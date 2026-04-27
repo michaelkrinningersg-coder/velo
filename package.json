@@ -1,0 +1,16 @@
+{
+  "name": "velo",
+  "version": "0.1.0",
+  "description": "Radsport Director – a data-driven cycling manager game",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "start": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev -- --host 0.0.0.0\"",
+    "dev": "npm run start",
+    "browser": "npm run start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  }
+}

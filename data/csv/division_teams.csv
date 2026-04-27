@@ -1,0 +1,4 @@
+name,tier,max_teams,min_roster_size,max_roster_size
+WorldTour,1,22,24,30
+ProTour,2,22,20,28
+U23,3,44,16,24

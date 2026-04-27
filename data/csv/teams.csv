@@ -1,0 +1,7 @@
+team_id,name,abbreviation,division_name,is_player_team,country_id,color_primary,color_secondary,ai_focus_1,ai_focus_2,ai_focus_3
+1,UAE Team Emirates,UAE,WorldTour,0,24,#111827,#ffffff,1,4,6
+2,Team Visma Lease a Bike,TVL,WorldTour,1,5,#f4d03f,#111827,2,1,4
+3,Soudal Quick-Step,SQS,WorldTour,0,1,#1d4ed8,#ffffff,3,2,6
+4,Lidl-Trek,LTK,WorldTour,0,8,#ef4444,#111827,4,5,1
+5,Tudor Pro Cycling Team,TUD,ProTour,0,15,#b91c1c,#f8fafc,2,6,4
+6,Uno-X Mobility,UXM,ProTour,0,12,#ef4444,#f59e0b,5,3,1

@@ -1,0 +1,25 @@
+id,name,code_3,continent,regen_rating,number_regen_min,number_regen_max
+1,Belgium,BEL,Europe,93,5,12
+2,France,FRA,Europe,89,5,11
+3,Italy,ITA,Europe,87,4,10
+4,Spain,ESP,Europe,91,5,12
+5,Netherlands,NED,Europe,85,3,8
+6,Germany,GER,Europe,82,3,8
+7,Great Britain,GBR,Europe,90,4,10
+8,United States,USA,North America,72,2,6
+9,Colombia,COL,South America,95,5,12
+10,Australia,AUS,Oceania,79,2,7
+11,Denmark,DEN,Europe,86,3,8
+12,Norway,NOR,Europe,76,2,6
+13,Slovenia,SLO,Europe,88,2,6
+14,Portugal,POR,Europe,77,2,6
+15,Switzerland,SUI,Europe,81,2,6
+16,Poland,POL,Europe,73,2,5
+17,Austria,AUT,Europe,71,2,5
+18,Luxembourg,LUX,Europe,68,1,3
+19,Ireland,IRE,Europe,66,1,3
+20,Czech Republic,CZE,Europe,63,1,3
+21,Slovakia,SVK,Europe,64,1,3
+22,Kazakhstan,KAZ,Asia,61,1,3
+23,South Africa,RSA,Africa,67,1,4
+24,Other,OTH,Other,35,0,2

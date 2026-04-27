@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Velo – Radsport Director</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
+  <link rel="stylesheet" href="/src/main.css" />
+</head>
+<body>
+
+  <!-- ========================================================
+       SCREENS
+  ========================================================= -->
+
+  <!-- ---- Hauptmenü ----------------------------------------- -->
+  <div id="screen-menu" class="screen active">
+    <div class="menu-logo">
+      <h1>VELO</h1>
+      <p class="menu-subtitle">Radsport Director</p>
+    </div>
+    <div class="menu-actions">
+      <button class="btn btn-primary btn-lg" id="btn-new-career">Neue Karriere</button>
+      <button class="btn btn-secondary btn-lg" id="btn-load-career">Karriere laden</button>
+    </div>
+    <div id="saves-list" class="saves-grid hidden"></div>
+  </div>
+
+  <!-- ---- Neue Karriere Modal ------------------------------- -->
+  <div id="modal-newCareer" class="modal hidden">
+    <div class="modal-card">
+      <h2>Neue Karriere</h2>
+      <div class="form-group">
+        <label for="input-career-name">Karriere-Name</label>
+        <input type="text" id="input-career-name" placeholder="Meine Karriere" maxlength="40" />
+      </div>
+      <div class="form-group">
+        <label for="input-team-id">Team auswählen</label>
+        <select id="input-team-id">
+          <option value="">— Teams werden geladen —</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-new">Abbrechen</button>
+        <button class="btn btn-primary" id="btn-confirm-new">Karriere starten</button>
+      </div>
+      <p id="new-career-error" class="error-msg hidden"></p>
+    </div>
+  </div>
+
+  <!-- ---- Hauptspiel ---------------------------------------- -->
+  <div id="screen-game" class="screen hidden">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo">VELO</div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-view="dashboard">
+          <span class="nav-icon">⌂</span> Dashboard
+        </button>
+        <button class="nav-btn" data-view="teams">
+          <span class="nav-icon">🏆</span> Teams
+        </button>
+      </nav>
+      <div class="sidebar-meta">
+        <div id="meta-career"></div>
+        <div id="meta-season"></div>
+        <button class="btn btn-sm btn-ghost" id="btn-back-menu">← Hauptmenü</button>
+      </div>
+    </aside>
+
+    <main class="game-main">
+      <section class="game-state-bar">
+        <div>
+          <div class="game-state-label">Aktueller Tag</div>
+          <div id="meta-date" class="game-state-date">-</div>
+          <div id="meta-race-hint" class="game-state-hint hidden"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-advance-day">Nächster Tag</button>
+      </section>
+
+      <!-- Dashboard -->
+      <div id="view-dashboard" class="view active">
+        <div class="view-header"><h2>Dashboard</h2></div>
+        <div class="dashboard-grid">
+          <div class="dashboard-card"><div class="dashboard-card-label">Karriere</div><div id="dashboard-career" class="dashboard-card-value">-</div></div>
+          <div class="dashboard-card"><div class="dashboard-card-label">Hauptteam</div><div id="dashboard-team" class="dashboard-card-value">-</div></div>
+          <div class="dashboard-card"><div class="dashboard-card-label">U23-Team</div><div id="dashboard-u23-team" class="dashboard-card-value">-</div></div>
+          <div class="dashboard-card"><div class="dashboard-card-label">Datum</div><div id="dashboard-date" class="dashboard-card-value">-</div></div>
+          <div class="dashboard-card"><div class="dashboard-card-label">Saison</div><div id="dashboard-season" class="dashboard-card-value">-</div></div>
+          <div class="dashboard-card"><div class="dashboard-card-label">Rennen heute</div><div id="dashboard-races-today" class="dashboard-card-value">0</div></div>
+        </div>
+        <section class="dashboard-section">
+          <div class="dashboard-section-header">
+            <h3>Nächste Rennen</h3>
+            <p class="text-muted">Zeitfahren bleiben direkt aus dem Dashboard startbar.</p>
+          </div>
+          <table class="data-table" id="dashboard-races-table">
+            <thead>
+              <tr>
+                <th>Datum</th><th>Name</th><th>Typ</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-races-tbody"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <!-- Teams -->
+      <div id="view-teams" class="view">
+        <div class="view-header"><h2>Teams</h2></div>
+        <div class="teams-selector">
+          <label for="teams-dropdown">Team auswählen</label>
+          <select id="teams-dropdown">
+            <option value="">– Team auswählen –</option>
+          </select>
+        </div>
+        <div id="teams-detail"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ---- TT-Ergebnis Modal --------------------------------- -->
+  <div id="modal-ttResult" class="modal hidden">
+    <div class="modal-card modal-card-xl">
+      <div class="modal-header">
+        <div>
+          <h2 id="tt-result-race-name">Ergebnis</h2>
+          <p id="tt-result-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-tt">✕</button>
+      </div>
+      <div class="tt-result-wrapper">
+        <table class="data-table" id="tt-result-table">
+          <thead>
+            <tr>
+              <th>Platz</th><th>Fahrer</th><th>Nat</th><th>Team</th>
+              <th>ZF-Attr</th><th>Tagesform</th><th>Zeit</th><th>Rückstand</th>
+            </tr>
+          </thead>
+          <tbody id="tt-result-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Loading Overlay ----------------------------------- -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p id="loading-msg">Lade…</p>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

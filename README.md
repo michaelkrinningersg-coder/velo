@@ -1,52 +1,108 @@
-# velo
+# Velo – Radsport Director
 
-Reduzierter Neustart des Projekts mit einem einfachen Hauptmenue in Flet.
+Eine datengetriebene Radsport-Simulation gebaut mit **TypeScript**, **Electron** und **better-sqlite3**.
 
-## Enthaltene Menuepunkte
-- Kalender
-- Saison Ergebnisse
-- Fahrer
-- Teams Standings
+## Technologie-Stack
 
-## Lokales Setup
-1. Virtuelle Umgebung erstellen:
-   `/usr/local/python/3.12.1/bin/python -m venv .venv`
-2. Pakete installieren:
-   `.venv/bin/python -m pip install --upgrade pip setuptools wheel`
-   `.venv/bin/python -m pip install -r requirements.txt`
-3. App starten:
-   `.venv/bin/python main.py`
+| Schicht | Technologie |
+|---------|-------------|
+| App-Shell | Electron 30 |
+| Sprache | TypeScript 5 (strict) |
+| Datenbank | better-sqlite3 (synchron, WAL-Modus) |
+| Renderer | Vanilla HTML/CSS/JS (kein Framework) |
 
-## Hinweis
-Das bisherige Datenmodell und alle zugehoerigen Daten/Import-Export-Features wurden entfernt.
+---
 
-## Teams Datenbasis
-- Beim Start der App wird eine lokale SQLite-Datei `velo.db` im Projektverzeichnis angelegt.
-- Das Schema fuer die Teams-Tabelle liegt in `schema.sql`.
-- Die Seed-Daten fuer Teams liegen in `data/teams.csv`.
-- Die Divisionen liegen in `data/divisions.csv`.
-- Beide CSV-Dateien werden beim App-Start importiert/aktualisiert.
+## Projektstruktur
 
-## Relationales Schema
-Die `teams` Tabelle referenziert die `divisions` Tabelle ueber einen Foreign Key:
-- `teams.division_id` -> `divisions.division_id`
-- Dies ermoeglicht eine normalisierende Struktur und zentrale Verwaltung von Divisionen.
+```
+velo/
+├── assets/
+│   ├── schema.sql           # Master-DB Schema
+│   └── world_data.db        # Schreibgeschützte Master-DB (generiert via seed)
+├── data/
+│   ├── division_teams.csv   # Stammdaten für Ligen/Divisionen
+│   └── teams.csv            # Stammdaten für Teams
+├── scripts/
+│   └── seed.ts              # Baut world_data.db aus CSV-Stammdaten und Startdaten
+├── src/
+│   ├── shared/
+│   │   └── types.ts         # Alle gemeinsamen Typen (Rider, Race, IPC, …)
+│   ├── main/                # Electron Main Process
+│   │   ├── index.ts         # App-Einstiegspunkt
+│   │   ├── preload.ts       # contextBridge API für den Renderer
+│   │   ├── database/
+│   │   │   ├── DatabaseService.ts   # Master-DB vs. Savegame-Logik
+│   │   │   └── GameRepository.ts    # Datenzugriffs-Schicht
+│   │   ├── ipc/
+│   │   │   └── handlers.ts  # IPC-Handler (Main ↔ Renderer)
+│   │   └── simulation/
+│   │       └── TimeTrialSimulator.ts  # Zeitfahren-Simulation
+│   └── renderer/            # Frontend
+│       ├── index.html
+│       ├── renderer.d.ts
+│       ├── styles/main.css
+│       └── scripts/app.js
+├── package.json
+└── tsconfig.json
+```
 
-## Teams CSV Format
-Die Datei `data/teams.csv` verwendet diese Spalten:
+---
 
-`team_id, team_name, abbreviation, budget, main_sponsor1_id, main_sponsor2_id, prestige, division_id, uci_points, jersey_asset_id`
+## Quick Start
 
-Leere Felder fuer `team_id`, `main_sponsor1_id`, `main_sponsor2_id` und `jersey_asset_id` werden beim Import als `NULL` behandelt. `team_id` wird automatisch durch SQLite vergeben.
+```bash
+# 1. Abhängigkeiten
+npm install
 
-## Divisions CSV Format
-Die Datei `data/divisions.csv` verwendet diese Spalten:
+# 1a. Teilpakete installieren
+npm --prefix backend install
+npm --prefix frontend install
 
-`Division_Id, Division_name`
+# 2. Backend + Frontend im Browser starten
+npm start
 
-Gueltige Divisionen werden beim App-Start synchronisiert. Die Standard-Divisionen sind:
-- 1: Fantasy
-- 2: Development
+# 3. Alias für denselben Browser-Start
+npm run browser
+```
 
-## Migration
-Wenn eine bestehende `velo.db` mit dem alten Schema (TEXT division Spalte) existiert, wird diese automatisch migriert. Die Tabellenstruktur wird aktualisiert und Daten werden unter Beibehaltung der Division-Mappings uebertragen.
+---
+
+## Datenbank-Konzept
+
+```
+assets/world_data.db          ← Schreibgeschützte Master-DB
+        │  copyFileSync() beim "Neue Karriere"-Klick
+        ▼
+userData/savegames/karriere_xxx.db   ← Savegame (lebende Kopie)
+```
+
+## Stammdaten per CSV
+
+Statische Welt- und Balancing-Daten liegen unter [data/division_teams.csv](data/division_teams.csv) und [data/teams.csv](data/teams.csv). Der Seed-Lauf liest diese Dateien ein und baut daraus die Master-Datenbank neu auf.
+
+Das Muster ist absichtlich pro Stammdatentabelle aufgebaut:
+- `division_teams.csv` für Liga-Struktur und Regeln
+- `teams.csv` für Team-Stammdaten
+
+Savegame-Tabellen wie Spielstand, Verträge oder Rennergebnisse gehören nicht in dieses CSV-System.
+
+## Browser-Testmodus
+
+Mit `npm run browser` oder `npm start` werden Backend und Frontend parallel gestartet. Das Frontend läuft per Vite auf Port 5173 und leitet `/api` an das Backend auf Port 3000 weiter.
+
+## Zeitfahren-Simulation (Meilenstein 1)
+
+`TimeTrialSimulator.simulate(race, riders)` berechnet pro Fahrer:
+- **Basisgeschwindigkeit** aus Streckenprofil (Flach 50 km/h / Hügelig 41 / Berg 30)
+- **±0,28 km/h** pro TT-Attributpunkt über/unter 50
+- **Tagesform** `[0.88–1.12]` + ±1,5% Rauschen
+
+## Nächste Meilensteine
+
+- M2: Etappenrennen (Flat/Hilly/Mountain)
+- M3: Kaderverwaltung & Transfers
+- M4: Fahrer-Progression (Alter, Potenzial)
+- M5: Regen-System (neue Nachwuchsfahrer)
+- M6: Mehretappige Rennen (GC, Trikots)
+
