@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SavegameMeta } from '../../../shared/types';
+import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 
 const MASTER_DB_NAME = 'world_data.db';
@@ -96,7 +97,8 @@ export class DatabaseService {
       const teamName = teamRow.name;
 
       const gss = new GameStateService(db);
-      gss.ensureState();
+      const gameState = gss.ensureState();
+      new ContractService(db).checkContractStatuses(gameState.season);
       db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -123,31 +125,11 @@ export class DatabaseService {
   private syncActiveContractCache(db: Database.Database): void {
     if (!tableExists(db, 'contracts') || !tableExists(db, 'riders')) return;
     if (!columnExists(db, 'riders', 'active_team_id') || !columnExists(db, 'riders', 'active_contract_id')) return;
+    if (!columnExists(db, 'contracts', 'status')) return;
 
     const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
     const season = seasonRow?.season ?? 2026;
-
-    db.prepare(`
-      UPDATE riders
-      SET active_contract_id = (
-        SELECT c.id
-        FROM contracts c
-        WHERE c.rider_id = riders.id
-          AND c.start_season <= ?
-          AND c.end_season >= ?
-        ORDER BY c.start_season DESC, c.id DESC
-        LIMIT 1
-      ),
-      active_team_id = (
-        SELECT c.team_id
-        FROM contracts c
-        WHERE c.rider_id = riders.id
-          AND c.start_season <= ?
-          AND c.end_season >= ?
-        ORDER BY c.start_season DESC, c.id DESC
-        LIMIT 1
-      )
-    `).run(season, season, season, season);
+    new ContractService(db).checkContractStatuses(season);
   }
 
   public getActiveConnection(): Database.Database {

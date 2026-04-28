@@ -63,6 +63,7 @@ html, body {
   min-width: 2.1rem;
   font-weight: 700;
   text-align: right;
+  letter-spacing: .01em;
 }
 
 /* ---- Screens ---------------------------------------------- */
@@ -307,16 +308,16 @@ html, body {
 
 .data-table thead th {
   text-align: left;
-  padding: .55rem .75rem;
-  color: var(--text-500);
-  font-weight: 600;
+  padding: 0;
+  color: var(--text-100);
+  font-weight: 700;
   text-transform: uppercase;
   font-size: .75rem;
-  letter-spacing: .05em;
-  border-bottom: 1px solid var(--border);
+  letter-spacing: .07em;
+  border-bottom: 1px solid rgba(148, 163, 184, .28);
   position: sticky;
   top: 0;
-  background: var(--bg-900);
+  background: linear-gradient(180deg, rgba(59, 130, 246, .12) 0%, rgba(30, 41, 59, .95) 100%);
 }
 
 .data-table tbody tr {
@@ -328,6 +329,164 @@ html, body {
 .data-table tbody td {
   padding: .5rem .75rem;
   vertical-align: middle;
+}
+
+.data-table-teams {
+  table-layout: auto;
+}
+
+.data-table-teams thead th,
+.data-table-teams tbody td {
+  border-right: 1px solid rgba(148, 163, 184, .14);
+}
+
+.data-table-teams thead th:last-child,
+.data-table-teams tbody td:last-child {
+  border-right: none;
+}
+
+.team-table-sort {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .45rem;
+  width: 100%;
+  padding: .7rem .75rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.team-table-sort:hover {
+  background: rgba(96, 165, 250, .08);
+  color: #fff;
+}
+
+.team-table-sort-active {
+  background: rgba(96, 165, 250, .12);
+  color: #fff;
+}
+
+.team-table-sort-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+}
+
+.team-table-sort-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  color: rgba(191, 219, 254, .82);
+  font-size: .98rem;
+  font-weight: 900;
+  text-shadow: 0 0 10px rgba(96, 165, 250, .18);
+}
+
+.team-table-sort-indicator-active {
+  color: #ffffff;
+  text-shadow: 0 0 14px rgba(96, 165, 250, .65);
+  transform: scale(1.18);
+}
+
+.team-table-row-expanded,
+.team-detail-row-expanded {
+  background: rgba(59, 130, 246, .05);
+}
+
+.team-table-name-cell {
+  min-width: 12rem;
+}
+
+.team-table-flag-cell,
+.team-table-code-cell,
+.team-table-info-cell {
+  text-align: center;
+}
+
+.team-table-code-cell {
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--text-300);
+}
+
+.team-table-col-flag,
+.team-table-col-info {
+  width: 4.5rem;
+}
+
+.team-table-col-code,
+.team-table-col-year,
+.team-table-col-age,
+.team-table-col-overall {
+  width: 5.1rem;
+}
+
+.team-table-col-skill {
+  width: 8.9rem;
+}
+
+.info-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid rgba(148, 163, 184, .35);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .75);
+  color: #cbd5e1;
+  font-size: .9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease;
+}
+
+.info-toggle:hover {
+  border-color: rgba(96, 165, 250, .65);
+  background: rgba(30, 64, 175, .35);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.info-toggle-active {
+  border-color: rgba(96, 165, 250, .85);
+  background: rgba(30, 64, 175, .45);
+  color: #fff;
+}
+
+.team-detail-expansion-row td {
+  padding: 0;
+  border-right: none;
+}
+
+.rider-insight-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  padding: .95rem 1rem 1rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .78) 0%, rgba(30, 41, 59, .95) 100%);
+  border-top: 1px solid rgba(148, 163, 184, .16);
+}
+
+.rider-insight-group {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.rider-insight-title {
+  color: #93c5fd;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 /* ---- Badges ----------------------------------------------- */
@@ -404,6 +563,7 @@ html, body {
   border-radius: var(--radius-md);
   padding: 1.25rem 1.5rem;
 }
+
 .team-detail-header { margin-bottom: .75rem; }
 .team-detail-header h3 { font-size: 1.15rem; margin-bottom: .4rem; }
 .team-detail-meta {

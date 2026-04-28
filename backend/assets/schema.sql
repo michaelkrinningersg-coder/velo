@@ -59,12 +59,20 @@ CREATE TABLE IF NOT EXISTS teams (
   ai_focus_3      INTEGER NOT NULL
 );
 
+-- ---- Fahrerrollen ------------------------------------------
+CREATE TABLE IF NOT EXISTS sta_role (
+  id         INTEGER PRIMARY KEY,
+  name       TEXT    NOT NULL UNIQUE,
+  weighting  INTEGER NOT NULL CHECK(weighting >= 0)
+);
+
 -- ---- Fahrer -------------------------------------------------
 CREATE TABLE IF NOT EXISTS riders (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   first_name     TEXT    NOT NULL,
   last_name      TEXT    NOT NULL,
   country_id     INTEGER NOT NULL REFERENCES sta_country(id),
+  role_id        INTEGER REFERENCES sta_role(id),
   birth_year     INTEGER NOT NULL,
   pot_overall    INTEGER NOT NULL CHECK(pot_overall BETWEEN 0 AND 85),
   overall_rating INTEGER NOT NULL CHECK(overall_rating BETWEEN 0 AND 85),
@@ -120,10 +128,13 @@ CREATE TABLE IF NOT EXISTS contracts (
   team_id         INTEGER NOT NULL REFERENCES teams(id)  ON DELETE CASCADE,
   start_season    INTEGER NOT NULL,
   end_season      INTEGER NOT NULL,
+  status          TEXT    NOT NULL DEFAULT 'future' CHECK(status IN ('active', 'expired', 'future')),
+  CHECK(end_season >= start_season),
   UNIQUE(rider_id, start_season)
 );
 
 CREATE INDEX IF NOT EXISTS idx_contracts_rider_season ON contracts(rider_id, start_season, end_season);
+CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 
 -- ---- Rennen -------------------------------------------------
 CREATE TABLE IF NOT EXISTS races (

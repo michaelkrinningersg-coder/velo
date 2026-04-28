@@ -19,6 +19,12 @@ export interface Country {
   numberRegenMax: number;
 }
 
+export interface Role {
+  id: number;
+  name: string;
+  weighting: number;
+}
+
 export type RiderSkillKey =
   | 'flat'
   | 'mountain'
@@ -50,6 +56,17 @@ export type RiderSpecialization =
 export type RiderSkills = Record<RiderSkillKey, number>;
 export type RiderPotentials = Record<RiderSkillKey, number>;
 
+export type ContractStatus = 'active' | 'expired' | 'future';
+
+export interface Contract {
+  id: number;
+  riderId: number;
+  teamId: number;
+  startSeason: number;
+  endSeason: number;
+  status: ContractStatus;
+}
+
 export interface Rider {
   id: number;
   firstName: string;
@@ -57,6 +74,8 @@ export interface Rider {
   nationality: Nationality;
   countryId?: number;
   country?: Country;
+  roleId?: number | null;
+  role?: Role;
   birthYear: number;
   age?: number;
   potential: number;
@@ -73,6 +92,7 @@ export interface Rider {
   nonFavoriteRaces: number[];
   activeTeamId: number | null;
   activeContractId: number | null;
+  contractEndSeason?: number | null;
 }
 
 // ------ Team -------------------------------------------------
@@ -85,6 +105,7 @@ export interface Team {
   abbreviation: string;
   divisionId: number;
   u23TeamId: number | null;
+  mainTeamId?: number | null;
   isPlayerTeam: boolean;
   countryCode: Nationality;
   countryId?: number;
@@ -95,6 +116,7 @@ export interface Team {
   aiFocus2: number;
   aiFocus3: number;
   u23TeamName?: string;
+  mainTeamName?: string;
   divisionName?: string;
   shortName?: string;
   nationality?: Nationality;

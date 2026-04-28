@@ -8,7 +8,8 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../shared/types';
+import type { ContractStatus, RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../shared/types';
+import { ContractService } from './game/ContractService';
 
 function resolveBackendRoot(): string {
   const candidates = [
@@ -44,8 +45,40 @@ function rand(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function calcOverall(attrs: number[]): number {
-  return clamp(Math.round(attrs.reduce((s, v) => s + v, 0) / attrs.length));
+function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation'>): number {
+  const includedSkills = [
+    ['mountain', skills.mountain, 1.8],
+    ['hill', skills.hill, 1],
+    ['sprint', skills.sprint, 1],
+    ['timeTrial', skills.timeTrial, 2 / 3],
+    ['cobble', skills.cobble, 4 / 5],
+    ['mediumMountain', skills.mediumMountain, 0.2],
+    ['stamina', skills.stamina, 0.1],
+    ['resistance', skills.resistance, 0.1],
+    ['recuperation', skills.recuperation, 0.1],
+    ['flat', skills.flat, 0.15],
+  ] as const;
+
+  const weightedTotal = includedSkills.reduce((sum, [, value, weight]) => sum + value * weight, 0);
+
+  let topSkillValue = -Infinity;
+  let secondSkillValue = -Infinity;
+
+  for (const [, value] of includedSkills) {
+    if (value > topSkillValue) {
+      secondSkillValue = topSkillValue;
+      topSkillValue = value;
+      continue;
+    }
+
+    if (value > secondSkillValue) {
+      secondSkillValue = value;
+    }
+  }
+
+  const bonusTotal = topSkillValue * 1.5 + secondSkillValue * 1.25;
+  const totalWeight = 1.8 + 1 + 1 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 1.5 + 1.25;
+  return clamp(Math.round((weightedTotal + bonusTotal) / totalWeight));
 }
 
 function parseCsvLine(line: string): string[] {
@@ -152,6 +185,53 @@ interface CountrySeed {
   numberRegenMax: number;
 }
 
+type TeamRoleName = 'Kapitaen' | 'Co-Kapitaen' | 'Edelhelfer' | 'Starke Helfer' | 'Wassertraeger' | 'Sprinter';
+
+interface RoleSeed {
+  id: number;
+  name: TeamRoleName;
+  weighting: number;
+}
+
+interface ContractSeed {
+  riderId: number;
+  teamId: number;
+  startSeason: number;
+  endSeason: number;
+  status: ContractStatus;
+}
+
+const ROLE_NAME_CAPTAIN: TeamRoleName = 'Kapitaen';
+const ROLE_NAME_CO_CAPTAIN: TeamRoleName = 'Co-Kapitaen';
+const ROLE_NAME_ROAD_CAPTAIN: TeamRoleName = 'Edelhelfer';
+const ROLE_NAME_STRONG_HELPER: TeamRoleName = 'Starke Helfer';
+const ROLE_NAME_DOMESTIQUE: TeamRoleName = 'Wassertraeger';
+const ROLE_NAME_SPRINTER: TeamRoleName = 'Sprinter';
+
+const REQUIRED_ROLE_NAMES: TeamRoleName[] = [
+  ROLE_NAME_CAPTAIN,
+  ROLE_NAME_CO_CAPTAIN,
+  ROLE_NAME_ROAD_CAPTAIN,
+  ROLE_NAME_STRONG_HELPER,
+  ROLE_NAME_DOMESTIQUE,
+  ROLE_NAME_SPRINTER,
+];
+
+function parseRoleSeeds(): RoleSeed[] {
+  return readCsv('sta_role.csv').map((row, index) => {
+    const ctx = `sta_role.csv Zeile ${index + 2}`;
+    const name = req(row, 'name', ctx) as TeamRoleName;
+    if (!REQUIRED_ROLE_NAMES.includes(name)) {
+      throw new Error(`${ctx}: Unbekannte Rolle "${name}".`);
+    }
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      name,
+      weighting: int(req(row, 'weighting', ctx), ctx),
+    };
+  });
+}
+
 function parseCountrySeeds(): CountrySeed[] {
   return readCsv('sta_country.csv').map((row, index) => {
     const ctx = `sta_country.csv Zeile ${index + 2}`;
@@ -172,19 +252,28 @@ function parseCountrySeeds(): CountrySeed[] {
   });
 }
 
-// ------ U23-Abkürzung ------------------------------------------
+function parseContractSeeds(): ContractSeed[] {
+  return readCsv('contracts.csv').map((row, index) => {
+    const ctx = `contracts.csv Zeile ${index + 2}`;
+    const status = req(row, 'status', ctx) as ContractStatus;
+    if (!['active', 'expired', 'future'].includes(status)) {
+      throw new Error(`${ctx}: Ungueltiger Vertragsstatus "${status}".`);
+    }
 
-function createU23Abbreviation(base: string, used: Set<string>): string {
-  const n = base.toUpperCase().replace(/[^A-Z0-9]/g, '').padEnd(3, 'X').slice(0, 3);
-  const candidates = [`U${n.slice(0, 2)}`, `${n[0]}U${n[1]}`, `${n.slice(0, 2)}U`, `U${n[0]}${n[2]}`];
-  for (const c of candidates) {
-    if (c.length === 3 && !used.has(c)) { used.add(c); return c; }
-  }
-  for (let i = 0; i <= 9; i++) {
-    const c = `U${n[0]}${i}`;
-    if (!used.has(c)) { used.add(c); return c; }
-  }
-  throw new Error(`Keine freie U23-Abkürzung für ${base}.`);
+    const startSeason = int(req(row, 'start_season', ctx), ctx);
+    const endSeason = int(req(row, 'end_season', ctx), ctx);
+    if (endSeason < startSeason) {
+      throw new Error(`${ctx}: end_season muss >= start_season sein.`);
+    }
+
+    return {
+      riderId: int(req(row, 'rider_id', ctx), ctx),
+      teamId: int(req(row, 'team_id', ctx), ctx),
+      startSeason,
+      endSeason,
+      status,
+    };
+  });
 }
 
 // ------ Rider-Seeding ----------------------------------------
@@ -215,10 +304,9 @@ interface RiderSeedInput {
   firstName: string;
   lastName: string;
   countryId: number;
+  roleId: number | null;
   birthYear: number;
   activeTeamId: number;
-  contractStartSeason: number;
-  contractEndSeason: number;
   skills: RiderSkills;
   potentials: Partial<RiderPotentials>;
   potential: number | null;
@@ -236,6 +324,131 @@ interface RiderSeed extends RiderSeedInput {
   specialization3: RiderSpecialization | null;
   isStageRacer: number;
   isOneDayRacer: number;
+}
+
+function buildRoleMaps(roleSeeds: RoleSeed[]): {
+  idByName: Map<TeamRoleName, number>;
+  weightingByName: Map<TeamRoleName, number>;
+} {
+  const idByName = new Map<TeamRoleName, number>();
+  const weightingByName = new Map<TeamRoleName, number>();
+
+  for (const role of roleSeeds) {
+    if (idByName.has(role.name)) throw new Error(`Doppelte Rollenbezeichnung ${role.name} in sta_role.csv.`);
+    idByName.set(role.name, role.id);
+    weightingByName.set(role.name, role.weighting);
+  }
+
+  for (const requiredRoleName of REQUIRED_ROLE_NAMES) {
+    if (!idByName.has(requiredRoleName)) throw new Error(`Pflichtrolle ${requiredRoleName} fehlt in sta_role.csv.`);
+  }
+
+  return { idByName, weightingByName };
+}
+
+function getRoleScore(rider: RiderSeedInput): number {
+  return (
+    rider.skills.mountain * 2
+    + rider.skills.hill
+    + rider.skills.sprint
+    + rider.skills.timeTrial
+    + rider.skills.cobble
+  ) / 6;
+}
+
+function getRoundedRoleCount(teamSize: number, percentage: number): number {
+  return Math.max(0, Math.round(teamSize * (percentage / 100)));
+}
+
+function compareByRoleRanking(left: RiderSeedInput, right: RiderSeedInput): number {
+  return getRoleScore(right) - getRoleScore(left)
+    || right.skills.sprint - left.skills.sprint
+    || left.riderId - right.riderId;
+}
+
+function compareBySprintRanking(left: RiderSeedInput, right: RiderSeedInput): number {
+  return right.skills.sprint - left.skills.sprint
+    || getRoleScore(right) - getRoleScore(left)
+    || left.riderId - right.riderId;
+}
+
+function assignTeamRoleIds(riders: RiderSeedInput[], roleSeeds: RoleSeed[]): Map<number, number> {
+  const { idByName, weightingByName } = buildRoleMaps(roleSeeds);
+  const riderRoleIds = new Map<number, number>();
+  const ridersByTeam = new Map<number, RiderSeedInput[]>();
+
+  for (const rider of riders) {
+    const teamRiders = ridersByTeam.get(rider.activeTeamId) ?? [];
+    teamRiders.push(rider);
+    ridersByTeam.set(rider.activeTeamId, teamRiders);
+  }
+
+  for (const teamRiders of ridersByTeam.values()) {
+    const teamSize = teamRiders.length;
+    const availableRiders = [...teamRiders].sort(compareByRoleRanking);
+    const captainCount = Math.min(
+      teamSize,
+      teamSize >= 25
+        ? Math.max(getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_CAPTAIN) ?? 0), 3)
+        : getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_CAPTAIN) ?? 0),
+    );
+
+    const captainIds = new Set<number>();
+    const coCaptainIds = new Set<number>();
+    const sprinterIds = new Set<number>();
+
+    for (const rider of availableRiders.slice(0, captainCount)) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_CAPTAIN)!);
+      captainIds.add(rider.riderId);
+    }
+
+    const coCaptainCount = Math.min(
+      teamSize - captainIds.size,
+      teamSize >= 25
+        ? Math.max(getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_CO_CAPTAIN) ?? 0), 3)
+        : getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_CO_CAPTAIN) ?? 0),
+    );
+
+    const coCaptainPool = availableRiders.filter(rider => !captainIds.has(rider.riderId));
+    for (const rider of coCaptainPool.slice(0, coCaptainCount)) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_CO_CAPTAIN)!);
+      coCaptainIds.add(rider.riderId);
+    }
+
+    const sprintPool = [...teamRiders]
+      .filter(rider => !captainIds.has(rider.riderId) && !coCaptainIds.has(rider.riderId) && rider.skills.sprint > 70)
+      .sort(compareBySprintRanking)
+      .slice(0, 5);
+
+    for (const rider of sprintPool) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_SPRINTER)!);
+      sprinterIds.add(rider.riderId);
+    }
+
+    const helperPool = availableRiders.filter(
+      rider => !captainIds.has(rider.riderId) && !coCaptainIds.has(rider.riderId) && !sprinterIds.has(rider.riderId),
+    );
+
+    const roadCaptainCount = Math.min(helperPool.length, getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_ROAD_CAPTAIN) ?? 0));
+    const roadCaptainRiders = helperPool.slice(0, roadCaptainCount);
+    for (const rider of roadCaptainRiders) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_ROAD_CAPTAIN)!);
+    }
+
+    const strongHelperPool = helperPool.slice(roadCaptainCount);
+    const strongHelperCount = Math.min(strongHelperPool.length, getRoundedRoleCount(teamSize, weightingByName.get(ROLE_NAME_STRONG_HELPER) ?? 0));
+    const strongHelperRiders = strongHelperPool.slice(0, strongHelperCount);
+    for (const rider of strongHelperRiders) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_STRONG_HELPER)!);
+    }
+
+    const domestiquePool = strongHelperPool.slice(strongHelperCount);
+    for (const rider of domestiquePool) {
+      riderRoleIds.set(rider.riderId, idByName.get(ROLE_NAME_DOMESTIQUE)!);
+    }
+  }
+
+  return riderRoleIds;
 }
 
 function scoreProfile(skills: RiderSkills, weights: Array<[RiderSkillKey, number]>): number {
@@ -268,7 +481,7 @@ function getSpecializationScores(skills: RiderSkills): Array<{ specialization: R
   return scores.sort((left, right) => right.score - left.score);
 }
 
-function assignRiderType(input: Pick<RiderSeedInput, 'skills' | 'potentials' | 'potential'>): Omit<RiderSeed, 'riderId' | 'firstName' | 'lastName' | 'countryId' | 'birthYear' | 'activeTeamId' | 'contractStartSeason' | 'contractEndSeason' | 'skills' | 'favoriteRaces' | 'nonFavoriteRaces'> {
+function assignRiderType(input: Pick<RiderSeedInput, 'skills' | 'potentials' | 'potential'>): Omit<RiderSeed, 'riderId' | 'firstName' | 'lastName' | 'countryId' | 'roleId' | 'birthYear' | 'activeTeamId' | 'contractStartSeason' | 'contractEndSeason' | 'skills' | 'favoriteRaces' | 'nonFavoriteRaces'> {
   const { skills } = input;
   const specializationScores = getSpecializationScores(skills);
   const [first, second, third] = specializationScores;
@@ -278,8 +491,8 @@ function assignRiderType(input: Pick<RiderSeedInput, 'skills' | 'potentials' | '
   const isOneDayRacer = topThree.some(specialization => ONE_DAY_SPECIALIZATIONS.includes(specialization)) ? 1 : 0;
   return {
     potentials,
-    overallRating: calcOverall(RIDER_SKILL_COLUMNS.map(([key]) => skills[key])),
-    potential: input.potential ?? calcOverall(RIDER_SKILL_COLUMNS.map(([key]) => potentials[key])),
+    overallRating: calcOverall(skills),
+    potential: input.potential ?? calcOverall(potentials),
     riderType: first.specialization,
     specialization1: first?.specialization ?? null,
     specialization2: second?.specialization ?? null,
@@ -309,10 +522,9 @@ function parseRiderSeeds(): RiderSeedInput[] {
       firstName: req(row, 'first_name', ctx),
       lastName: req(row, 'last_name', ctx),
       countryId: int(req(row, 'country_id', ctx), ctx),
+      roleId: optionalInt(row['role_id']),
       birthYear: int(req(row, 'birth_year', ctx), ctx),
       activeTeamId: int(req(row, 'team_id', ctx), ctx),
-      contractStartSeason: int(req(row, 'contract_start_season', ctx), ctx),
-      contractEndSeason: int(req(row, 'contract_end_season', ctx), ctx),
       skills,
       potentials,
       potential: (() => {
@@ -323,30 +535,6 @@ function parseRiderSeeds(): RiderSeedInput[] {
       nonFavoriteRaces: normalizeIdList(row['non_favorite_races'] ?? ''),
     };
   });
-}
-
-function syncActiveContractCache(db: Database.Database, season: number): void {
-  db.prepare(`
-    UPDATE riders
-    SET active_contract_id = (
-      SELECT c.id
-      FROM contracts c
-      WHERE c.rider_id = riders.id
-        AND c.start_season <= ?
-        AND c.end_season >= ?
-      ORDER BY c.start_season DESC, c.id DESC
-      LIMIT 1
-    ),
-    active_team_id = (
-      SELECT c.team_id
-      FROM contracts c
-      WHERE c.rider_id = riders.id
-        AND c.start_season <= ?
-        AND c.end_season >= ?
-      ORDER BY c.start_season DESC, c.id DESC
-      LIMIT 1
-    )
-  `).run(season, season, season, season);
 }
 
 interface RaceDef {
@@ -393,6 +581,7 @@ export function bootstrap(force = false): void {
 
   // Laender-Stammdaten
   const countrySeeds = parseCountrySeeds();
+  const roleSeeds = parseRoleSeeds();
   const seenCountryIds = new Set<number>();
   const seenCountryCodes = new Set<string>();
   for (const country of countrySeeds) {
@@ -407,6 +596,17 @@ export function bootstrap(force = false): void {
   );
   for (const country of countrySeeds) {
     insCountry.run(country.id, country.name, country.code3, country.continent, country.regenRating, country.numberRegenMin, country.numberRegenMax);
+  }
+
+  const seenRoleIds = new Set<number>();
+  const insRole = db.prepare(
+    'INSERT INTO sta_role (id, name, weighting) VALUES (?, ?, ?)',
+  );
+  for (const role of roleSeeds) {
+    if (role.id <= 0) throw new Error(`Role-ID ${role.id} muss positiv sein.`);
+    if (seenRoleIds.has(role.id)) throw new Error(`Doppelte Role-ID ${role.id} in sta_role.csv.`);
+    seenRoleIds.add(role.id);
+    insRole.run(role.id, role.name, role.weighting);
   }
 
   // Divisionen aus CSV
@@ -456,58 +656,35 @@ export function bootstrap(force = false): void {
     if (team.teamId <= 0) throw new Error(`Team-ID ${team.teamId} für Team "${team.name}" muss positiv sein.`);
     if (usedTeamIds.has(team.teamId)) throw new Error(`Doppelte team_id ${team.teamId} in teams.csv.`);
     if (!seenCountryIds.has(team.countryId)) throw new Error(`Unbekannte country_id ${team.countryId} für Team "${team.name}".`);
+    if (team.divisionName === 'U23') throw new Error(`U23-Teams werden nicht mehr unterstützt: "${team.name}".`);
     usedTeamIds.add(team.teamId);
   }
-
-  const mainTeams = teamSeeds.filter(t => t.divisionName !== 'U23');
-  const usedAbbr = new Set(mainTeams.map(t => t.abbreviation));
-  let nextGeneratedTeamId = Math.max(...teamSeeds.map(t => t.teamId)) + 1;
-  const u23Teams = mainTeams.map(t => ({
-    teamId: nextGeneratedTeamId++,
-    mainTeamName: t.name,
-    name: `${t.name} U23`,
-    abbreviation: createU23Abbreviation(t.abbreviation, usedAbbr),
-    divisionName: 'U23',
-    isPlayerTeam: 0,
-    countryId: t.countryId,
-    colorPrimary: t.colorPrimary,
-    colorSecondary: t.colorSecondary,
-    aiFocus1: t.aiFocus1, aiFocus2: t.aiFocus2, aiFocus3: t.aiFocus3,
-  }));
 
   const insTeam = db.prepare(
     `INSERT INTO teams (id, name, abbreviation, division_id, u23_team, is_player_team, country_id, color_primary, color_secondary, ai_focus_1, ai_focus_2, ai_focus_3)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const linkU23 = db.prepare('UPDATE teams SET u23_team = ? WHERE id = ?');
-  const mainTeamIds = new Map<string, number>();
-  const u23TeamIds = new Map<string, number>();
 
-  for (const t of mainTeams) {
+  for (const t of teamSeeds) {
     const divId = divMap.get(t.divisionName);
     if (divId == null) throw new Error(`Unbekannte Division "${t.divisionName}" für Team "${t.name}".`);
     insTeam.run(t.teamId, t.name, t.abbreviation, divId, null, t.isPlayerTeam, t.countryId, t.colorPrimary, t.colorSecondary, t.aiFocus1, t.aiFocus2, t.aiFocus3);
-    mainTeamIds.set(t.name, t.teamId);
   }
-  for (const t of u23Teams) {
-    const divId = divMap.get(t.divisionName);
-    if (divId == null) throw new Error(`Unbekannte Division "${t.divisionName}" für U23-Team "${t.name}".`);
-    insTeam.run(t.teamId, t.name, t.abbreviation, divId, null, t.isPlayerTeam, t.countryId, t.colorPrimary, t.colorSecondary, t.aiFocus1, t.aiFocus2, t.aiFocus3);
-    u23TeamIds.set(t.mainTeamName, t.teamId);
-  }
-  for (const [teamName, mainId] of mainTeamIds) {
-    const u23Id = u23TeamIds.get(teamName);
-    if (u23Id != null) linkU23.run(u23Id, mainId);
-  }
-  console.log(`  ${mainTeams.length} Hauptteams + ${u23Teams.length} U23-Teams eingefügt.`);
+  console.log(`  ${teamSeeds.length} Profiteams eingefügt.`);
 
   // Fahrer aus CSV
-  const seededRiders = parseRiderSeeds().map(rider => ({
+  const riderSeeds = parseRiderSeeds();
+  const contractSeeds = parseContractSeeds();
+  const teamRoleIds = assignTeamRoleIds(riderSeeds, roleSeeds);
+  const seededRiders = riderSeeds.map(rider => ({
     ...rider,
+    roleId: teamRoleIds.get(rider.riderId) ?? rider.roleId,
     ...assignRiderType({ skills: rider.skills, potentials: rider.potentials, potential: rider.potential }),
   }));
   const knownTeamIds = new Set((db.prepare('SELECT id FROM teams').all() as Array<{ id: number }>).map(team => team.id));
+  const knownRiderIds = new Set(riderSeeds.map(rider => rider.riderId));
   const usedRiderIds = new Set<number>();
+  const usedContractKeys = new Set<string>();
 
   const riderColumns = RIDER_SKILL_COLUMNS.map(([, column]) => `skill_${column}`).join(', ');
   const riderPotentialColumns = RIDER_SKILL_COLUMNS.map(([, column]) => `pot_${column}`).join(', ');
@@ -515,7 +692,7 @@ export function bootstrap(force = false): void {
   const riderPotentialPlaceholders = RIDER_SKILL_COLUMNS.map(() => '?').join(', ');
   const insRider = db.prepare(`
     INSERT INTO riders (
-      id, first_name, last_name, country_id, birth_year, pot_overall, overall_rating,
+      id, first_name, last_name, country_id, role_id, birth_year, pot_overall, overall_rating,
       ${riderColumns},
       ${riderPotentialColumns},
       rider_type, specialization_1, specialization_2, specialization_3,
@@ -523,16 +700,12 @@ export function bootstrap(force = false): void {
       active_team_id, active_contract_id, is_retired
     )
     VALUES (
-      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?,
       ${riderPlaceholders},
       ${riderPotentialPlaceholders},
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
-  const insContract = db.prepare(
-    'INSERT INTO contracts (rider_id, team_id, start_season, end_season) VALUES (?, ?, ?, ?)',
-  );
-
   for (const rider of seededRiders) {
     if (usedRiderIds.has(rider.riderId)) throw new Error(`Doppelte rider_id ${rider.riderId} in riders.csv.`);
     if (!knownTeamIds.has(rider.activeTeamId)) throw new Error(`Unbekannte team_id ${rider.activeTeamId} für Fahrer ${rider.firstName} ${rider.lastName}.`);
@@ -546,6 +719,7 @@ export function bootstrap(force = false): void {
       rider.firstName,
       rider.lastName,
       rider.countryId,
+      rider.roleId,
       rider.birthYear,
       rider.potential,
       rider.overallRating,
@@ -563,9 +737,30 @@ export function bootstrap(force = false): void {
       null,
       0,
     );
-    insContract.run(rider.riderId, rider.activeTeamId, rider.contractStartSeason, rider.contractEndSeason);
   }
-  syncActiveContractCache(db, currentSeason);
+
+  const insContract = db.prepare(
+    'INSERT INTO contracts (rider_id, team_id, start_season, end_season, status) VALUES (?, ?, ?, ?, ?)',
+  );
+
+  for (const contract of contractSeeds) {
+    if (!knownRiderIds.has(contract.riderId)) {
+      throw new Error(`Unbekannte rider_id ${contract.riderId} in contracts.csv.`);
+    }
+    if (!knownTeamIds.has(contract.teamId)) {
+      throw new Error(`Unbekannte team_id ${contract.teamId} in contracts.csv fuer rider_id ${contract.riderId}.`);
+    }
+
+    const contractKey = `${contract.riderId}:${contract.startSeason}`;
+    if (usedContractKeys.has(contractKey)) {
+      throw new Error(`Doppelter Vertrag fuer rider_id ${contract.riderId} und start_season ${contract.startSeason} in contracts.csv.`);
+    }
+    usedContractKeys.add(contractKey);
+
+    insContract.run(contract.riderId, contract.teamId, contract.startSeason, contract.endSeason, contract.status);
+  }
+
+  new ContractService(db).checkContractStatuses(currentSeason);
   console.log(`  ${seededRiders.length} Fahrer eingefügt.`);
 
   // Rennen

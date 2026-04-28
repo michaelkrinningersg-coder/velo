@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { Country, Rider, RiderPotentials, RiderSkillKey, RiderSkills, Team, Race, TimeTrialEntry, TimeTrialResult } from '../../../shared/types';
+import { Country, Race, Rider, RiderPotentials, RiderSkillKey, RiderSkills, Role, Team, TimeTrialEntry, TimeTrialResult } from '../../../shared/types';
 
 const RIDER_SKILL_COLUMNS = [
   ['flat', 'flat'],
@@ -24,6 +24,9 @@ interface RiderRow {
   first_name: string;
   last_name: string;
   country_id: number;
+  role_id: number | null;
+  role_name: string | null;
+  role_weighting: number | null;
   country_name: string;
   country_code_3: Country['code3'];
   country_continent: string;
@@ -73,6 +76,7 @@ interface RiderRow {
   non_favorite_races: string;
   active_team_id: number | null;
   active_contract_id: number | null;
+  contract_end_season: number | null;
 }
 
 interface TeamRow {
@@ -81,6 +85,7 @@ interface TeamRow {
   abbreviation: string;
   division_id: number;
   u23_team: number | null;
+  main_team_id: number | null;
   is_player_team: number;
   country_id: number;
   country_name: string;
@@ -95,6 +100,7 @@ interface TeamRow {
   ai_focus_2: number;
   ai_focus_3: number;
   u23_team_name: string | null;
+  main_team_name: string | null;
   division_name: string;
 }
 
@@ -138,8 +144,21 @@ function mapCountry(row: Pick<RiderRow, 'country_id' | 'country_name' | 'country
   };
 }
 
+function mapRole(row: Pick<RiderRow, 'role_id' | 'role_name' | 'role_weighting'>): Role | undefined {
+  if (row.role_id == null || row.role_name == null || row.role_weighting == null) {
+    return undefined;
+  }
+
+  return {
+    id: row.role_id,
+    name: row.role_name,
+    weighting: row.role_weighting,
+  };
+}
+
 function mapRider(row: RiderRow, currentYear: number): Rider {
   const country = mapCountry(row);
+  const role = mapRole(row);
   return {
     id:            row.id,
     firstName:     row.first_name,
@@ -148,6 +167,8 @@ function mapRider(row: RiderRow, currentYear: number): Rider {
     countryId:     country.id,
     country,
     birthYear:     row.birth_year,
+    roleId:        row.role_id,
+    role,
     age:           currentYear - row.birth_year,
     potential:     row.pot_overall,
     overallRating: row.overall_rating,
@@ -163,6 +184,7 @@ function mapRider(row: RiderRow, currentYear: number): Rider {
     nonFavoriteRaces: parseRaceList(row.non_favorite_races),
     activeTeamId:  row.active_team_id,
     activeContractId: row.active_contract_id,
+    contractEndSeason: row.contract_end_season,
   };
 }
 
@@ -174,6 +196,7 @@ function mapTeam(row: TeamRow): Team {
     abbreviation:   row.abbreviation,
     divisionId:     row.division_id,
     u23TeamId:      row.u23_team,
+    mainTeamId:     row.main_team_id,
     isPlayerTeam:   row.is_player_team === 1,
     countryCode:    country.code3,
     countryId:      country.id,
@@ -184,6 +207,7 @@ function mapTeam(row: TeamRow): Team {
     aiFocus2:       row.ai_focus_2,
     aiFocus3:       row.ai_focus_3,
     u23TeamName:    row.u23_team_name ?? undefined,
+    mainTeamName:   row.main_team_name ?? undefined,
     divisionName:   row.division_name,
     shortName:      row.abbreviation,
     nationality:    country.code3,
@@ -230,6 +254,8 @@ export class GameRepository {
   private getRidersQuery(useContracts: boolean, filterByTeam: boolean): string {
     const countrySelect = `
       riders.*, 
+      role.name AS role_name,
+      role.weighting AS role_weighting,
       country.name AS country_name,
       country.code_3 AS country_code_3,
       country.continent AS country_continent,
@@ -240,8 +266,8 @@ export class GameRepository {
 
     if (!useContracts) {
       return filterByTeam
-        ? `SELECT ${countrySelect} FROM riders JOIN sta_country country ON country.id = riders.country_id WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
-        : `SELECT ${countrySelect} FROM riders JOIN sta_country country ON country.id = riders.country_id WHERE is_retired = 0 ORDER BY overall_rating DESC`;
+        ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
+        : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id WHERE is_retired = 0 ORDER BY overall_rating DESC`;
     }
 
     const activeContractJoin = `
@@ -260,9 +286,15 @@ export class GameRepository {
     const selectWithResolvedContract = `
       SELECT ${countrySelect},
              COALESCE(current_contract.team_id, riders.active_team_id) AS active_team_id,
-             COALESCE(current_contract.id, riders.active_contract_id) AS active_contract_id
+             COALESCE(current_contract.id, riders.active_contract_id) AS active_contract_id,
+             COALESCE(current_contract.end_season, (
+               SELECT c.end_season
+               FROM contracts c
+               WHERE c.id = riders.active_contract_id
+             )) AS contract_end_season
       FROM riders
       JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN sta_role role ON role.id = riders.role_id
       ${activeContractJoin}
     `;
 
@@ -290,14 +322,22 @@ export class GameRepository {
     const season = this.getCurrentSeason();
     const row = this.db.prepare(`
       SELECT riders.*, 
+             role.name AS role_name,
+             role.weighting AS role_weighting,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
-             country.number_regen_max AS country_number_regen_max
+              country.number_regen_max AS country_number_regen_max,
+              (
+           SELECT c.end_season
+           FROM contracts c
+           WHERE c.id = riders.active_contract_id
+              ) AS contract_end_season
       FROM riders
       JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN sta_role role ON role.id = riders.role_id
       WHERE riders.id = ?
     `).get(id) as RiderRow | undefined;
     return row ? mapRider(row, season) : null;
@@ -305,7 +345,8 @@ export class GameRepository {
 
   public getTeams(): Team[] {
     const rows = this.db.prepare(`
-      SELECT t.id, t.name, t.abbreviation, t.division_id, t.u23_team,
+            SELECT t.id, t.name, t.abbreviation, t.division_id, t.u23_team,
+              main.id AS main_team_id,
              t.is_player_team, t.country_id,
              country.name AS country_name,
              country.code_3 AS country_code_3,
@@ -314,12 +355,13 @@ export class GameRepository {
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
              t.color_primary, t.color_secondary,
-             t.ai_focus_1, t.ai_focus_2, t.ai_focus_3,
-             u23.name AS u23_team_name, dt.name AS division_name
+                  t.ai_focus_1, t.ai_focus_2, t.ai_focus_3,
+                  u23.name AS u23_team_name, main.name AS main_team_name, dt.name AS division_name
       FROM teams t
       JOIN division_teams dt ON dt.id = t.division_id
       JOIN sta_country country ON country.id = t.country_id
       LEFT JOIN teams u23 ON u23.id = t.u23_team
+                LEFT JOIN teams main ON main.u23_team = t.id
       ORDER BY dt.tier, t.name
     `).all() as TeamRow[];
     return rows.map(mapTeam);
@@ -327,7 +369,8 @@ export class GameRepository {
 
   public getTeamById(id: number): Team | null {
     const row = this.db.prepare(`
-      SELECT t.id, t.name, t.abbreviation, t.division_id, t.u23_team,
+        SELECT t.id, t.name, t.abbreviation, t.division_id, t.u23_team,
+          main.id AS main_team_id,
           t.is_player_team, t.country_id,
           country.name AS country_name,
           country.code_3 AS country_code_3,
@@ -336,12 +379,13 @@ export class GameRepository {
           country.number_regen_min AS country_number_regen_min,
           country.number_regen_max AS country_number_regen_max,
           t.color_primary, t.color_secondary,
-             t.ai_focus_1, t.ai_focus_2, t.ai_focus_3,
-             u23.name AS u23_team_name, dt.name AS division_name
+                  t.ai_focus_1, t.ai_focus_2, t.ai_focus_3,
+                  u23.name AS u23_team_name, main.name AS main_team_name, dt.name AS division_name
       FROM teams t
       JOIN division_teams dt ON dt.id = t.division_id
         JOIN sta_country country ON country.id = t.country_id
       LEFT JOIN teams u23 ON u23.id = t.u23_team
+                LEFT JOIN teams main ON main.u23_team = t.id
       WHERE t.id = ?
     `).get(id) as TeamRow | undefined;
     return row ? mapTeam(row) : null;
@@ -377,14 +421,22 @@ export class GameRepository {
     const season = this.getCurrentSeason();
     const rows = this.db.prepare(`
       SELECT r.*, 
+             role.name AS role_name,
+             role.weighting AS role_weighting,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
-             country.number_regen_max AS country_number_regen_max
+              country.number_regen_max AS country_number_regen_max,
+              (
+           SELECT c.end_season
+           FROM contracts c
+           WHERE c.id = r.active_contract_id
+              ) AS contract_end_season
       FROM riders r
       JOIN sta_country country ON country.id = r.country_id
+      LEFT JOIN sta_role role ON role.id = r.role_id
       INNER JOIN race_entries re ON re.rider_id = r.id
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
@@ -416,15 +468,23 @@ export class GameRepository {
     type ResultRow = RiderRow & { finish_position: number; finish_time_sec: number; gap_sec: number; day_form_factor: number };
     const resultRows = this.db.prepare(`
       SELECT rr.finish_position, rr.finish_time_sec, rr.gap_sec, rr.day_form_factor, r.*,
+             role.name AS role_name,
+             role.weighting AS role_weighting,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
-             country.number_regen_max AS country_number_regen_max
+              country.number_regen_max AS country_number_regen_max,
+              (
+           SELECT c.end_season
+           FROM contracts c
+           WHERE c.id = r.active_contract_id
+              ) AS contract_end_season
       FROM race_results rr
       JOIN riders r ON r.id = rr.rider_id
       JOIN sta_country country ON country.id = r.country_id
+      LEFT JOIN sta_role role ON role.id = r.role_id
       WHERE rr.race_id = ?
       ORDER BY rr.finish_position ASC
     `).all(raceId) as ResultRow[];

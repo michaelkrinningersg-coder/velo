@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState } from '../../../shared/types';
+import { ContractService } from './ContractService';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -75,6 +76,10 @@ export class GameStateService {
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
+
+      if (nextSeason !== currentRow.season) {
+        new ContractService(this.db).checkContractStatuses(nextSeason);
+      }
 
       return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
     })();

@@ -11,12 +11,22 @@ const state: {
   races: Race[];
   riders: Rider[];
   teams: Team[];
+  teamTableSort: {
+    key: TeamTableSortKey;
+    direction: 'asc' | 'desc';
+  };
+  teamDetailsRiderId: number | null;
 } = {
   currentSave: null,
   gameState: null,
   races: [],
   riders: [],
   teams: [],
+  teamTableSort: {
+    key: 'name',
+    direction: 'asc',
+  },
+  teamDetailsRiderId: null,
 };
 
 // ============================================================
@@ -79,12 +89,89 @@ const TEAM_SKILL_COLUMNS: Array<{ key: keyof Rider['skills']; label: string }> =
   { key: 'bikeHandling', label: 'Ftg' },
 ];
 
+type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'contractEndSeason' | 'roleName' | 'riderType' | keyof Rider['skills'];
+
+interface TeamTableColumn {
+  id: string;
+  label: string;
+  title: string;
+  sortKey?: TeamTableSortKey;
+  className?: string;
+}
+
+const TEAM_SKILL_TITLES: Record<keyof Rider['skills'], string> = {
+  flat: 'Flach',
+  mountain: 'Berg',
+  mediumMountain: 'Mittlere Berge',
+  hill: 'Hügel',
+  timeTrial: 'Zeitfahren',
+  prologue: 'Prolog',
+  cobble: 'Pflaster',
+  sprint: 'Sprint',
+  acceleration: 'Antritt',
+  downhill: 'Abfahrt',
+  attack: 'Attacke',
+  stamina: 'Stamina',
+  resistance: 'Widerstand',
+  recuperation: 'Regeneration',
+  bikeHandling: 'Fahrtechnik',
+};
+
+const TEAM_TABLE_COLUMNS: TeamTableColumn[] = [
+  { id: 'name', label: 'Name', title: 'Name - Nachname, Vorname', sortKey: 'name', className: 'team-table-col-name' },
+  { id: 'flag', label: '', title: '', className: 'team-table-col-flag' },
+  { id: 'code', label: 'Country', title: 'Country - Sortierung nach 3er-Code', sortKey: 'countryCode', className: 'team-table-col-code' },
+  { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
+  { id: 'age', label: 'Alt', title: 'Alter', sortKey: 'age', className: 'team-table-col-age' },
+  { id: 'overallRating', label: 'Ges', title: 'Gesamtstärke', sortKey: 'overallRating', className: 'team-table-col-overall' },
+  { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
+  { id: 'roleName', label: 'Rolle', title: 'Teamrolle des Fahrers', sortKey: 'roleName', className: 'team-table-col-role' },
+  ...TEAM_SKILL_COLUMNS.map((column) => ({
+    id: column.key,
+    label: column.label,
+    title: `${column.label} - ${TEAM_SKILL_TITLES[column.key]}`,
+    sortKey: column.key,
+    className: 'team-table-col-skill',
+  })),
+  { id: 'info', label: 'Info', title: 'Info - Profil und Vorlieben anzeigen', sortKey: 'riderType', className: 'team-table-col-info' },
+];
+
+const TEAM_TABLE_COLUMN_COUNT = TEAM_TABLE_COLUMNS.length;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function interpolateChannel(start: number, end: number, ratio: number): number {
+  return Math.round(start + (end - start) * ratio);
+}
+
+function interpolateColor(start: [number, number, number], end: [number, number, number], ratio: number): string {
+  return `rgb(${interpolateChannel(start[0], end[0], ratio)} ${interpolateChannel(start[1], end[1], ratio)} ${interpolateChannel(start[2], end[2], ratio)})`;
+}
+
 function getSkillColor(value: number): string {
-  const min = 40;
-  const max = 85;
-  const ratio = Math.max(0, Math.min(1, (value - min) / (max - min)));
-  const hue = 0 + ratio * 120;
-  return `hsl(${hue.toFixed(0)} 58% 28%)`;
+  const colorStops: Array<{ value: number; color: [number, number, number] }> = [
+    { value: 40, color: [86, 16, 28] },
+    { value: 50, color: [132, 24, 38] },
+    { value: 60, color: [185, 72, 18] },
+    { value: 70, color: [212, 145, 24] },
+    { value: 78, color: [88, 191, 92] },
+    { value: 85, color: [196, 255, 188] },
+  ];
+
+  const boundedValue = clamp(value, colorStops[0].value, colorStops[colorStops.length - 1].value);
+
+  for (let index = 1; index < colorStops.length; index += 1) {
+    const previousStop = colorStops[index - 1];
+    const currentStop = colorStops[index];
+    if (boundedValue <= currentStop.value) {
+      const ratio = (boundedValue - previousStop.value) / (currentStop.value - previousStop.value);
+      return interpolateColor(previousStop.color, currentStop.color, ratio);
+    }
+  }
+
+  return interpolateColor(colorStops[colorStops.length - 1].color, colorStops[colorStops.length - 1].color, 1);
 }
 
 function renderSkillValue(value: number): string {
@@ -127,6 +214,155 @@ function renderFlag(code3: string): string {
 function renderCountry(country?: Team['country'] | Rider['country'], fallbackCode?: string): string {
   if (!country) return fallbackCode ? esc(fallbackCode) : '–';
   return `<span class="country-chip">${renderFlag(country.code3)}<span>${esc(country.name)}</span></span>`;
+}
+
+function getRiderCountryCode(rider: Rider): string {
+  return rider.country?.code3 ?? rider.nationality;
+}
+
+function formatRiderName(rider: Rider): string {
+  return `${rider.lastName} ${rider.firstName}`;
+}
+
+function getRiderRoleName(rider: Rider): string {
+  return rider.role?.name ?? (rider.roleId != null ? `Rolle ${rider.roleId}` : '–');
+}
+
+function getTeamTopAverage(teamId: number, limit = 12): number | null {
+  const teamRiders = state.riders
+    .filter(rider => rider.activeTeamId === teamId)
+    .sort((left, right) => right.overallRating - left.overallRating)
+    .slice(0, limit);
+
+  if (teamRiders.length === 0) return null;
+  const total = teamRiders.reduce((sum, rider) => sum + rider.overallRating, 0);
+  return total / teamRiders.length;
+}
+
+function getTeamAverage(teamId: number): number | null {
+  const teamRiders = state.riders.filter(rider => rider.activeTeamId === teamId);
+  if (teamRiders.length === 0) return null;
+  const total = teamRiders.reduce((sum, rider) => sum + rider.overallRating, 0);
+  return total / teamRiders.length;
+}
+
+function formatTeamTopAverage(teamId: number): string {
+  const average = getTeamTopAverage(teamId);
+  return average == null ? '–' : average.toFixed(1).replace('.', ',');
+}
+
+function formatTeamAverage(teamId: number): string {
+  const average = getTeamAverage(teamId);
+  return average == null ? '–' : average.toFixed(1).replace('.', ',');
+}
+
+function compareStrings(left: string, right: string): number {
+  return left.localeCompare(right, 'de', { sensitivity: 'base' });
+}
+
+function getSortIndicator(sortKey: TeamTableSortKey): string {
+  if (state.teamTableSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
+  return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.teamTableSort.direction === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+function renderTeamTableHeader(column: TeamTableColumn): string {
+  if (!column.sortKey) {
+    return `<th class="${column.className ?? ''}"></th>`;
+  }
+
+  const activeClass = state.teamTableSort.key === column.sortKey ? ' team-table-sort-active' : '';
+  return `
+    <th class="${column.className ?? ''}">
+      <button
+        type="button"
+        class="team-table-sort${activeClass}"
+        data-team-sort="${column.sortKey}"
+        title="${esc(column.title)}"
+        aria-label="${esc(column.title)}"
+      >
+        <span class="team-table-sort-label">${esc(column.label)}</span>
+        ${getSortIndicator(column.sortKey)}
+      </button>
+    </th>`;
+}
+
+function sortTeamRiders(riders: Rider[]): Rider[] {
+  const sortedRiders = [...riders];
+  const directionFactor = state.teamTableSort.direction === 'asc' ? 1 : -1;
+
+  sortedRiders.sort((left, right) => {
+    let comparison = 0;
+
+    switch (state.teamTableSort.key) {
+      case 'name':
+        comparison = compareStrings(left.lastName, right.lastName) || compareStrings(left.firstName, right.firstName);
+        break;
+      case 'countryCode':
+        comparison = compareStrings(getRiderCountryCode(left), getRiderCountryCode(right));
+        break;
+      case 'birthYear':
+        comparison = left.birthYear - right.birthYear;
+        break;
+      case 'age':
+        comparison = (left.age ?? 0) - (right.age ?? 0);
+        break;
+      case 'overallRating':
+        comparison = left.overallRating - right.overallRating;
+        break;
+      case 'contractEndSeason':
+        comparison = (left.contractEndSeason ?? Number.MAX_SAFE_INTEGER) - (right.contractEndSeason ?? Number.MAX_SAFE_INTEGER);
+        break;
+      case 'roleName':
+        comparison = compareStrings(getRiderRoleName(left), getRiderRoleName(right));
+        break;
+      case 'riderType':
+        comparison = compareStrings(left.riderType, right.riderType)
+          || compareStrings(formatRiderName(left), formatRiderName(right));
+        break;
+      default:
+        comparison = left.skills[state.teamTableSort.key] - right.skills[state.teamTableSort.key];
+        break;
+    }
+
+    if (comparison === 0) {
+      comparison = compareStrings(left.lastName, right.lastName) || compareStrings(left.firstName, right.firstName);
+    }
+
+    return comparison * directionFactor;
+  });
+
+  return sortedRiders;
+}
+
+function renderRacePrefs(raceIds: number[]): string {
+  if (raceIds.length === 0) return '–';
+  return raceIds.map(raceId => {
+    const race = state.races.find(entry => entry.id === raceId);
+    return race ? esc(race.name) : `Rennen ${raceId}`;
+  }).join(', ');
+}
+
+function renderRiderInsightRow(rider: Rider): string {
+  return `
+    <tr class="team-detail-expansion-row">
+      <td colspan="${TEAM_TABLE_COLUMN_COUNT}">
+        <div class="rider-insight-panel">
+          <div class="rider-insight-group">
+            <div class="rider-insight-title">Profil</div>
+            <div><span class="text-muted">Rolle:</span> ${esc(getRiderRoleName(rider))}</div>
+            <div><strong>${esc(rider.riderType)}</strong></div>
+            <div class="text-muted">${esc([rider.specialization1, rider.specialization2, rider.specialization3].filter(Boolean).join(' · ') || 'Keine Spezialisierung')}</div>
+            <div class="text-muted">${rider.isStageRacer ? 'Etappenfahrer' : 'Kein Etappenfokus'} / ${rider.isOneDayRacer ? 'Eintagesfahrer' : 'Kein Eintagesfokus'}</div>
+            <div class="text-muted">Vertragsende: ${rider.contractEndSeason ?? '–'}</div>
+          </div>
+          <div class="rider-insight-group">
+            <div class="rider-insight-title">Vorlieben</div>
+            <div><span class="text-muted">Fav:</span> ${renderRacePrefs(rider.favoriteRaces)}</div>
+            <div><span class="text-muted">No:</span> ${renderRacePrefs(rider.nonFavoriteRaces)}</div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
 }
 
 // ============================================================
@@ -296,7 +532,34 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
 
 $<HTMLSelectElement>('teams-dropdown').addEventListener('change', (e) => {
   const val = (e.target as HTMLSelectElement).value;
+  state.teamDetailsRiderId = null;
   renderTeamDetail(val ? Number(val) : null);
+});
+
+$('teams-detail').addEventListener('click', (event) => {
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-team-sort]');
+  if (sortButton) {
+    const sortKey = sortButton.dataset['teamSort'] as TeamTableSortKey;
+    if (state.teamTableSort.key === sortKey) {
+      state.teamTableSort.direction = state.teamTableSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.teamTableSort = {
+        key: sortKey,
+        direction: sortKey === 'birthYear' || sortKey === 'age' || sortKey === 'overallRating' ? 'desc' : 'asc',
+      };
+    }
+    const selectedTeamId = Number($<HTMLSelectElement>('teams-dropdown').value);
+    renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
+    return;
+  }
+
+  const infoButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-info]');
+  if (!infoButton) return;
+
+  const riderId = Number(infoButton.dataset['riderInfo']);
+  state.teamDetailsRiderId = state.teamDetailsRiderId === riderId ? null : riderId;
+  const selectedTeamId = Number($<HTMLSelectElement>('teams-dropdown').value);
+  renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
 });
 
 $('btn-back-menu').addEventListener('click', () => {
@@ -353,7 +616,6 @@ function renderDashboard(): void {
     ?? null;
   $('dashboard-career').textContent   = state.currentSave?.careerName ?? '–';
   $('dashboard-team').textContent     = playerTeam?.name ?? state.currentSave?.teamName ?? '–';
-  $('dashboard-u23-team').textContent = playerTeam?.u23TeamName ?? '–';
   $('dashboard-date').textContent     = state.gameState?.formattedDate ?? '–';
   $('dashboard-season').textContent   = state.gameState ? `Saison ${state.gameState.season}` : '–';
   $('dashboard-races-today').textContent = String(state.gameState?.racesTodayCount ?? 0);
@@ -500,7 +762,7 @@ function renderTeams(): void {
   const currentVal = dropdown.value;
   dropdown.innerHTML = '<option value="">– Team auswählen –</option>' +
     state.teams.map(t =>
-      `<option value="${t.id}"${String(t.id) === currentVal ? ' selected' : ''}>${esc(t.name)} (${esc(t.division ?? t.divisionName ?? '')})</option>`,
+      `<option value="${t.id}"${String(t.id) === currentVal ? ' selected' : ''}>${esc(t.name)} (${esc(t.division ?? t.divisionName ?? '')}) · ${esc(t.abbreviation)}</option>`,
     ).join('');
   const selectedId = currentVal ? Number(currentVal) : null;
   renderTeamDetail(selectedId);
@@ -514,18 +776,7 @@ function renderTeamDetail(teamId: number | null): void {
   }
   const team = state.teams.find(t => t.id === teamId);
   if (!team) { detail.innerHTML = ''; return; }
-  const riders = state.riders.filter(r => r.activeTeamId === teamId).sort((a, b) => b.overallRating - a.overallRating);
-  const linkedMain = state.teams.find(c => c.u23TeamId === teamId);
-  const teamLinkInfo = team.u23TeamName
-    ? `U23-Team: ${esc(team.u23TeamName)}`
-    : linkedMain ? `Hauptteam: ${esc(linkedMain.name)}` : null;
-  const renderRacePrefs = (raceIds: number[]): string => {
-    if (raceIds.length === 0) return '–';
-    return raceIds.map(raceId => {
-      const race = state.races.find(entry => entry.id === raceId);
-      return race ? esc(race.name) : `Rennen ${raceId}`;
-    }).join(', ');
-  };
+  const riders = sortTeamRiders(state.riders.filter(r => r.activeTeamId === teamId));
   const divBadge = team.division === 'U23' ? 'badge-u23' : 'badge-classics';
   detail.innerHTML = `
     <div class="team-detail-card">
@@ -534,41 +785,48 @@ function renderTeamDetail(teamId: number | null): void {
         <div class="team-detail-meta">
           <span class="badge ${divBadge}">${esc(team.division ?? team.divisionName ?? '')}</span>
           <span>${renderCountry(team.country, team.countryCode)}</span>
-          <span>Kürzel: ${esc(team.abbreviation)}</span>
+          <span>Kürzel: ${esc(team.abbreviation)} · Top 12 ${esc(formatTeamTopAverage(team.id))} (${esc(formatTeamAverage(team.id))})</span>
           ${team.isPlayerTeam ? '<span class="badge badge-live">Spielerteam</span>' : ''}
-          ${teamLinkInfo ? `<span class="text-muted">${teamLinkInfo}</span>` : ''}
         </div>
       </div>
       <div class="team-detail-meta" style="margin-top:0.75rem">
         <span>${riders.length} Fahrer</span>
+        <span class="text-muted">Sortierung: ${esc(state.teamTableSort.key === 'name' ? 'Nachname' : state.teamTableSort.key === 'countryCode' ? 'Country' : state.teamTableSort.key === 'birthYear' ? 'Jahrgang' : state.teamTableSort.key === 'age' ? 'Alter' : state.teamTableSort.key === 'overallRating' ? 'Gesamt' : state.teamTableSort.key === 'contractEndSeason' ? 'Vertragsende' : state.teamTableSort.key === 'roleName' ? 'Rolle' : state.teamTableSort.key === 'riderType' ? 'Profil' : TEAM_SKILL_TITLES[state.teamTableSort.key])} ${state.teamTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
       </div>
-      <table class="data-table" style="margin-top:1rem">
+      <table class="data-table data-table-teams" style="margin-top:1rem">
         <thead><tr>
-          <th>Name</th><th>Nat</th><th>Jg.</th><th>Alter</th><th>ÜW</th>
-          ${TEAM_SKILL_COLUMNS.map(column => `<th>${column.label}</th>`).join('')}
-          <th>Profil</th><th>Vorlieben</th>
+          ${TEAM_TABLE_COLUMNS.map(renderTeamTableHeader).join('')}
         </tr></thead>
         <tbody>
           ${riders.length === 0
-            ? `<tr><td colspan="${5 + TEAM_SKILL_COLUMNS.length + 2}" class="text-muted">Keine Fahrer.</td></tr>`
-            : riders.map(r => `
-              <tr>
-                <td><strong>${esc(r.firstName)} ${esc(r.lastName)}</strong></td>
-                <td>${renderCountry(r.country, r.nationality)}</td>
+            ? `<tr><td colspan="${TEAM_TABLE_COLUMN_COUNT}" class="text-muted">Keine Fahrer.</td></tr>`
+            : riders.map(r => {
+              const countryCode = getRiderCountryCode(r);
+              const isExpanded = state.teamDetailsRiderId === r.id;
+              return `
+              <tr class="team-detail-row${isExpanded ? ' team-detail-row-expanded' : ''}">
+                <td class="team-table-name-cell"><strong>${esc(formatRiderName(r))}</strong></td>
+                <td class="team-table-flag-cell">${renderFlag(countryCode)}</td>
+                <td class="team-table-code-cell">${esc(countryCode)}</td>
                 <td>${r.birthYear}</td>
                 <td>${r.age ?? '–'}</td>
                 <td>${renderSkillValue(r.overallRating)}</td>
+                <td>${r.contractEndSeason ?? '–'}</td>
+                <td>${esc(getRiderRoleName(r))}</td>
                 ${TEAM_SKILL_COLUMNS.map(column => `<td>${renderSkillValue(r.skills[column.key])}</td>`).join('')}
-                <td>
-                  <strong>${esc(r.riderType)}</strong><br>
-                  <span class="text-muted">${esc([r.specialization1, r.specialization2, r.specialization3].filter(Boolean).join(' · '))}</span><br>
-                  <span class="text-muted">${r.isStageRacer ? 'Etappe' : '–'} / ${r.isOneDayRacer ? 'Eintages' : '–'}</span>
+                <td class="team-table-info-cell">
+                  <button
+                    type="button"
+                    class="info-toggle${isExpanded ? ' info-toggle-active' : ''}"
+                    data-rider-info="${r.id}"
+                    title="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'}"
+                    aria-expanded="${isExpanded ? 'true' : 'false'}"
+                    aria-label="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'}"
+                  >i</button>
                 </td>
-                <td>
-                  <span class="text-muted">Fav:</span> ${renderRacePrefs(r.favoriteRaces)}<br>
-                  <span class="text-muted">No:</span> ${renderRacePrefs(r.nonFavoriteRaces)}
-                </td>
-              </tr>`).join('')}
+              </tr>
+              ${isExpanded ? renderRiderInsightRow(r) : ''}`;
+            }).join('')}
         </tbody>
       </table>
     </div>`;
