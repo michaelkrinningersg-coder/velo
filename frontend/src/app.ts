@@ -64,9 +64,10 @@ function raceTypeBadge(type: string): string {
 
 function attrBar(value: number): string {
   const pct = Math.min(100, Math.max(0, value));
+  const displayValue = Math.round(value);
   return `
     <div class="attr-bar-wrap">
-      <span style="width:2.2em;text-align:right">${value}</span>
+      <span style="width:2.2em;text-align:right">${displayValue}</span>
       <div class="attr-bar"><div class="attr-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
 }
@@ -175,7 +176,7 @@ function getSkillColor(value: number): string {
 }
 
 function renderSkillValue(value: number): string {
-  return `<span class="skill-value" style="color:${getSkillColor(value)}">${value}</span>`;
+  return `<span class="skill-value" style="color:${getSkillColor(value)}">${Math.round(value)}</span>`;
 }
 
 const FLAG_CODE_BY_CODE3: Record<string, string> = {
@@ -202,6 +203,9 @@ const FLAG_CODE_BY_CODE3: Record<string, string> = {
   SVK: 'sk',
   KAZ: 'kz',
   RSA: 'za',
+  UAE: 'ae',
+  BHR: 'bh',
+  HUN: 'hu',
   OTH: 'un',
 };
 
@@ -342,7 +346,36 @@ function renderRacePrefs(raceIds: number[]): string {
   }).join(', ');
 }
 
+function getRiderSpecializationLabel(value: Rider['riderType'] | Rider['specialization1']): string {
+  switch (value) {
+    case 'Berg':
+      return 'Bergfahrer';
+    case 'Hill':
+      return 'Hügelspezialist';
+    case 'Sprint':
+      return 'Sprinter';
+    case 'Timetrial':
+      return 'Zeitfahrer';
+    case 'Cobble':
+      return 'Pflasterspezialist';
+    case 'Attacker':
+      return 'Angreifer';
+    default:
+      return value ?? 'Keine Spezialisierung';
+  }
+}
+
 function renderRiderInsightRow(rider: Rider): string {
+  const riderTags = [
+    rider.hasGrandTourTag ? 'Grand Tour' : null,
+    rider.hasStageRaceTag ? 'Etappenrennen' : null,
+    rider.hasOneDayClassicTag ? 'One Day Classic' : null,
+  ].filter(Boolean).join(' · ');
+  const riderSpecializations = [rider.specialization1, rider.specialization2, rider.specialization3]
+    .filter((value): value is NonNullable<typeof value> => value != null)
+    .map(getRiderSpecializationLabel)
+    .join(' · ');
+
   return `
     <tr class="team-detail-expansion-row">
       <td colspan="${TEAM_TABLE_COLUMN_COUNT}">
@@ -350,8 +383,10 @@ function renderRiderInsightRow(rider: Rider): string {
           <div class="rider-insight-group">
             <div class="rider-insight-title">Profil</div>
             <div><span class="text-muted">Rolle:</span> ${esc(getRiderRoleName(rider))}</div>
-            <div><strong>${esc(rider.riderType)}</strong></div>
-            <div class="text-muted">${esc([rider.specialization1, rider.specialization2, rider.specialization3].filter(Boolean).join(' · ') || 'Keine Spezialisierung')}</div>
+            <div><strong>${esc(getRiderSpecializationLabel(rider.riderType))}</strong></div>
+            <div class="text-muted">${esc(riderSpecializations || 'Keine Spezialisierung')}</div>
+            <div class="text-muted">Tags: ${esc(riderTags || 'Keine Tags')}</div>
+            <div class="text-muted">Skill-Development: ${rider.skillDevelopment ?? '–'}</div>
             <div class="text-muted">${rider.isStageRacer ? 'Etappenfahrer' : 'Kein Etappenfokus'} / ${rider.isOneDayRacer ? 'Eintagesfahrer' : 'Kein Eintagesfokus'}</div>
             <div class="text-muted">Vertragsende: ${rider.contractEndSeason ?? '–'}</div>
           </div>

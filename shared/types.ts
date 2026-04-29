@@ -7,7 +7,8 @@
 export type Nationality =
   | 'BEL' | 'FRA' | 'ITA' | 'ESP' | 'NED' | 'GER' | 'GBR' | 'USA'
   | 'COL' | 'AUS' | 'DEN' | 'NOR' | 'SLO' | 'POR' | 'SUI' | 'POL'
-  | 'AUT' | 'LUX' | 'IRE' | 'CZE' | 'SVK' | 'KAZ' | 'RSA' | 'OTH';
+  | 'AUT' | 'LUX' | 'IRE' | 'CZE' | 'SVK' | 'KAZ' | 'RSA' | 'UAE'
+  | 'BHR' | 'HUN' | 'OTH';
 
 export interface Country {
   id: number;
@@ -23,6 +24,14 @@ export interface Role {
   id: number;
   name: string;
   weighting: number;
+}
+
+export interface TypeRider {
+  id: number;
+  key: RiderSpecialization;
+  displayName: string;
+  isStageFocus: boolean;
+  isOneDayFocus: boolean;
 }
 
 export type RiderSkillKey =
@@ -44,14 +53,11 @@ export type RiderSkillKey =
 
 export type RiderSpecialization =
   | 'Cobble'
-  | 'Etappenrennen'
   | 'Berg'
   | 'Hill'
   | 'Sprint'
   | 'Timetrial'
-  | 'Attacker'
-  | 'One-Day-Classic'
-  | 'GrandTour';
+  | 'Attacker';
 
 export type RiderSkills = Record<RiderSkillKey, number>;
 export type RiderPotentials = Record<RiderSkillKey, number>;
@@ -76,8 +82,16 @@ export interface Rider {
   country?: Country;
   roleId?: number | null;
   role?: Role;
+  riderTypeId?: number;
+  specialization1Id?: number | null;
+  specialization2Id?: number | null;
+  specialization3Id?: number | null;
   birthYear: number;
   age?: number;
+  peakAge?: number;
+  declineAge?: number;
+  retirementAge?: number;
+  skillDevelopment?: number;
   potential: number;
   overallRating: number;
   skills: RiderSkills;
@@ -88,6 +102,9 @@ export interface Rider {
   specialization3: RiderSpecialization | null;
   isStageRacer: boolean;
   isOneDayRacer: boolean;
+  hasGrandTourTag: boolean;
+  hasStageRaceTag: boolean;
+  hasOneDayClassicTag: boolean;
   favoriteRaces: number[];
   nonFavoriteRaces: number[];
   activeTeamId: number | null;

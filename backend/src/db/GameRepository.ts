@@ -27,6 +27,9 @@ interface RiderRow {
   role_id: number | null;
   role_name: string | null;
   role_weighting: number | null;
+  rider_type_id: number;
+  rider_type: Rider['riderType'];
+  specialization_1_id: number | null;
   country_name: string;
   country_code_3: Country['code3'];
   country_continent: string;
@@ -34,6 +37,10 @@ interface RiderRow {
   country_number_regen_min: number;
   country_number_regen_max: number;
   birth_year: number;
+  peak_age: number;
+  decline_age: number;
+  retirement_age: number;
+  skill_development: number;
   pot_overall: number;
   overall_rating: number;
   skill_flat: number;
@@ -66,12 +73,16 @@ interface RiderRow {
   pot_resistance: number;
   pot_recuperation: number;
   pot_bike_handling: number;
-  rider_type: Rider['riderType'];
   specialization_1: Rider['specialization1'];
+  specialization_2_id: number | null;
   specialization_2: Rider['specialization2'];
+  specialization_3_id: number | null;
   specialization_3: Rider['specialization3'];
   is_stage_racer: number;
   is_one_day_racer: number;
+  has_grand_tour_tag: number;
+  has_stage_race_tag: number;
+  has_one_day_classic_tag: number;
   favorite_races: string;
   non_favorite_races: string;
   active_team_id: number | null;
@@ -166,7 +177,15 @@ function mapRider(row: RiderRow, currentYear: number): Rider {
     nationality:   country.code3,
     countryId:     country.id,
     country,
+    riderTypeId:   row.rider_type_id,
+    specialization1Id: row.specialization_1_id,
+    specialization2Id: row.specialization_2_id,
+    specialization3Id: row.specialization_3_id,
     birthYear:     row.birth_year,
+    peakAge:       row.peak_age,
+    declineAge:    row.decline_age,
+    retirementAge: row.retirement_age,
+    skillDevelopment: row.skill_development,
     roleId:        row.role_id,
     role,
     age:           currentYear - row.birth_year,
@@ -180,6 +199,9 @@ function mapRider(row: RiderRow, currentYear: number): Rider {
     specialization3: row.specialization_3,
     isStageRacer:  row.is_stage_racer === 1,
     isOneDayRacer: row.is_one_day_racer === 1,
+    hasGrandTourTag: row.has_grand_tour_tag === 1,
+    hasStageRaceTag: row.has_stage_race_tag === 1,
+    hasOneDayClassicTag: row.has_one_day_classic_tag === 1,
     favoriteRaces: parseRaceList(row.favorite_races),
     nonFavoriteRaces: parseRaceList(row.non_favorite_races),
     activeTeamId:  row.active_team_id,
@@ -256,6 +278,10 @@ export class GameRepository {
       riders.*, 
       role.name AS role_name,
       role.weighting AS role_weighting,
+      rider_type.type_key AS rider_type,
+      specialization_1.type_key AS specialization_1,
+      specialization_2.type_key AS specialization_2,
+      specialization_3.type_key AS specialization_3,
       country.name AS country_name,
       country.code_3 AS country_code_3,
       country.continent AS country_continent,
@@ -295,6 +321,10 @@ export class GameRepository {
       FROM riders
       JOIN sta_country country ON country.id = riders.country_id
       LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
+      LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
       ${activeContractJoin}
     `;
 
@@ -324,6 +354,10 @@ export class GameRepository {
       SELECT riders.*, 
              role.name AS role_name,
              role.weighting AS role_weighting,
+               rider_type.type_key AS rider_type,
+               specialization_1.type_key AS specialization_1,
+               specialization_2.type_key AS specialization_2,
+               specialization_3.type_key AS specialization_3,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
@@ -338,6 +372,10 @@ export class GameRepository {
       FROM riders
       JOIN sta_country country ON country.id = riders.country_id
       LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
+      LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
       WHERE riders.id = ?
     `).get(id) as RiderRow | undefined;
     return row ? mapRider(row, season) : null;
@@ -423,6 +461,10 @@ export class GameRepository {
       SELECT r.*, 
              role.name AS role_name,
              role.weighting AS role_weighting,
+               rider_type.type_key AS rider_type,
+               specialization_1.type_key AS specialization_1,
+               specialization_2.type_key AS specialization_2,
+               specialization_3.type_key AS specialization_3,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
@@ -437,6 +479,10 @@ export class GameRepository {
       FROM riders r
       JOIN sta_country country ON country.id = r.country_id
       LEFT JOIN sta_role role ON role.id = r.role_id
+      LEFT JOIN type_rider rider_type ON rider_type.id = r.rider_type_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
+      LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
       INNER JOIN race_entries re ON re.rider_id = r.id
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
@@ -470,6 +516,10 @@ export class GameRepository {
       SELECT rr.finish_position, rr.finish_time_sec, rr.gap_sec, rr.day_form_factor, r.*,
              role.name AS role_name,
              role.weighting AS role_weighting,
+             rider_type.type_key AS rider_type,
+             specialization_1.type_key AS specialization_1,
+             specialization_2.type_key AS specialization_2,
+             specialization_3.type_key AS specialization_3,
              country.name AS country_name,
              country.code_3 AS country_code_3,
              country.continent AS country_continent,
@@ -485,6 +535,10 @@ export class GameRepository {
       JOIN riders r ON r.id = rr.rider_id
       JOIN sta_country country ON country.id = r.country_id
       LEFT JOIN sta_role role ON role.id = r.role_id
+      LEFT JOIN type_rider rider_type ON rider_type.id = r.rider_type_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
+      LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
       WHERE rr.race_id = ?
       ORDER BY rr.finish_position ASC
     `).all(raceId) as ResultRow[];

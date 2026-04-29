@@ -4,7 +4,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { SavegameMeta } from '../../../shared/types';
 import { ContractService } from '../game/ContractService';
+import { RiderDevelopmentService } from '../game/RiderDevelopmentService';
 import { GameStateService } from '../game/GameStateService';
+import { RiderTagService } from '../game/RiderTagService';
 
 const MASTER_DB_NAME = 'world_data.db';
 
@@ -98,7 +100,9 @@ export class DatabaseService {
 
       const gss = new GameStateService(db);
       const gameState = gss.ensureState();
+      new RiderDevelopmentService(db).initializeRiders(gameState.season, true);
       new ContractService(db).checkContractStatuses(gameState.season);
+      new RiderTagService(db).recalculateAllTags();
       db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -129,7 +133,9 @@ export class DatabaseService {
 
     const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
     const season = seasonRow?.season ?? 2026;
+    new RiderDevelopmentService(db).initializeRiders(season, false);
     new ContractService(db).checkContractStatuses(season);
+    new RiderTagService(db).recalculateAllTags();
   }
 
   public getActiveConnection(): Database.Database {

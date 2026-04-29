@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState } from '../../../shared/types';
 import { ContractService } from './ContractService';
+import { RiderTagService } from './RiderTagService';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -79,6 +80,7 @@ export class GameStateService {
 
       if (nextSeason !== currentRow.season) {
         new ContractService(this.db).checkContractStatuses(nextSeason);
+        new RiderTagService(this.db).recalculateAllTags();
       }
 
       return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);

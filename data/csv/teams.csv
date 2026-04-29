@@ -1,7 +1,35 @@
 team_id,name,abbreviation,division_name,is_player_team,country_id,color_primary,color_secondary,ai_focus_1,ai_focus_2,ai_focus_3
-1,UAE Team Emirates,UAE,WorldTour,0,24,#111827,#ffffff,1,4,6
-2,Team Visma Lease a Bike,TVL,WorldTour,1,5,#f4d03f,#111827,2,1,4
-3,Soudal Quick-Step,SQS,WorldTour,0,1,#1d4ed8,#ffffff,3,2,6
-4,Lidl-Trek,LTK,WorldTour,0,8,#ef4444,#111827,4,5,1
-5,Tudor Pro Cycling Team,TUD,ProTour,0,15,#b91c1c,#f8fafc,2,6,4
-6,Uno-X Mobility,UXM,ProTour,0,12,#ef4444,#f59e0b,5,3,1
+1,UAE Team Emirates XRG,UAE,WorldTour,0,25,#111827,#ffffff,1,4,6
+2,Team Visma | Lease a Bike,TVL,WorldTour,1,5,#f4d03f,#111827,4,1,2
+3,Soudal Quick-Step,SQS,WorldTour,0,1,#1d4ed8,#ffffff,3,2,4
+4,Lidl - Trek,LTK,WorldTour,0,8,#ef4444,#111827,2,3,5
+5,Tudor Pro Cycling Team,TUD,ProTour,0,15,#b91c1c,#f8fafc,4,1,2
+6,Uno-X Mobility,UXM,WorldTour,0,12,#ef4444,#f59e0b,3,1,6
+7,Alpecin-Premier Tech,APT,WorldTour,0,1,#0057b8,#ffffff,5,3,2
+8,Bahrain - Victorious,BVT,WorldTour,0,26,#b91c1c,#111827,1,4,6
+9,Cofidis,COF,ProTour,0,2,#ef4444,#ffffff,3,2,6
+10,Decathlon CMA CGM Team,DCC,WorldTour,0,2,#8b5cf6,#ffffff,1,2,4
+11,EF Education - EasyPost,EFE,WorldTour,0,8,#ec4899,#111827,6,2,3
+12,Groupama - FDJ United,GFU,WorldTour,0,2,#1d4ed8,#ef4444,4,2,1
+13,Netcompany INEOS Cycling Team,NIC,WorldTour,0,7,#ef4444,#111827,4,1,6
+14,Lotto Intermarche,LIT,WorldTour,0,1,#f59e0b,#111827,5,2,6
+15,Movistar Team,MOV,WorldTour,0,4,#1d4ed8,#7dd3fc,4,2,1
+16,Red Bull - BORA - hansgrohe,RBH,WorldTour,0,6,#111827,#ef4444,1,4,5
+17,Team Jayco AlUla,JAY,WorldTour,0,10,#2563eb,#f59e0b,3,2,4
+18,Team Picnic PostNL,TPP,WorldTour,0,5,#f97316,#111827,3,4,2
+19,XDS Astana Team,XAT,WorldTour,0,22,#06b6d4,#111827,4,1,5
+20,NSN Cycling Team,NSN,WorldTour,0,15,#0f172a,#38bdf8,4,2,6
+21,Bardiani CSF 7 Saber,BCS,ProTour,0,3,#22c55e,#111827,5,1,6
+22,Burgos Burpellet BH,BBH,ProTour,0,4,#7c3aed,#111827,1,5,2
+23,Caja Rural - Seguros RGA,CRS,ProTour,0,4,#22c55e,#111827,6,2,5
+24,Equipo Kern Pharma,EKP,ProTour,0,4,#166534,#a3e635,6,2,3
+25,Euskaltel - Euskadi,EUS,ProTour,0,4,#f97316,#111827,1,2,6
+26,MBH Bank CSB Telecom Fort,MBH,ProTour,0,27,#16a34a,#111827,4,1,5
+27,Modern Adventure Pro Cycling,MAP,ProTour,0,8,#0f766e,#f8fafc,6,2,3
+28,Pinarello Q36.5 Pro Cycling Team,PQF,ProTour,0,15,#111827,#e5e7eb,4,1,5
+29,Solution Tech NIPPO Rali,SNR,ProTour,0,3,#ec4899,#111827,6,1,3
+30,Team Flanders - Baloise,TFB,ProTour,0,1,#f59e0b,#111827,3,5,6
+31,Team Novo Nordisk,TNN,ProTour,0,8,#1d4ed8,#60a5fa,4,3,2
+32,Team Polti VisitMalta,TPV,ProTour,0,3,#1d4ed8,#22c55e,5,3,2
+33,TotalEnergies,TEN,ProTour,0,2,#22c55e,#f59e0b,6,2,3
+34,Unibet Rose Rockets,URR,ProTour,0,5,#16a34a,#111827,3,5,6

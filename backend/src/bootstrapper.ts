@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ContractStatus, RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../shared/types';
 import { ContractService } from './game/ContractService';
+import { deriveRiderTags, type RiderTagFlags } from './game/RiderTagService';
 
 function resolveBackendRoot(): string {
   const candidates = [
@@ -37,12 +38,24 @@ const RIDER_STAT_MAX = 85;
 
 // ------ Hilfsfunktionen ----------------------------------------
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function clamp(v: number, min = 0, max = RIDER_STAT_MAX): number {
-  return Math.max(min, Math.min(max, Math.round(v)));
+  return round2(Math.max(min, Math.min(max, v)));
 }
 
 function rand(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function calcBikeHandling(skills: Pick<RiderSkills, 'downhill' | 'sprint' | 'attack' | 'resistance'>): number {
+  return clamp(skills.downhill * 0.7 + skills.sprint * 0.15 + skills.attack * 0.05 + skills.resistance * 0.1);
 }
 
 function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation'>): number {
@@ -201,6 +214,14 @@ interface ContractSeed {
   status: ContractStatus;
 }
 
+interface TypeRiderSeed {
+  id: number;
+  key: RiderSpecialization;
+  displayName: string;
+  isStageFocus: number;
+  isOneDayFocus: number;
+}
+
 const ROLE_NAME_CAPTAIN: TeamRoleName = 'Kapitaen';
 const ROLE_NAME_CO_CAPTAIN: TeamRoleName = 'Co-Kapitaen';
 const ROLE_NAME_ROAD_CAPTAIN: TeamRoleName = 'Edelhelfer';
@@ -276,6 +297,32 @@ function parseContractSeeds(): ContractSeed[] {
   });
 }
 
+function parseTypeRiderSeeds(): TypeRiderSeed[] {
+  return readCsv('type_rider.csv').map((row, index) => {
+    const ctx = `type_rider.csv Zeile ${index + 2}`;
+    const key = req(row, 'key', ctx) as RiderSpecialization;
+    const supportedKeys: RiderSpecialization[] = [
+      'Berg',
+      'Hill',
+      'Sprint',
+      'Timetrial',
+      'Cobble',
+      'Attacker',
+    ];
+    if (!supportedKeys.includes(key)) {
+      throw new Error(`${ctx}: Unbekannter rider_type key "${key}".`);
+    }
+
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      key,
+      displayName: req(row, 'display_name', ctx),
+      isStageFocus: boolFlag(req(row, 'is_stage_focus', ctx), ctx),
+      isOneDayFocus: boolFlag(req(row, 'is_one_day_focus', ctx), ctx),
+    };
+  });
+}
+
 // ------ Rider-Seeding ----------------------------------------
 
 const RIDER_SKILL_COLUMNS = [
@@ -296,28 +343,48 @@ const RIDER_SKILL_COLUMNS = [
   ['bikeHandling', 'bike_handling'],
 ] as const satisfies ReadonlyArray<readonly [RiderSkillKey, string]>;
 
-const STAGE_SPECIALIZATIONS: RiderSpecialization[] = ['GrandTour', 'Etappenrennen', 'Berg', 'Timetrial'];
-const ONE_DAY_SPECIALIZATIONS: RiderSpecialization[] = ['Cobble', 'Hill', 'Sprint', 'Attacker', 'One-Day-Classic'];
+const RIDER_IMPORTED_SKILL_COLUMNS = RIDER_SKILL_COLUMNS.filter(([key]) => key !== 'bikeHandling');
 
 interface RiderSeedInput {
   riderId: number;
   firstName: string;
   lastName: string;
   countryId: number;
-  roleId: number | null;
   birthYear: number;
   activeTeamId: number;
   skills: RiderSkills;
-  potentials: Partial<RiderPotentials>;
-  potential: number | null;
   favoriteRaces: string;
   nonFavoriteRaces: string;
 }
 
 interface RiderSeed extends RiderSeedInput {
+  roleId: number | null;
   potentials: RiderPotentials;
   overallRating: number;
   potential: number;
+  peakAge: number;
+  declineAge: number;
+  retirementAge: number;
+  skillDevelopment: number;
+  riderType: RiderSpecialization;
+  specialization1: RiderSpecialization | null;
+  specialization2: RiderSpecialization | null;
+  specialization3: RiderSpecialization | null;
+  isStageRacer: number;
+  isOneDayRacer: number;
+  hasGrandTourTag: number;
+  hasStageRaceTag: number;
+  hasOneDayClassicTag: number;
+}
+
+interface AssignedRiderType extends RiderTagFlags {
+  potentials: RiderPotentials;
+  overallRating: number;
+  potential: number;
+  peakAge: number;
+  declineAge: number;
+  retirementAge: number;
+  skillDevelopment: number;
   riderType: RiderSpecialization;
   specialization1: RiderSpecialization | null;
   specialization2: RiderSpecialization | null;
@@ -455,82 +522,98 @@ function scoreProfile(skills: RiderSkills, weights: Array<[RiderSkillKey, number
   return weights.reduce((sum, [key, weight]) => sum + skills[key] * weight, 0);
 }
 
-function calculateSkillPotential(skill: number): number {
-  if (skill > 80) return clamp(skill + rand(0, 3));
-  if (skill < 75) return clamp(skill + rand(5, 15));
-  return clamp(skill + rand(2, 8));
+function buildAgeProfile(): { peakAge: number; declineAge: number; retirementAge: number } {
+  const peakAge = rand(24, 28);
+  const declineAge = rand(Math.max(peakAge + 1, 26), 32);
+  const retirementAge = rand(Math.max(declineAge + 1, 32), 38);
+  return { peakAge, declineAge, retirementAge };
 }
 
-function buildPotentials(skills: RiderSkills, existing: Partial<RiderPotentials> = {}): RiderPotentials {
-  const entries = RIDER_SKILL_COLUMNS.map(([key]) => [key, existing[key] ?? calculateSkillPotential(skills[key])]);
+function buildPotentials(skills: RiderSkills, age: number, skillDevelopment: number): RiderPotentials {
+  if (age >= 26) {
+    return Object.fromEntries(RIDER_SKILL_COLUMNS.map(([key]) => [key, skills[key]])) as RiderPotentials;
+  }
+
+  const ageFactor = Math.max(0.15, (26 - age) / 8);
+  const developmentFactor = skillDevelopment / 20;
+  const entries = RIDER_SKILL_COLUMNS.map(([key]) => {
+    const current = skills[key];
+    const headroom = Math.max(0, RIDER_STAT_MAX - current);
+    if (headroom <= 0.01) return [key, current];
+    const growthBase = headroom * (0.14 + ageFactor * 0.24 + developmentFactor * 0.22);
+    const growth = Math.max(Math.min(headroom, growthBase * randomBetween(0.75, 1.25)), Math.min(headroom, 0.25));
+    return [key, clamp(current + growth)];
+  });
   return Object.fromEntries(entries) as RiderPotentials;
+}
+
+function buildHybridSkills(skills: RiderSkills, potentials: RiderPotentials): RiderSkills {
+  const entries = RIDER_SKILL_COLUMNS.map(([key]) => {
+    const baseValue = skills[key];
+    const potentialValue = potentials[key];
+    return [key, clamp(baseValue * 0.65 + potentialValue * 0.35)];
+  });
+  return Object.fromEntries(entries) as RiderSkills;
 }
 
 function getSpecializationScores(skills: RiderSkills): Array<{ specialization: RiderSpecialization; score: number }> {
   const scores: Array<{ specialization: RiderSpecialization; score: number }> = [
-    { specialization: 'GrandTour', score: scoreProfile(skills, [['mountain', 0.28], ['mediumMountain', 0.2], ['stamina', 0.2], ['resistance', 0.17], ['recuperation', 0.15]]) },
-    { specialization: 'Etappenrennen', score: scoreProfile(skills, [['mediumMountain', 0.22], ['hill', 0.16], ['timeTrial', 0.16], ['stamina', 0.16], ['resistance', 0.15], ['recuperation', 0.15]]) },
     { specialization: 'Berg', score: scoreProfile(skills, [['mountain', 0.4], ['mediumMountain', 0.2], ['stamina', 0.15], ['attack', 0.15], ['downhill', 0.1]]) },
     { specialization: 'Hill', score: scoreProfile(skills, [['hill', 0.35], ['acceleration', 0.2], ['mediumMountain', 0.15], ['attack', 0.15], ['bikeHandling', 0.15]]) },
     { specialization: 'Sprint', score: scoreProfile(skills, [['sprint', 0.4], ['acceleration', 0.25], ['flat', 0.15], ['bikeHandling', 0.1], ['resistance', 0.1]]) },
     { specialization: 'Timetrial', score: scoreProfile(skills, [['timeTrial', 0.5], ['prologue', 0.2], ['flat', 0.1], ['resistance', 0.1], ['bikeHandling', 0.1]]) },
     { specialization: 'Cobble', score: scoreProfile(skills, [['cobble', 0.4], ['flat', 0.2], ['resistance', 0.15], ['bikeHandling', 0.15], ['hill', 0.1]]) },
     { specialization: 'Attacker', score: scoreProfile(skills, [['attack', 0.35], ['acceleration', 0.2], ['hill', 0.15], ['mediumMountain', 0.15], ['resistance', 0.15]]) },
-    { specialization: 'One-Day-Classic', score: scoreProfile(skills, [['hill', 0.2], ['cobble', 0.2], ['flat', 0.15], ['resistance', 0.2], ['bikeHandling', 0.15], ['sprint', 0.1]]) },
   ];
   return scores.sort((left, right) => right.score - left.score);
 }
 
-function assignRiderType(input: Pick<RiderSeedInput, 'skills' | 'potentials' | 'potential'>): Omit<RiderSeed, 'riderId' | 'firstName' | 'lastName' | 'countryId' | 'roleId' | 'birthYear' | 'activeTeamId' | 'contractStartSeason' | 'contractEndSeason' | 'skills' | 'favoriteRaces' | 'nonFavoriteRaces'> {
+function assignRiderType(input: Pick<RiderSeedInput, 'skills' | 'birthYear'>, currentSeason: number): AssignedRiderType {
   const { skills } = input;
-  const specializationScores = getSpecializationScores(skills);
+  const age = currentSeason - input.birthYear;
+  const skillDevelopment = rand(1, 20);
+  const { peakAge, declineAge, retirementAge } = buildAgeProfile();
+  const potentials = buildPotentials(skills, age, skillDevelopment);
+  const hybridSkills = buildHybridSkills(skills, potentials);
+  const specializationScores = getSpecializationScores(hybridSkills);
   const [first, second, third] = specializationScores;
-  const potentials = buildPotentials(skills, input.potentials);
   const topThree = specializationScores.slice(0, 3).map(entry => entry.specialization);
-  const isStageRacer = topThree.some(specialization => STAGE_SPECIALIZATIONS.includes(specialization)) ? 1 : 0;
-  const isOneDayRacer = topThree.some(specialization => ONE_DAY_SPECIALIZATIONS.includes(specialization)) ? 1 : 0;
+  const tags = deriveRiderTags(topThree, skills.recuperation);
   return {
     potentials,
     overallRating: calcOverall(skills),
-    potential: input.potential ?? calcOverall(potentials),
+    potential: calcOverall(potentials),
+    peakAge,
+    declineAge,
+    retirementAge,
+    skillDevelopment,
     riderType: first.specialization,
     specialization1: first?.specialization ?? null,
     specialization2: second?.specialization ?? null,
     specialization3: third?.specialization ?? null,
-    isStageRacer,
-    isOneDayRacer,
+    ...tags,
   };
 }
 
 function parseRiderSeeds(): RiderSeedInput[] {
   return readCsv('riders.csv').map((row, index) => {
     const ctx = `riders.csv Zeile ${index + 2}`;
-    const skills = Object.fromEntries(
-      RIDER_SKILL_COLUMNS.map(([key, column]) => [key, clamp(int(req(row, `skill_${column}`, ctx), ctx))]),
-    ) as RiderSkills;
-    const potentials = Object.fromEntries(
-      RIDER_SKILL_COLUMNS
-        .map(([key, column]) => {
-          const value = optionalInt(row[`pot_${column}`]);
-          return [key, value == null ? null : clamp(value)];
-        })
-        .filter(([, value]) => value != null),
-    ) as Partial<RiderPotentials>;
+    const importedSkills = Object.fromEntries(
+      RIDER_IMPORTED_SKILL_COLUMNS.map(([key, column]) => [key, clamp(int(req(row, `skill_${column}`, ctx), ctx))]),
+    ) as Omit<RiderSkills, 'bikeHandling'>;
+    const skills: RiderSkills = {
+      ...importedSkills,
+      bikeHandling: calcBikeHandling(importedSkills),
+    };
 
     return {
       riderId: int(req(row, 'rider_id', ctx), ctx),
       firstName: req(row, 'first_name', ctx),
       lastName: req(row, 'last_name', ctx),
       countryId: int(req(row, 'country_id', ctx), ctx),
-      roleId: optionalInt(row['role_id']),
       birthYear: int(req(row, 'birth_year', ctx), ctx),
       activeTeamId: int(req(row, 'team_id', ctx), ctx),
       skills,
-      potentials,
-      potential: (() => {
-        const value = optionalInt(row['pot_overall']);
-        return value == null ? null : clamp(value);
-      })(),
       favoriteRaces: normalizeIdList(row['favorite_races'] ?? ''),
       nonFavoriteRaces: normalizeIdList(row['non_favorite_races'] ?? ''),
     };
@@ -582,6 +665,7 @@ export function bootstrap(force = false): void {
   // Laender-Stammdaten
   const countrySeeds = parseCountrySeeds();
   const roleSeeds = parseRoleSeeds();
+  const typeRiderSeeds = parseTypeRiderSeeds();
   const seenCountryIds = new Set<number>();
   const seenCountryCodes = new Set<string>();
   for (const country of countrySeeds) {
@@ -607,6 +691,22 @@ export function bootstrap(force = false): void {
     if (seenRoleIds.has(role.id)) throw new Error(`Doppelte Role-ID ${role.id} in sta_role.csv.`);
     seenRoleIds.add(role.id);
     insRole.run(role.id, role.name, role.weighting);
+  }
+
+  const seenTypeRiderIds = new Set<number>();
+  const seenTypeRiderKeys = new Set<RiderSpecialization>();
+  const typeRiderIdByKey = new Map<RiderSpecialization, number>();
+  const insTypeRider = db.prepare(
+    'INSERT INTO type_rider (id, type_key, display_name, is_stage_focus, is_one_day_focus) VALUES (?, ?, ?, ?, ?)',
+  );
+  for (const typeRider of typeRiderSeeds) {
+    if (typeRider.id <= 0) throw new Error(`Type-Rider-ID ${typeRider.id} muss positiv sein.`);
+    if (seenTypeRiderIds.has(typeRider.id)) throw new Error(`Doppelte Type-Rider-ID ${typeRider.id} in type_rider.csv.`);
+    if (seenTypeRiderKeys.has(typeRider.key)) throw new Error(`Doppelter rider_type key ${typeRider.key} in type_rider.csv.`);
+    seenTypeRiderIds.add(typeRider.id);
+    seenTypeRiderKeys.add(typeRider.key);
+    typeRiderIdByKey.set(typeRider.key, typeRider.id);
+    insTypeRider.run(typeRider.id, typeRider.key, typeRider.displayName, typeRider.isStageFocus, typeRider.isOneDayFocus);
   }
 
   // Divisionen aus CSV
@@ -657,6 +757,9 @@ export function bootstrap(force = false): void {
     if (usedTeamIds.has(team.teamId)) throw new Error(`Doppelte team_id ${team.teamId} in teams.csv.`);
     if (!seenCountryIds.has(team.countryId)) throw new Error(`Unbekannte country_id ${team.countryId} für Team "${team.name}".`);
     if (team.divisionName === 'U23') throw new Error(`U23-Teams werden nicht mehr unterstützt: "${team.name}".`);
+    for (const focusId of [team.aiFocus1, team.aiFocus2, team.aiFocus3]) {
+      if (!seenTypeRiderIds.has(focusId)) throw new Error(`Unbekannte ai_focus-ID ${focusId} für Team "${team.name}".`);
+    }
     usedTeamIds.add(team.teamId);
   }
 
@@ -678,8 +781,8 @@ export function bootstrap(force = false): void {
   const teamRoleIds = assignTeamRoleIds(riderSeeds, roleSeeds);
   const seededRiders = riderSeeds.map(rider => ({
     ...rider,
-    roleId: teamRoleIds.get(rider.riderId) ?? rider.roleId,
-    ...assignRiderType({ skills: rider.skills, potentials: rider.potentials, potential: rider.potential }),
+    roleId: teamRoleIds.get(rider.riderId) ?? null,
+    ...assignRiderType({ skills: rider.skills, birthYear: rider.birthYear }, currentSeason),
   }));
   const knownTeamIds = new Set((db.prepare('SELECT id FROM teams').all() as Array<{ id: number }>).map(team => team.id));
   const knownRiderIds = new Set(riderSeeds.map(rider => rider.riderId));
@@ -692,18 +795,18 @@ export function bootstrap(force = false): void {
   const riderPotentialPlaceholders = RIDER_SKILL_COLUMNS.map(() => '?').join(', ');
   const insRider = db.prepare(`
     INSERT INTO riders (
-      id, first_name, last_name, country_id, role_id, birth_year, pot_overall, overall_rating,
+      id, first_name, last_name, country_id, role_id, birth_year, peak_age, decline_age, retirement_age, skill_development, pot_overall, overall_rating,
       ${riderColumns},
       ${riderPotentialColumns},
-      rider_type, specialization_1, specialization_2, specialization_3,
-      is_stage_racer, is_one_day_racer, favorite_races, non_favorite_races,
+      rider_type_id, specialization_1_id, specialization_2_id, specialization_3_id,
+      is_stage_racer, is_one_day_racer, has_grand_tour_tag, has_stage_race_tag, has_one_day_classic_tag, favorite_races, non_favorite_races,
       active_team_id, active_contract_id, is_retired
     )
     VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ${riderPlaceholders},
       ${riderPotentialPlaceholders},
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
   for (const rider of seededRiders) {
@@ -714,6 +817,14 @@ export function bootstrap(force = false): void {
 
     const skillValues = RIDER_SKILL_COLUMNS.map(([key]) => rider.skills[key]);
     const potentialValues = RIDER_SKILL_COLUMNS.map(([key]) => rider.potentials[key]);
+    const riderTypeId = typeRiderIdByKey.get(rider.riderType);
+    const specialization1Id = rider.specialization1 == null ? null : typeRiderIdByKey.get(rider.specialization1);
+    const specialization2Id = rider.specialization2 == null ? null : typeRiderIdByKey.get(rider.specialization2);
+    const specialization3Id = rider.specialization3 == null ? null : typeRiderIdByKey.get(rider.specialization3);
+    if (riderTypeId == null) throw new Error(`Kein rider_type Mapping für ${rider.riderType} bei Fahrer ${rider.firstName} ${rider.lastName}.`);
+    if (rider.specialization1 != null && specialization1Id == null) throw new Error(`Kein specialization_1 Mapping für ${rider.specialization1} bei Fahrer ${rider.firstName} ${rider.lastName}.`);
+    if (rider.specialization2 != null && specialization2Id == null) throw new Error(`Kein specialization_2 Mapping für ${rider.specialization2} bei Fahrer ${rider.firstName} ${rider.lastName}.`);
+    if (rider.specialization3 != null && specialization3Id == null) throw new Error(`Kein specialization_3 Mapping für ${rider.specialization3} bei Fahrer ${rider.firstName} ${rider.lastName}.`);
     insRider.run(
       rider.riderId,
       rider.firstName,
@@ -721,16 +832,23 @@ export function bootstrap(force = false): void {
       rider.countryId,
       rider.roleId,
       rider.birthYear,
+      rider.peakAge,
+      rider.declineAge,
+      rider.retirementAge,
+      rider.skillDevelopment,
       rider.potential,
       rider.overallRating,
       ...skillValues,
       ...potentialValues,
-      rider.riderType,
-      rider.specialization1,
-      rider.specialization2,
-      rider.specialization3,
+      riderTypeId,
+      specialization1Id,
+      specialization2Id,
+      specialization3Id,
       rider.isStageRacer,
       rider.isOneDayRacer,
+      rider.hasGrandTourTag,
+      rider.hasStageRaceTag,
+      rider.hasOneDayClassicTag,
       rider.favoriteRaces,
       rider.nonFavoriteRaces,
       null,

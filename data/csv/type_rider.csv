@@ -1,0 +1,7 @@
+id,key,display_name,is_stage_focus,is_one_day_focus
+1,Berg,Bergfahrer,1,0
+2,Hill,Huegelspezialist,0,1
+3,Sprint,Sprinter,1,1
+4,Timetrial,Zeitfahrer,1,0
+5,Cobble,Pflasterspezialist,0,1
+6,Attacker,Angreifer,1,1

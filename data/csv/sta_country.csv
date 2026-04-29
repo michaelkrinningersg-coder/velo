@@ -23,3 +23,6 @@ id,name,code_3,continent,regen_rating,number_regen_min,number_regen_max
 22,Kazakhstan,KAZ,Asia,61,1,3
 23,South Africa,RSA,Africa,67,1,4
 24,Other,OTH,Other,35,0,2
+25,United Arab Emirates,UAE,Asia,58,1,3
+26,Bahrain,BHR,Asia,52,1,2
+27,Hungary,HUN,Europe,57,1,3
