@@ -1,0 +1,6 @@
+id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_date,prestige
+1,Santos Tour Down Under,10,3,1,3,2026-01-11,2026-01-13,72
+2,Criterium du Nord,2,2,0,1,2026-03-15,2026-03-15,68
+3,Klassieker van Vlaanderen,1,2,0,1,2026-04-05,2026-04-05,84
+4,Grand Prix du Rhin ITT,2,2,0,1,2026-04-15,2026-04-15,73
+5,Tour des Alpes,3,3,1,2,2026-05-20,2026-05-21,79

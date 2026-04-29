@@ -8,7 +8,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ContractStatus, RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../shared/types';
+import type { ContractStatus, RaceCategoryTier, RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization, StageProfile } from '../../shared/types';
 import { ContractService } from './game/ContractService';
 import { deriveRiderTags, type RiderTagFlags } from './game/RiderTagService';
 
@@ -32,9 +32,11 @@ function resolveBackendRoot(): string {
 const BACKEND_ROOT = resolveBackendRoot();
 const ASSETS_DIR  = path.join(BACKEND_ROOT, 'assets');
 const CSV_DIR     = path.join(BACKEND_ROOT, '..', 'data', 'csv');
+const STAGES_DIR  = path.join(BACKEND_ROOT, '..', 'data', 'stages');
 const SCHEMA_PATH = path.join(ASSETS_DIR, 'schema.sql');
 const DB_PATH     = path.join(ASSETS_DIR, 'world_data.db');
 const RIDER_STAT_MAX = 85;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // ------ Hilfsfunktionen ----------------------------------------
 
@@ -171,6 +173,13 @@ function boolFlag(value: string, ctx: string): number {
   throw new Error(`${ctx}: Feld muss 0 oder 1 sein, erhalten "${value}".`);
 }
 
+function isoDate(value: string, ctx: string): string {
+  if (!ISO_DATE_PATTERN.test(value)) {
+    throw new Error(`${ctx}: ISO-Datum YYYY-MM-DD erwartet, erhalten "${value}".`);
+  }
+  return value;
+}
+
 function parseIdList(value: string): number[] {
   return value
     .split(',')
@@ -221,6 +230,73 @@ interface TypeRiderSeed {
   isStageFocus: number;
   isOneDayFocus: number;
 }
+
+interface RaceCategoryBonusSeed {
+  id: number;
+  name: string;
+  bonusSecondsFinal: string;
+  bonusSecondsIntermediate: string;
+  pointsStage: string;
+  pointsOneDay: string;
+  pointsGcFinal: string;
+  pointsJerseyLeaderDay: number;
+  pointsJerseySprintDay: number;
+  pointsJerseyMountainDay: number;
+  pointsJerseyYouthDay: number;
+  pointsSprintIntermediate: string;
+  pointsMountainHc: string;
+  pointsMountainCat1: string;
+  pointsMountainCat2: string;
+  pointsMountainCat3: string;
+  pointsMountainCat4: string;
+  pointsJerseySprintFinal: string;
+  pointsJerseyMountainFinal: string;
+  pointsJerseyYouthFinal: string;
+}
+
+interface RaceCategorySeed {
+  id: number;
+  name: string;
+  tier: RaceCategoryTier;
+  numberOfTeams: number;
+  numberOfRiders: number;
+  bonusSystemId: number;
+}
+
+interface RaceSeed {
+  id: number;
+  name: string;
+  countryId: number;
+  categoryId: number;
+  isStageRace: number;
+  numberOfStages: number;
+  startDate: string;
+  endDate: string;
+  prestige: number;
+}
+
+interface StageSeed {
+  id: number;
+  raceId: number;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  detailsCsvFile: string;
+}
+
+const STAGE_PROFILES: StageProfile[] = [
+  'Flat',
+  'Rolling',
+  'Hilly',
+  'Hilly_Difficult',
+  'Medium_Mountain',
+  'Mountain',
+  'High_Mountain',
+  'ITT',
+  'TTT',
+  'Cobble',
+  'Cobble_Hill',
+];
 
 const ROLE_NAME_CAPTAIN: TeamRoleName = 'Kapitaen';
 const ROLE_NAME_CO_CAPTAIN: TeamRoleName = 'Co-Kapitaen';
@@ -319,6 +395,103 @@ function parseTypeRiderSeeds(): TypeRiderSeed[] {
       displayName: req(row, 'display_name', ctx),
       isStageFocus: boolFlag(req(row, 'is_stage_focus', ctx), ctx),
       isOneDayFocus: boolFlag(req(row, 'is_one_day_focus', ctx), ctx),
+    };
+  });
+}
+
+function parseRaceCategoryBonusSeeds(): RaceCategoryBonusSeed[] {
+  return readCsv('race_categories_bonus.csv').map((row, index) => {
+    const ctx = `race_categories_bonus.csv Zeile ${index + 2}`;
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      name: req(row, 'name', ctx),
+      bonusSecondsFinal: req(row, 'bonus_seconds_final', ctx),
+      bonusSecondsIntermediate: req(row, 'bonus_seconds_intermediate', ctx),
+      pointsStage: req(row, 'points_stage', ctx),
+      pointsOneDay: req(row, 'points_one_day', ctx),
+      pointsGcFinal: req(row, 'points_gc_final', ctx),
+      pointsJerseyLeaderDay: int(req(row, 'points_jersey_leader_day', ctx), ctx),
+      pointsJerseySprintDay: int(req(row, 'points_jersey_sprint_day', ctx), ctx),
+      pointsJerseyMountainDay: int(req(row, 'points_jersey_mountain_day', ctx), ctx),
+      pointsJerseyYouthDay: int(req(row, 'points_jersey_youth_day', ctx), ctx),
+      pointsSprintIntermediate: req(row, 'points_sprint_intermediate', ctx),
+      pointsMountainHc: req(row, 'points_mountain_hc', ctx),
+      pointsMountainCat1: req(row, 'points_mountain_cat1', ctx),
+      pointsMountainCat2: req(row, 'points_mountain_cat2', ctx),
+      pointsMountainCat3: req(row, 'points_mountain_cat3', ctx),
+      pointsMountainCat4: req(row, 'points_mountain_cat4', ctx),
+      pointsJerseySprintFinal: req(row, 'points_jersey_sprint_final', ctx),
+      pointsJerseyMountainFinal: req(row, 'points_jersey_mountain_final', ctx),
+      pointsJerseyYouthFinal: req(row, 'points_jersey_youth_final', ctx),
+    };
+  });
+}
+
+function parseRaceCategorySeeds(): RaceCategorySeed[] {
+  return readCsv('race_categories.csv').map((row, index) => {
+    const ctx = `race_categories.csv Zeile ${index + 2}`;
+    const tier = int(req(row, 'tier', ctx), ctx);
+    if (![1, 2, 3].includes(tier)) {
+      throw new Error(`${ctx}: tier muss 1, 2 oder 3 sein.`);
+    }
+
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      name: req(row, 'name', ctx),
+      tier: tier as RaceCategoryTier,
+      numberOfTeams: int(req(row, 'number_of_teams', ctx), ctx),
+      numberOfRiders: int(req(row, 'number_of_riders', ctx), ctx),
+      bonusSystemId: int(req(row, 'bonus_system_id', ctx), ctx),
+    };
+  });
+}
+
+function parseRaceSeeds(): RaceSeed[] {
+  return readCsv('races.csv').map((row, index) => {
+    const ctx = `races.csv Zeile ${index + 2}`;
+    const startDate = isoDate(req(row, 'start_date', ctx), ctx);
+    const endDate = isoDate(req(row, 'end_date', ctx), ctx);
+    if (endDate < startDate) {
+      throw new Error(`${ctx}: end_date muss >= start_date sein.`);
+    }
+
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      name: req(row, 'name', ctx),
+      countryId: int(req(row, 'country_id', ctx), ctx),
+      categoryId: int(req(row, 'category_id', ctx), ctx),
+      isStageRace: boolFlag(req(row, 'is_stage_race', ctx), ctx),
+      numberOfStages: int(req(row, 'number_of_stages', ctx), ctx),
+      startDate,
+      endDate,
+      prestige: int(req(row, 'prestige', ctx), ctx),
+    };
+  });
+}
+
+function parseStageSeeds(): StageSeed[] {
+  return readCsv('stages.csv').map((row, index) => {
+    const ctx = `stages.csv Zeile ${index + 2}`;
+    const profile = req(row, 'profile', ctx) as StageProfile;
+    if (!STAGE_PROFILES.includes(profile)) {
+      throw new Error(`${ctx}: Ungueltiges Stage-Profil "${profile}".`);
+    }
+
+    const detailsCsvFile = req(row, 'details_csv_file', ctx);
+    if (detailsCsvFile.includes('/') || detailsCsvFile.includes('\\')) {
+      throw new Error(`${ctx}: details_csv_file darf keinen Pfad enthalten.`);
+    }
+    if (!fs.existsSync(path.join(STAGES_DIR, detailsCsvFile))) {
+      throw new Error(`${ctx}: Stage-Datei fehlt unter data/stages/${detailsCsvFile}.`);
+    }
+
+    return {
+      id: int(req(row, 'id', ctx), ctx),
+      raceId: int(req(row, 'race_id', ctx), ctx),
+      stageNumber: int(req(row, 'stage_number', ctx), ctx),
+      date: isoDate(req(row, 'date', ctx), ctx),
+      profile,
+      detailsCsvFile,
     };
   });
 }
@@ -620,20 +793,6 @@ function parseRiderSeeds(): RiderSeedInput[] {
   });
 }
 
-interface RaceDef {
-  name: string; type: string; date: string; dist: number; elev: number; grad: number; ttType?: string;
-}
-
-const RACES: RaceDef[] = [
-  { name: 'Australian Open TT',                   type: 'TimeTrial', date: '2026-01-11', dist: 18.0, elev: 110,  grad: 0.6, ttType: 'ITT' },
-  { name: 'Prologue – Chrono de Genève',          type: 'TimeTrial', date: '2026-03-01', dist: 7.5,  elev: 80,   grad: 1.2, ttType: 'ITT' },
-  { name: 'Grand Prix du Rhin – Einzelzeitfahren', type: 'TimeTrial', date: '2026-04-15', dist: 42.0, elev: 350,  grad: 2.1, ttType: 'ITT' },
-  { name: 'Tour des Alpes – Einzelzeitfahren',     type: 'TimeTrial', date: '2026-05-20', dist: 28.5, elev: 620,  grad: 4.8, ttType: 'ITT' },
-  { name: 'Criterium du Nord',                     type: 'Flat',      date: '2026-03-15', dist: 185,  elev: 720,  grad: 1.1 },
-  { name: 'Klassieker van Vlaanderen',             type: 'Classics',  date: '2026-04-05', dist: 265,  elev: 2400, grad: 6.5 },
-  { name: 'Giro di Montagna – Etappe 12',          type: 'Mountain',  date: '2026-05-28', dist: 172,  elev: 4800, grad: 7.2 },
-];
-
 // ------ Bootstrap-Funktion ------------------------------------
 
 export function bootstrap(force = false): void {
@@ -881,12 +1040,100 @@ export function bootstrap(force = false): void {
   new ContractService(db).checkContractStatuses(currentSeason);
   console.log(`  ${seededRiders.length} Fahrer eingefügt.`);
 
-  // Rennen
-  const insRace = db.prepare(
-    'INSERT INTO races (name, type, season, date, distance_km, elevation_gain, avg_gradient, tt_type) VALUES (?, ?, 2026, ?, ?, ?, ?, ?)',
+  const raceCategoryBonusSeeds = parseRaceCategoryBonusSeeds();
+  const raceCategorySeeds = parseRaceCategorySeeds();
+  const raceSeeds = parseRaceSeeds();
+  const stageSeeds = parseStageSeeds();
+
+  const knownBonusIds = new Set<number>();
+  const insRaceCategoryBonus = db.prepare(
+    `INSERT INTO race_categories_bonus (
+      id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage, points_one_day, points_gc_final,
+      points_jersey_leader_day, points_jersey_sprint_day, points_jersey_mountain_day, points_jersey_youth_day,
+      points_sprint_intermediate, points_mountain_hc, points_mountain_cat1, points_mountain_cat2, points_mountain_cat3, points_mountain_cat4,
+      points_jersey_sprint_final, points_jersey_mountain_final, points_jersey_youth_final
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  for (const race of RACES) insRace.run(race.name, race.type, race.date, race.dist, race.elev, race.grad, race.ttType ?? null);
-  console.log(`  ${RACES.length} Rennen eingefügt.`);
+  for (const bonus of raceCategoryBonusSeeds) {
+    if (bonus.id <= 0) throw new Error(`RaceCategoryBonus-ID ${bonus.id} muss positiv sein.`);
+    if (knownBonusIds.has(bonus.id)) throw new Error(`Doppelte race_categories_bonus id ${bonus.id}.`);
+    knownBonusIds.add(bonus.id);
+    insRaceCategoryBonus.run(
+      bonus.id,
+      bonus.name,
+      bonus.bonusSecondsFinal,
+      bonus.bonusSecondsIntermediate,
+      bonus.pointsStage,
+      bonus.pointsOneDay,
+      bonus.pointsGcFinal,
+      bonus.pointsJerseyLeaderDay,
+      bonus.pointsJerseySprintDay,
+      bonus.pointsJerseyMountainDay,
+      bonus.pointsJerseyYouthDay,
+      bonus.pointsSprintIntermediate,
+      bonus.pointsMountainHc,
+      bonus.pointsMountainCat1,
+      bonus.pointsMountainCat2,
+      bonus.pointsMountainCat3,
+      bonus.pointsMountainCat4,
+      bonus.pointsJerseySprintFinal,
+      bonus.pointsJerseyMountainFinal,
+      bonus.pointsJerseyYouthFinal,
+    );
+  }
+
+  const knownRaceCategoryIds = new Set<number>();
+  const insRaceCategory = db.prepare(
+    'INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  for (const category of raceCategorySeeds) {
+    if (category.id <= 0) throw new Error(`RaceCategory-ID ${category.id} muss positiv sein.`);
+    if (knownRaceCategoryIds.has(category.id)) throw new Error(`Doppelte race_categories id ${category.id}.`);
+    if (!knownBonusIds.has(category.bonusSystemId)) {
+      throw new Error(`Unbekannte bonus_system_id ${category.bonusSystemId} fuer RaceCategory ${category.name}.`);
+    }
+    knownRaceCategoryIds.add(category.id);
+    insRaceCategory.run(category.id, category.name, category.tier, category.numberOfTeams, category.numberOfRiders, category.bonusSystemId);
+  }
+
+  const knownRaceIds = new Set<number>();
+  const insRace = db.prepare(
+    'INSERT INTO races (id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+  for (const race of raceSeeds) {
+    if (race.id <= 0) throw new Error(`Race-ID ${race.id} muss positiv sein.`);
+    if (knownRaceIds.has(race.id)) throw new Error(`Doppelte races id ${race.id}.`);
+    if (!seenCountryIds.has(race.countryId)) throw new Error(`Unbekannte country_id ${race.countryId} fuer Rennen ${race.name}.`);
+    if (!knownRaceCategoryIds.has(race.categoryId)) throw new Error(`Unbekannte category_id ${race.categoryId} fuer Rennen ${race.name}.`);
+    knownRaceIds.add(race.id);
+    insRace.run(race.id, race.name, race.countryId, race.categoryId, race.isStageRace, race.numberOfStages, race.startDate, race.endDate, race.prestige);
+  }
+
+  const stageCountsByRace = new Map<number, number>();
+  const usedStageIds = new Set<number>();
+  const usedStageKeys = new Set<string>();
+  const insStage = db.prepare(
+    'INSERT INTO stages (id, race_id, stage_number, date, profile, details_csv_file) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  for (const stage of stageSeeds) {
+    if (stage.id <= 0) throw new Error(`Stage-ID ${stage.id} muss positiv sein.`);
+    if (usedStageIds.has(stage.id)) throw new Error(`Doppelte stages id ${stage.id}.`);
+    if (!knownRaceIds.has(stage.raceId)) throw new Error(`Unbekannte race_id ${stage.raceId} in stages.csv.`);
+    const stageKey = `${stage.raceId}:${stage.stageNumber}`;
+    if (usedStageKeys.has(stageKey)) throw new Error(`Doppelte Stage-Nummer ${stage.stageNumber} fuer race_id ${stage.raceId}.`);
+    usedStageIds.add(stage.id);
+    usedStageKeys.add(stageKey);
+    stageCountsByRace.set(stage.raceId, (stageCountsByRace.get(stage.raceId) ?? 0) + 1);
+    insStage.run(stage.id, stage.raceId, stage.stageNumber, stage.date, stage.profile, stage.detailsCsvFile);
+  }
+
+  for (const race of raceSeeds) {
+    const stageCount = stageCountsByRace.get(race.id) ?? 0;
+    if (stageCount !== race.numberOfStages) {
+      throw new Error(`Rennen ${race.name} erwartet ${race.numberOfStages} Stages, gefunden ${stageCount}.`);
+    }
+  }
+  console.log(`  ${raceCategoryBonusSeeds.length} Bonus-Systeme, ${raceCategorySeeds.length} Kategorien, ${raceSeeds.length} Rennen und ${stageSeeds.length} Stages eingefügt.`);
 
   // Initialer Spielzustand aus CSV
   db.prepare(

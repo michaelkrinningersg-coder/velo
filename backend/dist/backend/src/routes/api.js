@@ -4,7 +4,7 @@ exports.createRouter = createRouter;
 const express_1 = require("express");
 const GameRepository_1 = require("../db/GameRepository");
 const GameStateService_1 = require("../game/GameStateService");
-const TimeTrialSimulator_1 = require("../simulation/TimeTrialSimulator");
+const RouteImporter_1 = require("../simulation/RouteImporter");
 function ok(res, data) {
     const body = { success: true, data };
     res.json(body);
@@ -15,6 +15,7 @@ function fail(res, status, message) {
 }
 function createRouter(dbService) {
     const router = (0, express_1.Router)();
+    const routeImporter = new RouteImporter_1.RouteImporter();
     // Caches GameStateService per active connection
     let cachedGss = null;
     let cachedDb = null;
@@ -138,6 +139,23 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
+    // ---- Stage Editor --------------------------------------
+    router.post('/stage-editor/import', (req, res) => {
+        try {
+            ok(res, routeImporter.importRoute(req.body));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/stage-editor/export', (req, res) => {
+        try {
+            ok(res, routeImporter.exportCsv(req.body));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
     // ---- Game State ---------------------------------------
     router.get('/state', (_req, res) => {
         try {
@@ -153,48 +171,6 @@ function createRouter(dbService) {
         }
         catch (e) {
             fail(res, 400, e.message);
-        }
-    });
-    // ---- Simulation ---------------------------------------
-    router.get('/races/:id/results', (req, res) => {
-        const id = Number(req.params['id']);
-        if (!Number.isFinite(id))
-            return fail(res, 400, 'Ungültige Rennen-ID.');
-        try {
-            const db = dbService.getActiveConnection();
-            const repo = new GameRepository_1.GameRepository(db);
-            const result = repo.getRaceResults(id);
-            if (!result)
-                return fail(res, 404, 'Keine Ergebnisse für dieses Rennen.');
-            ok(res, result);
-        }
-        catch (e) {
-            fail(res, 500, e.message);
-        }
-    });
-    router.post('/races/:id/simulate', (req, res) => {
-        const id = Number(req.params['id']);
-        if (!Number.isFinite(id))
-            return fail(res, 400, 'Ungültige Rennen-ID.');
-        try {
-            const db = dbService.getActiveConnection();
-            const repo = new GameRepository_1.GameRepository(db);
-            const race = repo.getRaceById(id);
-            if (!race)
-                return fail(res, 404, `Rennen ${id} nicht gefunden.`);
-            if (race.type !== 'TimeTrial')
-                return fail(res, 400, `Rennen "${race.name}" ist kein Zeitfahren.`);
-            const riders = repo.getRaceRiders(id);
-            if (riders.length === 0)
-                return fail(res, 400, 'Keine Fahrer für dieses Rennen gemeldet.');
-            const result = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, riders);
-            repo.saveRaceResults(id, result.entries.map((e, idx) => ({
-                riderId: e.rider.id, position: idx + 1, timeSec: e.finishTimeSeconds, gapSec: e.gapSeconds, dayForm: e.dayFormFactor,
-            })));
-            ok(res, result);
-        }
-        catch (e) {
-            fail(res, 500, e.message);
         }
     });
     return router;

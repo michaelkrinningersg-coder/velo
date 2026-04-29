@@ -1,0 +1,6 @@
+km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
+0.0,118,Flat,4,5,start,Grand Prix du Rhin ITT,
+10.5,132,Flat,5,6,,,
+24.0,178,Hill,6,7,climb_start,Cote du Rhin,
+33.5,264,Hill,7,7,climb_top,Cote du Rhin,3
+41.8,208,Flat,6,6,finish_TT,Grand Prix du Rhin ITT,

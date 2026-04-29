@@ -60,6 +60,9 @@
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">🏆</span> Teams
         </button>
+        <button class="nav-btn" data-view="stage-editor">
+          <span class="nav-icon">🗺</span> Stage Editor
+        </button>
       </nav>
       <div class="sidebar-meta">
         <div id="meta-career"></div>
@@ -96,7 +99,7 @@
           <table class="data-table" id="dashboard-races-table">
             <thead>
               <tr>
-                <th>Datum</th><th>Name</th><th>Typ</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th><th></th>
+                <th>Datum</th><th>Rennen</th><th>Format</th><th>Land</th><th>Rennklasse</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="dashboard-races-tbody"></tbody>
@@ -114,6 +117,110 @@
           </select>
         </div>
         <div id="teams-detail"></div>
+      </div>
+
+      <!-- Stage Editor -->
+      <div id="view-stage-editor" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Stage Editor</h2>
+            <p class="text-muted">GPX oder TCX importieren, Wegpunkte justieren und beide CSV-Zieldateien direkt herunterladen.</p>
+          </div>
+        </div>
+
+        <div class="stage-editor-grid">
+          <section class="stage-editor-panel">
+            <div class="stage-editor-card">
+              <div class="stage-editor-card-header">
+                <h3>Import</h3>
+                <p class="text-muted">Backend-Import mit Glättung, Mindestsegmenten und Climb-Erkennung.</p>
+              </div>
+              <div class="stage-editor-import-row">
+                <input type="file" id="stage-editor-file" accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml" />
+                <button class="btn btn-primary" id="btn-stage-editor-import">Route importieren</button>
+              </div>
+              <p id="stage-editor-file-hint" class="text-muted">Noch keine Datei ausgewählt.</p>
+              <div id="stage-editor-import-summary" class="stage-editor-stats"></div>
+              <div id="stage-editor-empty" class="stage-editor-empty">Noch keine Strecke importiert.</div>
+              <div id="stage-editor-warnings" class="stage-editor-alerts"></div>
+              <div id="stage-editor-climbs" class="stage-editor-climbs"></div>
+            </div>
+
+            <div class="stage-editor-card">
+              <div class="stage-editor-card-header">
+                <h3>Metadaten & Export</h3>
+                <p class="text-muted">Die Felder definieren exakt die Row für [stages.csv] und den Dateinamen unter [data/stages].</p>
+              </div>
+              <div class="stage-editor-form-grid">
+                <div class="form-group">
+                  <label for="stage-editor-stage-id">Stage-ID</label>
+                  <input type="number" id="stage-editor-stage-id" min="1" step="1" placeholder="z. B. 9" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-race-id">Race-ID</label>
+                  <input type="number" id="stage-editor-race-id" min="1" step="1" placeholder="z. B. 5" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-stage-number">Etappe</label>
+                  <input type="number" id="stage-editor-stage-number" min="1" step="1" value="1" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-date">Datum</label>
+                  <input type="date" id="stage-editor-date" />
+                </div>
+                <div class="form-group form-group-wide">
+                  <label for="stage-editor-details-file">Details-Datei</label>
+                  <input type="text" id="stage-editor-details-file" placeholder="meine_etappe.csv" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-profile">Profil</label>
+                  <select id="stage-editor-profile"></select>
+                </div>
+              </div>
+              <div class="stage-editor-actions">
+                <p id="stage-editor-export-hint" class="text-muted">Importiere zuerst eine Datei.</p>
+                <button class="btn btn-primary" id="btn-stage-editor-export" disabled>CSV-Export</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="stage-editor-panel stage-editor-panel-wide">
+            <div class="stage-editor-card">
+              <div class="stage-editor-card-header">
+                <h3>Höhenprofil</h3>
+                <p class="text-muted">Marker und Segmentdichte spiegeln direkt die editierbare Tabelle wider.</p>
+              </div>
+              <div id="stage-editor-chart" class="stage-editor-chart"></div>
+            </div>
+
+            <div class="stage-editor-card">
+              <div class="stage-editor-card-header">
+                <h3>Wegpunkte</h3>
+                <p class="text-muted">Jedes Segment muss mindestens 0,2 km lang sein. Sprintmarker werden im letzten 0,3-km-Abschnitt entfernt.</p>
+              </div>
+              <div class="stage-editor-table-wrap">
+                <table class="data-table stage-editor-table" id="stage-editor-waypoints">
+                  <thead>
+                    <tr>
+                      <th>km</th>
+                      <th>hm</th>
+                      <th>Segment</th>
+                      <th>Steigung</th>
+                      <th>Terrain</th>
+                      <th>Tech</th>
+                      <th>Wind</th>
+                      <th>Marker</th>
+                      <th>Name</th>
+                      <th>Kat</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="stage-editor-waypoints-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   </div>

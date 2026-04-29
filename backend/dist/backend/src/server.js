@@ -16,7 +16,7 @@ const dbService = new DatabaseService_1.DatabaseService();
 const app = (0, express_1.default)();
 // 3. Middleware
 app.use((0, cors_1.default)({ origin: process.env['CORS_ORIGIN'] ?? 'http://localhost:5173' }));
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '8mb' }));
 // 4. Routes
 app.use('/api', (0, api_1.createRouter)(dbService));
 // 5. Health-Check

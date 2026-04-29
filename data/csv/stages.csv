@@ -1,0 +1,9 @@
+id,race_id,stage_number,date,profile,details_csv_file
+1,1,1,2026-01-11,Flat,santos_tour_down_under_st1.csv
+2,1,2,2026-01-12,Rolling,santos_tour_down_under_st2.csv
+3,1,3,2026-01-13,Hilly,santos_tour_down_under_st3.csv
+4,2,1,2026-03-15,Flat,criterium_du_nord.csv
+5,3,1,2026-04-05,Cobble_Hill,klassieker_van_vlaanderen.csv
+6,4,1,2026-04-15,ITT,grand_prix_du_rhin_itt.csv
+7,5,1,2026-05-20,Medium_Mountain,tour_des_alpes_st1.csv
+8,5,2,2026-05-21,Mountain,tour_des_alpes_st2.csv

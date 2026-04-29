@@ -111,8 +111,8 @@ export class GameStateService {
 
   private runDailyChecks(currentDate: string): DailyCheckSummary {
     const row = this.db.prepare(
-      'SELECT COUNT(*) AS count FROM races WHERE date = ? AND is_completed = 0',
-    ).get(currentDate) as { count: number } | undefined;
+      'SELECT COUNT(*) AS count FROM races WHERE start_date <= ? AND end_date >= ?',
+    ).get(currentDate, currentDate) as { count: number } | undefined;
     return {
       hasRaceToday: (row?.count ?? 0) > 0,
       racesTodayCount: row?.count ?? 0,

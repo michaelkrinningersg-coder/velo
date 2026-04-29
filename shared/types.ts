@@ -152,24 +152,138 @@ export interface DivisionTeam {
 
 // ------ Rennen -----------------------------------------------
 
-export type RaceType = 'TimeTrial' | 'Flat' | 'Hilly' | 'Mountain' | 'Classics';
+export type RaceCategoryTier = 1 | 2 | 3;
 
-export interface RaceProfile {
+export type StageProfile =
+  | 'Flat'
+  | 'Rolling'
+  | 'Hilly'
+  | 'Hilly_Difficult'
+  | 'Medium_Mountain'
+  | 'Mountain'
+  | 'High_Mountain'
+  | 'ITT'
+  | 'TTT'
+  | 'Cobble'
+  | 'Cobble_Hill';
+
+export type StageTerrain =
+  | 'Flat'
+  | 'Hill'
+  | 'Medium_Mountain'
+  | 'Mountain'
+  | 'High_Mountain'
+  | 'Cobble'
+  | 'Cobble_Hill'
+  | 'Abfahrt'
+  | 'Sprint';
+
+export type StageFinishMarkerType = 'finish_flat' | 'finish_TT' | 'finish_hill' | 'finish_mountain';
+
+export type StageMarkerType =
+  | 'start'
+  | 'climb_start'
+  | 'climb_top'
+  | 'sprint_intermediate'
+  | StageFinishMarkerType;
+
+export type StageMarkerCategory = 'HC' | '1' | '2' | '3' | '4' | 'Sprint';
+
+export interface StageMarker {
+  type: StageMarkerType;
+  name: string | null;
+  cat: StageMarkerCategory | null;
+}
+
+export interface StageProfilePoint {
+  kmMark: number;
+  elevation: number;
+  terrain: StageTerrain;
+  techLevel: number;
+  windExp: number;
+  markers: StageMarker[];
+}
+
+export interface ParsedStageSegment {
+  start_km: number;
+  end_km: number;
+  length_km: number;
+  start_elevation: number;
+  end_elevation: number;
+  gradient_percent: number;
+  terrain: StageTerrain;
+  tech_level: number;
+  wind_exp: number;
+  start_markers?: StageMarker[];
+  end_markers?: StageMarker[];
+}
+
+export interface RaceCategoryBonus {
+  id: number;
+  name: string;
+  bonusSecondsFinal: string;
+  bonusSecondsIntermediate: string;
+  pointsStage: string;
+  pointsOneDay: string;
+  pointsGcFinal: string;
+  pointsJerseyLeaderDay: number;
+  pointsJerseySprintDay: number;
+  pointsJerseyMountainDay: number;
+  pointsJerseyYouthDay: number;
+  pointsSprintIntermediate: string;
+  pointsMountainHc: string;
+  pointsMountainCat1: string;
+  pointsMountainCat2: string;
+  pointsMountainCat3: string;
+  pointsMountainCat4: string;
+  pointsJerseySprintFinal: string;
+  pointsJerseyMountainFinal: string;
+  pointsJerseyYouthFinal: string;
+}
+
+export interface RaceCategory {
+  id: number;
+  name: string;
+  tier: RaceCategoryTier;
+  numberOfTeams: number;
+  numberOfRiders: number;
+  bonusSystemId: number;
+  bonusSystem?: RaceCategoryBonus;
+}
+
+export interface RaceStageSummary {
+  stageId: number;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  detailsCsvFile: string;
   distanceKm: number;
-  elevationGain: number;
-  avgGradientKey: number;
-  ttType?: 'ITT' | 'TTT';
+  elevationGainMeters: number;
 }
 
 export interface Race {
   id: number;
   name: string;
-  type: RaceType;
-  profile: RaceProfile;
-  season: number;
+  countryId: number;
+  categoryId: number;
+  isStageRace: boolean;
+  numberOfStages: number;
+  startDate: string;
+  endDate: string;
+  prestige: number;
+  country?: Country;
+  category?: RaceCategory;
+  stages?: Stage[];
+  upcomingStage?: RaceStageSummary;
+}
+
+export interface Stage {
+  id: number;
+  raceId: number;
+  stageNumber: number;
   date: string;
-  isCompleted: boolean;
-  participatingTeamIds: number[];
+  profile: StageProfile;
+  detailsCsvFile: string;
 }
 
 // ------ Simulation -------------------------------------------
@@ -221,3 +335,62 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// ------ Stage Editor ----------------------------------------
+
+export type RouteImportFormat = 'gpx' | 'tcx';
+
+export interface StageEditorWaypoint {
+  kmMark: number;
+  elevation: number;
+  terrain: StageTerrain;
+  techLevel: number;
+  windExp: number;
+  markers: StageMarker[];
+}
+
+export interface StageEditorClimb {
+  startKm: number;
+  endKm: number;
+  distanceKm: number;
+  gainMeters: number;
+  avgGradient: number;
+  category: Extract<StageMarkerCategory, 'HC' | '1' | '2' | '3' | '4'>;
+}
+
+export interface StageEditorDraft {
+  routeName: string;
+  sourceFormat: RouteImportFormat;
+  totalDistanceKm: number;
+  elevationGainMeters: number;
+  suggestedProfile: StageProfile;
+  waypoints: StageEditorWaypoint[];
+  climbs: StageEditorClimb[];
+  warnings: string[];
+}
+
+export interface StageEditorImportRequest {
+  fileName: string;
+  fileContent: string;
+}
+
+export interface StageEditorMetadata {
+  stageId: number;
+  raceId: number;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  detailsCsvFile: string;
+}
+
+export interface StageEditorExportRequest {
+  metadata: StageEditorMetadata;
+  draft: StageEditorDraft;
+}
+
+export interface StageEditorExportPayload {
+  stagesCsv: string;
+  stageDetailsCsv: string;
+  stagesFileName: string;
+  stageDetailsFileName: string;
+ }

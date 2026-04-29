@@ -153,21 +153,73 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS idx_contracts_rider_season ON contracts(rider_id, start_season, end_season);
 CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 
--- ---- Rennen -------------------------------------------------
-CREATE TABLE IF NOT EXISTS races (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  name            TEXT    NOT NULL,
-  type            TEXT    NOT NULL, -- 'TimeTrial','Flat','Hilly','Mountain','Classics'
-  season          INTEGER NOT NULL,
-  date            TEXT    NOT NULL, -- ISO-8601 Datum
-  distance_km     REAL    NOT NULL,
-  elevation_gain  INTEGER NOT NULL DEFAULT 0,
-  avg_gradient    REAL    NOT NULL DEFAULT 0.0,
-  tt_type         TEXT,             -- 'ITT' | 'TTT' | NULL
-  is_completed    INTEGER NOT NULL DEFAULT 0
+-- ---- Rennkategorien / Punkte- und Bonussysteme -------------
+CREATE TABLE IF NOT EXISTS race_categories_bonus (
+  id                           INTEGER PRIMARY KEY,
+  name                         TEXT    NOT NULL UNIQUE,
+  bonus_seconds_final          TEXT    NOT NULL DEFAULT '',
+  bonus_seconds_intermediate   TEXT    NOT NULL DEFAULT '',
+  points_stage                 TEXT    NOT NULL DEFAULT '',
+  points_one_day               TEXT    NOT NULL DEFAULT '',
+  points_gc_final              TEXT    NOT NULL DEFAULT '',
+  points_jersey_leader_day     INTEGER NOT NULL DEFAULT 0 CHECK(points_jersey_leader_day >= 0),
+  points_jersey_sprint_day     INTEGER NOT NULL DEFAULT 0 CHECK(points_jersey_sprint_day >= 0),
+  points_jersey_mountain_day   INTEGER NOT NULL DEFAULT 0 CHECK(points_jersey_mountain_day >= 0),
+  points_jersey_youth_day      INTEGER NOT NULL DEFAULT 0 CHECK(points_jersey_youth_day >= 0),
+  points_sprint_intermediate   TEXT    NOT NULL DEFAULT '',
+  points_mountain_hc           TEXT    NOT NULL DEFAULT '',
+  points_mountain_cat1         TEXT    NOT NULL DEFAULT '',
+  points_mountain_cat2         TEXT    NOT NULL DEFAULT '',
+  points_mountain_cat3         TEXT    NOT NULL DEFAULT '',
+  points_mountain_cat4         TEXT    NOT NULL DEFAULT '',
+  points_jersey_sprint_final   TEXT    NOT NULL DEFAULT '',
+  points_jersey_mountain_final TEXT    NOT NULL DEFAULT '',
+  points_jersey_youth_final    TEXT    NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_races_season ON races(season);
+CREATE TABLE IF NOT EXISTS race_categories (
+  id                INTEGER PRIMARY KEY,
+  name              TEXT    NOT NULL UNIQUE,
+  tier              INTEGER NOT NULL CHECK(tier IN (1, 2, 3)),
+  number_of_teams   INTEGER NOT NULL CHECK(number_of_teams > 0),
+  number_of_riders  INTEGER NOT NULL CHECK(number_of_riders > 0),
+  bonus_system_id   INTEGER NOT NULL REFERENCES race_categories_bonus(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_categories_tier ON race_categories(tier);
+
+-- ---- Rennen -------------------------------------------------
+CREATE TABLE IF NOT EXISTS races (
+  id                INTEGER PRIMARY KEY,
+  name              TEXT    NOT NULL,
+  country_id        INTEGER NOT NULL REFERENCES sta_country(id),
+  category_id       INTEGER NOT NULL REFERENCES race_categories(id),
+  is_stage_race     INTEGER NOT NULL CHECK(is_stage_race IN (0, 1)),
+  number_of_stages  INTEGER NOT NULL CHECK(number_of_stages > 0),
+  start_date        TEXT    NOT NULL,
+  end_date          TEXT    NOT NULL,
+  prestige          INTEGER NOT NULL CHECK(prestige BETWEEN 0 AND 100),
+  CHECK(end_date >= start_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_races_start_date ON races(start_date);
+CREATE INDEX IF NOT EXISTS idx_races_end_date ON races(end_date);
+CREATE INDEX IF NOT EXISTS idx_races_category ON races(category_id);
+CREATE INDEX IF NOT EXISTS idx_races_country ON races(country_id);
+
+-- ---- Etappen -----------------------------------------------
+CREATE TABLE IF NOT EXISTS stages (
+  id                INTEGER PRIMARY KEY,
+  race_id           INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  stage_number      INTEGER NOT NULL CHECK(stage_number > 0),
+  date              TEXT    NOT NULL,
+  profile           TEXT    NOT NULL CHECK(profile IN ('Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'ITT', 'TTT', 'Cobble', 'Cobble_Hill')),
+  details_csv_file  TEXT    NOT NULL CHECK(length(details_csv_file) > 0 AND instr(details_csv_file, '/') = 0 AND instr(details_csv_file, '\\') = 0),
+  UNIQUE(race_id, stage_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stages_race ON stages(race_id);
+CREATE INDEX IF NOT EXISTS idx_stages_date ON stages(date);
 
 -- ---- Rennteilnehmer -----------------------------------------
 CREATE TABLE IF NOT EXISTS race_entries (

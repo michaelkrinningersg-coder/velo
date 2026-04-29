@@ -1,5 +1,14 @@
 import type {
-  ApiResponse, SavegameMeta, Team, Rider, Race, GameState, TimeTrialResult,
+  ApiResponse,
+  SavegameMeta,
+  Team,
+  Rider,
+  Race,
+  GameState,
+  StageEditorDraft,
+  StageEditorExportPayload,
+  StageEditorExportRequest,
+  StageEditorImportRequest,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
@@ -28,6 +37,6 @@ export const api = {
   getRaces:            () => call<Race[]>('GET', '/api/races'),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   advanceDay:          () => call<GameState>('POST', '/api/state/advance'),
-  runTimeTrial:        (raceId: number) => call<TimeTrialResult>('POST', `/api/races/${raceId}/simulate`),
-  getRaceResults:      (raceId: number) => call<TimeTrialResult>('GET', `/api/races/${raceId}/results`),
+  importStageRoute:    (payload: StageEditorImportRequest) => call<StageEditorDraft>('POST', '/api/stage-editor/import', payload),
+  exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
 };

@@ -252,6 +252,12 @@ html, body {
 }
 .view-header h2 { font-size: 1.3rem; }
 
+.view-header-stack {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: .4rem;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -604,6 +610,285 @@ html, body {
   margin-top: .65rem;
   color: var(--accent-h);
   font-size: .82rem;
+}
+
+/* ---- Stage Editor ---------------------------------------- */
+.stage-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.stage-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stage-editor-panel-wide {
+  min-width: 0;
+}
+
+.stage-editor-card {
+  background: linear-gradient(180deg, rgba(30, 41, 59, .96) 0%, rgba(15, 23, 42, .96) 100%);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow);
+}
+
+.stage-editor-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .85rem;
+}
+
+.stage-editor-card-header h3 {
+  font-size: 1rem;
+}
+
+.stage-editor-import-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .75rem;
+  margin-bottom: .65rem;
+}
+
+.stage-editor-import-row input[type="file"] {
+  min-width: 0;
+  padding: .5rem .65rem;
+  border: 1px dashed rgba(148, 163, 184, .35);
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .72);
+  color: var(--text-300);
+}
+
+.stage-editor-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+  margin: .85rem 0;
+}
+
+.stage-editor-stat {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  padding: .8rem .85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid rgba(96, 165, 250, .12);
+}
+
+.stage-editor-stat-label {
+  color: #93c5fd;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.stage-editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  border: 1px dashed rgba(148, 163, 184, .28);
+  border-radius: var(--radius-md);
+  color: var(--text-500);
+  background: rgba(15, 23, 42, .52);
+}
+
+.stage-editor-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  margin-bottom: .75rem;
+}
+
+.stage-editor-alert {
+  padding: .65rem .75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .22);
+  color: #fecaca;
+  font-size: .82rem;
+}
+
+.stage-editor-alert-ok {
+  background: rgba(34, 197, 94, .12);
+  border-color: rgba(34, 197, 94, .24);
+  color: #bbf7d0;
+}
+
+.stage-editor-climbs {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.stage-editor-climb {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  padding: .7rem .8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(30, 41, 59, .84);
+  border: 1px solid rgba(245, 158, 11, .15);
+  font-size: .82rem;
+}
+
+.stage-editor-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.form-group-wide {
+  grid-column: 1 / -1;
+}
+
+.stage-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-top: .35rem;
+}
+
+.stage-editor-chart {
+  min-height: 280px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, .08) 0%, rgba(15, 23, 42, .82) 100%),
+    radial-gradient(circle at top left, rgba(14, 165, 233, .18) 0%, transparent 48%);
+  border: 1px solid rgba(96, 165, 250, .12);
+  padding: .5rem;
+}
+
+.stage-editor-chart svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.stage-editor-chart-axis {
+  stroke: rgba(148, 163, 184, .3);
+  stroke-width: 1;
+}
+
+.stage-editor-chart-line {
+  fill: none;
+  stroke: #7dd3fc;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.stage-editor-chart-point {
+  fill: #f8fafc;
+  stroke: #38bdf8;
+  stroke-width: 1.5;
+}
+
+.stage-editor-chart-marker-line {
+  stroke: rgba(245, 158, 11, .24);
+  stroke-width: 1;
+  stroke-dasharray: 5 5;
+}
+
+.stage-editor-chart-marker-label,
+.stage-editor-chart-scale {
+  fill: rgba(226, 232, 240, .8);
+  font-size: 11px;
+}
+
+.stage-editor-table-wrap {
+  overflow: auto;
+  max-height: 62vh;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(148, 163, 184, .14);
+}
+
+.stage-editor-table {
+  min-width: 1180px;
+}
+
+.stage-editor-table tbody td {
+  padding: .4rem .45rem;
+}
+
+.stage-editor-table input,
+.stage-editor-table select {
+  width: 100%;
+  padding: .4rem .5rem;
+  background: rgba(15, 23, 42, .78);
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 6px;
+  color: var(--text-100);
+}
+
+.stage-editor-table input[readonly],
+.stage-editor-table select:disabled {
+  opacity: .72;
+  cursor: not-allowed;
+}
+
+.stage-editor-marker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .25rem .5rem;
+  min-width: 17rem;
+}
+
+.stage-editor-marker-option {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .78rem;
+  color: var(--text-300);
+}
+
+.stage-editor-marker-option input {
+  width: auto;
+  padding: 0;
+}
+
+.stage-editor-marker-option.is-locked {
+  color: var(--text-100);
+  font-weight: 600;
+}
+
+.stage-editor-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .35rem;
+}
+
+@media (max-width: 1200px) {
+  .stage-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-editor-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .stage-editor-import-row,
+  .stage-editor-form-grid,
+  .stage-editor-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .game-main {
+    padding: 1rem;
+  }
 }
 
 /* ---- Buttons ---------------------------------------------- */

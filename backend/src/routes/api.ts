@@ -2,8 +2,19 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
 import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
-import { TimeTrialSimulator } from '../simulation/TimeTrialSimulator';
-import { ApiResponse, SavegameMeta, Team, Rider, Race, GameState, TimeTrialResult } from '../../../shared/types';
+import { RouteImporter } from '../simulation/RouteImporter';
+import {
+  ApiResponse,
+  SavegameMeta,
+  Team,
+  Rider,
+  Race,
+  GameState,
+  StageEditorDraft,
+  StageEditorExportPayload,
+  StageEditorExportRequest,
+  StageEditorImportRequest,
+} from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
   const body: ApiResponse<T> = { success: true, data };
@@ -17,6 +28,7 @@ function fail(res: Response, status: number, message: string): void {
 
 export function createRouter(dbService: DatabaseService): Router {
   const router = Router();
+  const routeImporter = new RouteImporter();
 
   // Caches GameStateService per active connection
   let cachedGss: GameStateService | null = null;
@@ -118,6 +130,20 @@ export function createRouter(dbService: DatabaseService): Router {
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
+  // ---- Stage Editor --------------------------------------
+
+  router.post('/stage-editor/import', (req: Request, res: Response) => {
+    try {
+      ok<StageEditorDraft>(res, routeImporter.importRoute(req.body as StageEditorImportRequest));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/stage-editor/export', (req: Request, res: Response) => {
+    try {
+      ok<StageEditorExportPayload>(res, routeImporter.exportCsv(req.body as StageEditorExportRequest));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   // ---- Game State ---------------------------------------
 
   router.get('/state', (_req: Request, res: Response) => {
@@ -128,39 +154,6 @@ export function createRouter(dbService: DatabaseService): Router {
   router.post('/state/advance', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().advanceDay()); }
     catch (e) { fail(res, 400, (e as Error).message); }
-  });
-
-  // ---- Simulation ---------------------------------------
-
-  router.get('/races/:id/results', (req: Request, res: Response) => {
-    const id = Number(req.params['id']);
-    if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Rennen-ID.');
-    try {
-      const db   = dbService.getActiveConnection();
-      const repo = new GameRepository(db);
-      const result = repo.getRaceResults(id);
-      if (!result) return fail(res, 404, 'Keine Ergebnisse für dieses Rennen.');
-      ok<TimeTrialResult>(res, result);
-    } catch (e) { fail(res, 500, (e as Error).message); }
-  });
-
-  router.post('/races/:id/simulate', (req: Request, res: Response) => {
-    const id = Number(req.params['id']);
-    if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Rennen-ID.');
-    try {
-      const db   = dbService.getActiveConnection();
-      const repo = new GameRepository(db);
-      const race = repo.getRaceById(id);
-      if (!race) return fail(res, 404, `Rennen ${id} nicht gefunden.`);
-      if (race.type !== 'TimeTrial') return fail(res, 400, `Rennen "${race.name}" ist kein Zeitfahren.`);
-      const riders = repo.getRaceRiders(id);
-      if (riders.length === 0) return fail(res, 400, 'Keine Fahrer für dieses Rennen gemeldet.');
-      const result = TimeTrialSimulator.simulate(race, riders);
-      repo.saveRaceResults(id, result.entries.map((e, idx) => ({
-        riderId: e.rider.id, position: idx + 1, timeSec: e.finishTimeSeconds, gapSec: e.gapSeconds, dayForm: e.dayFormFactor,
-      })));
-      ok<TimeTrialResult>(res, result);
-    } catch (e) { fail(res, 500, (e as Error).message); }
   });
 
   return router;

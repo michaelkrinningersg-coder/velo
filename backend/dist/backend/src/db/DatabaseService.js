@@ -41,7 +41,10 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
+const ContractService_1 = require("../game/ContractService");
+const RiderDevelopmentService_1 = require("../game/RiderDevelopmentService");
 const GameStateService_1 = require("../game/GameStateService");
+const RiderTagService_1 = require("../game/RiderTagService");
 const MASTER_DB_NAME = 'world_data.db';
 function resolveAssetsDir() {
     const candidates = [
@@ -55,6 +58,14 @@ function resolveAssetsDir() {
         }
     }
     throw new Error('Konnte backend/assets mit schema.sql nicht finden.');
+}
+function tableExists(db, tableName) {
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    return row != null;
+}
+function columnExists(db, tableName, columnName) {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    return columns.some(column => column.name === columnName);
 }
 class DatabaseService {
     constructor() {
@@ -107,7 +118,10 @@ class DatabaseService {
             db.prepare('UPDATE teams SET is_player_team = 1 WHERE id = ?').run(teamId);
             const teamName = teamRow.name;
             const gss = new GameStateService_1.GameStateService(db);
-            gss.ensureState();
+            const gameState = gss.ensureState();
+            new RiderDevelopmentService_1.RiderDevelopmentService(db).initializeRiders(gameState.season, true);
+            new ContractService_1.ContractService(db).checkContractStatuses(gameState.season);
+            new RiderTagService_1.RiderTagService(db).recalculateAllTags();
             db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -127,7 +141,21 @@ class DatabaseService {
         this.activeSaveName = filename;
         this.activeConnection.pragma('journal_mode = WAL');
         this.activeConnection.pragma('foreign_keys = ON');
+        this.syncActiveContractCache(this.activeConnection);
         return this.activeConnection;
+    }
+    syncActiveContractCache(db) {
+        if (!tableExists(db, 'contracts') || !tableExists(db, 'riders'))
+            return;
+        if (!columnExists(db, 'riders', 'active_team_id') || !columnExists(db, 'riders', 'active_contract_id'))
+            return;
+        if (!columnExists(db, 'contracts', 'status'))
+            return;
+        const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get();
+        const season = seasonRow?.season ?? 2026;
+        new RiderDevelopmentService_1.RiderDevelopmentService(db).initializeRiders(season, false);
+        new ContractService_1.ContractService(db).checkContractStatuses(season);
+        new RiderTagService_1.RiderTagService(db).recalculateAllTags();
     }
     getActiveConnection() {
         if (!this.activeConnection) {

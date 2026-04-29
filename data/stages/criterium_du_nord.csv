@@ -1,0 +1,6 @@
+km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
+0.0,42,Flat,3,7,start,Criterium du Nord,
+58.0,60,Flat,4,6,sprint_intermediate,Sprint de Lens,Sprint
+122.0,118,Flat,5,7,climb_start,Cote de Cassel,
+163.0,312,Hill,6,8,climb_top,Cote de Cassel,2
+187.0,280,Hill,5,7,finish_hill,Criterium du Nord,

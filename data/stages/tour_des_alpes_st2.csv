@@ -1,0 +1,6 @@
+km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
+0.0,348,Flat,4,5,start,Tour des Alpes Stage 2,
+52.0,410,Sprint,5,6,sprint_intermediate,Sprint Lienz,Sprint
+109.0,688,Mountain,6,7,climb_start,Iselsbergpass,
+148.5,1406,High_Mountain,8,7,climb_top,Iselsbergpass,1
+171.9,1124,Mountain,7,6,finish_mountain,Tour des Alpes Stage 2,

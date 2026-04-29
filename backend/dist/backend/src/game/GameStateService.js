@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameStateService = void 0;
 const events_1 = require("events");
+const ContractService_1 = require("./ContractService");
+const RiderTagService_1 = require("./RiderTagService");
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 class GameStateService {
@@ -50,6 +52,10 @@ class GameStateService {
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
+            if (nextSeason !== currentRow.season) {
+                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason);
+                new RiderTagService_1.RiderTagService(this.db).recalculateAllTags();
+            }
             return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
         })();
         this.events.emit('dayAdvanced', nextState);
@@ -71,7 +77,7 @@ class GameStateService {
         this.db.prepare('INSERT OR IGNORE INTO game_state (id, "current_date", season, is_game_over) VALUES (1, ?, ?, 0)').run(DEFAULT_START_DATE, DEFAULT_START_SEASON);
     }
     runDailyChecks(currentDate) {
-        const row = this.db.prepare('SELECT COUNT(*) AS count FROM races WHERE date = ? AND is_completed = 0').get(currentDate);
+        const row = this.db.prepare('SELECT COUNT(*) AS count FROM races WHERE start_date <= ? AND end_date >= ?').get(currentDate, currentDate);
         return {
             hasRaceToday: (row?.count ?? 0) > 0,
             racesTodayCount: row?.count ?? 0,

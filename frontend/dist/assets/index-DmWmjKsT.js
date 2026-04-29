@@ -1,0 +1,101 @@
+(function(){const a=document.createElement("link").relList;if(a&&a.supports&&a.supports("modulepreload"))return;for(const i of document.querySelectorAll('link[rel="modulepreload"]'))r(i);new MutationObserver(i=>{for(const s of i)if(s.type==="childList")for(const c of s.addedNodes)c.tagName==="LINK"&&c.rel==="modulepreload"&&r(c)}).observe(document,{childList:!0,subtree:!0});function t(i){const s={};return i.integrity&&(s.integrity=i.integrity),i.referrerPolicy&&(s.referrerPolicy=i.referrerPolicy),i.crossOrigin==="use-credentials"?s.credentials="include":i.crossOrigin==="anonymous"?s.credentials="omit":s.credentials="same-origin",s}function r(i){if(i.ep)return;i.ep=!0;const s=t(i);fetch(i.href,s)}})();async function d(e,a,t){try{return(await fetch(a,{method:e,headers:t?{"Content-Type":"application/json"}:{},body:t?JSON.stringify(t):void 0})).json()}catch(r){return{success:!1,error:`Netzwerkfehler: ${r.message}`}}}const u={listSaves:()=>d("GET","/api/saves"),createSave:(e,a,t)=>d("POST","/api/saves",{filename:e,careerName:a,teamId:t}),loadSave:e=>d("POST",`/api/saves/${encodeURIComponent(e)}/load`),deleteSave:e=>d("DELETE",`/api/saves/${encodeURIComponent(e)}`),getAvailableTeams:()=>d("GET","/api/teams/available"),getTeams:()=>d("GET","/api/teams"),getTeam:e=>d("GET",`/api/teams/${e}`),getRiders:e=>d("GET",`/api/riders${e!=null?`?teamId=${e}`:""}`),getRaces:()=>d("GET","/api/races"),getGameState:()=>d("GET","/api/state"),advanceDay:()=>d("POST","/api/state/advance")},n={currentSave:null,gameState:null,races:[],riders:[],teams:[],teamTableSort:{key:"name",direction:"asc"},teamDetailsRiderId:null};function o(e){return document.getElementById(e)}function l(e){return String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#x27;")}function S(e){return new Date(e).toLocaleDateString("de-DE",{day:"2-digit",month:"short",year:"numeric"})}function V(e){return e.isStageRace?`<span class="badge badge-live">Etappenrennen · ${e.numberOfStages} Etappen</span>`:'<span class="badge badge-todo">Eintagesrennen</span>'}function j(e){return e.startDate===e.endDate?S(e.startDate):`${S(e.startDate)} - ${S(e.endDate)}`}const x=[{key:"flat",label:"Fl"},{key:"mountain",label:"Berg"},{key:"mediumMountain",label:"MB"},{key:"hill",label:"Hgl"},{key:"timeTrial",label:"ZF"},{key:"prologue",label:"Pro"},{key:"cobble",label:"Pf"},{key:"sprint",label:"Spr"},{key:"acceleration",label:"Acc"},{key:"downhill",label:"Abf"},{key:"attack",label:"Atk"},{key:"stamina",label:"Sta"},{key:"resistance",label:"Res"},{key:"recuperation",label:"Rec"},{key:"bikeHandling",label:"Ftg"}],K={flat:"Flach",mountain:"Berg",mediumMountain:"Mittlere Berge",hill:"Hügel",timeTrial:"Zeitfahren",prologue:"Prolog",cobble:"Pflaster",sprint:"Sprint",acceleration:"Antritt",downhill:"Abfahrt",attack:"Attacke",stamina:"Stamina",resistance:"Widerstand",recuperation:"Regeneration",bikeHandling:"Fahrtechnik"},I=[{id:"name",label:"Name",title:"Name - Nachname, Vorname",sortKey:"name",className:"team-table-col-name"},{id:"flag",label:"",title:"",className:"team-table-col-flag"},{id:"code",label:"Country",title:"Country - Sortierung nach 3er-Code",sortKey:"countryCode",className:"team-table-col-code"},{id:"birthYear",label:"Jg",title:"Geburtsjahr",sortKey:"birthYear",className:"team-table-col-year"},{id:"age",label:"Alt",title:"Alter",sortKey:"age",className:"team-table-col-age"},{id:"overallRating",label:"Ges",title:"Gesamtstärke",sortKey:"overallRating",className:"team-table-col-overall"},{id:"contractEndSeason",label:"V-Ende",title:"Vertragsende - Ende des aktiven Vertrags",sortKey:"contractEndSeason",className:"team-table-col-contract"},{id:"roleName",label:"Rolle",title:"Teamrolle des Fahrers",sortKey:"roleName",className:"team-table-col-role"},...x.map(e=>({id:e.key,label:e.label,title:`${e.label} - ${K[e.key]}`,sortKey:e.key,className:"team-table-col-skill"})),{id:"info",label:"Info",title:"Info - Profil und Vorlieben anzeigen",sortKey:"riderType",className:"team-table-col-info"}],M=I.length;function Y(e,a,t){return Math.max(a,Math.min(t,e))}function $(e,a,t){return Math.round(e+(a-e)*t)}function E(e,a,t){return`rgb(${$(e[0],a[0],t)} ${$(e[1],a[1],t)} ${$(e[2],a[2],t)})`}function q(e){const a=[{value:40,color:[86,16,28]},{value:50,color:[132,24,38]},{value:60,color:[185,72,18]},{value:70,color:[212,145,24]},{value:78,color:[88,191,92]},{value:85,color:[196,255,188]}],t=Y(e,a[0].value,a[a.length-1].value);for(let r=1;r<a.length;r+=1){const i=a[r-1],s=a[r];if(t<=s.value){const c=(t-i.value)/(s.value-i.value);return E(i.color,s.color,c)}}return E(a[a.length-1].color,a[a.length-1].color,1)}function R(e){return`<span class="skill-value" style="color:${q(e)}">${Math.round(e)}</span>`}const Z={BEL:"be",FRA:"fr",ITA:"it",ESP:"es",NED:"nl",GER:"de",GBR:"gb",USA:"us",COL:"co",AUS:"au",DEN:"dk",NOR:"no",SLO:"si",POR:"pt",SUI:"ch",POL:"pl",AUT:"at",LUX:"lu",IRE:"ie",CZE:"cz",SVK:"sk",KAZ:"kz",RSA:"za",UAE:"ae",BHR:"bh",HUN:"hu",OTH:"un"};function F(e){const a=Z[e]??null;return a?`<span class="fi fi-${a} country-flag" aria-hidden="true"></span>`:""}function J(e,a){return e?`<span class="country-chip">${F(e.code3)}<span>${l(e.name)}</span></span>`:a?l(a):"–"}function k(e){var a;return((a=e.country)==null?void 0:a.code3)??e.nationality}function L(e){return`${e.lastName} ${e.firstName}`}function h(e){var a;return((a=e.role)==null?void 0:a.name)??(e.roleId!=null?`Rolle ${e.roleId}`:"–")}function X(e,a=12){const t=n.riders.filter(i=>i.activeTeamId===e).sort((i,s)=>s.overallRating-i.overallRating).slice(0,a);return t.length===0?null:t.reduce((i,s)=>i+s.overallRating,0)/t.length}function W(e){const a=n.riders.filter(r=>r.activeTeamId===e);return a.length===0?null:a.reduce((r,i)=>r+i.overallRating,0)/a.length}function Q(e){const a=X(e);return a==null?"–":a.toFixed(1).replace(".",",")}function ee(e){const a=W(e);return a==null?"–":a.toFixed(1).replace(".",",")}function g(e,a){return e.localeCompare(a,"de",{sensitivity:"base"})}function ae(e){return n.teamTableSort.key!==e?'<span class="team-table-sort-indicator">↕</span>':`<span class="team-table-sort-indicator team-table-sort-indicator-active">${n.teamTableSort.direction==="asc"?"↑":"↓"}</span>`}function te(e){if(!e.sortKey)return`<th class="${e.className??""}"></th>`;const a=n.teamTableSort.key===e.sortKey?" team-table-sort-active":"";return`
+    <th class="${e.className??""}">
+      <button
+        type="button"
+        class="team-table-sort${a}"
+        data-team-sort="${e.sortKey}"
+        title="${l(e.title)}"
+        aria-label="${l(e.title)}"
+      >
+        <span class="team-table-sort-label">${l(e.label)}</span>
+        ${ae(e.sortKey)}
+      </button>
+    </th>`}function ne(e){const a=[...e],t=n.teamTableSort.direction==="asc"?1:-1;return a.sort((r,i)=>{let s=0;switch(n.teamTableSort.key){case"name":s=g(r.lastName,i.lastName)||g(r.firstName,i.firstName);break;case"countryCode":s=g(k(r),k(i));break;case"birthYear":s=r.birthYear-i.birthYear;break;case"age":s=(r.age??0)-(i.age??0);break;case"overallRating":s=r.overallRating-i.overallRating;break;case"contractEndSeason":s=(r.contractEndSeason??Number.MAX_SAFE_INTEGER)-(i.contractEndSeason??Number.MAX_SAFE_INTEGER);break;case"roleName":s=g(h(r),h(i));break;case"riderType":s=g(r.riderType,i.riderType)||g(L(r),L(i));break;default:s=r.skills[n.teamTableSort.key]-i.skills[n.teamTableSort.key];break}return s===0&&(s=g(r.lastName,i.lastName)||g(r.firstName,i.firstName)),s*t}),a}function C(e){return e.length===0?"–":e.map(a=>{const t=n.races.find(r=>r.id===a);return t?l(t.name):`Rennen ${a}`}).join(", ")}function D(e){switch(e){case"Berg":return"Bergfahrer";case"Hill":return"Hügelspezialist";case"Sprint":return"Sprinter";case"Timetrial":return"Zeitfahrer";case"Cobble":return"Pflasterspezialist";case"Attacker":return"Angreifer";default:return e??"Keine Spezialisierung"}}function re(e){const a=[e.hasGrandTourTag?"Grand Tour":null,e.hasStageRaceTag?"Etappenrennen":null,e.hasOneDayClassicTag?"One Day Classic":null].filter(Boolean).join(" · "),t=[e.specialization1,e.specialization2,e.specialization3].filter(r=>r!=null).map(D).join(" · ");return`
+    <tr class="team-detail-expansion-row">
+      <td colspan="${M}">
+        <div class="rider-insight-panel">
+          <div class="rider-insight-group">
+            <div class="rider-insight-title">Profil</div>
+            <div><span class="text-muted">Rolle:</span> ${l(h(e))}</div>
+            <div><strong>${l(D(e.riderType))}</strong></div>
+            <div class="text-muted">${l(t||"Keine Spezialisierung")}</div>
+            <div class="text-muted">Tags: ${l(a||"Keine Tags")}</div>
+            <div class="text-muted">Skill-Development: ${e.skillDevelopment??"–"}</div>
+            <div class="text-muted">${e.isStageRacer?"Etappenfahrer":"Kein Etappenfokus"} / ${e.isOneDayRacer?"Eintagesfahrer":"Kein Eintagesfokus"}</div>
+            <div class="text-muted">Vertragsende: ${e.contractEndSeason??"–"}</div>
+          </div>
+          <div class="rider-insight-group">
+            <div class="rider-insight-title">Vorlieben</div>
+            <div><span class="text-muted">Fav:</span> ${C(e.favoriteRaces)}</div>
+            <div><span class="text-muted">No:</span> ${C(e.nonFavoriteRaces)}</div>
+          </div>
+        </div>
+      </td>
+    </tr>`}function w(e){document.querySelectorAll(".screen").forEach(a=>a.classList.add("hidden")),o(`screen-${e}`).classList.remove("hidden")}function se(e){o(`modal-${e}`).classList.remove("hidden")}function O(e){o(`modal-${e}`).classList.add("hidden")}function p(e="Lade…"){o("loading-msg").textContent=e,o("loading-overlay").classList.remove("hidden")}function b(){o("loading-overlay").classList.add("hidden")}function A(e,a){const t=o(e);t.textContent=a,t.classList.remove("hidden")}function G(e){o(e).classList.add("hidden")}function P(e){var a;document.querySelectorAll(".view").forEach(t=>t.classList.remove("active")),document.querySelectorAll(".nav-btn").forEach(t=>t.classList.remove("active")),o(`view-${e}`).classList.add("active"),(a=document.querySelector(`.nav-btn[data-view="${e}"]`))==null||a.classList.add("active")}async function T(){const e=await u.listSaves(),a=o("saves-list");if(!e.success||!e.data||e.data.length===0){a.classList.add("hidden");return}a.classList.remove("hidden"),a.innerHTML=e.data.map(t=>`
+    <div class="save-card">
+      <h3>${l(t.careerName)}</h3>
+      <p class="save-meta">
+        ${l(t.teamName)} · Saison ${t.currentSeason}
+        ${t.lastSaved?"· "+S(t.lastSaved):""}
+      </p>
+      <div class="save-actions">
+        <button class="btn btn-primary btn-sm" data-save-action="load" data-filename="${l(t.filename)}">Laden</button>
+        <button class="btn btn-danger btn-sm" data-save-action="delete" data-filename="${l(t.filename)}" data-career-name="${l(t.careerName)}">Löschen</button>
+      </div>
+    </div>
+  `).join("")}async function ie(e){p("Karriere wird geladen…");const a=await u.loadSave(e);if(b(),!a.success){alert("Fehler beim Laden: "+a.error);return}n.currentSave=a.data??null,await H()}async function oe(e,a){if(!confirm(`Karriere "${a}" wirklich löschen?`))return;p("Löschen…");const t=await u.deleteSave(e);if(b(),!t.success){alert("Fehler: "+t.error);return}await T()}o("btn-new-career").addEventListener("click",async()=>{var t;G("new-career-error"),o("input-career-name").value="";const e=o("input-team-id");e.innerHTML='<option value="">Wird geladen…</option>',se("newCareer");const a=await u.getAvailableTeams();if(!a.success||!((t=a.data)!=null&&t.length)){e.innerHTML='<option value="">Fehler beim Laden der Teams</option>';return}e.innerHTML=a.data.map(r=>`<option value="${r.id}">${l(r.name)} (${l(r.division??r.divisionName??"")})</option>`).join("")});o("btn-cancel-new").addEventListener("click",()=>O("newCareer"));o("btn-confirm-new").addEventListener("click",async()=>{const e=o("input-career-name").value.trim(),a=o("input-team-id").value;if(!e||!a){A("new-career-error","Bitte Karriere-Name und Team auswählen.");return}const t=Number(a),i=`${e.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,20)}_${Date.now()}.db`;G("new-career-error"),p("Neue Karriere wird erstellt…");const s=await u.createSave(i,e,t);if(!s.success){b(),A("new-career-error",s.error??"Unbekannter Fehler.");return}const c=await u.loadSave(i);if(b(),O("newCareer"),!c.success){alert("Fehler: "+c.error);return}n.currentSave=c.data??null,await H()});o("btn-load-career").addEventListener("click",()=>T());o("saves-list").addEventListener("click",async e=>{const a=e.target.closest("button[data-save-action]");if(!a)return;const{saveAction:t,filename:r,careerName:i}=a.dataset;if(r){if(t==="load"){await ie(r);return}t==="delete"&&await oe(r,i??r)}});async function H(){var e;w("game"),o("meta-career").textContent=((e=n.currentSave)==null?void 0:e.careerName)??"",P("dashboard"),p("Spiel wird geladen…");try{await le(),await z(),await U(),await de(),f()}catch(a){alert("Fehler beim Laden des Spiels: "+a.message)}finally{b()}}document.querySelectorAll(".nav-btn").forEach(e=>{e.addEventListener("click",()=>{const a=e.dataset.view??"";P(a),a==="teams"&&U()})});o("teams-dropdown").addEventListener("change",e=>{const a=e.target.value;n.teamDetailsRiderId=null,y(a?Number(a):null)});o("teams-detail").addEventListener("click",e=>{const a=e.target.closest("button[data-team-sort]");if(a){const s=a.dataset.teamSort;n.teamTableSort.key===s?n.teamTableSort.direction=n.teamTableSort.direction==="asc"?"desc":"asc":n.teamTableSort={key:s,direction:s==="birthYear"||s==="age"||s==="overallRating"?"desc":"asc"};const c=Number(o("teams-dropdown").value);y(Number.isFinite(c)?c:null);return}const t=e.target.closest("button[data-rider-info]");if(!t)return;const r=Number(t.dataset.riderInfo);n.teamDetailsRiderId=n.teamDetailsRiderId===r?null:r;const i=Number(o("teams-dropdown").value);y(Number.isFinite(i)?i:null)});o("btn-back-menu").addEventListener("click",()=>{w("menu"),T()});o("btn-advance-day").addEventListener("click",async()=>{p("Tag wird fortgeschrieben...");try{const e=await u.advanceDay();if(!e.success){alert(`Tageswechsel fehlgeschlagen:
+`+(e.error??"Unbekannter Fehler"));return}n.gameState=e.data??null,B(),n.currentSave&&e.data&&(n.currentSave.currentSeason=e.data.season),await z()}catch(e){alert("Unerwarteter Fehler beim Tageswechsel: "+e.message)}finally{b()}});async function le(){const e=await u.getGameState();if(!e.success){console.error(e.error);return}n.gameState=e.data??null,B(),f(),n.currentSave&&e.data&&(n.currentSave.currentSeason=e.data.season)}function B(){if(!n.gameState)return;o("meta-date").textContent=n.gameState.formattedDate,o("meta-season").textContent=`Saison ${n.gameState.season}`;const e=o("meta-race-hint");n.gameState.hasRaceToday?(e.textContent=`${n.gameState.racesTodayCount} Rennen für heute im Kalender`,e.classList.remove("hidden")):(e.textContent="",e.classList.add("hidden"))}function f(){var a,t,r,i;const e=n.teams.find(s=>s.isPlayerTeam)??n.teams.find(s=>{var c;return s.name===((c=n.currentSave)==null?void 0:c.teamName)})??null;o("dashboard-career").textContent=((a=n.currentSave)==null?void 0:a.careerName)??"–",o("dashboard-team").textContent=(e==null?void 0:e.name)??((t=n.currentSave)==null?void 0:t.teamName)??"–",o("dashboard-date").textContent=((r=n.gameState)==null?void 0:r.formattedDate)??"–",o("dashboard-season").textContent=n.gameState?`Saison ${n.gameState.season}`:"–",o("dashboard-races-today").textContent=String(((i=n.gameState)==null?void 0:i.racesTodayCount)??0),ce()}async function z(){const e=await u.getRaces();if(!e.success){console.error(e.error);return}n.races=e.data??[],f()}function ce(){const e=o("dashboard-races-tbody"),a=n.races.filter(t=>!n.gameState||t.endDate>=n.gameState.currentDate).slice(0,8);if(a.length===0){e.innerHTML='<tr><td colspan="7" class="text-muted">Keine kommenden Rennen.</td></tr>';return}e.innerHTML=a.map(t=>{var v,N;const r=n.gameState!=null&&t.startDate<=n.gameState.currentDate&&t.endDate>=n.gameState.currentDate,s=n.gameState!=null&&t.endDate<n.gameState.currentDate?'<span class="badge badge-done">Abgeschlossen</span>':r?'<span class="badge badge-live">Läuft</span>':'<span class="badge badge-todo">Geplant</span>',c=((v=t.country)==null?void 0:v.name)??`Land ${t.countryId}`,m=((N=t.category)==null?void 0:N.name)??`Kategorie ${t.categoryId}`;return`
+      <tr>
+        <td>${j(t)}</td>
+        <td><strong>${l(t.name)}</strong></td>
+        <td>${V(t)}</td>
+        <td>${l(c)}</td>
+        <td>${l(m)}</td>
+        <td>${s}</td>
+        <td>Prestige ${t.prestige}</td>
+      </tr>`}).join("")}async function de(){const e=await u.getRiders();if(!e.success){console.error(e.error);return}n.riders=e.data??[],_(),f()}async function U(){const e=await u.getTeams();if(!e.success){console.error("loadTeams Fehler:",e.error),o("teams-detail").innerHTML=`<p class="error-msg">Teams konnten nicht geladen werden: ${l(e.error??"Unbekannt")}</p>`;return}n.teams=e.data??[],_(),f()}function _(){const e=o("teams-dropdown"),a=e.value;e.innerHTML='<option value="">– Team auswählen –</option>'+n.teams.map(r=>`<option value="${r.id}"${String(r.id)===a?" selected":""}>${l(r.name)} (${l(r.division??r.divisionName??"")}) · ${l(r.abbreviation)}</option>`).join("");const t=a?Number(a):null;y(t)}function y(e){const a=o("teams-detail");if(e===null){a.innerHTML='<p class="text-muted" style="padding:1rem 0">Team aus der Liste auswählen.</p>';return}const t=n.teams.find(s=>s.id===e);if(!t){a.innerHTML="";return}const r=ne(n.riders.filter(s=>s.activeTeamId===e)),i=t.division==="U23"?"badge-u23":"badge-classics";a.innerHTML=`
+    <div class="team-detail-card">
+      <div class="team-detail-header">
+        <h3>${l(t.name)}</h3>
+        <div class="team-detail-meta">
+          <span class="badge ${i}">${l(t.division??t.divisionName??"")}</span>
+          <span>${J(t.country,t.countryCode)}</span>
+          <span>Kürzel: ${l(t.abbreviation)} · Top 12 ${l(Q(t.id))} (${l(ee(t.id))})</span>
+          ${t.isPlayerTeam?'<span class="badge badge-live">Spielerteam</span>':""}
+        </div>
+      </div>
+      <div class="team-detail-meta" style="margin-top:0.75rem">
+        <span>${r.length} Fahrer</span>
+        <span class="text-muted">Sortierung: ${l(n.teamTableSort.key==="name"?"Nachname":n.teamTableSort.key==="countryCode"?"Country":n.teamTableSort.key==="birthYear"?"Jahrgang":n.teamTableSort.key==="age"?"Alter":n.teamTableSort.key==="overallRating"?"Gesamt":n.teamTableSort.key==="contractEndSeason"?"Vertragsende":n.teamTableSort.key==="roleName"?"Rolle":n.teamTableSort.key==="riderType"?"Profil":K[n.teamTableSort.key])} ${n.teamTableSort.direction==="asc"?"aufsteigend":"absteigend"}</span>
+      </div>
+      <table class="data-table data-table-teams" style="margin-top:1rem">
+        <thead><tr>
+          ${I.map(te).join("")}
+        </tr></thead>
+        <tbody>
+          ${r.length===0?`<tr><td colspan="${M}" class="text-muted">Keine Fahrer.</td></tr>`:r.map(s=>{const c=k(s),m=n.teamDetailsRiderId===s.id;return`
+              <tr class="team-detail-row${m?" team-detail-row-expanded":""}">
+                <td class="team-table-name-cell"><strong>${l(L(s))}</strong></td>
+                <td class="team-table-flag-cell">${F(c)}</td>
+                <td class="team-table-code-cell">${l(c)}</td>
+                <td>${s.birthYear}</td>
+                <td>${s.age??"–"}</td>
+                <td>${R(s.overallRating)}</td>
+                <td>${s.contractEndSeason??"–"}</td>
+                <td>${l(h(s))}</td>
+                ${x.map(v=>`<td>${R(s.skills[v.key])}</td>`).join("")}
+                <td class="team-table-info-cell">
+                  <button
+                    type="button"
+                    class="info-toggle${m?" info-toggle-active":""}"
+                    data-rider-info="${s.id}"
+                    title="Profil und Vorlieben ${m?"ausblenden":"anzeigen"}"
+                    aria-expanded="${m?"true":"false"}"
+                    aria-label="Profil und Vorlieben ${m?"ausblenden":"anzeigen"}"
+                  >i</button>
+                </td>
+              </tr>
+              ${m?re(s):""}`}).join("")}
+        </tbody>
+      </table>
+    </div>`}(async()=>(w("menu"),await T()))();
