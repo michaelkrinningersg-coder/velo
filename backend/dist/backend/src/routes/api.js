@@ -5,6 +5,7 @@ const express_1 = require("express");
 const GameRepository_1 = require("../db/GameRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
+const QuickSimEngine_1 = require("../simulation/QuickSimEngine");
 function ok(res, data) {
     const body = { success: true, data };
     res.json(body);
@@ -160,6 +161,54 @@ function createRouter(dbService) {
     router.get('/state', (_req, res) => {
         try {
             ok(res, getGss().loadState());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/game/status', (_req, res) => {
+        try {
+            ok(res, getGss().loadStatus());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/simulation/quick/:stageId', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+            if (!pendingStageIds.has(stageId)) {
+                return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Simulation freigegeben.');
+            }
+            const db = dbService.getActiveConnection();
+            ok(res, new QuickSimEngine_1.QuickSimEngine(db).simulateStage(stageId));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/results/:stageId', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const db = dbService.getActiveConnection();
+            const payload = new GameRepository_1.GameRepository(db).getStageResults(stageId);
+            if (!payload)
+                return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
+            ok(res, payload);
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/season-standings', (_req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            ok(res, new GameRepository_1.GameRepository(db).getSeasonStandings());
         }
         catch (e) {
             fail(res, 400, e.message);

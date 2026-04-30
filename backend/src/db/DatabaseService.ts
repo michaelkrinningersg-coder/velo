@@ -3,12 +3,23 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SavegameMeta } from '../../../shared/types';
-import { ContractService } from '../game/ContractService';
-import { RiderDevelopmentService } from '../game/RiderDevelopmentService';
+import { bootstrap } from '../bootstrapper';
 import { GameStateService } from '../game/GameStateService';
-import { RiderTagService } from '../game/RiderTagService';
 
 const MASTER_DB_NAME = 'world_data.db';
+const RESULT_TYPE_ROWS = [
+  { id: 1, name: 'Stage' },
+  { id: 2, name: 'GC' },
+  { id: 3, name: 'Points' },
+  { id: 4, name: 'Mountain' },
+  { id: 5, name: 'Youth' },
+  { id: 6, name: 'Team' },
+] as const;
+
+function tableExists(db: Database.Database, tableName: string): boolean {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  return row != null;
+}
 
 function resolveAssetsDir(): string {
   const candidates = [
@@ -26,18 +37,9 @@ function resolveAssetsDir(): string {
   throw new Error('Konnte backend/assets mit schema.sql nicht finden.');
 }
 
-function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
-  return row != null;
-}
-
-function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return columns.some(column => column.name === columnName);
-}
-
 export class DatabaseService {
   private readonly masterDbPath: string;
+  private readonly schemaPath: string;
   private readonly savegamesDir: string;
   private activeConnection: Database.Database | null = null;
   private activeSaveName: string | null = null;
@@ -45,9 +47,28 @@ export class DatabaseService {
   constructor() {
     const assetsDir = resolveAssetsDir();
     this.masterDbPath = path.join(assetsDir, MASTER_DB_NAME);
+    this.schemaPath = path.join(assetsDir, 'schema.sql');
     this.savegamesDir = process.env['SAVEGAME_DIR']
       ?? path.join(os.homedir(), '.velo', 'savegames');
     this.ensureSavegamesDir();
+  }
+
+  private applyLatestSchema(db: Database.Database): void {
+    const schema = fs.readFileSync(this.schemaPath, 'utf8');
+    db.exec(schema);
+  }
+
+  private ensureReferenceData(db: Database.Database): void {
+    if (!tableExists(db, 'result_types')) {
+      return;
+    }
+
+    const insert = db.prepare('INSERT OR IGNORE INTO result_types (id, name) VALUES (?, ?)');
+    db.transaction(() => {
+      for (const row of RESULT_TYPE_ROWS) {
+        insert.run(row.id, row.name);
+      }
+    })();
   }
 
   private ensureSavegamesDir(): void {
@@ -72,6 +93,9 @@ export class DatabaseService {
     if (fs.existsSync(savePath)) {
       throw new Error(`Savegame "${filename}" existiert bereits.`);
     }
+
+    // Jede neue Karriere soll auf einer frisch erzeugten Master-DB basieren.
+    bootstrap(true);
 
     if (!fs.existsSync(this.masterDbPath)) {
       throw new Error(
@@ -99,10 +123,7 @@ export class DatabaseService {
       const teamName = teamRow.name;
 
       const gss = new GameStateService(db);
-      const gameState = gss.ensureState();
-      new RiderDevelopmentService(db).initializeRiders(gameState.season, true);
-      new ContractService(db).checkContractStatuses(gameState.season);
-      new RiderTagService(db).recalculateAllTags();
+      gss.ensureState();
       db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -122,20 +143,9 @@ export class DatabaseService {
     this.activeSaveName = filename;
     this.activeConnection.pragma('journal_mode = WAL');
     this.activeConnection.pragma('foreign_keys = ON');
-    this.syncActiveContractCache(this.activeConnection);
+    this.applyLatestSchema(this.activeConnection);
+    this.ensureReferenceData(this.activeConnection);
     return this.activeConnection;
-  }
-
-  private syncActiveContractCache(db: Database.Database): void {
-    if (!tableExists(db, 'contracts') || !tableExists(db, 'riders')) return;
-    if (!columnExists(db, 'riders', 'active_team_id') || !columnExists(db, 'riders', 'active_contract_id')) return;
-    if (!columnExists(db, 'contracts', 'status')) return;
-
-    const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
-    const season = seasonRow?.season ?? 2026;
-    new RiderDevelopmentService(db).initializeRiders(season, false);
-    new ContractService(db).checkContractStatuses(season);
-    new RiderTagService(db).recalculateAllTags();
   }
 
   public getActiveConnection(): Database.Database {

@@ -229,19 +229,78 @@ CREATE TABLE IF NOT EXISTS race_entries (
   PRIMARY KEY (race_id, rider_id)
 );
 
--- ---- Rennergebnisse (Zeitfahren & allgemein) ----------------
-CREATE TABLE IF NOT EXISTS race_results (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  race_id          INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
-  rider_id         INTEGER NOT NULL REFERENCES riders(id),
-  finish_position  INTEGER NOT NULL,
-  finish_time_sec  REAL    NOT NULL,
-  gap_sec          REAL    NOT NULL DEFAULT 0.0,
-  day_form_factor  REAL    NOT NULL DEFAULT 1.0,
-  UNIQUE(race_id, rider_id)
+-- ---- Ergebnisarten ------------------------------------------
+CREATE TABLE IF NOT EXISTS result_types (
+  id    INTEGER PRIMARY KEY,
+  name  TEXT    NOT NULL UNIQUE
 );
 
-CREATE INDEX IF NOT EXISTS idx_results_race ON race_results(race_id);
+-- ---- Ergebnisse / Wertungen ---------------------------------
+CREATE TABLE IF NOT EXISTS results (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  race_id          INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  stage_id         INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  rider_id         INTEGER REFERENCES riders(id) ON DELETE CASCADE,
+  team_id          INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  result_type_id   INTEGER NOT NULL REFERENCES result_types(id),
+  rank             INTEGER NOT NULL CHECK(rank > 0),
+  time_seconds     INTEGER,
+  points           INTEGER,
+  CHECK(
+    (result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)
+    OR
+    (result_type_id != 6 AND rider_id IS NOT NULL AND team_id IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_rider_type
+  ON results(stage_id, rider_id, result_type_id)
+  WHERE rider_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_team_type
+  ON results(stage_id, team_id, result_type_id)
+  WHERE rider_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_results_stage_type_rank
+  ON results(stage_id, result_type_id, rank);
+
+CREATE INDEX IF NOT EXISTS idx_results_race_type
+  ON results(race_id, result_type_id);
+
+-- ---- Saisonpunkte ------------------------------------------
+CREATE TABLE IF NOT EXISTS season_point_events (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  season           INTEGER NOT NULL,
+  race_id          INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  stage_id         INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  team_id          INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  award_type       TEXT    NOT NULL CHECK(award_type IN (
+    'stage_result',
+    'one_day_result',
+    'gc_leader_day',
+    'points_leader_day',
+    'mountain_leader_day',
+    'youth_leader_day',
+    'gc_final',
+    'points_final',
+    'mountain_final',
+    'youth_final'
+  )),
+  rank             INTEGER NOT NULL CHECK(rank > 0),
+  points_awarded   INTEGER NOT NULL CHECK(points_awarded >= 0),
+  awarded_on       TEXT    NOT NULL,
+  UNIQUE(stage_id, rider_id, award_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_season_point_events_season_rider
+  ON season_point_events(season, rider_id);
+
+CREATE INDEX IF NOT EXISTS idx_season_point_events_season_team
+  ON season_point_events(season, team_id);
+
+CREATE INDEX IF NOT EXISTS idx_season_point_events_season_stage
+  ON season_point_events(season, stage_id);
 
 -- ---- Saisonstatistiken (aggregiert am Saisonende) -----------
 CREATE TABLE IF NOT EXISTS season_stats (

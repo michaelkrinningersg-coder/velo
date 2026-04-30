@@ -41,11 +41,21 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
-const ContractService_1 = require("../game/ContractService");
-const RiderDevelopmentService_1 = require("../game/RiderDevelopmentService");
+const bootstrapper_1 = require("../bootstrapper");
 const GameStateService_1 = require("../game/GameStateService");
-const RiderTagService_1 = require("../game/RiderTagService");
 const MASTER_DB_NAME = 'world_data.db';
+const RESULT_TYPE_ROWS = [
+    { id: 1, name: 'Stage' },
+    { id: 2, name: 'GC' },
+    { id: 3, name: 'Points' },
+    { id: 4, name: 'Mountain' },
+    { id: 5, name: 'Youth' },
+    { id: 6, name: 'Team' },
+];
+function tableExists(db, tableName) {
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    return row != null;
+}
 function resolveAssetsDir() {
     const candidates = [
         path.resolve(__dirname, '..', '..', 'assets'),
@@ -59,23 +69,31 @@ function resolveAssetsDir() {
     }
     throw new Error('Konnte backend/assets mit schema.sql nicht finden.');
 }
-function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
-    return row != null;
-}
-function columnExists(db, tableName, columnName) {
-    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
-    return columns.some(column => column.name === columnName);
-}
 class DatabaseService {
     constructor() {
         this.activeConnection = null;
         this.activeSaveName = null;
         const assetsDir = resolveAssetsDir();
         this.masterDbPath = path.join(assetsDir, MASTER_DB_NAME);
+        this.schemaPath = path.join(assetsDir, 'schema.sql');
         this.savegamesDir = process.env['SAVEGAME_DIR']
             ?? path.join(os.homedir(), '.velo', 'savegames');
         this.ensureSavegamesDir();
+    }
+    applyLatestSchema(db) {
+        const schema = fs.readFileSync(this.schemaPath, 'utf8');
+        db.exec(schema);
+    }
+    ensureReferenceData(db) {
+        if (!tableExists(db, 'result_types')) {
+            return;
+        }
+        const insert = db.prepare('INSERT OR IGNORE INTO result_types (id, name) VALUES (?, ?)');
+        db.transaction(() => {
+            for (const row of RESULT_TYPE_ROWS) {
+                insert.run(row.id, row.name);
+            }
+        })();
     }
     ensureSavegamesDir() {
         if (!fs.existsSync(this.savegamesDir)) {
@@ -94,6 +112,8 @@ class DatabaseService {
         if (fs.existsSync(savePath)) {
             throw new Error(`Savegame "${filename}" existiert bereits.`);
         }
+        // Jede neue Karriere soll auf einer frisch erzeugten Master-DB basieren.
+        (0, bootstrapper_1.bootstrap)(true);
         if (!fs.existsSync(this.masterDbPath)) {
             throw new Error(`Master-Datenbank nicht gefunden unter: ${this.masterDbPath}. ` +
                 'Führe zuerst den Bootstrapper aus.');
@@ -118,10 +138,7 @@ class DatabaseService {
             db.prepare('UPDATE teams SET is_player_team = 1 WHERE id = ?').run(teamId);
             const teamName = teamRow.name;
             const gss = new GameStateService_1.GameStateService(db);
-            const gameState = gss.ensureState();
-            new RiderDevelopmentService_1.RiderDevelopmentService(db).initializeRiders(gameState.season, true);
-            new ContractService_1.ContractService(db).checkContractStatuses(gameState.season);
-            new RiderTagService_1.RiderTagService(db).recalculateAllTags();
+            gss.ensureState();
             db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -141,21 +158,9 @@ class DatabaseService {
         this.activeSaveName = filename;
         this.activeConnection.pragma('journal_mode = WAL');
         this.activeConnection.pragma('foreign_keys = ON');
-        this.syncActiveContractCache(this.activeConnection);
+        this.applyLatestSchema(this.activeConnection);
+        this.ensureReferenceData(this.activeConnection);
         return this.activeConnection;
-    }
-    syncActiveContractCache(db) {
-        if (!tableExists(db, 'contracts') || !tableExists(db, 'riders'))
-            return;
-        if (!columnExists(db, 'riders', 'active_team_id') || !columnExists(db, 'riders', 'active_contract_id'))
-            return;
-        if (!columnExists(db, 'contracts', 'status'))
-            return;
-        const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get();
-        const season = seasonRow?.season ?? 2026;
-        new RiderDevelopmentService_1.RiderDevelopmentService(db).initializeRiders(season, false);
-        new ContractService_1.ContractService(db).checkContractStatuses(season);
-        new RiderTagService_1.RiderTagService(db).recalculateAllTags();
     }
     getActiveConnection() {
         if (!this.activeConnection) {

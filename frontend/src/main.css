@@ -239,6 +239,47 @@ html, body {
   font-size: .82rem;
 }
 
+.game-state-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-state-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.pending-stage-list {
+  display: grid;
+  gap: .65rem;
+  margin-top: .9rem;
+}
+
+.pending-stage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .7rem .85rem;
+  background: rgba(99, 102, 241, .12);
+  border: 1px solid rgba(129, 140, 248, .25);
+  border-radius: var(--radius-sm);
+}
+
+.pending-stage-meta {
+  min-width: 0;
+}
+
+.pending-stage-title {
+  font-weight: 700;
+}
+
+.pending-stage-subtitle {
+  color: var(--text-300);
+  font-size: .82rem;
+}
+
 .view { display: none; }
 .view.active { display: block; }
 
@@ -329,6 +370,50 @@ html, body {
 .data-table tbody tr {
   border-bottom: 1px solid var(--bg-700);
   transition: background .1s;
+}
+
+.results-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 320px));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.results-type-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.results-type-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-800);
+  color: var(--text-300);
+  border-radius: 999px;
+  padding: .45rem .9rem;
+  font: inherit;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.results-type-btn:hover {
+  border-color: var(--accent-h);
+  color: var(--text-100);
+}
+
+.results-type-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.results-empty {
+  padding: 1.2rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-800);
+  color: var(--text-500);
 }
 .data-table tbody tr:hover { background: var(--bg-800); }
 
@@ -883,6 +968,16 @@ html, body {
   .stage-editor-import-row,
   .stage-editor-form-grid,
   .stage-editor-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .game-state-bar,
+  .pending-stage-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .results-toolbar {
     grid-template-columns: 1fr;
   }
 

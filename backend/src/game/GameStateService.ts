@@ -1,8 +1,6 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
-import { GameState } from '../../../shared/types';
-import { ContractService } from './ContractService';
-import { RiderTagService } from './RiderTagService';
+import { GameState, GameStatus, PendingStage } from '../../../shared/types';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -18,6 +16,22 @@ interface GameStateRow {
 interface DailyCheckSummary {
   hasRaceToday: boolean;
   racesTodayCount: number;
+}
+
+interface PendingStageRow {
+  stage_id: number;
+  race_id: number;
+  race_name: string;
+  stage_number: number;
+  date: string;
+  profile: PendingStage['profile'];
+  details_csv_file: string;
+  is_stage_race: number;
+}
+
+function tableExists(db: Database.Database, tableName: string): boolean {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  return row != null;
 }
 
 export class GameStateService {
@@ -58,6 +72,18 @@ export class GameStateService {
     return this.mapState(row);
   }
 
+  public loadStatus(): GameStatus {
+    const state = this.loadState();
+    const pendingStages = this.getPendingStages(state.currentDate);
+    return {
+      currentDate: state.currentDate,
+      season: state.season,
+      isRaceDay: pendingStages.length > 0,
+      currentStageId: pendingStages[0]?.stageId ?? null,
+      pendingStages,
+    };
+  }
+
   public advanceDay(): GameState {
     const nextState = this.db.transaction(() => {
       this.ensureStateRow();
@@ -65,6 +91,11 @@ export class GameStateService {
         'SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1',
       ).get() as GameStateRow | undefined;
       if (!currentRow) throw new Error('game_state nicht ladbar.');
+
+      const pendingStages = this.getPendingStages(currentRow.current_date);
+      if (pendingStages.length > 0) {
+        throw new Error('Der Tag kann nicht beendet werden, solange offene Rennen oder Etappen simuliert werden muessen.');
+      }
 
       const nextDate = addDaysIso(currentRow.current_date, 1);
       const nextSeason = resolveSeason(nextDate, currentRow.season);
@@ -77,11 +108,6 @@ export class GameStateService {
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
-
-      if (nextSeason !== currentRow.season) {
-        new ContractService(this.db).checkContractStatuses(nextSeason);
-        new RiderTagService(this.db).recalculateAllTags();
-      }
 
       return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
     })();
@@ -111,12 +137,74 @@ export class GameStateService {
 
   private runDailyChecks(currentDate: string): DailyCheckSummary {
     const row = this.db.prepare(
-      'SELECT COUNT(*) AS count FROM races WHERE start_date <= ? AND end_date >= ?',
-    ).get(currentDate, currentDate) as { count: number } | undefined;
+      'SELECT COUNT(DISTINCT race_id) AS count FROM stages WHERE date = ?',
+    ).get(currentDate) as { count: number } | undefined;
     return {
       hasRaceToday: (row?.count ?? 0) > 0,
       racesTodayCount: row?.count ?? 0,
     };
+  }
+
+  private getPendingStages(currentDate: string): PendingStage[] {
+    if (!tableExists(this.db, 'stages') || !tableExists(this.db, 'races')) {
+      return [];
+    }
+
+    const rows = tableExists(this.db, 'results')
+      ? this.db.prepare(`
+          SELECT
+            stages.id AS stage_id,
+            stages.race_id AS race_id,
+            races.name AS race_name,
+            stages.stage_number AS stage_number,
+            stages.date AS date,
+            stages.profile AS profile,
+            stages.details_csv_file AS details_csv_file,
+            races.is_stage_race AS is_stage_race
+          FROM stages
+          JOIN races ON races.id = stages.race_id
+          LEFT JOIN results stage_results
+            ON stage_results.stage_id = stages.id
+           AND stage_results.result_type_id = 1
+          WHERE stages.date = ?
+          GROUP BY
+            stages.id,
+            stages.race_id,
+            races.name,
+            stages.stage_number,
+            stages.date,
+            stages.profile,
+            stages.details_csv_file,
+            races.is_stage_race
+          HAVING COUNT(stage_results.id) = 0
+          ORDER BY races.id ASC, stages.stage_number ASC
+        `).all(currentDate) as PendingStageRow[]
+      : this.db.prepare(`
+          SELECT
+            stages.id AS stage_id,
+            stages.race_id AS race_id,
+            races.name AS race_name,
+            stages.stage_number AS stage_number,
+            stages.date AS date,
+            stages.profile AS profile,
+            stages.details_csv_file AS details_csv_file,
+            races.is_stage_race AS is_stage_race
+          FROM stages
+          JOIN races ON races.id = stages.race_id
+          WHERE stages.date = ?
+          ORDER BY races.id ASC, stages.stage_number ASC
+        `).all(currentDate) as PendingStageRow[];
+
+    return rows.map((row) => ({
+      stageId: row.stage_id,
+      raceId: row.race_id,
+      raceName: row.race_name,
+      stageNumber: row.stage_number,
+      date: row.date,
+      profile: row.profile,
+      detailsCsvFile: row.details_csv_file,
+      isStageRace: row.is_stage_race === 1,
+    }));
   }
 
   private mapState(row: GameStateRow, dailyChecks = this.runDailyChecks(row.current_date)): GameState {

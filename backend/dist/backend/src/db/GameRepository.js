@@ -37,6 +37,26 @@ exports.GameRepository = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const StageParser_1 = require("../simulation/StageParser");
+const RESULT_TYPE_IDS = {
+    stage: 1,
+    gc: 2,
+    points: 3,
+    mountain: 4,
+    youth: 5,
+    team: 6,
+};
+const SEASON_POINT_AWARD_TYPES = [
+    'stage_result',
+    'one_day_result',
+    'gc_leader_day',
+    'points_leader_day',
+    'mountain_leader_day',
+    'youth_leader_day',
+    'gc_final',
+    'points_final',
+    'mountain_final',
+    'youth_final',
+];
 const RIDER_SKILL_COLUMNS = [
     ['flat', 'flat'],
     ['mountain', 'mountain'],
@@ -99,6 +119,11 @@ function parseRaceList(value) {
         return [];
     return value.split(',').map(part => Number.parseInt(part.trim(), 10)).filter(Number.isFinite);
 }
+function parseRankedValues(value) {
+    if (!value.trim())
+        return [];
+    return value.split('|').map((part) => Number.parseInt(part.trim(), 10)).filter(Number.isFinite);
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -128,7 +153,7 @@ function mapRole(row) {
         weighting: row.role_weighting,
     };
 }
-function mapRider(row, currentYear) {
+function mapRider(row, currentYear, seasonPoints = 0) {
     const country = mapCountry(row);
     const role = mapRole(row);
     return {
@@ -168,6 +193,7 @@ function mapRider(row, currentYear) {
         activeTeamId: row.active_team_id,
         activeContractId: row.active_contract_id,
         contractEndSeason: row.contract_end_season,
+        seasonPoints,
     };
 }
 function mapTeam(row) {
@@ -413,6 +439,7 @@ class GameRepository {
     }
     getRiders(teamId) {
         const season = this.getCurrentSeason();
+        this.syncSeasonPointEventsForSeason(season);
         const useContracts = tableExists(this.db, 'contracts');
         const rows = teamId != null
             ? (useContracts
@@ -421,7 +448,8 @@ class GameRepository {
             : (useContracts
                 ? this.db.prepare(this.getRidersQuery(true, false)).all(season, season)
                 : this.db.prepare(this.getRidersQuery(false, false)).all());
-        return rows.map(row => mapRider(row, season));
+        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
+        return rows.map((row) => mapRider(row, season, seasonPointsByRiderId.get(row.id) ?? 0));
     }
     getRiderById(id) {
         const season = this.getCurrentSeason();
@@ -533,6 +561,7 @@ class GameRepository {
     }
     getRaceRiders(raceId) {
         const season = this.getCurrentSeason();
+        this.syncSeasonPointEventsForSeason(season);
         const rows = this.db.prepare(`
       SELECT r.*,
              role.name AS role_name,
@@ -563,10 +592,222 @@ class GameRepository {
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(raceId);
-        return rows.map(row => mapRider(row, season));
+        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
+        return rows.map((row) => mapRider(row, season, seasonPointsByRiderId.get(row.id) ?? 0));
+    }
+    getSeasonStandings(season = this.getCurrentSeason()) {
+        this.syncSeasonPointEventsForSeason(season);
+        if (!tableExists(this.db, 'season_point_events')) {
+            return {
+                season,
+                riderStandings: [],
+                teamStandings: [],
+            };
+        }
+        const riderRows = this.db.prepare(`
+      SELECT
+        season_point_events.rider_id AS rider_id,
+        riders.first_name AS rider_first_name,
+        riders.last_name AS rider_last_name,
+        teams.id AS team_id,
+        teams.name AS team_name,
+        country.code_3 AS country_code_3,
+        SUM(season_point_events.points_awarded) AS points_total
+      FROM season_point_events
+      JOIN riders ON riders.id = season_point_events.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = riders.active_team_id
+      WHERE season_point_events.season = ?
+      GROUP BY season_point_events.rider_id, riders.first_name, riders.last_name, teams.id, teams.name, country.code_3
+      ORDER BY points_total DESC, riders.last_name ASC, riders.first_name ASC
+    `).all(season);
+        const teamRows = this.db.prepare(`
+      SELECT
+        season_point_events.team_id AS team_id,
+        teams.name AS team_name,
+        country.code_3 AS country_code_3,
+        SUM(season_point_events.points_awarded) AS points_total
+      FROM season_point_events
+      JOIN teams ON teams.id = season_point_events.team_id
+      JOIN sta_country country ON country.id = teams.country_id
+      WHERE season_point_events.season = ?
+      GROUP BY season_point_events.team_id, teams.name, country.code_3
+      ORDER BY points_total DESC, teams.name ASC
+    `).all(season);
+        return {
+            season,
+            riderStandings: this.mapRiderSeasonStandings(riderRows),
+            teamStandings: this.mapTeamSeasonStandings(teamRows),
+        };
+    }
+    getStageById(id) {
+        const row = this.db.prepare(`
+      SELECT id, race_id, stage_number, date, profile, details_csv_file
+      FROM stages
+      WHERE id = ?
+    `).get(id);
+        return row ? mapStage(row) : null;
+    }
+    getStageResults(stageId) {
+        if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
+            return null;
+        }
+        const meta = this.db.prepare(`
+      SELECT
+        stages.id AS stage_id,
+        stages.race_id AS race_id,
+        races.name AS race_name,
+        stages.stage_number AS stage_number,
+        stages.date AS date,
+        stages.profile AS profile
+      FROM stages
+      JOIN races ON races.id = stages.race_id
+      WHERE stages.id = ?
+    `).get(stageId);
+        if (!meta)
+            return null;
+        const resultTypes = this.db.prepare(`
+      SELECT id, name
+      FROM result_types
+      ORDER BY id ASC
+    `).all();
+        const rows = this.db.prepare(`
+      SELECT
+        results.result_type_id AS result_type_id,
+        result_types.name AS result_type_name,
+        results.rank AS rank,
+        results.time_seconds AS time_seconds,
+        results.points AS points,
+        results.rider_id AS rider_id,
+        riders.first_name AS rider_first_name,
+        riders.last_name AS rider_last_name,
+        results.team_id AS team_id,
+        teams.name AS team_name
+      FROM results
+      JOIN result_types ON result_types.id = results.result_type_id
+      LEFT JOIN riders ON riders.id = results.rider_id
+      LEFT JOIN teams ON teams.id = results.team_id
+      WHERE results.stage_id = ?
+      ORDER BY results.result_type_id ASC, results.rank ASC
+    `).all(stageId);
+        if (rows.length === 0)
+            return null;
+        const groupedRows = new Map();
+        for (const row of rows) {
+            const bucket = groupedRows.get(row.result_type_id) ?? [];
+            bucket.push(row);
+            groupedRows.set(row.result_type_id, bucket);
+        }
+        const classifications = resultTypes
+            .map((resultType) => {
+            const typeRows = groupedRows.get(resultType.id) ?? [];
+            if (typeRows.length === 0) {
+                return null;
+            }
+            const leaderTime = typeRows[0]?.time_seconds ?? null;
+            const mappedRows = typeRows.map((row) => ({
+                rank: row.rank,
+                riderId: row.rider_id,
+                riderName: row.rider_id == null
+                    ? null
+                    : `${row.rider_first_name ?? ''} ${row.rider_last_name ?? ''}`.trim(),
+                teamId: row.team_id,
+                teamName: row.team_name ?? '',
+                timeSeconds: row.time_seconds,
+                gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
+                points: row.points,
+            }));
+            return {
+                resultTypeId: resultType.id,
+                resultTypeName: resultType.name,
+                rows: mappedRows,
+            };
+        })
+            .filter((classification) => classification != null);
+        return {
+            raceId: meta.race_id,
+            raceName: meta.race_name,
+            stageId: meta.stage_id,
+            stageNumber: meta.stage_number,
+            date: meta.date,
+            profile: meta.profile,
+            resultTypes: resultTypes.map((resultType) => ({
+                id: resultType.id,
+                name: resultType.name,
+            })),
+            classifications,
+        };
     }
     getStagesForRace(raceId) {
         return this.getStagesByRaceIds([raceId]).get(raceId) ?? [];
+    }
+    syncSeasonPointEventsForSeason(season = this.getCurrentSeason()) {
+        if (!tableExists(this.db, 'season_point_events') || !tableExists(this.db, 'results')) {
+            return;
+        }
+        const stages = this.db.prepare(`
+      SELECT
+        stages.id AS stage_id,
+        stages.race_id AS race_id,
+        stages.stage_number AS stage_number,
+        stages.date AS date,
+        races.is_stage_race AS is_stage_race,
+        races.number_of_stages AS number_of_stages,
+        race_categories_bonus.points_stage AS points_stage,
+        race_categories_bonus.points_one_day AS points_one_day,
+        race_categories_bonus.points_gc_final AS points_gc_final,
+        race_categories_bonus.points_jersey_leader_day AS points_jersey_leader_day,
+        race_categories_bonus.points_jersey_sprint_day AS points_jersey_sprint_day,
+        race_categories_bonus.points_jersey_mountain_day AS points_jersey_mountain_day,
+        race_categories_bonus.points_jersey_youth_day AS points_jersey_youth_day,
+        race_categories_bonus.points_jersey_sprint_final AS points_jersey_sprint_final,
+        race_categories_bonus.points_jersey_mountain_final AS points_jersey_mountain_final,
+        race_categories_bonus.points_jersey_youth_final AS points_jersey_youth_final
+      FROM stages
+      JOIN races ON races.id = stages.race_id
+      JOIN race_categories ON race_categories.id = races.category_id
+      JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
+      WHERE CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        AND EXISTS (
+          SELECT 1
+          FROM results
+          WHERE results.stage_id = stages.id AND results.result_type_id = ?
+        )
+      ORDER BY stages.date ASC, stages.race_id ASC, stages.stage_number ASC
+    `).all(season, RESULT_TYPE_IDS.stage);
+        if (stages.length === 0) {
+            return;
+        }
+        const insert = this.db.prepare(`
+      INSERT OR IGNORE INTO season_point_events (
+        season, race_id, stage_id, rider_id, team_id, award_type, rank, points_awarded, awarded_on
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+        this.db.transaction(() => {
+            for (const stage of stages) {
+                const stageRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.stage);
+                const gcRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.gc);
+                const pointsRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.points);
+                const mountainRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.mountain);
+                const youthRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.youth);
+                if (stage.is_stage_race === 1) {
+                    this.insertSeasonPointAwards(insert, season, stage, 'stage_result', stageRows, parseRankedValues(stage.points_stage));
+                    this.insertSeasonPointLeaderAward(insert, season, stage, 'gc_leader_day', gcRows[0], stage.points_jersey_leader_day);
+                    this.insertSeasonPointLeaderAward(insert, season, stage, 'points_leader_day', pointsRows[0], stage.points_jersey_sprint_day);
+                    this.insertSeasonPointLeaderAward(insert, season, stage, 'mountain_leader_day', mountainRows[0], stage.points_jersey_mountain_day);
+                    this.insertSeasonPointLeaderAward(insert, season, stage, 'youth_leader_day', youthRows[0], stage.points_jersey_youth_day);
+                    if (stage.stage_number === stage.number_of_stages) {
+                        this.insertSeasonPointAwards(insert, season, stage, 'gc_final', gcRows, parseRankedValues(stage.points_gc_final));
+                        this.insertSeasonPointAwards(insert, season, stage, 'points_final', pointsRows, parseRankedValues(stage.points_jersey_sprint_final));
+                        this.insertSeasonPointAwards(insert, season, stage, 'mountain_final', mountainRows, parseRankedValues(stage.points_jersey_mountain_final));
+                        this.insertSeasonPointAwards(insert, season, stage, 'youth_final', youthRows, parseRankedValues(stage.points_jersey_youth_final));
+                    }
+                }
+                else {
+                    this.insertSeasonPointAwards(insert, season, stage, 'one_day_result', stageRows, parseRankedValues(stage.points_one_day));
+                }
+            }
+        })();
     }
     getStagesByRaceIds(raceIds) {
         const stagesByRaceId = new Map();
@@ -612,6 +853,67 @@ class GameRepository {
             distanceKm: summary.distanceKm,
             elevationGainMeters: summary.elevationGainMeters,
         };
+    }
+    getSeasonPointsByRiderId(season) {
+        if (!tableExists(this.db, 'season_point_events')) {
+            return new Map();
+        }
+        const rows = this.db.prepare(`
+      SELECT rider_id, SUM(points_awarded) AS points_total
+      FROM season_point_events
+      WHERE season = ?
+      GROUP BY rider_id
+    `).all(season);
+        return new Map(rows.map((row) => [row.rider_id, row.points_total]));
+    }
+    loadSeasonPointResultRows(stageId, resultTypeId) {
+        return this.db.prepare(`
+      SELECT rider_id, team_id, rank
+      FROM results
+      WHERE stage_id = ? AND result_type_id = ? AND rider_id IS NOT NULL AND team_id IS NOT NULL
+      ORDER BY rank ASC
+    `).all(stageId, resultTypeId);
+    }
+    insertSeasonPointAwards(insert, season, stage, awardType, rows, pointValues) {
+        pointValues.forEach((points, index) => {
+            const row = rows[index];
+            if (!row || points <= 0) {
+                return;
+            }
+            insert.run(season, stage.race_id, stage.stage_id, row.rider_id, row.team_id, awardType, row.rank, points, stage.date);
+        });
+    }
+    insertSeasonPointLeaderAward(insert, season, stage, awardType, row, points) {
+        if (!row || points <= 0) {
+            return;
+        }
+        insert.run(season, stage.race_id, stage.stage_id, row.rider_id, row.team_id, awardType, row.rank, points, stage.date);
+    }
+    mapRiderSeasonStandings(rows) {
+        const leaderPoints = rows[0]?.points_total ?? 0;
+        return rows.map((row, index) => ({
+            rank: index + 1,
+            riderId: row.rider_id,
+            riderName: `${row.rider_first_name} ${row.rider_last_name}`.trim(),
+            teamId: row.team_id,
+            teamName: row.team_name ?? '—',
+            countryCode: row.country_code_3,
+            points: row.points_total,
+            gapPoints: leaderPoints - row.points_total,
+        }));
+    }
+    mapTeamSeasonStandings(rows) {
+        const leaderPoints = rows[0]?.points_total ?? 0;
+        return rows.map((row, index) => ({
+            rank: index + 1,
+            riderId: null,
+            riderName: null,
+            teamId: row.team_id,
+            teamName: row.team_name,
+            countryCode: row.country_code_3,
+            points: row.points_total,
+            gapPoints: leaderPoints - row.points_total,
+        }));
     }
 }
 exports.GameRepository = GameRepository;

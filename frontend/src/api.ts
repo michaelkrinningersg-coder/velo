@@ -5,10 +5,14 @@ import type {
   Rider,
   Race,
   GameState,
+  GameStatus,
+  QuickSimResponse,
   StageEditorDraft,
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
+  SeasonStandingsPayload,
+  StageResultsPayload,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
@@ -36,7 +40,11 @@ export const api = {
   getRiders:           (teamId?: number) => call<Rider[]>('GET', `/api/riders${teamId != null ? `?teamId=${teamId}` : ''}`),
   getRaces:            () => call<Race[]>('GET', '/api/races'),
   getGameState:        () => call<GameState>('GET', '/api/state'),
+  getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   advanceDay:          () => call<GameState>('POST', '/api/state/advance'),
+  quickSimStage:       (stageId: number) => call<QuickSimResponse>('POST', `/api/simulation/quick/${stageId}`),
+  getStageResults:     (stageId: number) => call<StageResultsPayload>('GET', `/api/results/${stageId}`),
+  getSeasonStandings:  () => call<SeasonStandingsPayload>('GET', '/api/season-standings'),
   importStageRoute:    (payload: StageEditorImportRequest) => call<StageEditorDraft>('POST', '/api/stage-editor/import', payload),
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
 };

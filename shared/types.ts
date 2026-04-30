@@ -110,6 +110,7 @@ export interface Rider {
   activeTeamId: number | null;
   activeContractId: number | null;
   contractEndSeason?: number | null;
+  seasonPoints?: number;
 }
 
 // ------ Team -------------------------------------------------
@@ -326,6 +327,99 @@ export interface GameState {
   formattedDate: string;
   hasRaceToday: boolean;
   racesTodayCount: number;
+}
+
+export interface PendingStage {
+  stageId: number;
+  raceId: number;
+  raceName: string;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  detailsCsvFile: string;
+  isStageRace: boolean;
+}
+
+export interface GameStatus {
+  currentDate: string;
+  season: number;
+  isRaceDay: boolean;
+  currentStageId: number | null;
+  pendingStages: PendingStage[];
+}
+
+export interface ResultType {
+  id: number;
+  name: string;
+}
+
+export interface RaceClassificationRow {
+  rank: number;
+  riderId: number | null;
+  riderName: string | null;
+  teamId: number | null;
+  teamName: string;
+  timeSeconds: number | null;
+  gapSeconds: number | null;
+  points: number | null;
+}
+
+export type StageResultRow = RaceClassificationRow;
+
+export interface StageClassification {
+  resultTypeId: number;
+  resultTypeName: string;
+  rows: RaceClassificationRow[];
+}
+
+export interface StageResultsPayload {
+  raceId: number;
+  raceName: string;
+  stageId: number;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  resultTypes: ResultType[];
+  classifications: StageClassification[];
+}
+
+export interface QuickSimResponse {
+  raceId: number;
+  raceName: string;
+  stageId: number;
+  stageNumber: number;
+  date: string;
+  profile: StageProfile;
+  resultTypes: ResultType[];
+}
+
+export type SeasonPointAwardType =
+  | 'stage_result'
+  | 'one_day_result'
+  | 'gc_leader_day'
+  | 'points_leader_day'
+  | 'mountain_leader_day'
+  | 'youth_leader_day'
+  | 'gc_final'
+  | 'points_final'
+  | 'mountain_final'
+  | 'youth_final';
+
+export interface SeasonStandingRow {
+  rank: number;
+  riderId: number | null;
+  riderName: string | null;
+  teamId: number | null;
+  teamName: string;
+  countryCode: Nationality | null;
+  points: number;
+  gapPoints: number;
+}
+
+export interface SeasonStandingsPayload {
+  season: number;
+  riderStandings: SeasonStandingRow[];
+  teamStandings: SeasonStandingRow[];
 }
 
 // ------ Generische API-Response ------------------------------

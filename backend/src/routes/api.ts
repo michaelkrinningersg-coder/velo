@@ -3,6 +3,7 @@ import { DatabaseService } from '../db/DatabaseService';
 import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
+import { QuickSimEngine } from '../simulation/QuickSimEngine';
 import {
   ApiResponse,
   SavegameMeta,
@@ -10,10 +11,14 @@ import {
   Rider,
   Race,
   GameState,
+  GameStatus,
+  QuickSimResponse,
+  SeasonStandingsPayload,
   StageEditorDraft,
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
+  StageResultsPayload,
 } from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
@@ -149,6 +154,45 @@ export function createRouter(dbService: DatabaseService): Router {
   router.get('/state', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().loadState()); }
     catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/game/status', (_req: Request, res: Response) => {
+    try { ok<GameStatus>(res, getGss().loadStatus()); }
+    catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/simulation/quick/:stageId', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+
+    try {
+      const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+      if (!pendingStageIds.has(stageId)) {
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Simulation freigegeben.');
+      }
+
+      const db = dbService.getActiveConnection();
+      ok<QuickSimResponse>(res, new QuickSimEngine(db).simulateStage(stageId));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/results/:stageId', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+
+    try {
+      const db = dbService.getActiveConnection();
+      const payload = new GameRepository(db).getStageResults(stageId);
+      if (!payload) return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
+      ok<StageResultsPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/season-standings', (_req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      ok<SeasonStandingsPayload>(res, new GameRepository(db).getSeasonStandings());
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   router.post('/state/advance', (_req: Request, res: Response) => {

@@ -60,6 +60,12 @@
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">🏆</span> Teams
         </button>
+        <button class="nav-btn" data-view="results">
+          <span class="nav-icon">📋</span> Results
+        </button>
+        <button class="nav-btn" data-view="season-standings">
+          <span class="nav-icon">★</span> Season Standings
+        </button>
         <button class="nav-btn" data-view="stage-editor">
           <span class="nav-icon">🗺</span> Stage Editor
         </button>
@@ -73,12 +79,15 @@
 
     <main class="game-main">
       <section class="game-state-bar">
-        <div>
+        <div class="game-state-copy">
           <div class="game-state-label">Aktueller Tag</div>
           <div id="meta-date" class="game-state-date">-</div>
           <div id="meta-race-hint" class="game-state-hint hidden"></div>
+          <div id="pending-stages-list" class="pending-stage-list hidden"></div>
         </div>
-        <button class="btn btn-primary" id="btn-advance-day">Nächster Tag</button>
+        <div class="game-state-actions">
+          <button class="btn btn-primary" id="btn-advance-day">Nächster Tag</button>
+        </div>
       </section>
 
       <!-- Dashboard -->
@@ -117,6 +126,69 @@
           </select>
         </div>
         <div id="teams-detail"></div>
+      </div>
+
+      <!-- Results -->
+      <div id="view-results" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Results</h2>
+            <p id="results-stage-meta" class="text-muted">Noch keine Etappe ausgewählt.</p>
+          </div>
+        </div>
+        <div class="results-toolbar">
+          <div class="form-group">
+            <label for="results-race-select">Rennen</label>
+            <select id="results-race-select">
+              <option value="">– Rennen auswählen –</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="results-stage-select">Etappe</label>
+            <select id="results-stage-select">
+              <option value="">– Etappe auswählen –</option>
+            </select>
+          </div>
+        </div>
+        <div id="results-type-tabs" class="results-type-tabs"></div>
+        <div id="results-empty" class="results-empty">Noch keine Ergebnisse geladen.</div>
+        <table class="data-table hidden" id="results-table">
+          <thead>
+            <tr>
+              <th>Platz</th>
+              <th>Fahrer / Team</th>
+              <th>Team</th>
+              <th>Zeit</th>
+              <th>Rückstand</th>
+              <th>Punkte</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Season Standings -->
+      <div id="view-season-standings" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Season Standings</h2>
+            <p id="season-standings-meta" class="text-muted">Noch keine Saisonwertung geladen.</p>
+          </div>
+        </div>
+        <div id="season-standings-scope-tabs" class="results-type-tabs"></div>
+        <div id="season-standings-empty" class="results-empty">Noch keine Saisonpunkte vorhanden.</div>
+        <table class="data-table hidden" id="season-standings-table">
+          <thead>
+            <tr>
+              <th>Platz</th>
+              <th id="season-standings-primary-header">Fahrer</th>
+              <th id="season-standings-secondary-header">Team</th>
+              <th>Punkte</th>
+              <th>Rückstand</th>
+            </tr>
+          </thead>
+          <tbody id="season-standings-tbody"></tbody>
+        </table>
       </div>
 
       <!-- Stage Editor -->

@@ -34,7 +34,7 @@ class TimeTrialSimulator {
         };
     }
     static resolveBaseSpeed(segment) {
-        if (segment.terrain === 'cobble') {
+        if (segment.terrain === 'Cobble') {
             return SPEED_BASE_HILLY - 3;
         }
         if (segment.gradient_percent >= 5.0)
@@ -80,7 +80,7 @@ class TimeTrialSimulator {
                 + rider.skills.downhill * 0.05
                 + rider.skills.bikeHandling * 0.1;
         }
-        if (segment.terrain === 'cobble') {
+        if (segment.terrain === 'Cobble') {
             return rider.skills.timeTrial * 0.4
                 + rider.skills.cobble * 0.25
                 + rider.skills.flat * 0.15

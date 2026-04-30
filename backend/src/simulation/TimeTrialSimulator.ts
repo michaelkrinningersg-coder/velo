@@ -40,7 +40,7 @@ export class TimeTrialSimulator {
   }
 
   private static resolveBaseSpeed(segment: ParsedStageSegment): number {
-    if (segment.terrain === 'cobble') {
+    if (segment.terrain === 'Cobble') {
       return SPEED_BASE_HILLY - 3;
     }
     if (segment.gradient_percent >= 5.0) return SPEED_BASE_MOUNTAIN;
@@ -90,7 +90,7 @@ export class TimeTrialSimulator {
         + rider.skills.bikeHandling * 0.1;
     }
 
-    if (segment.terrain === 'cobble') {
+    if (segment.terrain === 'Cobble') {
       return rider.skills.timeTrial * 0.4
         + rider.skills.cobble * 0.25
         + rider.skills.flat * 0.15
