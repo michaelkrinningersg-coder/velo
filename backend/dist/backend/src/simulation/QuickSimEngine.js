@@ -25,42 +25,18 @@ const DIVISION_BY_TIER = {
     2: 'ProTour',
     3: 'U23',
 };
-const PROFILE_BASE_SPEED = {
-    Flat: 46,
-    Rolling: 44,
-    Hilly: 42,
-    Hilly_Difficult: 40,
-    Medium_Mountain: 38,
-    Mountain: 36,
-    High_Mountain: 33,
-    Cobble: 43,
-    Cobble_Hill: 40,
-};
-const PROFILE_SCORE_FACTOR = {
-    Flat: 0.00075,
-    Rolling: 0.00085,
-    Hilly: 0.001,
-    Hilly_Difficult: 0.0011,
-    Medium_Mountain: 0.00125,
-    Mountain: 0.00145,
-    High_Mountain: 0.00165,
-    Cobble: 0.00095,
-    Cobble_Hill: 0.0011,
-};
-const GROUP_THRESHOLD_SECONDS = {
-    Flat: 2,
-    Rolling: 2,
-    Hilly: 3,
-    Hilly_Difficult: 3,
-    Medium_Mountain: 4,
-    Mountain: 6,
-    High_Mountain: 7,
-    Cobble: 2,
-    Cobble_Hill: 3,
-};
-const FORM_MIN = 0.96;
-const FORM_MAX = 1.04;
-const SCORE_NOISE = 0.01;
+const FLAT_BASE_SPEED = 45;
+const DOWNHILL_BASE_SPEED = 60;
+const MOUNTAIN_BASE_SPEED_AT_10_PERCENT = 15;
+const ACTIVE_SKILL_SPEED_FACTOR = 0.28;
+const FORM_MIN = 0.97;
+const FORM_MAX = 1.03;
+const ALTITUDE_THRESHOLD_METERS = 1500;
+const FATIGUE_THRESHOLD_KM = 150;
+const COBBLE_FATIGUE_THRESHOLD_KM = 10;
+const TECH_PENALTY_FACTOR = 0.002;
+const WIND_FACTOR = 0.0025;
+const MIN_SEGMENT_SPEED_KMH = 6;
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -124,7 +100,7 @@ class QuickSimEngine {
             riderId: entry.rider.id,
             teamId: entry.team.id,
             timeSeconds: entry.stageTimeSeconds,
-            points: entry.points,
+            points: race.isStageRace ? entry.points : null,
         }));
         const gcRows = [...performance]
             .map((entry) => ({
@@ -134,35 +110,41 @@ class QuickSimEngine {
         }))
             .sort((left, right) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId)
             .map((entry, index) => ({ ...entry, rank: index + 1, points: null }));
-        const pointsRows = [...performance]
-            .map((entry) => ({
-            riderId: entry.rider.id,
-            teamId: entry.team.id,
-            points: (previousPoints.get(entry.rider.id) ?? 0) + entry.points,
-        }))
-            .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
-            .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }));
-        const mountainRows = [...performance]
-            .map((entry) => ({
-            riderId: entry.rider.id,
-            teamId: entry.team.id,
-            points: (previousMountain.get(entry.rider.id) ?? 0) + entry.mountainPoints,
-        }))
-            .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
-            .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }));
+        const pointsRows = race.isStageRace
+            ? [...performance]
+                .map((entry) => ({
+                riderId: entry.rider.id,
+                teamId: entry.team.id,
+                points: (previousPoints.get(entry.rider.id) ?? 0) + entry.points,
+            }))
+                .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
+                .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }))
+            : [];
+        const mountainRows = race.isStageRace
+            ? [...performance]
+                .map((entry) => ({
+                riderId: entry.rider.id,
+                teamId: entry.team.id,
+                points: (previousMountain.get(entry.rider.id) ?? 0) + entry.mountainPoints,
+            }))
+                .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
+                .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }))
+            : [];
         const currentSeason = this.repo.getCurrentSeason();
-        const youthRows = gcRows
-            .filter((entry) => {
-            const rider = performance.find((candidate) => candidate.rider.id === entry.riderId)?.rider;
-            return rider != null && currentSeason - rider.birthYear <= 25;
-        })
-            .map((entry, index) => ({
-            rank: index + 1,
-            riderId: entry.riderId,
-            teamId: entry.teamId,
-            timeSeconds: entry.timeSeconds,
-            points: null,
-        }));
+        const youthRows = race.isStageRace
+            ? gcRows
+                .filter((entry) => {
+                const rider = performance.find((candidate) => candidate.rider.id === entry.riderId)?.rider;
+                return rider != null && currentSeason - rider.birthYear <= 25;
+            })
+                .map((entry, index) => ({
+                rank: index + 1,
+                riderId: entry.riderId,
+                teamId: entry.teamId,
+                timeSeconds: entry.timeSeconds,
+                points: null,
+            }))
+            : [];
         const stageTeamTimes = new Map();
         for (const team of teamsById.values()) {
             const teamEntries = performance
@@ -291,12 +273,17 @@ class QuickSimEngine {
     simulateMassStartStage(race, stage, riders, teamsById) {
         const summary = StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile);
         const markers = summary.points.flatMap((point) => point.markers.map((marker) => ({ kmMark: point.kmMark, marker })));
-        const sprintPointValues = parseRankedValues(race.category?.bonusSystem?.pointsSprintIntermediate);
-        const sprintBonusValues = parseRankedValues(race.category?.bonusSystem?.bonusSecondsIntermediate);
+        const sprintPointValues = race.isStageRace
+            ? parseRankedValues(race.category?.bonusSystem?.pointsSprintIntermediate)
+            : [];
+        const sprintBonusValues = race.isStageRace
+            ? parseRankedValues(race.category?.bonusSystem?.bonusSecondsIntermediate)
+            : [];
         const finishBonusValues = parseRankedValues(race.category?.bonusSystem?.bonusSecondsFinal);
-        const finishPointValues = parseRankedValues(race.isStageRace
-            ? race.category?.bonusSystem?.pointsStage
-            : race.category?.bonusSystem?.pointsOneDay);
+        // Finish-line sprint points feed the race-internal points jersey, not season stage awards.
+        const finishPointValues = race.isStageRace
+            ? parseRankedValues(race.category?.bonusSystem?.pointsSprintFinish)
+            : [];
         const mountainPointValues = {
             HC: parseRankedValues(race.category?.bonusSystem?.pointsMountainHc),
             '1': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat1),
@@ -304,53 +291,42 @@ class QuickSimEngine {
             '3': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat3),
             '4': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat4),
         };
-        const baseEntries = riders.map((rider) => {
+        const states = riders.map((rider) => {
             const team = teamsById.get(rider.activeTeamId ?? -1);
             if (!team) {
                 throw new Error(`Team für Fahrer ${rider.firstName} ${rider.lastName} konnte nicht geladen werden.`);
             }
             const dayForm = randomBetween(FORM_MIN, FORM_MAX);
-            const scoreNoise = randomBetween(-SCORE_NOISE, SCORE_NOISE);
-            const performanceScore = this.resolveStageScore(rider, summary.segments, summary.distanceKm) * dayForm * (1 + scoreNoise);
             return {
                 rider,
                 team,
                 dayForm,
-                performanceScore,
+                performanceScore: 0,
                 rawTimeSeconds: 0,
                 stageTimeSeconds: 0,
                 points: 0,
                 gcBonusSeconds: 0,
                 mountainPoints: 0,
+                currentKm: 0,
+                cobbleKm: 0,
             };
         });
-        const profile = stage.profile;
-        const winnerScore = Math.max(...baseEntries.map((entry) => entry.performanceScore));
-        const leaderSpeed = PROFILE_BASE_SPEED[profile] + Math.max(0, (winnerScore - 50) * 0.12);
-        const leaderTime = (summary.distanceKm / leaderSpeed) * 3600;
-        const scoreFactor = PROFILE_SCORE_FACTOR[profile];
-        const sorted = [...baseEntries]
+        for (const segment of summary.segments) {
+            for (const entry of states) {
+                entry.rawTimeSeconds += this.simulateMassStartSegment(entry.rider, segment, entry.dayForm, entry.currentKm, entry.cobbleKm);
+                entry.currentKm += segment.length_km;
+                if (segment.terrain === 'Cobble' || segment.terrain === 'Cobble_Hill') {
+                    entry.cobbleKm += segment.length_km;
+                }
+            }
+            this.applyPelotonEffect(states, segment);
+        }
+        const sorted = [...states]
+            .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || left.rider.id - right.rider.id)
             .map((entry) => ({
             ...entry,
-            rawTimeSeconds: leaderTime * (1 + Math.max(0, winnerScore - entry.performanceScore) * scoreFactor),
-        }))
-            .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || right.performanceScore - left.performanceScore);
-        let currentGroupTime = roundSeconds(sorted[0]?.rawTimeSeconds ?? leaderTime);
-        let previousRawTime = sorted[0]?.rawTimeSeconds ?? leaderTime;
-        sorted.forEach((entry, index) => {
-            if (index === 0) {
-                entry.stageTimeSeconds = currentGroupTime;
-                return;
-            }
-            if (entry.rawTimeSeconds - previousRawTime <= GROUP_THRESHOLD_SECONDS[profile]) {
-                entry.stageTimeSeconds = currentGroupTime;
-            }
-            else {
-                currentGroupTime = roundSeconds(entry.rawTimeSeconds);
-                entry.stageTimeSeconds = currentGroupTime;
-            }
-            previousRawTime = entry.rawTimeSeconds;
-        });
+            stageTimeSeconds: roundSeconds(entry.rawTimeSeconds),
+        }));
         finishPointValues.forEach((points, index) => {
             const entry = sorted[index];
             if (!entry)
@@ -400,38 +376,118 @@ class QuickSimEngine {
             mountainPoints: mountainPointsByRider.get(entry.rider.id) ?? 0,
         }));
     }
-    resolveStageScore(rider, segments, distanceKm) {
-        const weightedTerrainScore = segments.reduce((sum, segment) => {
-            const segmentWeight = segment.length_km / Math.max(distanceKm, 1);
-            return sum + this.resolveTerrainSkill(rider, segment) * segmentWeight;
-        }, 0);
-        const enduranceFactor = Math.min(distanceKm / 200, 1.15);
-        const staminaBoost = (rider.skills.stamina - 50) * 0.12 * enduranceFactor;
-        const resistanceBoost = (rider.skills.resistance - 50) * 0.08 * enduranceFactor;
-        return weightedTerrainScore + staminaBoost + resistanceBoost;
+    simulateMassStartSegment(rider, segment, dayForm, currentKm, cobbleKm) {
+        const activeSkill = this.resolveActiveSkill(rider, segment);
+        const baseSpeed = this.resolveSegmentBaseSpeed(segment);
+        const averageKm = currentKm + (segment.length_km / 2);
+        const averageCobbleKm = cobbleKm + ((segment.terrain === 'Cobble' || segment.terrain === 'Cobble_Hill') ? (segment.length_km / 2) : 0);
+        const techFactor = 1 - ((segment.tech_level - 1) * TECH_PENALTY_FACTOR);
+        const windFactor = 1 - ((segment.wind_exp - 1) * WIND_FACTOR);
+        const speed = Math.max(MIN_SEGMENT_SPEED_KMH, (baseSpeed + ((activeSkill - 50) * ACTIVE_SKILL_SPEED_FACTOR))
+            * this.resolveAltitudeSpeedFactor(rider, segment)
+            * this.resolveFatigueSpeedFactor(rider, averageKm)
+            * this.resolveCobbleFatigueSpeedFactor(rider, averageCobbleKm)
+            * this.resolveClimbStrainSpeedFactor(rider, segment)
+            * techFactor
+            * windFactor
+            * dayForm);
+        return (segment.length_km / speed) * 3600;
     }
-    resolveTerrainSkill(rider, segment) {
+    resolveSegmentBaseSpeed(segment) {
+        const positiveGradient = Math.max(segment.gradient_percent, 0);
+        const climbingBaseSpeed = Math.max(MOUNTAIN_BASE_SPEED_AT_10_PERCENT, FLAT_BASE_SPEED - ((FLAT_BASE_SPEED - MOUNTAIN_BASE_SPEED_AT_10_PERCENT) * Math.min(positiveGradient, 10) / 10));
         switch (segment.terrain) {
+            case 'Abfahrt':
+                return DOWNHILL_BASE_SPEED;
             case 'Flat':
-                return rider.skills.flat * 0.55 + rider.skills.sprint * 0.15 + rider.skills.resistance * 0.15 + rider.skills.stamina * 0.15;
+                return FLAT_BASE_SPEED;
             case 'Hill':
-                return rider.skills.hill * 0.5 + rider.skills.acceleration * 0.15 + rider.skills.attack * 0.15 + rider.skills.resistance * 0.1 + rider.skills.stamina * 0.1;
             case 'Medium_Mountain':
-                return rider.skills.mediumMountain * 0.45 + rider.skills.mountain * 0.2 + rider.skills.attack * 0.15 + rider.skills.resistance * 0.1 + rider.skills.stamina * 0.1;
             case 'Mountain':
             case 'High_Mountain':
-                return rider.skills.mountain * 0.55 + rider.skills.stamina * 0.15 + rider.skills.resistance * 0.15 + rider.skills.attack * 0.1 + rider.skills.downhill * 0.05;
+                return climbingBaseSpeed;
             case 'Cobble':
-                return rider.skills.cobble * 0.5 + rider.skills.flat * 0.15 + rider.skills.resistance * 0.15 + rider.skills.bikeHandling * 0.1 + rider.skills.sprint * 0.1;
+                return FLAT_BASE_SPEED - 2;
             case 'Cobble_Hill':
-                return rider.skills.cobble * 0.3 + rider.skills.hill * 0.2 + rider.skills.bikeHandling * 0.15 + rider.skills.resistance * 0.15 + rider.skills.acceleration * 0.1 + rider.skills.stamina * 0.1;
-            case 'Abfahrt':
-                return rider.skills.downhill * 0.55 + rider.skills.bikeHandling * 0.25 + rider.skills.flat * 0.1 + rider.skills.resistance * 0.1;
+                return Math.max(MOUNTAIN_BASE_SPEED_AT_10_PERCENT, climbingBaseSpeed - 2);
             case 'Sprint':
-                return rider.skills.sprint * 0.5 + rider.skills.acceleration * 0.25 + rider.skills.flat * 0.1 + rider.skills.resistance * 0.1 + rider.skills.bikeHandling * 0.05;
+                return FLAT_BASE_SPEED + 1.5;
+            default:
+                return FLAT_BASE_SPEED;
+        }
+    }
+    resolveActiveSkill(rider, segment) {
+        switch (segment.terrain) {
+            case 'Flat':
+                return rider.skills.flat;
+            case 'Hill':
+                return rider.skills.hill;
+            case 'Medium_Mountain':
+                return rider.skills.mediumMountain * 0.7 + rider.skills.mountain * 0.3;
+            case 'Mountain':
+            case 'High_Mountain':
+                return rider.skills.mountain;
+            case 'Cobble':
+                return rider.skills.cobble;
+            case 'Cobble_Hill':
+                return rider.skills.cobble * 0.6 + rider.skills.hill * 0.4;
+            case 'Abfahrt':
+                return rider.skills.downhill;
+            case 'Sprint':
+                return rider.skills.sprint * 0.7 + rider.skills.acceleration * 0.3;
             default:
                 return rider.skills.flat;
         }
+    }
+    resolveAltitudeSpeedFactor(rider, segment) {
+        const averageElevation = (segment.start_elevation + segment.end_elevation) / 2;
+        if (averageElevation <= ALTITUDE_THRESHOLD_METERS) {
+            return 1;
+        }
+        const altitudePenalty = Math.min(0.14, ((averageElevation - ALTITUDE_THRESHOLD_METERS) / 1800) * (1 - (rider.skills.mountain / 150)));
+        return 1 - Math.max(0, altitudePenalty);
+    }
+    resolveFatigueSpeedFactor(rider, currentKm) {
+        if (currentKm <= FATIGUE_THRESHOLD_KM) {
+            return 1;
+        }
+        const fatiguePenalty = Math.min(0.18, ((currentKm - FATIGUE_THRESHOLD_KM) / 75) * (1 - (rider.skills.stamina / 145)));
+        return 1 - Math.max(0, fatiguePenalty);
+    }
+    resolveCobbleFatigueSpeedFactor(rider, cobbleKm) {
+        if (cobbleKm <= COBBLE_FATIGUE_THRESHOLD_KM) {
+            return 1;
+        }
+        const cobblePenalty = Math.min(0.28, ((cobbleKm - COBBLE_FATIGUE_THRESHOLD_KM) / 20) * (1 - (rider.skills.cobble / 150)));
+        return 1 - Math.max(0, cobblePenalty);
+    }
+    resolveClimbStrainSpeedFactor(rider, segment) {
+        if (!['Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain'].includes(segment.terrain)) {
+            return 1;
+        }
+        const lengthFactor = Math.pow((segment.length_km / 10), 1.5);
+        const gradientFactor = Math.max(segment.gradient_percent, 0) / 10;
+        const climbDefense = (rider.skills.resistance * 0.5) + (rider.skills.mountain * 0.5);
+        const defenseFactor = 1.0 - (climbDefense / 100);
+        const penalty = Math.min(0.8, lengthFactor * gradientFactor * defenseFactor);
+        return 1.0 - penalty;
+    }
+    applyPelotonEffect(entries, segment) {
+        const thresholdSeconds = this.resolvePelotonThresholdSeconds(segment);
+        const sorted = [...entries].sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || left.rider.id - right.rider.id);
+        for (let index = 1; index < sorted.length; index += 1) {
+            const frontRider = sorted[index - 1];
+            const chasingRider = sorted[index];
+            if (chasingRider.rawTimeSeconds - frontRider.rawTimeSeconds < thresholdSeconds) {
+                chasingRider.rawTimeSeconds = frontRider.rawTimeSeconds;
+            }
+        }
+    }
+    resolvePelotonThresholdSeconds(segment) {
+        if (['Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble_Hill'].includes(segment.terrain)) {
+            return 1;
+        }
+        return 2;
     }
     resolveSprintScore(rider, stageFraction, dayForm) {
         const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 250) * stageFraction;

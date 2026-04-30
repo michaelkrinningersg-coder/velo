@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContractService = void 0;
+const RiderRoleService_1 = require("./RiderRoleService");
 const CONTRACT_STATUS_ACTIVE = 'active';
 const CONTRACT_STATUS_EXPIRED = 'expired';
 const CONTRACT_STATUS_FUTURE = 'future';
@@ -37,6 +38,7 @@ class ContractService {
           LIMIT 1
         )
       `).run(CONTRACT_STATUS_ACTIVE, CONTRACT_STATUS_ACTIVE);
+            new RiderRoleService_1.RiderRoleService(this.db).recalculateAllTeamRoles();
         })();
     }
 }

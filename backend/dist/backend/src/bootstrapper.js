@@ -302,16 +302,16 @@ function seedRaceCategoriesBonus(db) {
     const insert = db.prepare(`
     INSERT INTO race_categories_bonus (
       id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage,
-      points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
+      points_sprint_finish, points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
       points_jersey_mountain_day, points_jersey_youth_day, points_sprint_intermediate,
       points_mountain_hc, points_mountain_cat1, points_mountain_cat2, points_mountain_cat3,
       points_mountain_cat4, points_jersey_sprint_final, points_jersey_mountain_final,
       points_jersey_youth_final
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `race_categories_bonus.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), req(row, 'bonus_seconds_final', ctx), req(row, 'bonus_seconds_intermediate', ctx), req(row, 'points_stage', ctx), req(row, 'points_one_day', ctx), req(row, 'points_gc_final', ctx), int(req(row, 'points_jersey_leader_day', ctx), ctx), int(req(row, 'points_jersey_sprint_day', ctx), ctx), int(req(row, 'points_jersey_mountain_day', ctx), ctx), int(req(row, 'points_jersey_youth_day', ctx), ctx), req(row, 'points_sprint_intermediate', ctx), req(row, 'points_mountain_hc', ctx), req(row, 'points_mountain_cat1', ctx), req(row, 'points_mountain_cat2', ctx), req(row, 'points_mountain_cat3', ctx), req(row, 'points_mountain_cat4', ctx), req(row, 'points_jersey_sprint_final', ctx), req(row, 'points_jersey_mountain_final', ctx), req(row, 'points_jersey_youth_final', ctx));
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), req(row, 'bonus_seconds_final', ctx), req(row, 'bonus_seconds_intermediate', ctx), req(row, 'points_stage', ctx), req(row, 'points_sprint_finish', ctx), req(row, 'points_one_day', ctx), req(row, 'points_gc_final', ctx), int(req(row, 'points_jersey_leader_day', ctx), ctx), int(req(row, 'points_jersey_sprint_day', ctx), ctx), int(req(row, 'points_jersey_mountain_day', ctx), ctx), int(req(row, 'points_jersey_youth_day', ctx), ctx), req(row, 'points_sprint_intermediate', ctx), req(row, 'points_mountain_hc', ctx), req(row, 'points_mountain_cat1', ctx), req(row, 'points_mountain_cat2', ctx), req(row, 'points_mountain_cat3', ctx), req(row, 'points_mountain_cat4', ctx), req(row, 'points_jersey_sprint_final', ctx), req(row, 'points_jersey_mountain_final', ctx), req(row, 'points_jersey_youth_final', ctx));
     }
     console.log(`  ${rows.length} Kategorie-Bonussysteme eingefuegt.`);
 }

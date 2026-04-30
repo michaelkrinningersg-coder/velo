@@ -1529,6 +1529,7 @@ function renderResultsView(): void {
         <td>${row.timeSeconds != null ? esc(formatRaceTime(row.timeSeconds)) : '–'}</td>
         <td>${esc(formatRaceGap(row.gapSeconds))}</td>
         <td>${row.points != null ? row.points : '–'}</td>
+        <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
       </tr>`;
   }).join('');
 

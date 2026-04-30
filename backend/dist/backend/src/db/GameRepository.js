@@ -229,6 +229,7 @@ function mapRaceCategoryBonus(row) {
         bonusSecondsFinal: row.bonus_seconds_final,
         bonusSecondsIntermediate: row.bonus_seconds_intermediate,
         pointsStage: row.points_stage,
+        pointsSprintFinish: row.points_sprint_finish,
         pointsOneDay: row.points_one_day,
         pointsGcFinal: row.points_gc_final,
         pointsJerseyLeaderDay: row.points_jersey_leader_day,
@@ -338,6 +339,7 @@ function buildRaceSelect() {
            race_categories_bonus.bonus_seconds_final,
            race_categories_bonus.bonus_seconds_intermediate,
            race_categories_bonus.points_stage,
+           race_categories_bonus.points_sprint_finish,
            race_categories_bonus.points_one_day,
            race_categories_bonus.points_gc_final,
            race_categories_bonus.points_jersey_leader_day,
@@ -659,13 +661,19 @@ class GameRepository {
         races.name AS race_name,
         stages.stage_number AS stage_number,
         stages.date AS date,
-        stages.profile AS profile
+        stages.profile AS profile,
+        races.is_stage_race AS is_stage_race,
+        races.number_of_stages AS number_of_stages
       FROM stages
       JOIN races ON races.id = stages.race_id
       WHERE stages.id = ?
     `).get(stageId);
         if (!meta)
             return null;
+        const season = Number.parseInt(meta.date.slice(0, 4), 10);
+        if (Number.isFinite(season)) {
+            this.syncSeasonPointEventsForSeason(season);
+        }
         const resultTypes = this.db.prepare(`
       SELECT id, name
       FROM result_types
@@ -692,6 +700,8 @@ class GameRepository {
     `).all(stageId);
         if (rows.length === 0)
             return null;
+        const uciPointsByRiderAndAwardType = this.loadStageUciPointsByRiderAndAwardType(stageId);
+        const uciPointsByTeamId = this.loadStageUciPointsByTeamId(stageId);
         const groupedRows = new Map();
         for (const row of rows) {
             const bucket = groupedRows.get(row.result_type_id) ?? [];
@@ -716,6 +726,7 @@ class GameRepository {
                 timeSeconds: row.time_seconds,
                 gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
                 points: row.points,
+                uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
             }));
             return {
                 resultTypeId: resultType.id,
@@ -865,6 +876,65 @@ class GameRepository {
       GROUP BY rider_id
     `).all(season);
         return new Map(rows.map((row) => [row.rider_id, row.points_total]));
+    }
+    loadStageUciPointsByRiderAndAwardType(stageId) {
+        if (!tableExists(this.db, 'season_point_events')) {
+            return new Map();
+        }
+        const rows = this.db.prepare(`
+      SELECT rider_id, award_type, SUM(points_awarded) AS points_total
+      FROM season_point_events
+      WHERE stage_id = ?
+      GROUP BY rider_id, award_type
+    `).all(stageId);
+        return new Map(rows.map((row) => [this.getStageUciPointKey(row.rider_id, row.award_type), row.points_total]));
+    }
+    loadStageUciPointsByTeamId(stageId) {
+        if (!tableExists(this.db, 'season_point_events')) {
+            return new Map();
+        }
+        const rows = this.db.prepare(`
+      SELECT team_id, SUM(points_awarded) AS points_total
+      FROM season_point_events
+      WHERE stage_id = ? AND team_id IS NOT NULL
+      GROUP BY team_id
+    `).all(stageId);
+        return new Map(rows.map((row) => [row.team_id, row.points_total]));
+    }
+    resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId) {
+        if (row.result_type_id === RESULT_TYPE_IDS.team) {
+            return row.team_id == null ? null : (uciPointsByTeamId.get(row.team_id) ?? 0);
+        }
+        if (row.rider_id == null) {
+            return null;
+        }
+        const awardTypes = this.getAwardTypesForStageResult(meta, row.result_type_id);
+        if (awardTypes.length === 0) {
+            return 0;
+        }
+        return awardTypes.reduce((sum, awardType) => sum + (uciPointsByRiderAndAwardType.get(this.getStageUciPointKey(row.rider_id, awardType)) ?? 0), 0);
+    }
+    getAwardTypesForStageResult(meta, resultTypeId) {
+        if (meta.is_stage_race !== 1) {
+            return resultTypeId === RESULT_TYPE_IDS.stage ? ['one_day_result'] : [];
+        }
+        switch (resultTypeId) {
+            case RESULT_TYPE_IDS.stage:
+                return ['stage_result'];
+            case RESULT_TYPE_IDS.gc:
+                return meta.stage_number === meta.number_of_stages ? ['gc_leader_day', 'gc_final'] : ['gc_leader_day'];
+            case RESULT_TYPE_IDS.points:
+                return meta.stage_number === meta.number_of_stages ? ['points_leader_day', 'points_final'] : ['points_leader_day'];
+            case RESULT_TYPE_IDS.mountain:
+                return meta.stage_number === meta.number_of_stages ? ['mountain_leader_day', 'mountain_final'] : ['mountain_leader_day'];
+            case RESULT_TYPE_IDS.youth:
+                return meta.stage_number === meta.number_of_stages ? ['youth_leader_day', 'youth_final'] : ['youth_leader_day'];
+            default:
+                return [];
+        }
+    }
+    getStageUciPointKey(riderId, awardType) {
+        return `${riderId}:${awardType}`;
     }
     loadSeasonPointResultRows(stageId, resultTypeId) {
         return this.db.prepare(`

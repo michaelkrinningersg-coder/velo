@@ -42,6 +42,7 @@ const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const bootstrapper_1 = require("../bootstrapper");
+const ContractService_1 = require("../game/ContractService");
 const GameStateService_1 = require("../game/GameStateService");
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -56,10 +57,16 @@ function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
 }
+function columnExists(db, tableName, columnName) {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    return columns.some((column) => column.name === columnName);
+}
 function resolveAssetsDir() {
     const candidates = [
         path.resolve(__dirname, '..', '..', 'assets'),
         path.resolve(__dirname, '..', '..', '..', 'assets'),
+        path.resolve(__dirname, '..', '..', '..', '..', 'assets'),
+        path.resolve(process.cwd(), 'assets'),
         path.resolve(process.cwd(), 'backend', 'assets'),
     ];
     for (const candidate of candidates) {
@@ -94,6 +101,41 @@ class DatabaseService {
                 insert.run(row.id, row.name);
             }
         })();
+    }
+    ensureRaceCategoryBonusSchema(db) {
+        if (!tableExists(db, 'race_categories_bonus') || columnExists(db, 'race_categories_bonus', 'points_sprint_finish')) {
+            return;
+        }
+        db.prepare(`
+      ALTER TABLE race_categories_bonus
+      ADD COLUMN points_sprint_finish TEXT NOT NULL DEFAULT ''
+    `).run();
+        if (!fs.existsSync(this.masterDbPath)) {
+            return;
+        }
+        const masterDb = new better_sqlite3_1.default(this.masterDbPath, { readonly: true });
+        try {
+            if (!tableExists(masterDb, 'race_categories_bonus') || !columnExists(masterDb, 'race_categories_bonus', 'points_sprint_finish')) {
+                return;
+            }
+            const rows = masterDb.prepare(`
+        SELECT id, points_sprint_finish
+        FROM race_categories_bonus
+      `).all();
+            const update = db.prepare(`
+        UPDATE race_categories_bonus
+        SET points_sprint_finish = ?
+        WHERE id = ?
+      `);
+            db.transaction(() => {
+                for (const row of rows) {
+                    update.run(row.points_sprint_finish, row.id);
+                }
+            })();
+        }
+        finally {
+            masterDb.close();
+        }
     }
     ensureSavegamesDir() {
         if (!fs.existsSync(this.savegamesDir)) {
@@ -159,7 +201,10 @@ class DatabaseService {
         this.activeConnection.pragma('journal_mode = WAL');
         this.activeConnection.pragma('foreign_keys = ON');
         this.applyLatestSchema(this.activeConnection);
+        this.ensureRaceCategoryBonusSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
+        const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
+        new ContractService_1.ContractService(this.activeConnection).checkContractStatuses(gameState.season);
         return this.activeConnection;
     }
     getActiveConnection() {

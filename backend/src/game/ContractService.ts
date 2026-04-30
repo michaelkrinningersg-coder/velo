@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { RiderRoleService } from './RiderRoleService';
 
 const CONTRACT_STATUS_ACTIVE = 'active';
 const CONTRACT_STATUS_EXPIRED = 'expired';
@@ -52,6 +53,8 @@ export class ContractService {
           LIMIT 1
         )
       `).run(CONTRACT_STATUS_ACTIVE, CONTRACT_STATUS_ACTIVE);
+
+      new RiderRoleService(this.db).recalculateAllTeamRoles();
     })();
   }
 }

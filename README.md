@@ -1,108 +1,62 @@
 # Velo – Radsport Director
 
-Eine datengetriebene Radsport-Simulation gebaut mit **TypeScript**, **Electron** und **better-sqlite3**.
+Eine datengetriebene Radsport-Simulation mit Express-Backend, Vite-Frontend und better-sqlite3.
 
 ## Technologie-Stack
 
 | Schicht | Technologie |
 |---------|-------------|
-| App-Shell | Electron 30 |
-| Sprache | TypeScript 5 (strict) |
-| Datenbank | better-sqlite3 (synchron, WAL-Modus) |
-| Renderer | Vanilla HTML/CSS/JS (kein Framework) |
-
----
+| Backend | Express + TypeScript |
+| Frontend | Vite + Vanilla TypeScript |
+| Datenbank | better-sqlite3 |
+| Gemeinsame Typen | shared/types.ts |
 
 ## Projektstruktur
 
 ```
 velo/
-├── assets/
-│   ├── schema.sql           # Master-DB Schema
-│   └── world_data.db        # Schreibgeschützte Master-DB (generiert via seed)
-├── data/
-│   ├── division_teams.csv   # Stammdaten für Ligen/Divisionen
-│   └── teams.csv            # Stammdaten für Teams
-├── scripts/
-│   └── seed.ts              # Baut world_data.db aus CSV-Stammdaten und Startdaten
-├── src/
-│   ├── shared/
-│   │   └── types.ts         # Alle gemeinsamen Typen (Rider, Race, IPC, …)
-│   ├── main/                # Electron Main Process
-│   │   ├── index.ts         # App-Einstiegspunkt
-│   │   ├── preload.ts       # contextBridge API für den Renderer
-│   │   ├── database/
-│   │   │   ├── DatabaseService.ts   # Master-DB vs. Savegame-Logik
-│   │   │   └── GameRepository.ts    # Datenzugriffs-Schicht
-│   │   ├── ipc/
-│   │   │   └── handlers.ts  # IPC-Handler (Main ↔ Renderer)
-│   │   └── simulation/
-│   │       └── TimeTrialSimulator.ts  # Zeitfahren-Simulation
-│   └── renderer/            # Frontend
-│       ├── index.html
-│       ├── renderer.d.ts
-│       ├── styles/main.css
-│       └── scripts/app.js
-├── package.json
-└── tsconfig.json
+├── backend/
+│   ├── assets/
+│   │   ├── schema.sql
+│   │   └── world_data.db
+│   └── src/
+├── frontend/
+│   ├── index.html
+│   └── src/
+├── shared/
+│   └── types.ts
+└── data/
+    └── csv/
+        ├── division_teams.csv
+        ├── teams.csv
+        └── game_state.csv
 ```
 
----
-
-## Quick Start
+## Start
 
 ```bash
-# 1. Abhängigkeiten
 npm install
-
-# 1a. Teilpakete installieren
-npm --prefix backend install
-npm --prefix frontend install
-
-# 2. Backend + Frontend im Browser starten
-npm start
-
-# 3. Alias für denselben Browser-Start
-npm run browser
+npm run dev
 ```
 
----
+Das startet:
+- Backend auf http://localhost:3000
+- Frontend auf http://localhost:5173
 
-## Datenbank-Konzept
+## Datenbank-Verhalten
 
-```
-assets/world_data.db          ← Schreibgeschützte Master-DB
-        │  copyFileSync() beim "Neue Karriere"-Klick
-        ▼
-userData/savegames/karriere_xxx.db   ← Savegame (lebende Kopie)
-```
+- Die Master-DB wird bei jedem Backend-Start neu aus den CSV-Dateien aufgebaut.
+- Die Master-DB liegt unter [backend/assets/schema.sql](backend/assets/schema.sql) und [backend/assets/world_data.db](backend/assets/world_data.db).
+- Neue Karrieren werden als Kopie der Master-DB im Savegame-Ordner erstellt.
+- Savegames bleiben erhalten und werden beim Serverstart nicht neu gebaut.
 
-## Stammdaten per CSV
+## Startzustand
 
-Statische Welt- und Balancing-Daten liegen unter [data/division_teams.csv](data/division_teams.csv) und [data/teams.csv](data/teams.csv). Der Seed-Lauf liest diese Dateien ein und baut daraus die Master-Datenbank neu auf.
+- Der initiale Spielzustand kommt aus [data/csv/game_state.csv](data/csv/game_state.csv).
+- Standardmäßig startet jede neue Karriere am `2026-01-01`.
 
-Das Muster ist absichtlich pro Stammdatentabelle aufgebaut:
-- `division_teams.csv` für Liga-Struktur und Regeln
-- `teams.csv` für Team-Stammdaten
+## Hinweise
 
-Savegame-Tabellen wie Spielstand, Verträge oder Rennergebnisse gehören nicht in dieses CSV-System.
-
-## Browser-Testmodus
-
-Mit `npm run browser` oder `npm start` werden Backend und Frontend parallel gestartet. Das Frontend läuft per Vite auf Port 5173 und leitet `/api` an das Backend auf Port 3000 weiter.
-
-## Zeitfahren-Simulation (Meilenstein 1)
-
-`TimeTrialSimulator.simulate(race, riders)` berechnet pro Fahrer:
-- **Basisgeschwindigkeit** aus Streckenprofil (Flach 50 km/h / Hügelig 41 / Berg 30)
-- **±0,28 km/h** pro TT-Attributpunkt über/unter 50
-- **Tagesform** `[0.88–1.12]` + ±1,5% Rauschen
-
-## Nächste Meilensteine
-
-- M2: Etappenrennen (Flat/Hilly/Mountain)
-- M3: Kaderverwaltung & Transfers
-- M4: Fahrer-Progression (Alter, Potenzial)
-- M5: Regen-System (neue Nachwuchsfahrer)
-- M6: Mehretappige Rennen (GC, Trikots)
+- Wenn das Datum im UI nicht zum aktuellen Code passt, den Backend-Prozess neu starten und eine neue Karriere anlegen.
+- Bestehende alte Savegames behalten ihren gespeicherten Zustand.
 

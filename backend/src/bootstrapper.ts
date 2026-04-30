@@ -379,12 +379,12 @@ function seedRaceCategoriesBonus(db: Database.Database): void {
   const insert = db.prepare(`
     INSERT INTO race_categories_bonus (
       id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage,
-      points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
+      points_sprint_finish, points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
       points_jersey_mountain_day, points_jersey_youth_day, points_sprint_intermediate,
       points_mountain_hc, points_mountain_cat1, points_mountain_cat2, points_mountain_cat3,
       points_mountain_cat4, points_jersey_sprint_final, points_jersey_mountain_final,
       points_jersey_youth_final
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -395,6 +395,7 @@ function seedRaceCategoriesBonus(db: Database.Database): void {
       req(row, 'bonus_seconds_final', ctx),
       req(row, 'bonus_seconds_intermediate', ctx),
       req(row, 'points_stage', ctx),
+      req(row, 'points_sprint_finish', ctx),
       req(row, 'points_one_day', ctx),
       req(row, 'points_gc_final', ctx),
       int(req(row, 'points_jersey_leader_day', ctx), ctx),

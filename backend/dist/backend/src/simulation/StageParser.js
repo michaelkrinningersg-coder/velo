@@ -59,7 +59,9 @@ function resolveStagesDir() {
     const candidates = [
         path.resolve(__dirname, '..', '..', '..', 'data', 'stages'),
         path.resolve(__dirname, '..', '..', '..', '..', 'data', 'stages'),
+        path.resolve(__dirname, '..', '..', '..', '..', '..', 'data', 'stages'),
         path.resolve(process.cwd(), 'data', 'stages'),
+        path.resolve(process.cwd(), '..', 'data', 'stages'),
     ];
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {

@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS race_categories_bonus (
   bonus_seconds_final          TEXT    NOT NULL DEFAULT '',
   bonus_seconds_intermediate   TEXT    NOT NULL DEFAULT '',
   points_stage                 TEXT    NOT NULL DEFAULT '',
+  points_sprint_finish         TEXT    NOT NULL DEFAULT '',
   points_one_day               TEXT    NOT NULL DEFAULT '',
   points_gc_final              TEXT    NOT NULL DEFAULT '',
   points_jersey_leader_day     INTEGER NOT NULL DEFAULT 0 CHECK(points_jersey_leader_day >= 0),

@@ -225,6 +225,7 @@ export interface RaceCategoryBonus {
   bonusSecondsFinal: string;
   bonusSecondsIntermediate: string;
   pointsStage: string;
+  pointsSprintFinish: string;
   pointsOneDay: string;
   pointsGcFinal: string;
   pointsJerseyLeaderDay: number;
@@ -362,6 +363,7 @@ export interface RaceClassificationRow {
   timeSeconds: number | null;
   gapSeconds: number | null;
   points: number | null;
+  uciPoints: number | null;
 }
 
 export type StageResultRow = RaceClassificationRow;
