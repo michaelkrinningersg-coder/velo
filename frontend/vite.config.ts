@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-const apiTarget = process.env['VITE_API_TARGET'] ?? 'http://localhost:3000';
+const apiTarget = process.env['VITE_API_TARGET'] ?? 'http://localhost:3101';
 
 export default defineConfig({
   server: {

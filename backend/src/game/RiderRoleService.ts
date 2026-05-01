@@ -21,6 +21,12 @@ function columnExists(db: Database.Database, tableName: string, columnName: stri
 interface RoleRow {
   id: number;
   name: string;
+  weighting: number;
+}
+
+interface RoleDefinition {
+  id: number;
+  weighting: number;
 }
 
 interface RiderRoleRow {
@@ -40,13 +46,18 @@ interface RiderRoleRow {
 }
 
 interface RoleIdMap {
-  captain: number;
-  coCaptain: number;
-  eliteHelper: number;
-  strongHelper: number;
-  waterCarrier: number;
-  sprinter: number;
+  captain: RoleDefinition;
+  coCaptain: RoleDefinition;
+  eliteHelper: RoleDefinition;
+  strongHelper: RoleDefinition;
+  waterCarrier: RoleDefinition;
+  sprinter: RoleDefinition;
 }
+
+type WeightedRoleKey = 'captain' | 'coCaptain' | 'eliteHelper' | 'strongHelper' | 'waterCarrier';
+
+const WEIGHTED_ROLE_KEYS: WeightedRoleKey[] = ['captain', 'coCaptain', 'eliteHelper', 'strongHelper', 'waterCarrier'];
+const ROLE_DONOR_PRIORITY: WeightedRoleKey[] = ['waterCarrier', 'strongHelper', 'eliteHelper', 'coCaptain'];
 
 function compareLeadership(left: RiderRoleRow, right: RiderRoleRow): number {
   return right.overall_rating - left.overall_rating
@@ -144,6 +155,7 @@ export class RiderRoleService {
       ridersByTeamId.set(row.active_team_id, roster);
     }
 
+    const resetAllRoles = this.db.prepare('UPDATE riders SET role_id = NULL');
     const resetInactive = this.db.prepare(`
       UPDATE riders
       SET role_id = NULL
@@ -152,6 +164,7 @@ export class RiderRoleService {
     const updateRole = this.db.prepare('UPDATE riders SET role_id = ? WHERE id = ?');
 
     this.db.transaction(() => {
+      resetAllRoles.run();
       resetInactive.run();
 
       for (const roster of ridersByTeamId.values()) {
@@ -164,15 +177,15 @@ export class RiderRoleService {
   }
 
   private loadRoleIds(): RoleIdMap | null {
-    const rows = this.db.prepare('SELECT id, name FROM sta_role').all() as RoleRow[];
-    const roleIdByName = new Map(rows.map((row) => [row.name, row.id]));
+    const rows = this.db.prepare('SELECT id, name, weighting FROM sta_role').all() as RoleRow[];
+    const roleByName = new Map(rows.map((row) => [row.name, row]));
 
-    const captain = roleIdByName.get(CAPTAIN_ROLE_NAME);
-    const coCaptain = roleIdByName.get(CO_CAPTAIN_ROLE_NAME);
-    const eliteHelper = roleIdByName.get(ELITE_HELPER_ROLE_NAME);
-    const strongHelper = roleIdByName.get(STRONG_HELPER_ROLE_NAME);
-    const waterCarrier = roleIdByName.get(WATER_CARRIER_ROLE_NAME);
-    const sprinter = roleIdByName.get(SPRINTER_ROLE_NAME);
+    const captain = roleByName.get(CAPTAIN_ROLE_NAME);
+    const coCaptain = roleByName.get(CO_CAPTAIN_ROLE_NAME);
+    const eliteHelper = roleByName.get(ELITE_HELPER_ROLE_NAME);
+    const strongHelper = roleByName.get(STRONG_HELPER_ROLE_NAME);
+    const waterCarrier = roleByName.get(WATER_CARRIER_ROLE_NAME);
+    const sprinter = roleByName.get(SPRINTER_ROLE_NAME);
 
     if (
       captain == null
@@ -186,12 +199,12 @@ export class RiderRoleService {
     }
 
     return {
-      captain,
-      coCaptain,
-      eliteHelper,
-      strongHelper,
-      waterCarrier,
-      sprinter,
+      captain: { id: captain.id, weighting: captain.weighting },
+      coCaptain: { id: coCaptain.id, weighting: coCaptain.weighting },
+      eliteHelper: { id: eliteHelper.id, weighting: eliteHelper.weighting },
+      strongHelper: { id: strongHelper.id, weighting: strongHelper.weighting },
+      waterCarrier: { id: waterCarrier.id, weighting: waterCarrier.weighting },
+      sprinter: { id: sprinter.id, weighting: sprinter.weighting },
     };
   }
 
@@ -203,47 +216,108 @@ export class RiderRoleService {
     const assignments = new Map<number, number>();
     const sprinter = this.selectSprinter(roster);
     if (sprinter != null) {
-      assignments.set(sprinter.id, roleIds.sprinter);
+      assignments.set(sprinter.id, roleIds.sprinter.id);
     }
 
     const leadershipRoster = roster
       .filter((rider) => rider.id !== sprinter?.id)
       .sort(compareLeadership);
 
-    if (leadershipRoster[0] != null) {
-      assignments.set(leadershipRoster[0].id, roleIds.captain);
-    }
-    if (leadershipRoster[1] != null) {
-      assignments.set(leadershipRoster[1].id, roleIds.coCaptain);
-    }
+    const roleCounts = this.resolveWeightedRoleCounts(roster.length, sprinter != null, roleIds);
 
-    const supportRoster = leadershipRoster.slice(2);
-    if (supportRoster.length > 0) {
-      const eliteHelperCount = Math.min(
-        supportRoster.length,
-        Math.max(1, Math.round(supportRoster.length * 15 / 80)),
-      );
-      const remainingAfterElite = supportRoster.length - eliteHelperCount;
-      const strongHelperCount = Math.min(
-        remainingAfterElite,
-        Math.round(supportRoster.length * 25 / 80),
-      );
-
-      for (const rider of supportRoster.slice(0, eliteHelperCount)) {
-        assignments.set(rider.id, roleIds.eliteHelper);
-      }
-      for (const rider of supportRoster.slice(eliteHelperCount, eliteHelperCount + strongHelperCount)) {
-        assignments.set(rider.id, roleIds.strongHelper);
-      }
-      for (const rider of supportRoster.slice(eliteHelperCount + strongHelperCount)) {
-        assignments.set(rider.id, roleIds.waterCarrier);
-      }
-    }
+    let cursor = 0;
+    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.captain, roleIds.captain.id);
+    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.coCaptain, roleIds.coCaptain.id);
+    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.eliteHelper, roleIds.eliteHelper.id);
+    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.strongHelper, roleIds.strongHelper.id);
+    this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.waterCarrier, roleIds.waterCarrier.id);
 
     return roster.map((rider) => ({
       riderId: rider.id,
-      roleId: assignments.get(rider.id) ?? roleIds.waterCarrier,
+      roleId: assignments.get(rider.id) ?? roleIds.waterCarrier.id,
     }));
+  }
+
+  private resolveWeightedRoleCounts(
+    rosterSize: number,
+    reserveSprinter: boolean,
+    roleIds: RoleIdMap,
+  ): Record<WeightedRoleKey, number> {
+    const counts: Record<WeightedRoleKey, number> = {
+      captain: 0,
+      coCaptain: 0,
+      eliteHelper: 0,
+      strongHelper: 0,
+      waterCarrier: 0,
+    };
+
+    const distributedRosterSize = Math.max(0, rosterSize - (reserveSprinter ? 1 : 0));
+    if (distributedRosterSize === 0) {
+      return counts;
+    }
+
+    const weightedRoles = WEIGHTED_ROLE_KEYS.map((key) => ({
+      key,
+      weighting: roleIds[key].weighting,
+      quota: 0,
+      baseCount: 0,
+      remainder: 0,
+    }));
+    const totalWeight = weightedRoles.reduce((sum, role) => sum + Math.max(0, role.weighting), 0);
+
+    if (totalWeight <= 0) {
+      counts.waterCarrier = distributedRosterSize;
+      return counts;
+    }
+
+    let assignedCount = 0;
+    for (const role of weightedRoles) {
+      const quota = distributedRosterSize * Math.max(0, role.weighting) / totalWeight;
+      role.quota = quota;
+      role.baseCount = Math.floor(quota);
+      role.remainder = quota - role.baseCount;
+      counts[role.key] = role.baseCount;
+      assignedCount += role.baseCount;
+    }
+
+    let remainingCount = distributedRosterSize - assignedCount;
+    const rankedRemainders = [...weightedRoles].sort((left, right) => right.remainder - left.remainder
+      || right.weighting - left.weighting
+      || WEIGHTED_ROLE_KEYS.indexOf(left.key) - WEIGHTED_ROLE_KEYS.indexOf(right.key));
+
+    for (const role of rankedRemainders) {
+      if (remainingCount <= 0) {
+        break;
+      }
+      counts[role.key] += 1;
+      remainingCount -= 1;
+    }
+
+    if (rosterSize > 0 && counts.captain === 0) {
+      const donorRole = ROLE_DONOR_PRIORITY.find((key) => counts[key] > 0);
+      if (donorRole != null) {
+        counts[donorRole] -= 1;
+      }
+      counts.captain += 1;
+    }
+
+    return counts;
+  }
+
+  private assignRoleSlice(
+    assignments: Map<number, number>,
+    sortedRoster: RiderRoleRow[],
+    startIndex: number,
+    count: number,
+    roleId: number,
+  ): number {
+    let cursor = startIndex;
+    for (const rider of sortedRoster.slice(startIndex, startIndex + count)) {
+      assignments.set(rider.id, roleId);
+      cursor += 1;
+    }
+
+    return cursor;
   }
 
   private selectSprinter(roster: RiderRoleRow[]): RiderRoleRow | null {

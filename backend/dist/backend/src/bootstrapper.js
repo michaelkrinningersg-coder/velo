@@ -71,7 +71,32 @@ const DEFAULT_RIDER_TYPE_ID = 1;
 function clamp(value, min = 0, max = 85) {
     return Math.max(min, Math.min(max, Math.round(value * 100) / 100));
 }
-function parseCsvLine(line) {
+function detectCsvDelimiter(line) {
+    let commaCount = 0;
+    let semicolonCount = 0;
+    let inQuotes = false;
+    for (let index = 0; index < line.length; index += 1) {
+        const char = line[index];
+        const next = line[index + 1];
+        if (char === '"') {
+            if (inQuotes && next === '"') {
+                index += 1;
+            }
+            else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+        if (!inQuotes) {
+            if (char === ',')
+                commaCount += 1;
+            if (char === ';')
+                semicolonCount += 1;
+        }
+    }
+    return semicolonCount > commaCount ? ';' : ',';
+}
+function parseCsvLine(line, delimiter) {
     const cells = [];
     let current = '';
     let inQuotes = false;
@@ -88,7 +113,7 @@ function parseCsvLine(line) {
             }
             continue;
         }
-        if (char === ',' && !inQuotes) {
+        if (char === delimiter && !inQuotes) {
             cells.push(current.trim());
             current = '';
             continue;
@@ -109,9 +134,10 @@ function parseCsv(content) {
     if (lines.length < 2) {
         throw new Error('CSV muss Header und mindestens eine Datenzeile enthalten.');
     }
-    const headers = parseCsvLine(lines[0]).map(value => value.trim());
+    const delimiter = detectCsvDelimiter(lines[0]);
+    const headers = parseCsvLine(lines[0], delimiter).map(value => value.trim());
     return lines.slice(1).map((line, index) => {
-        const values = parseCsvLine(line);
+        const values = parseCsvLine(line, delimiter);
         if (values.length !== headers.length) {
             throw new Error(`CSV-Zeile ${index + 2} hat ${values.length} Spalten, erwartet ${headers.length}.`);
         }
@@ -147,6 +173,30 @@ function boolFlag(value, ctx) {
         return Number(value);
     }
     throw new Error(`${ctx}: Feld muss 0 oder 1 sein, erhalten "${value}".`);
+}
+function optionalInt(value) {
+    const normalized = value?.trim();
+    if (!normalized) {
+        return null;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isInteger(parsed) ? parsed : null;
+}
+function createDeterministicRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+}
+function shuffleDeterministically(items, seed) {
+    const shuffled = [...items];
+    const random = createDeterministicRandom(seed);
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
 }
 function createU23Abbreviation(base, used) {
     const normalized = base.toUpperCase().replace(/[^A-Z0-9]/g, '').padEnd(3, 'X').slice(0, 3);
@@ -380,21 +430,60 @@ function seedRiders(db) {
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `riders.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'rider_id', ctx), ctx), req(row, 'first_name', ctx), req(row, 'last_name', ctx), int(req(row, 'country_id', ctx), ctx), DEFAULT_RIDER_TYPE_ID, int(req(row, 'birth_year', ctx), ctx), provisionalOverall(row, ctx), int(req(row, 'skill_flat', ctx), ctx), int(req(row, 'skill_mountain', ctx), ctx), int(req(row, 'skill_medium_mountain', ctx), ctx), int(req(row, 'skill_hill', ctx), ctx), int(req(row, 'skill_time_trial', ctx), ctx), int(req(row, 'skill_prologue', ctx), ctx), int(req(row, 'skill_cobble', ctx), ctx), int(req(row, 'skill_sprint', ctx), ctx), int(req(row, 'skill_acceleration', ctx), ctx), int(req(row, 'skill_downhill', ctx), ctx), int(req(row, 'skill_attack', ctx), ctx), int(req(row, 'skill_stamina', ctx), ctx), int(req(row, 'skill_resistance', ctx), ctx), int(req(row, 'skill_recuperation', ctx), ctx), int(req(row, 'team_id', ctx), ctx), row['favorite_races']?.trim() ?? '', row['non_favorite_races']?.trim() ?? '');
+        const seededTeamId = optionalInt(row['team_id']);
+        insert.run(int(req(row, 'rider_id', ctx), ctx), req(row, 'first_name', ctx), req(row, 'last_name', ctx), int(req(row, 'country_id', ctx), ctx), DEFAULT_RIDER_TYPE_ID, int(req(row, 'birth_year', ctx), ctx), provisionalOverall(row, ctx), int(req(row, 'skill_flat', ctx), ctx), int(req(row, 'skill_mountain', ctx), ctx), int(req(row, 'skill_medium_mountain', ctx), ctx), int(req(row, 'skill_hill', ctx), ctx), int(req(row, 'skill_time_trial', ctx), ctx), int(req(row, 'skill_prologue', ctx), ctx), int(req(row, 'skill_cobble', ctx), ctx), int(req(row, 'skill_sprint', ctx), ctx), int(req(row, 'skill_acceleration', ctx), ctx), int(req(row, 'skill_downhill', ctx), ctx), int(req(row, 'skill_attack', ctx), ctx), int(req(row, 'skill_stamina', ctx), ctx), int(req(row, 'skill_resistance', ctx), ctx), int(req(row, 'skill_recuperation', ctx), ctx), seededTeamId, row['favorite_races']?.trim() ?? '', row['non_favorite_races']?.trim() ?? '');
     }
     console.log(`  ${rows.length} Fahrer eingefuegt.`);
 }
 function seedContracts(db) {
-    const rows = readCsv('contracts.csv');
+    const currentSeason = db.prepare('SELECT season FROM game_state WHERE id = 1').get();
+    if (!currentSeason) {
+        throw new Error('game_state muss vor contracts gesetzt sein.');
+    }
+    const teams = db.prepare(`
+    SELECT teams.id, division_teams.name AS division_name, division_teams.tier AS tier
+    FROM teams
+    JOIN division_teams ON division_teams.id = teams.division_id
+    WHERE division_teams.name IN ('WorldTour', 'ProTour')
+    ORDER BY division_teams.tier ASC, teams.id ASC
+  `).all();
+    const riders = db.prepare(`
+    SELECT id, overall_rating
+    FROM riders
+    WHERE is_retired = 0
+    ORDER BY overall_rating DESC, id ASC
+  `).all();
+    const worldTourTeams = teams.filter((team) => team.division_name === 'WorldTour');
+    const proTourTeams = teams.filter((team) => team.division_name === 'ProTour');
+    const rosterSize = 30;
+    const requiredRiders = (worldTourTeams.length + proTourTeams.length) * rosterSize;
+    if (riders.length < requiredRiders) {
+        throw new Error(`Nicht genug Fahrer fuer ${teams.length} Teams à ${rosterSize}. Verfuegbar: ${riders.length}, benoetigt: ${requiredRiders}.`);
+    }
     const insert = db.prepare(`
     INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
     VALUES (?, ?, ?, ?, ?)
   `);
-    for (const [index, row] of rows.entries()) {
-        const ctx = `contracts.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'rider_id', ctx), ctx), int(req(row, 'team_id', ctx), ctx), int(req(row, 'start_season', ctx), ctx), int(req(row, 'end_season', ctx), ctx), req(row, 'status', ctx));
-    }
-    console.log(`  ${rows.length} Vertraege eingefuegt.`);
+    let offset = 0;
+    const allocateDivision = (divisionTeams, seed) => {
+        const poolSize = divisionTeams.length * rosterSize;
+        const divisionPool = riders.slice(offset, offset + poolSize);
+        const shuffledPool = shuffleDeterministically(divisionPool, seed);
+        divisionTeams.forEach((team, teamIndex) => {
+            const teamRiders = shuffledPool.slice(teamIndex * rosterSize, (teamIndex + 1) * rosterSize);
+            if (teamRiders.length !== rosterSize) {
+                throw new Error(`Team ${team.id} konnte nicht mit ${rosterSize} Fahrern gefuellt werden.`);
+            }
+            teamRiders.forEach((rider) => {
+                insert.run(rider.id, team.id, currentSeason.season, currentSeason.season + 2, 'active');
+            });
+        });
+        offset += poolSize;
+    };
+    allocateDivision(worldTourTeams, currentSeason.season * 100 + 1);
+    allocateDivision(proTourTeams, currentSeason.season * 100 + 2);
+    const assignedRiders = teams.length * rosterSize;
+    console.log(`  ${assignedRiders} Vertraege fuer ${teams.length} Teams erzeugt.`);
 }
 function seedGameState(db) {
     const rows = readCsv('game_state.csv');
@@ -484,9 +573,9 @@ function bootstrap(force = false) {
         seedRaces(db);
         seedStages(db);
         seedRiders(db);
-        seedContracts(db);
         const currentSeason = seedGameState(db);
         new RiderDevelopmentService_1.RiderDevelopmentService(db).initializeRiders(currentSeason, true);
+        seedContracts(db);
         new ContractService_1.ContractService(db).checkContractStatuses(currentSeason);
         db.pragma('wal_checkpoint(TRUNCATE)');
         db.pragma('journal_mode = DELETE');

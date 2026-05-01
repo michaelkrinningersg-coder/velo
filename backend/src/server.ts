@@ -4,7 +4,7 @@ import { bootstrap } from './bootstrapper';
 import { DatabaseService } from './db/DatabaseService';
 import { createRouter } from './routes/api';
 
-const PORT = Number(process.env['PORT'] ?? 3000);
+const PORT = Number(process.env['PORT'] ?? 3101);
 
 // 1. Bootstrap: Master-DB bei jedem Start neu bauen
 bootstrap(true);

@@ -8,7 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const bootstrapper_1 = require("./bootstrapper");
 const DatabaseService_1 = require("./db/DatabaseService");
 const api_1 = require("./routes/api");
-const PORT = Number(process.env['PORT'] ?? 3000);
+const PORT = Number(process.env['PORT'] ?? 3101);
 // 1. Bootstrap: Master-DB bei jedem Start neu bauen
 (0, bootstrapper_1.bootstrap)(true);
 // 2. Services initialisieren

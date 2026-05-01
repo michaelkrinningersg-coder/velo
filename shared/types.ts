@@ -4,11 +4,7 @@
 
 // ------ Fahrer -----------------------------------------------
 
-export type Nationality =
-  | 'BEL' | 'FRA' | 'ITA' | 'ESP' | 'NED' | 'GER' | 'GBR' | 'USA'
-  | 'COL' | 'AUS' | 'DEN' | 'NOR' | 'SLO' | 'POR' | 'SUI' | 'POL'
-  | 'AUT' | 'LUX' | 'IRE' | 'CZE' | 'SVK' | 'KAZ' | 'RSA' | 'UAE'
-  | 'BHR' | 'HUN' | 'OTH';
+export type Nationality = string;
 
 export interface Country {
   id: number;

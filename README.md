@@ -40,7 +40,7 @@ npm run dev
 ```
 
 Das startet:
-- Backend auf http://localhost:3000
+- Backend auf http://localhost:3101
 - Frontend auf http://localhost:5173
 
 ## Datenbank-Verhalten

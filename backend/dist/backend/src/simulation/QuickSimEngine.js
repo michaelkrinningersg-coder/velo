@@ -25,6 +25,14 @@ const DIVISION_BY_TIER = {
     2: 'ProTour',
     3: 'U23',
 };
+const RACE_ROLE_REQUIREMENTS = [
+    { roleName: 'Kapitaen', count: 1 },
+    { roleName: 'Co-Kapitaen', count: 1 },
+    { roleName: 'Edelhelfer', count: 1 },
+    { roleName: 'Starke Helfer', count: 1 },
+    { roleName: 'Sprinter', count: 1 },
+    { roleName: 'Wassertraeger', count: 2 },
+];
 const FLAT_BASE_SPEED = 45;
 const DOWNHILL_BASE_SPEED = 60;
 const MOUNTAIN_BASE_SPEED_AT_10_PERCENT = 15;
@@ -37,6 +45,22 @@ const COBBLE_FATIGUE_THRESHOLD_KM = 10;
 const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
+function createDeterministicRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+}
+function shuffleDeterministically(items, seed) {
+    const shuffled = [...items];
+    const random = createDeterministicRandom(seed);
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -242,13 +266,43 @@ class QuickSimEngine {
         const insertEntry = this.db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
         this.db.transaction(() => {
             for (const team of eligibleTeams) {
-                const riders = this.repo.getRiders(team.id).slice(0, race.category?.numberOfRiders ?? 0);
+                const riders = this.selectRaceRoster(team, race.category?.numberOfRiders ?? 0, race.id);
                 for (const rider of riders) {
                     insertEntry.run(race.id, team.id, rider.id);
                 }
             }
         })();
         return this.repo.getRaceRiders(race.id);
+    }
+    selectRaceRoster(team, targetCount, raceId) {
+        const roster = this.repo.getRiders(team.id);
+        const requestedCount = Math.min(targetCount, roster.length);
+        if (requestedCount <= 0) {
+            return [];
+        }
+        const selectedIds = new Set();
+        const selected = [];
+        let seedOffset = 0;
+        for (const requirement of RACE_ROLE_REQUIREMENTS) {
+            if (selected.length >= requestedCount) {
+                break;
+            }
+            const roleCandidates = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName), raceId * 1000 + team.id * 100 + seedOffset);
+            const takeCount = Math.min(requirement.count, requestedCount - selected.length, roleCandidates.length);
+            for (const rider of roleCandidates.slice(0, takeCount)) {
+                selected.push(rider);
+                selectedIds.add(rider.id);
+            }
+            seedOffset += 1;
+        }
+        if (selected.length < requestedCount) {
+            const remaining = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id)), raceId * 1000 + team.id * 100 + 97);
+            for (const rider of remaining.slice(0, requestedCount - selected.length)) {
+                selected.push(rider);
+                selectedIds.add(rider.id);
+            }
+        }
+        return selected;
     }
     simulateTimeTrialStage(race, stage, riders, teamsById) {
         const ttResult = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, stage, riders);

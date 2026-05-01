@@ -38,6 +38,15 @@ const DIVISION_BY_TIER: Record<number, Team['division']> = {
   3: 'U23',
 };
 
+const RACE_ROLE_REQUIREMENTS = [
+  { roleName: 'Kapitaen', count: 1 },
+  { roleName: 'Co-Kapitaen', count: 1 },
+  { roleName: 'Edelhelfer', count: 1 },
+  { roleName: 'Starke Helfer', count: 1 },
+  { roleName: 'Sprinter', count: 1 },
+  { roleName: 'Wassertraeger', count: 2 },
+] as const;
+
 const FLAT_BASE_SPEED = 45;
 const DOWNHILL_BASE_SPEED = 60;
 const MOUNTAIN_BASE_SPEED_AT_10_PERCENT = 15;
@@ -50,6 +59,26 @@ const COBBLE_FATIGUE_THRESHOLD_KM = 10;
 const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
+
+function createDeterministicRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function shuffleDeterministically<T>(items: T[], seed: number): T[] {
+  const shuffled = [...items];
+  const random = createDeterministicRandom(seed);
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
 
 interface PerformanceEntry {
   rider: Rider;
@@ -326,7 +355,7 @@ export class QuickSimEngine {
 
     this.db.transaction(() => {
       for (const team of eligibleTeams) {
-        const riders = this.repo.getRiders(team.id).slice(0, race.category?.numberOfRiders ?? 0);
+        const riders = this.selectRaceRoster(team, race.category?.numberOfRiders ?? 0, race.id);
         for (const rider of riders) {
           insertEntry.run(race.id, team.id, rider.id);
         }
@@ -334,6 +363,49 @@ export class QuickSimEngine {
     })();
 
     return this.repo.getRaceRiders(race.id);
+  }
+
+  private selectRaceRoster(team: Team, targetCount: number, raceId: number): Rider[] {
+    const roster = this.repo.getRiders(team.id);
+    const requestedCount = Math.min(targetCount, roster.length);
+    if (requestedCount <= 0) {
+      return [];
+    }
+
+    const selectedIds = new Set<number>();
+    const selected: Rider[] = [];
+    let seedOffset = 0;
+
+    for (const requirement of RACE_ROLE_REQUIREMENTS) {
+      if (selected.length >= requestedCount) {
+        break;
+      }
+
+      const roleCandidates = shuffleDeterministically(
+        roster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName),
+        raceId * 1000 + team.id * 100 + seedOffset,
+      );
+      const takeCount = Math.min(requirement.count, requestedCount - selected.length, roleCandidates.length);
+      for (const rider of roleCandidates.slice(0, takeCount)) {
+        selected.push(rider);
+        selectedIds.add(rider.id);
+      }
+
+      seedOffset += 1;
+    }
+
+    if (selected.length < requestedCount) {
+      const remaining = shuffleDeterministically(
+        roster.filter((rider) => !selectedIds.has(rider.id)),
+        raceId * 1000 + team.id * 100 + 97,
+      );
+      for (const rider of remaining.slice(0, requestedCount - selected.length)) {
+        selected.push(rider);
+        selectedIds.add(rider.id);
+      }
+    }
+
+    return selected;
   }
 
   private simulateTimeTrialStage(
