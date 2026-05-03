@@ -6,6 +6,8 @@ const GameRepository_1 = require("../db/GameRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
 const QuickSimEngine_1 = require("../simulation/QuickSimEngine");
+const RaceRosterService_1 = require("../simulation/RaceRosterService");
+const StageParser_1 = require("../simulation/StageParser");
 function ok(res, data) {
     const body = { success: true, data };
     res.json(body);
@@ -169,6 +171,61 @@ function createRouter(dbService) {
     router.get('/game/status', (_req, res) => {
         try {
             ok(res, getGss().loadStatus());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/simulation/realtime/:stageId', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+            if (!pendingStageIds.has(stageId)) {
+                return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Live-Simulation freigegeben.');
+            }
+            const db = dbService.getActiveConnection();
+            const repo = new GameRepository_1.GameRepository(db);
+            const stage = repo.getStageById(stageId);
+            if (!stage) {
+                return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+            }
+            const race = repo.getRaceById(stage.raceId);
+            if (!race) {
+                return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
+            }
+            const riders = (0, RaceRosterService_1.previewRaceRoster)(repo, race);
+            if (riders.length === 0) {
+                return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
+            }
+            ok(res, {
+                race,
+                stage,
+                riders,
+                teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
+                stageSummary: StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile),
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/simulation/realtime/:stageId/complete', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+            if (!pendingStageIds.has(stageId)) {
+                return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Live-Simulation freigegeben.');
+            }
+            const payload = req.body;
+            if (!payload || !Array.isArray(payload.entries) || payload.entries.length === 0) {
+                return fail(res, 400, 'Es wurden keine Live-Ergebnisse übergeben.');
+            }
+            const db = dbService.getActiveConnection();
+            ok(res, new QuickSimEngine_1.QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries));
         }
         catch (e) {
             fail(res, 400, e.message);

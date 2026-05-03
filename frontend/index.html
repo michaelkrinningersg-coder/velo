@@ -60,6 +60,9 @@
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">🏆</span> Teams
         </button>
+        <button class="nav-btn" data-view="live-race">
+          <span class="nav-icon">◔</span> Live Race
+        </button>
         <button class="nav-btn" data-view="results">
           <span class="nav-icon">📋</span> Results
         </button>
@@ -126,6 +129,54 @@
           </select>
         </div>
         <div id="teams-detail"></div>
+      </div>
+
+      <!-- Live Race -->
+      <div id="view-live-race" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Live Race</h2>
+            <p id="race-sim-stage-meta" class="text-muted">Noch keine Etappe für die Live-Simulation geladen.</p>
+          </div>
+        </div>
+        <div class="race-sim-toolbar">
+          <div class="form-group">
+            <label for="race-sim-stage-select">Offene Etappe</label>
+            <select id="race-sim-stage-select">
+              <option value="">– Keine offenen Etappen –</option>
+            </select>
+          </div>
+          <div class="race-sim-toolbar-actions">
+            <button class="btn btn-primary" id="btn-race-sim-load">Live-Simulation laden</button>
+            <div id="race-sim-status" class="race-sim-toolbar-status">Heute gibt es keine offenen Etappen.</div>
+          </div>
+        </div>
+        <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen für die Live-Simulation.</div>
+        <div id="race-sim-layout" class="race-sim-shell hidden">
+          <aside class="race-sim-sidebar-card">
+            <div class="race-sim-card-header">
+              <h3>Leaderboard</h3>
+              <p class="text-muted">Live-Daten pro Fahrer, sortiert nach Distanz.</p>
+            </div>
+            <div id="race-sim-sidebar-body" class="race-sim-sidebar-body"></div>
+          </aside>
+          <section class="race-sim-main">
+            <div class="race-sim-card">
+              <div class="race-sim-card-header">
+                <h3>Höhenprofil</h3>
+                <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
+              </div>
+              <div id="race-sim-profile" class="race-sim-profile"></div>
+            </div>
+            <div class="race-sim-card">
+              <div class="race-sim-card-header">
+                <h3>Time Controls</h3>
+                <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
+              </div>
+              <div id="race-sim-controls" class="race-sim-controls"></div>
+            </div>
+          </section>
+        </div>
       </div>
 
       <!-- Results -->

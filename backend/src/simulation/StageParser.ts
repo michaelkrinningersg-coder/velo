@@ -1,6 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ParsedStageSegment, StageMarker, StageMarkerCategory, StageFinishMarkerType, StageMarkerType, StageProfilePoint, StageTerrain } from '../../../shared/types';
+import type {
+  ParsedStageSegment,
+  ParsedStageSummary,
+  StageMarker,
+  StageMarkerCategory,
+  StageFinishMarkerType,
+  StageMarkerType,
+  StageProfilePoint,
+  StageTerrain,
+} from '../../../shared/types';
 
 const STAGE_FILE_HEADERS = [
   'km_mark',
@@ -285,13 +294,6 @@ function calculateElevationGain(points: StageProfilePoint[]): number {
     gain += Math.max(0, points[index].elevation - points[index - 1].elevation);
   }
   return gain;
-}
-
-export interface ParsedStageSummary {
-  distanceKm: number;
-  elevationGainMeters: number;
-  points: StageProfilePoint[];
-  segments: ParsedStageSegment[];
 }
 
 export class StageParser {

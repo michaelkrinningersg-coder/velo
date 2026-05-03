@@ -3,6 +3,7 @@ import type {
   GameStatus,
   GameState,
   QuickSimResponse,
+  RealtimeSimulationBootstrap,
   SavegameMeta,
   SeasonStandingsPayload,
   Team,
@@ -20,6 +21,7 @@ import type {
   StageResultsPayload,
   StageTerrain,
 } from '../../shared/types';
+import { RaceSimView } from './race-sim/RaceSimView';
 
 // ============================================================
 //  State
@@ -35,6 +37,7 @@ const state: {
   selectedResultsRaceId: number | null;
   selectedResultsStageId: number | null;
   selectedResultTypeId: number;
+  selectedRealtimeStageId: number | null;
   stageResults: StageResultsPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
   selectedSeasonStandingScope: 'riders' | 'teams';
@@ -44,6 +47,8 @@ const state: {
   };
   teamDetailsRiderId: number | null;
   stageEditorDraft: StageEditorDraft | null;
+  realtimeBootstrap: RealtimeSimulationBootstrap | null;
+  realtimeError: string | null;
 } = {
   currentSave: null,
   gameState: null,
@@ -54,6 +59,7 @@ const state: {
   selectedResultsRaceId: null,
   selectedResultsStageId: null,
   selectedResultTypeId: 1,
+  selectedRealtimeStageId: null,
   stageResults: null,
   seasonStandings: null,
   selectedSeasonStandingScope: 'riders',
@@ -63,7 +69,13 @@ const state: {
   },
   teamDetailsRiderId: null,
   stageEditorDraft: null,
+  realtimeBootstrap: null,
+  realtimeError: null,
 };
+
+let raceSimView: RaceSimView | null = null;
+
+let realtimeCompletionInFlight = false;
 
 const STAGE_PROFILE_OPTIONS: StageProfile[] = [
   'Flat',
@@ -1051,6 +1063,107 @@ function activateView(name: string): void {
   document.querySelectorAll<HTMLElement>('.nav-btn').forEach(b => b.classList.remove('active'));
   $(`view-${name}`).classList.add('active');
   document.querySelector<HTMLElement>(`.nav-btn[data-view="${name}"]`)?.classList.add('active');
+  if (name !== 'live-race') {
+    raceSimView?.pause();
+  }
+}
+
+function getRaceSimView(): RaceSimView {
+  if (!raceSimView) {
+    raceSimView = new RaceSimView({
+      layout: $('race-sim-layout'),
+      emptyState: $('race-sim-empty'),
+      profile: $('race-sim-profile'),
+      sidebar: $('race-sim-sidebar-body'),
+      controls: $('race-sim-controls'),
+      meta: $('race-sim-stage-meta'),
+    }, {
+      onFinishRequested: (snapshot, bootstrap) => {
+        const entries = snapshot.riders
+          .map((rider) => ({
+            riderId: rider.riderId,
+            finishTimeSeconds: rider.finishTimeSeconds,
+          }))
+          .filter((entry): entry is { riderId: number; finishTimeSeconds: number } => entry.finishTimeSeconds != null);
+        void completeRealtimeStage(bootstrap.stage.id, entries);
+      },
+    });
+  }
+  return raceSimView;
+}
+
+function formatPendingStageLabel(raceName: string, stageNumber: number, profile: StageProfile): string {
+  return `${raceName} · Etappe ${stageNumber} · ${profile}`;
+}
+
+function renderRealtimeRaceView(): void {
+  const select = $<HTMLSelectElement>('race-sim-stage-select');
+  const loadButton = $<HTMLButtonElement>('btn-race-sim-load');
+  const status = $('race-sim-status');
+  const pendingStages = state.gameStatus?.pendingStages ?? [];
+  const selectedStillAvailable = pendingStages.some((stage) => stage.stageId === state.selectedRealtimeStageId);
+
+  if (!selectedStillAvailable) {
+    state.selectedRealtimeStageId = pendingStages[0]?.stageId ?? null;
+    if (state.realtimeBootstrap && state.realtimeBootstrap.stage.id !== state.selectedRealtimeStageId) {
+      state.realtimeBootstrap = null;
+    }
+  }
+
+  select.innerHTML = pendingStages.length === 0
+    ? '<option value="">– Keine offenen Etappen –</option>'
+    : pendingStages.map((stage) => `
+      <option value="${stage.stageId}"${stage.stageId === state.selectedRealtimeStageId ? ' selected' : ''}>${esc(formatPendingStageLabel(stage.raceName, stage.stageNumber, stage.profile))}</option>
+    `).join('');
+  select.disabled = pendingStages.length === 0;
+  loadButton.disabled = state.selectedRealtimeStageId == null;
+
+  const selectedStage = pendingStages.find((stage) => stage.stageId === state.selectedRealtimeStageId) ?? null;
+  const simView = getRaceSimView();
+
+  if (!selectedStage) {
+    status.textContent = 'Heute gibt es keine offenen Etappen.';
+    state.realtimeBootstrap = null;
+    state.realtimeError = null;
+    simView.clear('Heute gibt es keine offenen Etappen für die Live-Simulation.');
+    return;
+  }
+
+  status.textContent = formatPendingStageLabel(selectedStage.raceName, selectedStage.stageNumber, selectedStage.profile);
+  if (!state.realtimeBootstrap || state.realtimeBootstrap.stage.id !== selectedStage.stageId) {
+    simView.clear(state.realtimeError ?? 'Etappe auswählen und Live-Simulation laden.');
+  }
+}
+
+async function openRealtimeStage(stageId: number, activateLiveView: boolean): Promise<void> {
+  state.selectedRealtimeStageId = stageId;
+  if (activateLiveView) {
+    activateView('live-race');
+  }
+  renderRealtimeRaceView();
+  showLoading('Live-Simulation wird geladen...');
+  try {
+    const res = await api.getRealtimeSimulation(stageId);
+    if (!res.success || !res.data) {
+      state.realtimeBootstrap = null;
+      state.realtimeError = res.error ?? 'Live-Simulation konnte nicht geladen werden.';
+      renderRealtimeRaceView();
+      alert('Live-Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
+      return;
+    }
+
+    state.realtimeBootstrap = res.data;
+    state.realtimeError = null;
+    getRaceSimView().load(res.data, { autoplay: true, resetSpeed: true });
+    renderRealtimeRaceView();
+  } catch (error) {
+    state.realtimeBootstrap = null;
+    state.realtimeError = (error as Error).message;
+    renderRealtimeRaceView();
+    alert('Unerwarteter Fehler bei der Live-Simulation: ' + (error as Error).message);
+  } finally {
+    hideLoading();
+  }
 }
 
 function findRaceById(raceId: number | null): Race | null {
@@ -1204,6 +1317,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     const view = btn.dataset['view'] ?? '';
     activateView(view);
     if (view === 'teams') loadTeams(); // immer neu laden bei Nav-Klick
+    if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
     if (view === 'season-standings') void loadSeasonStandings(true);
   });
@@ -1242,16 +1356,42 @@ $('teams-detail').addEventListener('click', (event) => {
 });
 
 $('btn-back-menu').addEventListener('click', () => {
+  raceSimView?.pause();
   showScreen('menu');
   loadSavesList();
 });
 
 $('pending-stages-list').addEventListener('click', (event) => {
+  const liveButton = (event.target as Element).closest<HTMLButtonElement>('button[data-live-stage]');
+  if (liveButton) {
+    const stageId = Number(liveButton.dataset['liveStage']);
+    if (!Number.isFinite(stageId)) return;
+    void openRealtimeStage(stageId, true);
+    return;
+  }
+
   const button = (event.target as Element).closest<HTMLButtonElement>('button[data-simulate-stage]');
   if (!button) return;
   const stageId = Number(button.dataset['simulateStage']);
   if (!Number.isFinite(stageId)) return;
   void simulatePendingStage(stageId);
+});
+
+$<HTMLSelectElement>('race-sim-stage-select').addEventListener('change', (event) => {
+  const stageId = Number((event.target as HTMLSelectElement).value);
+  state.selectedRealtimeStageId = Number.isFinite(stageId) ? stageId : null;
+  if (state.realtimeBootstrap && state.realtimeBootstrap.stage.id !== state.selectedRealtimeStageId) {
+    state.realtimeBootstrap = null;
+  }
+  state.realtimeError = null;
+  renderRealtimeRaceView();
+});
+
+$<HTMLButtonElement>('btn-race-sim-load').addEventListener('click', () => {
+  if (state.selectedRealtimeStageId == null) {
+    return;
+  }
+  void openRealtimeStage(state.selectedRealtimeStageId, true);
 });
 
 $<HTMLSelectElement>('results-race-select').addEventListener('change', (event) => {
@@ -1371,6 +1511,7 @@ async function loadGameState(): Promise<void> {
   renderGameState();
   renderDashboard();
   renderResultsView();
+  renderRealtimeRaceView();
   renderSeasonStandingsView();
   if (state.currentSave && gameStateRes.data) state.currentSave.currentSeason = gameStateRes.data.season;
 }
@@ -1396,7 +1537,10 @@ function renderGameState(): void {
             <div class="pending-stage-title">${esc(pendingStage.raceName)}</div>
             <div class="pending-stage-subtitle">${esc(subtitle)}</div>
           </div>
-          <button class="btn btn-primary btn-sm" data-simulate-stage="${pendingStage.stageId}">Jetzt simulieren</button>
+          <div class="pending-stage-actions">
+            <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
+            <button class="btn btn-primary btn-sm" data-simulate-stage="${pendingStage.stageId}">Quick Sim</button>
+          </div>
         </div>`;
     }).join('');
     pendingStagesContainer.classList.remove('hidden');
@@ -1452,6 +1596,43 @@ async function simulatePendingStage(stageId: number): Promise<void> {
   } catch (error) {
     alert('Unerwarteter Fehler bei der Simulation: ' + (error as Error).message);
   } finally {
+    hideLoading();
+  }
+}
+
+async function completeRealtimeStage(stageId: number, entries: Array<{ riderId: number; finishTimeSeconds: number }>): Promise<void> {
+  if (realtimeCompletionInFlight) {
+    return;
+  }
+
+  realtimeCompletionInFlight = true;
+  showLoading('Live-Ergebnis wird gespeichert...');
+  try {
+    const res = await api.completeRealtimeSimulation(stageId, { entries });
+    if (!res.success) {
+      alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
+      return;
+    }
+
+    const data = res.data as QuickSimResponse | undefined;
+    state.selectedResultsRaceId = data?.raceId ?? state.selectedResultsRaceId;
+    state.selectedResultsStageId = data?.stageId ?? stageId;
+    state.selectedResultTypeId = 1;
+    state.realtimeBootstrap = null;
+    state.realtimeError = null;
+    await loadStageResults(stageId, false);
+    await loadGameState();
+    await loadRaces();
+    await loadRoster();
+    if (state.seasonStandings != null) {
+      await loadSeasonStandings(true);
+    }
+    renderRealtimeRaceView();
+    activateView('results');
+  } catch (error) {
+    alert('Unerwarteter Fehler beim Speichern des Live-Ergebnisses: ' + (error as Error).message);
+  } finally {
+    realtimeCompletionInFlight = false;
     hideLoading();
   }
 }

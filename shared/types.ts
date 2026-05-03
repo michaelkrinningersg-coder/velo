@@ -215,6 +215,13 @@ export interface ParsedStageSegment {
   end_markers?: StageMarker[];
 }
 
+export interface ParsedStageSummary {
+  distanceKm: number;
+  elevationGainMeters: number;
+  points: StageProfilePoint[];
+  segments: ParsedStageSegment[];
+}
+
 export interface RaceCategoryBonus {
   id: number;
   name: string;
@@ -389,6 +396,23 @@ export interface QuickSimResponse {
   date: string;
   profile: StageProfile;
   resultTypes: ResultType[];
+}
+
+export interface RealtimeStageCommitEntry {
+  riderId: number;
+  finishTimeSeconds: number;
+}
+
+export interface RealtimeStageCommitRequest {
+  entries: RealtimeStageCommitEntry[];
+}
+
+export interface RealtimeSimulationBootstrap {
+  race: Race;
+  stage: Stage;
+  riders: Rider[];
+  teams: Team[];
+  stageSummary: ParsedStageSummary;
 }
 
 export type SeasonPointAwardType =

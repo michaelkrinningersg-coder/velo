@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuickSimEngine = void 0;
 const GameRepository_1 = require("../db/GameRepository");
+const RaceRosterService_1 = require("./RaceRosterService");
 const StageParser_1 = require("./StageParser");
 const TimeTrialSimulator_1 = require("./TimeTrialSimulator");
 const RESULT_TYPES = {
@@ -20,19 +21,6 @@ const SUPPORTED_RESULT_TYPES = [
     { id: RESULT_TYPES.youth, name: 'Youth' },
     { id: RESULT_TYPES.team, name: 'Team' },
 ];
-const DIVISION_BY_TIER = {
-    1: 'WorldTour',
-    2: 'ProTour',
-    3: 'U23',
-};
-const RACE_ROLE_REQUIREMENTS = [
-    { roleName: 'Kapitaen', count: 1 },
-    { roleName: 'Co-Kapitaen', count: 1 },
-    { roleName: 'Edelhelfer', count: 1 },
-    { roleName: 'Starke Helfer', count: 1 },
-    { roleName: 'Sprinter', count: 1 },
-    { roleName: 'Wassertraeger', count: 2 },
-];
 const FLAT_BASE_SPEED = 45;
 const DOWNHILL_BASE_SPEED = 60;
 const MOUNTAIN_BASE_SPEED_AT_10_PERCENT = 15;
@@ -45,22 +33,6 @@ const COBBLE_FATIGUE_THRESHOLD_KM = 10;
 const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
-function createDeterministicRandom(seed) {
-    let state = seed >>> 0;
-    return () => {
-        state = (state * 1664525 + 1013904223) >>> 0;
-        return state / 0x100000000;
-    };
-}
-function shuffleDeterministically(items, seed) {
-    const shuffled = [...items];
-    const random = createDeterministicRandom(seed);
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(random() * (index + 1));
-        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-    }
-    return shuffled;
-}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -90,6 +62,60 @@ class QuickSimEngine {
         this.repo = new GameRepository_1.GameRepository(db);
     }
     simulateStage(stageId) {
+        const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
+        const performance = stage.profile === 'ITT'
+            ? this.simulateTimeTrialStage(race, stage, riders, teamsById)
+            : this.simulateMassStartStage(race, stage, riders, teamsById);
+        return this.persistStagePerformance(race, stage, performance);
+    }
+    commitRealtimeStage(stageId, entries) {
+        const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
+        const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
+        const sanitizedEntries = [...entries]
+            .filter((entry) => Number.isFinite(entry.riderId) && Number.isFinite(entry.finishTimeSeconds))
+            .map((entry) => ({
+            riderId: entry.riderId,
+            finishTimeSeconds: roundSeconds(entry.finishTimeSeconds),
+        }))
+            .sort((left, right) => left.finishTimeSeconds - right.finishTimeSeconds || left.riderId - right.riderId);
+        if (sanitizedEntries.length !== riders.length) {
+            throw new Error('Die Live-Simulation muss genau eine Zielzeit für jeden Starter übergeben.');
+        }
+        const seenRiderIds = new Set();
+        const performance = sanitizedEntries.map((entry) => {
+            const rider = rosterById.get(entry.riderId);
+            if (!rider) {
+                throw new Error(`Live-Ergebnis für unbekannten Fahrer ${entry.riderId} erhalten.`);
+            }
+            if (seenRiderIds.has(entry.riderId)) {
+                throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
+            }
+            seenRiderIds.add(entry.riderId);
+            const team = teamsById.get(rider.activeTeamId ?? -1);
+            if (!team) {
+                throw new Error(`Team für Fahrer ${rider.firstName} ${rider.lastName} konnte nicht geladen werden.`);
+            }
+            return {
+                rider,
+                team,
+                dayForm: 1,
+                performanceScore: 0,
+                rawTimeSeconds: entry.finishTimeSeconds,
+                stageTimeSeconds: entry.finishTimeSeconds,
+                points: 0,
+                gcBonusSeconds: 0,
+                mountainPoints: 0,
+            };
+        });
+        if (seenRiderIds.size !== riders.length) {
+            throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
+        }
+        if (stage.profile !== 'ITT' && stage.profile !== 'TTT') {
+            this.applyFinishLineAwards(race, performance);
+        }
+        return this.persistStagePerformance(race, stage, performance);
+    }
+    loadSimulatableStageContext(stageId) {
         if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
             throw new Error('Das Savegame verwendet noch kein Results-Schema. Bitte eine neue Karriere mit dem aktuellen Build anlegen.');
         }
@@ -102,7 +128,7 @@ class QuickSimEngine {
             throw new Error(`Rennen ${stage.raceId} konnte nicht vollständig geladen werden.`);
         }
         this.ensureStageCanBeSimulated(stage);
-        const riders = this.ensureRaceEntries(race);
+        const riders = (0, RaceRosterService_1.ensureRaceEntries)(this.db, this.repo, race);
         if (riders.length === 0) {
             throw new Error('Für dieses Rennen konnten keine Fahrer für die Startliste bestimmt werden.');
         }
@@ -111,9 +137,31 @@ class QuickSimEngine {
         if (missingTeam) {
             throw new Error(`Team für Fahrer ${missingTeam.firstName} ${missingTeam.lastName} konnte nicht aufgelöst werden.`);
         }
-        const performance = stage.profile === 'ITT'
-            ? this.simulateTimeTrialStage(race, stage, riders, teamsById)
-            : this.simulateMassStartStage(race, stage, riders, teamsById);
+        return { race, stage, riders, teamsById };
+    }
+    applyFinishLineAwards(race, performance) {
+        if (!race.category?.bonusSystem) {
+            return;
+        }
+        const finishPointValues = race.isStageRace
+            ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
+            : [];
+        const finishBonusValues = parseRankedValues(race.category.bonusSystem.bonusSecondsFinal);
+        const sorted = [...performance].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || left.rider.id - right.rider.id);
+        finishPointValues.forEach((points, index) => {
+            const entry = sorted[index];
+            if (!entry)
+                return;
+            entry.points += points;
+        });
+        finishBonusValues.forEach((bonusSeconds, index) => {
+            const entry = sorted[index];
+            if (!entry)
+                return;
+            entry.gcBonusSeconds += bonusSeconds;
+        });
+    }
+    persistStagePerformance(race, stage, performance) {
         const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
         const previousGc = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.gc, 'time_seconds');
         const previousPoints = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.points, 'points');
@@ -169,15 +217,16 @@ class QuickSimEngine {
                 points: null,
             }))
             : [];
+        const teamIds = [...new Set(performance.map((entry) => entry.team.id))];
         const stageTeamTimes = new Map();
-        for (const team of teamsById.values()) {
+        for (const teamId of teamIds) {
             const teamEntries = performance
-                .filter((entry) => entry.team.id === team.id)
+                .filter((entry) => entry.team.id === teamId)
                 .sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds)
                 .slice(0, 3);
             if (teamEntries.length === 0)
                 continue;
-            stageTeamTimes.set(team.id, teamEntries.reduce((sum, entry) => sum + entry.stageTimeSeconds, 0));
+            stageTeamTimes.set(teamId, teamEntries.reduce((sum, entry) => sum + entry.stageTimeSeconds, 0));
         }
         const teamRows = [...stageTeamTimes.entries()]
             .map(([teamId, stageTime]) => ({
@@ -253,56 +302,6 @@ class QuickSimEngine {
         if (stage.stageNumber !== expectedStageNumber) {
             throw new Error('Etappen eines Rennens müssen in der vorgesehenen Reihenfolge simuliert werden.');
         }
-    }
-    ensureRaceEntries(race) {
-        const existingEntries = this.repo.getRaceRiders(race.id);
-        if (existingEntries.length > 0) {
-            return existingEntries;
-        }
-        const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
-        const eligibleTeams = this.repo.getTeams()
-            .filter((team) => team.division === targetDivision)
-            .slice(0, race.category?.numberOfTeams ?? 0);
-        const insertEntry = this.db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
-        this.db.transaction(() => {
-            for (const team of eligibleTeams) {
-                const riders = this.selectRaceRoster(team, race.category?.numberOfRiders ?? 0, race.id);
-                for (const rider of riders) {
-                    insertEntry.run(race.id, team.id, rider.id);
-                }
-            }
-        })();
-        return this.repo.getRaceRiders(race.id);
-    }
-    selectRaceRoster(team, targetCount, raceId) {
-        const roster = this.repo.getRiders(team.id);
-        const requestedCount = Math.min(targetCount, roster.length);
-        if (requestedCount <= 0) {
-            return [];
-        }
-        const selectedIds = new Set();
-        const selected = [];
-        let seedOffset = 0;
-        for (const requirement of RACE_ROLE_REQUIREMENTS) {
-            if (selected.length >= requestedCount) {
-                break;
-            }
-            const roleCandidates = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName), raceId * 1000 + team.id * 100 + seedOffset);
-            const takeCount = Math.min(requirement.count, requestedCount - selected.length, roleCandidates.length);
-            for (const rider of roleCandidates.slice(0, takeCount)) {
-                selected.push(rider);
-                selectedIds.add(rider.id);
-            }
-            seedOffset += 1;
-        }
-        if (selected.length < requestedCount) {
-            const remaining = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id)), raceId * 1000 + team.id * 100 + 97);
-            for (const rider of remaining.slice(0, requestedCount - selected.length)) {
-                selected.push(rider);
-                selectedIds.add(rider.id);
-            }
-        }
-        return selected;
     }
     simulateTimeTrialStage(race, stage, riders, teamsById) {
         const ttResult = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, stage, riders);
