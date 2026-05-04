@@ -3,6 +3,8 @@ import type {
   GameStatus,
   GameState,
   QuickSimResponse,
+  PendingStage,
+  RaceRosterEditorPayload,
   RealtimeSimulationBootstrap,
   SavegameMeta,
   SeasonStandingsPayload,
@@ -12,6 +14,7 @@ import type {
   StageClassification,
   StageFinishMarkerType,
   StageMarker,
+  StageEditorClimb,
   StageEditorDraft,
   StageEditorMetadata,
   StageEditorWaypoint,
@@ -49,6 +52,8 @@ const state: {
   stageEditorDraft: StageEditorDraft | null;
   realtimeBootstrap: RealtimeSimulationBootstrap | null;
   realtimeError: string | null;
+  rosterEditor: RaceRosterEditorPayload | null;
+  rosterEditorSelectedRiderIds: number[];
 } = {
   currentSave: null,
   gameState: null,
@@ -71,6 +76,8 @@ const state: {
   stageEditorDraft: null,
   realtimeBootstrap: null,
   realtimeError: null,
+  rosterEditor: null,
+  rosterEditorSelectedRiderIds: [],
 };
 
 let raceSimView: RaceSimView | null = null;
@@ -96,6 +103,22 @@ const STAGE_MARKER_TYPES: StageMarkerType[] = ['start', 'climb_start', 'climb_to
 const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['Sprint', '4', '3', '2', '1', 'HC'];
 const STAGE_EDITOR_MIN_SEGMENT_KM = 0.2;
 const STAGE_EDITOR_SPRINT_CUT_KM = 0.3;
+const STAGE_EDITOR_TABLE_COLUMN_COUNT = 9;
+const STAGE_EDITOR_CLIMB_MIN_GAIN_METERS = 60;
+const STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT = 3;
+const STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_METERS = 18;
+const STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_KM = 0.6;
+const STAGE_EDITOR_AUTO_DESCENT_MIN_GRADIENT = -2;
+const STAGE_EDITOR_AUTO_DESCENT_MIN_DISTANCE_KM = 1;
+const STAGE_EDITOR_AUTO_HILL_MIN_DISTANCE_KM = 0.5;
+const STAGE_EDITOR_AUTO_HILL_MIN_GRADIENT = 3;
+const STAGE_EDITOR_AUTO_MEDIUM_MIN_DISTANCE_KM = 2.5;
+const STAGE_EDITOR_AUTO_MEDIUM_MIN_GRADIENT = 3;
+const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_DISTANCE_KM = 6;
+const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GRADIENT = 3.5;
+const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_DISTANCE_KM = 10;
+const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_GRADIENT = 4;
+const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_TOP_METERS = 2000;
 
 function isFinishMarkerType(markerType: StageMarkerType): markerType is StageFinishMarkerType {
   return ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(markerType);
@@ -183,7 +206,7 @@ const TEAM_SKILL_COLUMNS: Array<{ key: keyof Rider['skills']; label: string }> =
   { key: 'bikeHandling', label: 'Ftg' },
 ];
 
-type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'seasonPoints' | 'contractEndSeason' | 'roleName' | 'riderType' | keyof Rider['skills'];
+type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'seasonPoints' | 'contractEndSeason' | 'roleName' | 'riderType' | keyof Rider['skills'];
 
 interface TeamTableColumn {
   id: string;
@@ -218,6 +241,8 @@ const TEAM_TABLE_COLUMNS: TeamTableColumn[] = [
   { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
   { id: 'age', label: 'Alt', title: 'Alter', sortKey: 'age', className: 'team-table-col-age' },
   { id: 'overallRating', label: 'Ges', title: 'Gesamtstärke', sortKey: 'overallRating', className: 'team-table-col-overall' },
+  { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
+  { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
   { id: 'seasonPoints', label: 'Pkt', title: 'Saisonpunkte - kumulierte Punkte der aktuellen Saison', sortKey: 'seasonPoints', className: 'team-table-col-points' },
   { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
   { id: 'roleName', label: 'Rolle', title: 'Teamrolle des Fahrers', sortKey: 'roleName', className: 'team-table-col-role' },
@@ -271,6 +296,24 @@ function getSkillColor(value: number): string {
 
 function renderSkillValue(value: number): string {
   return `<span class="skill-value" style="color:${getSkillColor(value)}">${Math.round(value)}</span>`;
+}
+
+function renderRaceFormBonusValue(value: number | undefined): string {
+  const amount = value ?? 0;
+  if (amount <= 0) {
+    return '–';
+  }
+  return `<span class="race-sim-form-positive">+${amount.toFixed(1).replace('.', ',')}</span>`;
+}
+
+function renderSeasonFormValue(value: number | undefined): string {
+  const amount = value ?? 0;
+  if (amount === 0) {
+    return '–';
+  }
+  const className = amount > 0 ? 'race-sim-form-positive' : 'race-sim-form-negative';
+  const prefix = amount > 0 ? '+' : '';
+  return `<span class="${className}">${prefix}${amount.toFixed(1).replace('.', ',')}</span>`;
 }
 
 const FLAG_CODE_BY_CODE3: Record<string, string> = {
@@ -369,6 +412,17 @@ function terrainOptionsHtml(selected: StageTerrain): string {
     `<option value="${terrain}"${terrain === selected ? ' selected' : ''}>${esc(terrain)}</option>`).join('');
 }
 
+function markerTypeOptionsHtml(selected: StageMarkerType): string {
+  return STAGE_MARKER_TYPES.map((markerType) =>
+    `<option value="${markerType}"${markerType === selected ? ' selected' : ''}>${esc(markerType)}</option>`).join('');
+}
+
+function markerCategoryOptionsHtml(selected: StageMarkerCategory | null): string {
+  return ['<option value="">–</option>', ...STAGE_MARKER_CATEGORIES.map((category) =>
+    `<option value="${category}"${category === selected ? ' selected' : ''}>${esc(category)}</option>`),
+  ].join('');
+}
+
 function markerTypeSortValue(markerType: StageMarkerType): number {
   return STAGE_MARKER_TYPES.indexOf(markerType);
 }
@@ -400,7 +454,7 @@ function normalizeWaypointMarkers(waypoint: StageEditorWaypoint & {
 }
 
 function normalizeStageEditorDraft(draft: StageEditorDraft): StageEditorDraft {
-  return {
+  const normalizedDraft = {
     ...draft,
     waypoints: draft.waypoints.map((waypoint) => ({
       ...waypoint,
@@ -409,6 +463,8 @@ function normalizeStageEditorDraft(draft: StageEditorDraft): StageEditorDraft {
       markers: normalizeWaypointMarkers(waypoint),
     })),
   };
+  syncStageEditorDerivedState(normalizedDraft);
+  return normalizedDraft;
 }
 
 function sortStageMarkers(markers: StageMarker[]): StageMarker[] {
@@ -432,59 +488,289 @@ function markerLabelValue(markers: StageMarker[]): string {
   return markers.map((marker) => marker.type).join(' | ');
 }
 
-function markerCheckboxesHtml(waypoint: StageEditorWaypoint, index: number, totalWaypoints: number): string {
-  return `<div class="stage-editor-marker-grid">${STAGE_MARKER_TYPES.map((markerType) => {
-    const checked = waypoint.markers.some((marker) => marker.type === markerType);
-    const locked = index === 0 && markerType === 'start';
+function roundStageEditorOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function roundStageEditorKm(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function syncStageEditorDraftStats(draft: StageEditorDraft): void {
+  draft.totalDistanceKm = draft.waypoints[draft.waypoints.length - 1]?.kmMark ?? 0;
+  draft.elevationGainMeters = draft.waypoints.reduce((sum, waypoint, index) => {
+    if (index === 0) return 0;
+    const gain = waypoint.elevation - draft.waypoints[index - 1].elevation;
+    return sum + Math.max(0, gain);
+  }, 0);
+}
+
+interface DetectedStageEditorClimb extends StageEditorClimb {
+  startIndex: number;
+  topIndex: number;
+  topElevation: number;
+}
+
+function classifyStageEditorClimb(distanceKm: number, gainMeters: number, avgGradient: number): Extract<StageMarkerCategory, 'HC' | '1' | '2' | '3' | '4'> {
+  const score = distanceKm * avgGradient * 8 + gainMeters / 12;
+  if (score >= 95) return 'HC';
+  if (score >= 68) return '1';
+  if (score >= 46) return '2';
+  if (score >= 28) return '3';
+  return '4';
+}
+
+function detectStageEditorClimbs(waypoints: StageEditorWaypoint[]): DetectedStageEditorClimb[] {
+  const climbs: DetectedStageEditorClimb[] = [];
+  let startIndex: number | null = null;
+  let gainMeters = 0;
+  let descentMeters = 0;
+  let descentDistanceKm = 0;
+
+  const commitClimb = (topIndex: number): void => {
+    if (startIndex == null) return;
+
+    const startPoint = waypoints[startIndex];
+    const topPoint = waypoints[topIndex];
+    const distanceKm = topPoint.kmMark - startPoint.kmMark;
+    const avgGradient = distanceKm > 0 ? gainMeters / (distanceKm * 10) : 0;
+    if (gainMeters >= STAGE_EDITOR_CLIMB_MIN_GAIN_METERS && avgGradient >= STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT) {
+      climbs.push({
+        startKm: roundStageEditorKm(startPoint.kmMark),
+        endKm: roundStageEditorKm(topPoint.kmMark),
+        distanceKm: roundStageEditorKm(distanceKm),
+        gainMeters: Math.round(gainMeters),
+        avgGradient: roundStageEditorOneDecimal(avgGradient),
+        category: classifyStageEditorClimb(distanceKm, gainMeters, avgGradient),
+        startIndex,
+        topIndex,
+        topElevation: Math.round(topPoint.elevation),
+      });
+    }
+
+    startIndex = null;
+    gainMeters = 0;
+    descentMeters = 0;
+    descentDistanceKm = 0;
+  };
+
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const previous = waypoints[index - 1];
+    const current = waypoints[index];
+    const deltaElevation = current.elevation - previous.elevation;
+    const deltaDistanceKm = current.kmMark - previous.kmMark;
+
+    if (startIndex == null && deltaElevation > 0) {
+      startIndex = index - 1;
+      gainMeters = deltaElevation;
+      descentMeters = 0;
+      descentDistanceKm = 0;
+      continue;
+    }
+
+    if (startIndex == null) {
+      continue;
+    }
+
+    if (deltaElevation >= 0) {
+      gainMeters += deltaElevation;
+      descentMeters = 0;
+      descentDistanceKm = 0;
+      continue;
+    }
+
+    descentMeters += Math.abs(deltaElevation);
+    descentDistanceKm += deltaDistanceKm;
+    if (descentMeters <= STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_METERS && descentDistanceKm <= STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_KM) {
+      continue;
+    }
+
+    commitClimb(index - 1);
+  }
+
+  commitClimb(waypoints.length - 1);
+  return climbs;
+}
+
+function suggestStageEditorProfile(draft: StageEditorDraft): StageProfile {
+  const hasCobbleHill = draft.waypoints.some((waypoint) => waypoint.terrain === 'Cobble_Hill');
+  const hasCobble = draft.waypoints.some((waypoint) => waypoint.terrain === 'Cobble');
+  const hasHcOrCat1 = draft.climbs.some((climb) => climb.category === 'HC' || climb.category === '1');
+
+  if (hasCobbleHill) return 'Cobble_Hill';
+  if (hasCobble) return 'Cobble';
+  if (draft.totalDistanceKm <= 25 && draft.elevationGainMeters < 250) return 'ITT';
+  if (hasHcOrCat1 && draft.elevationGainMeters >= 2800) return 'High_Mountain';
+  if (hasHcOrCat1 || draft.elevationGainMeters >= 1800) return 'Mountain';
+  if (draft.elevationGainMeters >= 1100) return 'Medium_Mountain';
+  if (draft.elevationGainMeters >= 700) return 'Hilly';
+  if (draft.elevationGainMeters >= 350) return 'Rolling';
+  return 'Flat';
+}
+
+function isManualStageEditorTerrain(terrain: StageTerrain): boolean {
+  return terrain === 'Cobble' || terrain === 'Cobble_Hill' || terrain === 'Sprint';
+}
+
+function classifyAutoClimbTerrain(climb: DetectedStageEditorClimb): StageTerrain | null {
+  if (
+    climb.distanceKm > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_DISTANCE_KM
+    && climb.avgGradient > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_GRADIENT
+    && climb.topElevation > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_TOP_METERS
+  ) {
+    return 'High_Mountain';
+  }
+  if (climb.distanceKm > STAGE_EDITOR_AUTO_MOUNTAIN_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GRADIENT) {
+    return 'Mountain';
+  }
+  if (climb.distanceKm > STAGE_EDITOR_AUTO_MEDIUM_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_MEDIUM_MIN_GRADIENT) {
+    return 'Medium_Mountain';
+  }
+  if (climb.distanceKm > STAGE_EDITOR_AUTO_HILL_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_HILL_MIN_GRADIENT) {
+    return 'Hill';
+  }
+  return null;
+}
+
+function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
+  const { waypoints } = draft;
+  if (waypoints.length === 0) return;
+
+  const nextTerrains = waypoints.map((waypoint) => (isManualStageEditorTerrain(waypoint.terrain) ? waypoint.terrain : 'Flat' as StageTerrain));
+  const climbs = detectStageEditorClimbs(waypoints);
+  draft.climbs = climbs.map(({ startIndex: _startIndex, topIndex: _topIndex, topElevation: _topElevation, ...climb }) => climb);
+
+  climbs.forEach((climb) => {
+    const climbTerrain = classifyAutoClimbTerrain(climb);
+    if (!climbTerrain) return;
+    for (let index = climb.startIndex; index < climb.topIndex; index += 1) {
+      if (!isManualStageEditorTerrain(nextTerrains[index])) {
+        nextTerrains[index] = climbTerrain;
+      }
+    }
+  });
+
+  let descentStartIndex: number | null = null;
+  let descentDistanceKm = 0;
+  const commitDescent = (endExclusive: number): void => {
+    if (descentStartIndex == null || descentDistanceKm <= STAGE_EDITOR_AUTO_DESCENT_MIN_DISTANCE_KM) {
+      descentStartIndex = null;
+      descentDistanceKm = 0;
+      return;
+    }
+
+    for (let index = descentStartIndex; index < endExclusive; index += 1) {
+      if (!isManualStageEditorTerrain(nextTerrains[index]) && nextTerrains[index] === 'Flat') {
+        nextTerrains[index] = 'Abfahrt';
+      }
+    }
+
+    descentStartIndex = null;
+    descentDistanceKm = 0;
+  };
+
+  for (let index = 0; index < waypoints.length - 1; index += 1) {
+    const segment = getWaypointSegmentInfo(waypoints, index);
+    if (segment && segment.gradientPercent < STAGE_EDITOR_AUTO_DESCENT_MIN_GRADIENT) {
+      if (descentStartIndex == null) descentStartIndex = index;
+      descentDistanceKm += segment.lengthKm;
+      continue;
+    }
+    commitDescent(index);
+  }
+  commitDescent(waypoints.length - 1);
+
+  waypoints.forEach((waypoint, index) => {
+    if (!isManualStageEditorTerrain(waypoint.terrain)) {
+      waypoint.terrain = nextTerrains[index];
+    }
+  });
+
+  if (waypoints.length >= 2 && !isManualStageEditorTerrain(waypoints[waypoints.length - 1].terrain)) {
+    waypoints[waypoints.length - 1].terrain = waypoints[waypoints.length - 2].terrain;
+  }
+
+  draft.suggestedProfile = suggestStageEditorProfile(draft);
+}
+
+function syncStageEditorDerivedState(draft: StageEditorDraft): void {
+  syncStageEditorDraftStats(draft);
+  applyAutomaticStageEditorTerrain(draft);
+}
+
+function ensureStageEditorBoundaryMarkers(draft: StageEditorDraft): void {
+  const firstWaypoint = draft.waypoints[0];
+  const lastWaypoint = draft.waypoints[draft.waypoints.length - 1];
+  if (!firstWaypoint || !lastWaypoint) return;
+
+  if (!firstWaypoint.markers.some((marker) => marker.type === 'start')) {
+    firstWaypoint.markers = sortStageMarkers([{ type: 'start', name: null, cat: null }, ...firstWaypoint.markers]);
+  }
+
+  if (!lastWaypoint.markers.some((marker) => isFinishMarkerType(marker.type))) {
+    lastWaypoint.markers = sortStageMarkers([...lastWaypoint.markers, { type: 'finish_flat', name: null, cat: null }]);
+  }
+}
+
+function renderWaypointMarkerRows(waypoint: StageEditorWaypoint, waypointIndex: number, totalWaypoints: number): string {
+  if (waypoint.markers.length === 0) {
+    return '<div class="stage-editor-marker-empty">Keine Marker</div>';
+  }
+
+  return `<div class="stage-editor-marker-list">${waypoint.markers.map((marker, markerIndex) => {
+    const lockedStart = waypointIndex === 0 && marker.type === 'start';
+    const finishMarkerCount = waypoint.markers.filter((entry) => isFinishMarkerType(entry.type)).length;
+    const lockedFinish = waypointIndex === totalWaypoints - 1 && isFinishMarkerType(marker.type) && finishMarkerCount === 1;
+    const canRemove = !(lockedStart || lockedFinish);
+
     return `
-      <label class="stage-editor-marker-option${locked ? ' is-locked' : ''}">
-        <input
-          type="checkbox"
-          data-field="markerToggle"
-          data-marker-type="${markerType}"
-          ${checked ? 'checked' : ''}
-          ${locked ? 'disabled' : ''}
-        >
-        <span>${esc(markerType)}</span>
-      </label>`;
+      <div class="stage-editor-marker-row">
+        <select data-field="markerType" data-marker-index="${markerIndex}">${markerTypeOptionsHtml(marker.type)}</select>
+        <input type="text" value="${esc(marker.name ?? '')}" data-field="markerName" data-marker-index="${markerIndex}" placeholder="Name" />
+        <select data-field="markerCat" data-marker-index="${markerIndex}">${markerCategoryOptionsHtml(marker.cat)}</select>
+        <button type="button" class="btn btn-danger btn-xs" data-waypoint-action="remove-marker" data-marker-index="${markerIndex}" data-waypoint-index="${waypointIndex}" ${canRemove ? '' : 'disabled'}>×</button>
+      </div>`;
   }).join('')}</div>`;
 }
 
-function syncWaypointMarkerText(waypoint: StageEditorWaypoint, field: 'name' | 'cat', rawValue: string): void {
-  const values = parseMarkerTextList(rawValue);
-  waypoint.markers = sortStageMarkers(waypoint.markers.map((marker, index) => ({
-    ...marker,
-    [field]: values[index] ?? null,
-  })));
+function updateStageEditorMarker(waypointIndex: number, markerIndex: number, field: 'markerType' | 'markerName' | 'markerCat', rawValue: string): void {
+  if (!state.stageEditorDraft) return;
+  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
+  const marker = waypoint?.markers[markerIndex];
+  if (!waypoint || !marker) return;
+
+  if (field === 'markerType') {
+    marker.type = rawValue as StageMarkerType;
+    if (isFinishMarkerType(marker.type)) {
+      waypoint.markers = waypoint.markers.filter((entry, index) => index === markerIndex || !isFinishMarkerType(entry.type));
+    }
+  } else if (field === 'markerName') {
+    marker.name = rawValue.trim() || null;
+  } else if (field === 'markerCat') {
+    marker.cat = rawValue ? rawValue as StageMarkerCategory : null;
+  }
+
+  waypoint.markers = sortStageMarkers(waypoint.markers);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
+  renderStageEditor();
 }
 
-function toggleWaypointMarker(index: number, markerType: StageMarkerType, checked: boolean): void {
+function addStageEditorMarker(waypointIndex: number): void {
   if (!state.stageEditorDraft) return;
-  const waypoint = state.stageEditorDraft.waypoints[index];
+  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
   if (!waypoint) return;
+  waypoint.markers.push({ type: 'sprint_intermediate', name: null, cat: null });
+  waypoint.markers = sortStageMarkers(waypoint.markers);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
+  renderStageEditor();
+}
 
-  const existing = new Map(waypoint.markers.map((marker) => [marker.type, marker]));
-  const selectedTypes = new Set(waypoint.markers.map((marker) => marker.type));
-  if (checked) selectedTypes.add(markerType);
-  else selectedTypes.delete(markerType);
-
-  if (index === 0) selectedTypes.add('start');
-  if (index === state.stageEditorDraft.waypoints.length - 1 && !Array.from(selectedTypes).some((type) => isFinishMarkerType(type))) {
-    selectedTypes.add('finish_flat');
-  }
-
-  if (checked && isFinishMarkerType(markerType)) {
-    Array.from(selectedTypes)
-      .filter((type) => isFinishMarkerType(type) && type !== markerType)
-      .forEach((type) => selectedTypes.delete(type));
-  }
-
-  waypoint.markers = sortStageMarkers(Array.from(selectedTypes).map((type) => existing.get(type) ?? {
-    type,
-    name: null,
-    cat: null,
-  }));
-
+function removeStageEditorMarker(waypointIndex: number, markerIndex: number): void {
+  if (!state.stageEditorDraft) return;
+  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
+  if (!waypoint) return;
+  waypoint.markers.splice(markerIndex, 1);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
@@ -518,6 +804,35 @@ function setStageEditorDefaults(draft: StageEditorDraft): void {
   if (!dateInput.value && state.gameState?.currentDate) {
     dateInput.value = state.gameState.currentDate;
   }
+}
+
+function updateStageEditorSegment(index: number, field: 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
+  if (!state.stageEditorDraft) return;
+  const waypoints = state.stageEditorDraft.waypoints;
+  const start = waypoints[index];
+  const end = waypoints[index + 1];
+  if (!start || !end) return;
+
+  if (field === 'segmentLengthKm') {
+    const currentLengthKm = end.kmMark - start.kmMark;
+    const nextLengthKm = Number.parseFloat(rawValue || String(currentLengthKm));
+    if (!Number.isFinite(nextLengthKm)) return;
+    const deltaKm = roundStageEditorKm(nextLengthKm - currentLengthKm);
+    for (let waypointIndex = index + 1; waypointIndex < waypoints.length; waypointIndex += 1) {
+      waypoints[waypointIndex].kmMark = roundStageEditorKm(waypoints[waypointIndex].kmMark + deltaKm);
+    }
+  }
+
+  if (field === 'segmentGradientPercent') {
+    const segmentLengthKm = end.kmMark - start.kmMark;
+    const nextGradientPercent = Number.parseFloat(rawValue || '0');
+    if (!Number.isFinite(nextGradientPercent) || segmentLengthKm <= 0) return;
+    end.elevation = Math.round(start.elevation + ((segmentLengthKm * 1000) * (nextGradientPercent / 100)));
+  }
+
+  syncStageEditorDerivedState(state.stageEditorDraft);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
+  renderStageEditor();
 }
 
 function getStageEditorIssues(draft: StageEditorDraft | null): string[] {
@@ -677,7 +992,7 @@ function renderStageEditor(): void {
     climbs.innerHTML = '<p class="text-muted">Climb-Vorschläge erscheinen nach dem Import.</p>';
     emptyState.classList.remove('hidden');
     chart.innerHTML = renderStageEditorChart(null);
-    tbody.innerHTML = '<tr><td colspan="11" class="text-muted">Keine Wegpunkte vorhanden.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${STAGE_EDITOR_TABLE_COLUMN_COUNT}" class="text-muted">Keine Wegpunkte vorhanden.</td></tr>`;
     exportHint.textContent = 'Importiere zuerst eine Datei.';
     exportButton.disabled = true;
     return;
@@ -713,16 +1028,17 @@ function renderStageEditor(): void {
     <tr data-waypoint-index="${index}">
       <td><input type="number" step="0.01" min="0" value="${waypoint.kmMark.toFixed(2)}" data-field="kmMark" ${index === 0 ? 'readonly' : ''}></td>
       <td><input type="number" step="1" value="${waypoint.elevation}" data-field="elevation"></td>
-      <td><input type="text" value="${esc(getWaypointSegmentInfo(draft.waypoints, index)?.lengthKm != null ? formatKm(getWaypointSegmentInfo(draft.waypoints, index)!.lengthKm) : '–')}" readonly></td>
-      <td><input type="text" value="${esc(getWaypointSegmentInfo(draft.waypoints, index)?.gradientPercent != null ? formatGradient(getWaypointSegmentInfo(draft.waypoints, index)!.gradientPercent) : '–')}" readonly></td>
+      <td><input type="number" step="0.01" min="0" value="${getWaypointSegmentInfo(draft.waypoints, index)?.lengthKm?.toFixed(2) ?? ''}" data-field="segmentLengthKm" ${index === draft.waypoints.length - 1 ? 'readonly placeholder="–"' : ''}></td>
+      <td><input type="number" step="0.1" value="${getWaypointSegmentInfo(draft.waypoints, index)?.gradientPercent?.toFixed(1) ?? ''}" data-field="segmentGradientPercent" ${index === draft.waypoints.length - 1 ? 'readonly placeholder="–"' : ''}></td>
       <td><select data-field="terrain">${terrainOptionsHtml(waypoint.terrain)}</select></td>
       <td><input type="number" step="1" min="1" max="10" value="${waypoint.techLevel}" data-field="techLevel"></td>
       <td><input type="number" step="1" min="1" max="10" value="${waypoint.windExp}" data-field="windExp"></td>
-      <td>${markerCheckboxesHtml(waypoint, index, draft.waypoints.length)}</td>
-      <td><input type="text" value="${esc(markerInputValue(waypoint.markers, 'name'))}" data-field="markerNames" placeholder="Name|Name oder null"></td>
-      <td><input type="text" value="${esc(markerInputValue(waypoint.markers, 'cat'))}" data-field="markerCats" placeholder="HC|null"></td>
+      <td>
+        ${renderWaypointMarkerRows(waypoint, index, draft.waypoints.length)}
+        <button type="button" class="btn btn-secondary btn-xs stage-editor-marker-add" data-waypoint-action="add-marker" data-waypoint-index="${index}">Marker +</button>
+      </td>
       <td class="stage-editor-row-actions">
-        ${index < draft.waypoints.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-waypoint-action="insert" data-waypoint-index="${index}">+</button>` : ''}
+        ${index < draft.waypoints.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-waypoint-action="insert" data-waypoint-index="${index}">+</button>` : `<button type="button" class="btn btn-secondary btn-xs" data-waypoint-action="append" data-waypoint-index="${index}">+ Ende</button>`}
         ${index > 0 && index < draft.waypoints.length - 1 ? `<button type="button" class="btn btn-danger btn-xs" data-waypoint-action="delete" data-waypoint-index="${index}">×</button>` : ''}
       </td>
     </tr>`).join('');
@@ -733,7 +1049,7 @@ function renderStageEditor(): void {
     : `Exportiert ${$<HTMLInputElement>('stage-editor-details-file').value || 'stage_details.csv'} und eine stages-Row.`;
 }
 
-function updateStageEditorWaypoint(index: number, field: keyof StageEditorWaypoint | 'markerNames' | 'markerCats', rawValue: string): void {
+function updateStageEditorWaypoint(index: number, field: keyof StageEditorWaypoint | 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
   if (!state.stageEditorDraft) return;
   const waypoint = state.stageEditorDraft.waypoints[index];
   if (!waypoint) return;
@@ -754,16 +1070,20 @@ function updateStageEditorWaypoint(index: number, field: keyof StageEditorWaypoi
     case 'windExp':
       waypoint.windExp = Number.parseInt(rawValue || '0', 10);
       break;
-    case 'markerNames':
-      syncWaypointMarkerText(waypoint, 'name', rawValue);
-      break;
-    case 'markerCats':
-      syncWaypointMarkerText(waypoint, 'cat', rawValue);
-      break;
+    case 'segmentLengthKm':
+    case 'segmentGradientPercent':
+      updateStageEditorSegment(index, field, rawValue);
+      return;
     default:
       break;
   }
 
+  if (field === 'kmMark' || field === 'elevation') {
+    syncStageEditorDerivedState(state.stageEditorDraft);
+  } else {
+    syncStageEditorDraftStats(state.stageEditorDraft);
+  }
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
@@ -781,6 +1101,34 @@ function insertStageEditorWaypoint(index: number): void {
     markers: [],
   };
   state.stageEditorDraft.waypoints.splice(index + 1, 0, newWaypoint);
+  syncStageEditorDerivedState(state.stageEditorDraft);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
+  renderStageEditor();
+}
+
+function appendStageEditorWaypoint(): void {
+  if (!state.stageEditorDraft) return;
+  const waypoints = state.stageEditorDraft.waypoints;
+  const last = waypoints[waypoints.length - 1];
+  const previous = waypoints[waypoints.length - 2] ?? null;
+  if (!last) return;
+
+  const previousSegmentLength = previous ? Math.max(STAGE_EDITOR_MIN_SEGMENT_KM, roundStageEditorKm(last.kmMark - previous.kmMark)) : 1;
+  const previousElevationDelta = previous ? last.elevation - previous.elevation : 0;
+  const finishMarkers = last.markers.filter((marker) => isFinishMarkerType(marker.type));
+  last.markers = last.markers.filter((marker) => !isFinishMarkerType(marker.type));
+
+  waypoints.push({
+    kmMark: roundStageEditorKm(last.kmMark + previousSegmentLength),
+    elevation: Math.round(last.elevation + previousElevationDelta),
+    terrain: last.terrain,
+    techLevel: last.techLevel,
+    windExp: last.windExp,
+    markers: finishMarkers.length > 0 ? finishMarkers : [{ type: 'finish_flat', name: null, cat: null }],
+  });
+
+  syncStageEditorDerivedState(state.stageEditorDraft);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
@@ -788,6 +1136,8 @@ function deleteStageEditorWaypoint(index: number): void {
   if (!state.stageEditorDraft) return;
   if (index <= 0 || index >= state.stageEditorDraft.waypoints.length - 1) return;
   state.stageEditorDraft.waypoints.splice(index, 1);
+  syncStageEditorDerivedState(state.stageEditorDraft);
+  ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
@@ -811,6 +1161,7 @@ async function onStageEditorImport(): Promise<void> {
 
     const normalizedDraft = normalizeStageEditorDraft(res.data);
     state.stageEditorDraft = normalizedDraft;
+    ensureStageEditorBoundaryMarkers(normalizedDraft);
     setStageEditorDefaults(normalizedDraft);
     renderStageEditor();
     activateView('stage-editor');
@@ -856,6 +1207,18 @@ function getRiderCountryCode(rider: Rider): string {
 
 function formatRiderName(rider: Rider): string {
   return `${rider.lastName} ${rider.firstName}`;
+}
+
+function renderRiderAvailabilityMarker(rider: Rider): string {
+  if (!rider.isUnavailable) {
+    return '';
+  }
+
+  const label = rider.healthStatus === 'injured' ? 'Verletzung' : 'Krankheit';
+  const remainingDays = rider.unavailableDaysRemaining ?? 0;
+  const untilText = rider.unavailableUntil ? ` bis ${formatDate(rider.unavailableUntil)}` : '';
+  const title = `${label}: noch ${remainingDays} Tag${remainingDays === 1 ? '' : 'e'}${untilText}`;
+  return `<span class="rider-availability-marker" title="${esc(title)}" aria-label="${esc(title)}">✚</span>`;
 }
 
 function getRiderRoleName(rider: Rider): string {
@@ -942,6 +1305,12 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
         break;
       case 'overallRating':
         comparison = left.overallRating - right.overallRating;
+        break;
+      case 'formBonus':
+        comparison = (left.formBonus ?? 0) - (right.formBonus ?? 0);
+        break;
+      case 'raceFormBonus':
+        comparison = (left.raceFormBonus ?? 0) - (right.raceFormBonus ?? 0);
         break;
       case 'seasonPoints':
         comparison = (left.seasonPoints ?? 0) - (right.seasonPoints ?? 0);
@@ -1063,8 +1432,14 @@ function activateView(name: string): void {
   document.querySelectorAll<HTMLElement>('.nav-btn').forEach(b => b.classList.remove('active'));
   $(`view-${name}`).classList.add('active');
   document.querySelector<HTMLElement>(`.nav-btn[data-view="${name}"]`)?.classList.add('active');
+  $('game-state-bar').classList.toggle('hidden', name === 'live-race');
   if (name !== 'live-race') {
     raceSimView?.pause();
+    return;
+  }
+
+  if (state.selectedRealtimeStageId != null && (!state.realtimeBootstrap || state.realtimeBootstrap.stage.id !== state.selectedRealtimeStageId)) {
+    void openRealtimeStage(state.selectedRealtimeStageId, false);
   }
 }
 
@@ -1082,9 +1457,12 @@ function getRaceSimView(): RaceSimView {
         const entries = snapshot.riders
           .map((rider) => ({
             riderId: rider.riderId,
-            finishTimeSeconds: rider.finishTimeSeconds,
+            finishTimeSeconds: bootstrap.stage.profile === 'ITT'
+              ? rider.riderClockSeconds
+              : rider.finishTimeSeconds,
+            photoFinishScore: rider.photoFinishScore,
           }))
-          .filter((entry): entry is { riderId: number; finishTimeSeconds: number } => entry.finishTimeSeconds != null);
+          .filter((entry): entry is { riderId: number; finishTimeSeconds: number; photoFinishScore: number } => entry.finishTimeSeconds != null);
         void completeRealtimeStage(bootstrap.stage.id, entries);
       },
     });
@@ -1096,10 +1474,165 @@ function formatPendingStageLabel(raceName: string, stageNumber: number, profile:
   return `${raceName} · Etappe ${stageNumber} · ${profile}`;
 }
 
+function canEditPendingStage(stage: PendingStage): boolean {
+  return stage.stageId > 0;
+}
+
+function getRosterEditorSelectedCount(teamId: number): number {
+  const team = state.rosterEditor?.teams.find((entry) => entry.team.id === teamId);
+  if (!team) return 0;
+  const selected = new Set(state.rosterEditorSelectedRiderIds);
+  return team.riders.filter((riderOption) => selected.has(riderOption.rider.id)).length;
+}
+
+function isRosterEditorSelectionValid(): boolean {
+  if (!state.rosterEditor) return false;
+  return state.rosterEditor.teams.every((team) => getRosterEditorSelectedCount(team.team.id) === team.riderLimit);
+}
+
+function renderRosterEditor(): void {
+  const title = $('roster-editor-title');
+  const meta = $('roster-editor-meta');
+  const body = $('roster-editor-body');
+  const applyButton = $<HTMLButtonElement>('btn-apply-roster-editor');
+  const payload = state.rosterEditor;
+
+  if (!payload) {
+    title.textContent = 'Starterfeld bearbeiten';
+    meta.textContent = '';
+    body.innerHTML = '<div class="results-empty">Kein Starterfeld geladen.</div>';
+    applyButton.disabled = true;
+    return;
+  }
+
+  title.textContent = 'Starterfeld bearbeiten';
+  meta.textContent = payload.race.isStageRace
+    ? `${payload.race.name} · Etappe ${payload.stage.stageNumber} · ${payload.stage.profile}`
+    : `${payload.race.name} · ${payload.stage.profile}`;
+
+  const selectedIds = new Set(state.rosterEditorSelectedRiderIds);
+  body.innerHTML = payload.teams.map((teamEntry) => {
+    const selectedCount = getRosterEditorSelectedCount(teamEntry.team.id);
+    const selectionStateClass = selectedCount === teamEntry.riderLimit
+      ? 'roster-editor-team-count-ok'
+      : 'roster-editor-team-count-bad';
+
+    return `
+      <section class="roster-editor-team">
+        <div class="roster-editor-team-head">
+          <div>
+            <h3>${esc(teamEntry.team.name)}</h3>
+            <p class="text-muted">${esc(teamEntry.team.abbreviation)} · ${esc(teamEntry.team.division ?? teamEntry.team.divisionName ?? 'Team')}</p>
+          </div>
+          <div class="roster-editor-team-count ${selectionStateClass}">${selectedCount} / ${teamEntry.riderLimit}</div>
+        </div>
+        <div class="roster-editor-riders">
+          ${teamEntry.riders.map((riderOption) => {
+            const isSelected = selectedIds.has(riderOption.rider.id);
+            const classes = [
+              'roster-editor-rider',
+              isSelected ? 'roster-editor-rider-selected' : '',
+              riderOption.isLocked ? 'roster-editor-rider-locked' : '',
+            ].filter(Boolean).join(' ');
+            const flag = riderOption.rider.country ? renderFlag(riderOption.rider.country.code3) : '';
+            const subtitle = [riderOption.rider.role?.name ?? 'Ohne Rolle', `OVR ${Math.round(riderOption.rider.overallRating)}`].join(' · ');
+            const lockReason = riderOption.lockReason ? `<span class="roster-editor-rider-lock">${esc(riderOption.lockReason)}</span>` : '';
+            return `
+              <button
+                type="button"
+                class="${classes}"
+                data-roster-team-id="${teamEntry.team.id}"
+                data-roster-rider-id="${riderOption.rider.id}"
+                ${riderOption.isLocked ? 'disabled' : ''}
+              >
+                <span class="roster-editor-rider-name">${flag}<span>${esc(riderOption.rider.firstName)} ${esc(riderOption.rider.lastName)}</span></span>
+                <span class="roster-editor-rider-meta">${esc(subtitle)}</span>
+                ${lockReason}
+              </button>`;
+          }).join('')}
+        </div>
+      </section>`;
+  }).join('');
+
+  applyButton.disabled = !isRosterEditorSelectionValid();
+}
+
+function hideRosterEditor(): void {
+  state.rosterEditor = null;
+  state.rosterEditorSelectedRiderIds = [];
+  hideError('roster-editor-error');
+  hideModal('rosterEditor');
+}
+
+function startRealtimeSimulation(bootstrap: RealtimeSimulationBootstrap, activateLiveView: boolean): void {
+  state.selectedRealtimeStageId = bootstrap.stage.id;
+  state.realtimeBootstrap = bootstrap;
+  state.realtimeError = null;
+  if (activateLiveView) {
+    activateView('live-race');
+  }
+  getRaceSimView().load(bootstrap, { autoplay: true, resetSpeed: true });
+  renderRealtimeRaceView();
+}
+
+async function openRosterEditor(stageId: number): Promise<void> {
+  showLoading('Starterfeld wird geladen...');
+  hideError('roster-editor-error');
+  try {
+    const res = await api.getRosterEditor(stageId);
+    if (!res.success || !res.data) {
+      showError('roster-editor-error', res.error ?? 'Starterfeld konnte nicht geladen werden.');
+      showModal('rosterEditor');
+      renderRosterEditor();
+      return;
+    }
+
+    state.rosterEditor = res.data;
+    state.rosterEditorSelectedRiderIds = res.data.teams
+      .flatMap((team) => team.riders.filter((riderOption) => riderOption.isSelected).map((riderOption) => riderOption.rider.id));
+    renderRosterEditor();
+    showModal('rosterEditor');
+  } catch (error) {
+    state.rosterEditor = null;
+    state.rosterEditorSelectedRiderIds = [];
+    showError('roster-editor-error', (error as Error).message);
+    showModal('rosterEditor');
+    renderRosterEditor();
+  } finally {
+    hideLoading();
+  }
+}
+
+async function applyRosterEditor(): Promise<void> {
+  const payload = state.rosterEditor;
+  if (!payload) {
+    return;
+  }
+  if (!isRosterEditorSelectionValid()) {
+    showError('roster-editor-error', 'Dein Team muss genau die erlaubte Zahl an Fahrern stellen.');
+    return;
+  }
+
+  hideError('roster-editor-error');
+  showLoading('Starterfeld wird übernommen...');
+  try {
+    const res = await api.applyRosterEditor(payload.stage.id, { riderIds: state.rosterEditorSelectedRiderIds });
+    if (!res.success || !res.data) {
+      showError('roster-editor-error', res.error ?? 'Starterfeld konnte nicht übernommen werden.');
+      return;
+    }
+
+    hideRosterEditor();
+    startRealtimeSimulation(res.data, true);
+  } catch (error) {
+    showError('roster-editor-error', (error as Error).message);
+  } finally {
+    hideLoading();
+  }
+}
+
 function renderRealtimeRaceView(): void {
   const select = $<HTMLSelectElement>('race-sim-stage-select');
-  const loadButton = $<HTMLButtonElement>('btn-race-sim-load');
-  const status = $('race-sim-status');
   const pendingStages = state.gameStatus?.pendingStages ?? [];
   const selectedStillAvailable = pendingStages.some((stage) => stage.stageId === state.selectedRealtimeStageId);
 
@@ -1116,22 +1649,23 @@ function renderRealtimeRaceView(): void {
       <option value="${stage.stageId}"${stage.stageId === state.selectedRealtimeStageId ? ' selected' : ''}>${esc(formatPendingStageLabel(stage.raceName, stage.stageNumber, stage.profile))}</option>
     `).join('');
   select.disabled = pendingStages.length === 0;
-  loadButton.disabled = state.selectedRealtimeStageId == null;
 
   const selectedStage = pendingStages.find((stage) => stage.stageId === state.selectedRealtimeStageId) ?? null;
   const simView = getRaceSimView();
 
   if (!selectedStage) {
-    status.textContent = 'Heute gibt es keine offenen Etappen.';
     state.realtimeBootstrap = null;
     state.realtimeError = null;
     simView.clear('Heute gibt es keine offenen Etappen für die Live-Simulation.');
     return;
   }
 
-  status.textContent = formatPendingStageLabel(selectedStage.raceName, selectedStage.stageNumber, selectedStage.profile);
   if (!state.realtimeBootstrap || state.realtimeBootstrap.stage.id !== selectedStage.stageId) {
-    simView.clear(state.realtimeError ?? 'Etappe auswählen und Live-Simulation laden.');
+    if (state.realtimeError) {
+      simView.clear(state.realtimeError);
+    } else {
+      simView.hide();
+    }
   }
 }
 
@@ -1152,10 +1686,7 @@ async function openRealtimeStage(stageId: number, activateLiveView: boolean): Pr
       return;
     }
 
-    state.realtimeBootstrap = res.data;
-    state.realtimeError = null;
-    getRaceSimView().load(res.data, { autoplay: true, resetSpeed: true });
-    renderRealtimeRaceView();
+    startRealtimeSimulation(res.data, false);
   } catch (error) {
     state.realtimeBootstrap = null;
     state.realtimeError = (error as Error).message;
@@ -1194,11 +1725,14 @@ function formatResultsStageLabel(race: Race, stage: NonNullable<Race['stages']>[
 async function loadSavesList(): Promise<void> {
   const res = await api.listSaves();
   const container = $('saves-list');
+  const deleteAllButton = $('btn-delete-all-careers');
   if (!res.success || !res.data || res.data.length === 0) {
     container.classList.add('hidden');
+    deleteAllButton.classList.add('hidden');
     return;
   }
   container.classList.remove('hidden');
+  deleteAllButton.classList.remove('hidden');
   container.innerHTML = res.data.map(save => `
     <div class="save-card">
       <h3>${esc(save.careerName)}</h3>
@@ -1232,6 +1766,34 @@ async function onDeleteSave(filename: string, name: string): Promise<void> {
   await loadSavesList();
 }
 
+async function onDeleteAllSaves(): Promise<void> {
+  const res = await api.listSaves();
+  const saves = res.success ? (res.data ?? []) : [];
+  if (saves.length === 0) {
+    $('btn-delete-all-careers').classList.add('hidden');
+    $('saves-list').classList.add('hidden');
+    return;
+  }
+
+  if (!confirm(`Wirklich alle ${saves.length} Karrieren löschen?`)) return;
+  if (!confirm('Dieser Schritt löscht alle Spielstände dauerhaft. Wirklich fortfahren?')) return;
+
+  showLoading('Alle Karrieren werden gelöscht…');
+  try {
+    for (const save of saves) {
+      const deleteRes = await api.deleteSave(save.filename);
+      if (!deleteRes.success) {
+        alert(`Fehler beim Löschen von "${save.careerName}": ${deleteRes.error ?? 'Unbekannter Fehler'}`);
+        break;
+      }
+    }
+  } finally {
+    hideLoading();
+  }
+
+  await loadSavesList();
+}
+
 // ============================================================
 //  Neue Karriere
 // ============================================================
@@ -1252,6 +1814,39 @@ $('btn-new-career').addEventListener('click', async () => {
   ).join('');
 });
 $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
+$('btn-close-roster-editor').addEventListener('click', () => hideRosterEditor());
+$('btn-cancel-roster-editor').addEventListener('click', () => hideRosterEditor());
+$('btn-apply-roster-editor').addEventListener('click', () => {
+  void applyRosterEditor();
+});
+
+$('roster-editor-body').addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('button[data-roster-rider-id]');
+  if (!button || button.disabled || !state.rosterEditor) return;
+
+  const teamId = Number(button.dataset['rosterTeamId']);
+  const riderId = Number(button.dataset['rosterRiderId']);
+  if (!Number.isFinite(teamId) || !Number.isFinite(riderId)) return;
+
+  const team = state.rosterEditor.teams.find((entry) => entry.team.id === teamId);
+  if (!team) return;
+
+  const selected = new Set(state.rosterEditorSelectedRiderIds);
+  if (selected.has(riderId)) {
+    state.rosterEditorSelectedRiderIds = state.rosterEditorSelectedRiderIds.filter((id) => id !== riderId);
+    renderRosterEditor();
+    return;
+  }
+
+  if (getRosterEditorSelectedCount(teamId) >= team.riderLimit) {
+    showError('roster-editor-error', `${team.team.name} darf nur ${team.riderLimit} Fahrer nominieren.`);
+    return;
+  }
+
+  hideError('roster-editor-error');
+  state.rosterEditorSelectedRiderIds = [...state.rosterEditorSelectedRiderIds, riderId];
+  renderRosterEditor();
+});
 
 $('btn-confirm-new').addEventListener('click', async () => {
   const careerName = ($<HTMLInputElement>('input-career-name')).value.trim();
@@ -1280,6 +1875,9 @@ $('btn-confirm-new').addEventListener('click', async () => {
 // ============================================================
 
 $('btn-load-career').addEventListener('click', () => loadSavesList());
+$('btn-delete-all-careers').addEventListener('click', () => {
+  void onDeleteAllSaves();
+});
 
 $('saves-list').addEventListener('click', async (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>('button[data-save-action]');
@@ -1362,6 +1960,14 @@ $('btn-back-menu').addEventListener('click', () => {
 });
 
 $('pending-stages-list').addEventListener('click', (event) => {
+  const editButton = (event.target as Element).closest<HTMLButtonElement>('button[data-edit-stage-roster]');
+  if (editButton) {
+    const stageId = Number(editButton.dataset['editStageRoster']);
+    if (!Number.isFinite(stageId)) return;
+    void openRosterEditor(stageId);
+    return;
+  }
+
   const liveButton = (event.target as Element).closest<HTMLButtonElement>('button[data-live-stage]');
   if (liveButton) {
     const stageId = Number(liveButton.dataset['liveStage']);
@@ -1384,14 +1990,11 @@ $<HTMLSelectElement>('race-sim-stage-select').addEventListener('change', (event)
     state.realtimeBootstrap = null;
   }
   state.realtimeError = null;
-  renderRealtimeRaceView();
-});
-
-$<HTMLButtonElement>('btn-race-sim-load').addEventListener('click', () => {
   if (state.selectedRealtimeStageId == null) {
+    renderRealtimeRaceView();
     return;
   }
-  void openRealtimeStage(state.selectedRealtimeStageId, true);
+  void openRealtimeStage(state.selectedRealtimeStageId, false);
 });
 
 $<HTMLSelectElement>('results-race-select').addEventListener('change', (event) => {
@@ -1454,16 +2057,18 @@ $('stage-editor-file').addEventListener('change', (event) => {
 $('stage-editor-waypoints').addEventListener('change', (event) => {
   const target = event.target as HTMLInputElement | HTMLSelectElement;
   const row = target.closest<HTMLTableRowElement>('tr[data-waypoint-index]');
-  const field = target.dataset['field'] as (keyof StageEditorWaypoint | 'markerNames' | 'markerCats' | 'markerToggle') | undefined;
+  const field = target.dataset['field'] as (keyof StageEditorWaypoint | 'segmentLengthKm' | 'segmentGradientPercent' | 'markerType' | 'markerName' | 'markerCat') | undefined;
   if (!row || !field) return;
   const index = Number(row.dataset['waypointIndex']);
   if (!Number.isInteger(index)) return;
-  if (field === 'markerToggle') {
-    const markerType = target.dataset['markerType'] as StageMarkerType | undefined;
-    if (!markerType || !(target instanceof HTMLInputElement)) return;
-    toggleWaypointMarker(index, markerType, target.checked);
+
+  if (field === 'markerType' || field === 'markerName' || field === 'markerCat') {
+    const markerIndex = Number(target.dataset['markerIndex']);
+    if (!Number.isInteger(markerIndex)) return;
+    updateStageEditorMarker(index, markerIndex, field, target.value);
     return;
   }
+
   updateStageEditorWaypoint(index, field, target.value);
 });
 
@@ -1474,6 +2079,20 @@ $('stage-editor-waypoints').addEventListener('click', (event) => {
   if (!Number.isInteger(index)) return;
   if (button.dataset['waypointAction'] === 'insert') {
     insertStageEditorWaypoint(index);
+    return;
+  }
+  if (button.dataset['waypointAction'] === 'append') {
+    appendStageEditorWaypoint();
+    return;
+  }
+  if (button.dataset['waypointAction'] === 'add-marker') {
+    addStageEditorMarker(index);
+    return;
+  }
+  if (button.dataset['waypointAction'] === 'remove-marker') {
+    const markerIndex = Number(button.dataset['markerIndex']);
+    if (!Number.isInteger(markerIndex)) return;
+    removeStageEditorMarker(index, markerIndex);
     return;
   }
   if (button.dataset['waypointAction'] === 'delete') {
@@ -1531,6 +2150,9 @@ function renderGameState(): void {
       const subtitle = pendingStage.isStageRace
         ? `Etappe ${pendingStage.stageNumber} · ${pendingStage.profile} · ${formatDate(pendingStage.date)}`
         : `${pendingStage.profile} · ${formatDate(pendingStage.date)}`;
+      const rosterButton = canEditPendingStage(pendingStage)
+        ? `<button class="btn btn-ghost btn-sm" data-edit-stage-roster="${pendingStage.stageId}">Starterfeld bearbeiten</button>`
+        : '';
       return `
         <div class="pending-stage-item">
           <div class="pending-stage-meta">
@@ -1538,6 +2160,7 @@ function renderGameState(): void {
             <div class="pending-stage-subtitle">${esc(subtitle)}</div>
           </div>
           <div class="pending-stage-actions">
+            ${rosterButton}
             <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
             <button class="btn btn-primary btn-sm" data-simulate-stage="${pendingStage.stageId}">Quick Sim</button>
           </div>
@@ -1600,7 +2223,7 @@ async function simulatePendingStage(stageId: number): Promise<void> {
   }
 }
 
-async function completeRealtimeStage(stageId: number, entries: Array<{ riderId: number; finishTimeSeconds: number }>): Promise<void> {
+async function completeRealtimeStage(stageId: number, entries: Array<{ riderId: number; finishTimeSeconds: number; photoFinishScore: number }>): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
   }
@@ -1839,6 +2462,37 @@ function renderDashboardRaces(): void {
     return;
   }
 
+  const renderStageRaceDetails = (race: Race): string => {
+    if (!race.isStageRace || (race.stages?.length ?? 0) === 0) {
+      return '';
+    }
+
+    const stageRows = (race.stages ?? []).map((stage) => `
+      <div class="dashboard-stage-row">
+        <span class="dashboard-stage-name">Etappe ${stage.stageNumber}</span>
+        <span>${esc(stage.profile)}</span>
+        <span class="dashboard-stage-value">${stage.distanceKm != null ? formatKm(stage.distanceKm) : '–'}</span>
+        <span class="dashboard-stage-value">${stage.elevationGainMeters != null ? formatElevationGain(stage.elevationGainMeters) : '–'}</span>
+      </div>`).join('');
+
+    return `
+      <details class="dashboard-stage-details dashboard-stage-details-inline">
+        <summary>
+          <strong>${esc(race.name)}</strong>
+          <span class="dashboard-stage-summary-link">Etappen anzeigen (${race.stages?.length ?? 0})</span>
+        </summary>
+        <div class="dashboard-stage-list">
+          <div class="dashboard-stage-row dashboard-stage-row-head" aria-hidden="true">
+            <span>Name</span>
+            <span>Profil</span>
+            <span>Distanz</span>
+            <span>Höhenmeter</span>
+          </div>
+          ${stageRows}
+        </div>
+      </details>`;
+  };
+
   tbody.innerHTML = visibleRaces.map(race => {
     const isLive = state.gameState != null
       && race.startDate <= state.gameState.currentDate
@@ -1850,18 +2504,26 @@ function renderDashboardRaces(): void {
         ? `<span class="badge badge-live">Läuft</span>`
         : `<span class="badge badge-todo">Geplant</span>`;
     const location = race.country?.name ?? `Land ${race.countryId}`;
+    const locationFlag = race.country?.code3 ? renderFlag(race.country.code3) : '';
     const categoryName = race.category?.name ?? `Kategorie ${race.categoryId}`;
-    const distance = race.upcomingStage?.distanceKm != null ? formatKm(race.upcomingStage.distanceKm) : '–';
-    const elevation = race.upcomingStage?.elevationGainMeters != null ? formatElevationGain(race.upcomingStage.elevationGainMeters) : '–';
-    const stageHint = race.isStageRace && race.upcomingStage
-      ? `<div class="text-muted">Etappe ${race.upcomingStage.stageNumber} · ${esc(race.upcomingStage.profile)}</div>`
-      : '';
+    const totalDistanceKm = race.isStageRace
+      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
+      : (race.upcomingStage?.distanceKm ?? null);
+    const totalElevationGain = race.isStageRace
+      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.elevationGainMeters ?? 0), 0)
+      : (race.upcomingStage?.elevationGainMeters ?? null);
+    const distance = totalDistanceKm != null ? formatKm(totalDistanceKm) : '–';
+    const elevation = totalElevationGain != null ? formatElevationGain(totalElevationGain) : '–';
+    const stageDetails = renderStageRaceDetails(race);
+    const raceNameCell = race.isStageRace
+      ? stageDetails
+      : `<strong>${esc(race.name)}</strong>`;
     return `
       <tr>
         <td>${formatRaceDateRange(race)}</td>
-        <td><strong>${esc(race.name)}</strong>${stageHint}</td>
+        <td>${raceNameCell}</td>
         <td>${raceCategoryBadge(race)}</td>
-        <td>${esc(location)}</td>
+        <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
         <td>${esc(categoryName)}</td>
         <td>${distance}</td>
         <td>${elevation}</td>
@@ -1930,7 +2592,7 @@ function renderTeamDetail(teamId: number | null): void {
       </div>
       <div class="team-detail-meta" style="margin-top:0.75rem">
         <span>${riders.length} Fahrer</span>
-        <span class="text-muted">Sortierung: ${esc(state.teamTableSort.key === 'name' ? 'Nachname' : state.teamTableSort.key === 'countryCode' ? 'Country' : state.teamTableSort.key === 'birthYear' ? 'Jahrgang' : state.teamTableSort.key === 'age' ? 'Alter' : state.teamTableSort.key === 'overallRating' ? 'Gesamt' : state.teamTableSort.key === 'seasonPoints' ? 'Saisonpunkte' : state.teamTableSort.key === 'contractEndSeason' ? 'Vertragsende' : state.teamTableSort.key === 'roleName' ? 'Rolle' : state.teamTableSort.key === 'riderType' ? 'Profil' : TEAM_SKILL_TITLES[state.teamTableSort.key])} ${state.teamTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
+        <span class="text-muted">Sortierung: ${esc(state.teamTableSort.key === 'name' ? 'Nachname' : state.teamTableSort.key === 'countryCode' ? 'Country' : state.teamTableSort.key === 'birthYear' ? 'Jahrgang' : state.teamTableSort.key === 'age' ? 'Alter' : state.teamTableSort.key === 'overallRating' ? 'Gesamt' : state.teamTableSort.key === 'formBonus' ? 'Saisonform' : state.teamTableSort.key === 'raceFormBonus' ? 'Rennbonus' : state.teamTableSort.key === 'seasonPoints' ? 'Saisonpunkte' : state.teamTableSort.key === 'contractEndSeason' ? 'Vertragsende' : state.teamTableSort.key === 'roleName' ? 'Rolle' : state.teamTableSort.key === 'riderType' ? 'Profil' : TEAM_SKILL_TITLES[state.teamTableSort.key])} ${state.teamTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
       </div>
       <table class="data-table data-table-teams" style="margin-top:1rem">
         <thead><tr>
@@ -1944,12 +2606,14 @@ function renderTeamDetail(teamId: number | null): void {
               const isExpanded = state.teamDetailsRiderId === r.id;
               return `
               <tr class="team-detail-row${isExpanded ? ' team-detail-row-expanded' : ''}">
-                <td class="team-table-name-cell"><strong>${esc(formatRiderName(r))}</strong></td>
+                <td class="team-table-name-cell"><strong>${esc(formatRiderName(r))}</strong>${renderRiderAvailabilityMarker(r)}</td>
                 <td class="team-table-flag-cell">${renderFlag(countryCode)}</td>
                 <td class="team-table-code-cell">${esc(countryCode)}</td>
                 <td>${r.birthYear}</td>
                 <td>${r.age ?? '–'}</td>
                 <td>${renderSkillValue(r.overallRating)}</td>
+                <td>${renderSeasonFormValue(r.formBonus)}</td>
+                <td>${renderRaceFormBonusValue(r.raceFormBonus)}</td>
                 <td>${r.seasonPoints ?? 0}</td>
                 <td>${r.contractEndSeason ?? '–'}</td>
                 <td>${esc(getRiderRoleName(r))}</td>

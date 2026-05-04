@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.previewRaceRoster = previewRaceRoster;
+exports.previewRaceRosterEditor = previewRaceRosterEditor;
+exports.applyRaceRosterSelection = applyRaceRosterSelection;
 exports.ensureRaceEntries = ensureRaceEntries;
 const DIVISION_BY_TIER = {
     1: 'WorldTour',
@@ -15,6 +17,11 @@ const RACE_ROLE_REQUIREMENTS = [
     { roleName: 'Sprinter', count: 1 },
     { roleName: 'Wassertraeger', count: 2 },
 ];
+const RIDER_LOCK_MESSAGES = {
+    'already-raced-today': 'Heute bereits in einem anderen Rennen gestartet.',
+    'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
+    unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
+};
 function createDeterministicRandom(seed) {
     let state = seed >>> 0;
     return () => {
@@ -31,9 +38,69 @@ function shuffleDeterministically(items, seed) {
     }
     return shuffled;
 }
-function selectRaceRoster(team, repo, targetCount, raceId) {
-    const roster = repo.getRiders(team.id);
-    const requestedCount = Math.min(targetCount, roster.length);
+function canCustomizeRoster(race, stage) {
+    return race.id > 0 && stage.id > 0;
+}
+function getPlayerTeam(repo) {
+    const playerTeam = repo.getTeams().find((team) => team.isPlayerTeam);
+    if (!playerTeam) {
+        throw new Error('Es konnte kein Spielerteam gefunden werden.');
+    }
+    return playerTeam;
+}
+function buildRiderLockMap(db, repo, race) {
+    const currentDate = repo.getCurrentDate();
+    const locks = new Map();
+    for (const rider of repo.getRiders()) {
+        if (rider.isUnavailable) {
+            locks.set(rider.id, 'unavailable');
+        }
+    }
+    const sameDayRows = db.prepare(`
+    SELECT DISTINCT results.rider_id AS rider_id
+    FROM results
+    JOIN stages ON stages.id = results.stage_id
+    WHERE results.result_type_id = 1
+      AND results.rider_id IS NOT NULL
+      AND stages.date = ?
+      AND stages.race_id != ?
+  `).all(currentDate, race.id);
+    for (const row of sameDayRows) {
+        if (!locks.has(row.rider_id)) {
+            locks.set(row.rider_id, 'already-raced-today');
+        }
+    }
+    const activeStageRaceRows = db.prepare(`
+    SELECT DISTINCT re.rider_id AS rider_id
+    FROM race_entries re
+    JOIN races race_entries_race ON race_entries_race.id = re.race_id
+    WHERE race_entries_race.is_stage_race = 1
+      AND re.race_id != ?
+      AND EXISTS (
+        SELECT 1
+        FROM stages remaining_stage
+        WHERE remaining_stage.race_id = re.race_id
+          AND remaining_stage.date >= ?
+          AND NOT EXISTS (
+            SELECT 1
+            FROM results remaining_result
+            WHERE remaining_result.stage_id = remaining_stage.id
+              AND remaining_result.result_type_id = 1
+          )
+      )
+  `).all(race.id, currentDate);
+    for (const row of activeStageRaceRows) {
+        if (!locks.has(row.rider_id)) {
+            locks.set(row.rider_id, 'active-stage-race');
+        }
+    }
+    return locks;
+}
+function getEligibleRiders(roster, riderLocks) {
+    return roster.filter((rider) => !riderLocks.has(rider.id));
+}
+function selectRaceRoster(team, eligibleRoster, targetCount, raceId) {
+    const requestedCount = Math.min(targetCount, eligibleRoster.length);
     if (requestedCount <= 0) {
         return [];
     }
@@ -44,7 +111,7 @@ function selectRaceRoster(team, repo, targetCount, raceId) {
         if (selected.length >= requestedCount) {
             break;
         }
-        const roleCandidates = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName), raceId * 1000 + team.id * 100 + seedOffset);
+        const roleCandidates = shuffleDeterministically(eligibleRoster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName), raceId * 1000 + team.id * 100 + seedOffset);
         const takeCount = Math.min(requirement.count, requestedCount - selected.length, roleCandidates.length);
         for (const rider of roleCandidates.slice(0, takeCount)) {
             selected.push(rider);
@@ -53,7 +120,7 @@ function selectRaceRoster(team, repo, targetCount, raceId) {
         seedOffset += 1;
     }
     if (selected.length < requestedCount) {
-        const remaining = shuffleDeterministically(roster.filter((rider) => !selectedIds.has(rider.id)), raceId * 1000 + team.id * 100 + 97);
+        const remaining = shuffleDeterministically(eligibleRoster.filter((rider) => !selectedIds.has(rider.id)), raceId * 1000 + team.id * 100 + 97);
         for (const rider of remaining.slice(0, requestedCount - selected.length)) {
             selected.push(rider);
             selectedIds.add(rider.id);
@@ -61,28 +128,104 @@ function selectRaceRoster(team, repo, targetCount, raceId) {
     }
     return selected;
 }
-function buildRaceRoster(repo, race) {
+function resolveParticipatingTeams(repo, race, riderLocks) {
     const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
-    const eligibleTeams = repo.getTeams()
+    const existingEntries = repo.getRaceRiders(race.id);
+    if (existingEntries.length > 0) {
+        const existingTeamIds = new Set(existingEntries.map((rider) => rider.activeTeamId).filter((teamId) => teamId != null));
+        return repo.getTeams().filter((team) => existingTeamIds.has(team.id));
+    }
+    const riderLimit = race.category?.numberOfRiders ?? 0;
+    return repo.getTeams()
         .filter((team) => team.division === targetDivision)
+        .filter((team) => getEligibleRiders(repo.getRiders(team.id), riderLocks).length >= riderLimit)
         .slice(0, race.category?.numberOfTeams ?? 0);
+}
+function buildRaceRoster(db, repo, race) {
+    const riderLocks = buildRiderLockMap(db, repo, race);
+    const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks);
     return eligibleTeams
-        .flatMap((team) => selectRaceRoster(team, repo, race.category?.numberOfRiders ?? 0, race.id))
+        .flatMap((team) => selectRaceRoster(team, getEligibleRiders(repo.getRiders(team.id), riderLocks), race.category?.numberOfRiders ?? 0, race.id))
         .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
 }
-function previewRaceRoster(repo, race) {
+function previewRaceRoster(db, repo, race) {
     const existingEntries = repo.getRaceRiders(race.id);
     if (existingEntries.length > 0) {
         return existingEntries;
     }
-    return buildRaceRoster(repo, race);
+    return buildRaceRoster(db, repo, race);
+}
+function previewRaceRosterEditor(db, repo, race, stage) {
+    const riderLocks = buildRiderLockMap(db, repo, race);
+    const selectedIds = new Set(previewRaceRoster(db, repo, race).map((rider) => rider.id));
+    const playerTeam = getPlayerTeam(repo);
+    const teams = [{
+            team: playerTeam,
+            riderLimit: race.category?.numberOfRiders ?? 0,
+            riders: repo.getRiders(playerTeam.id).map((rider) => {
+                const lockReason = riderLocks.get(rider.id) ?? null;
+                return {
+                    rider,
+                    isSelected: selectedIds.has(rider.id),
+                    isLocked: lockReason != null,
+                    lockReason: lockReason ? RIDER_LOCK_MESSAGES[lockReason] : null,
+                };
+            }),
+        }];
+    return {
+        race,
+        stage,
+        teams,
+    };
+}
+function applyRaceRosterSelection(db, repo, race, stage, riderIds) {
+    if (!canCustomizeRoster(race, stage)) {
+        throw new Error('Das Starterfeld kann für dieses Rennen jetzt nicht mehr bearbeitet werden.');
+    }
+    const riderLocks = buildRiderLockMap(db, repo, race);
+    const selectedRiderIds = new Set(riderIds.filter((riderId) => Number.isInteger(riderId)));
+    const playerTeam = getPlayerTeam(repo);
+    const riderLimit = race.category?.numberOfRiders ?? 0;
+    const playerRoster = repo.getRiders(playerTeam.id);
+    const rosterById = new Map(playerRoster.map((rider) => [rider.id, rider]));
+    const validatedSelections = [...selectedRiderIds]
+        .map((riderId) => rosterById.get(riderId) ?? null)
+        .filter((rider) => rider != null);
+    if (validatedSelections.length !== riderLimit) {
+        throw new Error(`${playerTeam.name} muss genau ${riderLimit} Fahrer fuer das Starterfeld stellen.`);
+    }
+    for (const rider of validatedSelections) {
+        const lockReason = riderLocks.get(rider.id);
+        if (lockReason) {
+            throw new Error(`${rider.firstName} ${rider.lastName} ist gesperrt: ${RIDER_LOCK_MESSAGES[lockReason]}`);
+        }
+    }
+    const participatingRiderIds = new Set(validatedSelections.map((rider) => rider.id));
+    const unknownSelection = [...selectedRiderIds].find((riderId) => !participatingRiderIds.has(riderId));
+    if (unknownSelection != null) {
+        throw new Error('Die Auswahl enthält Fahrer ausserhalb deines Teams.');
+    }
+    const autoEntries = previewRaceRoster(db, repo, race).filter((rider) => rider.activeTeamId !== playerTeam.id);
+    const finalSelections = [...autoEntries, ...validatedSelections];
+    const deleteEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
+    const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+    db.transaction(() => {
+        deleteEntries.run(race.id);
+        for (const rider of finalSelections) {
+            if (rider.activeTeamId == null) {
+                continue;
+            }
+            insertEntry.run(race.id, rider.activeTeamId, rider.id);
+        }
+    })();
+    return repo.getRaceRiders(race.id);
 }
 function ensureRaceEntries(db, repo, race) {
     const existingEntries = repo.getRaceRiders(race.id);
     if (existingEntries.length > 0) {
         return existingEntries;
     }
-    const selected = buildRaceRoster(repo, race);
+    const selected = buildRaceRoster(db, repo, race);
     const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
     db.transaction(() => {
         for (const rider of selected) {

@@ -1,7 +1,13 @@
 km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
-0.0,24,Flat,2,6,start,Santos Tour Down Under Stage 1,
-39.5,42,Flat,3,5,,,
-87.7,42,Sprint,3,5,sprint_intermediate,Sprint Gumeracha,Sprint
-88.0,45,Hill,4,6,climb_start,Checker Hill,
-91.0,214,Hill,5,7,climb_top,Checker Hill,3
-145.2,176,Flat,4,6,finish_hill,Santos Tour Down Under Stage 1,
+0.00,11,Flat,5,5,start,Start,null
+5.64,2,Flat,5,5,sprint_intermediate,null,null
+6.92,23,Flat,5,5,,,
+8.68,20,Flat,5,5,,,
+10.30,47,Flat,5,5,,,
+11.75,52,Flat,5,5,,,
+15.26,38,Hill,5,5,sprint_intermediate,null,null
+16.39,66,Hill,5,5,,,
+16.79,100,Hill,5,5,,,
+17.15,105,Abfahrt,5,5,,,
+18.67,52,Flat,5,5,,,
+19.56,111,Flat,5,5,finish_TT,Ziel,null

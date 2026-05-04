@@ -7,6 +7,8 @@ import type {
   GameState,
   GameStatus,
   QuickSimResponse,
+  RaceRosterEditorPayload,
+  RaceRosterSelectionRequest,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
   StageEditorDraft,
@@ -24,6 +26,16 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<Api
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      const text = await res.text();
+      return {
+        success: false,
+        error: res.ok
+          ? 'Antwort war kein JSON.'
+          : `HTTP ${res.status}: ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || 'Unerwartete Antwort vom Server.'}`,
+      };
+    }
     return res.json() as Promise<ApiResponse<T>>;
   } catch (err) {
     return { success: false, error: `Netzwerkfehler: ${(err as Error).message}` };
@@ -44,6 +56,8 @@ export const api = {
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   getRealtimeSimulation: (stageId: number) => call<RealtimeSimulationBootstrap>('GET', `/api/simulation/realtime/${stageId}`),
+  getRosterEditor:     (stageId: number) => call<RaceRosterEditorPayload>('GET', `/api/simulation/roster/${stageId}`),
+  applyRosterEditor:   (stageId: number, payload: RaceRosterSelectionRequest) => call<RealtimeSimulationBootstrap>('POST', `/api/simulation/roster/${stageId}/apply`, payload),
   completeRealtimeSimulation: (stageId: number, payload: RealtimeStageCommitRequest) => call<QuickSimResponse>('POST', `/api/simulation/realtime/${stageId}/complete`, payload),
   advanceDay:          () => call<GameState>('POST', '/api/state/advance'),
   quickSimStage:       (stageId: number) => call<QuickSimResponse>('POST', `/api/simulation/quick/${stageId}`),

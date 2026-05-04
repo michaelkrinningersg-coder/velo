@@ -1,6 +1,6 @@
 import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { renderRaceSimControls, type TimeControlValue } from './renderControls';
-import { renderRaceProfile } from './renderProfile';
+import { renderRaceProfile, type TimingRailMode } from './renderProfile';
 import { renderRaceSimSidebar } from './renderSidebar';
 import { SimulationEngine, type SimulationSnapshot } from './SimulationEngine';
 
@@ -35,8 +35,6 @@ export class RaceSimView {
 
   private isRunning = false;
 
-  private readonly expandedRiderIds = new Set<number>();
-
   private animationFrameId: number | null = null;
 
   private lastFrameTime: number | null = null;
@@ -44,6 +42,8 @@ export class RaceSimView {
   private lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
 
   private sidebarSnapshot: SimulationSnapshot | null = null;
+
+  private timingRailMode: TimingRailMode = 'finish';
 
   constructor(private readonly elements: RaceSimElements, private readonly options: RaceSimViewOptions = {}) {
     this.elements.controls.addEventListener('click', (event) => {
@@ -70,27 +70,24 @@ export class RaceSimView {
       this.render();
     });
 
-    this.elements.sidebar.addEventListener('click', (event) => {
-      const toggleButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-rider-toggle]');
-      if (!toggleButton) return;
-      const riderId = Number(toggleButton.dataset['raceSimRiderToggle']);
-      if (!Number.isFinite(riderId)) return;
-      if (this.expandedRiderIds.has(riderId)) {
-        this.expandedRiderIds.delete(riderId);
-      } else {
-        this.expandedRiderIds.add(riderId);
-      }
-      this.render(performance.now(), true);
+    this.elements.profile.addEventListener('click', (event) => {
+      const modeButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-timing-mode]');
+      if (!modeButton) return;
+      const nextMode = modeButton.dataset['raceSimTimingMode'];
+      if (nextMode !== 'finish' && nextMode !== 'splits') return;
+      this.timingRailMode = nextMode;
+      this.render();
     });
+
   }
 
   public load(bootstrap: RealtimeSimulationBootstrap, options: LoadOptions = {}): void {
     this.pause();
     this.bootstrap = bootstrap;
-    this.expandedRiderIds.clear();
     if (options.resetSpeed ?? true) {
       this.timeMultiplier = 1;
     }
+    this.timingRailMode = 'finish';
     this.engine = new SimulationEngine(bootstrap);
     this.snapshot = this.engine.getSnapshot();
     this.sidebarSnapshot = null;
@@ -107,12 +104,24 @@ export class RaceSimView {
     this.engine = null;
     this.snapshot = null;
     this.bootstrap = null;
-    this.expandedRiderIds.clear();
     this.sidebarSnapshot = null;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
     this.elements.layout.classList.add('hidden');
     this.elements.emptyState.classList.remove('hidden');
     this.elements.emptyState.textContent = message;
+    this.elements.meta.textContent = '';
+  }
+
+  public hide(): void {
+    this.pause();
+    this.engine = null;
+    this.snapshot = null;
+    this.bootstrap = null;
+    this.sidebarSnapshot = null;
+    this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
+    this.elements.layout.classList.add('hidden');
+    this.elements.emptyState.classList.add('hidden');
+    this.elements.meta.textContent = '';
   }
 
   public pause(): void {
@@ -142,7 +151,6 @@ export class RaceSimView {
     this.engine = null;
     this.snapshot = null;
     this.bootstrap = null;
-    this.expandedRiderIds.clear();
   }
 
   private frame(timestamp: number): void {
@@ -176,8 +184,11 @@ export class RaceSimView {
 
     this.elements.layout.classList.remove('hidden');
     this.elements.emptyState.classList.add('hidden');
-    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km`;
-    renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.snapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`);
+    const ittSuffix = this.bootstrap.stage.profile === 'ITT'
+      ? ' · Einzelzeitfahren · Startintervall 02:00'
+      : '';
+    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}`;
+    renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.snapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`, this.bootstrap, this.timingRailMode);
 
     const shouldRenderSidebar = forceSidebar
       || this.sidebarSnapshot == null
@@ -187,7 +198,7 @@ export class RaceSimView {
     if (shouldRenderSidebar) {
       this.sidebarSnapshot = this.snapshot;
       this.lastSidebarRenderTime = nowMs;
-      renderRaceSimSidebar(this.elements.sidebar, this.sidebarSnapshot, this.expandedRiderIds, this.bootstrap);
+      renderRaceSimSidebar(this.elements.sidebar, this.sidebarSnapshot, this.bootstrap);
     }
 
     renderRaceSimControls(this.elements.controls, {

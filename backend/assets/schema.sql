@@ -258,6 +258,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_rider_type
   ON results(stage_id, rider_id, result_type_id)
   WHERE rider_id IS NOT NULL;
 
+-- ---- Taeglicher Fahrerzustand -------------------------------
+CREATE TABLE IF NOT EXISTS rider_daily_state (
+  rider_id                INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+  season                  INTEGER NOT NULL,
+  form_bonus              REAL NOT NULL DEFAULT -1.0,
+  peak_dates_json         TEXT NOT NULL DEFAULT '[]',
+  health_status           TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
+  unavailable_until       TEXT,
+  unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_daily_state_season ON rider_daily_state(season);
+CREATE INDEX IF NOT EXISTS idx_rider_daily_state_health ON rider_daily_state(health_status, unavailable_days_remaining);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_team_type
   ON results(stage_id, team_id, result_type_id)
   WHERE rider_id IS NULL;

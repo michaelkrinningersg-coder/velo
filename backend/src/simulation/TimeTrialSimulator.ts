@@ -11,6 +11,10 @@ const NOISE_RANGE = 0.015;
 const TECH_PENALTY_FACTOR = 0.0025;
 const WIND_FACTOR = 0.003;
 
+function resolveFormBonus(rider: Rider): number {
+  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+}
+
 export class TimeTrialSimulator {
   static simulate(race: Race, stage: Stage, riders: Rider[]): TimeTrialResult {
     const segments = StageParser.parseStageProfile(stage.detailsCsvFile);
@@ -74,35 +78,36 @@ export class TimeTrialSimulator {
   }
 
   private static resolveSegmentSkill(rider: Rider, segment: ParsedStageSegment): number {
+    const formBonus = resolveFormBonus(rider);
     if (segment.length_km <= 10) {
-      return rider.skills.timeTrial * 0.45
-        + rider.skills.prologue * 0.25
-        + rider.skills.acceleration * 0.1
-        + rider.skills.bikeHandling * 0.1
-        + rider.skills.flat * 0.1;
+      return (rider.skills.timeTrial + formBonus) * 0.45
+        + (rider.skills.prologue + formBonus) * 0.25
+        + (rider.skills.acceleration + formBonus) * 0.1
+        + (rider.skills.bikeHandling + formBonus) * 0.1
+        + (rider.skills.flat + formBonus) * 0.1;
     }
 
     if (segment.gradient_percent >= 5.0) {
-      return rider.skills.timeTrial * 0.45
-        + rider.skills.mountain * 0.25
-        + rider.skills.resistance * 0.15
-        + rider.skills.downhill * 0.05
-        + rider.skills.bikeHandling * 0.1;
+      return (rider.skills.timeTrial + formBonus) * 0.45
+        + (rider.skills.mountain + formBonus) * 0.25
+        + (rider.skills.resistance + formBonus) * 0.15
+        + (rider.skills.downhill + formBonus) * 0.05
+        + (rider.skills.bikeHandling + formBonus) * 0.1;
     }
 
     if (segment.terrain === 'Cobble') {
-      return rider.skills.timeTrial * 0.4
-        + rider.skills.cobble * 0.25
-        + rider.skills.flat * 0.15
-        + rider.skills.bikeHandling * 0.1
-        + rider.skills.resistance * 0.1;
+      return (rider.skills.timeTrial + formBonus) * 0.4
+        + (rider.skills.cobble + formBonus) * 0.25
+        + (rider.skills.flat + formBonus) * 0.15
+        + (rider.skills.bikeHandling + formBonus) * 0.1
+        + (rider.skills.resistance + formBonus) * 0.1;
     }
 
-    return rider.skills.timeTrial * 0.6
-      + rider.skills.resistance * 0.15
-      + rider.skills.flat * 0.15
-      + rider.skills.prologue * 0.05
-      + rider.skills.bikeHandling * 0.05;
+    return (rider.skills.timeTrial + formBonus) * 0.6
+      + (rider.skills.resistance + formBonus) * 0.15
+      + (rider.skills.flat + formBonus) * 0.15
+      + (rider.skills.prologue + formBonus) * 0.05
+      + (rider.skills.bikeHandling + formBonus) * 0.05;
   }
 
   private static formatTime(totalSec: number): string {

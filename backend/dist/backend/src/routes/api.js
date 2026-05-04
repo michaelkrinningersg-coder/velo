@@ -195,7 +195,7 @@ function createRouter(dbService) {
             if (!race) {
                 return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
             }
-            const riders = (0, RaceRosterService_1.previewRaceRoster)(repo, race);
+            const riders = (0, RaceRosterService_1.previewRaceRoster)(db, repo, race);
             if (riders.length === 0) {
                 return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
             }
@@ -205,6 +205,72 @@ function createRouter(dbService) {
                 riders,
                 teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
                 stageSummary: StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile),
+                gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/simulation/roster/:stageId', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+            if (!pendingStageIds.has(stageId)) {
+                return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+            }
+            const db = dbService.getActiveConnection();
+            const repo = new GameRepository_1.GameRepository(db);
+            const stage = repo.getStageById(stageId);
+            if (!stage) {
+                return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+            }
+            const race = repo.getRaceById(stage.raceId);
+            if (!race) {
+                return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
+            }
+            ok(res, (0, RaceRosterService_1.previewRaceRosterEditor)(db, repo, race, stage));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/simulation/roster/:stageId/apply', (req, res) => {
+        const stageId = Number(req.params['stageId']);
+        if (!Number.isFinite(stageId))
+            return fail(res, 400, 'Ungültige Stage-ID.');
+        try {
+            const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+            if (!pendingStageIds.has(stageId)) {
+                return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+            }
+            const payload = req.body;
+            if (!payload || !Array.isArray(payload.riderIds)) {
+                return fail(res, 400, 'Es wurden keine Teilnehmer übergeben.');
+            }
+            const db = dbService.getActiveConnection();
+            const repo = new GameRepository_1.GameRepository(db);
+            const stage = repo.getStageById(stageId);
+            if (!stage) {
+                return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+            }
+            const race = repo.getRaceById(stage.raceId);
+            if (!race) {
+                return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
+            }
+            const riders = (0, RaceRosterService_1.applyRaceRosterSelection)(db, repo, race, stage, payload.riderIds);
+            if (riders.length === 0) {
+                return fail(res, 400, 'Für diese Etappe konnte keine Startliste gespeichert werden.');
+            }
+            ok(res, {
+                race,
+                stage,
+                riders,
+                teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
+                stageSummary: StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile),
+                gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
             });
         }
         catch (e) {

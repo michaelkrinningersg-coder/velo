@@ -4,7 +4,7 @@ import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { QuickSimEngine } from '../simulation/QuickSimEngine';
-import { previewRaceRoster } from '../simulation/RaceRosterService';
+import { applyRaceRosterSelection, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { StageParser } from '../simulation/StageParser';
 import {
   ApiResponse,
@@ -15,6 +15,8 @@ import {
   GameState,
   GameStatus,
   QuickSimResponse,
+  RaceRosterEditorPayload,
+  RaceRosterSelectionRequest,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
   SeasonStandingsPayload,
@@ -187,7 +189,7 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
       }
 
-      const riders = previewRaceRoster(repo, race);
+      const riders = previewRaceRoster(db, repo, race);
       if (riders.length === 0) {
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
@@ -198,6 +200,76 @@ export function createRouter(dbService: DatabaseService): Router {
         riders,
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile),
+        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/simulation/roster/:stageId', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+
+    try {
+      const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+      if (!pendingStageIds.has(stageId)) {
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+      }
+
+      const db = dbService.getActiveConnection();
+      const repo = new GameRepository(db);
+      const stage = repo.getStageById(stageId);
+      if (!stage) {
+        return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+      }
+
+      const race = repo.getRaceById(stage.raceId);
+      if (!race) {
+        return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
+      }
+
+      ok<RaceRosterEditorPayload>(res, previewRaceRosterEditor(db, repo, race, stage));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/simulation/roster/:stageId/apply', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+
+    try {
+      const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
+      if (!pendingStageIds.has(stageId)) {
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+      }
+
+      const payload = req.body as RaceRosterSelectionRequest;
+      if (!payload || !Array.isArray(payload.riderIds)) {
+        return fail(res, 400, 'Es wurden keine Teilnehmer übergeben.');
+      }
+
+      const db = dbService.getActiveConnection();
+      const repo = new GameRepository(db);
+      const stage = repo.getStageById(stageId);
+      if (!stage) {
+        return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+      }
+
+      const race = repo.getRaceById(stage.raceId);
+      if (!race) {
+        return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
+      }
+
+      const riders = applyRaceRosterSelection(db, repo, race, stage, payload.riderIds);
+      if (riders.length === 0) {
+        return fail(res, 400, 'Für diese Etappe konnte keine Startliste gespeichert werden.');
+      }
+
+      ok<RealtimeSimulationBootstrap>(res, {
+        race,
+        stage,
+        riders,
+        teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
+        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile),
+        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

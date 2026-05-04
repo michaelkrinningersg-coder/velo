@@ -2,6 +2,7 @@ import type {
   ParsedStageSegment,
   RealtimeSimulationBootstrap,
   Rider,
+  RiderSkillKey,
   StageTerrain,
 } from '../../../shared/types';
 
@@ -23,18 +24,29 @@ export interface RiderCluster {
 export interface RealtimeRiderSnapshot {
   riderId: number;
   riderName: string;
+  startOffsetSeconds: number;
+  riderClockSeconds: number | null;
+  hasStarted: boolean;
   distanceCoveredMeters: number;
   gapToLeaderMeters: number;
   activeTerrain: StageTerrain | 'Finish';
   skillName: TerrainSkillName | 'Finish';
+  skillBreakdown: string;
   baseSkill: number;
+  teamGroupBonus: number;
   effectiveSkill: number;
+  staminaModifier: number;
+  elevationGainModifier: number;
   dailyForm: number;
   microForm: number;
+  gradientPercent: number;
   gradientModifier: number;
   windModifier: number;
   draftModifier: number;
   currentSpeedMps: number;
+  photoFinishScore: number;
+  lastSplitLabel: string | null;
+  lastSplitTimeSeconds: number | null;
   finishTimeSeconds: number | null;
   isLeadingGroup: boolean;
   isFinished: boolean;
@@ -54,6 +66,8 @@ export interface SimulationSnapshot {
 interface RiderState {
   rider: Rider;
   riderName: string;
+  startOffsetSeconds: number;
+  hasStarted: boolean;
   distanceCoveredMeters: number;
   nextDistanceCoveredMeters: number | null;
   dailyForm: number;
@@ -64,20 +78,34 @@ interface RiderState {
   windZoneIndex: number;
   activeTerrain: StageTerrain | 'Finish';
   skillName: TerrainSkillName | 'Finish';
+  skillBreakdown: string;
   baseSkill: number;
+  teamGroupBonus: number;
   effectiveSkill: number;
+  staminaModifier: number;
+  elevationGainModifier: number;
+  gradientPercent: number;
   gradientModifier: number;
   windModifier: number;
   draftModifier: number;
   tempSpeedMps: number;
   currentSpeedMps: number;
+  photoFinishScore: number;
+  nextIntermediateIndex: number;
+  lastSplitLabel: string | null;
+  lastSplitTimeSeconds: number | null;
   isLeadingGroup: boolean;
 }
 
 interface BasePhysicsResult {
   skillName: TerrainSkillName;
+  skillBreakdown: string;
   baseSkill: number;
+  teamGroupBonus: number;
   effectiveSkill: number;
+  staminaModifier: number;
+  elevationGainModifier: number;
+  gradientPercent: number;
   gradientModifier: number;
   windModifier: number;
   tempSpeedMps: number;
@@ -85,6 +113,35 @@ interface BasePhysicsResult {
 
 const CLUSTER_DISTANCE_METERS = 20;
 const MAX_SUBSTEP_SECONDS = 1;
+const ITT_START_INTERVAL_SECONDS = 120;
+
+interface WeightedSkillComponent {
+  key: RiderSkillKey;
+  weight: number;
+}
+
+const SKILL_SHORT_LABELS: Record<RiderSkillKey, string> = {
+  flat: 'Fl',
+  mountain: 'Berg',
+  mediumMountain: 'MB',
+  hill: 'Hgl',
+  timeTrial: 'ZF',
+  prologue: 'Pro',
+  cobble: 'Pf',
+  sprint: 'Spr',
+  acceleration: 'Acc',
+  downhill: 'Abf',
+  attack: 'Atk',
+  stamina: 'Sta',
+  resistance: 'Res',
+  recuperation: 'Rec',
+  bikeHandling: 'Ftg',
+};
+
+interface IntermediateMarker {
+  distanceMeters: number;
+  label: string;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -144,6 +201,23 @@ function resolveBaseSkill(rider: Rider, skillName: TerrainSkillName): number {
     default:
       return rider.skills.flat;
   }
+}
+
+function resolveConditionFormBonus(rider: Rider): number {
+  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+}
+
+function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]): string {
+  if (components.length === 0) {
+    return '';
+  }
+
+  const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+  return components.map((component) => {
+    const skillValue = rider.skills[component.key];
+    const weightPercent = Math.round((component.weight / totalWeight) * 100);
+    return `${SKILL_SHORT_LABELS[component.key]} ${Math.round(skillValue)} (${weightPercent}%)`;
+  }).join(' · ');
 }
 
 function sampleInitialWindSpeedKph(): number {
@@ -213,7 +287,7 @@ function compareRiders(left: RiderState, right: RiderState): number {
   }
 
   if (left.finishTimeSeconds != null && right.finishTimeSeconds != null) {
-    return left.finishTimeSeconds - right.finishTimeSeconds || left.rider.id - right.rider.id;
+    return left.finishTimeSeconds - right.finishTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id;
   }
 
   if (left.finishTimeSeconds != null) return -1;
@@ -243,18 +317,26 @@ function compareDraftOrder(left: RiderState, right: RiderState): number {
 export class SimulationEngine {
   private readonly stageDistanceMeters: number;
 
+  private readonly isIndividualTimeTrial: boolean;
+
   private readonly riders: RiderState[];
 
   private readonly windZones: WindZone[];
+
+  private readonly intermediateMarkers: IntermediateMarker[];
 
   private elapsedSeconds = 0;
 
   constructor(private readonly bootstrap: RealtimeSimulationBootstrap) {
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
+    this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.windZones = createWindZones(this.stageDistanceMeters);
-    this.riders = bootstrap.riders.map((rider) => ({
+    this.intermediateMarkers = this.buildIntermediateMarkers();
+    const riderStates: RiderState[] = bootstrap.riders.map((rider) => ({
       rider,
       riderName: `${rider.firstName} ${rider.lastName}`,
+      startOffsetSeconds: 0,
+      hasStarted: !this.isIndividualTimeTrial,
       distanceCoveredMeters: 0,
       nextDistanceCoveredMeters: null,
       dailyForm: sampleDailyForm(),
@@ -265,14 +347,29 @@ export class SimulationEngine {
       windZoneIndex: 0,
       activeTerrain: 'Flat',
       skillName: 'Flat',
+      skillBreakdown: '',
       baseSkill: 0,
+      teamGroupBonus: 0,
       effectiveSkill: 0,
+      staminaModifier: 1,
+      elevationGainModifier: 1,
+      gradientPercent: 0,
       gradientModifier: 1,
       windModifier: 1,
       draftModifier: 1,
       tempSpeedMps: 0,
       currentSpeedMps: 0,
-      isLeadingGroup: true,
+      photoFinishScore: 0,
+      nextIntermediateIndex: 0,
+      lastSplitLabel: null,
+      lastSplitTimeSeconds: null,
+      isLeadingGroup: !this.isIndividualTimeTrial,
+    }));
+
+    const orderedRiders = this.resolveStartOrder(riderStates);
+    this.riders = orderedRiders.map((rider, index) => ({
+      ...rider,
+      startOffsetSeconds: this.isIndividualTimeTrial ? index * ITT_START_INTERVAL_SECONDS : 0,
     }));
 
     this.riders.forEach((rider) => this.syncRiderTelemetry(rider));
@@ -306,18 +403,29 @@ export class SimulationEngine {
       riders: ordered.map((rider) => ({
         riderId: rider.rider.id,
         riderName: rider.riderName,
+        startOffsetSeconds: rider.startOffsetSeconds,
+        riderClockSeconds: this.resolveRiderClockSeconds(rider),
+        hasStarted: rider.hasStarted || rider.finishTimeSeconds != null,
         distanceCoveredMeters: rider.distanceCoveredMeters,
         gapToLeaderMeters: Math.max(0, leaderDistanceMeters - rider.distanceCoveredMeters),
         activeTerrain: rider.finishTimeSeconds != null ? 'Finish' : rider.activeTerrain,
         skillName: rider.finishTimeSeconds != null ? 'Finish' : rider.skillName,
+        skillBreakdown: rider.finishTimeSeconds != null ? '' : rider.skillBreakdown,
         baseSkill: rider.baseSkill,
+        teamGroupBonus: rider.teamGroupBonus,
         effectiveSkill: rider.effectiveSkill,
+        staminaModifier: rider.staminaModifier,
+        elevationGainModifier: rider.elevationGainModifier,
         dailyForm: rider.dailyForm,
         microForm: rider.microForm,
+        gradientPercent: rider.gradientPercent,
         gradientModifier: rider.gradientModifier,
         windModifier: rider.windModifier,
         draftModifier: rider.draftModifier,
         currentSpeedMps: rider.currentSpeedMps,
+        photoFinishScore: rider.photoFinishScore,
+        lastSplitLabel: rider.lastSplitLabel,
+        lastSplitTimeSeconds: rider.lastSplitTimeSeconds,
         finishTimeSeconds: rider.finishTimeSeconds,
         isLeadingGroup: rider.isLeadingGroup,
         isFinished: rider.finishTimeSeconds != null,
@@ -333,6 +441,7 @@ export class SimulationEngine {
 
   private advanceSubstep(deltaSeconds: number): void {
     const stepStartSeconds = this.elapsedSeconds;
+    const stepEndSeconds = stepStartSeconds + deltaSeconds;
 
     for (const rider of this.riders) {
       if (rider.finishTimeSeconds != null) {
@@ -344,108 +453,139 @@ export class SimulationEngine {
         continue;
       }
 
+      if (this.isIndividualTimeTrial && stepEndSeconds <= rider.startOffsetSeconds) {
+        rider.nextDistanceCoveredMeters = null;
+        rider.tempSpeedMps = 0;
+        rider.draftModifier = 1;
+        rider.currentSpeedMps = 0;
+        rider.teamGroupBonus = 0;
+        rider.isLeadingGroup = false;
+        continue;
+      }
+
+      const activeStepStartSeconds = this.isIndividualTimeTrial
+        ? Math.max(stepStartSeconds, rider.startOffsetSeconds)
+        : stepStartSeconds;
+      const activeDeltaSeconds = Math.max(0, stepEndSeconds - activeStepStartSeconds);
+      if (activeDeltaSeconds <= 0) {
+        continue;
+      }
+      rider.hasStarted = true;
+
       this.advanceIndexForDistance(rider);
       const segment = this.currentSegment(rider);
       const windZone = this.currentWindZone(rider);
       if (!segment || !windZone) {
         rider.distanceCoveredMeters = this.stageDistanceMeters;
         rider.nextDistanceCoveredMeters = this.stageDistanceMeters;
-        rider.finishTimeSeconds = stepStartSeconds;
+        rider.finishTimeSeconds = activeStepStartSeconds;
         rider.tempSpeedMps = 0;
         rider.draftModifier = 1;
         rider.currentSpeedMps = 0;
         rider.isLeadingGroup = false;
         rider.activeTerrain = 'Finish';
         rider.skillName = 'Finish';
+        rider.skillBreakdown = '';
+        rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
         continue;
       }
 
+      rider.teamGroupBonus = this.isIndividualTimeTrial ? 0 : this.calculateTeamGroupBonus(rider);
       const basePhysics = this.calculateBasePhysics(rider, segment, windZone);
       rider.activeTerrain = segment.terrain;
       rider.skillName = basePhysics.skillName;
+      rider.skillBreakdown = basePhysics.skillBreakdown;
       rider.baseSkill = basePhysics.baseSkill;
+      rider.teamGroupBonus = basePhysics.teamGroupBonus;
       rider.effectiveSkill = basePhysics.effectiveSkill;
+      rider.staminaModifier = basePhysics.staminaModifier;
+      rider.elevationGainModifier = basePhysics.elevationGainModifier;
+      rider.gradientPercent = basePhysics.gradientPercent;
       rider.gradientModifier = basePhysics.gradientModifier;
       rider.windModifier = basePhysics.windModifier;
       rider.tempSpeedMps = basePhysics.tempSpeedMps;
       rider.draftModifier = 1;
       rider.currentSpeedMps = basePhysics.tempSpeedMps;
-      rider.isLeadingGroup = true;
+      rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
+      rider.isLeadingGroup = !this.isIndividualTimeTrial;
       rider.nextDistanceCoveredMeters = null;
+      rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * activeDeltaSeconds);
     }
 
-    const ordered = [...this.riders].sort(compareDraftOrder);
-    for (let index = 0; index < ordered.length; index += 1) {
-      const rider = ordered[index];
-      if (rider.finishTimeSeconds != null) {
-        continue;
-      }
-
-      const refV = rider.tempSpeedMps / 14;
-      const dFull = Math.max(5, 50 * refV);
-      const dZero = Math.max(15, 150 * refV);
-      const ridersInZone = ordered
-        .slice(0, index)
-        .map((candidate) => ({
-          rider: candidate,
-          gapMeters: candidate.distanceCoveredMeters - rider.distanceCoveredMeters,
-        }))
-        .filter((candidate) => candidate.gapMeters > 0 && candidate.gapMeters < dZero);
-
-      if (ridersInZone.length === 0) {
-        rider.draftModifier = 1;
-        rider.currentSpeedMps = rider.tempSpeedMps;
-        rider.isLeadingGroup = true;
-        continue;
-      }
-
-      const target = ridersInZone.reduce((closest, candidate) => (
-        candidate.gapMeters < closest.gapMeters ? candidate : closest
-      ));
-
-      const targetFinalSpeed = target.rider.finishTimeSeconds != null
-        ? target.rider.tempSpeedMps
-        : target.rider.currentSpeedMps;
-
-      const dist = target.gapMeters;
-      const fDist = dist <= dFull
-        ? 1
-        : 1 - ((dist - dFull) / Math.max(0.0001, dZero - dFull));
-      const fPack = Math.min(1, 0.5 + (ridersInZone.length * 0.1));
-      const windZone = this.currentWindZone(rider);
-      const currentWindVector = windZone?.vector ?? 0;
-      const currentWindSpeed = windZone?.windSpeedKph ?? 0;
-      const windEffect = -currentWindVector * (currentWindSpeed / 70);
-      const baseBonus = Math.max(0.30, 0.35 + (0.35 * windEffect));
-      const maxBonus = baseBonus * Math.min(1, refV);
-      const segment = this.currentSegment(rider);
-      const gradientPercent = clamp(segment?.gradient_percent ?? 0, -20, 20);
-      const adjustedDraftBonus = gradientPercent >= 2
-        ? ((maxBonus * fDist * fPack) / 1.5)
-        : (maxBonus * fDist * fPack);
-      const draftModifier = 1 + adjustedDraftBonus;
-      const draftedSpeed = rider.tempSpeedMps * draftModifier;
-
-      rider.draftModifier = draftModifier;
-      rider.isLeadingGroup = false;
-
-      if (draftedSpeed > targetFinalSpeed) {
-        if (rider.tempSpeedMps > target.rider.tempSpeedMps) {
-          rider.currentSpeedMps = draftedSpeed;
+    if (!this.isIndividualTimeTrial) {
+      const ordered = [...this.riders].sort(compareDraftOrder);
+      for (let index = 0; index < ordered.length; index += 1) {
+        const rider = ordered[index];
+        if (rider.finishTimeSeconds != null) {
           continue;
         }
 
-        if (dist < 1.0) {
-          rider.currentSpeedMps = targetFinalSpeed;
-          rider.nextDistanceCoveredMeters = target.rider.distanceCoveredMeters + (targetFinalSpeed * deltaSeconds);
+        const refV = rider.tempSpeedMps / 14;
+        const dFull = Math.max(5, 50 * refV);
+        const dZero = Math.max(15, 150 * refV);
+        const ridersInZone = ordered
+          .slice(0, index)
+          .map((candidate) => ({
+            rider: candidate,
+            gapMeters: candidate.distanceCoveredMeters - rider.distanceCoveredMeters,
+          }))
+          .filter((candidate) => candidate.gapMeters > 0 && candidate.gapMeters < dZero);
+
+        if (ridersInZone.length === 0) {
+          rider.draftModifier = 1;
+          rider.currentSpeedMps = rider.tempSpeedMps;
+          rider.isLeadingGroup = true;
           continue;
         }
 
-        rider.currentSpeedMps = Math.min(draftedSpeed, targetFinalSpeed + 2.0);
-        continue;
-      }
+        const target = ridersInZone.reduce((closest, candidate) => (
+          candidate.gapMeters < closest.gapMeters ? candidate : closest
+        ));
 
-      rider.currentSpeedMps = draftedSpeed;
+        const targetFinalSpeed = target.rider.finishTimeSeconds != null
+          ? target.rider.tempSpeedMps
+          : target.rider.currentSpeedMps;
+
+        const dist = target.gapMeters;
+        const fDist = dist <= dFull
+          ? 1
+          : 1 - ((dist - dFull) / Math.max(0.0001, dZero - dFull));
+        const fPack = Math.min(1, 0.5 + (ridersInZone.length * 0.1));
+        const windZone = this.currentWindZone(rider);
+        const currentWindVector = windZone?.vector ?? 0;
+        const currentWindSpeed = windZone?.windSpeedKph ?? 0;
+        const windEffect = -currentWindVector * (currentWindSpeed / 70);
+        const baseBonus = Math.max(0.30, 0.35 + (0.35 * windEffect));
+        const maxBonus = baseBonus * Math.min(1, refV);
+        const segment = this.currentSegment(rider);
+        const gradientPercent = clamp(segment?.gradient_percent ?? 0, -20, 20);
+        const adjustedDraftBonus = gradientPercent >= 2
+          ? ((maxBonus * fDist * fPack) / 1.5)
+          : (maxBonus * fDist * fPack);
+        const draftModifier = 1 + adjustedDraftBonus;
+        const draftedSpeed = rider.tempSpeedMps * draftModifier;
+
+        rider.draftModifier = draftModifier;
+        rider.isLeadingGroup = false;
+
+        if (draftedSpeed > targetFinalSpeed) {
+          if (rider.tempSpeedMps > target.rider.tempSpeedMps) {
+            rider.currentSpeedMps = draftedSpeed;
+            continue;
+          }
+
+          if (dist < 1.0) {
+            rider.currentSpeedMps = targetFinalSpeed;
+            rider.nextDistanceCoveredMeters = target.rider.distanceCoveredMeters + (targetFinalSpeed * deltaSeconds);
+            continue;
+          }
+
+          rider.currentSpeedMps = Math.min(draftedSpeed, targetFinalSpeed + 2.0);
+          continue;
+        }
+
+        rider.currentSpeedMps = draftedSpeed;
+      }
     }
 
     for (const rider of this.riders) {
@@ -453,18 +593,34 @@ export class SimulationEngine {
         continue;
       }
 
+      if (this.isIndividualTimeTrial && stepEndSeconds <= rider.startOffsetSeconds) {
+        continue;
+      }
+
+      const activeStepStartSeconds = this.isIndividualTimeTrial
+        ? Math.max(stepStartSeconds, rider.startOffsetSeconds)
+        : stepStartSeconds;
+      const activeDeltaSeconds = Math.max(0, stepEndSeconds - activeStepStartSeconds);
+      if (activeDeltaSeconds <= 0) {
+        continue;
+      }
+
+      const previousDistance = rider.distanceCoveredMeters;
+
       const targetDistance = rider.nextDistanceCoveredMeters
-        ?? (rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds));
+        ?? (rider.distanceCoveredMeters + (rider.currentSpeedMps * activeDeltaSeconds));
       const remainingMeters = this.stageDistanceMeters - rider.distanceCoveredMeters;
       const travelMeters = Math.max(0, targetDistance - rider.distanceCoveredMeters);
 
       if (travelMeters >= remainingMeters) {
         const finishSeconds = remainingMeters / rider.currentSpeedMps;
         rider.distanceCoveredMeters = this.stageDistanceMeters;
-        rider.finishTimeSeconds = stepStartSeconds + finishSeconds;
+        this.recordIntermediateSplits(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
+        rider.finishTimeSeconds = activeStepStartSeconds + finishSeconds;
         rider.currentSpeedMps = 0;
       } else {
         rider.distanceCoveredMeters = targetDistance;
+        this.recordIntermediateSplits(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
       }
 
       rider.nextDistanceCoveredMeters = null;
@@ -507,13 +663,77 @@ export class SimulationEngine {
     return this.windZones[rider.windZoneIndex] ?? null;
   }
 
+  private resolveStartOrder(riders: RiderState[]): RiderState[] {
+    if (!this.isIndividualTimeTrial) {
+      return [...riders];
+    }
+
+    const gcRankByRiderId = new Map((this.bootstrap.gcStandings ?? []).map((entry) => [entry.riderId, entry.rank]));
+    const hasEstablishedGc = this.bootstrap.race.isStageRace && this.bootstrap.stage.stageNumber > 1 && gcRankByRiderId.size > 0;
+    if (!hasEstablishedGc) {
+      return [...riders].sort((left, right) => left.rider.skills.timeTrial - right.rider.skills.timeTrial || left.rider.id - right.rider.id);
+    }
+
+    return [...riders].sort((left, right) => {
+      const leftRank = gcRankByRiderId.get(left.rider.id);
+      const rightRank = gcRankByRiderId.get(right.rider.id);
+      if (leftRank != null && rightRank != null) {
+        return rightRank - leftRank;
+      }
+      if (leftRank != null) return -1;
+      if (rightRank != null) return 1;
+      return this.resolveProjectedIttStartScore(left) - this.resolveProjectedIttStartScore(right) || left.rider.id - right.rider.id;
+    });
+  }
+
+  private resolveProjectedIttStartScore(rider: RiderState): number {
+    let weightedScore = 0;
+    let totalDistance = 0;
+
+    for (const segment of this.bootstrap.stageSummary.segments) {
+      const skillName = terrainToSkillName(segment.terrain);
+      const weightedSkill = this.resolveWeightedSkill(rider.rider, skillName).value;
+      const effectiveSkill = weightedSkill + resolveConditionFormBonus(rider.rider) + rider.dailyForm + rider.microForm;
+      const gradientPercent = clamp(segment.gradient_percent, -20, 20);
+      const gradientModifier = gradientPercent > 0
+        ? Math.exp(-0.11 * gradientPercent)
+        : 1 - (gradientPercent * 0.06);
+      const segmentCenterMeter = ((segment.start_km + segment.end_km) / 2) * 1000;
+      const windZone = this.windZones.find((candidate) => segmentCenterMeter >= candidate.startMeter && segmentCenterMeter <= candidate.endMeter) ?? this.windZones[this.windZones.length - 1];
+      const windModifier = windZone
+        ? 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52)
+        : 1;
+      const elevationModifier = this.resolveElevationGainModifier(skillName, effectiveSkill);
+      weightedScore += effectiveSkill * gradientModifier * windModifier * elevationModifier * segment.length_km;
+      totalDistance += segment.length_km;
+    }
+
+    return totalDistance > 0 ? weightedScore / totalDistance : 0;
+  }
+
+  private buildIntermediateMarkers(): IntermediateMarker[] {
+    return this.bootstrap.stageSummary.points
+      .flatMap((point, pointIndex) => point.markers
+        .filter((marker) => marker.type === 'sprint_intermediate')
+        .map((marker, markerIndex) => ({
+          distanceMeters: point.kmMark * 1000,
+          label: marker.name ?? `SZ ${pointIndex + markerIndex + 1}`,
+        })))
+      .sort((left, right) => left.distanceMeters - right.distanceMeters);
+  }
+
   private calculateBasePhysics(rider: RiderState, segment: ParsedStageSegment, windZone: WindZone): BasePhysicsResult {
     const skillName = terrainToSkillName(segment.terrain);
-    const baseSkill = Math.min(85, resolveBaseSkill(rider.rider, skillName));
-    const effectiveSkill = baseSkill + rider.dailyForm + rider.microForm;
+    const weightedSkill = this.resolveWeightedSkill(rider.rider, skillName);
+    const baseSkill = Math.min(85, weightedSkill.value);
+    const teamGroupBonus = this.isIndividualTimeTrial ? 0 : rider.teamGroupBonus;
+    const staminaModifier = this.resolveStaminaModifier(rider);
+    const preElevationEffectiveSkill = (baseSkill + resolveConditionFormBonus(rider.rider) + rider.dailyForm + rider.microForm + teamGroupBonus) * staminaModifier;
+    const elevationGainModifier = this.resolveElevationGainModifier(skillName, preElevationEffectiveSkill);
+    const effectiveSkill = preElevationEffectiveSkill * elevationGainModifier;
     const gradientPercent = clamp(segment.gradient_percent, -20, 20);
     const gradientModifier = gradientPercent > 0
-      ? Math.exp(-0.06 * gradientPercent)
+      ? Math.exp(-0.11 * gradientPercent)
       : 1 - (gradientPercent * 0.06);
     const windModifier = 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52);
     const speedSkillFactor = skillName === 'Flat' ? (7 / 35) : (10 / 35);
@@ -522,8 +742,13 @@ export class SimulationEngine {
 
     return {
       skillName,
+      skillBreakdown: weightedSkill.breakdown,
       baseSkill,
+      teamGroupBonus,
       effectiveSkill,
+      staminaModifier,
+      elevationGainModifier,
+      gradientPercent,
       gradientModifier,
       windModifier,
       tempSpeedMps: Math.max(0.5, baseSpeedMps * gradientModifier * windModifier),
@@ -536,20 +761,36 @@ export class SimulationEngine {
     if (!segment || !windZone) {
       rider.activeTerrain = 'Finish';
       rider.skillName = 'Finish';
+      rider.skillBreakdown = '';
       rider.baseSkill = 0;
+      rider.teamGroupBonus = 0;
       rider.effectiveSkill = 0;
+      rider.staminaModifier = 1;
+      rider.elevationGainModifier = 1;
+      rider.gradientPercent = 0;
       rider.gradientModifier = 1;
       rider.windModifier = 1;
+      rider.draftModifier = 1;
+      rider.currentSpeedMps = 0;
       return;
     }
 
+    rider.teamGroupBonus = this.isIndividualTimeTrial ? 0 : this.calculateTeamGroupBonus(rider);
     const basePhysics = this.calculateBasePhysics(rider, segment, windZone);
     rider.activeTerrain = segment.terrain;
     rider.skillName = basePhysics.skillName;
+    rider.skillBreakdown = basePhysics.skillBreakdown;
     rider.baseSkill = basePhysics.baseSkill;
+    rider.teamGroupBonus = basePhysics.teamGroupBonus;
     rider.effectiveSkill = basePhysics.effectiveSkill;
+    rider.staminaModifier = basePhysics.staminaModifier;
+    rider.elevationGainModifier = basePhysics.elevationGainModifier;
+    rider.gradientPercent = basePhysics.gradientPercent;
     rider.gradientModifier = basePhysics.gradientModifier;
     rider.windModifier = basePhysics.windModifier;
+    rider.draftModifier = 1;
+    rider.currentSpeedMps = basePhysics.tempSpeedMps;
+    rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
   }
 
   private buildClusters(ordered: RiderState[]): RiderCluster[] {
@@ -574,5 +815,172 @@ export class SimulationEngine {
     }
 
     return clusters.map(({ distanceSum: _distanceSum, ...cluster }) => cluster);
+  }
+
+  private calculateTeamGroupBonus(targetRider: RiderState): number {
+    if (this.isIndividualTimeTrial) {
+      return 0;
+    }
+
+    if (targetRider.rider.activeTeamId == null) {
+      return 0;
+    }
+
+    const sameTeamNearbyCount = this.riders.filter((candidate) => (
+      candidate.rider.id !== targetRider.rider.id
+      && candidate.finishTimeSeconds == null
+      && candidate.rider.activeTeamId === targetRider.rider.activeTeamId
+      && Math.abs(candidate.distanceCoveredMeters - targetRider.distanceCoveredMeters) < CLUSTER_DISTANCE_METERS
+    )).length;
+
+    if (sameTeamNearbyCount === 0) {
+      return -0.5;
+    }
+
+    return roundToTwoDecimals(sameTeamNearbyCount * 0.15);
+  }
+
+  private resolveStaminaModifier(rider: RiderState): number {
+    const stageDistanceKm = this.stageDistanceMeters / 1000;
+    if (stageDistanceKm <= 150) {
+      return 1;
+    }
+
+    const effectiveStaminaSkill = rider.rider.skills.stamina + resolveConditionFormBonus(rider.rider) + rider.dailyForm + rider.microForm + rider.teamGroupBonus;
+    const distanceFactor = 1.05 + (((stageDistanceKm - 150) / 10) * 0.015);
+    return (effectiveStaminaSkill / 90) * distanceFactor;
+  }
+
+  private resolveWeightedSkill(rider: Rider, skillName: TerrainSkillName): { value: number; breakdown: string } {
+    if (!this.isIndividualTimeTrial) {
+      const components: WeightedSkillComponent[] = [{ key: this.resolvePrimarySkillKey(skillName), weight: 1 }];
+      return {
+        value: resolveBaseSkill(rider, skillName),
+        breakdown: formatSkillBreakdown(rider, components),
+      };
+    }
+
+    const components: WeightedSkillComponent[] = [];
+
+    switch (skillName) {
+      case 'Flat':
+      case 'Sprint':
+        components.push({ key: 'timeTrial', weight: 3 }, { key: 'flat', weight: 2 }, { key: 'stamina', weight: 1 });
+        break;
+      case 'Hill':
+        components.push({ key: 'timeTrial', weight: 3 }, { key: 'hill', weight: 2 }, { key: 'stamina', weight: 1 });
+        break;
+      case 'Medium_Mountain':
+        components.push({ key: 'timeTrial', weight: 2 }, { key: 'mediumMountain', weight: 3 }, { key: 'stamina', weight: 1 });
+        break;
+      case 'Mountain':
+        components.push({ key: 'timeTrial', weight: 1 }, { key: 'mountain', weight: 4 }, { key: 'stamina', weight: 1 });
+        break;
+      case 'Downhill':
+        components.push({ key: 'timeTrial', weight: 2 }, { key: 'downhill', weight: 3 }, { key: 'stamina', weight: 1 });
+        break;
+      case 'Cobble':
+        components.push({ key: 'timeTrial', weight: 3 }, { key: 'cobble', weight: 2 }, { key: 'stamina', weight: 1 });
+        break;
+      default:
+        return {
+          value: resolveBaseSkill(rider, skillName),
+          breakdown: '',
+        };
+    }
+
+    const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+    const totalValue = components.reduce((sum, component) => sum + (rider.skills[component.key] * component.weight), 0);
+    return {
+      value: totalValue / totalWeight,
+      breakdown: formatSkillBreakdown(rider, components),
+    };
+  }
+
+  private resolvePrimarySkillKey(skillName: TerrainSkillName): RiderSkillKey {
+    switch (skillName) {
+      case 'Flat':
+        return 'flat';
+      case 'Hill':
+        return 'hill';
+      case 'Medium_Mountain':
+        return 'mediumMountain';
+      case 'Mountain':
+        return 'mountain';
+      case 'Cobble':
+        return 'cobble';
+      case 'Sprint':
+        return 'sprint';
+      case 'Downhill':
+        return 'downhill';
+      default:
+        return 'flat';
+    }
+  }
+
+  private resolveElevationGainModifier(skillName: TerrainSkillName, effectiveSkill: number): number {
+    if (skillName !== 'Mountain' && skillName !== 'Medium_Mountain') {
+      return 1;
+    }
+
+    const elevationGainMeters = this.bootstrap.stageSummary.elevationGainMeters;
+    if (elevationGainMeters < 1500) {
+      return 1;
+    }
+
+    const stageLoadFactor = 1 + ((Math.min(elevationGainMeters, 3000) - 1500) / 250);
+    const clampedSkill = clamp(effectiveSkill, 50, 85);
+    const skillRatio = (85 - clampedSkill) / 35;
+    const penaltyPerBand = 0.01 + (skillRatio * 0.02);
+    return Math.max(0.5, 1 - (penaltyPerBand * stageLoadFactor));
+  }
+
+  private calculatePhotoFinishScore(rider: RiderState): number {
+    const formBonus = resolveConditionFormBonus(rider.rider);
+    const effectiveSprint = (rider.rider.skills.sprint + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus) * rider.staminaModifier;
+    const effectiveAcceleration = (rider.rider.skills.acceleration + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus) * rider.staminaModifier;
+    const effectiveFlat = (rider.rider.skills.flat + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus) * rider.staminaModifier;
+    return (effectiveSprint * 0.6) + (effectiveAcceleration * 0.2) + (effectiveFlat * 0.2);
+  }
+
+  private recordIntermediateSplits(
+    rider: RiderState,
+    startDistanceMeters: number,
+    endDistanceMeters: number,
+    stepStartSeconds: number,
+    speedMps: number,
+  ): void {
+    if (!this.isIndividualTimeTrial || speedMps <= 0) {
+      return;
+    }
+
+    while (rider.nextIntermediateIndex < this.intermediateMarkers.length) {
+      const marker = this.intermediateMarkers[rider.nextIntermediateIndex];
+      if (marker.distanceMeters > endDistanceMeters) {
+        break;
+      }
+      if (marker.distanceMeters < startDistanceMeters) {
+        rider.nextIntermediateIndex += 1;
+        continue;
+      }
+
+      const secondsToMarker = (marker.distanceMeters - startDistanceMeters) / speedMps;
+      rider.lastSplitLabel = marker.label;
+      rider.lastSplitTimeSeconds = Math.max(0, stepStartSeconds + secondsToMarker - rider.startOffsetSeconds);
+      rider.nextIntermediateIndex += 1;
+    }
+  }
+
+  private resolveRiderClockSeconds(rider: RiderState): number | null {
+    if (rider.finishTimeSeconds != null) {
+      return Math.max(0, rider.finishTimeSeconds - rider.startOffsetSeconds);
+    }
+    if (!this.isIndividualTimeTrial) {
+      return this.elapsedSeconds;
+    }
+    if (!rider.hasStarted) {
+      return null;
+    }
+    return Math.max(0, this.elapsedSeconds - rider.startOffsetSeconds);
   }
 }

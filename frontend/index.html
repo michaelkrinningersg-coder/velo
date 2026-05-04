@@ -23,6 +23,7 @@
       <button class="btn btn-primary btn-lg" id="btn-new-career">Neue Karriere</button>
       <button class="btn btn-secondary btn-lg" id="btn-load-career">Karriere laden</button>
     </div>
+    <button class="btn btn-danger btn-sm hidden" id="btn-delete-all-careers">Alle Karrieren löschen</button>
     <div id="saves-list" class="saves-grid hidden"></div>
   </div>
 
@@ -81,7 +82,7 @@
     </aside>
 
     <main class="game-main">
-      <section class="game-state-bar">
+      <section id="game-state-bar" class="game-state-bar hidden">
         <div class="game-state-copy">
           <div class="game-state-label">Aktueller Tag</div>
           <div id="meta-date" class="game-state-date">-</div>
@@ -136,7 +137,7 @@
         <div class="view-header view-header-stack">
           <div>
             <h2>Live Race</h2>
-            <p id="race-sim-stage-meta" class="text-muted">Noch keine Etappe für die Live-Simulation geladen.</p>
+            <p id="race-sim-stage-meta" class="text-muted"></p>
           </div>
         </div>
         <div class="race-sim-toolbar">
@@ -146,34 +147,52 @@
               <option value="">– Keine offenen Etappen –</option>
             </select>
           </div>
-          <div class="race-sim-toolbar-actions">
-            <button class="btn btn-primary" id="btn-race-sim-load">Live-Simulation laden</button>
-            <div id="race-sim-status" class="race-sim-toolbar-status">Heute gibt es keine offenen Etappen.</div>
-          </div>
         </div>
         <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen für die Live-Simulation.</div>
         <div id="race-sim-layout" class="race-sim-shell hidden">
-          <aside class="race-sim-sidebar-card">
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Time Controls</h3>
+              <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
+            </div>
+            <div id="race-sim-controls" class="race-sim-controls"></div>
+          </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Höhenprofil</h3>
+              <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
+            </div>
+            <div id="race-sim-profile" class="race-sim-profile"></div>
+          </section>
+          <section class="race-sim-sidebar-card">
             <div class="race-sim-card-header">
               <h3>Leaderboard</h3>
-              <p class="text-muted">Live-Daten pro Fahrer, sortiert nach Distanz.</p>
+              <p class="text-muted">Live-Daten pro Fahrer, sortiert nach Position.</p>
             </div>
-            <div id="race-sim-sidebar-body" class="race-sim-sidebar-body"></div>
-          </aside>
-          <section class="race-sim-main">
-            <div class="race-sim-card">
-              <div class="race-sim-card-header">
-                <h3>Höhenprofil</h3>
-                <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
+            <div class="race-sim-leaderboard-scroll">
+              <div class="race-sim-leaderboard-head" aria-hidden="true">
+                <span>Fahrer</span>
+                <span>Gap</span>
+                <span>Uhr</span>
+                <span>Terrain / Skill</span>
+                <span>Skills / Basis</span>
+                <span>Team</span>
+                <span>S-Form</span>
+                <span>R-Form</span>
+                <span>Effektiv</span>
+                <span>Stamina</span>
+                <span>HM</span>
+                <span>Tagesform</span>
+                <span>Zufall</span>
+                <span>GC</span>
+                <span>GC Gap</span>
+                <span>Steigung</span>
+                <span>M_grad</span>
+                <span>M_wind</span>
+                <span>Draft</span>
+                <span>Speed</span>
               </div>
-              <div id="race-sim-profile" class="race-sim-profile"></div>
-            </div>
-            <div class="race-sim-card">
-              <div class="race-sim-card-header">
-                <h3>Time Controls</h3>
-                <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
-              </div>
-              <div id="race-sim-controls" class="race-sim-controls"></div>
+              <div id="race-sim-sidebar-body" class="race-sim-sidebar-body"></div>
             </div>
           </section>
         </div>
@@ -334,8 +353,6 @@
                       <th>Tech</th>
                       <th>Wind</th>
                       <th>Marker</th>
-                      <th>Name</th>
-                      <th>Kat</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -369,6 +386,25 @@
           </thead>
           <tbody id="tt-result-tbody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Starterfeld Modal --------------------------------- -->
+  <div id="modal-rosterEditor" class="modal hidden">
+    <div class="modal-card modal-card-xl">
+      <div class="modal-header">
+        <div>
+          <h2 id="roster-editor-title">Starterfeld bearbeiten</h2>
+          <p id="roster-editor-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-roster-editor">✕</button>
+      </div>
+      <p id="roster-editor-error" class="error-msg hidden"></p>
+      <div id="roster-editor-body" class="roster-editor-body"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-roster-editor">Abbrechen</button>
+        <button class="btn btn-primary" id="btn-apply-roster-editor">Teilnehmer übernehmen</button>
       </div>
     </div>
   </div>

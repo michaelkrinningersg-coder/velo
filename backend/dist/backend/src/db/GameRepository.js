@@ -124,6 +124,39 @@ function parseRankedValues(value) {
         return [];
     return value.split('|').map((part) => Number.parseInt(part.trim(), 10)).filter(Number.isFinite);
 }
+function parsePeakDates(value) {
+    if (!value)
+        return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [];
+    }
+    catch {
+        return [];
+    }
+}
+function isoDateToDayNumber(isoDate) {
+    return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
+}
+function resolveRaceFormBonus(currentDate, peakDates) {
+    if (peakDates.length === 0) {
+        return 0;
+    }
+    const currentDay = isoDateToDayNumber(currentDate);
+    for (const peakDate of peakDates) {
+        const peakDay = isoDateToDayNumber(peakDate);
+        const buildStartDay = peakDay - 42;
+        const peakBonus = (peakDay - buildStartDay) * 0.1;
+        if (currentDay >= buildStartDay && currentDay < peakDay) {
+            return Number((((currentDay - buildStartDay) + 1) * 0.1).toFixed(2));
+        }
+        if (currentDay >= peakDay && currentDay < peakDay + 10) {
+            const elapsedDeclineDays = currentDay - peakDay;
+            return Number((Math.max(0, peakBonus * (1 - (elapsedDeclineDays / 10)))).toFixed(2));
+        }
+    }
+    return 0;
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -153,9 +186,10 @@ function mapRole(row) {
         weighting: row.role_weighting,
     };
 }
-function mapRider(row, currentYear, seasonPoints = 0) {
+function mapRider(row, currentYear, currentDate, seasonPoints = 0) {
     const country = mapCountry(row);
     const role = mapRole(row);
+    const peakDates = parsePeakDates(row.peak_dates_json);
     return {
         id: row.id,
         firstName: row.first_name,
@@ -194,6 +228,14 @@ function mapRider(row, currentYear, seasonPoints = 0) {
         activeContractId: row.active_contract_id,
         contractEndSeason: row.contract_end_season,
         seasonPoints,
+        formBonus: row.form_bonus ?? -1,
+        raceFormBonus: resolveRaceFormBonus(currentDate, peakDates),
+        seasonFormPeakDates: peakDates,
+        healthStatus: row.health_status ?? 'healthy',
+        unavailableUntil: row.unavailable_until,
+        unavailableDaysRemaining: row.unavailable_days_remaining ?? 0,
+        healthStatusLabel: row.health_status === 'ill' ? 'Krankheit' : row.health_status === 'injured' ? 'Verletzung' : null,
+        isUnavailable: (row.unavailable_days_remaining ?? 0) > 0,
     };
 }
 function mapTeam(row) {
@@ -260,6 +302,7 @@ function mapRaceCategory(row) {
     };
 }
 function mapStage(row) {
+    const summary = (0, StageParser_1.summarizeStageProfile)(row.details_csv_file);
     return {
         id: row.id,
         raceId: row.race_id,
@@ -267,6 +310,8 @@ function mapStage(row) {
         date: row.date,
         profile: row.profile,
         detailsCsvFile: row.details_csv_file,
+        distanceKm: summary.distanceKm,
+        elevationGainMeters: summary.elevationGainMeters,
     };
 }
 function loadFallbackStages(raceIds) {
@@ -385,6 +430,7 @@ class GameRepository {
         return `${this.getCurrentSeason()}-01-01`;
     }
     getRidersQuery(useContracts, filterByTeam) {
+        const useDailyState = tableExists(this.db, 'rider_daily_state');
         const countrySelect = `
       riders.*,
       role.name AS role_name,
@@ -398,12 +444,18 @@ class GameRepository {
       country.continent AS country_continent,
       country.regen_rating AS country_regen_rating,
       country.number_regen_min AS country_number_regen_min,
-      country.number_regen_max AS country_number_regen_max
+      country.number_regen_max AS country_number_regen_max,
+      ${useDailyState ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+      ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+      ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+      ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+      ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining
     `;
+        const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
         if (!useContracts) {
             return filterByTeam
-                ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
-                : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id WHERE is_retired = 0 ORDER BY overall_rating DESC`;
+                ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
+                : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} WHERE is_retired = 0 ORDER BY overall_rating DESC`;
         }
         const activeContractJoin = `
       LEFT JOIN contracts current_contract
@@ -433,6 +485,7 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
+      ${riderStateJoin}
       ${activeContractJoin}
     `;
         return filterByTeam
@@ -441,6 +494,7 @@ class GameRepository {
     }
     getRiders(teamId) {
         const season = this.getCurrentSeason();
+        const currentDate = this.getCurrentDate();
         this.syncSeasonPointEventsForSeason(season);
         const useContracts = tableExists(this.db, 'contracts');
         const rows = teamId != null
@@ -451,10 +505,11 @@ class GameRepository {
                 ? this.db.prepare(this.getRidersQuery(true, false)).all(season, season)
                 : this.db.prepare(this.getRidersQuery(false, false)).all());
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
-        return rows.map((row) => mapRider(row, season, seasonPointsByRiderId.get(row.id) ?? 0));
+        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
     }
     getRiderById(id) {
         const season = this.getCurrentSeason();
+        const currentDate = this.getCurrentDate();
         const row = this.db.prepare(`
       SELECT riders.*,
              role.name AS role_name,
@@ -469,6 +524,11 @@ class GameRepository {
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              (
                SELECT c.end_season
                FROM contracts c
@@ -481,9 +541,10 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
+      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : ''}
       WHERE riders.id = ?
     `).get(id);
-        return row ? mapRider(row, season) : null;
+        return row ? mapRider(row, season, currentDate) : null;
     }
     getTeams() {
         const rows = this.db.prepare(`
@@ -563,6 +624,7 @@ class GameRepository {
     }
     getRaceRiders(raceId) {
         const season = this.getCurrentSeason();
+        const currentDate = this.getCurrentDate();
         this.syncSeasonPointEventsForSeason(season);
         const rows = this.db.prepare(`
       SELECT r.*,
@@ -595,7 +657,7 @@ class GameRepository {
       ORDER BY r.overall_rating DESC
     `).all(raceId);
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
-        return rows.map((row) => mapRider(row, season, seasonPointsByRiderId.get(row.id) ?? 0));
+        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
     }
     getSeasonStandings(season = this.getCurrentSeason()) {
         this.syncSeasonPointEventsForSeason(season);
@@ -649,6 +711,40 @@ class GameRepository {
       WHERE id = ?
     `).get(id);
         return row ? mapStage(row) : null;
+    }
+    getPreviousGcStandings(raceId, stageNumber) {
+        if (!tableExists(this.db, 'results')) {
+            return [];
+        }
+        const previousStage = this.db.prepare(`
+      SELECT stages.id AS stage_id
+      FROM stages
+      JOIN results ON results.stage_id = stages.id
+      WHERE stages.race_id = ?
+        AND stages.stage_number < ?
+        AND results.result_type_id = ?
+      GROUP BY stages.id, stages.stage_number
+      ORDER BY stages.stage_number DESC
+      LIMIT 1
+    `).get(raceId, stageNumber, RESULT_TYPE_IDS.gc);
+        if (!previousStage) {
+            return [];
+        }
+        const rows = this.db.prepare(`
+      SELECT rider_id, rank, time_seconds
+      FROM results
+      WHERE stage_id = ?
+        AND result_type_id = ?
+        AND rider_id IS NOT NULL
+      ORDER BY rank ASC
+    `).all(previousStage.stage_id, RESULT_TYPE_IDS.gc);
+        const leaderTime = rows[0]?.time_seconds ?? 0;
+        return rows.map((row) => ({
+            riderId: row.rider_id,
+            rank: row.rank,
+            timeSeconds: row.time_seconds,
+            gapSeconds: row.time_seconds - leaderTime,
+        }));
     }
     getStageResults(stageId) {
         if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
@@ -849,9 +945,36 @@ class GameRepository {
     getUpcomingStageSummary(stages, isStageRace, currentDate) {
         if (stages.length === 0)
             return undefined;
-        const selectedStage = isStageRace
-            ? stages.find((stage) => stage.date >= currentDate) ?? stages[stages.length - 1]
-            : stages[0];
+        const orderedStages = [...stages].sort((left, right) => {
+            if (left.stageNumber !== right.stageNumber) {
+                return left.stageNumber - right.stageNumber;
+            }
+            if (left.date !== right.date) {
+                return left.date.localeCompare(right.date);
+            }
+            return left.id - right.id;
+        });
+        let selectedStage = orderedStages[0];
+        if (isStageRace) {
+            if (currentDate < orderedStages[0].date) {
+                selectedStage = orderedStages[0];
+            }
+            else {
+                const completedStageIds = tableExists(this.db, 'results')
+                    ? new Set(this.db.prepare(`
+            SELECT DISTINCT stage_id
+            FROM results
+            WHERE result_type_id = ?
+              AND stage_id IN (${orderedStages.map(() => '?').join(', ')})
+          `).all(RESULT_TYPE_IDS.stage, ...orderedStages.map((stage) => stage.id)).map((row) => row.stage_id))
+                    : new Set();
+                selectedStage = orderedStages.find((stage) => stage.date <= currentDate && !completedStageIds.has(stage.id))
+                    ?? orderedStages.find((stage) => stage.date >= currentDate && !completedStageIds.has(stage.id))
+                    ?? orderedStages.find((stage) => stage.date >= currentDate)
+                    ?? orderedStages.find((stage) => !completedStageIds.has(stage.id))
+                    ?? orderedStages[orderedStages.length - 1];
+            }
+        }
         if (!selectedStage)
             return undefined;
         const summary = (0, StageParser_1.summarizeStageProfile)(selectedStage.detailsCsvFile);

@@ -43,14 +43,8 @@ function ensureControlsMarkup(container: HTMLElement): void {
         <strong data-race-sim-field="finished">0 / 0</strong>
       </div>
     </div>
-    <div class="race-sim-control-state" data-race-sim-field="state"></div>
-    <div class="race-sim-progress">
-      <div class="race-sim-progress-fill" data-race-sim-field="progress"></div>
-    </div>
-    <div class="race-sim-control-actions">
-      <button type="button" class="btn btn-primary" data-race-sim-action="toggle">Start</button>
-    </div>
     <div class="race-sim-speed-strip">
+      <button type="button" class="race-sim-speed-btn race-sim-speed-btn-toggle" data-race-sim-action="toggle">Start</button>
       ${TIME_CONTROL_VALUES.map((value) => `
         <button
           type="button"
@@ -64,20 +58,9 @@ function ensureControlsMarkup(container: HTMLElement): void {
 export function renderRaceSimControls(container: HTMLElement, state: ControlRenderState): void {
   ensureControlsMarkup(container);
 
-  const progress = state.snapshot.stageDistanceMeters <= 0
-    ? 0
-    : Math.max(0, Math.min(100, (state.snapshot.leaderDistanceMeters / state.snapshot.stageDistanceMeters) * 100));
-  const controlStateLabel = state.snapshot.isFinished
-    ? 'Etappe beendet'
-    : state.isRunning
-      ? `Läuft · ${state.timeMultiplier}x`
-      : `Pausiert · ${state.timeMultiplier}x`;
-
   const timeField = container.querySelector<HTMLElement>('[data-race-sim-field="time"]');
   const leaderField = container.querySelector<HTMLElement>('[data-race-sim-field="leader"]');
   const finishedField = container.querySelector<HTMLElement>('[data-race-sim-field="finished"]');
-  const stateField = container.querySelector<HTMLElement>('[data-race-sim-field="state"]');
-  const progressField = container.querySelector<HTMLElement>('[data-race-sim-field="progress"]');
   const toggleButton = container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]');
 
   if (timeField) {
@@ -89,14 +72,9 @@ export function renderRaceSimControls(container: HTMLElement, state: ControlRend
   if (finishedField) {
     finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.snapshot.riders.length}`;
   }
-  if (stateField) {
-    stateField.textContent = controlStateLabel;
-  }
-  if (progressField) {
-    progressField.setAttribute('style', `width:${progress.toFixed(2)}%`);
-  }
   if (toggleButton) {
     toggleButton.textContent = state.isRunning ? 'Pause' : state.snapshot.isFinished ? 'Fertig' : 'Start';
+    toggleButton.classList.toggle('active', !state.isRunning && !state.snapshot.isFinished);
   }
 
   container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]').forEach((button) => {

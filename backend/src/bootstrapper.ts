@@ -632,20 +632,24 @@ function seedContracts(db: Database.Database): void {
     ORDER BY division_teams.tier ASC, teams.id ASC
   `).all() as TeamAllocationRow[];
 
-  const riders = db.prepare(`
-    SELECT id, overall_rating
+  const assignedRiders = db.prepare(`
+    SELECT id, active_team_id
     FROM riders
     WHERE is_retired = 0
-    ORDER BY overall_rating DESC, id ASC
-  `).all() as RiderAllocationRow[];
+      AND active_team_id IS NOT NULL
+    ORDER BY active_team_id ASC, overall_rating DESC, id ASC
+  `).all() as Array<{ id: number; active_team_id: number }>;
 
-  const worldTourTeams = teams.filter((team) => team.division_name === 'WorldTour');
-  const proTourTeams = teams.filter((team) => team.division_name === 'ProTour');
-  const rosterSize = 30;
-  const requiredRiders = (worldTourTeams.length + proTourTeams.length) * rosterSize;
+  const riderCountByTeam = new Map<number, number>();
+  for (const rider of assignedRiders) {
+    riderCountByTeam.set(rider.active_team_id, (riderCountByTeam.get(rider.active_team_id) ?? 0) + 1);
+  }
 
-  if (riders.length < requiredRiders) {
-    throw new Error(`Nicht genug Fahrer fuer ${teams.length} Teams à ${rosterSize}. Verfuegbar: ${riders.length}, benoetigt: ${requiredRiders}.`);
+  for (const team of teams) {
+    const riderCount = riderCountByTeam.get(team.id) ?? 0;
+    if (riderCount !== 30) {
+      throw new Error(`Team ${team.id} (${team.division_name}) hat ${riderCount} gesetzte Fahrer in riders.csv, erwartet 30.`);
+    }
   }
 
   const insert = db.prepare(`
@@ -653,31 +657,11 @@ function seedContracts(db: Database.Database): void {
     VALUES (?, ?, ?, ?, ?)
   `);
 
-  let offset = 0;
-  const allocateDivision = (divisionTeams: TeamAllocationRow[], seed: number): void => {
-    const poolSize = divisionTeams.length * rosterSize;
-    const divisionPool = riders.slice(offset, offset + poolSize);
-    const shuffledPool = shuffleDeterministically(divisionPool, seed);
+  for (const rider of assignedRiders) {
+    insert.run(rider.id, rider.active_team_id, currentSeason.season, currentSeason.season + 2, 'active');
+  }
 
-    divisionTeams.forEach((team, teamIndex) => {
-      const teamRiders = shuffledPool.slice(teamIndex * rosterSize, (teamIndex + 1) * rosterSize);
-      if (teamRiders.length !== rosterSize) {
-        throw new Error(`Team ${team.id} konnte nicht mit ${rosterSize} Fahrern gefuellt werden.`);
-      }
-
-      teamRiders.forEach((rider) => {
-        insert.run(rider.id, team.id, currentSeason.season, currentSeason.season + 2, 'active');
-      });
-    });
-
-    offset += poolSize;
-  };
-
-  allocateDivision(worldTourTeams, currentSeason.season * 100 + 1);
-  allocateDivision(proTourTeams, currentSeason.season * 100 + 2);
-
-  const assignedRiders = teams.length * rosterSize;
-  console.log(`  ${assignedRiders} Vertraege fuer ${teams.length} Teams erzeugt.`);
+  console.log(`  ${assignedRiders.length} Vertraege fuer ${teams.length} Teams aus riders.csv erzeugt.`);
 }
 
 function seedGameState(db: Database.Database): number {

@@ -54,6 +54,7 @@ interface PerformanceEntry {
   performanceScore: number;
   rawTimeSeconds: number;
   stageTimeSeconds: number;
+  photoFinishScore: number;
   points: number;
   gcBonusSeconds: number;
   mountainPoints: number;
@@ -116,6 +117,16 @@ function appendToNumberMap(target: Map<number, number>, key: number, value: numb
   target.set(key, (target.get(key) ?? 0) + value);
 }
 
+function comparePerformanceEntries(left: Pick<PerformanceEntry, 'stageTimeSeconds' | 'photoFinishScore' | 'rider'>, right: Pick<PerformanceEntry, 'stageTimeSeconds' | 'photoFinishScore' | 'rider'>): number {
+  return left.stageTimeSeconds - right.stageTimeSeconds
+    || right.photoFinishScore - left.photoFinishScore
+    || left.rider.id - right.rider.id;
+}
+
+function resolveFormBonus(rider: Rider): number {
+  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+}
+
 export class QuickSimEngine {
   private readonly repo: GameRepository;
 
@@ -141,8 +152,9 @@ export class QuickSimEngine {
       .map((entry) => ({
         riderId: entry.riderId,
         finishTimeSeconds: roundSeconds(entry.finishTimeSeconds),
+        photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
       }))
-      .sort((left, right) => left.finishTimeSeconds - right.finishTimeSeconds || left.riderId - right.riderId);
+      .sort((left, right) => left.finishTimeSeconds - right.finishTimeSeconds || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
     if (sanitizedEntries.length !== riders.length) {
       throw new Error('Die Live-Simulation muss genau eine Zielzeit für jeden Starter übergeben.');
@@ -171,6 +183,7 @@ export class QuickSimEngine {
         performanceScore: 0,
         rawTimeSeconds: entry.finishTimeSeconds,
         stageTimeSeconds: entry.finishTimeSeconds,
+        photoFinishScore: entry.photoFinishScore ?? 0,
         points: 0,
         gcBonusSeconds: 0,
         mountainPoints: 0,
@@ -181,9 +194,10 @@ export class QuickSimEngine {
       throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
     }
 
-    if (stage.profile !== 'ITT' && stage.profile !== 'TTT') {
-      this.applyFinishLineAwards(race, performance);
-    }
+    this.applyFinishLineAwards(race, performance, {
+      awardPoints: stage.profile !== 'TTT',
+      awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
+    });
 
     return this.persistStagePerformance(race, stage, performance);
   }
@@ -224,16 +238,22 @@ export class QuickSimEngine {
     return { race, stage, riders, teamsById };
   }
 
-  private applyFinishLineAwards(race: Race, performance: PerformanceEntry[]): void {
+  private applyFinishLineAwards(
+    race: Race,
+    performance: PerformanceEntry[],
+    options: { awardPoints: boolean; awardTimeBonuses: boolean } = { awardPoints: true, awardTimeBonuses: true },
+  ): void {
     if (!race.category?.bonusSystem) {
       return;
     }
 
-    const finishPointValues = race.isStageRace
+    const finishPointValues = options.awardPoints && race.isStageRace
       ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
       : [];
-    const finishBonusValues = parseRankedValues(race.category.bonusSystem.bonusSecondsFinal);
-    const sorted = [...performance].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || left.rider.id - right.rider.id);
+    const finishBonusValues = options.awardTimeBonuses
+      ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)
+      : [];
+    const sorted = [...performance].sort(comparePerformanceEntries);
 
     finishPointValues.forEach((points, index) => {
       const entry = sorted[index];
@@ -249,6 +269,7 @@ export class QuickSimEngine {
   }
 
   private persistStagePerformance(race: Race, stage: Stage, performance: PerformanceEntry[]): QuickSimResponse {
+    const rankedPerformance = [...performance].sort(comparePerformanceEntries);
 
     const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
     const previousGc = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.gc, 'time_seconds');
@@ -256,7 +277,7 @@ export class QuickSimEngine {
     const previousMountain = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.mountain, 'points');
     const previousTeam = this.loadPreviousTeamMetricMap(previousStageId, RESULT_TYPES.team, 'time_seconds');
 
-    const stageRows = performance.map((entry, index) => ({
+    const stageRows = rankedPerformance.map((entry, index) => ({
       rank: index + 1,
       riderId: entry.rider.id,
       teamId: entry.team.id,
@@ -299,7 +320,7 @@ export class QuickSimEngine {
     const youthRows = race.isStageRace
       ? gcRows
           .filter((entry) => {
-            const rider = performance.find((candidate) => candidate.rider.id === entry.riderId)?.rider;
+            const rider = rankedPerformance.find((candidate) => candidate.rider.id === entry.riderId)?.rider;
             return rider != null && currentSeason - rider.birthYear <= 25;
           })
           .map((entry, index) => ({
@@ -311,14 +332,14 @@ export class QuickSimEngine {
           }))
       : [];
 
-    const teamIds = [...new Set(performance.map((entry) => entry.team.id))];
+    const teamIds = [...new Set(rankedPerformance.map((entry) => entry.team.id))];
     const stageTeamTimes = new Map<number, number>();
     for (const teamId of teamIds) {
-      const teamEntries = performance
+      const teamEntries = rankedPerformance
         .filter((entry) => entry.team.id === teamId)
         .sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds)
         .slice(0, 3);
-      if (teamEntries.length === 0) continue;
+      if (teamEntries.length < 3) continue;
       stageTeamTimes.set(teamId, teamEntries.reduce((sum, entry) => sum + entry.stageTimeSeconds, 0));
     }
 
@@ -423,6 +444,7 @@ export class QuickSimEngine {
         performanceScore: 0,
         rawTimeSeconds: entry.finishTimeSeconds,
         stageTimeSeconds: roundSeconds(entry.finishTimeSeconds),
+        photoFinishScore: 0,
         points: 0,
         gcBonusSeconds: 0,
         mountainPoints: 0,
@@ -470,6 +492,7 @@ export class QuickSimEngine {
         performanceScore: 0,
         rawTimeSeconds: 0,
         stageTimeSeconds: 0,
+        photoFinishScore: 0,
         points: 0,
         gcBonusSeconds: 0,
         mountainPoints: 0,
@@ -497,10 +520,11 @@ export class QuickSimEngine {
     }
 
     const sorted = [...states]
-      .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || left.rider.id - right.rider.id)
+      .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || this.resolvePhotoFinishScore(right.rider, right.dayForm, summary.distanceKm) - this.resolvePhotoFinishScore(left.rider, left.dayForm, summary.distanceKm) || left.rider.id - right.rider.id)
       .map((entry) => ({
         ...entry,
         stageTimeSeconds: roundSeconds(entry.rawTimeSeconds),
+        photoFinishScore: this.resolvePhotoFinishScore(entry.rider, entry.dayForm, summary.distanceKm),
       }));
 
     finishPointValues.forEach((points, index) => {
@@ -607,26 +631,27 @@ export class QuickSimEngine {
   }
 
   private resolveActiveSkill(rider: Rider, segment: ParsedStageSegment): number {
+    const formBonus = resolveFormBonus(rider);
     switch (segment.terrain) {
       case 'Flat':
-        return rider.skills.flat;
+        return rider.skills.flat + formBonus;
       case 'Hill':
-        return rider.skills.hill;
+        return rider.skills.hill + formBonus;
       case 'Medium_Mountain':
-        return rider.skills.mediumMountain * 0.7 + rider.skills.mountain * 0.3;
+        return rider.skills.mediumMountain * 0.7 + rider.skills.mountain * 0.3 + formBonus;
       case 'Mountain':
       case 'High_Mountain':
-        return rider.skills.mountain;
+        return rider.skills.mountain + formBonus;
       case 'Cobble':
-        return rider.skills.cobble;
+        return rider.skills.cobble + formBonus;
       case 'Cobble_Hill':
-        return rider.skills.cobble * 0.6 + rider.skills.hill * 0.4;
+        return rider.skills.cobble * 0.6 + rider.skills.hill * 0.4 + formBonus;
       case 'Abfahrt':
-        return rider.skills.downhill;
+        return rider.skills.downhill + formBonus;
       case 'Sprint':
-        return rider.skills.sprint * 0.7 + rider.skills.acceleration * 0.3;
+        return rider.skills.sprint * 0.7 + rider.skills.acceleration * 0.3 + formBonus;
       default:
-        return rider.skills.flat;
+        return rider.skills.flat + formBonus;
     }
   }
 
@@ -702,24 +727,44 @@ export class QuickSimEngine {
   }
 
   private resolveSprintScore(rider: Rider, stageFraction: number, dayForm: number): number {
+    const formBonus = resolveFormBonus(rider);
     const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 250) * stageFraction;
     return (
-      rider.skills.sprint * 0.45
-      + rider.skills.acceleration * 0.25
-      + rider.skills.flat * 0.1
-      + rider.skills.resistance * 0.1
-      + rider.skills.bikeHandling * 0.1
+      (rider.skills.sprint + formBonus) * 0.45
+      + (rider.skills.acceleration + formBonus) * 0.25
+      + (rider.skills.flat + formBonus) * 0.1
+      + (rider.skills.resistance + formBonus) * 0.1
+      + (rider.skills.bikeHandling + formBonus) * 0.1
     ) * fatigueBoost * dayForm;
   }
 
+  private resolvePhotoFinishScore(rider: Rider, dayForm: number, stageDistanceKm: number): number {
+    const staminaModifier = this.resolveStaminaModifier(rider, dayForm, stageDistanceKm);
+    const formBonus = resolveFormBonus(rider);
+    const effectiveSprint = ((rider.skills.sprint + formBonus) * dayForm) * staminaModifier;
+    const effectiveAcceleration = ((rider.skills.acceleration + formBonus) * dayForm) * staminaModifier;
+    const effectiveFlat = ((rider.skills.flat + formBonus) * dayForm) * staminaModifier;
+    return (effectiveSprint * 0.6) + (effectiveAcceleration * 0.2) + (effectiveFlat * 0.2);
+  }
+
+  private resolveStaminaModifier(rider: Rider, dayForm: number, stageDistanceKm: number): number {
+    if (stageDistanceKm <= 150) {
+      return 1;
+    }
+
+    const distanceFactor = 1.05 + (((stageDistanceKm - 150) / 10) * 0.015);
+    return (((rider.skills.stamina + resolveFormBonus(rider)) * dayForm) / 90) * distanceFactor;
+  }
+
   private resolveClimbScore(rider: Rider, stageFraction: number, dayForm: number): number {
+    const formBonus = resolveFormBonus(rider);
     const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 220) * stageFraction;
     return (
-      rider.skills.mountain * 0.45
-      + rider.skills.mediumMountain * 0.2
-      + rider.skills.hill * 0.1
-      + rider.skills.attack * 0.1
-      + rider.skills.resistance * 0.15
+      (rider.skills.mountain + formBonus) * 0.45
+      + (rider.skills.mediumMountain + formBonus) * 0.2
+      + (rider.skills.hill + formBonus) * 0.1
+      + (rider.skills.attack + formBonus) * 0.1
+      + (rider.skills.resistance + formBonus) * 0.15
     ) * fatigueBoost * dayForm;
   }
 

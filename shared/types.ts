@@ -57,6 +57,7 @@ export type RiderSpecialization =
 
 export type RiderSkills = Record<RiderSkillKey, number>;
 export type RiderPotentials = Record<RiderSkillKey, number>;
+export type RiderHealthStatus = 'healthy' | 'ill' | 'injured';
 
 export type ContractStatus = 'active' | 'expired' | 'future';
 
@@ -107,6 +108,14 @@ export interface Rider {
   activeContractId: number | null;
   contractEndSeason?: number | null;
   seasonPoints?: number;
+  formBonus?: number;
+  raceFormBonus?: number;
+  seasonFormPeakDates?: string[];
+  healthStatus?: RiderHealthStatus;
+  unavailableUntil?: string | null;
+  unavailableDaysRemaining?: number;
+  healthStatusLabel?: string | null;
+  isUnavailable?: boolean;
 }
 
 // ------ Team -------------------------------------------------
@@ -289,6 +298,8 @@ export interface Stage {
   date: string;
   profile: StageProfile;
   detailsCsvFile: string;
+  distanceKm?: number;
+  elevationGainMeters?: number;
 }
 
 // ------ Simulation -------------------------------------------
@@ -401,10 +412,41 @@ export interface QuickSimResponse {
 export interface RealtimeStageCommitEntry {
   riderId: number;
   finishTimeSeconds: number;
+  photoFinishScore?: number;
+}
+
+export interface RealtimeGcStanding {
+  riderId: number;
+  rank: number;
+  timeSeconds: number;
+  gapSeconds: number;
 }
 
 export interface RealtimeStageCommitRequest {
   entries: RealtimeStageCommitEntry[];
+}
+
+export interface RaceRosterSelectionRequest {
+  riderIds: number[];
+}
+
+export interface RaceRosterRiderOption {
+  rider: Rider;
+  isSelected: boolean;
+  isLocked: boolean;
+  lockReason: string | null;
+}
+
+export interface RaceRosterTeamOption {
+  team: Team;
+  riderLimit: number;
+  riders: RaceRosterRiderOption[];
+}
+
+export interface RaceRosterEditorPayload {
+  race: Race;
+  stage: Stage;
+  teams: RaceRosterTeamOption[];
 }
 
 export interface RealtimeSimulationBootstrap {
@@ -413,6 +455,7 @@ export interface RealtimeSimulationBootstrap {
   riders: Rider[];
   teams: Team[];
   stageSummary: ParsedStageSummary;
+  gcStandings: RealtimeGcStanding[];
 }
 
 export type SeasonPointAwardType =
