@@ -182,18 +182,27 @@ function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race
     .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
 }
 
-export function previewRaceRoster(db: Database.Database, repo: GameRepository, race: Race): Rider[] {
+export function previewRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): Rider[] {
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
-    return existingEntries;
+    if (race.isStageRace) {
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider) => rider.id));
+    }
+    repo.ensureStageEntries(stage);
+    return repo.getStageRiders(stage.id);
   }
 
-  return buildRaceRoster(db, repo, race);
+  const selected = buildRaceRoster(db, repo, race);
+  if (race.isStageRace) {
+    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+    return repo.attachStageRaceFatigue(race.id, selected, stage.stageNumber);
+  }
+  return selected;
 }
 
 export function previewRaceRosterEditor(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): RaceRosterEditorPayload {
   const riderLocks = buildRiderLockMap(db, repo, race);
-  const selectedIds = new Set(previewRaceRoster(db, repo, race).map((rider) => rider.id));
+  const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider) => rider.id));
   const playerTeam = getPlayerTeam(repo);
   const teams = [{
     team: playerTeam,
@@ -248,7 +257,7 @@ export function applyRaceRosterSelection(db: Database.Database, repo: GameReposi
     throw new Error('Die Auswahl enthält Fahrer ausserhalb deines Teams.');
   }
 
-  const autoEntries = previewRaceRoster(db, repo, race).filter((rider) => rider.activeTeamId !== playerTeam.id);
+  const autoEntries = previewRaceRoster(db, repo, race, stage).filter((rider) => rider.activeTeamId !== playerTeam.id);
   const finalSelections = [...autoEntries, ...validatedSelections];
 
   const deleteEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
@@ -256,6 +265,7 @@ export function applyRaceRosterSelection(db: Database.Database, repo: GameReposi
 
   db.transaction(() => {
     deleteEntries.run(race.id);
+    repo.clearStageEntries(stage.id);
     for (const rider of finalSelections) {
       if (rider.activeTeamId == null) {
         continue;
@@ -264,13 +274,18 @@ export function applyRaceRosterSelection(db: Database.Database, repo: GameReposi
     }
   })();
 
-  return repo.getRaceRiders(race.id);
+  repo.ensureStageEntries(stage);
+  return repo.getStageRiders(stage.id);
 }
 
-export function ensureRaceEntries(db: Database.Database, repo: GameRepository, race: Race): Rider[] {
+export function ensureRaceEntries(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): Rider[] {
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
-    return existingEntries;
+    if (race.isStageRace) {
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider) => rider.id));
+    }
+    repo.ensureStageEntries(stage);
+    return repo.getStageRiders(stage.id);
   }
 
   const selected = buildRaceRoster(db, repo, race);
@@ -285,5 +300,10 @@ export function ensureRaceEntries(db: Database.Database, repo: GameRepository, r
     }
   })();
 
-  return repo.getRaceRiders(race.id);
+  if (race.isStageRace) {
+    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+  }
+
+  repo.ensureStageEntries(stage);
+  return repo.getStageRiders(stage.id);
 }

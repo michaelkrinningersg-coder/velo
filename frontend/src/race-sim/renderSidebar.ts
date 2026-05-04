@@ -26,6 +26,10 @@ function formatSigned(value: number): string {
   return value > 0 ? `+${formatted}` : formatted;
 }
 
+function formatFatigue(value: number): string {
+  return value <= 0 ? '0.0' : `-${value.toFixed(1).replace('.', ',')}`;
+}
+
 function formatNumber(value: number): string {
   return value.toLocaleString('de-DE', {
     minimumFractionDigits: 0,
@@ -46,11 +50,8 @@ function formatSkill(value: RealtimeRiderSnapshot['skillName']): string {
 }
 
 function renderBaseSkillCell(rider: RealtimeRiderSnapshot): string {
-  if (!rider.skillBreakdown) {
-    return formatNumber(rider.baseSkill);
-  }
-
-  return `${formatNumber(rider.baseSkill)}<span class="race-sim-row-detail">${esc(rider.skillBreakdown)}</span>`;
+  const breakdown = rider.skillBreakdown ? ` · ${esc(rider.skillBreakdown)}` : '';
+  return `${formatNumber(rider.baseSkill)} / ${formatNumber(rider.effectiveSkill)}<span class="race-sim-row-inline-detail">${breakdown}</span>`;
 }
 
 function getEffectiveSkillClassName(rider: RealtimeRiderSnapshot): string {
@@ -96,13 +97,10 @@ function getRiderCountryCode(rider: Rider): string {
 function renderRiderLabel(position: number, rider: RealtimeRiderSnapshot, sourceRider: Rider | null, teamAbbreviation: string | null): string {
   const flag = sourceRider ? renderFlag(getRiderCountryCode(sourceRider)) : '';
   const teamSuffix = teamAbbreviation ? ` (${esc(teamAbbreviation)})` : '';
-  const leadingBadge = rider.isLeadingGroup && !rider.isFinished
-    ? '<span class="race-sim-leading-badge">Leading Group</span>'
-    : '';
   const splitDetail = rider.lastSplitLabel && rider.lastSplitTimeSeconds != null
-    ? `<span class="race-sim-row-detail">${esc(rider.lastSplitLabel)} · ${esc(formatClock(rider.lastSplitTimeSeconds))}</span>`
+    ? ` <span class="race-sim-row-inline-detail">${esc(rider.lastSplitLabel)} ${esc(formatClock(rider.lastSplitTimeSeconds))}</span>`
     : '';
-  return `<span class="race-sim-row-rank">${position}.</span>${flag}<span>${esc(rider.riderName)}${teamSuffix}</span>${leadingBadge}${splitDetail}`;
+  return `<span class="race-sim-row-rank">${position}.</span>${flag}<span class="race-sim-row-main-name">${esc(rider.riderName)}${teamSuffix}</span>${splitDetail}`;
 }
 
 function formatSpeed(speedMps: number): string {
@@ -157,7 +155,7 @@ function ensureSidebarRow(container: HTMLElement, riderId: number): HTMLElement 
       <strong data-race-sim-field="team-bonus"></strong>
       <strong data-race-sim-field="season-form-bonus"></strong>
       <strong data-race-sim-field="race-form-bonus"></strong>
-      <strong data-race-sim-field="effective-skill"></strong>
+      <strong data-race-sim-field="fatigue"></strong>
       <strong data-race-sim-field="stamina"></strong>
       <strong data-race-sim-field="height-factor"></strong>
       <strong data-race-sim-field="daily-form"></strong>
@@ -218,7 +216,7 @@ export function renderRaceSimSidebar(
     const teamBonusField = row.querySelector<HTMLElement>('[data-race-sim-field="team-bonus"]');
     const seasonFormBonusField = row.querySelector<HTMLElement>('[data-race-sim-field="season-form-bonus"]');
     const raceFormBonusField = row.querySelector<HTMLElement>('[data-race-sim-field="race-form-bonus"]');
-    const effectiveSkillField = row.querySelector<HTMLElement>('[data-race-sim-field="effective-skill"]');
+    const fatigueField = row.querySelector<HTMLElement>('[data-race-sim-field="fatigue"]');
     const staminaField = row.querySelector<HTMLElement>('[data-race-sim-field="stamina"]');
     const heightFactorField = row.querySelector<HTMLElement>('[data-race-sim-field="height-factor"]');
     const dailyFormField = row.querySelector<HTMLElement>('[data-race-sim-field="daily-form"]');
@@ -263,22 +261,24 @@ export function renderRaceSimSidebar(
     }
     if (seasonFormBonusField) {
       const seasonFormBonus = sourceRider?.formBonus ?? 0;
-      seasonFormBonusField.textContent = seasonFormBonus !== 0 ? formatSigned(seasonFormBonus) : '—';
+      seasonFormBonusField.textContent = formatSigned(seasonFormBonus);
       seasonFormBonusField.className = getFormClassName(seasonFormBonus);
     }
     if (raceFormBonusField) {
       const raceFormBonus = sourceRider?.raceFormBonus ?? 0;
-      raceFormBonusField.textContent = raceFormBonus > 0 ? `+${formatNumber(raceFormBonus)}` : '—';
-      raceFormBonusField.className = raceFormBonus > 0 ? 'race-sim-form-positive' : '';
+      raceFormBonusField.textContent = formatSigned(raceFormBonus);
+      raceFormBonusField.className = getFormClassName(raceFormBonus);
     }
-    if (effectiveSkillField) {
-      effectiveSkillField.textContent = formatNumber(rider.effectiveSkill);
-      effectiveSkillField.classList.remove(
+    if (fatigueField) {
+      fatigueField.textContent = formatFatigue(sourceRider?.fatigueMalus ?? 0);
+    }
+    if (baseSkillField) {
+      baseSkillField.classList.remove(
         'race-sim-skill-effective-good',
         'race-sim-skill-effective-equal',
         'race-sim-skill-effective-bad',
       );
-      effectiveSkillField.classList.add(getEffectiveSkillClassName(rider));
+      baseSkillField.classList.add(getEffectiveSkillClassName(rider));
     }
     if (staminaField) {
       staminaField.textContent = `x${rider.staminaModifier.toFixed(2)}`;

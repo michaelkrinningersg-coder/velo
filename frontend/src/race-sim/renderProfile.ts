@@ -39,7 +39,19 @@ interface TimingRailEntry {
   teamAbbreviation: string | null;
 }
 
-export type TimingRailMode = 'finish' | 'splits';
+export type TimingRailMode = 'finish' | `split:${string}`;
+
+function encodeSplitModeValue(label: string): TimingRailMode {
+  return `split:${encodeURIComponent(label)}`;
+}
+
+function isSplitMode(mode: TimingRailMode): mode is `split:${string}` {
+  return mode.startsWith('split:');
+}
+
+function splitModeLabel(mode: TimingRailMode): string | null {
+  return isSplitMode(mode) ? decodeURIComponent(mode.slice('split:'.length)) : null;
+}
 
 const DISPLAY_CLUSTER_MIN_GAP_METERS = 200;
 
@@ -331,87 +343,156 @@ function formatClock(seconds: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-function renderTimingRail(snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap, mode: TimingRailMode): string {
-  const riderById = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
-  const teamAbbreviationById = new Map((bootstrap.teams ?? []).map((team) => [team.id, team.abbreviation]));
-  const finished = snapshot.riders.filter((rider) => rider.finishTimeSeconds != null);
-  const finishedEntries: TimingRailEntry[] = [...finished]
-    .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0) || left.riderId - right.riderId)
-    .map((rider) => {
-      const sourceRider = riderById.get(rider.riderId) ?? null;
-      const teamAbbreviation = sourceRider?.activeTeamId != null
-        ? teamAbbreviationById.get(sourceRider.activeTeamId) ?? null
-        : null;
-      return { rider, sourceRider, teamAbbreviation };
-    });
-  const splitEntries: TimingRailEntry[] = snapshot.riders
-    .filter((rider) => rider.lastSplitTimeSeconds != null && rider.lastSplitLabel != null)
-    .sort((left, right) => (left.lastSplitTimeSeconds ?? 0) - (right.lastSplitTimeSeconds ?? 0) || left.riderId - right.riderId)
-    .map((rider) => {
-      const sourceRider = riderById.get(rider.riderId) ?? null;
-      const teamAbbreviation = sourceRider?.activeTeamId != null
-        ? teamAbbreviationById.get(sourceRider.activeTeamId) ?? null
-        : null;
-      return { rider, sourceRider, teamAbbreviation };
-    });
-
-  const rankingEntries = mode === 'splits' ? splitEntries : finishedEntries;
-  if (rankingEntries.length === 0) {
-    return `<div class="race-sim-cluster-rail-empty">${mode === 'splits' ? 'Noch keine Zwischenzeiten' : 'Noch keine Fahrer im Ziel'}</div>`;
+function formatTimingClock(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
   }
 
-  const latestFive = mode === 'splits'
-    ? [...rankingEntries].sort((left, right) => (right.rider.lastSplitTimeSeconds ?? 0) - (left.rider.lastSplitTimeSeconds ?? 0)).slice(0, 5)
+  if (totalSeconds < 3600) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+  }
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function formatFinishGap(seconds: number): string {
+  return `+${Math.max(0, Math.round(seconds))}s`;
+}
+
+function buildSplitLabels(summary: ParsedStageSummary): string[] {
+  return summary.points
+    .flatMap((point, pointIndex) => point.markers
+      .filter((marker) => marker.type === 'sprint_intermediate')
+      .map((marker, markerIndex) => marker.name ?? `SZ ${pointIndex + markerIndex + 1}`));
+}
+
+function buildTimingEntries(snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap): { finishedEntries: TimingRailEntry[]; splitEntries: TimingRailEntry[] } {
+  const riderById = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
+  const teamAbbreviationById = new Map((bootstrap.teams ?? []).map((team) => [team.id, team.abbreviation]));
+  const mapEntry = (rider: RealtimeRiderSnapshot): TimingRailEntry => {
+    const sourceRider = riderById.get(rider.riderId) ?? null;
+    const teamAbbreviation = sourceRider?.activeTeamId != null
+      ? teamAbbreviationById.get(sourceRider.activeTeamId) ?? null
+      : null;
+    return { rider, sourceRider, teamAbbreviation };
+  };
+
+  const finishedEntries = snapshot.riders
+    .filter((rider) => rider.finishTimeSeconds != null)
+    .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0) || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId)
+    .map(mapEntry);
+
+  const splitEntries = snapshot.riders
+    .filter((rider) => rider.lastSplitTimeSeconds != null && rider.lastSplitLabel != null)
+    .sort((left, right) => (left.lastSplitTimeSeconds ?? 0) - (right.lastSplitTimeSeconds ?? 0) || left.riderId - right.riderId)
+    .map(mapEntry);
+
+  return { finishedEntries, splitEntries };
+}
+
+function renderFinishRail(snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap): string {
+  const { finishedEntries } = buildTimingEntries(snapshot, bootstrap);
+  if (finishedEntries.length === 0) {
+    return '<div class="race-sim-cluster-rail-empty">Noch keine Fahrer im Ziel</div>';
+  }
+
+  const leaderTime = finishedEntries[0]?.rider.finishTimeSeconds ?? 0;
+
+  return `
+    <div class="race-sim-cluster-rail-list">
+      ${finishedEntries.map((entry, index) => {
+        const flag = entry.sourceRider ? renderFlag(entry.sourceRider.country?.code3 ?? entry.sourceRider.nationality) : '';
+        const riderName = entry.sourceRider?.lastName ?? entry.rider.riderName;
+        const teamTag = entry.teamAbbreviation ? `<span class="race-sim-timing-team">${esc(entry.teamAbbreviation)}</span>` : '';
+        const timeValue = index === 0
+          ? formatClock(entry.rider.finishTimeSeconds ?? 0)
+          : formatFinishGap((entry.rider.finishTimeSeconds ?? leaderTime) - leaderTime);
+        return `
+          <div class="race-sim-cluster-rail-row${index < 3 ? ' race-sim-timing-highlight' : ''}">
+            <div class="race-sim-cluster-rail-gap">${index + 1}.</div>
+            <div class="race-sim-cluster-rail-main">
+              <span class="race-sim-timing-rider">${flag}<span class="race-sim-timing-name">${esc(riderName)}</span>${teamTag}</span>
+              <span class="race-sim-timing-time">${esc(timeValue)}</span>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderTimingRail(summary: ParsedStageSummary, snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap, mode: TimingRailMode): string {
+  const { finishedEntries, splitEntries } = buildTimingEntries(snapshot, bootstrap);
+  const splitLabels = buildSplitLabels(summary);
+  const activeSplitLabel = splitModeLabel(mode);
+  const rankingEntries = activeSplitLabel
+    ? splitEntries
+        .filter((entry) => entry.rider.splitTimes[activeSplitLabel] != null)
+        .sort((left, right) => (left.rider.splitTimes[activeSplitLabel] ?? 0) - (right.rider.splitTimes[activeSplitLabel] ?? 0) || left.rider.riderId - right.rider.riderId)
+    : finishedEntries;
+  if (rankingEntries.length === 0) {
+    return `<div class="race-sim-cluster-rail-empty">${activeSplitLabel ? 'Noch keine Zwischenzeiten an dieser Messung' : 'Noch keine Fahrer im Ziel'}</div>`;
+  }
+
+  const latestFive = activeSplitLabel
+    ? [...rankingEntries].sort((left, right) => (right.rider.splitTimes[activeSplitLabel] ?? 0) - (left.rider.splitTimes[activeSplitLabel] ?? 0)).slice(0, 5)
     : [...rankingEntries].sort((left, right) => (right.rider.finishTimeSeconds ?? 0) - (left.rider.finishTimeSeconds ?? 0)).slice(0, 5);
   const latestIds = new Set(latestFive.map((entry) => entry.rider.riderId));
-  const latestTitle = mode === 'splits' ? 'Zuletzt an Zeitnahme' : 'Zuletzt über Linie';
-  const rankingTitle = mode === 'splits' ? 'Zwischenzeiten' : 'Im Ziel';
+  const latestTitle = activeSplitLabel ? `Zuletzt bei ${esc(activeSplitLabel)}` : 'Zuletzt im Ziel';
+  const rankingTitle = activeSplitLabel ? `${esc(activeSplitLabel)} · Bestzeiten` : 'Im Ziel';
 
-  const formatTimingValue = (entry: TimingRailEntry): string => mode === 'splits'
-    ? `${entry.rider.lastSplitLabel ?? 'Split'} · ${formatClock(entry.rider.lastSplitTimeSeconds ?? 0)}`
-    : formatClock(entry.rider.riderClockSeconds ?? entry.rider.finishTimeSeconds ?? 0);
+  const formatTimingValue = (entry: TimingRailEntry): string => activeSplitLabel
+    ? formatTimingClock(entry.rider.splitTimes[activeSplitLabel] ?? 0)
+    : formatTimingClock(entry.rider.riderClockSeconds ?? entry.rider.finishTimeSeconds ?? 0);
 
   const renderTimingIdentity = (entry: TimingRailEntry): string => {
     const flag = entry.sourceRider ? renderFlag(entry.sourceRider.country?.code3 ?? entry.sourceRider.nationality) : '';
     const teamSuffix = entry.teamAbbreviation ? `<span class="race-sim-timing-team">${esc(entry.teamAbbreviation)}</span>` : '';
-    return `<span class="race-sim-timing-rider">${flag}<span class="race-sim-timing-name">${esc(entry.rider.riderName)}</span>${teamSuffix}</span>`;
+    const riderName = entry.sourceRider?.lastName ?? entry.rider.riderName;
+    return `<span class="race-sim-timing-rider">${flag}<span class="race-sim-timing-name">${esc(riderName)}</span>${teamSuffix}</span>`;
   };
 
   return `
     <div class="race-sim-timing-panel">
       <div class="race-sim-timing-toggle">
         <button type="button" class="race-sim-timing-toggle-btn${mode === 'finish' ? ' active' : ''}" data-race-sim-timing-mode="finish">Ziel</button>
-        <button type="button" class="race-sim-timing-toggle-btn${mode === 'splits' ? ' active' : ''}" data-race-sim-timing-mode="splits">Split</button>
+        ${splitLabels.map((label) => `<button type="button" class="race-sim-timing-toggle-btn${activeSplitLabel === label ? ' active' : ''}" data-race-sim-timing-mode="${encodeSplitModeValue(label)}">${esc(label)}</button>`).join('')}
       </div>
-      <div>
-        <div class="race-sim-cluster-rail-title">${latestTitle}</div>
-        <div class="race-sim-timing-latest-list">
-          ${latestFive.map((entry) => {
-            const rank = rankingEntries.findIndex((candidate) => candidate.rider.riderId === entry.rider.riderId) + 1;
-            return `
-              <div class="race-sim-cluster-rail-row race-sim-timing-latest-row race-sim-timing-highlight">
-                <div class="race-sim-cluster-rail-gap">#${rank}</div>
-                <div class="race-sim-cluster-rail-main">
-                  ${renderTimingIdentity(entry)}
-                  <span class="race-sim-timing-time">${esc(formatTimingValue(entry))}</span>
-                </div>
-              </div>`;
-          }).join('')}
+      <div class="race-sim-timing-scroll">
+        <div>
+          <div class="race-sim-cluster-rail-title">${latestTitle}</div>
+          <div class="race-sim-timing-latest-list">
+            ${latestFive.map((entry) => {
+              const rank = rankingEntries.findIndex((candidate) => candidate.rider.riderId === entry.rider.riderId) + 1;
+              return `
+                <div class="race-sim-cluster-rail-row race-sim-timing-latest-row race-sim-timing-highlight">
+                  <div class="race-sim-cluster-rail-gap">(${rank}.)</div>
+                  <div class="race-sim-cluster-rail-main">
+                    ${renderTimingIdentity(entry)}
+                    <span class="race-sim-timing-time">${esc(formatTimingValue(entry))}</span>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
         </div>
-      </div>
-      <div class="race-sim-timing-ranking-wrap">
-        <div class="race-sim-cluster-rail-title">${rankingTitle}</div>
-        <div class="race-sim-cluster-rail-list">
-          ${rankingEntries.map((entry, index) => {
-            return `
-              <div class="race-sim-cluster-rail-row${latestIds.has(entry.rider.riderId) ? ' race-sim-timing-highlight' : ''}">
-                <div class="race-sim-cluster-rail-gap">${index + 1}.</div>
-                <div class="race-sim-cluster-rail-main">
-                  ${renderTimingIdentity(entry)}
-                  <span class="race-sim-timing-time">${esc(formatTimingValue(entry))}</span>
-                </div>
-              </div>`;
-          }).join('')}
+        <div class="race-sim-timing-ranking-wrap">
+          <div class="race-sim-cluster-rail-title">${rankingTitle}</div>
+          <div class="race-sim-cluster-rail-list">
+            ${rankingEntries.map((entry, index) => {
+              return `
+                <div class="race-sim-cluster-rail-row${latestIds.has(entry.rider.riderId) ? ' race-sim-timing-highlight' : ''}">
+                  <div class="race-sim-cluster-rail-gap">(${index + 1}.)</div>
+                  <div class="race-sim-cluster-rail-main">
+                    ${renderTimingIdentity(entry)}
+                    <span class="race-sim-timing-time">${esc(formatTimingValue(entry))}</span>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
         </div>
       </div>
     </div>`;
@@ -488,8 +569,9 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
     ? renderIttRiderLabels(displayClusters, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMaxElevation, bootstrap)
     : '';
   const clusterRail = bootstrap.stage.profile === 'ITT'
-    ? renderTimingRail(snapshot, bootstrap, timingMode)
+    ? renderTimingRail(summary, snapshot, bootstrap, timingMode)
     : renderClusterRail(displayClusters);
+  const finishRail = bootstrap.stage.profile === 'ITT' ? '' : renderFinishRail(snapshot, bootstrap);
 
   container.innerHTML = `
     <div class="race-sim-profile-layout${bootstrap.stage.profile === 'ITT' ? ' race-sim-profile-layout-itt' : ''}">
@@ -518,9 +600,20 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
           <text x="${paddingX.toFixed(1)}" y="${(paddingTop - 20).toFixed(1)}" class="race-sim-scale race-sim-scale-title" text-anchor="start">Höhe</text>
         </svg>
       </div>
-      <aside class="race-sim-cluster-rail${bootstrap.stage.profile === 'ITT' ? ' race-sim-cluster-rail-itt' : ''}" aria-label="${bootstrap.stage.profile === 'ITT' ? 'Timing-Reihenfolge' : 'Gruppenübersicht'}">
-        <div class="race-sim-cluster-rail-title">${bootstrap.stage.profile === 'ITT' ? 'Timing' : 'Gruppen'}</div>
-        ${clusterRail}
-      </aside>
+      ${bootstrap.stage.profile === 'ITT'
+        ? `<aside class="race-sim-cluster-rail race-sim-cluster-rail-itt" aria-label="Timing-Reihenfolge">
+            <div class="race-sim-cluster-rail-title">Timing</div>
+            ${clusterRail}
+          </aside>`
+        : `<div class="race-sim-side-rails">
+            <aside class="race-sim-cluster-rail" aria-label="Live-Zieleinlauf">
+              <div class="race-sim-cluster-rail-title">Zieleinlauf</div>
+              ${finishRail}
+            </aside>
+            <aside class="race-sim-cluster-rail" aria-label="Gruppenübersicht">
+              <div class="race-sim-cluster-rail-title">Gruppen</div>
+              ${clusterRail}
+            </aside>
+          </div>`}
     </div>`;
 }

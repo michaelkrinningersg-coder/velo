@@ -858,8 +858,8 @@ html, body {
 .race-sim-sidebar-body {
   display: flex;
   flex-direction: column;
-  gap: .45rem;
-  max-height: 42vh;
+  gap: .2rem;
+  max-height: min(72vh, 30rem);
   overflow-y: auto;
   padding-right: .2rem;
   min-width: max-content;
@@ -871,28 +871,32 @@ html, body {
   padding-bottom: .15rem;
 }
 
+:root {
+  --race-sim-leaderboard-columns: minmax(250px, 2.3fr) minmax(62px, .5fr) minmax(84px, .66fr) minmax(140px, 1fr) minmax(260px, 1.8fr) minmax(62px, .46fr) minmax(68px, .5fr) minmax(68px, .5fr) minmax(72px, .52fr) minmax(72px, .52fr) minmax(72px, .52fr) minmax(62px, .46fr) minmax(62px, .46fr) minmax(62px, .46fr) minmax(82px, .58fr) minmax(72px, .52fr) minmax(72px, .52fr) minmax(72px, .52fr) minmax(72px, .52fr) minmax(84px, .6fr);
+}
+
 .race-sim-leaderboard-head,
 .race-sim-row-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 2.1fr) minmax(70px, .58fr) minmax(92px, .72fr) minmax(170px, 1.25fr) minmax(190px, 1.45fr) minmax(64px, .48fr) minmax(76px, .54fr) minmax(76px, .54fr) minmax(78px, .56fr) minmax(78px, .54fr) minmax(78px, .54fr) minmax(82px, .58fr) minmax(82px, .58fr) minmax(70px, .5fr) minmax(88px, .64fr) minmax(78px, .54fr) minmax(78px, .54fr) minmax(78px, .54fr) minmax(78px, .54fr) minmax(92px, .7fr);
-  gap: .65rem;
+  grid-template-columns: var(--race-sim-leaderboard-columns);
+  gap: .42rem;
   align-items: center;
-  min-width: 2050px;
+  min-width: 1940px;
 }
 
 .race-sim-leaderboard-head {
-  padding: 0 .9rem .55rem;
-  margin-bottom: .4rem;
+  padding: 0 .55rem .4rem;
+  margin-bottom: .2rem;
   border-bottom: 1px solid rgba(148, 163, 184, .18);
   color: var(--text-500);
-  font-size: .72rem;
+  font-size: .62rem;
   font-weight: 700;
-  letter-spacing: .06em;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
 .race-sim-row {
-  padding: .65rem .9rem;
+  padding: .26rem .55rem;
   border: 1px solid rgba(148, 163, 184, .14);
   border-radius: var(--radius-md);
   background: rgba(15, 23, 42, .72);
@@ -906,11 +910,18 @@ html, body {
 .race-sim-row-name {
   display: flex;
   align-items: center;
-  gap: .45rem;
-  flex-wrap: wrap;
+  gap: .28rem;
   font-weight: 700;
   text-align: left;
   min-width: 0;
+  white-space: nowrap;
+}
+
+.race-sim-row-main-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .race-sim-row-detail {
@@ -920,24 +931,17 @@ html, body {
   font-weight: 600;
 }
 
+.race-sim-row-inline-detail {
+  color: var(--text-500);
+  font-size: .6rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .race-sim-row-rank {
   min-width: 1.7rem;
   color: var(--text-500);
   font-variant-numeric: tabular-nums;
-}
-
-.race-sim-leading-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: .08rem .42rem;
-  border-radius: 999px;
-  background: rgba(147, 197, 253, .12);
-  border: 1px solid rgba(147, 197, 253, .22);
-  color: #bfdbfe;
-  font-size: .68rem;
-  font-weight: 700;
-  letter-spacing: .03em;
-  text-transform: uppercase;
 }
 
 .race-sim-gap {
@@ -946,19 +950,20 @@ html, body {
 }
 
 .race-sim-row-grid {
-  font-size: .86rem;
+  font-size: .64rem;
   font-variant-numeric: tabular-nums;
 }
 
 .race-sim-row-grid strong {
   min-width: 0;
+  white-space: nowrap;
 }
 
 .race-sim-row-grid [data-race-sim-field="base-skill"] {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: .18rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .15rem;
+  overflow: hidden;
 }
 
 .race-sim-skill-effective-good {
@@ -1014,7 +1019,7 @@ html, body {
 
 .race-sim-profile-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: .6rem;
   width: 100%;
   height: 100%;
@@ -1026,6 +1031,13 @@ html, body {
 
 .race-sim-profile-canvas-wrap {
   min-width: 0;
+  min-height: 0;
+}
+
+.race-sim-side-rails {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: .45rem;
   min-height: 0;
 }
 
@@ -1076,6 +1088,7 @@ html, body {
   flex-direction: column;
   gap: .45rem;
   min-height: 0;
+  height: 100%;
   padding: .45rem .5rem;
   border-left: 1px solid rgba(120, 53, 15, .16);
   background: rgba(255, 251, 235, .86);
@@ -1099,9 +1112,10 @@ html, body {
 }
 
 .race-sim-cluster-rail-row {
-  display: flex;
-  flex-direction: column;
-  gap: .16rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .35rem;
   padding: .28rem .34rem;
   border-radius: 8px;
   background: rgba(255, 255, 255, .72);
@@ -1110,8 +1124,9 @@ html, body {
 
 .race-sim-cluster-rail-gap {
   color: rgba(120, 53, 15, .72);
-  font-size: .68rem;
+  font-size: .66rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .race-sim-cluster-rail-main {
@@ -1146,15 +1161,22 @@ html, body {
   font-weight: 600;
 }
 
+.race-sim-cluster-rail-size {
+  white-space: nowrap;
+}
+
 .race-sim-timing-panel {
   display: flex;
   flex-direction: column;
   gap: .7rem;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .race-sim-timing-toggle {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: .3rem;
 }
 
@@ -1181,8 +1203,29 @@ html, body {
   gap: .35rem;
 }
 
+.race-sim-timing-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: .55rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: .15rem;
+}
+
+.race-sim-profile-layout-itt .race-sim-cluster-rail {
+  min-height: 357px;
+  max-height: 357px;
+  overflow: hidden;
+}
+
 .race-sim-timing-latest-row {
   background: rgba(240, 253, 244, .9);
+}
+
+.race-sim-profile-layout-itt .race-sim-cluster-rail {
+  border: 1px solid rgba(120, 53, 15, .16);
+  border-radius: 10px;
 }
 
 .race-sim-timing-ranking-wrap {
@@ -1231,6 +1274,8 @@ html, body {
   font-size: .72rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .race-sim-scale {
@@ -1590,9 +1635,13 @@ html, body {
     grid-template-columns: 1fr;
   }
 
+  .race-sim-side-rails {
+    grid-template-columns: 1fr;
+  }
+
   .race-sim-leaderboard-head,
   .race-sim-row-grid {
-    grid-template-columns: minmax(220px, 2fr) minmax(64px, .6fr) minmax(88px, .72fr) minmax(140px, 1fr) minmax(170px, 1.2fr) repeat(15, minmax(60px, .54fr));
+    grid-template-columns: minmax(210px, 2fr) minmax(56px, .55fr) minmax(80px, .72fr) minmax(120px, .9fr) minmax(200px, 1.45fr) repeat(14, minmax(58px, .5fr));
   }
 
   .race-sim-sidebar-body {

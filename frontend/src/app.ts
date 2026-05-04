@@ -160,6 +160,13 @@ function formatRaceGap(seconds: number | null): string {
   return `+${formatRaceTime(seconds)}`;
 }
 
+function formatAverageSpeed(distanceKm: number, timeSeconds: number): string {
+  if (!(distanceKm > 0) || !(timeSeconds > 0)) {
+    return '';
+  }
+  return `${((distanceKm / timeSeconds) * 3600).toFixed(1).replace('.', ',')} km/h`;
+}
+
 function formatPointsGap(points: number): string {
   if (points === 0) return '—';
   return `-${points}`;
@@ -2336,6 +2343,8 @@ function renderResultsView(): void {
   }
 
   meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
+  const resultStage = findStageById(state.stageResults.stageId);
+  const stageDistanceKm = resultStage?.stage.distanceKm ?? null;
   tabs.innerHTML = state.stageResults.classifications.map((classification) => `
     <button
       type="button"
@@ -2347,12 +2356,16 @@ function renderResultsView(): void {
   tbody.innerHTML = selectedClassification.rows.map((row) => {
     const participant = row.riderName ?? row.teamName;
     const teamName = row.riderName ? row.teamName : '—';
+    const showAverageSpeed = selectedClassification.resultTypeId === 1 && row.rank === 1 && row.timeSeconds != null && stageDistanceKm != null;
+    const timeCell = row.timeSeconds != null
+      ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
+      : '–';
     return `
       <tr>
         <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
         <td><strong>${esc(participant)}</strong></td>
         <td>${esc(teamName)}</td>
-        <td>${row.timeSeconds != null ? esc(formatRaceTime(row.timeSeconds)) : '–'}</td>
+        <td>${esc(timeCell)}</td>
         <td>${esc(formatRaceGap(row.gapSeconds))}</td>
         <td>${row.points != null ? row.points : '–'}</td>
         <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>

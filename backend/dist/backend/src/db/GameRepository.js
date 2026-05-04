@@ -138,21 +138,42 @@ function parsePeakDates(value) {
 function isoDateToDayNumber(isoDate) {
     return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
 }
+function randomBetween(min, max) {
+    return min + Math.random() * (max - min);
+}
+function roundToTwoDecimals(value) {
+    return Math.round(value * 100) / 100;
+}
+function resolveStageRaceBaseFatigue(stageNumber, recuperationSkill) {
+    if (stageNumber <= 1) {
+        return 0;
+    }
+    const cappedRecuperation = Math.min(85, recuperationSkill);
+    return (stageNumber - 1) * (0.01 + ((85 - cappedRecuperation) * 0.01));
+}
+function resolveStageRaceFatigueMalus(stageNumber, recuperationSkill, accumulatedRandomFatigue) {
+    if (stageNumber == null) {
+        return 0;
+    }
+    return roundToTwoDecimals(resolveStageRaceBaseFatigue(stageNumber, recuperationSkill) + accumulatedRandomFatigue);
+}
 function resolveRaceFormBonus(currentDate, peakDates) {
     if (peakDates.length === 0) {
         return 0;
     }
     const currentDay = isoDateToDayNumber(currentDate);
+    const buildDays = 42;
+    const declineDays = 14;
     for (const peakDate of peakDates) {
         const peakDay = isoDateToDayNumber(peakDate);
-        const buildStartDay = peakDay - 42;
+        const buildStartDay = peakDay - buildDays;
         const peakBonus = (peakDay - buildStartDay) * 0.1;
         if (currentDay >= buildStartDay && currentDay < peakDay) {
             return Number((((currentDay - buildStartDay) + 1) * 0.1).toFixed(2));
         }
-        if (currentDay >= peakDay && currentDay < peakDay + 10) {
+        if (currentDay >= peakDay && currentDay < peakDay + declineDays) {
             const elapsedDeclineDays = currentDay - peakDay;
-            return Number((Math.max(0, peakBonus * (1 - (elapsedDeclineDays / 10)))).toFixed(2));
+            return Number((Math.max(0, peakBonus * (1 - (elapsedDeclineDays / declineDays)))).toFixed(2));
         }
     }
     return 0;
@@ -186,10 +207,11 @@ function mapRole(row) {
         weighting: row.role_weighting,
     };
 }
-function mapRider(row, currentYear, currentDate, seasonPoints = 0) {
+function mapRider(row, currentYear, currentDate, seasonPoints = 0, stageNumber) {
     const country = mapCountry(row);
     const role = mapRole(row);
     const peakDates = parsePeakDates(row.peak_dates_json);
+    const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
     return {
         id: row.id,
         firstName: row.first_name,
@@ -230,6 +252,8 @@ function mapRider(row, currentYear, currentDate, seasonPoints = 0) {
         seasonPoints,
         formBonus: row.form_bonus ?? -1,
         raceFormBonus: resolveRaceFormBonus(currentDate, peakDates),
+        fatigueMalus: resolveStageRaceFatigueMalus(stageNumber, row.skill_recuperation, accumulatedRandomFatigue),
+        accumulatedRandomFatigue,
         seasonFormPeakDates: peakDates,
         healthStatus: row.health_status ?? 'healthy',
         unavailableUntil: row.unavailable_until,
@@ -429,6 +453,152 @@ class GameRepository {
             return row.current_date;
         return `${this.getCurrentSeason()}-01-01`;
     }
+    prepareStageRaceFatigue(raceId, stageNumber, riderIds) {
+        if (stageNumber < 1 || riderIds.length === 0) {
+            return;
+        }
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_stage_race_state (
+        race_id INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL,
+        accumulated_random_fatigue REAL NOT NULL DEFAULT 0,
+        last_applied_stage_number INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (race_id, rider_id)
+      )
+    `).run();
+        const insertState = this.db.prepare(`
+      INSERT OR IGNORE INTO rider_stage_race_state (
+        race_id, rider_id, accumulated_random_fatigue, last_applied_stage_number
+      ) VALUES (?, ?, 0, 0)
+    `);
+        const selectState = this.db.prepare(`
+      SELECT rider_id, accumulated_random_fatigue, last_applied_stage_number
+      FROM rider_stage_race_state
+      WHERE race_id = ? AND rider_id = ?
+    `);
+        const updateState = this.db.prepare(`
+      UPDATE rider_stage_race_state
+      SET accumulated_random_fatigue = ?, last_applied_stage_number = ?
+      WHERE race_id = ? AND rider_id = ?
+    `);
+        this.db.transaction(() => {
+            for (const riderId of riderIds) {
+                insertState.run(raceId, riderId);
+                const existing = selectState.get(raceId, riderId);
+                if (!existing || existing.last_applied_stage_number >= stageNumber) {
+                    continue;
+                }
+                let accumulatedRandomFatigue = existing.accumulated_random_fatigue;
+                if (Math.random() < 0.005) {
+                    accumulatedRandomFatigue = roundToTwoDecimals(accumulatedRandomFatigue + randomBetween(0.1, 0.3));
+                }
+                updateState.run(accumulatedRandomFatigue, stageNumber, raceId, riderId);
+            }
+        })();
+    }
+    ensureStageEntries(stage) {
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_entries (
+        stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+        race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        team_id        INTEGER NOT NULL REFERENCES teams(id),
+        rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        status         TEXT    NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'started', 'finished', 'dns', 'dnf')),
+        status_reason  TEXT,
+        PRIMARY KEY (stage_id, rider_id)
+      )
+    `).run();
+        this.db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_race_stage_status ON stage_entries(race_id, stage_id, status)').run();
+        this.db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_rider_status ON stage_entries(rider_id, status)').run();
+        const inactiveRiderIds = new Set(this.db.prepare(`
+      SELECT DISTINCT stage_entries.rider_id AS rider_id
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.race_id = ?
+        AND stages.stage_number < ?
+        AND stage_entries.status IN ('dns', 'dnf')
+    `).all(stage.raceId, stage.stageNumber).map((row) => row.rider_id));
+        const raceEntries = this.db.prepare(`
+      SELECT race_id, team_id, rider_id
+      FROM race_entries
+      WHERE race_id = ?
+      ORDER BY rider_id ASC
+    `).all(stage.raceId);
+        const insertStageEntry = this.db.prepare(`
+      INSERT OR IGNORE INTO stage_entries (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (?, ?, ?, ?, 'scheduled', NULL)
+    `);
+        this.db.transaction(() => {
+            for (const entry of raceEntries) {
+                if (inactiveRiderIds.has(entry.rider_id)) {
+                    continue;
+                }
+                insertStageEntry.run(stage.id, stage.raceId, entry.team_id, entry.rider_id);
+            }
+        })();
+    }
+    clearStageEntries(stageId) {
+        if (!tableExists(this.db, 'stage_entries')) {
+            return;
+        }
+        this.db.prepare('DELETE FROM stage_entries WHERE stage_id = ?').run(stageId);
+    }
+    updateStageEntryStatus(stageId, riderId, status, statusReason = null) {
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_entries (
+        stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+        race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        team_id        INTEGER NOT NULL REFERENCES teams(id),
+        rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        status         TEXT    NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'started', 'finished', 'dns', 'dnf')),
+        status_reason  TEXT,
+        PRIMARY KEY (stage_id, rider_id)
+      )
+    `).run();
+        this.db.prepare(`
+      UPDATE stage_entries
+      SET status = ?, status_reason = ?
+      WHERE stage_id = ? AND rider_id = ?
+    `).run(status, statusReason, stageId, riderId);
+    }
+    markStageEntriesFinished(stageId, riderIds) {
+        if (riderIds.length === 0) {
+            return;
+        }
+        this.db.transaction(() => {
+            for (const riderId of riderIds) {
+                this.updateStageEntryStatus(stageId, riderId, 'finished');
+            }
+        })();
+    }
+    attachStageRaceFatigue(raceId, riders, stageNumber) {
+        if (riders.length === 0 || stageNumber < 1) {
+            return riders;
+        }
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_stage_race_state (
+        race_id INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL,
+        accumulated_random_fatigue REAL NOT NULL DEFAULT 0,
+        last_applied_stage_number INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (race_id, rider_id)
+      )
+    `).run();
+        const fatigueRows = this.db.prepare(`
+      SELECT race_id, rider_id, accumulated_random_fatigue
+      FROM rider_stage_race_state
+      WHERE race_id = ? AND rider_id = ?
+    `);
+        return riders.map((rider) => {
+            const row = fatigueRows.get(raceId, rider.id);
+            const accumulatedRandomFatigue = row?.accumulated_random_fatigue ?? 0;
+            return {
+                ...rider,
+                accumulatedRandomFatigue,
+                fatigueMalus: resolveStageRaceFatigueMalus(stageNumber, rider.skills.recuperation, accumulatedRandomFatigue),
+            };
+        });
+    }
     getRidersQuery(useContracts, filterByTeam) {
         const useDailyState = tableExists(this.db, 'rider_daily_state');
         const countrySelect = `
@@ -529,6 +699,7 @@ class GameRepository {
              ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
              ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             0 AS accumulated_random_fatigue,
              (
                SELECT c.end_season
                FROM contracts c
@@ -544,7 +715,7 @@ class GameRepository {
       ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : ''}
       WHERE riders.id = ?
     `).get(id);
-        return row ? mapRider(row, season, currentDate) : null;
+        return row ? mapRider(row, season, currentDate, 0) : null;
     }
     getTeams() {
         const rows = this.db.prepare(`
@@ -640,6 +811,12 @@ class GameRepository {
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${tableExists(this.db, 'rider_stage_race_state') ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              (
                SELECT c.end_season
                FROM contracts c
@@ -652,12 +829,67 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
+      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
+      ${tableExists(this.db, 'rider_stage_race_state') ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = re.race_id' : ''}
       INNER JOIN race_entries re ON re.rider_id = r.id
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(raceId);
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
-        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
+        const stageRow = this.db.prepare('SELECT stage_number FROM stages WHERE race_id = ? AND date = ? ORDER BY stage_number ASC LIMIT 1').get(raceId, currentDate);
+        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stageRow?.stage_number));
+    }
+    getStageRiders(stageId) {
+        const season = this.getCurrentSeason();
+        const currentDate = this.getCurrentDate();
+        this.syncSeasonPointEventsForSeason(season);
+        const stage = this.getStageById(stageId);
+        if (!stage) {
+            return [];
+        }
+        this.ensureStageEntries(stage);
+        const rows = this.db.prepare(`
+      SELECT r.*,
+             role.name AS role_name,
+             role.weighting AS role_weighting,
+             rider_type.type_key AS rider_type,
+             specialization_1.type_key AS specialization_1,
+             specialization_2.type_key AS specialization_2,
+             specialization_3.type_key AS specialization_3,
+             country.name AS country_name,
+             country.code_3 AS country_code_3,
+             country.continent AS country_continent,
+             country.regen_rating AS country_regen_rating,
+             country.number_regen_min AS country_number_regen_min,
+             country.number_regen_max AS country_number_regen_max,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${tableExists(this.db, 'rider_stage_race_state') ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
+             (
+               SELECT c.end_season
+               FROM contracts c
+               WHERE c.id = r.active_contract_id
+             ) AS contract_end_season
+      FROM riders r
+      JOIN sta_country country ON country.id = r.country_id
+      LEFT JOIN sta_role role ON role.id = r.role_id
+      LEFT JOIN type_rider rider_type ON rider_type.id = r.rider_type_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
+      LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
+      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
+      ${tableExists(this.db, 'rider_stage_race_state') ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = stage_entries.race_id' : ''}
+      JOIN stage_entries ON stage_entries.rider_id = r.id
+      WHERE stage_entries.stage_id = ?
+        AND stage_entries.status IN ('scheduled', 'started', 'finished')
+        AND r.is_retired = 0
+      ORDER BY r.overall_rating DESC
+    `).all(stageId);
+        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
+        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stage.stageNumber));
     }
     getSeasonStandings(season = this.getCurrentSeason()) {
         this.syncSeasonPointEventsForSeason(season);

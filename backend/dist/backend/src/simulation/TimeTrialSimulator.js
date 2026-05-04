@@ -12,7 +12,7 @@ const NOISE_RANGE = 0.015;
 const TECH_PENALTY_FACTOR = 0.0025;
 const WIND_FACTOR = 0.003;
 function resolveFormBonus(rider) {
-    return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+    return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
 class TimeTrialSimulator {
     static simulate(race, stage, riders) {
@@ -83,6 +83,11 @@ class TimeTrialSimulator {
                 + (rider.skills.resistance + formBonus) * 0.15
                 + (rider.skills.downhill + formBonus) * 0.05
                 + (rider.skills.bikeHandling + formBonus) * 0.1;
+        }
+        if (segment.gradient_percent <= -3.0) {
+            return (rider.skills.timeTrial + formBonus) * 0.5
+                + (rider.skills.downhill + formBonus) * (2 / 6)
+                + (rider.skills.flat + formBonus) * (1 / 6);
         }
         if (segment.terrain === 'Cobble') {
             return (rider.skills.timeTrial + formBonus) * 0.4

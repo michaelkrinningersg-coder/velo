@@ -47,6 +47,7 @@ export interface RealtimeRiderSnapshot {
   photoFinishScore: number;
   lastSplitLabel: string | null;
   lastSplitTimeSeconds: number | null;
+  splitTimes: Record<string, number>;
   finishTimeSeconds: number | null;
   isLeadingGroup: boolean;
   isFinished: boolean;
@@ -94,6 +95,7 @@ interface RiderState {
   nextIntermediateIndex: number;
   lastSplitLabel: string | null;
   lastSplitTimeSeconds: number | null;
+  splitTimes: Record<string, number>;
   isLeadingGroup: boolean;
 }
 
@@ -114,6 +116,11 @@ interface BasePhysicsResult {
 const CLUSTER_DISTANCE_METERS = 20;
 const MAX_SUBSTEP_SECONDS = 1;
 const ITT_START_INTERVAL_SECONDS = 120;
+const SPREAD_BUCKET_RATIO = 0.025;
+const START_SPREAD_MIN = 0.1;
+const START_SPREAD_MAX = 0.4;
+const LATE_STAGE_START_MIN = 0.6;
+const LATE_STAGE_START_MAX = 0.8;
 
 interface WeightedSkillComponent {
   key: RiderSkillKey;
@@ -204,7 +211,7 @@ function resolveBaseSkill(rider: Rider, skillName: TerrainSkillName): number {
 }
 
 function resolveConditionFormBonus(rider: Rider): number {
-  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
 
 function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]): string {
@@ -325,6 +332,10 @@ export class SimulationEngine {
 
   private readonly intermediateMarkers: IntermediateMarker[];
 
+  private readonly lateStageStartRatio: number;
+
+  private readonly spreadCurve: number[];
+
   private elapsedSeconds = 0;
 
   constructor(private readonly bootstrap: RealtimeSimulationBootstrap) {
@@ -332,6 +343,8 @@ export class SimulationEngine {
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.windZones = createWindZones(this.stageDistanceMeters);
     this.intermediateMarkers = this.buildIntermediateMarkers();
+    this.lateStageStartRatio = randomBetween(LATE_STAGE_START_MIN, LATE_STAGE_START_MAX);
+    this.spreadCurve = this.buildSpreadCurve(this.lateStageStartRatio);
     const riderStates: RiderState[] = bootstrap.riders.map((rider) => ({
       rider,
       riderName: `${rider.firstName} ${rider.lastName}`,
@@ -363,6 +376,7 @@ export class SimulationEngine {
       nextIntermediateIndex: 0,
       lastSplitLabel: null,
       lastSplitTimeSeconds: null,
+      splitTimes: {},
       isLeadingGroup: !this.isIndividualTimeTrial,
     }));
 
@@ -426,6 +440,7 @@ export class SimulationEngine {
         photoFinishScore: rider.photoFinishScore,
         lastSplitLabel: rider.lastSplitLabel,
         lastSplitTimeSeconds: rider.lastSplitTimeSeconds,
+        splitTimes: { ...rider.splitTimes },
         finishTimeSeconds: rider.finishTimeSeconds,
         isLeadingGroup: rider.isLeadingGroup,
         isFinished: rider.finishTimeSeconds != null,
@@ -534,6 +549,7 @@ export class SimulationEngine {
         if (ridersInZone.length === 0) {
           rider.draftModifier = 1;
           rider.currentSpeedMps = rider.tempSpeedMps;
+          rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
           rider.isLeadingGroup = true;
           continue;
         }
@@ -571,6 +587,7 @@ export class SimulationEngine {
         if (draftedSpeed > targetFinalSpeed) {
           if (rider.tempSpeedMps > target.rider.tempSpeedMps) {
             rider.currentSpeedMps = draftedSpeed;
+            rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
             continue;
           }
 
@@ -581,10 +598,12 @@ export class SimulationEngine {
           }
 
           rider.currentSpeedMps = Math.min(draftedSpeed, targetFinalSpeed + 2.0);
+          rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
           continue;
         }
 
         rider.currentSpeedMps = draftedSpeed;
+        rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
       }
     }
 
@@ -737,7 +756,8 @@ export class SimulationEngine {
       : 1 - (gradientPercent * 0.06);
     const windModifier = 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52);
     const speedSkillFactor = skillName === 'Flat' ? (7 / 35) : (10 / 35);
-    const baseSpeedKph = 40 + ((effectiveSkill - 50) * speedSkillFactor);
+    const spreadFactor = this.resolveSkillSpreadFactor(rider.distanceCoveredMeters, segment);
+    const baseSpeedKph = 40 + ((effectiveSkill - 50) * speedSkillFactor * spreadFactor);
     const baseSpeedMps = baseSpeedKph / 3.6;
 
     return {
@@ -788,8 +808,7 @@ export class SimulationEngine {
     rider.gradientPercent = basePhysics.gradientPercent;
     rider.gradientModifier = basePhysics.gradientModifier;
     rider.windModifier = basePhysics.windModifier;
-    rider.draftModifier = 1;
-    rider.currentSpeedMps = basePhysics.tempSpeedMps;
+    rider.currentSpeedMps = basePhysics.tempSpeedMps * rider.draftModifier;
     rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
   }
 
@@ -847,8 +866,70 @@ export class SimulationEngine {
     }
 
     const effectiveStaminaSkill = rider.rider.skills.stamina + resolveConditionFormBonus(rider.rider) + rider.dailyForm + rider.microForm + rider.teamGroupBonus;
-    const distanceFactor = 1.05 + (((stageDistanceKm - 150) / 10) * 0.015);
-    return (effectiveStaminaSkill / 90) * distanceFactor;
+    const distanceFactor = 1.05 + (((stageDistanceKm - 150) / 10) * 0.01);
+    return effectiveStaminaSkill / (90 * distanceFactor);
+  }
+
+  private buildSpreadCurve(lateStageStartRatio: number): number[] {
+    const totalBucketCount = Math.ceil(1 / SPREAD_BUCKET_RATIO);
+    const reachBucket = Math.max(1, Math.ceil(lateStageStartRatio / SPREAD_BUCKET_RATIO));
+    const startSpreadFactor = randomBetween(START_SPREAD_MIN, START_SPREAD_MAX);
+    const weights = Array.from({ length: reachBucket }, () => randomBetween(0.2, 1.2));
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    const factors = Array.from({ length: totalBucketCount + 1 }, () => 1);
+
+    factors[0] = startSpreadFactor;
+    let cumulativeWeight = 0;
+    for (let index = 1; index <= reachBucket; index += 1) {
+      cumulativeWeight += weights[index - 1] ?? 0;
+      factors[index] = startSpreadFactor + ((1 - startSpreadFactor) * (cumulativeWeight / totalWeight));
+    }
+
+    return factors;
+  }
+
+  private resolveSkillSpreadFactor(distanceCoveredMeters: number, segment: ParsedStageSegment): number {
+    const distanceRatio = this.stageDistanceMeters <= 0
+      ? 1
+      : clamp(distanceCoveredMeters / this.stageDistanceMeters, 0, 1);
+    const bucketIndex = Math.min(this.spreadCurve.length - 1, Math.floor(distanceRatio / SPREAD_BUCKET_RATIO));
+    const baseSpread = this.spreadCurve[bucketIndex] ?? 1;
+
+    if (distanceRatio <= this.lateStageStartRatio) {
+      return baseSpread;
+    }
+
+    const lateProgress = clamp((distanceRatio - this.lateStageStartRatio) / Math.max(0.0001, 1 - this.lateStageStartRatio), 0, 1);
+    const remainingMeters = Math.max(0, this.stageDistanceMeters - distanceCoveredMeters);
+
+    if (segment.terrain === 'Hill') {
+      const hillSpread = 1 + (0.1 * lateProgress);
+      if (remainingMeters > 3000) {
+        return Math.max(baseSpread, hillSpread);
+      }
+
+      const ratioAtThreeKm = this.stageDistanceMeters <= 3000
+        ? this.lateStageStartRatio
+        : clamp((this.stageDistanceMeters - 3000) / this.stageDistanceMeters, this.lateStageStartRatio, 1);
+      const lateProgressAtThreeKm = clamp((ratioAtThreeKm - this.lateStageStartRatio) / Math.max(0.0001, 1 - this.lateStageStartRatio), 0, 1);
+      const spreadAtThreeKm = 1 + (0.1 * lateProgressAtThreeKm);
+      const finalKickProgress = 1 - (remainingMeters / 3000);
+      return Math.max(baseSpread, spreadAtThreeKm + ((1.3 - spreadAtThreeKm) * finalKickProgress));
+    }
+
+    if (segment.terrain === 'Medium_Mountain' || segment.terrain === 'Mountain' || segment.terrain === 'High_Mountain') {
+      const mountainSpread = 1 + (0.2 * lateProgress);
+      const finalTenPercentBoost = distanceRatio >= 0.9
+        ? ((distanceRatio - 0.9) / 0.1) * 0.2
+        : 0;
+      return Math.max(baseSpread, mountainSpread + finalTenPercentBoost);
+    }
+
+    if (segment.terrain === 'Cobble' || segment.terrain === 'Cobble_Hill') {
+      return Math.max(baseSpread, 1 + (0.2 * lateProgress));
+    }
+
+    return baseSpread;
   }
 
   private resolveWeightedSkill(rider: Rider, skillName: TerrainSkillName): { value: number; breakdown: string } {
@@ -877,7 +958,7 @@ export class SimulationEngine {
         components.push({ key: 'timeTrial', weight: 1 }, { key: 'mountain', weight: 4 }, { key: 'stamina', weight: 1 });
         break;
       case 'Downhill':
-        components.push({ key: 'timeTrial', weight: 2 }, { key: 'downhill', weight: 3 }, { key: 'stamina', weight: 1 });
+        components.push({ key: 'timeTrial', weight: 3 }, { key: 'downhill', weight: 2 }, { key: 'flat', weight: 1 });
         break;
       case 'Cobble':
         components.push({ key: 'timeTrial', weight: 3 }, { key: 'cobble', weight: 2 }, { key: 'stamina', weight: 1 });
@@ -967,6 +1048,7 @@ export class SimulationEngine {
       const secondsToMarker = (marker.distanceMeters - startDistanceMeters) / speedMps;
       rider.lastSplitLabel = marker.label;
       rider.lastSplitTimeSeconds = Math.max(0, stepStartSeconds + secondsToMarker - rider.startOffsetSeconds);
+      rider.splitTimes[marker.label] = rider.lastSplitTimeSeconds;
       rider.nextIntermediateIndex += 1;
     }
   }

@@ -198,29 +198,6 @@ function shuffleDeterministically(items, seed) {
     }
     return shuffled;
 }
-function createU23Abbreviation(base, used) {
-    const normalized = base.toUpperCase().replace(/[^A-Z0-9]/g, '').padEnd(3, 'X').slice(0, 3);
-    const candidates = [
-        `U${normalized.slice(0, 2)}`,
-        `${normalized[0]}U${normalized[1]}`,
-        `${normalized.slice(0, 2)}U`,
-        `U${normalized[0]}${normalized[2]}`,
-    ];
-    for (const candidate of candidates) {
-        if (candidate.length === 3 && !used.has(candidate)) {
-            used.add(candidate);
-            return candidate;
-        }
-    }
-    for (let suffix = 0; suffix <= 9; suffix += 1) {
-        const candidate = `U${normalized[0]}${suffix}`;
-        if (!used.has(candidate)) {
-            used.add(candidate);
-            return candidate;
-        }
-    }
-    throw new Error(`Keine freie U23-Abkuerzung fuer ${base}.`);
-}
 function seedStaCountry(db) {
     const rows = readCsv('sta_country.csv');
     const insert = db.prepare(`
@@ -305,22 +282,6 @@ function readTeamSeeds() {
 }
 function seedTeams(db, divisionIdByName) {
     const mainTeams = readTeamSeeds().filter(team => team.divisionName !== 'U23');
-    const usedAbbreviations = new Set(mainTeams.map(team => team.abbreviation));
-    let nextTeamId = Math.max(...mainTeams.map(team => team.id)) + 1;
-    const generatedU23Teams = mainTeams.map((team) => ({
-        id: nextTeamId++,
-        mainTeamId: team.id,
-        name: `${team.name} U23`,
-        abbreviation: createU23Abbreviation(team.abbreviation, usedAbbreviations),
-        divisionName: 'U23',
-        isPlayerTeam: 0,
-        countryId: team.countryId,
-        colorPrimary: team.colorPrimary,
-        colorSecondary: team.colorSecondary,
-        aiFocus1: team.aiFocus1,
-        aiFocus2: team.aiFocus2,
-        aiFocus3: team.aiFocus3,
-    }));
     const insert = db.prepare(`
     INSERT INTO teams (
       id, name, abbreviation, division_id, u23_team, is_player_team, country_id,
@@ -334,18 +295,7 @@ function seedTeams(db, divisionIdByName) {
         }
         insert.run(team.id, team.name, team.abbreviation, divisionId, team.isPlayerTeam, team.countryId, team.colorPrimary, team.colorSecondary, team.aiFocus1, team.aiFocus2, team.aiFocus3);
     }
-    for (const team of generatedU23Teams) {
-        const divisionId = divisionIdByName.get(team.divisionName);
-        if (divisionId == null) {
-            throw new Error(`Unbekannte Division "${team.divisionName}" fuer U23-Team "${team.name}".`);
-        }
-        insert.run(team.id, team.name, team.abbreviation, divisionId, team.isPlayerTeam, team.countryId, team.colorPrimary, team.colorSecondary, team.aiFocus1, team.aiFocus2, team.aiFocus3);
-    }
-    const linkU23 = db.prepare('UPDATE teams SET u23_team = ? WHERE id = ?');
-    for (const team of generatedU23Teams) {
-        linkU23.run(team.id, team.mainTeamId);
-    }
-    console.log(`  ${mainTeams.length} Hauptteams + ${generatedU23Teams.length} U23-Teams eingefuegt.`);
+    console.log(`  ${mainTeams.length} Teams eingefuegt.`);
 }
 function seedRaceCategoriesBonus(db) {
     const rows = readCsv('race_categories_bonus.csv');
@@ -468,8 +418,17 @@ function seedContracts(db) {
     INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
     VALUES (?, ?, ?, ?, ?)
   `);
-    for (const rider of assignedRiders) {
-        insert.run(rider.id, rider.active_team_id, currentSeason.season, currentSeason.season + 2, 'active');
+    const shuffledRiders = shuffleDeterministically(assignedRiders, currentSeason.season + 2026);
+    const totalRiders = shuffledRiders.length;
+    const contracts2026 = Math.floor(totalRiders * 2 / 5);
+    const contracts2027 = Math.floor(totalRiders * 2 / 5);
+    for (const [index, rider] of shuffledRiders.entries()) {
+        const endSeason = index < contracts2026
+            ? currentSeason.season
+            : index < contracts2026 + contracts2027
+                ? currentSeason.season + 1
+                : currentSeason.season + 2;
+        insert.run(rider.id, rider.active_team_id, currentSeason.season, endSeason, 'active');
     }
     console.log(`  ${assignedRiders.length} Vertraege fuer ${teams.length} Teams aus riders.csv erzeugt.`);
 }

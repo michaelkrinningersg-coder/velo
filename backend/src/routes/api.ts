@@ -189,7 +189,7 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
       }
 
-      const riders = previewRaceRoster(db, repo, race);
+      const riders = previewRaceRoster(db, repo, race, stage);
       if (riders.length === 0) {
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }

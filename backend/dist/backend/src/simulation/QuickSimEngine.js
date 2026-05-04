@@ -62,7 +62,7 @@ function comparePerformanceEntries(left, right) {
         || left.rider.id - right.rider.id;
 }
 function resolveFormBonus(rider) {
-    return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+    return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
 class QuickSimEngine {
     constructor(db) {
@@ -120,7 +120,7 @@ class QuickSimEngine {
         if (seenRiderIds.size !== riders.length) {
             throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
         }
-        this.applyFinishLineAwards(race, performance, {
+        this.applyFinishLineAwards(race, stage, performance, {
             awardPoints: stage.profile !== 'TTT',
             awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
         });
@@ -139,7 +139,7 @@ class QuickSimEngine {
             throw new Error(`Rennen ${stage.raceId} konnte nicht vollständig geladen werden.`);
         }
         this.ensureStageCanBeSimulated(stage);
-        const riders = (0, RaceRosterService_1.ensureRaceEntries)(this.db, this.repo, race);
+        const riders = (0, RaceRosterService_1.ensureRaceEntries)(this.db, this.repo, race, stage);
         if (riders.length === 0) {
             throw new Error('Für dieses Rennen konnten keine Fahrer für die Startliste bestimmt werden.');
         }
@@ -150,12 +150,12 @@ class QuickSimEngine {
         }
         return { race, stage, riders, teamsById };
     }
-    applyFinishLineAwards(race, performance, options = { awardPoints: true, awardTimeBonuses: true }) {
+    applyFinishLineAwards(race, stage, performance, options = { awardPoints: true, awardTimeBonuses: true }) {
         if (!race.category?.bonusSystem) {
             return;
         }
         const finishPointValues = options.awardPoints && race.isStageRace
-            ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
+            ? parseRankedValues(stage.profile === 'ITT' ? race.category.bonusSystem.pointsStage : race.category.bonusSystem.pointsSprintFinish)
             : [];
         const finishBonusValues = options.awardTimeBonuses
             ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)
@@ -284,6 +284,7 @@ class QuickSimEngine {
                     points: row.points,
                 });
             }
+            this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
         })();
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
         return {
@@ -319,7 +320,7 @@ class QuickSimEngine {
     }
     simulateTimeTrialStage(race, stage, riders, teamsById) {
         const ttResult = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, stage, riders);
-        return ttResult.entries.map((entry) => {
+        const performance = ttResult.entries.map((entry) => {
             const team = teamsById.get(entry.rider.activeTeamId ?? -1);
             if (!team) {
                 throw new Error(`Team für Fahrer ${entry.rider.firstName} ${entry.rider.lastName} konnte nicht geladen werden.`);
@@ -337,6 +338,11 @@ class QuickSimEngine {
                 mountainPoints: 0,
             };
         });
+        this.applyFinishLineAwards(race, stage, performance, {
+            awardPoints: stage.profile !== 'TTT',
+            awardTimeBonuses: false,
+        });
+        return performance;
     }
     simulateMassStartStage(race, stage, riders, teamsById) {
         const summary = StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile);

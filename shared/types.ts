@@ -110,6 +110,8 @@ export interface Rider {
   seasonPoints?: number;
   formBonus?: number;
   raceFormBonus?: number;
+  fatigueMalus?: number;
+  accumulatedRandomFatigue?: number;
   seasonFormPeakDates?: string[];
   healthStatus?: RiderHealthStatus;
   unavailableUntil?: string | null;
