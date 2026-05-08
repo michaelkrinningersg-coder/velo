@@ -568,9 +568,7 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
   const ittRiderLabels = bootstrap.stage.profile === 'ITT'
     ? renderIttRiderLabels(displayClusters, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMaxElevation, bootstrap)
     : '';
-  const clusterRail = bootstrap.stage.profile === 'ITT'
-    ? renderTimingRail(summary, snapshot, bootstrap, timingMode)
-    : renderClusterRail(displayClusters);
+  const clusterRail = renderClusterRail(displayClusters);
   const finishRail = bootstrap.stage.profile === 'ITT' ? '' : renderFinishRail(snapshot, bootstrap);
 
   container.innerHTML = `
@@ -601,10 +599,7 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
         </svg>
       </div>
       ${bootstrap.stage.profile === 'ITT'
-        ? `<aside class="race-sim-cluster-rail race-sim-cluster-rail-itt" aria-label="Timing-Reihenfolge">
-            <div class="race-sim-cluster-rail-title">Timing</div>
-            ${clusterRail}
-          </aside>`
+        ? ''
         : `<div class="race-sim-side-rails">
             <aside class="race-sim-cluster-rail" aria-label="Live-Zieleinlauf">
               <div class="race-sim-cluster-rail-title">Zieleinlauf</div>

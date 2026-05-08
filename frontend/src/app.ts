@@ -1355,6 +1355,77 @@ function renderRacePrefs(raceIds: number[]): string {
   }).join(', ');
 }
 
+function renderPeakDatesSummary(rider: Rider): string {
+  const peakDates = rider.seasonFormPeakDates ?? [];
+  if (peakDates.length === 0) {
+    return '–';
+  }
+  return peakDates.join(' · ');
+}
+
+function formatFormDebugValue(value: number | undefined): string {
+  const amount = value ?? 0;
+  const prefix = amount > 0 ? '+' : '';
+  return `${prefix}${amount.toFixed(2).replace('.', ',')}`;
+}
+
+function buildFormSparklinePath(points: Array<{ totalForm: number }>, width: number, height: number, minValue: number, maxValue: number): string {
+  if (points.length === 0) {
+    return '';
+  }
+
+  const chartWidth = width - 20;
+  const chartHeight = height - 20;
+  return points.map((point, index) => {
+    const x = 10 + ((chartWidth * index) / Math.max(1, points.length - 1));
+    const normalized = (point.totalForm - minValue) / (maxValue - minValue);
+    const y = 10 + chartHeight - (Math.max(0, Math.min(1, normalized)) * chartHeight);
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+}
+
+function renderRiderFormSparkline(rider: Rider): string {
+  const points = rider.formForecast ?? [];
+  if (points.length === 0) {
+    return '<div class="text-muted">Noch keine Form-Historie vorhanden.</div>';
+  }
+
+  const width = 320;
+  const height = 110;
+  const historyPoints = points.filter((point) => !point.isProjection);
+  const projectionStartIndex = Math.max(0, historyPoints.length - 1);
+  const projectionPoints = points.slice(projectionStartIndex);
+  const peakMarkers = (rider.seasonFormPeakDates ?? []).map((peakDate) => {
+    const index = points.findIndex((point) => point.date === peakDate);
+    if (index < 0) {
+      return '';
+    }
+
+    const x = 10 + (((width - 20) * index) / Math.max(1, points.length - 1));
+    return `<line class="rider-form-peak-marker" x1="${x.toFixed(2)}" y1="8" x2="${x.toFixed(2)}" y2="102"></line>`;
+  }).join('');
+
+  return `
+    <div class="rider-form-debug-meta">
+      <span><span class="text-muted">S-Form:</span> ${formatFormDebugValue(rider.formBonus)}</span>
+      <span><span class="text-muted">R-Form:</span> ${formatFormDebugValue(rider.raceFormBonus)}</span>
+      <span><span class="text-muted">Peak:</span> ${esc((rider.seasonFormPeakDates ?? []).join(' · ') || '–')}</span>
+    </div>
+    <svg class="rider-form-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="Formverlauf Januar bis Oktober">
+      <line class="rider-form-axis" x1="10" y1="100" x2="310" y2="100"></line>
+      <line class="rider-form-axis" x1="10" y1="10" x2="10" y2="100"></line>
+      ${peakMarkers}
+      <path class="rider-form-line rider-form-line-history" d="${buildFormSparklinePath(historyPoints, width, height, -1, 5)}"></path>
+      <path class="rider-form-line rider-form-line-projection" d="${buildFormSparklinePath(projectionPoints, width, height, -1, 5)}"></path>
+      <text class="rider-form-axis-label" x="10" y="108">01.01.</text>
+      <text class="rider-form-axis-label" x="286" y="108">31.10.</text>
+      <text class="rider-form-axis-label" x="2" y="16">5,0</text>
+      <text class="rider-form-axis-label" x="2" y="100">-1,0</text>
+    </svg>
+    <div class="text-muted">Durchgezogen = Ist, gestrichelt = Prognose.</div>
+  `;
+}
+
 function getRiderSpecializationLabel(value: Rider['riderType'] | Rider['specialization1']): string {
   switch (value) {
     case 'Berg':
@@ -1395,6 +1466,7 @@ function renderRiderInsightRow(rider: Rider): string {
             <div><strong>${esc(getRiderSpecializationLabel(rider.riderType))}</strong></div>
             <div class="text-muted">${esc(riderSpecializations || 'Keine Spezialisierung')}</div>
             <div class="text-muted">Tags: ${esc(riderTags || 'Keine Tags')}</div>
+            <div class="text-muted">Formhöhepunkte: ${esc(renderPeakDatesSummary(rider))}</div>
             <div class="text-muted">Skill-Development: ${rider.skillDevelopment ?? '–'}</div>
             <div class="text-muted">${rider.isStageRacer ? 'Etappenfahrer' : 'Kein Etappenfokus'} / ${rider.isOneDayRacer ? 'Eintagesfahrer' : 'Kein Eintagesfokus'}</div>
             <div class="text-muted">Vertragsende: ${rider.contractEndSeason ?? '–'}</div>
@@ -1403,6 +1475,10 @@ function renderRiderInsightRow(rider: Rider): string {
             <div class="rider-insight-title">Vorlieben</div>
             <div><span class="text-muted">Fav:</span> ${renderRacePrefs(rider.favoriteRaces)}</div>
             <div><span class="text-muted">No:</span> ${renderRacePrefs(rider.nonFavoriteRaces)}</div>
+          </div>
+          <div class="rider-insight-group rider-form-debug-group">
+            <div class="rider-insight-title">Form-Debug</div>
+            ${renderRiderFormSparkline(rider)}
           </div>
         </div>
       </td>
@@ -2636,7 +2712,7 @@ function renderTeamDetail(teamId: number | null): void {
                     type="button"
                     class="info-toggle${isExpanded ? ' info-toggle-active' : ''}"
                     data-rider-info="${r.id}"
-                    title="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'}"
+                    title="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'} · Peaks: ${esc(renderPeakDatesSummary(r))}"
                     aria-expanded="${isExpanded ? 'true' : 'false'}"
                     aria-label="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'}"
                   >i</button>

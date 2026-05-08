@@ -1,8 +1,8 @@
 import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { renderRaceSimControls, type TimeControlValue } from './renderControls';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
-import { renderRaceSimSidebar } from './renderSidebar';
-import { SimulationEngine, type SimulationSnapshot } from './SimulationEngine';
+import { handleRaceSimSidebarInteraction, renderRaceSimSidebar } from './renderSidebar';
+import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
 
 interface RaceSimElements {
   layout: HTMLElement;
@@ -23,12 +23,23 @@ interface RaceSimViewOptions {
 }
 
 const SIDEBAR_RENDER_INTERVAL_MS = 1000;
+const PROFILE_RENDER_INTERVAL_MS = 250;
 const PROFILE_INTERACTION_HOLD_MS = 1200;
+const PERF_SMOOTHING_FACTOR = 0.2;
+
+interface RaceSimPerfTelemetry {
+  engineStepMs: number;
+  snapshotBuildMs: number;
+  profileRenderMs: number;
+  sidebarRenderMs: number;
+}
 
 export class RaceSimView {
   private engine: SimulationEngine | null = null;
 
-  private snapshot: SimulationSnapshot | null = null;
+  private frameSnapshot: SimulationFrameSnapshot | null = null;
+
+  private detailSnapshot: SimulationSnapshot | null = null;
 
   private bootstrap: RealtimeSimulationBootstrap | null = null;
 
@@ -42,13 +53,20 @@ export class RaceSimView {
 
   private lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
 
-  private sidebarSnapshot: SimulationSnapshot | null = null;
-
   private timingRailMode: TimingRailMode = 'finish';
 
   private timingScrollTop = 0;
 
   private profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+
+  private lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+
+  private perfTelemetry: RaceSimPerfTelemetry = {
+    engineStepMs: 0,
+    snapshotBuildMs: 0,
+    profileRenderMs: 0,
+    sidebarRenderMs: 0,
+  };
 
   constructor(private readonly elements: RaceSimElements, private readonly options: RaceSimViewOptions = {}) {
     this.elements.controls.addEventListener('click', (event) => {
@@ -56,8 +74,11 @@ export class RaceSimView {
       if (actionButton) {
         const action = actionButton.dataset['raceSimAction'];
         if (action === 'toggle') {
-          if (this.snapshot?.isFinished && this.bootstrap) {
-            this.options.onFinishRequested?.(this.snapshot, this.bootstrap);
+          if (this.frameSnapshot?.isFinished && this.bootstrap) {
+            const completedSnapshot = this.engine?.getSnapshot() ?? this.detailSnapshot;
+            if (completedSnapshot) {
+              this.options.onFinishRequested?.(completedSnapshot, this.bootstrap);
+            }
           } else if (this.isRunning) {
             this.pause();
           } else {
@@ -113,6 +134,22 @@ export class RaceSimView {
       this.profileInteractionHoldUntilMs = performance.now() + PROFILE_INTERACTION_HOLD_MS;
     }, true);
 
+    this.elements.sidebar.parentElement?.addEventListener('click', (event) => {
+      if (!this.bootstrap || !this.detailSnapshot) {
+        return;
+      }
+
+      const handled = handleRaceSimSidebarInteraction(this.elements.sidebar, event.target as Element);
+      if (!handled) {
+        return;
+      }
+
+      const sidebarRenderStartMs = performance.now();
+      renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
+      this.recordPerfTelemetry('sidebarRenderMs', performance.now() - sidebarRenderStartMs);
+      this.lastSidebarRenderTime = performance.now();
+    });
+
   }
 
   public load(bootstrap: RealtimeSimulationBootstrap, options: LoadOptions = {}): void {
@@ -123,11 +160,13 @@ export class RaceSimView {
     }
     this.timingRailMode = 'finish';
     this.engine = new SimulationEngine(bootstrap);
-    this.snapshot = this.engine.getSnapshot();
-    this.sidebarSnapshot = null;
+    this.detailSnapshot = this.engine.getSnapshot();
+    this.frameSnapshot = this.detailSnapshot;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.resetPerfTelemetry();
     this.render(performance.now(), true);
 
     if (options.autoplay ?? true) {
@@ -138,12 +177,14 @@ export class RaceSimView {
   public clear(message: string): void {
     this.pause();
     this.engine = null;
-    this.snapshot = null;
+    this.frameSnapshot = null;
+    this.detailSnapshot = null;
     this.bootstrap = null;
-    this.sidebarSnapshot = null;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.resetPerfTelemetry();
     this.elements.layout.classList.add('hidden');
     this.elements.emptyState.classList.remove('hidden');
     this.elements.emptyState.textContent = message;
@@ -153,12 +194,14 @@ export class RaceSimView {
   public hide(): void {
     this.pause();
     this.engine = null;
-    this.snapshot = null;
+    this.frameSnapshot = null;
+    this.detailSnapshot = null;
     this.bootstrap = null;
-    this.sidebarSnapshot = null;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.resetPerfTelemetry();
     this.elements.layout.classList.add('hidden');
     this.elements.emptyState.classList.add('hidden');
     this.elements.meta.textContent = '';
@@ -175,7 +218,7 @@ export class RaceSimView {
   }
 
   public play(): void {
-    if (!this.engine || !this.snapshot || this.snapshot.isFinished || this.isRunning) {
+    if (!this.engine || !this.frameSnapshot || this.frameSnapshot.isFinished || this.isRunning) {
       this.render();
       return;
     }
@@ -189,7 +232,8 @@ export class RaceSimView {
   public destroy(): void {
     this.pause();
     this.engine = null;
-    this.snapshot = null;
+    this.frameSnapshot = null;
+    this.detailSnapshot = null;
     this.bootstrap = null;
   }
 
@@ -206,10 +250,13 @@ export class RaceSimView {
 
     const realDeltaSeconds = Math.min(0.25, (timestamp - this.lastFrameTime) / 1000);
     this.lastFrameTime = timestamp;
-    this.snapshot = this.engine.step(realDeltaSeconds * this.timeMultiplier);
+    const engineStepStartMs = performance.now();
+    this.frameSnapshot = this.engine.step(realDeltaSeconds * this.timeMultiplier);
+    this.recordPerfTelemetry('engineStepMs', performance.now() - engineStepStartMs);
     this.render(timestamp);
 
-    if (this.snapshot.isFinished) {
+    if (this.frameSnapshot.isFinished) {
+      this.detailSnapshot = this.engine.getSnapshot();
       this.pause();
       return;
     }
@@ -218,7 +265,7 @@ export class RaceSimView {
   }
 
   private render(nowMs = performance.now(), forceSidebar = false): void {
-    if (!this.bootstrap || !this.snapshot) {
+    if (!this.bootstrap || !this.frameSnapshot) {
       return;
     }
 
@@ -228,38 +275,70 @@ export class RaceSimView {
       ? ' · Einzelzeitfahren · Startintervall 02:00'
       : '';
     this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}`;
-    const currentTimingScroll = this.elements.profile.querySelector<HTMLElement>('.race-sim-timing-scroll');
-    if (currentTimingScroll) {
-      this.timingScrollTop = currentTimingScroll.scrollTop;
-    }
 
     const shouldRenderProfile = forceSidebar
       || !this.isRunning
-      || nowMs >= this.profileInteractionHoldUntilMs;
+      || this.frameSnapshot.isFinished
+      || (
+        nowMs >= this.profileInteractionHoldUntilMs
+        && (nowMs - this.lastProfileRenderTime) >= PROFILE_RENDER_INTERVAL_MS
+      );
 
-    if (shouldRenderProfile) {
-      renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.snapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`, this.bootstrap, this.timingRailMode);
+    const shouldRenderSidebar = forceSidebar
+      || this.detailSnapshot == null
+      || this.frameSnapshot.isFinished
+      || (nowMs - this.lastSidebarRenderTime) >= SIDEBAR_RENDER_INTERVAL_MS;
+
+    if (shouldRenderProfile || shouldRenderSidebar) {
+      const snapshotBuildStartMs = performance.now();
+      this.detailSnapshot = this.engine?.getSnapshot() ?? this.detailSnapshot;
+      this.recordPerfTelemetry('snapshotBuildMs', performance.now() - snapshotBuildStartMs);
+    }
+
+    if (shouldRenderProfile && this.detailSnapshot) {
+      const currentTimingScroll = this.elements.profile.querySelector<HTMLElement>('.race-sim-timing-scroll');
+      if (currentTimingScroll) {
+        this.timingScrollTop = currentTimingScroll.scrollTop;
+      }
+      const profileRenderStartMs = performance.now();
+      renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.detailSnapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`, this.bootstrap, this.timingRailMode);
+      this.recordPerfTelemetry('profileRenderMs', performance.now() - profileRenderStartMs);
+      this.lastProfileRenderTime = nowMs;
       const nextTimingScroll = this.elements.profile.querySelector<HTMLElement>('.race-sim-timing-scroll');
       if (nextTimingScroll) {
         nextTimingScroll.scrollTop = this.timingScrollTop;
       }
     }
 
-    const shouldRenderSidebar = forceSidebar
-      || this.sidebarSnapshot == null
-      || this.snapshot.isFinished
-      || (nowMs - this.lastSidebarRenderTime) >= SIDEBAR_RENDER_INTERVAL_MS;
-
-    if (shouldRenderSidebar) {
-      this.sidebarSnapshot = this.snapshot;
+    if (shouldRenderSidebar && this.detailSnapshot) {
       this.lastSidebarRenderTime = nowMs;
-      renderRaceSimSidebar(this.elements.sidebar, this.sidebarSnapshot, this.bootstrap);
+      const sidebarRenderStartMs = performance.now();
+      renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
+      this.recordPerfTelemetry('sidebarRenderMs', performance.now() - sidebarRenderStartMs);
     }
 
     renderRaceSimControls(this.elements.controls, {
       isRunning: this.isRunning,
       timeMultiplier: this.timeMultiplier,
-      snapshot: this.snapshot,
+      snapshot: this.frameSnapshot,
+      totalRiders: this.bootstrap.riders.length,
+      perf: this.perfTelemetry,
     });
+  }
+
+  private resetPerfTelemetry(): void {
+    this.perfTelemetry = {
+      engineStepMs: 0,
+      snapshotBuildMs: 0,
+      profileRenderMs: 0,
+      sidebarRenderMs: 0,
+    };
+  }
+
+  private recordPerfTelemetry(key: keyof RaceSimPerfTelemetry, sampleMs: number): void {
+    const currentValue = this.perfTelemetry[key];
+    this.perfTelemetry[key] = currentValue <= 0
+      ? sampleMs
+      : (currentValue * (1 - PERF_SMOOTHING_FACTOR)) + (sampleMs * PERF_SMOOTHING_FACTOR);
   }
 }

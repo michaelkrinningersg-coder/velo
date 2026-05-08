@@ -118,7 +118,7 @@ export function createRouter(dbService: DatabaseService): Router {
       const repo = new GameRepository(db);
       const team = repo.getTeamById(id);
       if (!team) return fail(res, 404, `Team ${id} nicht gefunden.`);
-      ok<Team & { riders: Rider[] }>(res, { ...team, riders: repo.getRiders(id) });
+      ok<Team & { riders: Rider[] }>(res, { ...team, riders: repo.getRiders(id, true) });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

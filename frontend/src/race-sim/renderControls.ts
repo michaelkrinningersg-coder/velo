@@ -1,4 +1,4 @@
-import type { SimulationSnapshot } from './SimulationEngine';
+import type { SimulationFrameSnapshot } from './SimulationEngine';
 
 export const TIME_CONTROL_VALUES = [1, 2, 5, 10, 25, 50, 100, 250, 500] as const;
 
@@ -7,8 +7,29 @@ export type TimeControlValue = (typeof TIME_CONTROL_VALUES)[number];
 interface ControlRenderState {
   isRunning: boolean;
   timeMultiplier: TimeControlValue;
-  snapshot: SimulationSnapshot;
+  snapshot: SimulationFrameSnapshot;
+  totalRiders: number;
+  perf: {
+    engineStepMs: number;
+    snapshotBuildMs: number;
+    profileRenderMs: number;
+    sidebarRenderMs: number;
+  };
 }
+
+interface ControlElements {
+  timeField: HTMLElement | null;
+  leaderField: HTMLElement | null;
+  finishedField: HTMLElement | null;
+  engineField: HTMLElement | null;
+  snapshotField: HTMLElement | null;
+  profileField: HTMLElement | null;
+  sidebarField: HTMLElement | null;
+  toggleButton: HTMLButtonElement | null;
+  speedButtons: HTMLButtonElement[];
+}
+
+const controlElementsByContainer = new WeakMap<HTMLElement, ControlElements>();
 
 function formatTime(seconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(seconds));
@@ -22,9 +43,14 @@ function formatKm(meters: number): string {
   return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
 }
 
-function ensureControlsMarkup(container: HTMLElement): void {
-  if (container.dataset['raceSimMounted'] === 'true') {
-    return;
+function formatPerfMs(value: number): string {
+  return `${value.toFixed(2).replace('.', ',')} ms`;
+}
+
+function ensureControlsMarkup(container: HTMLElement): ControlElements {
+  const cached = controlElementsByContainer.get(container);
+  if (cached) {
+    return cached;
   }
 
   container.dataset['raceSimMounted'] = 'true';
@@ -42,6 +68,22 @@ function ensureControlsMarkup(container: HTMLElement): void {
         <span class="race-sim-stat-label">Im Ziel</span>
         <strong data-race-sim-field="finished">0 / 0</strong>
       </div>
+      <div class="race-sim-stat-card race-sim-stat-card-perf">
+        <span class="race-sim-stat-label">Engine</span>
+        <strong data-race-sim-field="engine">0,00 ms</strong>
+      </div>
+      <div class="race-sim-stat-card race-sim-stat-card-perf">
+        <span class="race-sim-stat-label">Snapshot</span>
+        <strong data-race-sim-field="snapshot">0,00 ms</strong>
+      </div>
+      <div class="race-sim-stat-card race-sim-stat-card-perf">
+        <span class="race-sim-stat-label">Profil</span>
+        <strong data-race-sim-field="profile">0,00 ms</strong>
+      </div>
+      <div class="race-sim-stat-card race-sim-stat-card-perf">
+        <span class="race-sim-stat-label">Sidebar</span>
+        <strong data-race-sim-field="sidebar">0,00 ms</strong>
+      </div>
     </div>
     <div class="race-sim-speed-strip">
       <button type="button" class="race-sim-speed-btn race-sim-speed-btn-toggle" data-race-sim-action="toggle">Start</button>
@@ -53,31 +95,52 @@ function ensureControlsMarkup(container: HTMLElement): void {
         >${value}x</button>
       `).join('')}
     </div>`;
+
+  const elements: ControlElements = {
+    timeField: container.querySelector<HTMLElement>('[data-race-sim-field="time"]'),
+    leaderField: container.querySelector<HTMLElement>('[data-race-sim-field="leader"]'),
+    finishedField: container.querySelector<HTMLElement>('[data-race-sim-field="finished"]'),
+    engineField: container.querySelector<HTMLElement>('[data-race-sim-field="engine"]'),
+    snapshotField: container.querySelector<HTMLElement>('[data-race-sim-field="snapshot"]'),
+    profileField: container.querySelector<HTMLElement>('[data-race-sim-field="profile"]'),
+    sidebarField: container.querySelector<HTMLElement>('[data-race-sim-field="sidebar"]'),
+    toggleButton: container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]'),
+    speedButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]')),
+  };
+  controlElementsByContainer.set(container, elements);
+  return elements;
 }
 
 export function renderRaceSimControls(container: HTMLElement, state: ControlRenderState): void {
-  ensureControlsMarkup(container);
+  const elements = ensureControlsMarkup(container);
 
-  const timeField = container.querySelector<HTMLElement>('[data-race-sim-field="time"]');
-  const leaderField = container.querySelector<HTMLElement>('[data-race-sim-field="leader"]');
-  const finishedField = container.querySelector<HTMLElement>('[data-race-sim-field="finished"]');
-  const toggleButton = container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]');
+  if (elements.timeField) {
+    elements.timeField.textContent = formatTime(state.snapshot.elapsedSeconds);
+  }
+  if (elements.leaderField) {
+    elements.leaderField.textContent = `${formatKm(state.snapshot.leaderDistanceMeters)} / ${formatKm(state.snapshot.stageDistanceMeters)}`;
+  }
+  if (elements.finishedField) {
+    elements.finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.totalRiders}`;
+  }
+  if (elements.engineField) {
+    elements.engineField.textContent = formatPerfMs(state.perf.engineStepMs);
+  }
+  if (elements.snapshotField) {
+    elements.snapshotField.textContent = formatPerfMs(state.perf.snapshotBuildMs);
+  }
+  if (elements.profileField) {
+    elements.profileField.textContent = formatPerfMs(state.perf.profileRenderMs);
+  }
+  if (elements.sidebarField) {
+    elements.sidebarField.textContent = formatPerfMs(state.perf.sidebarRenderMs);
+  }
+  if (elements.toggleButton) {
+    elements.toggleButton.textContent = state.isRunning ? 'Pause' : state.snapshot.isFinished ? 'Fertig' : 'Start';
+    elements.toggleButton.classList.toggle('active', !state.isRunning && !state.snapshot.isFinished);
+  }
 
-  if (timeField) {
-    timeField.textContent = formatTime(state.snapshot.elapsedSeconds);
-  }
-  if (leaderField) {
-    leaderField.textContent = `${formatKm(state.snapshot.leaderDistanceMeters)} / ${formatKm(state.snapshot.stageDistanceMeters)}`;
-  }
-  if (finishedField) {
-    finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.snapshot.riders.length}`;
-  }
-  if (toggleButton) {
-    toggleButton.textContent = state.isRunning ? 'Pause' : state.snapshot.isFinished ? 'Fertig' : 'Start';
-    toggleButton.classList.toggle('active', !state.isRunning && !state.snapshot.isFinished);
-  }
-
-  container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]').forEach((button) => {
+  elements.speedButtons.forEach((button) => {
     const speedValue = Number(button.dataset['raceSimSpeed']);
     button.classList.toggle('active', speedValue === state.timeMultiplier);
   });

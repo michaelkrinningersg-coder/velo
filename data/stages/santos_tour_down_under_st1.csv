@@ -1,11 +1,11 @@
 km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
 0.00,11,Flat,5,5,start,Start,null
-5.64,2,Flat,5,5,sprint_intermediate,null,null
+5.64,2,Flat,5,5,sprint_intermediate,Intermediate 1,null
 6.92,23,Flat,5,5,,,
 8.68,20,Flat,5,5,,,
 10.30,47,Flat,5,5,,,
 11.75,52,Flat,5,5,,,
-15.26,38,Hill,5,5,sprint_intermediate,null,null
+15.26,38,Hill,5,5,sprint_intermediate,Intermediate 2,null
 16.39,66,Hill,5,5,,,
 16.79,100,Hill,5,5,,,
 17.15,105,Abfahrt,5,5,,,

@@ -279,6 +279,10 @@ CREATE TABLE IF NOT EXISTS rider_daily_state (
   rider_id                INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
   season                  INTEGER NOT NULL,
   form_bonus              REAL NOT NULL DEFAULT -1.0,
+  race_form_bonus         REAL NOT NULL DEFAULT 0.0,
+  peak_s_form             REAL NOT NULL DEFAULT 0.0,
+  peak_r_form             REAL NOT NULL DEFAULT 0.0,
+  active_peak_date        TEXT,
   peak_dates_json         TEXT NOT NULL DEFAULT '[]',
   health_status           TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
   unavailable_until       TEXT,
@@ -287,6 +291,37 @@ CREATE TABLE IF NOT EXISTS rider_daily_state (
 
 CREATE INDEX IF NOT EXISTS idx_rider_daily_state_season ON rider_daily_state(season);
 CREATE INDEX IF NOT EXISTS idx_rider_daily_state_health ON rider_daily_state(health_status, unavailable_days_remaining);
+
+CREATE TABLE IF NOT EXISTS rider_r_form_events (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  source_date      TEXT    NOT NULL,
+  expires_on       TEXT    NOT NULL,
+  amount           REAL    NOT NULL CHECK(amount >= 0),
+  event_type       TEXT    NOT NULL CHECK(event_type IN ('race_day'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_rider_date
+  ON rider_r_form_events(rider_id, source_date, expires_on);
+
+CREATE TABLE IF NOT EXISTS rider_form_history (
+  rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  date             TEXT    NOT NULL,
+  s_form           REAL    NOT NULL,
+  r_form           REAL    NOT NULL,
+  total_form       REAL    NOT NULL,
+  PRIMARY KEY (rider_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
+  ON rider_form_history(date, rider_id);
+
+CREATE TABLE IF NOT EXISTS rider_r_form_daily_awards (
+  rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  award_date       TEXT    NOT NULL,
+  award_type       TEXT    NOT NULL CHECK(award_type IN ('build', 'free')),
+  PRIMARY KEY (rider_id, award_date)
+);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_team_type
   ON results(stage_id, team_id, result_type_id)

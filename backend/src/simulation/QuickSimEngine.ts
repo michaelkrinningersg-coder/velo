@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { GameRepository } from '../db/GameRepository';
+import { GameStateService } from '../game/GameStateService';
 import { ensureRaceEntries } from './RaceRosterService';
 import { StageParser } from './StageParser';
 import { TimeTrialSimulator } from './TimeTrialSimulator';
@@ -390,6 +391,8 @@ export class QuickSimEngine {
       }
       this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
     })();
+
+    new GameStateService(this.db).applyRaceDayFormBonuses(stage.date, stageRows.map((row) => row.riderId));
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
 

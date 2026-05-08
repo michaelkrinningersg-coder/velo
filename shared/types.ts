@@ -70,6 +70,21 @@ export interface Contract {
   status: ContractStatus;
 }
 
+export interface FormDebugPoint {
+  date: string;
+  totalForm: number;
+  sForm: number;
+  rForm: number;
+  isProjection: boolean;
+}
+
+export interface RiderFormSnapshot {
+  date: string;
+  totalForm: number;
+  sForm: number;
+  rForm: number;
+}
+
 export interface Rider {
   id: number;
   firstName: string;
@@ -110,9 +125,14 @@ export interface Rider {
   seasonPoints?: number;
   formBonus?: number;
   raceFormBonus?: number;
+  peakSForm?: number;
+  peakRForm?: number;
+  activePeakDate?: string | null;
   fatigueMalus?: number;
   accumulatedRandomFatigue?: number;
   seasonFormPeakDates?: string[];
+  formHistory?: RiderFormSnapshot[];
+  formForecast?: FormDebugPoint[];
   healthStatus?: RiderHealthStatus;
   unavailableUntil?: string | null;
   unavailableDaysRemaining?: number;

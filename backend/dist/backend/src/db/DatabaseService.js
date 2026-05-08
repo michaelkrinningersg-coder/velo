@@ -137,6 +137,48 @@ class DatabaseService {
             masterDb.close();
         }
     }
+    ensureRiderFormSchema(db) {
+        if (tableExists(db, 'rider_daily_state')) {
+            if (!columnExists(db, 'rider_daily_state', 'race_form_bonus')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN race_form_bonus REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'peak_s_form')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN peak_s_form REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'peak_r_form')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN peak_r_form REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'active_peak_date')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN active_peak_date TEXT
+        `).run();
+            }
+        }
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_r_form_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        source_date TEXT NOT NULL,
+        expires_on TEXT NOT NULL,
+        amount REAL NOT NULL CHECK(amount >= 0),
+        event_type TEXT NOT NULL CHECK(event_type IN ('race_day'))
+      )
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_rider_date
+      ON rider_r_form_events(rider_id, source_date, expires_on)
+    `).run();
+    }
     ensureSavegamesDir() {
         if (!fs.existsSync(this.savegamesDir)) {
             fs.mkdirSync(this.savegamesDir, { recursive: true });
@@ -202,6 +244,7 @@ class DatabaseService {
         this.activeConnection.pragma('foreign_keys = ON');
         this.applyLatestSchema(this.activeConnection);
         this.ensureRaceCategoryBonusSchema(this.activeConnection);
+        this.ensureRiderFormSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
         new ContractService_1.ContractService(this.activeConnection).checkContractStatuses(gameState.season);
