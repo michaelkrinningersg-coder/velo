@@ -14,7 +14,7 @@ team_id,name,abbreviation,division_name,is_player_team,country_id,color_primary,
 13,Shimano - Tissot,SHT,WorldTour,0,17,#0055A5,#E3000F,2,1,5
 14,AXA - Lindt,AXA,WorldTour,0,17,#00008F,#D4AF37,2,3,1
 15,ING - Schwalbe,ING,WorldTour,0,5,#FF6200,#0000A0,2,4,3
-16,Ikea - Merida,IKE,WorldTour,0,32,#0051BA,#43B02A,3,6,4
+16,Ikea - Adidas,IKE,WorldTour,0,32,#0051BA,#43B02A,3,6,4
 17,Swiss Re - BMC,SRB,WorldTour,0,17,#005596,#E3000F,6,4,2
 18,Google - Pinarello,GOO,WorldTour,0,2,#4285F4,#DB4437,2,1,3
 19,Microsoft - Tacx,MST,WorldTour,0,5,#F25022,#00A4EF,4,1,2

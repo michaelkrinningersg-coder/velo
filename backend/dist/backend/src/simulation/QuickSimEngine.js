@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuickSimEngine = void 0;
 const GameRepository_1 = require("../db/GameRepository");
+const GameStateService_1 = require("../game/GameStateService");
 const RaceRosterService_1 = require("./RaceRosterService");
 const StageParser_1 = require("./StageParser");
 const TimeTrialSimulator_1 = require("./TimeTrialSimulator");
@@ -155,7 +156,7 @@ class QuickSimEngine {
             return;
         }
         const finishPointValues = options.awardPoints && race.isStageRace
-            ? parseRankedValues(stage.profile === 'ITT' ? race.category.bonusSystem.pointsStage : race.category.bonusSystem.pointsSprintFinish)
+            ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
             : [];
         const finishBonusValues = options.awardTimeBonuses
             ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)
@@ -286,6 +287,7 @@ class QuickSimEngine {
             }
             this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
         })();
+        new GameStateService_1.GameStateService(this.db).applyRaceDayFormBonuses(stage.date, stageRows.map((row) => row.riderId));
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
         return {
             raceId: race.id,

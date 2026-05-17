@@ -43,6 +43,8 @@ export interface RealtimeRiderSnapshot {
   gradientModifier: number;
   windModifier: number;
   draftModifier: number;
+  draftNearbyRiderCount: number;
+  draftPackFactor: number;
   currentSpeedMps: number;
   photoFinishScore: number;
   lastSplitLabel: string | null;
@@ -104,6 +106,8 @@ interface RiderState {
   gradientModifier: number;
   windModifier: number;
   draftModifier: number;
+  draftNearbyRiderCount: number;
+  draftPackFactor: number;
   tempSpeedMps: number;
   currentSpeedMps: number;
   photoFinishScore: number;
@@ -139,6 +143,9 @@ const START_SPREAD_MAX = 0.4;
 const LATE_STAGE_START_MIN = 0.6;
 const LATE_STAGE_START_MAX = 0.8;
 const DRAFT_BONUS_SCALE = 2 / 3;
+const DRAFT_PACK_SOFT_CAP_START = 10;
+const DRAFT_PACK_HARD_CAP_SIZE = 50;
+const DRAFT_FRONT_NO_BONUS_GROUP_SIZE = 25;
 
 interface WeightedSkillComponent {
   key: RiderSkillKey;
@@ -380,6 +387,57 @@ function compareDraftOrder(left: RiderState, right: RiderState): number {
   return left.rider.id - right.rider.id;
 }
 
+function resolveDraftPackFactor(groupSize: number): number {
+  const clampedGroupSize = clamp(groupSize, 1, DRAFT_PACK_HARD_CAP_SIZE);
+  if (clampedGroupSize <= 2) {
+    return 0.12 * clampedGroupSize;
+  }
+
+  if (clampedGroupSize <= DRAFT_PACK_SOFT_CAP_START) {
+    const progressToSoftCap = (clampedGroupSize - 2) / Math.max(1, DRAFT_PACK_SOFT_CAP_START - 2);
+    return 0.24 + (progressToSoftCap * 0.58);
+  }
+
+  const progressToHardCap = (clampedGroupSize - DRAFT_PACK_SOFT_CAP_START) / Math.max(1, DRAFT_PACK_HARD_CAP_SIZE - DRAFT_PACK_SOFT_CAP_START);
+  return 0.82 + (progressToHardCap * 0.18);
+}
+
+function resolveDraftGroupWindow(orderedRiders: RiderState[], riderIndex: number, maxGapMeters: number): { startIndex: number; endIndex: number; size: number; positionInGroup: number } {
+  let startIndex = riderIndex;
+  while (startIndex > 0) {
+    const gapToFront = orderedRiders[startIndex - 1].distanceCoveredMeters - orderedRiders[startIndex].distanceCoveredMeters;
+    if (gapToFront <= 0 || gapToFront >= maxGapMeters) {
+      break;
+    }
+    startIndex -= 1;
+  }
+
+  let endIndex = riderIndex;
+  while (endIndex < orderedRiders.length - 1) {
+    const gapToBack = orderedRiders[endIndex].distanceCoveredMeters - orderedRiders[endIndex + 1].distanceCoveredMeters;
+    if (gapToBack <= 0 || gapToBack >= maxGapMeters) {
+      break;
+    }
+    endIndex += 1;
+  }
+
+  return {
+    startIndex,
+    endIndex,
+    size: (endIndex - startIndex) + 1,
+    positionInGroup: riderIndex - startIndex,
+  };
+}
+
+function isFrontOfLargeDraftGroup(groupSize: number, positionInGroup: number): boolean {
+  if (groupSize < DRAFT_FRONT_NO_BONUS_GROUP_SIZE) {
+    return false;
+  }
+
+  const frontZoneSize = Math.max(1, Math.floor(groupSize * 0.1));
+  return positionInGroup < frontZoneSize;
+}
+
 export class SimulationEngine {
   private readonly stageDistanceMeters: number;
 
@@ -431,6 +489,8 @@ export class SimulationEngine {
       gradientModifier: 1,
       windModifier: 1,
       draftModifier: 1,
+      draftNearbyRiderCount: 0,
+      draftPackFactor: 0,
       tempSpeedMps: 0,
       currentSpeedMps: 0,
       photoFinishScore: 0,
@@ -498,6 +558,8 @@ export class SimulationEngine {
         gradientModifier: rider.gradientModifier,
         windModifier: rider.windModifier,
         draftModifier: rider.draftModifier,
+        draftNearbyRiderCount: rider.draftNearbyRiderCount,
+        draftPackFactor: rider.draftPackFactor,
         currentSpeedMps: rider.currentSpeedMps,
         photoFinishScore: rider.photoFinishScore,
         lastSplitLabel: rider.lastSplitLabel,
@@ -550,6 +612,8 @@ export class SimulationEngine {
         rider.nextDistanceCoveredMeters = null;
         rider.tempSpeedMps = 0;
         rider.draftModifier = 1;
+        rider.draftNearbyRiderCount = 0;
+        rider.draftPackFactor = 0;
         rider.currentSpeedMps = 0;
         rider.isLeadingGroup = false;
         continue;
@@ -559,6 +623,8 @@ export class SimulationEngine {
         rider.nextDistanceCoveredMeters = null;
         rider.tempSpeedMps = 0;
         rider.draftModifier = 1;
+        rider.draftNearbyRiderCount = 0;
+        rider.draftPackFactor = 0;
         rider.currentSpeedMps = 0;
         rider.teamGroupBonus = 0;
         rider.isLeadingGroup = false;
@@ -583,6 +649,8 @@ export class SimulationEngine {
         rider.finishTimeSeconds = activeStepStartSeconds;
         rider.tempSpeedMps = 0;
         rider.draftModifier = 1;
+        rider.draftNearbyRiderCount = 0;
+        rider.draftPackFactor = 0;
         rider.currentSpeedMps = 0;
         rider.isLeadingGroup = false;
         rider.activeTerrain = 'Finish';
@@ -607,6 +675,8 @@ export class SimulationEngine {
       rider.windModifier = basePhysics.windModifier;
       rider.tempSpeedMps = basePhysics.tempSpeedMps;
       rider.draftModifier = 1;
+      rider.draftNearbyRiderCount = 0;
+      rider.draftPackFactor = 0;
       rider.currentSpeedMps = basePhysics.tempSpeedMps;
       rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
       rider.isLeadingGroup = !this.isIndividualTimeTrial;
@@ -625,6 +695,10 @@ export class SimulationEngine {
         const refV = rider.tempSpeedMps / 14;
         const dFull = Math.max(5, 50 * refV);
         const dZero = Math.max(15, 150 * refV);
+        const draftGroupWindow = resolveDraftGroupWindow(ordered, index, dZero);
+        const draftGroupSize = draftGroupWindow.size;
+        const draftPackFactor = resolveDraftPackFactor(draftGroupSize);
+        const riderIsInFrontNoDraftZone = isFrontOfLargeDraftGroup(draftGroupSize, draftGroupWindow.positionInGroup);
         let ridersInZoneCount = 0;
         let closestGapMeters = Number.POSITIVE_INFINITY;
         let closestRider: RiderState | null = null;
@@ -645,6 +719,8 @@ export class SimulationEngine {
 
         if (ridersInZoneCount === 0 || !closestRider) {
           rider.draftModifier = 1;
+          rider.draftNearbyRiderCount = 0;
+          rider.draftPackFactor = 0;
           rider.currentSpeedMps = rider.tempSpeedMps;
           rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
           rider.isLeadingGroup = true;
@@ -659,7 +735,6 @@ export class SimulationEngine {
         const fDist = dist <= dFull
           ? 1
           : 1 - ((dist - dFull) / Math.max(0.0001, dZero - dFull));
-        const fPack = Math.min(1, 0.5 + (ridersInZoneCount * 0.1));
         const windZone = this.currentWindZone(rider);
         const currentWindVector = windZone?.vector ?? 0;
         const currentWindSpeed = windZone?.windSpeedKph ?? 0;
@@ -669,12 +744,16 @@ export class SimulationEngine {
         const segment = this.currentSegment(rider);
         const gradientPercent = clamp(segment?.gradient_percent ?? 0, -20, 20);
         const draftRetentionFactor = resolveDraftRetentionFactor(gradientPercent);
-        const adjustedDraftBonus = (maxBonus * fDist * fPack) * draftRetentionFactor;
+        const adjustedDraftBonus = riderIsInFrontNoDraftZone
+          ? 0
+          : (maxBonus * fDist * draftPackFactor) * draftRetentionFactor;
         const draftModifier = 1 + adjustedDraftBonus;
         const draftedSpeed = rider.tempSpeedMps * draftModifier;
 
         rider.draftModifier = draftModifier;
-        rider.isLeadingGroup = false;
+        rider.draftNearbyRiderCount = draftGroupSize;
+        rider.draftPackFactor = draftPackFactor;
+        rider.isLeadingGroup = riderIsInFrontNoDraftZone;
 
         if (draftedSpeed > targetFinalSpeed) {
           if (rider.tempSpeedMps > closestRider.tempSpeedMps) {
@@ -899,6 +978,8 @@ export class SimulationEngine {
       rider.gradientModifier = 1;
       rider.windModifier = 1;
       rider.draftModifier = 1;
+      rider.draftNearbyRiderCount = 0;
+      rider.draftPackFactor = 0;
       rider.currentSpeedMps = 0;
       return;
     }
@@ -989,7 +1070,7 @@ export class SimulationEngine {
       const sameTeamNearbyCount = teamId == null ? 0 : Math.max(0, (teamCounts.get(teamId) ?? 0) - 1);
       bonusByRiderId.set(
         rider.rider.id,
-        sameTeamNearbyCount === 0 ? -0.5 : roundToTwoDecimals(sameTeamNearbyCount * 0.15),
+        sameTeamNearbyCount === 0 ? -0.5 : roundToTwoDecimals(sameTeamNearbyCount * 0.3),
       );
     }
 

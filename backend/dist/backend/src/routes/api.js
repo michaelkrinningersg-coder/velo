@@ -115,7 +115,7 @@ function createRouter(dbService) {
             const team = repo.getTeamById(id);
             if (!team)
                 return fail(res, 404, `Team ${id} nicht gefunden.`);
-            ok(res, { ...team, riders: repo.getRiders(id) });
+            ok(res, { ...team, riders: repo.getRiders(id, true) });
         }
         catch (e) {
             fail(res, 400, e.message);

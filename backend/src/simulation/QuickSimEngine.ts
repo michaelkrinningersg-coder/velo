@@ -250,7 +250,7 @@ export class QuickSimEngine {
     }
 
     const finishPointValues = options.awardPoints && race.isStageRace
-      ? parseRankedValues(stage.profile === 'ITT' ? race.category.bonusSystem.pointsStage : race.category.bonusSystem.pointsSprintFinish)
+      ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
       : [];
     const finishBonusValues = options.awardTimeBonuses
       ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)

@@ -178,6 +178,28 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_rider_date
       ON rider_r_form_events(rider_id, source_date, expires_on)
     `).run();
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_form_history (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        s_form REAL NOT NULL,
+        r_form REAL NOT NULL,
+        total_form REAL NOT NULL,
+        PRIMARY KEY (rider_id, date)
+      )
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
+      ON rider_form_history(date, rider_id)
+    `).run();
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_r_form_daily_awards (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        award_date TEXT NOT NULL,
+        award_type TEXT NOT NULL CHECK(award_type IN ('build', 'free')),
+        PRIMARY KEY (rider_id, award_date)
+      )
+    `).run();
     }
     ensureSavegamesDir() {
         if (!fs.existsSync(this.savegamesDir)) {

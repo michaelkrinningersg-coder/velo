@@ -74,6 +74,10 @@ const RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
+const FORM_RISE_DAYS = 42;
+const FORM_RISE_STEP = 0.1;
+const FORM_FALL_DAYS = 10;
+const FORM_MAX_BONUS = 3;
 function resolveDataCsvDir() {
     const candidates = [
         path.resolve(__dirname, '..', '..', '..', 'data', 'csv'),
@@ -144,6 +148,11 @@ function randomBetween(min, max) {
 function roundToTwoDecimals(value) {
     return Math.round(value * 100) / 100;
 }
+function addDaysIso(isoDate, days) {
+    const date = new Date(`${isoDate}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+}
 function resolveStageRaceBaseFatigue(stageNumber, recuperationSkill) {
     if (stageNumber <= 1) {
         return 0;
@@ -157,26 +166,44 @@ function resolveStageRaceFatigueMalus(stageNumber, recuperationSkill, accumulate
     }
     return roundToTwoDecimals(resolveStageRaceBaseFatigue(stageNumber, recuperationSkill) + accumulatedRandomFatigue);
 }
-function resolveRaceFormBonus(currentDate, peakDates) {
-    if (peakDates.length === 0) {
-        return 0;
-    }
+function resolvePeakPhase(currentDate, peakDates) {
     const currentDay = isoDateToDayNumber(currentDate);
-    const buildDays = 42;
-    const declineDays = 14;
     for (const peakDate of peakDates) {
         const peakDay = isoDateToDayNumber(peakDate);
-        const buildStartDay = peakDay - buildDays;
-        const peakBonus = (peakDay - buildStartDay) * 0.1;
-        if (currentDay >= buildStartDay && currentDay < peakDay) {
-            return Number((((currentDay - buildStartDay) + 1) * 0.1).toFixed(2));
+        if (currentDay === peakDay) {
+            return { phase: 'peak', peakDate, elapsedDays: 0 };
         }
-        if (currentDay >= peakDay && currentDay < peakDay + declineDays) {
-            const elapsedDeclineDays = currentDay - peakDay;
-            return Number((Math.max(0, peakBonus * (1 - (elapsedDeclineDays / declineDays)))).toFixed(2));
+        if (currentDay > peakDay && currentDay <= peakDay + FORM_FALL_DAYS) {
+            return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
+        }
+        if (currentDay >= peakDay - FORM_RISE_DAYS && currentDay < peakDay) {
+            return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
         }
     }
-    return 0;
+    return null;
+}
+function resolveDeclineValue(peakValue, elapsedDays) {
+    if (elapsedDays >= FORM_FALL_DAYS) {
+        return 0;
+    }
+    return roundToTwoDecimals(Math.max(0, peakValue * (1 - (elapsedDays / FORM_FALL_DAYS))));
+}
+function resolveProjectionPoint(date, peakDates) {
+    const phase = resolvePeakPhase(date, peakDates);
+    if (!phase) {
+        return { sForm: 0, rForm: 0 };
+    }
+    if (phase.phase === 'build') {
+        const sForm = roundToTwoDecimals(Math.min(FORM_MAX_BONUS, Math.max(0, (FORM_RISE_DAYS - phase.elapsedDays + 1) * FORM_RISE_STEP)));
+        return { sForm, rForm: 0 };
+    }
+    if (phase.phase === 'peak') {
+        return { sForm: FORM_MAX_BONUS, rForm: 0 };
+    }
+    return {
+        sForm: resolveDeclineValue(FORM_MAX_BONUS, phase.elapsedDays),
+        rForm: 0,
+    };
 }
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
@@ -207,11 +234,12 @@ function mapRole(row) {
         weighting: row.role_weighting,
     };
 }
-function mapRider(row, currentYear, currentDate, seasonPoints = 0, stageNumber) {
+function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber) {
     const country = mapCountry(row);
     const role = mapRole(row);
     const peakDates = parsePeakDates(row.peak_dates_json);
     const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
+    const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
     return {
         id: row.id,
         firstName: row.first_name,
@@ -251,7 +279,10 @@ function mapRider(row, currentYear, currentDate, seasonPoints = 0, stageNumber) 
         contractEndSeason: row.contract_end_season,
         seasonPoints,
         formBonus: row.form_bonus ?? -1,
-        raceFormBonus: resolveRaceFormBonus(currentDate, peakDates),
+        raceFormBonus: totalRaceFormBonus,
+        peakSForm: row.peak_s_form ?? 0,
+        peakRForm: row.peak_r_form ?? 0,
+        activePeakDate: row.active_peak_date,
         fatigueMalus: resolveStageRaceFatigueMalus(stageNumber, row.skill_recuperation, accumulatedRandomFatigue),
         accumulatedRandomFatigue,
         seasonFormPeakDates: peakDates,
@@ -601,6 +632,7 @@ class GameRepository {
     }
     getRidersQuery(useContracts, filterByTeam) {
         const useDailyState = tableExists(this.db, 'rider_daily_state');
+        const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
         const countrySelect = `
       riders.*,
       role.name AS role_name,
@@ -616,16 +648,22 @@ class GameRepository {
       country.number_regen_min AS country_number_regen_min,
       country.number_regen_max AS country_number_regen_max,
       ${useDailyState ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+      ${useDailyState ? 'rider_state.race_form_bonus' : '0'} AS race_form_bonus,
+      ${useDailyState ? 'rider_state.peak_s_form' : '0'} AS peak_s_form,
+      ${useDailyState ? 'rider_state.peak_r_form' : '0'} AS peak_r_form,
+      ${useDailyState ? 'rider_state.active_peak_date' : 'NULL'} AS active_peak_date,
+      ${useFreeRaceForm ? 'COALESCE(free_r_form.total, 0)' : '0'} AS free_r_form_bonus,
       ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
       ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
       ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
       ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining
     `;
         const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
+        const freeRaceFormJoin = useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : '';
         if (!useContracts) {
             return filterByTeam
-                ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
-                : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} WHERE is_retired = 0 ORDER BY overall_rating DESC`;
+                ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
+                : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE is_retired = 0 ORDER BY overall_rating DESC`;
         }
         const activeContractJoin = `
       LEFT JOIN contracts current_contract
@@ -659,10 +697,10 @@ class GameRepository {
       ${activeContractJoin}
     `;
         return filterByTeam
-            ? `${selectWithResolvedContract} WHERE COALESCE(current_contract.team_id, riders.active_team_id) = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`
-            : `${selectWithResolvedContract} WHERE riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
+            ? `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE COALESCE(current_contract.team_id, riders.active_team_id) = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`
+            : `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
     }
-    getRiders(teamId) {
+    getRiders(teamId, includeFormDebug = false) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
         this.syncSeasonPointEventsForSeason(season);
@@ -675,11 +713,14 @@ class GameRepository {
                 ? this.db.prepare(this.getRidersQuery(true, false)).all(season, season)
                 : this.db.prepare(this.getRidersQuery(false, false)).all());
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
-        return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
+        const riders = rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
+        return includeFormDebug ? this.attachFormDebugData(riders, season, currentDate) : riders;
     }
     getRiderById(id) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
+        const useDailyState = tableExists(this.db, 'rider_daily_state');
+        const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
         const row = this.db.prepare(`
       SELECT riders.*,
              role.name AS role_name,
@@ -694,11 +735,16 @@ class GameRepository {
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useDailyState ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${useDailyState ? 'rider_state.race_form_bonus' : '0'} AS race_form_bonus,
+             ${useDailyState ? 'rider_state.peak_s_form' : '0'} AS peak_s_form,
+             ${useDailyState ? 'rider_state.peak_r_form' : '0'} AS peak_r_form,
+             ${useDailyState ? 'rider_state.active_peak_date' : 'NULL'} AS active_peak_date,
+             ${useFreeRaceForm ? 'COALESCE(free_r_form.total, 0)' : '0'} AS free_r_form_bonus,
+             ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              0 AS accumulated_random_fatigue,
              (
                SELECT c.end_season
@@ -712,7 +758,8 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
-      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : ''}
+      ${useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : ''}
+      ${useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : ''}
       WHERE riders.id = ?
     `).get(id);
         return row ? mapRider(row, season, currentDate, 0) : null;
@@ -797,6 +844,9 @@ class GameRepository {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
         this.syncSeasonPointEventsForSeason(season);
+        const useDailyState = tableExists(this.db, 'rider_daily_state');
+        const useStageRaceState = tableExists(this.db, 'rider_stage_race_state');
+        const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
         const rows = this.db.prepare(`
       SELECT r.*,
              role.name AS role_name,
@@ -811,12 +861,17 @@ class GameRepository {
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
-             ${tableExists(this.db, 'rider_stage_race_state') ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
+             ${useDailyState ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${useDailyState ? 'rider_state.race_form_bonus' : '0'} AS race_form_bonus,
+             ${useDailyState ? 'rider_state.peak_s_form' : '0'} AS peak_s_form,
+             ${useDailyState ? 'rider_state.peak_r_form' : '0'} AS peak_r_form,
+             ${useDailyState ? 'rider_state.active_peak_date' : 'NULL'} AS active_peak_date,
+             ${useFreeRaceForm ? 'COALESCE(free_r_form.total, 0)' : '0'} AS free_r_form_bonus,
+             ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              (
                SELECT c.end_season
                FROM contracts c
@@ -829,9 +884,10 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
-      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
-      ${tableExists(this.db, 'rider_stage_race_state') ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = re.race_id' : ''}
+      ${useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
+      ${useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = r.id' : ''}
       INNER JOIN race_entries re ON re.rider_id = r.id
+      ${useStageRaceState ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = re.race_id' : ''}
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(raceId);
@@ -843,6 +899,9 @@ class GameRepository {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
         this.syncSeasonPointEventsForSeason(season);
+        const useDailyState = tableExists(this.db, 'rider_daily_state');
+        const useStageRaceState = tableExists(this.db, 'rider_stage_race_state');
+        const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
         const stage = this.getStageById(stageId);
         if (!stage) {
             return [];
@@ -862,12 +921,17 @@ class GameRepository {
              country.regen_rating AS country_regen_rating,
              country.number_regen_min AS country_number_regen_min,
              country.number_regen_max AS country_number_regen_max,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.health_status' : "'healthy'"} AS health_status,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
-             ${tableExists(this.db, 'rider_daily_state') ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
-             ${tableExists(this.db, 'rider_stage_race_state') ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
+             ${useDailyState ? 'rider_state.form_bonus' : '-1.0'} AS form_bonus,
+             ${useDailyState ? 'rider_state.race_form_bonus' : '0'} AS race_form_bonus,
+             ${useDailyState ? 'rider_state.peak_s_form' : '0'} AS peak_s_form,
+             ${useDailyState ? 'rider_state.peak_r_form' : '0'} AS peak_r_form,
+             ${useDailyState ? 'rider_state.active_peak_date' : 'NULL'} AS active_peak_date,
+             ${useFreeRaceForm ? 'COALESCE(free_r_form.total, 0)' : '0'} AS free_r_form_bonus,
+             ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
+             ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
+             ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              (
                SELECT c.end_season
                FROM contracts c
@@ -880,9 +944,10 @@ class GameRepository {
       LEFT JOIN type_rider specialization_1 ON specialization_1.id = r.specialization_1_id
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = r.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = r.specialization_3_id
-      ${tableExists(this.db, 'rider_daily_state') ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
-      ${tableExists(this.db, 'rider_stage_race_state') ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = stage_entries.race_id' : ''}
+      ${useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = r.id' : ''}
+      ${useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = r.id' : ''}
       JOIN stage_entries ON stage_entries.rider_id = r.id
+      ${useStageRaceState ? 'LEFT JOIN rider_stage_race_state race_state ON race_state.rider_id = r.id AND race_state.race_id = stage_entries.race_id' : ''}
       WHERE stage_entries.stage_id = ?
         AND stage_entries.status IN ('scheduled', 'started', 'finished')
         AND r.is_retired = 0
@@ -890,6 +955,75 @@ class GameRepository {
     `).all(stageId);
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
         return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stage.stageNumber));
+    }
+    attachFormDebugData(riders, season, currentDate) {
+        if (riders.length === 0) {
+            return riders;
+        }
+        const historyByRiderId = this.loadRiderFormHistoryByRiderId(riders.map((rider) => rider.id), season);
+        const seasonStart = `${season}-01-01`;
+        const seasonEnd = `${season}-10-31`;
+        return riders.map((rider) => {
+            const history = historyByRiderId.get(rider.id) ?? [];
+            const projection = this.buildFormDebugSeries(rider, history, seasonStart, seasonEnd, currentDate);
+            return {
+                ...rider,
+                formHistory: history,
+                formForecast: projection,
+            };
+        });
+    }
+    loadRiderFormHistoryByRiderId(riderIds, season) {
+        const historyByRiderId = new Map();
+        if (riderIds.length === 0 || !tableExists(this.db, 'rider_form_history')) {
+            return historyByRiderId;
+        }
+        const placeholders = riderIds.map(() => '?').join(', ');
+        const rows = this.db.prepare(`
+      SELECT rider_id, date, s_form, r_form, total_form
+      FROM rider_form_history
+      WHERE rider_id IN (${placeholders})
+        AND date >= ?
+        AND date <= ?
+      ORDER BY date ASC
+    `).all(...riderIds, `${season}-01-01`, `${season}-10-31`);
+        for (const row of rows) {
+            const snapshots = historyByRiderId.get(row.rider_id) ?? [];
+            snapshots.push({
+                date: row.date,
+                sForm: row.s_form,
+                rForm: row.r_form,
+                totalForm: row.total_form,
+            });
+            historyByRiderId.set(row.rider_id, snapshots);
+        }
+        return historyByRiderId;
+    }
+    buildFormDebugSeries(rider, history, seasonStart, seasonEnd, currentDate) {
+        const historyByDate = new Map(history.map((entry) => [entry.date, entry]));
+        const points = [];
+        for (let date = seasonStart; date <= seasonEnd; date = addDaysIso(date, 1)) {
+            const historyEntry = historyByDate.get(date);
+            if (historyEntry) {
+                points.push({
+                    date,
+                    sForm: historyEntry.sForm,
+                    rForm: historyEntry.rForm,
+                    totalForm: historyEntry.totalForm,
+                    isProjection: date > currentDate,
+                });
+                continue;
+            }
+            const projected = resolveProjectionPoint(date, rider.seasonFormPeakDates ?? []);
+            points.push({
+                date,
+                sForm: projected.sForm,
+                rForm: projected.rForm,
+                totalForm: roundToTwoDecimals(projected.sForm + projected.rForm),
+                isProjection: date > currentDate,
+            });
+        }
+        return points;
     }
     getSeasonStandings(season = this.getCurrentSeason()) {
         this.syncSeasonPointEventsForSeason(season);

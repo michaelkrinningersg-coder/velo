@@ -74,7 +74,6 @@ export interface SidebarRenderTelemetry {
 const bootstrapSidebarDataCache = new WeakMap<RealtimeSimulationBootstrap, BootstrapSidebarData>();
 const sidebarRenderCache = new WeakMap<HTMLElement, SidebarRenderCache>();
 const leaderboardSortStateCache = new WeakMap<HTMLElement, LeaderboardSortState>();
-const AVAILABLE_TEAM_JERSEY_IDS = new Set([1, 2, 3, 4, 5, 21]);
 const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
@@ -681,6 +680,14 @@ function formatScaledMicroForm(value: number): string {
   return formatSigned(Math.max(-2.5, Math.min(2.5, value * 2.5)));
 }
 
+function formatDraftPackInfluence(rider: RealtimeRiderSnapshot): string {
+  if (rider.draftNearbyRiderCount <= 0 || rider.draftModifier <= 1) {
+    return '—';
+  }
+
+  return `${rider.draftNearbyRiderCount} · x${rider.draftPackFactor.toFixed(2).replace('.', ',')}`;
+}
+
 function renderRiderButton(rider: RealtimeRiderSnapshot, isOpen: boolean): string {
   return `<button type="button" class="race-sim-row-name-btn" data-race-sim-rider-toggle="${rider.riderId}" aria-expanded="${isOpen ? 'true' : 'false'}" title="${esc(rider.riderName)}">${esc(rider.riderName)}</button>`;
 }
@@ -696,11 +703,7 @@ function renderTeamCell(sourceRider: Rider | null, teamAbbreviationById: Map<num
 }
 
 function resolveTeamJerseyAssetPath(teamId: number): string {
-  if (AVAILABLE_TEAM_JERSEY_IDS.has(teamId)) {
-    return `/jersey/Jer_${teamId}.png`;
-  }
-
-  return '/jersey/Jer_placeholder.svg';
+  return `/jersey/Jer_${teamId}.png`;
 }
 
 function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, Team>, teamNameById: Map<number, string>): string {
@@ -725,6 +728,7 @@ function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, T
         height="18"
         loading="lazy"
         decoding="async"
+        onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';"
       >
     </span>`;
 }
@@ -749,6 +753,7 @@ function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | nu
     { label: 'M_grad', value: `x${rider.gradientModifier.toFixed(2).replace('.', ',')}` },
     { label: 'M_wind', value: `x${rider.windModifier.toFixed(2).replace('.', ',')}` },
     { label: 'Draft', value: `x${rider.draftModifier.toFixed(2).replace('.', ',')}` },
+    { label: 'Draft Pack', value: formatDraftPackInfluence(rider) },
     { label: 'GC', value: gcStanding ? String(gcStanding.rank) : '—' },
     { label: 'GC Gap', value: gcStanding ? formatGcGap(gcStanding.gapSeconds) : '—' },
   ];
@@ -938,6 +943,8 @@ function updateSidebarRow(
     rider.gradientModifier,
     rider.windModifier,
     rider.draftModifier,
+    rider.draftNearbyRiderCount,
+    rider.draftPackFactor,
     gcStanding?.rank ?? '—',
     gcStanding?.gapSeconds ?? '—',
     rider.skillBreakdown,
