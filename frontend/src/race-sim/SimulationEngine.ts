@@ -138,6 +138,7 @@ const START_SPREAD_MIN = 0.1;
 const START_SPREAD_MAX = 0.4;
 const LATE_STAGE_START_MIN = 0.6;
 const LATE_STAGE_START_MAX = 0.8;
+const DRAFT_BONUS_SCALE = 2 / 3;
 
 interface WeightedSkillComponent {
   key: RiderSkillKey;
@@ -664,7 +665,7 @@ export class SimulationEngine {
         const currentWindSpeed = windZone?.windSpeedKph ?? 0;
         const windEffect = -currentWindVector * (currentWindSpeed / 70);
         const baseBonus = Math.max(0.30, 0.35 + (0.35 * windEffect));
-        const maxBonus = baseBonus * Math.min(1, refV);
+        const maxBonus = (baseBonus * Math.min(1, refV)) * DRAFT_BONUS_SCALE;
         const segment = this.currentSegment(rider);
         const gradientPercent = clamp(segment?.gradient_percent ?? 0, -20, 20);
         const draftRetentionFactor = resolveDraftRetentionFactor(gradientPercent);
@@ -858,7 +859,11 @@ export class SimulationEngine {
     const windModifier = 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52);
     const speedSkillFactor = this.isIndividualTimeTrial
       ? 0.5
-      : (skillName === 'Flat' ? (7 / 35) : (10 / 35));
+      : skillName === 'Flat'
+        ? 0.14
+        : skillName === 'Downhill'
+          ? 0.18
+          : (10 / 35);
     const spreadFactor = this.resolveSkillSpreadFactor(rider.distanceCoveredMeters, segment);
     const baseSpeedKph = 40 + ((effectiveSkill - 50) * speedSkillFactor * spreadFactor);
     const baseSpeedMps = baseSpeedKph / 3.6;
@@ -1090,19 +1095,28 @@ export class SimulationEngine {
       const lateProgressAtThreeKm = clamp((ratioAtThreeKm - this.lateStageStartRatio) / Math.max(0.0001, 1 - this.lateStageStartRatio), 0, 1);
       const spreadAtThreeKm = 1 + (0.1 * lateProgressAtThreeKm);
       const finalKickProgress = 1 - (remainingMeters / 3000);
-      return Math.max(baseSpread, spreadAtThreeKm + ((1.3 - spreadAtThreeKm) * finalKickProgress));
+      return Math.max(baseSpread, spreadAtThreeKm + ((1.6 - spreadAtThreeKm) * finalKickProgress));
     }
 
     if (segment.terrain === 'Medium_Mountain' || segment.terrain === 'Mountain' || segment.terrain === 'High_Mountain') {
-      const mountainSpread = 1 + (0.2 * lateProgress);
-      const finalTenPercentBoost = distanceRatio >= 0.9
-        ? ((distanceRatio - 0.9) / 0.1) * 0.2
-        : 0;
-      return Math.max(baseSpread, mountainSpread + finalTenPercentBoost);
+      const mountainSpread = 1 + (0.6 * lateProgress);
+      if (distanceRatio < 0.9) {
+        return Math.max(baseSpread, mountainSpread);
+      }
+
+      const ratioAtNinetyPercent = clamp(0.9, this.lateStageStartRatio, 1);
+      const lateProgressAtNinetyPercent = clamp(
+        (ratioAtNinetyPercent - this.lateStageStartRatio) / Math.max(0.0001, 1 - this.lateStageStartRatio),
+        0,
+        1,
+      );
+      const spreadAtNinetyPercent = 1 + (0.6 * lateProgressAtNinetyPercent);
+      const finalKickProgress = (distanceRatio - 0.9) / 0.1;
+      return Math.max(baseSpread, spreadAtNinetyPercent + ((2.5 - spreadAtNinetyPercent) * finalKickProgress));
     }
 
     if (segment.terrain === 'Cobble' || segment.terrain === 'Cobble_Hill') {
-      return Math.max(baseSpread, 1 + (0.2 * lateProgress));
+      return Math.max(baseSpread, 1 + (0.5 * lateProgress));
     }
 
     return baseSpread;

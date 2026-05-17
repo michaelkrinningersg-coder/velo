@@ -14,6 +14,24 @@ interface ControlRenderState {
     snapshotBuildMs: number;
     profileRenderMs: number;
     sidebarRenderMs: number;
+    sidebarWriteMs: number;
+    sidebarPaintMs: number;
+    sidebarPrepMs: number;
+    sidebarSortMs: number;
+    sidebarLayoutMs: number;
+    sidebarCreateRowsMs: number;
+    sidebarRemoveRowsMs: number;
+    sidebarOrderCheckMs: number;
+    sidebarReorderMs: number;
+    sidebarVisibilityMs: number;
+    sidebarUpdateRowsMs: number;
+    sidebarFinalizeMs: number;
+    sidebarRowsTotal: number;
+    sidebarRowsCreated: number;
+    sidebarRowsRemoved: number;
+    sidebarRowsUpdated: number;
+    sidebarRowsSkippedInvisible: number;
+    sidebarOrderChanged: number;
   };
 }
 
@@ -21,10 +39,6 @@ interface ControlElements {
   timeField: HTMLElement | null;
   leaderField: HTMLElement | null;
   finishedField: HTMLElement | null;
-  engineField: HTMLElement | null;
-  snapshotField: HTMLElement | null;
-  profileField: HTMLElement | null;
-  sidebarField: HTMLElement | null;
   toggleButton: HTMLButtonElement | null;
   speedButtons: HTMLButtonElement[];
 }
@@ -41,10 +55,6 @@ function formatTime(seconds: number): string {
 
 function formatKm(meters: number): string {
   return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
-}
-
-function formatPerfMs(value: number): string {
-  return `${value.toFixed(2).replace('.', ',')} ms`;
 }
 
 function ensureControlsMarkup(container: HTMLElement): ControlElements {
@@ -68,22 +78,6 @@ function ensureControlsMarkup(container: HTMLElement): ControlElements {
         <span class="race-sim-stat-label">Im Ziel</span>
         <strong data-race-sim-field="finished">0 / 0</strong>
       </div>
-      <div class="race-sim-stat-card race-sim-stat-card-perf">
-        <span class="race-sim-stat-label">Engine</span>
-        <strong data-race-sim-field="engine">0,00 ms</strong>
-      </div>
-      <div class="race-sim-stat-card race-sim-stat-card-perf">
-        <span class="race-sim-stat-label">Snapshot</span>
-        <strong data-race-sim-field="snapshot">0,00 ms</strong>
-      </div>
-      <div class="race-sim-stat-card race-sim-stat-card-perf">
-        <span class="race-sim-stat-label">Profil</span>
-        <strong data-race-sim-field="profile">0,00 ms</strong>
-      </div>
-      <div class="race-sim-stat-card race-sim-stat-card-perf">
-        <span class="race-sim-stat-label">Sidebar</span>
-        <strong data-race-sim-field="sidebar">0,00 ms</strong>
-      </div>
     </div>
     <div class="race-sim-speed-strip">
       <button type="button" class="race-sim-speed-btn race-sim-speed-btn-toggle" data-race-sim-action="toggle">Start</button>
@@ -100,10 +94,6 @@ function ensureControlsMarkup(container: HTMLElement): ControlElements {
     timeField: container.querySelector<HTMLElement>('[data-race-sim-field="time"]'),
     leaderField: container.querySelector<HTMLElement>('[data-race-sim-field="leader"]'),
     finishedField: container.querySelector<HTMLElement>('[data-race-sim-field="finished"]'),
-    engineField: container.querySelector<HTMLElement>('[data-race-sim-field="engine"]'),
-    snapshotField: container.querySelector<HTMLElement>('[data-race-sim-field="snapshot"]'),
-    profileField: container.querySelector<HTMLElement>('[data-race-sim-field="profile"]'),
-    sidebarField: container.querySelector<HTMLElement>('[data-race-sim-field="sidebar"]'),
     toggleButton: container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]'),
     speedButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]')),
   };
@@ -122,18 +112,6 @@ export function renderRaceSimControls(container: HTMLElement, state: ControlRend
   }
   if (elements.finishedField) {
     elements.finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.totalRiders}`;
-  }
-  if (elements.engineField) {
-    elements.engineField.textContent = formatPerfMs(state.perf.engineStepMs);
-  }
-  if (elements.snapshotField) {
-    elements.snapshotField.textContent = formatPerfMs(state.perf.snapshotBuildMs);
-  }
-  if (elements.profileField) {
-    elements.profileField.textContent = formatPerfMs(state.perf.profileRenderMs);
-  }
-  if (elements.sidebarField) {
-    elements.sidebarField.textContent = formatPerfMs(state.perf.sidebarRenderMs);
   }
   if (elements.toggleButton) {
     elements.toggleButton.textContent = state.isRunning ? 'Pause' : state.snapshot.isFinished ? 'Fertig' : 'Start';

@@ -24,32 +24,22 @@ interface SidebarRenderCache {
   layoutKey: string;
   orderedRiderIds: number[];
   rowsByRiderId: Map<number, SidebarRowCache>;
+  openDetailRiderId: number | null;
 }
 
 interface SidebarRowCache {
   row: HTMLElement;
   rankField: HTMLElement;
+  nameButton: HTMLButtonElement;
   gapField: HTMLElement;
   clockField: HTMLElement;
   splitFields: HTMLElement[];
-  terrainSkillField: HTMLElement;
-  baseSkillField: HTMLElement;
   effectiveSkillField: HTMLElement;
-  teamBonusField: HTMLElement;
-  seasonFormField: HTMLElement;
-  raceFormField: HTMLElement;
-  fatigueField: HTMLElement;
-  staminaField: HTMLElement;
-  elevationField: HTMLElement;
-  dailyFormField: HTMLElement;
-  microFormField: HTMLElement;
   gcRankField: HTMLElement;
   gcGapField: HTMLElement;
   gradientPercentField: HTMLElement;
-  gradientModifierField: HTMLElement;
-  windModifierField: HTMLElement;
-  draftModifierField: HTMLElement;
   speedField: HTMLElement;
+  detailPanel: HTMLElement;
   initialized: boolean;
   lastValues: Record<string, string | number | null>;
 }
@@ -61,10 +51,30 @@ interface LeaderboardSortState {
   frozenOrder: number[];
 }
 
+export interface SidebarRenderTelemetry {
+  totalMs: number;
+  prepMs: number;
+  sortMs: number;
+  layoutMs: number;
+  createRowsMs: number;
+  removeRowsMs: number;
+  orderCheckMs: number;
+  reorderMs: number;
+  visibilityMs: number;
+  updateRowsMs: number;
+  finalizeMs: number;
+  rowsTotal: number;
+  rowsCreated: number;
+  rowsRemoved: number;
+  rowsUpdated: number;
+  rowsSkippedInvisible: number;
+  orderChanged: number;
+}
+
 const bootstrapSidebarDataCache = new WeakMap<RealtimeSimulationBootstrap, BootstrapSidebarData>();
 const sidebarRenderCache = new WeakMap<HTMLElement, SidebarRenderCache>();
 const leaderboardSortStateCache = new WeakMap<HTMLElement, LeaderboardSortState>();
-const SIDEBAR_VISIBILITY_BUFFER_PX = 320;
+const AVAILABLE_TEAM_JERSEY_IDS = new Set([1, 2, 3, 4, 5, 21]);
 const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
@@ -188,44 +198,26 @@ function buildIntermediateLabels(bootstrap: RealtimeSimulationBootstrap): string
   return bootstrap.stageSummary.points
     .flatMap((point, pointIndex) => point.markers
       .filter((marker) => marker.type === 'sprint_intermediate')
-      .map((marker, markerIndex) => marker.name ?? `SZ ${pointIndex + markerIndex + 1}`));
+      .map((marker, markerIndex) => marker.name ?? `SZ ${pointIndex + markerIndex + 1}`))
+    .slice(0, 2);
 }
 
 function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitLabels: string[]): LeaderboardColumn[] {
   const columns: LeaderboardColumn[] = [
-    { label: 'Fahrer', width: '228px', className: 'race-sim-col-name', sortKey: 'name' },
-    { label: 'Teamfarben', displayLabel: '//', width: '46px', className: 'race-sim-col-team-visual', sortKey: 'team' },
+    { label: 'Pos', width: '50px', className: 'race-sim-col-rank', sortKey: 'gap' },
+    { label: 'Flag', width: '40px', className: 'race-sim-col-flag' },
+    { label: 'Fahrer', width: '196px', className: 'race-sim-col-name', sortKey: 'name' },
+    { label: 'Jersey', displayLabel: 'Jer', width: '46px', className: 'race-sim-col-team-visual', sortKey: 'team' },
     { label: 'Team', width: '58px', className: 'race-sim-col-team', sortKey: 'team' },
     { label: 'Gap', width: '72px', sortKey: 'gap' },
     { label: 'Uhr', width: '96px', sortKey: 'clock' },
-  ];
-
-  if (bootstrap.stage.profile === 'ITT') {
-    for (const splitLabel of splitLabels) {
-      columns.push({ label: splitLabel, width: '92px', className: 'race-sim-col-split', sortKey: `split:${splitLabel}` });
-    }
-  }
-
-  columns.push(
-    { label: 'Terrain / Skill', width: '140px', sortKey: 'terrainSkill' },
-    { label: 'Basis', width: '68px', sortKey: 'baseSkill' },
+    ...splitLabels.map((splitLabel) => ({ label: splitLabel, width: '92px', className: 'race-sim-col-split', sortKey: `split:${splitLabel}` })),
     { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
-    { label: 'Team+', width: '64px', sortKey: 'teamBonus' },
-    { label: 'S-Form', width: '64px', sortKey: 'seasonForm' },
-    { label: 'R-Form', width: '64px', sortKey: 'raceForm' },
-    { label: 'Fatigue', width: '70px', sortKey: 'fatigue' },
-    { label: 'Stamina', width: '72px', sortKey: 'staminaPenalty' },
-    { label: 'HM', width: '56px', sortKey: 'elevationPenalty' },
-    { label: 'T-Form', width: '66px', sortKey: 'dailyForm' },
-    { label: 'Zufall', width: '66px', sortKey: 'microForm' },
     { label: 'GC', width: '52px', sortKey: 'gcRank' },
     { label: 'GC Gap', width: '70px', sortKey: 'gcGap' },
     { label: 'Steigung', width: '72px', sortKey: 'gradientPercent' },
-    { label: 'M_grad', width: '66px', sortKey: 'gradientModifier' },
-    { label: 'M_wind', width: '66px', sortKey: 'windModifier' },
-    { label: 'Draft', width: '60px', sortKey: 'draftModifier' },
     { label: 'Speed', width: '82px', sortKey: 'speed' },
-  );
+  ];
 
   return columns;
 }
@@ -297,6 +289,7 @@ function applyLeaderboardLayout(container: HTMLElement, columns: LeaderboardColu
     layoutKey,
     orderedRiderIds: cached?.orderedRiderIds ?? [],
     rowsByRiderId: cached?.rowsByRiderId ?? new Map(),
+    openDetailRiderId: cached?.openDetailRiderId ?? null,
   });
   return layoutKey;
 }
@@ -524,11 +517,6 @@ function sortRiders(
         return [...riders];
       }
 
-      const ridersById = new Map(riders.map((rider) => [rider.riderId, rider]));
-      if (canReuseOrderedRiders(previousOrderedRiderIds, ridersById, comparator)) {
-        return previousOrderedRiderIds.map((riderId) => ridersById.get(riderId)).filter((rider): rider is RealtimeRiderSnapshot => rider != null);
-      }
-
       return [...riders].sort(comparator);
     }
 
@@ -553,15 +541,23 @@ function sortRiders(
   return [...riders].sort(comparator);
 }
 
-function isRowVisible(row: HTMLElement, scrollContainer: HTMLElement): boolean {
-  const viewTop = scrollContainer.scrollTop - SIDEBAR_VISIBILITY_BUFFER_PX;
-  const viewBottom = scrollContainer.scrollTop + scrollContainer.clientHeight + SIDEBAR_VISIBILITY_BUFFER_PX;
-  const rowTop = row.offsetTop;
-  const rowBottom = rowTop + row.offsetHeight;
-  return rowBottom >= viewTop && rowTop <= viewBottom;
-}
-
 export function handleRaceSimSidebarInteraction(container: HTMLElement, target: Element): boolean {
+  const detailToggleButton = target.closest<HTMLButtonElement>('button[data-race-sim-rider-toggle]');
+  if (detailToggleButton) {
+    const riderId = Number(detailToggleButton.dataset['raceSimRiderToggle']);
+    if (!Number.isFinite(riderId)) {
+      return false;
+    }
+
+    const cached = sidebarRenderCache.get(container);
+    if (!cached) {
+      return false;
+    }
+
+    cached.openDetailRiderId = cached.openDetailRiderId === riderId ? null : riderId;
+    return true;
+  }
+
   const sortState = getLeaderboardSortState(container);
   const autoSortButton = target.closest<HTMLButtonElement>('button[data-race-sim-auto-sort]');
   if (autoSortButton) {
@@ -632,12 +628,20 @@ function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRider
     return leftHasTime ? -1 : 1;
   }
 
+  const leftClock = left.riderClockSeconds;
+  const rightClock = right.riderClockSeconds;
+  if (leftClock != null && rightClock != null && leftClock !== rightClock) {
+    return leftClock - rightClock;
+  }
+  if (leftClock != null && rightClock == null) return -1;
+  if (leftClock == null && rightClock != null) return 1;
+
   return left.startOffsetSeconds - right.startOffsetSeconds || left.riderId - right.riderId;
 }
 
 function compareStandardLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRiderSnapshot): number {
   if (left.isFinished !== right.isFinished) {
-    return left.isFinished ? 1 : -1;
+    return left.isFinished ? -1 : 1;
   }
 
   if (left.isFinished && right.isFinished) {
@@ -645,7 +649,7 @@ function compareStandardLeaderboard(left: RealtimeRiderSnapshot, right: Realtime
       || left.riderId - right.riderId;
   }
 
-  return right.distanceCoveredMeters - left.distanceCoveredMeters || left.riderId - right.riderId;
+  return left.gapToLeaderMeters - right.gapToLeaderMeters || left.riderId - right.riderId;
 }
 
 function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string {
@@ -653,6 +657,7 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
   const raceForm = sourceRider?.raceFormBonus ?? 0;
   const fatigue = sourceRider?.fatigueMalus ?? 0;
   const teamBonus = rider.teamGroupBonus;
+  const scaledMicroForm = Math.max(-2.5, Math.min(2.5, rider.microForm * 2.5));
   const baseWithoutStamina = rider.baseSkill + seasonForm + raceForm + rider.dailyForm + rider.microForm + teamBonus - fatigue;
   const afterStamina = Math.max(0, baseWithoutStamina - rider.staminaPenalty);
   const staminaImpact = baseWithoutStamina - afterStamina;
@@ -663,7 +668,7 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
     `+ S-Form ${formatNumber(seasonForm)}`,
     `+ R-Form ${formatNumber(raceForm)}`,
     `+ T-Form ${formatNumber(rider.dailyForm)}`,
-    `+ Zufällige Form ${formatNumber(rider.microForm)}`,
+    `+ Zufällige Form ${formatNumber(scaledMicroForm)} (skaliert)`,
     `+ Teambonus ${formatNumber(teamBonus)}`,
     `- Fatigue ${formatNumber(fatigue)}`,
     `- Stamina ${formatNumber(staminaImpact)}`,
@@ -672,9 +677,12 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
   ].join('\n');
 }
 
-function renderRiderLabel(position: number, rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string {
-  const flag = sourceRider ? renderFlag(getRiderCountryCode(sourceRider)) : '';
-  return `<span class="race-sim-row-rank">${position}.</span>${flag}<span class="race-sim-row-main-name" title="${esc(rider.riderName)}">${esc(rider.riderName)}</span>`;
+function formatScaledMicroForm(value: number): string {
+  return formatSigned(Math.max(-2.5, Math.min(2.5, value * 2.5)));
+}
+
+function renderRiderButton(rider: RealtimeRiderSnapshot, isOpen: boolean): string {
+  return `<button type="button" class="race-sim-row-name-btn" data-race-sim-rider-toggle="${rider.riderId}" aria-expanded="${isOpen ? 'true' : 'false'}" title="${esc(rider.riderName)}">${esc(rider.riderName)}</button>`;
 }
 
 function renderTeamCell(sourceRider: Rider | null, teamAbbreviationById: Map<number, string>, teamNameById: Map<number, string>): string {
@@ -687,7 +695,15 @@ function renderTeamCell(sourceRider: Rider | null, teamAbbreviationById: Map<num
   return `<span class="race-sim-team-code" title="${esc(teamName)}">${esc(abbreviation)}</span>`;
 }
 
-function renderTeamColorsCell(sourceRider: Rider | null, teamById: Map<number, Team>, teamNameById: Map<number, string>): string {
+function resolveTeamJerseyAssetPath(teamId: number): string {
+  if (AVAILABLE_TEAM_JERSEY_IDS.has(teamId)) {
+    return `/jersey/Jer_${teamId}.png`;
+  }
+
+  return '/jersey/Jer_placeholder.svg';
+}
+
+function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, Team>, teamNameById: Map<number, string>): string {
   if (sourceRider?.activeTeamId == null) {
     return '—';
   }
@@ -698,11 +714,18 @@ function renderTeamColorsCell(sourceRider: Rider | null, teamById: Map<number, T
   }
 
   const teamName = teamNameById.get(sourceRider.activeTeamId) ?? team.name;
+  const jerseyPath = resolveTeamJerseyAssetPath(sourceRider.activeTeamId);
   return `
     <span class="race-sim-team-visual" title="${esc(teamName)}">
-      <span class="race-sim-team-visual-bar" style="background:${esc(team.colorPrimary)}"></span>
-      <span class="race-sim-team-visual-gap"></span>
-      <span class="race-sim-team-visual-bar" style="background:${esc(team.colorSecondary)}"></span>
+      <img
+        class="race-sim-team-jersey-img"
+        src="${esc(jerseyPath)}"
+        alt=""
+        width="18"
+        height="18"
+        loading="lazy"
+        decoding="async"
+      >
     </span>`;
 }
 
@@ -711,9 +734,42 @@ function renderSplitCell(rider: RealtimeRiderSnapshot, label: string): string {
   return value != null ? formatClock(value) : '—';
 }
 
+function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | null, gcStanding: { rank: number; gapSeconds: number } | null): string {
+  const detailItems = [
+    { label: 'Terrain / Skill', value: `${formatTerrain(rider.activeTerrain)} / ${formatSkill(rider.skillName)}` },
+    { label: 'Basis', value: formatNumber(rider.baseSkill) },
+    { label: 'Team+', value: rider.teamGroupBonus > 0 ? `+${formatNumber(rider.teamGroupBonus)}` : '—' },
+    { label: 'S-Form', value: formatSigned(sourceRider?.formBonus ?? 0) },
+    { label: 'R-Form', value: formatSigned(sourceRider?.raceFormBonus ?? 0) },
+    { label: 'Fatigue', value: formatFatigue(sourceRider?.fatigueMalus ?? 0) },
+    { label: 'Stamina', value: formatNumber(rider.staminaPenalty) },
+    { label: 'HM', value: formatNumber(rider.elevationPenalty) },
+    { label: 'T-Form', value: formatSigned(rider.dailyForm) },
+    { label: 'Zufall', value: formatScaledMicroForm(rider.microForm) },
+    { label: 'M_grad', value: `x${rider.gradientModifier.toFixed(2).replace('.', ',')}` },
+    { label: 'M_wind', value: `x${rider.windModifier.toFixed(2).replace('.', ',')}` },
+    { label: 'Draft', value: `x${rider.draftModifier.toFixed(2).replace('.', ',')}` },
+    { label: 'GC', value: gcStanding ? String(gcStanding.rank) : '—' },
+    { label: 'GC Gap', value: gcStanding ? formatGcGap(gcStanding.gapSeconds) : '—' },
+  ];
+
+  return `
+    <section class="race-sim-rider-detail-panel" aria-label="Fahrerdetails ${esc(rider.riderName)}">
+      <div class="race-sim-rider-detail-head">
+        <strong>${esc(rider.riderName)}</strong>
+        <button type="button" class="race-sim-rider-detail-close" data-race-sim-rider-toggle="${rider.riderId}" aria-label="Details schließen">×</button>
+      </div>
+      <div class="race-sim-rider-detail-grid">
+        ${detailItems.map((item) => `<div class="race-sim-rider-detail-item"><span>${esc(item.label)}</span><strong>${esc(item.value)}</strong></div>`).join('')}
+      </div>
+      <div class="race-sim-rider-detail-foot">${esc(rider.skillBreakdown || 'Primärskill ohne Mischgewichtung')}</div>
+    </section>`;
+}
+
 function buildSidebarRowCache(
   rider: RealtimeRiderSnapshot,
   sourceRider: Rider | null,
+  isOpen: boolean,
   splitLabels: string[],
   teamById: Map<number, Team>,
   teamAbbreviationById: Map<number, string>,
@@ -726,19 +782,29 @@ function buildSidebarRowCache(
   grid.className = 'race-sim-row-grid';
   row.appendChild(grid);
 
+  const rankField = document.createElement('strong');
+  rankField.className = 'race-sim-row-rank';
+  rankField.textContent = '0.';
+  grid.appendChild(rankField);
+
+  const flagField = document.createElement('span');
+  flagField.className = 'race-sim-row-flag';
+  flagField.innerHTML = sourceRider ? renderFlag(getRiderCountryCode(sourceRider)) : '—';
+  grid.appendChild(flagField);
+
   const nameField = document.createElement('span');
   nameField.className = 'race-sim-row-name';
-  nameField.innerHTML = renderRiderLabel(0, rider, sourceRider);
+  nameField.innerHTML = renderRiderButton(rider, isOpen);
   grid.appendChild(nameField);
 
-  const rankField = nameField.querySelector<HTMLElement>('.race-sim-row-rank');
-  if (!rankField) {
-    throw new Error('race-sim-row-rank not found');
+  const nameButton = nameField.querySelector<HTMLButtonElement>('.race-sim-row-name-btn');
+  if (!nameButton) {
+    throw new Error('race-sim-row-name-btn not found');
   }
 
   const teamVisualField = document.createElement('span');
   teamVisualField.className = 'race-sim-row-team-visual';
-  teamVisualField.innerHTML = renderTeamColorsCell(sourceRider, teamById, teamNameById);
+  teamVisualField.innerHTML = renderTeamJerseyCell(sourceRider, teamById, teamNameById);
   grid.appendChild(teamVisualField);
 
   const teamField = document.createElement('strong');
@@ -758,49 +824,29 @@ function buildSidebarRowCache(
   const gapField = makeStrong('race-sim-gap');
   const clockField = makeStrong();
   const splitFields = splitLabels.map(() => makeStrong());
-  const terrainSkillField = makeStrong();
-  const baseSkillField = makeStrong('race-sim-cell-base-skill');
   const effectiveSkillField = makeStrong('race-sim-cell-effective-skill');
-  const teamBonusField = makeStrong();
-  const seasonFormField = makeStrong();
-  const raceFormField = makeStrong();
-  const fatigueField = makeStrong();
-  const staminaField = makeStrong();
-  const elevationField = makeStrong();
-  const dailyFormField = makeStrong();
-  const microFormField = makeStrong();
   const gcRankField = makeStrong();
   const gcGapField = makeStrong();
   const gradientPercentField = makeStrong();
-  const gradientModifierField = makeStrong();
-  const windModifierField = makeStrong();
-  const draftModifierField = makeStrong();
   const speedField = makeStrong();
+
+  const detailPanel = document.createElement('div');
+  detailPanel.className = 'race-sim-row-detail-popover hidden';
+  row.appendChild(detailPanel);
 
   return {
     row,
     rankField,
+    nameButton,
     gapField,
     clockField,
     splitFields,
-    terrainSkillField,
-    baseSkillField,
     effectiveSkillField,
-    teamBonusField,
-    seasonFormField,
-    raceFormField,
-    fatigueField,
-    staminaField,
-    elevationField,
-    dailyFormField,
-    microFormField,
     gcRankField,
     gcGapField,
     gradientPercentField,
-    gradientModifierField,
-    windModifierField,
-    draftModifierField,
     speedField,
+    detailPanel,
     initialized: false,
     lastValues: {},
   };
@@ -811,6 +857,7 @@ function updateSidebarRow(
   position: number,
   rider: RealtimeRiderSnapshot,
   sourceRider: Rider | null,
+  isDetailOpen: boolean,
   splitLabels: string[],
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
   raceIsStageRace: boolean,
@@ -827,14 +874,11 @@ function updateSidebarRow(
       : rider.riderClockSeconds != null
         ? formatClock(rider.riderClockSeconds)
         : '—';
-  const terrainSkillValue = `${formatTerrain(rider.activeTerrain)} / ${formatSkill(rider.skillName)}`;
-
-  const teamBonusValue = rider.teamGroupBonus > 0 ? `+${formatNumber(rider.teamGroupBonus)}` : '—';
-
-  updateClassName(rowCache.row, `race-sim-row${position === 1 ? ' race-sim-row-leader' : ''}`);
+  updateClassName(rowCache.row, `race-sim-row${position === 1 ? ' race-sim-row-leader' : ''}${isDetailOpen ? ' race-sim-row-detail-open' : ''}`);
   updateText(rowCache.rankField, `${position}.`);
   updateText(rowCache.gapField, formatGap(rider.gapToLeaderMeters));
   updateText(rowCache.clockField, clockValue);
+  rowCache.nameButton.setAttribute('aria-expanded', isDetailOpen ? 'true' : 'false');
 
   splitLabels.forEach((label, index) => {
     const splitField = rowCache.splitFields[index];
@@ -845,23 +889,6 @@ function updateSidebarRow(
     updateText(splitField, splitValue);
     updateTitle(splitField, label);
   });
-
-  if (hasChanged(rowCache, 'terrainSkillValue', terrainSkillValue)) {
-    updateText(rowCache.terrainSkillField, terrainSkillValue);
-    updateTitle(rowCache.terrainSkillField, terrainSkillValue);
-    commitValue(rowCache, 'terrainSkillValue', terrainSkillValue);
-  }
-
-  if (hasChanged(rowCache, 'baseSkillValue', rider.baseSkill)) {
-    updateText(rowCache.baseSkillField, formatNumber(rider.baseSkill));
-    commitValue(rowCache, 'baseSkillValue', rider.baseSkill);
-  }
-
-  const baseSkillTitle = rider.skillBreakdown || 'Basis-Skill';
-  if (hasChanged(rowCache, 'baseSkillTitle', baseSkillTitle)) {
-    updateTitle(rowCache.baseSkillField, baseSkillTitle);
-    commitValue(rowCache, 'baseSkillTitle', baseSkillTitle);
-  }
 
   if (hasChanged(rowCache, 'effectiveSkillValue', rider.effectiveSkill)) {
     updateText(rowCache.effectiveSkillField, formatNumber(rider.effectiveSkill));
@@ -889,46 +916,38 @@ function updateSidebarRow(
     updateTitle(rowCache.effectiveSkillField, buildEffectiveSkillTitle(rider, sourceRider));
     commitValue(rowCache, 'effectiveSkillTitleKey', effectiveSkillTitleKey);
   }
-
-  updateText(rowCache.teamBonusField, teamBonusValue);
-  updateClassName(rowCache.teamBonusField, rider.teamGroupBonus > 0 ? 'race-sim-team-bonus' : '');
-  if (hasChanged(rowCache, 'seasonFormValue', seasonForm)) {
-    updateText(rowCache.seasonFormField, formatSigned(seasonForm));
-    commitValue(rowCache, 'seasonFormValue', seasonForm);
-  }
-  const seasonFormClass = getFormClassName(seasonForm);
-  if (hasChanged(rowCache, 'seasonFormClass', seasonFormClass)) {
-    updateClassName(rowCache.seasonFormField, seasonFormClass);
-    commitValue(rowCache, 'seasonFormClass', seasonFormClass);
-  }
-  if (hasChanged(rowCache, 'raceFormValue', raceForm)) {
-    updateText(rowCache.raceFormField, formatSigned(raceForm));
-    commitValue(rowCache, 'raceFormValue', raceForm);
-  }
-  const raceFormClass = getFormClassName(raceForm);
-  if (hasChanged(rowCache, 'raceFormClass', raceFormClass)) {
-    updateClassName(rowCache.raceFormField, raceFormClass);
-    commitValue(rowCache, 'raceFormClass', raceFormClass);
-  }
-  const fatigueValue = sourceRider?.fatigueMalus ?? 0;
-  if (hasChanged(rowCache, 'fatigueValue', fatigueValue)) {
-    updateText(rowCache.fatigueField, formatFatigue(fatigueValue));
-    commitValue(rowCache, 'fatigueValue', fatigueValue);
-  }
-  updateText(rowCache.staminaField, formatNumber(rider.staminaPenalty));
-  updateText(rowCache.elevationField, formatNumber(rider.elevationPenalty));
-  updateText(rowCache.dailyFormField, formatSigned(rider.dailyForm));
-  updateClassName(rowCache.dailyFormField, getFormClassName(rider.dailyForm));
-  updateText(rowCache.microFormField, formatSigned(rider.microForm));
-  updateClassName(rowCache.microFormField, getFormClassName(rider.microForm));
   updateText(rowCache.gcRankField, gcStanding ? String(gcStanding.rank) : '—');
   updateText(rowCache.gcGapField, gcStanding ? formatGcGap(gcStanding.gapSeconds) : '—');
   updateText(rowCache.gradientPercentField, formatGradientPercent(rider.gradientPercent));
   updateClassName(rowCache.gradientPercentField, getSlopeClassName(rider.gradientPercent));
-  updateText(rowCache.gradientModifierField, `x${rider.gradientModifier.toFixed(2).replace('.', ',')}`);
-  updateText(rowCache.windModifierField, `x${rider.windModifier.toFixed(2).replace('.', ',')}`);
-  updateText(rowCache.draftModifierField, `x${rider.draftModifier.toFixed(2).replace('.', ',')}`);
   updateText(rowCache.speedField, formatSpeed(rider.currentSpeedMps));
+
+  const detailKey = [
+    isDetailOpen ? 'open' : 'closed',
+    rider.activeTerrain,
+    rider.skillName,
+    rider.baseSkill,
+    rider.teamGroupBonus,
+    seasonForm,
+    raceForm,
+    sourceRider?.fatigueMalus ?? 0,
+    rider.staminaPenalty,
+    rider.elevationPenalty,
+    rider.dailyForm,
+    rider.microForm,
+    rider.gradientModifier,
+    rider.windModifier,
+    rider.draftModifier,
+    gcStanding?.rank ?? '—',
+    gcStanding?.gapSeconds ?? '—',
+    rider.skillBreakdown,
+  ].join('|');
+  if (hasChanged(rowCache, 'detailKey', detailKey)) {
+    rowCache.detailPanel.innerHTML = isDetailOpen ? renderDetailPanel(rider, sourceRider, gcStanding) : '';
+    rowCache.detailPanel.classList.toggle('hidden', !isDetailOpen);
+    commitValue(rowCache, 'detailKey', detailKey);
+  }
+  rowCache.detailPanel.classList.toggle('hidden', !isDetailOpen);
   rowCache.initialized = true;
 }
 
@@ -936,11 +955,35 @@ export function renderRaceSimSidebar(
   container: HTMLElement,
   snapshot: SimulationSnapshot,
   bootstrap: RealtimeSimulationBootstrap,
-): void {
+): SidebarRenderTelemetry {
+  const totalStartMs = performance.now();
+  const telemetry: SidebarRenderTelemetry = {
+    totalMs: 0,
+    prepMs: 0,
+    sortMs: 0,
+    layoutMs: 0,
+    createRowsMs: 0,
+    removeRowsMs: 0,
+    orderCheckMs: 0,
+    reorderMs: 0,
+    visibilityMs: 0,
+    updateRowsMs: 0,
+    finalizeMs: 0,
+    rowsTotal: snapshot.riders.length,
+    rowsCreated: 0,
+    rowsRemoved: 0,
+    rowsUpdated: 0,
+    rowsSkippedInvisible: 0,
+    orderChanged: 0,
+  };
+  const prepStartMs = performance.now();
   const sidebarData = getBootstrapSidebarData(bootstrap);
   const { splitLabels } = sidebarData;
   const sortState = getLeaderboardSortState(container);
   const previousCache = sidebarRenderCache.get(container);
+  telemetry.prepMs = performance.now() - prepStartMs;
+
+  const sortStartMs = performance.now();
   const sortedRiders = sortRiders(
     snapshot.riders,
     bootstrap,
@@ -951,10 +994,18 @@ export function renderRaceSimSidebar(
     sidebarData.teamAbbreviationById,
     previousCache?.orderedRiderIds ?? [],
   );
+  telemetry.sortMs = performance.now() - sortStartMs;
 
   const previousLayoutKey = previousCache?.layoutKey;
+  const layoutStartMs = performance.now();
   const layoutKey = applyLeaderboardLayout(container, sidebarData.columns);
-  const cached = sidebarRenderCache.get(container) ?? { layoutKey, orderedRiderIds: [], rowsByRiderId: new Map() };
+  telemetry.layoutMs = performance.now() - layoutStartMs;
+  const cached = sidebarRenderCache.get(container) ?? {
+    layoutKey,
+    orderedRiderIds: [],
+    rowsByRiderId: new Map(),
+    openDetailRiderId: null,
+  };
 
   if (previousLayoutKey != null && previousLayoutKey !== layoutKey) {
     container.innerHTML = '';
@@ -965,14 +1016,18 @@ export function renderRaceSimSidebar(
   const nextRiderIds = sortedRiders.map((rider) => rider.riderId);
   const activeRiderIdSet = new Set(nextRiderIds);
 
+  const removeRowsStartMs = performance.now();
   for (const [riderId, rowCache] of cached.rowsByRiderId) {
     if (activeRiderIdSet.has(riderId)) {
       continue;
     }
     rowCache.row.remove();
     cached.rowsByRiderId.delete(riderId);
+    telemetry.rowsRemoved += 1;
   }
+  telemetry.removeRowsMs = performance.now() - removeRowsStartMs;
 
+  const createRowsStartMs = performance.now();
   for (let index = 0; index < sortedRiders.length; index += 1) {
     const rider = sortedRiders[index];
     const sourceRider = sidebarData.riderById.get(rider.riderId) ?? null;
@@ -981,18 +1036,24 @@ export function renderRaceSimSidebar(
       rowCache = buildSidebarRowCache(
         rider,
         sourceRider,
+        cached.openDetailRiderId === rider.riderId,
         splitLabels,
         sidebarData.teamById,
         sidebarData.teamAbbreviationById,
         sidebarData.teamNameById,
       );
       cached.rowsByRiderId.set(rider.riderId, rowCache);
+      telemetry.rowsCreated += 1;
     }
   }
+  telemetry.createRowsMs = performance.now() - createRowsStartMs;
 
+  const orderCheckStartMs = performance.now();
   const isSameOrder = cached.orderedRiderIds.length === nextRiderIds.length
     && cached.orderedRiderIds.every((riderId, index) => riderId === nextRiderIds[index]);
+  telemetry.orderCheckMs = performance.now() - orderCheckStartMs;
 
+  const reorderStartMs = performance.now();
   if (!isSameOrder) {
     const fragment = document.createDocumentFragment();
     for (const riderId of nextRiderIds) {
@@ -1002,10 +1063,9 @@ export function renderRaceSimSidebar(
       }
     }
     container.replaceChildren(fragment);
+    telemetry.orderChanged = 1;
   }
-
-  const scrollContainer = container.parentElement;
-  const shouldLimitToVisibleRows = scrollContainer instanceof HTMLElement && scrollContainer.clientHeight > 0;
+  telemetry.reorderMs = performance.now() - reorderStartMs;
 
   for (let index = 0; index < sortedRiders.length; index += 1) {
     const rider = sortedRiders[index];
@@ -1015,26 +1075,32 @@ export function renderRaceSimSidebar(
       continue;
     }
 
-    if (shouldLimitToVisibleRows && rowCache.initialized && !isRowVisible(rowCache.row, scrollContainer)) {
-      continue;
-    }
-
+    const updateStartMs = performance.now();
     updateSidebarRow(
       rowCache,
       index + 1,
       rider,
       sourceRider,
+      cached.openDetailRiderId === rider.riderId,
       splitLabels,
       bootstrap.stage.profile,
       bootstrap.race.isStageRace,
       bootstrap.stage.stageNumber,
       sidebarData.gcByRiderId,
     );
+    telemetry.updateRowsMs += performance.now() - updateStartMs;
+    telemetry.rowsUpdated += 1;
   }
 
   sidebarRenderCache.set(container, {
     layoutKey,
     orderedRiderIds: nextRiderIds,
     rowsByRiderId: cached.rowsByRiderId,
+    openDetailRiderId: cached.openDetailRiderId,
   });
+  telemetry.finalizeMs = performance.now() - (totalStartMs + telemetry.prepMs + telemetry.sortMs + telemetry.layoutMs + telemetry.removeRowsMs + telemetry.createRowsMs + telemetry.orderCheckMs + telemetry.reorderMs + telemetry.visibilityMs + telemetry.updateRowsMs);
+
+  telemetry.totalMs = performance.now() - totalStartMs;
+  telemetry.finalizeMs = Math.max(0, telemetry.totalMs - telemetry.prepMs - telemetry.sortMs - telemetry.layoutMs - telemetry.removeRowsMs - telemetry.createRowsMs - telemetry.orderCheckMs - telemetry.reorderMs - telemetry.visibilityMs - telemetry.updateRowsMs);
+  return telemetry;
 }

@@ -1,7 +1,7 @@
 import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { renderRaceSimControls, type TimeControlValue } from './renderControls';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
-import { handleRaceSimSidebarInteraction, renderRaceSimSidebar } from './renderSidebar';
+import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRenderTelemetry } from './renderSidebar';
 import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
 
 interface RaceSimElements {
@@ -22,7 +22,6 @@ interface RaceSimViewOptions {
   onFinishRequested?: (snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap) => void;
 }
 
-const SIDEBAR_RENDER_INTERVAL_MS = 1000;
 const PROFILE_RENDER_INTERVAL_MS = 250;
 const PROFILE_INTERACTION_HOLD_MS = 1200;
 const PERF_SMOOTHING_FACTOR = 0.2;
@@ -32,6 +31,24 @@ interface RaceSimPerfTelemetry {
   snapshotBuildMs: number;
   profileRenderMs: number;
   sidebarRenderMs: number;
+  sidebarWriteMs: number;
+  sidebarPaintMs: number;
+  sidebarPrepMs: number;
+  sidebarSortMs: number;
+  sidebarLayoutMs: number;
+  sidebarCreateRowsMs: number;
+  sidebarRemoveRowsMs: number;
+  sidebarOrderCheckMs: number;
+  sidebarReorderMs: number;
+  sidebarVisibilityMs: number;
+  sidebarUpdateRowsMs: number;
+  sidebarFinalizeMs: number;
+  sidebarRowsTotal: number;
+  sidebarRowsCreated: number;
+  sidebarRowsRemoved: number;
+  sidebarRowsUpdated: number;
+  sidebarRowsSkippedInvisible: number;
+  sidebarOrderChanged: number;
 }
 
 export class RaceSimView {
@@ -61,11 +78,31 @@ export class RaceSimView {
 
   private lastProfileRenderTime = Number.NEGATIVE_INFINITY;
 
+  private sidebarPaintSequence = 0;
+
   private perfTelemetry: RaceSimPerfTelemetry = {
     engineStepMs: 0,
     snapshotBuildMs: 0,
     profileRenderMs: 0,
     sidebarRenderMs: 0,
+    sidebarWriteMs: 0,
+    sidebarPaintMs: 0,
+    sidebarPrepMs: 0,
+    sidebarSortMs: 0,
+    sidebarLayoutMs: 0,
+    sidebarCreateRowsMs: 0,
+    sidebarRemoveRowsMs: 0,
+    sidebarOrderCheckMs: 0,
+    sidebarReorderMs: 0,
+    sidebarVisibilityMs: 0,
+    sidebarUpdateRowsMs: 0,
+    sidebarFinalizeMs: 0,
+    sidebarRowsTotal: 0,
+    sidebarRowsCreated: 0,
+    sidebarRowsRemoved: 0,
+    sidebarRowsUpdated: 0,
+    sidebarRowsSkippedInvisible: 0,
+    sidebarOrderChanged: 0,
   };
 
   constructor(private readonly elements: RaceSimElements, private readonly options: RaceSimViewOptions = {}) {
@@ -145,8 +182,11 @@ export class RaceSimView {
       }
 
       const sidebarRenderStartMs = performance.now();
-      renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
-      this.recordPerfTelemetry('sidebarRenderMs', performance.now() - sidebarRenderStartMs);
+      const sidebarTelemetry = renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
+      this.recordSidebarPerfTelemetry(sidebarTelemetry);
+      const sidebarWriteMs = performance.now() - sidebarRenderStartMs;
+      this.recordPerfTelemetry('sidebarWriteMs', sidebarWriteMs);
+      this.scheduleSidebarPaintTelemetry(sidebarRenderStartMs, sidebarWriteMs);
       this.lastSidebarRenderTime = performance.now();
     });
 
@@ -287,7 +327,7 @@ export class RaceSimView {
     const shouldRenderSidebar = forceSidebar
       || this.detailSnapshot == null
       || this.frameSnapshot.isFinished
-      || (nowMs - this.lastSidebarRenderTime) >= SIDEBAR_RENDER_INTERVAL_MS;
+      || this.isRunning;
 
     if (shouldRenderProfile || shouldRenderSidebar) {
       const snapshotBuildStartMs = performance.now();
@@ -313,8 +353,11 @@ export class RaceSimView {
     if (shouldRenderSidebar && this.detailSnapshot) {
       this.lastSidebarRenderTime = nowMs;
       const sidebarRenderStartMs = performance.now();
-      renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
-      this.recordPerfTelemetry('sidebarRenderMs', performance.now() - sidebarRenderStartMs);
+      const sidebarTelemetry = renderRaceSimSidebar(this.elements.sidebar, this.detailSnapshot, this.bootstrap);
+      this.recordSidebarPerfTelemetry(sidebarTelemetry);
+      const sidebarWriteMs = performance.now() - sidebarRenderStartMs;
+      this.recordPerfTelemetry('sidebarWriteMs', sidebarWriteMs);
+      this.scheduleSidebarPaintTelemetry(sidebarRenderStartMs, sidebarWriteMs);
     }
 
     renderRaceSimControls(this.elements.controls, {
@@ -332,6 +375,24 @@ export class RaceSimView {
       snapshotBuildMs: 0,
       profileRenderMs: 0,
       sidebarRenderMs: 0,
+      sidebarWriteMs: 0,
+      sidebarPaintMs: 0,
+      sidebarPrepMs: 0,
+      sidebarSortMs: 0,
+      sidebarLayoutMs: 0,
+      sidebarCreateRowsMs: 0,
+      sidebarRemoveRowsMs: 0,
+      sidebarOrderCheckMs: 0,
+      sidebarReorderMs: 0,
+      sidebarVisibilityMs: 0,
+      sidebarUpdateRowsMs: 0,
+      sidebarFinalizeMs: 0,
+      sidebarRowsTotal: 0,
+      sidebarRowsCreated: 0,
+      sidebarRowsRemoved: 0,
+      sidebarRowsUpdated: 0,
+      sidebarRowsSkippedInvisible: 0,
+      sidebarOrderChanged: 0,
     };
   }
 
@@ -340,5 +401,52 @@ export class RaceSimView {
     this.perfTelemetry[key] = currentValue <= 0
       ? sampleMs
       : (currentValue * (1 - PERF_SMOOTHING_FACTOR)) + (sampleMs * PERF_SMOOTHING_FACTOR);
+  }
+
+  private recordSidebarPerfTelemetry(telemetry: SidebarRenderTelemetry): void {
+    this.recordPerfTelemetry('sidebarRenderMs', telemetry.totalMs);
+    this.recordPerfTelemetry('sidebarPrepMs', telemetry.prepMs);
+    this.recordPerfTelemetry('sidebarSortMs', telemetry.sortMs);
+    this.recordPerfTelemetry('sidebarLayoutMs', telemetry.layoutMs);
+    this.recordPerfTelemetry('sidebarCreateRowsMs', telemetry.createRowsMs);
+    this.recordPerfTelemetry('sidebarRemoveRowsMs', telemetry.removeRowsMs);
+    this.recordPerfTelemetry('sidebarOrderCheckMs', telemetry.orderCheckMs);
+    this.recordPerfTelemetry('sidebarReorderMs', telemetry.reorderMs);
+    this.recordPerfTelemetry('sidebarVisibilityMs', telemetry.visibilityMs);
+    this.recordPerfTelemetry('sidebarUpdateRowsMs', telemetry.updateRowsMs);
+    this.recordPerfTelemetry('sidebarFinalizeMs', telemetry.finalizeMs);
+    this.perfTelemetry.sidebarRowsTotal = telemetry.rowsTotal;
+    this.perfTelemetry.sidebarRowsCreated = telemetry.rowsCreated;
+    this.perfTelemetry.sidebarRowsRemoved = telemetry.rowsRemoved;
+    this.perfTelemetry.sidebarRowsUpdated = telemetry.rowsUpdated;
+    this.perfTelemetry.sidebarRowsSkippedInvisible = telemetry.rowsSkippedInvisible;
+    this.perfTelemetry.sidebarOrderChanged = telemetry.orderChanged;
+  }
+
+  private scheduleSidebarPaintTelemetry(renderStartMs: number, sidebarWriteMs: number): void {
+    const sequence = ++this.sidebarPaintSequence;
+    requestAnimationFrame(() => {
+      if (sequence !== this.sidebarPaintSequence) {
+        return;
+      }
+
+      const paintMs = Math.max(0, performance.now() - renderStartMs - sidebarWriteMs);
+      this.recordPerfTelemetry('sidebarPaintMs', paintMs);
+      this.refreshControls();
+    });
+  }
+
+  private refreshControls(): void {
+    if (!this.bootstrap || !this.frameSnapshot) {
+      return;
+    }
+
+    renderRaceSimControls(this.elements.controls, {
+      isRunning: this.isRunning,
+      timeMultiplier: this.timeMultiplier,
+      snapshot: this.frameSnapshot,
+      totalRiders: this.bootstrap.riders.length,
+      perf: this.perfTelemetry,
+    });
   }
 }

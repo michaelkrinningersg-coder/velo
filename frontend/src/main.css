@@ -1009,6 +1009,7 @@ html, body {
 }
 
 .race-sim-row {
+  position: relative;
   padding: .26rem .55rem;
   border: 1px solid rgba(148, 163, 184, .14);
   border-radius: var(--radius-md);
@@ -1023,12 +1024,35 @@ html, body {
 .race-sim-row-name {
   display: flex;
   align-items: center;
-  gap: .28rem;
-  font-weight: 700;
   text-align: left;
   min-width: 0;
+}
+
+.race-sim-row-name-btn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.race-sim-row-name-btn:hover {
+  color: #dbeafe;
+}
+
+.race-sim-row-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .race-sim-row-main-name {
@@ -1086,6 +1110,83 @@ html, body {
   text-align: center;
 }
 
+.race-sim-row-detail-open {
+  z-index: 3;
+}
+
+.race-sim-row-detail-popover {
+  margin-top: .42rem;
+  width: 100%;
+  padding: .4rem .78rem;
+  border-radius: 12px;
+  border: 1px solid rgba(96, 165, 250, .24);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, .46);
+}
+
+.race-sim-rider-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.race-sim-rider-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.race-sim-rider-detail-head strong {
+  font-size: .86rem;
+}
+
+.race-sim-rider-detail-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-400);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.race-sim-rider-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 120px));
+  justify-content: start;
+  gap: .2rem .45rem;
+}
+
+.race-sim-rider-detail-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: .06rem;
+  min-height: 2.55rem;
+  padding: .2rem .4rem;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, .82);
+}
+
+.race-sim-rider-detail-item span {
+  align-self: flex-start;
+  color: var(--text-500);
+  font-size: .61rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.race-sim-rider-detail-item strong {
+  align-self: flex-end;
+  font-size: .72rem;
+  text-align: right;
+}
+
+.race-sim-rider-detail-foot {
+  color: var(--text-500);
+  font-size: .66rem;
+}
+
 .race-sim-row-team-visual {
   display: flex;
   align-items: center;
@@ -1096,19 +1197,18 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: .38rem;
+  width: 1.35rem;
+  height: 1.35rem;
 }
 
-.race-sim-team-visual-bar {
-  width: .42rem;
-  height: 1.1rem;
-  border-radius: 999px;
-  transform: skew(-24deg);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .08) inset;
-}
-
-.race-sim-team-visual-gap {
-  width: .18rem;
+.race-sim-team-jersey-img {
+  display: block;
+  width: 1.2rem;
+  height: 1.2rem;
+  object-fit: contain;
+  transform: scale(1.7);
+  transform-origin: center;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .35));
 }
 
 .race-sim-team-code {
@@ -1183,14 +1283,14 @@ html, body {
 
 .race-sim-profile-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 170px;
   gap: .6rem;
   width: 100%;
   height: 100%;
 }
 
 .race-sim-profile-layout-itt {
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .race-sim-profile-canvas-wrap {
@@ -1200,7 +1300,7 @@ html, body {
 
 .race-sim-side-rails {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: .45rem;
   min-height: 0;
 }
@@ -1809,7 +1909,7 @@ html, body {
 
   .race-sim-leaderboard-head,
   .race-sim-row-grid {
-    grid-template-columns: minmax(210px, 2fr) minmax(44px, .3fr) minmax(56px, .55fr) minmax(80px, .72fr) minmax(120px, .9fr) minmax(200px, 1.45fr) repeat(14, minmax(58px, .5fr));
+    grid-template-columns: var(--race-sim-leaderboard-columns);
   }
 
   .race-sim-sidebar-body {
@@ -1837,6 +1937,14 @@ html, body {
   .race-sim-row-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: .35rem .7rem;
+  }
+
+  .race-sim-row-detail-popover {
+    width: 100%;
+  }
+
+  .race-sim-rider-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .race-sim-toolbar-status-card,
