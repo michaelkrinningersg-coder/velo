@@ -199,7 +199,7 @@ export function createRouter(dbService: DatabaseService): Router {
         stage,
         riders,
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile),
+        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -268,7 +268,7 @@ export function createRouter(dbService: DatabaseService): Router {
         stage,
         riders,
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile),
+        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -290,7 +290,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
-      ok<QuickSimResponse>(res, new QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries));
+      ok<QuickSimResponse>(res, new QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? []));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

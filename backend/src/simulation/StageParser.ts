@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
+  StageCsvSegment,
   ParsedStageSegment,
   ParsedStageSummary,
   StageMarker,
@@ -12,20 +13,24 @@ import type {
 } from '../../../shared/types';
 
 const STAGE_FILE_HEADERS = [
-  'km_mark',
-  'elevation',
+  'length_km',
+  'gradient_percent',
   'terrain',
   'tech_level',
   'wind_exp',
   'marker_type',
   'marker_name',
   'marker_cat',
+  'end_marker_type',
+  'end_marker_name',
+  'end_marker_cat',
 ] as const;
 
 const STAGE_MARKER_TYPES: StageMarkerType[] = ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
 const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['HC', '1', '2', '3', '4', 'Sprint'];
 const STAGE_TERRAINS: StageTerrain[] = ['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint'];
 const STAGE_FINISH_MARKER_TYPES: StageFinishMarkerType[] = ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
+const STAGE_ELEVATION_TOLERANCE_METERS = 0.5;
 
 function isFinishMarkerType(markerType: StageMarkerType): markerType is StageFinishMarkerType {
   return STAGE_FINISH_MARKER_TYPES.includes(markerType as StageFinishMarkerType);
@@ -113,6 +118,25 @@ function optionalPipeValue(value: string): string | null {
   return value;
 }
 
+function validateMarkerPlacement(markerType: StageMarkerType, scope: 'start' | 'end', ctx: string): void {
+  if (scope === 'start') {
+    if (markerType === 'sprint_intermediate') {
+      throw new Error(`${ctx}: sprint_intermediate ist nur als Endmarker erlaubt.`);
+    }
+    if (markerType === 'climb_top') {
+      throw new Error(`${ctx}: climb_top ist nur als Endmarker erlaubt.`);
+    }
+    if (isFinishMarkerType(markerType) && markerType !== 'start') {
+      throw new Error(`${ctx}: Finish-Marker sind nur als Endmarker erlaubt.`);
+    }
+    return;
+  }
+
+  if (markerType === 'start' || markerType === 'climb_start') {
+    throw new Error(`${ctx}: ${markerType} ist nur als Startmarker erlaubt.`);
+  }
+}
+
 function validateMarkerCategory(markerType: StageMarkerType, markerCategory: StageMarkerCategory | null, ctx: string): void {
   if (markerType === 'climb_top') {
     if (markerCategory == null || !['HC', '1', '2', '3', '4'].includes(markerCategory)) {
@@ -137,7 +161,13 @@ function validateMarkerCategory(markerType: StageMarkerType, markerCategory: Sta
   }
 }
 
-function parseMarkers(typeValue: string | undefined, nameValue: string | undefined, categoryValue: string | undefined, ctx: string): StageMarker[] {
+function parseMarkers(
+  typeValue: string | undefined,
+  nameValue: string | undefined,
+  categoryValue: string | undefined,
+  scope: 'start' | 'end',
+  ctx: string,
+): StageMarker[] {
   const markerTypeValues = parsePipeValues(typeValue);
   const markerNameValues = parsePipeValues(nameValue);
   const markerCategoryValues = parsePipeValues(categoryValue);
@@ -166,6 +196,7 @@ function parseMarkers(typeValue: string | undefined, nameValue: string | undefin
     const markerName = optionalPipeValue(markerNameValues[index] ?? '');
     const markerCategoryValue = optionalPipeValue(markerCategoryValues[index] ?? '');
     const markerCategory = markerCategoryValue as StageMarkerCategory | null;
+    validateMarkerPlacement(markerType, scope, ctx);
     validateMarkerCategory(markerType, markerCategory, ctx);
 
     return {
@@ -176,10 +207,14 @@ function parseMarkers(typeValue: string | undefined, nameValue: string | undefin
   });
 }
 
-function parseProfilePoint(row: Record<string, string>, index: number): StageProfilePoint {
+function parseSegmentRow(row: Record<string, string>, index: number, startElevation: number): StageCsvSegment {
   const ctx = `Stage-Zeile ${index + 2}`;
-  const kmMark = float(row['km_mark'] ?? '', ctx);
-  const elevation = int(row['elevation'] ?? '', ctx);
+  const lengthKm = float(row['length_km'] ?? '', ctx);
+  if (lengthKm <= 0) {
+    throw new Error(`${ctx}: length_km muss groesser als 0 sein.`);
+  }
+
+  const gradientPercent = float(row['gradient_percent'] ?? '', ctx);
   const terrainValue = (row['terrain'] ?? '').trim();
   if (terrainValue.length === 0) {
     throw new Error(`${ctx}: terrain fehlt.`);
@@ -200,13 +235,60 @@ function parseProfilePoint(row: Record<string, string>, index: number): StagePro
   }
 
   return {
-    kmMark,
-    elevation,
+    startElevation,
+    lengthKm,
+    gradientPercent,
     terrain,
     techLevel,
     windExp,
-    markers: parseMarkers(row['marker_type'], row['marker_name'], row['marker_cat'], ctx),
+    markers: parseMarkers(row['marker_type'], row['marker_name'], row['marker_cat'], 'start', ctx),
+    endMarkers: parseMarkers(row['end_marker_type'], row['end_marker_name'], row['end_marker_cat'], 'end', `${ctx} (Endmarker)`),
   };
+}
+
+function validateClimbPairs(segments: StageCsvSegment[], filename: string): void {
+  const openClimbs = new Map<string, number>();
+
+  const openClimb = (marker: StageMarker, ctx: string): void => {
+    if (marker.type !== 'climb_start') {
+      return;
+    }
+    if (!marker.name) {
+      throw new Error(`${ctx}: climb_start braucht einen Namen fuer die Paarbildung.`);
+    }
+    openClimbs.set(marker.name, (openClimbs.get(marker.name) ?? 0) + 1);
+  };
+
+  const closeClimb = (marker: StageMarker, ctx: string): void => {
+    if (marker.type !== 'climb_top') {
+      return;
+    }
+    if (!marker.name) {
+      throw new Error(`${ctx}: climb_top braucht einen Namen fuer die Paarbildung.`);
+    }
+
+    const openCount = openClimbs.get(marker.name) ?? 0;
+    if (openCount <= 0) {
+      throw new Error(`${ctx}: climb_top "${marker.name}" hat keinen vorherigen climb_start mit gleichem Namen.`);
+    }
+
+    if (openCount === 1) {
+      openClimbs.delete(marker.name);
+    } else {
+      openClimbs.set(marker.name, openCount - 1);
+    }
+  };
+
+  segments.forEach((segment, index) => {
+    const rowCtx = `Stage-Datei ${filename}, Segment ${index + 1}`;
+    segment.markers.forEach((marker) => openClimb(marker, `${rowCtx} Startmarker`));
+    segment.endMarkers.forEach((marker) => closeClimb(marker, `${rowCtx} Endmarker`));
+  });
+
+  const danglingClimb = [...openClimbs.entries()][0];
+  if (danglingClimb) {
+    throw new Error(`Stage-Datei ${filename}: climb_start "${danglingClimb[0]}" hat keinen spaeteren climb_top mit gleichem Namen.`);
+  }
 }
 
 function toRecords(content: string, filename: string): Array<Record<string, string>> {
@@ -238,30 +320,87 @@ function toRecords(content: string, filename: string): Array<Record<string, stri
   });
 }
 
-function createSegment(startPoint: StageProfilePoint, endPoint: StageProfilePoint, index: number): ParsedStageSegment {
-  const ctx = `Segment ${index + 1}`;
-  const lengthKm = endPoint.kmMark - startPoint.kmMark;
-  if (lengthKm <= 0) {
-    throw new Error(`${ctx}: km_mark muss strikt aufsteigend sein.`);
-  }
+function calculateSegmentEndElevation(startElevation: number, lengthKm: number, gradientPercent: number): number {
+  return startElevation + ((lengthKm * 1000) * (gradientPercent / 100));
+}
 
-  const gradientPercent = ((endPoint.elevation - startPoint.elevation) / (lengthKm * 1000)) * 100;
+function createParsedSegment(segment: StageCsvSegment, startKm: number, index: number): ParsedStageSegment {
+  const endKm = startKm + segment.lengthKm;
+  const endElevation = calculateSegmentEndElevation(segment.startElevation, segment.lengthKm, segment.gradientPercent);
   return {
-    start_km: startPoint.kmMark,
-    end_km: endPoint.kmMark,
-    length_km: lengthKm,
-    start_elevation: startPoint.elevation,
-    end_elevation: endPoint.elevation,
-    gradient_percent: gradientPercent,
-    terrain: startPoint.terrain,
-    tech_level: startPoint.techLevel,
-    wind_exp: startPoint.windExp,
-    ...(startPoint.markers.length > 0 ? { start_markers: startPoint.markers } : {}),
-    ...(endPoint.markers.length > 0 ? { end_markers: endPoint.markers } : {}),
+    start_km: startKm,
+    end_km: endKm,
+    length_km: segment.lengthKm,
+    start_elevation: segment.startElevation,
+    end_elevation: endElevation,
+    gradient_percent: segment.gradientPercent,
+    terrain: segment.terrain,
+    tech_level: segment.techLevel,
+    wind_exp: segment.windExp,
+    ...(segment.markers.length > 0 ? { start_markers: segment.markers } : {}),
+    ...(segment.endMarkers.length > 0 ? { end_markers: segment.endMarkers } : {}),
   };
 }
 
-function readStagePoints(filename: string): StageProfilePoint[] {
+function derivePoints(segments: StageCsvSegment[], filename: string): StageProfilePoint[] {
+  if (segments.length === 0) {
+    throw new Error(`Stage-Datei ${filename}: Mindestens ein Segment ist erforderlich.`);
+  }
+
+  const points: StageProfilePoint[] = [];
+  let currentKm = 0;
+  let currentElevation = segments[0].startElevation;
+
+  points.push({
+    kmMark: 0,
+    elevation: currentElevation,
+    terrain: segments[0].terrain,
+    techLevel: segments[0].techLevel,
+    windExp: segments[0].windExp,
+    markers: [...segments[0].markers],
+  });
+
+  segments.forEach((segment, index) => {
+    if (index === 0) {
+      currentElevation = segment.startElevation;
+    }
+
+    currentElevation = segment.startElevation;
+
+    const endKm = currentKm + segment.lengthKm;
+    const endElevation = calculateSegmentEndElevation(segment.startElevation, segment.lengthKm, segment.gradientPercent);
+    currentKm = endKm;
+    currentElevation = endElevation;
+
+    const previousPoint = points[points.length - 1];
+    if (previousPoint) {
+      previousPoint.terrain = segment.terrain;
+      previousPoint.techLevel = segment.techLevel;
+      previousPoint.windExp = segment.windExp;
+      previousPoint.markers = [...previousPoint.markers, ...segment.markers];
+    }
+
+    points.push({
+      kmMark: endKm,
+      elevation: endElevation,
+      terrain: segment.terrain,
+      techLevel: segment.techLevel,
+      windExp: segment.windExp,
+      markers: [...segment.endMarkers],
+    });
+  });
+
+  if (!points[0]?.markers.some((marker) => marker.type === 'start')) {
+    throw new Error(`Stage-Datei ${filename}: Das erste Segment muss marker_type start tragen.`);
+  }
+  if (!points[points.length - 1]?.markers.some((marker) => isFinishMarkerType(marker.type))) {
+    throw new Error(`Stage-Datei ${filename}: Das letzte Segment muss per end_marker_type einen Finish-Marker tragen.`);
+  }
+
+  return points;
+}
+
+function readStageSegments(filename: string, initialStartElevation: number): StageCsvSegment[] {
   if (filename.includes('/') || filename.includes('\\')) {
     throw new Error(`Stage-Dateiname darf keinen Pfad enthalten: ${filename}`);
   }
@@ -273,19 +412,20 @@ function readStagePoints(filename: string): StageProfilePoint[] {
   }
 
   const rows = toRecords(fs.readFileSync(filePath, 'utf8'), filename);
-  const points = rows.map((row, index) => parseProfilePoint(row, index));
+  let currentStartElevation: number | null = initialStartElevation;
 
-  if (points[0]?.kmMark !== 0) {
-    throw new Error(`Stage-Datei ${filename}: Erste Datenzeile muss km_mark 0 haben.`);
-  }
-  if (!points[0]?.markers.some((marker) => marker.type === 'start')) {
-    throw new Error(`Stage-Datei ${filename}: Erste Datenzeile muss marker_type start tragen.`);
-  }
-  if (!points[points.length - 1]?.markers.some((marker) => isFinishMarkerType(marker.type))) {
-    throw new Error(`Stage-Datei ${filename}: Letzte Datenzeile muss einen Finish-Marker tragen.`);
-  }
+  const segments = rows.map((row, index) => {
+    if (currentStartElevation == null) {
+      throw new Error(`Stage-Datei ${filename}: initiale Starthoehe fehlt.`);
+    }
 
-  return points;
+    const segment = parseSegmentRow(row, index, currentStartElevation);
+    currentStartElevation = calculateSegmentEndElevation(segment.startElevation, segment.lengthKm, segment.gradientPercent);
+    return segment;
+  });
+
+  validateClimbPairs(segments, filename);
+  return segments;
 }
 
 function calculateElevationGain(points: StageProfilePoint[]): number {
@@ -297,25 +437,26 @@ function calculateElevationGain(points: StageProfilePoint[]): number {
 }
 
 export class StageParser {
-  public static parseStageProfile(filename: string): ParsedStageSegment[] {
-    return StageParser.summarizeStageProfile(filename).segments;
+  public static parseStageProfile(filename: string, initialStartElevation: number): ParsedStageSegment[] {
+    return StageParser.summarizeStageProfile(filename, initialStartElevation).segments;
   }
 
-  public static summarizeStageProfile(filename: string): ParsedStageSummary {
-    const points = readStagePoints(filename);
+  public static summarizeStageProfile(filename: string, initialStartElevation: number): ParsedStageSummary {
+    const stageSegments = readStageSegments(filename, initialStartElevation);
+    const points = derivePoints(stageSegments, filename);
     return {
       distanceKm: points[points.length - 1]?.kmMark ?? 0,
       elevationGainMeters: calculateElevationGain(points),
       points,
-      segments: points.slice(0, -1).map((point, index) => createSegment(point, points[index + 1], index)),
+      segments: stageSegments.map((segment, index) => createParsedSegment(segment, points[index]?.kmMark ?? 0, index)),
     };
   }
 }
 
-export function parseStageProfile(filename: string): ParsedStageSegment[] {
-  return StageParser.parseStageProfile(filename);
+export function parseStageProfile(filename: string, initialStartElevation: number): ParsedStageSegment[] {
+  return StageParser.parseStageProfile(filename, initialStartElevation);
 }
 
-export function summarizeStageProfile(filename: string): ParsedStageSummary {
-  return StageParser.summarizeStageProfile(filename);
+export function summarizeStageProfile(filename: string, initialStartElevation: number): ParsedStageSummary {
+  return StageParser.summarizeStageProfile(filename, initialStartElevation);
 }

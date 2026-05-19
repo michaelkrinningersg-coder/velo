@@ -34,6 +34,7 @@ interface PendingStageRow {
   stage_number: number;
   date: string;
   profile: PendingStage['profile'];
+  start_elevation: number;
   details_csv_file: string;
   is_stage_race: number;
 }
@@ -541,6 +542,7 @@ export class GameStateService {
             stages.stage_number AS stage_number,
             stages.date AS date,
             stages.profile AS profile,
+            stages.start_elevation AS start_elevation,
             stages.details_csv_file AS details_csv_file,
             races.is_stage_race AS is_stage_race
           FROM stages
@@ -556,6 +558,7 @@ export class GameStateService {
             stages.stage_number,
             stages.date,
             stages.profile,
+            stages.start_elevation,
             stages.details_csv_file,
             races.is_stage_race
           HAVING COUNT(stage_results.id) = 0
@@ -569,6 +572,7 @@ export class GameStateService {
             stages.stage_number AS stage_number,
             stages.date AS date,
             stages.profile AS profile,
+            stages.start_elevation AS start_elevation,
             stages.details_csv_file AS details_csv_file,
             races.is_stage_race AS is_stage_race
           FROM stages
@@ -584,6 +588,7 @@ export class GameStateService {
       stageNumber: row.stage_number,
       date: row.date,
       profile: row.profile,
+      startElevation: row.start_elevation,
       detailsCsvFile: row.details_csv_file,
       isStageRace: row.is_stage_race === 1,
     }));

@@ -3,6 +3,7 @@ import { renderRaceSimControls, type TimeControlValue } from './renderControls';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
 import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRenderTelemetry } from './renderSidebar';
 import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
+import { summarizeStageMarkers } from './stageSummary';
 
 interface RaceSimElements {
   layout: HTMLElement;
@@ -314,7 +315,13 @@ export class RaceSimView {
     const ittSuffix = this.bootstrap.stage.profile === 'ITT'
       ? ' · Einzelzeitfahren · Startintervall 02:00'
       : '';
-    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}`;
+    const stageMeta = summarizeStageMarkers(this.bootstrap.stageSummary);
+    const markerMeta = [
+      `${stageMeta.segmentCount} Segmente`,
+      stageMeta.sprintCount > 0 ? `${stageMeta.sprintCount} Sprint${stageMeta.sprintCount === 1 ? '' : 's'}` : null,
+      stageMeta.climbCount > 0 ? `${stageMeta.climbCount} Bergwertung${stageMeta.climbCount === 1 ? '' : 'en'}` : null,
+    ].filter((value): value is string => value != null).join(' · ');
+    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}${markerMeta ? ` · ${markerMeta}` : ''}`;
 
     const shouldRenderProfile = forceSidebar
       || !this.isRunning

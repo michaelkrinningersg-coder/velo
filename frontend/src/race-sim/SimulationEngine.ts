@@ -3,8 +3,13 @@ import type {
   RealtimeSimulationBootstrap,
   Rider,
   RiderSkillKey,
+  StageMarkerCategory,
+  StageMarkerClassification,
+  StageMarkerClassificationEntry,
+  StageMarkerType,
   StageTerrain,
 } from '../../../shared/types';
+import { collectStageBoundaryMarkers } from './stageSummary';
 
 export type TerrainSkillName = 'Flat' | 'Hill' | 'Medium_Mountain' | 'Mountain' | 'Cobble' | 'Sprint' | 'Downhill';
 
@@ -29,6 +34,10 @@ export interface RealtimeRiderSnapshot {
   hasStarted: boolean;
   distanceCoveredMeters: number;
   gapToLeaderMeters: number;
+  segmentStartKm: number;
+  segmentEndKm: number;
+  segmentStartElevation: number;
+  segmentEndElevation: number;
   activeTerrain: StageTerrain | 'Finish';
   skillName: TerrainSkillName | 'Finish';
   skillBreakdown: string;
@@ -77,6 +86,18 @@ export interface SimulationFrameSnapshot {
 
 export interface SimulationSnapshot extends SimulationFrameSnapshot {
   riders: RealtimeRiderSnapshot[];
+  markerClassifications: StageMarkerClassification[];
+}
+
+interface MarkerCrossing {
+  riderId: number;
+  markerKey: string;
+  markerLabel: string;
+  markerType: StageMarkerType;
+  markerCategory: StageMarkerCategory | null;
+  kmMark: number;
+  crossingTimeSeconds: number;
+  photoFinishScore: number;
 }
 
 interface RiderState {
@@ -86,6 +107,10 @@ interface RiderState {
   hasStarted: boolean;
   distanceCoveredMeters: number;
   nextDistanceCoveredMeters: number | null;
+  segmentStartKm: number;
+  segmentEndKm: number;
+  segmentStartElevation: number;
+  segmentEndElevation: number;
   dailyForm: number;
   microForm: number;
   nextFormUpdateMeter: number;
@@ -115,6 +140,7 @@ interface RiderState {
   lastSplitLabel: string | null;
   lastSplitTimeSeconds: number | null;
   splitTimes: Record<string, number>;
+  markerCrossings: Record<string, MarkerCrossing>;
   isLeadingGroup: boolean;
 }
 
@@ -171,8 +197,11 @@ const SKILL_SHORT_LABELS: Record<RiderSkillKey, string> = {
 };
 
 interface IntermediateMarker {
+  key: string;
   distanceMeters: number;
   label: string;
+  markerType: StageMarkerType;
+  markerCategory: StageMarkerCategory | null;
 }
 
 const DRAFT_GRADIENT_PENALTY_CURVE = [
@@ -469,6 +498,10 @@ export class SimulationEngine {
       hasStarted: !this.isIndividualTimeTrial,
       distanceCoveredMeters: 0,
       nextDistanceCoveredMeters: null,
+      segmentStartKm: 0,
+      segmentEndKm: 0,
+      segmentStartElevation: 0,
+      segmentEndElevation: 0,
       dailyForm: sampleDailyForm(),
       microForm: sampleMicroForm(),
       nextFormUpdateMeter: randomBetween(5000, 40000),
@@ -498,6 +531,7 @@ export class SimulationEngine {
       lastSplitLabel: null,
       lastSplitTimeSeconds: null,
       splitTimes: {},
+      markerCrossings: {},
       isLeadingGroup: !this.isIndividualTimeTrial,
     }));
 
@@ -544,6 +578,10 @@ export class SimulationEngine {
         hasStarted: rider.hasStarted || rider.finishTimeSeconds != null,
         distanceCoveredMeters: rider.distanceCoveredMeters,
         gapToLeaderMeters: Math.max(0, frameSnapshot.leaderDistanceMeters - rider.distanceCoveredMeters),
+        segmentStartKm: rider.segmentStartKm,
+        segmentEndKm: rider.segmentEndKm,
+        segmentStartElevation: rider.segmentStartElevation,
+        segmentEndElevation: rider.segmentEndElevation,
         activeTerrain: rider.finishTimeSeconds != null ? 'Finish' : rider.activeTerrain,
         skillName: rider.finishTimeSeconds != null ? 'Finish' : rider.skillName,
         skillBreakdown: rider.finishTimeSeconds != null ? '' : rider.skillBreakdown,
@@ -569,7 +607,35 @@ export class SimulationEngine {
         isLeadingGroup: rider.isLeadingGroup,
         isFinished: rider.finishTimeSeconds != null,
       })),
+      markerClassifications: this.buildMarkerClassifications(ordered),
     };
+  }
+
+  private buildMarkerClassifications(ordered: RiderState[]): StageMarkerClassification[] {
+    return this.intermediateMarkers.map((marker) => {
+      const markerEntries = ordered
+        .map((rider) => rider.markerCrossings[marker.key] ?? null)
+        .filter((entry): entry is MarkerCrossing => entry != null)
+        .sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+
+      const leaderTime = markerEntries[0]?.crossingTimeSeconds ?? 0;
+      const entries: StageMarkerClassificationEntry[] = markerEntries.map((entry, index) => ({
+        riderId: entry.riderId,
+        rank: index + 1,
+        crossingTimeSeconds: entry.crossingTimeSeconds,
+        gapSeconds: Math.max(0, entry.crossingTimeSeconds - leaderTime),
+        photoFinishScore: entry.photoFinishScore,
+      }));
+
+      return {
+        markerKey: marker.key,
+        markerLabel: marker.label,
+        markerType: marker.markerType,
+        markerCategory: marker.markerCategory,
+        kmMark: marker.distanceMeters / 1000,
+        entries,
+      };
+    });
   }
 
   private getOrderedRiders(): RiderState[] {
@@ -908,13 +974,15 @@ export class SimulationEngine {
   }
 
   private buildIntermediateMarkers(): IntermediateMarker[] {
-    return this.bootstrap.stageSummary.points
-      .flatMap((point, pointIndex) => point.markers
-        .filter((marker) => marker.type === 'sprint_intermediate')
-        .map((marker, markerIndex) => ({
-          distanceMeters: point.kmMark * 1000,
-          label: marker.name ?? `SZ ${pointIndex + markerIndex + 1}`,
-        })))
+    return collectStageBoundaryMarkers(this.bootstrap.stageSummary)
+      .filter(({ marker }) => marker.type === 'sprint_intermediate' || marker.type === 'climb_top')
+      .map(({ key, label, marker, kmMark }) => ({
+        key,
+        distanceMeters: kmMark * 1000,
+        label,
+        markerType: marker.type,
+        markerCategory: marker.cat,
+      }))
       .sort((left, right) => left.distanceMeters - right.distanceMeters);
   }
 
@@ -966,6 +1034,10 @@ export class SimulationEngine {
     const segment = this.currentSegment(rider);
     const windZone = this.currentWindZone(rider);
     if (!segment || !windZone) {
+      rider.segmentStartKm = this.bootstrap.stageSummary.distanceKm;
+      rider.segmentEndKm = this.bootstrap.stageSummary.distanceKm;
+      rider.segmentStartElevation = 0;
+      rider.segmentEndElevation = 0;
       rider.activeTerrain = 'Finish';
       rider.skillName = 'Finish';
       rider.skillBreakdown = '';
@@ -986,6 +1058,10 @@ export class SimulationEngine {
 
     rider.teamGroupBonus = this.resolveTeamGroupBonusValue(rider, teamGroupBonusByRiderId);
     const basePhysics = this.calculateBasePhysics(rider, segment, windZone);
+  rider.segmentStartKm = segment.start_km;
+  rider.segmentEndKm = segment.end_km;
+  rider.segmentStartElevation = segment.start_elevation;
+  rider.segmentEndElevation = segment.end_elevation;
     rider.activeTerrain = segment.terrain;
     rider.skillName = basePhysics.skillName;
     rider.skillBreakdown = basePhysics.skillBreakdown;
@@ -1347,7 +1423,7 @@ export class SimulationEngine {
     stepStartSeconds: number,
     speedMps: number,
   ): void {
-    if (!this.isIndividualTimeTrial || speedMps <= 0) {
+    if (speedMps <= 0) {
       return;
     }
 
@@ -1362,9 +1438,23 @@ export class SimulationEngine {
       }
 
       const secondsToMarker = (marker.distanceMeters - startDistanceMeters) / speedMps;
+      const crossingTimeSeconds = Math.max(0, this.isIndividualTimeTrial
+        ? stepStartSeconds + secondsToMarker - rider.startOffsetSeconds
+        : stepStartSeconds + secondsToMarker);
+      const photoFinishScore = this.calculatePhotoFinishScore(rider);
       rider.lastSplitLabel = marker.label;
-      rider.lastSplitTimeSeconds = Math.max(0, stepStartSeconds + secondsToMarker - rider.startOffsetSeconds);
-      rider.splitTimes[marker.label] = rider.lastSplitTimeSeconds;
+      rider.lastSplitTimeSeconds = crossingTimeSeconds;
+      rider.splitTimes[marker.label] = crossingTimeSeconds;
+      rider.markerCrossings[marker.key] = {
+        riderId: rider.rider.id,
+        markerKey: marker.key,
+        markerLabel: marker.label,
+        markerType: marker.markerType,
+        markerCategory: marker.markerCategory,
+        kmMark: marker.distanceMeters / 1000,
+        crossingTimeSeconds,
+        photoFinishScore,
+      };
       rider.nextIntermediateIndex += 1;
     }
   }

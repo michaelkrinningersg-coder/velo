@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Country, FormDebugPoint, Nationality, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceStageSummary, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderSkillKey, RiderSkills, Role, SeasonPointAwardType, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageResultsPayload, Team } from '../../../shared/types';
+import { Country, FormDebugPoint, Nationality, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceStageSummary, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderSkillKey, RiderSkills, Role, SeasonPointAwardType, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageResultsPayload, Team } from '../../../shared/types';
 import { summarizeStageProfile } from '../simulation/StageParser';
 
 const RESULT_TYPE_IDS = {
@@ -205,6 +205,7 @@ interface StageRow {
   stage_number: number;
   date: string;
   profile: Stage['profile'];
+  start_elevation: number;
   details_csv_file: string;
 }
 
@@ -237,6 +238,20 @@ interface StageResultDbRow {
   rider_last_name: string | null;
   team_id: number | null;
   team_name: string | null;
+}
+
+interface StageMarkerResultDbRow {
+  marker_key: string;
+  marker_label: string;
+  marker_type: string;
+  marker_category: StageMarkerCategory | null;
+  km_mark: number;
+  rider_id: number;
+  rank: number;
+  crossing_time_seconds: number;
+  gap_seconds: number;
+  points_awarded: number;
+  photo_finish_score: number;
 }
 
 interface StageSeasonPointDbRow {
@@ -603,7 +618,7 @@ function mapRaceCategory(row: RaceRow): RaceCategory {
 }
 
 function mapStage(row: StageRow): Stage {
-  const summary = summarizeStageProfile(row.details_csv_file);
+  const summary = summarizeStageProfile(row.details_csv_file, row.start_elevation);
   return {
     id: row.id,
     raceId: row.race_id,
@@ -611,6 +626,7 @@ function mapStage(row: StageRow): Stage {
     date: row.date,
     profile: row.profile,
     detailsCsvFile: row.details_csv_file,
+    startElevation: row.start_elevation,
     distanceKm: summary.distanceKm,
     elevationGainMeters: summary.elevationGainMeters,
   };
@@ -639,6 +655,7 @@ function loadFallbackStages(raceIds: number[]): StageRow[] {
         stage_number: Number(record['stage_number']),
         date: record['date'] ?? '',
         profile: record['profile'] as Stage['profile'],
+        start_elevation: Number(record['start_elevation']),
         details_csv_file: record['details_csv_file'] ?? '',
       } satisfies StageRow;
     })
@@ -1389,7 +1406,7 @@ export class GameRepository {
 
   public getStageById(id: number): Stage | null {
     const row = this.db.prepare(`
-      SELECT id, race_id, stage_number, date, profile, details_csv_file
+      SELECT id, race_id, stage_number, date, profile, start_elevation, details_csv_file
       FROM stages
       WHERE id = ?
     `).get(id) as StageRow | undefined;
@@ -1431,6 +1448,15 @@ export class GameRepository {
       timeSeconds: row.time_seconds,
       gapSeconds: row.time_seconds - leaderTime,
     }));
+  }
+
+  public getPreviousGcStandingsForStage(stageId: number): RealtimeGcStanding[] {
+    const stage = this.getStageById(stageId);
+    if (!stage) {
+      return [];
+    }
+
+    return this.getPreviousGcStandings(stage.raceId, stage.stageNumber);
   }
 
   public getStageResults(stageId: number): StageResultsPayload | null {
@@ -1488,6 +1514,14 @@ export class GameRepository {
 
     const uciPointsByRiderAndAwardType = this.loadStageUciPointsByRiderAndAwardType(stageId);
     const uciPointsByTeamId = this.loadStageUciPointsByTeamId(stageId);
+    const previousGcStandings = meta.stage_number > 1
+      ? this.getPreviousGcStandingsForStage(stageId)
+      : [];
+    const previousGcRanks = previousGcStandings.length > 0
+      ? new Map(
+          previousGcStandings.map((standing) => [standing.riderId, standing.rank] as const),
+        )
+      : new Map<number, number>();
 
     const groupedRows = new Map<number, StageResultDbRow[]>();
     for (const row of rows) {
@@ -1504,19 +1538,28 @@ export class GameRepository {
         }
 
         const leaderTime = typeRows[0]?.time_seconds ?? null;
-        const mappedRows: RaceClassificationRow[] = typeRows.map((row) => ({
-          rank: row.rank,
-          riderId: row.rider_id,
-          riderName: row.rider_id == null
-            ? null
-            : `${row.rider_first_name ?? ''} ${row.rider_last_name ?? ''}`.trim(),
-          teamId: row.team_id,
-          teamName: row.team_name ?? '',
-          timeSeconds: row.time_seconds,
-          gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
-          points: row.points,
-          uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
-        }));
+        const isGcClassification = resultType.id === RESULT_TYPE_IDS.gc;
+        const mappedRows: RaceClassificationRow[] = typeRows.map((row) => {
+          const previousGcRank = isGcClassification && row.rider_id != null
+            ? previousGcRanks.get(row.rider_id) ?? null
+            : null;
+
+          return {
+            rank: row.rank,
+            riderId: row.rider_id,
+            riderName: row.rider_id == null
+              ? null
+              : `${row.rider_first_name ?? ''} ${row.rider_last_name ?? ''}`.trim(),
+            teamId: row.team_id,
+            teamName: row.team_name ?? '',
+            timeSeconds: row.time_seconds,
+            gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
+            points: row.points,
+            uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
+            gcPreviousRank: isGcClassification ? previousGcRank : undefined,
+            gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - row.rank : null,
+          };
+        });
 
         return {
           resultTypeId: resultType.id,
@@ -1538,7 +1581,54 @@ export class GameRepository {
         name: resultType.name,
       })) satisfies ResultType[],
       classifications,
+      previousGcStandings,
+      markerClassifications: tableExists(this.db, 'stage_marker_results')
+        ? this.loadStageMarkerClassifications(stageId)
+        : [],
     };
+  }
+
+  private loadStageMarkerClassifications(stageId: number): StageMarkerClassification[] {
+    const rows = this.db.prepare(`
+      SELECT
+        marker_key,
+        marker_label,
+        marker_type,
+        marker_category,
+        km_mark,
+        rider_id,
+        rank,
+        crossing_time_seconds,
+        gap_seconds,
+        points_awarded,
+        photo_finish_score
+      FROM stage_marker_results
+      WHERE stage_id = ?
+      ORDER BY marker_key ASC, rank ASC
+    `).all(stageId) as StageMarkerResultDbRow[];
+
+    const grouped = new Map<string, StageMarkerResultDbRow[]>();
+    for (const row of rows) {
+      const bucket = grouped.get(row.marker_key) ?? [];
+      bucket.push(row);
+      grouped.set(row.marker_key, bucket);
+    }
+
+    return [...grouped.entries()].map(([markerKey, markerRows]) => ({
+      markerKey,
+      markerLabel: markerRows[0]?.marker_label ?? markerKey,
+      markerType: markerRows[0]?.marker_type as StageMarkerClassification['markerType'],
+      markerCategory: markerRows[0]?.marker_category ?? null,
+      kmMark: markerRows[0]?.km_mark ?? 0,
+      entries: markerRows.map((row) => ({
+        riderId: row.rider_id,
+        rank: row.rank,
+        crossingTimeSeconds: row.crossing_time_seconds,
+        gapSeconds: row.gap_seconds,
+        pointsAwarded: row.points_awarded,
+        photoFinishScore: row.photo_finish_score,
+      })),
+    }));
   }
 
   public getStagesForRace(raceId: number): Stage[] {
@@ -1625,7 +1715,7 @@ export class GameRepository {
 
     const placeholders = raceIds.map(() => '?').join(', ');
     const stageRows = this.db.prepare(`
-      SELECT id, race_id, stage_number, date, profile, details_csv_file
+      SELECT id, race_id, stage_number, date, profile, start_elevation, details_csv_file
       FROM stages
       WHERE race_id IN (${placeholders})
       ORDER BY race_id ASC, stage_number ASC
@@ -1686,13 +1776,14 @@ export class GameRepository {
 
     if (!selectedStage) return undefined;
 
-    const summary = summarizeStageProfile(selectedStage.detailsCsvFile);
+    const summary = summarizeStageProfile(selectedStage.detailsCsvFile, selectedStage.startElevation);
     return {
       stageId: selectedStage.id,
       stageNumber: selectedStage.stageNumber,
       date: selectedStage.date,
       profile: selectedStage.profile,
       detailsCsvFile: selectedStage.detailsCsvFile,
+      startElevation: selectedStage.startElevation,
       distanceKm: summary.distanceKm,
       elevationGainMeters: summary.elevationGainMeters,
     };

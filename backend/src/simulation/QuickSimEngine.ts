@@ -8,6 +8,8 @@ import {
   ParsedStageSegment,
   QuickSimResponse,
   Race,
+  RealtimeStageCommitRequest,
+  StageMarkerClassification,
   RealtimeStageCommitEntry,
   ResultType,
   Rider,
@@ -80,8 +82,15 @@ interface TeamMetricRow {
 }
 
 interface MarkerAtKm {
+  key: string;
+  label: string;
   kmMark: number;
   marker: StageMarker;
+}
+
+interface StageSimulationOutcome {
+  performance: PerformanceEntry[];
+  markerClassifications: StageMarkerClassification[];
 }
 
 interface ResultInsertRow {
@@ -90,6 +99,21 @@ interface ResultInsertRow {
   teamId: number | null;
   timeSeconds: number | null;
   points: number | null;
+}
+
+interface StageMarkerResultInsertRow {
+  markerKey: string;
+  markerLabel: string;
+  markerType: StageMarker['type'];
+  markerCategory: StageMarkerCategory | null;
+  kmMark: number;
+  riderId: number;
+  teamId: number;
+  rank: number;
+  crossingTimeSeconds: number;
+  gapSeconds: number;
+  pointsAwarded: number;
+  photoFinishScore: number;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -128,6 +152,25 @@ function resolveFormBonus(rider: Rider): number {
   return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
 
+function normalizeMarkerClassifications(classifications: StageMarkerClassification[]): StageMarkerClassification[] {
+  return classifications.map((classification) => ({
+    ...classification,
+    entries: [...classification.entries].sort((left, right) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId),
+  }));
+}
+
+function buildStageBoundaryMarkerKey(segmentIndex: number, boundary: 'start' | 'end', markerIndex: number, marker: StageMarker): string {
+  return `${marker.type}:${segmentIndex}:${boundary}:${markerIndex}`;
+}
+
+function buildDefaultMarkerLabel(marker: StageMarker, ordinal: number): string {
+  if (marker.type === 'sprint_intermediate') return `SZ ${ordinal}`;
+  if (marker.type === 'climb_top') return `Berg ${ordinal}`;
+  if (marker.type === 'climb_start') return `Anstieg ${ordinal}`;
+  if (marker.type === 'start') return 'Start';
+  return 'Ziel';
+}
+
 export class QuickSimEngine {
   private readonly repo: GameRepository;
 
@@ -138,14 +181,17 @@ export class QuickSimEngine {
   public simulateStage(stageId: number): QuickSimResponse {
     const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
 
-    const performance = stage.profile === 'ITT'
-      ? this.simulateTimeTrialStage(race, stage, riders, teamsById)
+    const outcome: StageSimulationOutcome = stage.profile === 'ITT'
+      ? {
+          performance: this.simulateTimeTrialStage(race, stage, riders, teamsById),
+          markerClassifications: [],
+        }
       : this.simulateMassStartStage(race, stage, riders, teamsById);
 
-    return this.persistStagePerformance(race, stage, performance);
+    return this.persistStagePerformance(race, stage, outcome.performance, outcome.markerClassifications);
   }
 
-  public commitRealtimeStage(stageId: number, entries: RealtimeStageCommitEntry[]): QuickSimResponse {
+  public commitRealtimeStage(stageId: number, entries: RealtimeStageCommitEntry[], markerClassifications: StageMarkerClassification[] = []): QuickSimResponse {
     const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
     const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
     const sanitizedEntries = [...entries]
@@ -195,12 +241,15 @@ export class QuickSimEngine {
       throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
     }
 
+    const normalizedMarkerClassifications = normalizeMarkerClassifications(markerClassifications);
+    const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, performance, normalizedMarkerClassifications);
+
     this.applyFinishLineAwards(race, stage, performance, {
       awardPoints: stage.profile !== 'TTT',
       awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
     });
 
-    return this.persistStagePerformance(race, stage, performance);
+    return this.persistStagePerformance(race, stage, performance, awardedMarkerClassifications);
   }
 
   private loadSimulatableStageContext(stageId: number): {
@@ -270,7 +319,76 @@ export class QuickSimEngine {
     });
   }
 
-  private persistStagePerformance(race: Race, stage: Stage, performance: PerformanceEntry[]): QuickSimResponse {
+  private applyMarkerClassificationAwards(
+    race: Race,
+    performance: PerformanceEntry[],
+    markerClassifications: StageMarkerClassification[],
+  ): StageMarkerClassification[] {
+    if (markerClassifications.length === 0) {
+      return [];
+    }
+
+    if (!race.isStageRace || !race.category?.bonusSystem) {
+      return markerClassifications.map((classification) => ({
+        ...classification,
+        entries: classification.entries.map((entry) => ({
+          ...entry,
+          pointsAwarded: entry.pointsAwarded ?? 0,
+        })),
+      }));
+    }
+
+    const sprintPointValues = parseRankedValues(race.category.bonusSystem.pointsSprintIntermediate);
+    const sprintBonusValues = parseRankedValues(race.category.bonusSystem.bonusSecondsIntermediate);
+    const mountainPointValues = {
+      HC: parseRankedValues(race.category.bonusSystem.pointsMountainHc),
+      '1': parseRankedValues(race.category.bonusSystem.pointsMountainCat1),
+      '2': parseRankedValues(race.category.bonusSystem.pointsMountainCat2),
+      '3': parseRankedValues(race.category.bonusSystem.pointsMountainCat3),
+      '4': parseRankedValues(race.category.bonusSystem.pointsMountainCat4),
+    } satisfies Record<Exclude<StageMarkerCategory, 'Sprint'>, number[]>;
+
+    const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
+
+    return markerClassifications.map((classification) => {
+      const awardedEntries = classification.entries.map((markerEntry, index) => {
+        let pointsAwarded = 0;
+        const performanceEntry = performanceByRiderId.get(markerEntry.riderId) ?? null;
+
+        if (classification.markerType === 'sprint_intermediate') {
+          pointsAwarded = sprintPointValues[index] ?? 0;
+          if (performanceEntry) {
+            performanceEntry.points += pointsAwarded;
+            performanceEntry.gcBonusSeconds += sprintBonusValues[index] ?? 0;
+          }
+        }
+
+        if (classification.markerType === 'climb_top' && classification.markerCategory != null && classification.markerCategory !== 'Sprint') {
+          pointsAwarded = mountainPointValues[classification.markerCategory as Exclude<StageMarkerCategory, 'Sprint'>][index] ?? 0;
+          if (performanceEntry) {
+            performanceEntry.mountainPoints += pointsAwarded;
+          }
+        }
+
+        return {
+          ...markerEntry,
+          pointsAwarded,
+        };
+      });
+
+      return {
+        ...classification,
+        entries: awardedEntries,
+      };
+    });
+  }
+
+  private persistStagePerformance(
+    race: Race,
+    stage: Stage,
+    performance: PerformanceEntry[],
+    markerClassifications: StageMarkerClassification[] = [],
+  ): QuickSimResponse {
     const rankedPerformance = [...performance].sort(comparePerformanceEntries);
 
     const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
@@ -363,6 +481,13 @@ export class QuickSimEngine {
         race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const insertMarkerResult = this.db.prepare(`
+      INSERT INTO stage_marker_results (
+        race_id, stage_id, marker_key, marker_label, marker_type, marker_category, km_mark,
+        rider_id, team_id, rank, crossing_time_seconds, gap_seconds, points_awarded, photo_finish_score
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
 
     this.db.transaction(() => {
       for (const row of stageRows) {
@@ -388,6 +513,28 @@ export class QuickSimEngine {
           timeSeconds: row.timeSeconds,
           points: row.points,
         });
+      }
+      for (const classification of markerClassifications) {
+        for (const entry of classification.entries) {
+          const performanceEntry = performanceByRiderId.get(entry.riderId);
+          if (!performanceEntry) continue;
+          insertMarkerResult.run(
+            race.id,
+            stage.id,
+            classification.markerKey,
+            classification.markerLabel,
+            classification.markerType,
+            classification.markerCategory,
+            classification.kmMark,
+            entry.riderId,
+            performanceEntry.team.id,
+            entry.rank,
+            entry.crossingTimeSeconds,
+            entry.gapSeconds,
+            entry.pointsAwarded ?? 0,
+            entry.photoFinishScore,
+          );
+        }
       }
       this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
     })();
@@ -469,27 +616,14 @@ export class QuickSimEngine {
     stage: Stage,
     riders: Rider[],
     teamsById: Map<number, Team>,
-  ): PerformanceEntry[] {
-    const summary = StageParser.summarizeStageProfile(stage.detailsCsvFile);
-    const markers = summary.points.flatMap((point) => point.markers.map((marker) => ({ kmMark: point.kmMark, marker })));
-    const sprintPointValues = race.isStageRace
-      ? parseRankedValues(race.category?.bonusSystem?.pointsSprintIntermediate)
-      : [];
-    const sprintBonusValues = race.isStageRace
-      ? parseRankedValues(race.category?.bonusSystem?.bonusSecondsIntermediate)
-      : [];
+  ): StageSimulationOutcome {
+    const summary = StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation);
     const finishBonusValues = parseRankedValues(race.category?.bonusSystem?.bonusSecondsFinal);
     // Finish-line sprint points feed the race-internal points jersey, not season stage awards.
     const finishPointValues = race.isStageRace
       ? parseRankedValues(race.category?.bonusSystem?.pointsSprintFinish)
       : [];
-    const mountainPointValues = {
-      HC: parseRankedValues(race.category?.bonusSystem?.pointsMountainHc),
-      '1': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat1),
-      '2': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat2),
-      '3': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat3),
-      '4': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat4),
-    } satisfies Record<Exclude<StageMarkerCategory, 'Sprint'>, number[]>;
+    const markers = this.collectIntermediateMarkers(summary);
 
     const states = riders.map((rider) => {
       const team = teamsById.get(rider.activeTeamId ?? -1);
@@ -550,41 +684,92 @@ export class QuickSimEngine {
       entry.gcBonusSeconds += bonusSeconds;
     });
 
-    const sprintPointsByRider = new Map<number, number>();
-    const sprintBonusesByRider = new Map<number, number>();
-    for (const marker of markers.filter((candidate) => candidate.marker.type === 'sprint_intermediate')) {
-      const sprintRanking = [...sorted]
-        .sort((left, right) => this.resolveSprintScore(right.rider, marker.kmMark / summary.distanceKm, right.dayForm) - this.resolveSprintScore(left.rider, marker.kmMark / summary.distanceKm, left.dayForm));
-      sprintPointValues.forEach((points, index) => {
-        const entry = sprintRanking[index];
-        if (!entry) return;
-        appendToNumberMap(sprintPointsByRider, entry.rider.id, points);
-      });
-      sprintBonusValues.forEach((bonusSeconds, index) => {
-        const entry = sprintRanking[index];
-        if (!entry) return;
-        appendToNumberMap(sprintBonusesByRider, entry.rider.id, bonusSeconds);
-      });
-    }
+    const markerClassifications = this.applyMarkerClassificationAwards(
+      race,
+      sorted,
+      markers.map((marker) => this.buildQuickSimMarkerClassification(marker, sorted, summary.distanceKm)),
+    );
 
-    const mountainPointsByRider = new Map<number, number>();
-    for (const marker of markers.filter((candidate) => candidate.marker.type === 'climb_top' && candidate.marker.cat != null && candidate.marker.cat !== 'Sprint')) {
-      const pointValues = mountainPointValues[marker.marker.cat as Exclude<StageMarkerCategory, 'Sprint'>];
-      const climbingRanking = [...sorted]
-        .sort((left, right) => this.resolveClimbScore(right.rider, marker.kmMark / summary.distanceKm, right.dayForm) - this.resolveClimbScore(left.rider, marker.kmMark / summary.distanceKm, left.dayForm));
-      pointValues.forEach((points, index) => {
-        const entry = climbingRanking[index];
-        if (!entry) return;
-        appendToNumberMap(mountainPointsByRider, entry.rider.id, points);
-      });
-    }
+    return {
+      performance: sorted,
+      markerClassifications,
+    };
+  }
 
-    return sorted.map((entry) => ({
-      ...entry,
-      points: entry.points + (sprintPointsByRider.get(entry.rider.id) ?? 0),
-      gcBonusSeconds: entry.gcBonusSeconds + (sprintBonusesByRider.get(entry.rider.id) ?? 0),
-      mountainPoints: mountainPointsByRider.get(entry.rider.id) ?? 0,
-    }));
+  private collectIntermediateMarkers(summary: { segments: ParsedStageSegment[]; distanceKm: number }): MarkerAtKm[] {
+    const markers: MarkerAtKm[] = [];
+    const counts = new Map<StageMarker['type'], number>();
+
+    summary.segments.forEach((segment, segmentIndex) => {
+      (segment.start_markers ?? []).forEach((marker, markerIndex) => {
+        if (marker.type !== 'sprint_intermediate' && marker.type !== 'climb_top') {
+          return;
+        }
+        const ordinal = (counts.get(marker.type) ?? 0) + 1;
+        counts.set(marker.type, ordinal);
+        markers.push({
+          key: buildStageBoundaryMarkerKey(segmentIndex, 'start', markerIndex, marker),
+          label: marker.name ?? buildDefaultMarkerLabel(marker, ordinal),
+          kmMark: segment.start_km,
+          marker,
+        });
+      });
+
+      (segment.end_markers ?? []).forEach((marker, markerIndex) => {
+        if (marker.type !== 'sprint_intermediate' && marker.type !== 'climb_top') {
+          return;
+        }
+        const ordinal = (counts.get(marker.type) ?? 0) + 1;
+        counts.set(marker.type, ordinal);
+        markers.push({
+          key: buildStageBoundaryMarkerKey(segmentIndex, 'end', markerIndex, marker),
+          label: marker.name ?? buildDefaultMarkerLabel(marker, ordinal),
+          kmMark: segment.end_km,
+          marker,
+        });
+      });
+    });
+
+    return markers.sort((left, right) => left.kmMark - right.kmMark || left.key.localeCompare(right.key, 'de'));
+  }
+
+  private buildQuickSimMarkerClassification(
+    marker: MarkerAtKm,
+    sortedPerformance: RiderStageState[],
+    stageDistanceKm: number,
+  ): StageMarkerClassification {
+    const progressFactor = stageDistanceKm > 0 ? Math.max(0.02, Math.min(1, marker.kmMark / stageDistanceKm)) : 1;
+    const ranking = [...sortedPerformance].sort((left, right) => {
+      if (marker.marker.type === 'sprint_intermediate') {
+        return this.resolveSprintScore(right.rider, progressFactor, right.dayForm) - this.resolveSprintScore(left.rider, progressFactor, left.dayForm)
+          || left.rider.id - right.rider.id;
+      }
+
+      return this.resolveClimbScore(right.rider, progressFactor, right.dayForm) - this.resolveClimbScore(left.rider, progressFactor, left.dayForm)
+        || left.rider.id - right.rider.id;
+    });
+
+    const leaderCrossingTime = roundSeconds((ranking[0]?.stageTimeSeconds ?? 0) * progressFactor);
+    return {
+      markerKey: marker.key,
+      markerLabel: marker.label,
+      markerType: marker.marker.type,
+      markerCategory: marker.marker.cat,
+      kmMark: marker.kmMark,
+      entries: ranking.map((entry, index) => {
+        const crossingTimeSeconds = roundSeconds(entry.stageTimeSeconds * progressFactor);
+        const photoFinishScore = marker.marker.type === 'sprint_intermediate'
+          ? this.resolveSprintScore(entry.rider, progressFactor, entry.dayForm)
+          : this.resolveClimbScore(entry.rider, progressFactor, entry.dayForm);
+        return {
+          riderId: entry.rider.id,
+          rank: index + 1,
+          crossingTimeSeconds,
+          gapSeconds: Math.max(0, crossingTimeSeconds - leaderCrossingTime),
+          photoFinishScore,
+        };
+      }),
+    };
   }
 
   private simulateMassStartSegment(

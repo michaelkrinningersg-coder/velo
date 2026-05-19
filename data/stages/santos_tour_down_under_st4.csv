@@ -1,6 +1,5 @@
-km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat
-0.0,36,Flat,3,6,start,Santos Tour Down Under Stage 3,
-37.0,64,Flat,4,5,sprint_intermediate,Sprint Lobethal,Sprint
-90.0,132,Hill,5,6,climb_start,Norton Summit,
-119.5,418,Flat,7,7,climb_top,Norton Summit,1
-139.4,362,Hill,6,6,finish_hill,Santos Tour Down Under Stage 3,
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+37.00,0.076,Flat,3,6,start,Santos Tour Down Under Stage 3,,sprint_intermediate,Sprint Lobethal,Sprint
+53.00,0.128,Flat,4,5,,,,,,
+29.50,0.969,Hill,5,6,climb_start,Norton Summit,,climb_top,Norton Summit,1
+19.90,-0.281,Flat,7,7,,,,finish_hill,Santos Tour Down Under Stage 3,

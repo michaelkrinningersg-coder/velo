@@ -7,6 +7,7 @@ import type {
   StageEditorImportRequest,
   StageFinishMarkerType,
   StageMarker,
+  StageEditorSegment,
   StageEditorWaypoint,
   StageProfile,
   StageTerrain,
@@ -40,6 +41,10 @@ function round2(value: number): number {
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -364,6 +369,75 @@ function buildWaypoints(points: ProfilePoint[]): StageEditorWaypoint[] {
   }));
 }
 
+function buildSegments(points: ProfilePoint[]): StageEditorSegment[] {
+  return points.slice(0, -1).map((point, index) => {
+    const next = points[index + 1];
+    const lengthKm = round2(next.distanceKm - point.distanceKm);
+    const gradientPercent = lengthKm > 0
+      ? round3(((next.elevation - point.elevation) / (lengthKm * 1000)) * 100)
+      : 0;
+
+    return {
+      startElevation: Math.round(point.elevation),
+      lengthKm,
+      gradientPercent,
+      terrain: 'Flat',
+      techLevel: 5,
+      windExp: 5,
+      markers: index === 0
+        ? [{ type: 'start', name: 'Start', cat: null }]
+        : [],
+      endMarkers: index === points.length - 2
+        ? [{ type: 'finish_flat', name: 'Ziel', cat: null }]
+        : [],
+    };
+  });
+}
+
+function deriveWaypointsFromSegments(segments: StageEditorSegment[]): StageEditorWaypoint[] {
+  if (segments.length === 0) {
+    return [];
+  }
+
+  const waypoints: StageEditorWaypoint[] = [];
+  let kmMark = 0;
+  let elevation = segments[0].startElevation;
+
+  waypoints.push({
+    kmMark: 0,
+    elevation,
+    terrain: segments[0].terrain,
+    techLevel: segments[0].techLevel,
+    windExp: segments[0].windExp,
+    markers: normalizeMarkers(segments[0].markers),
+  });
+
+  segments.forEach((segment) => {
+    const endKm = round2(kmMark + segment.lengthKm);
+    const endElevation = Math.round(segment.startElevation + ((segment.lengthKm * 1000) * (segment.gradientPercent / 100)));
+
+    const previousWaypoint = waypoints[waypoints.length - 1];
+    previousWaypoint.terrain = segment.terrain;
+    previousWaypoint.techLevel = segment.techLevel;
+    previousWaypoint.windExp = segment.windExp;
+    previousWaypoint.markers = normalizeMarkers([...previousWaypoint.markers, ...segment.markers]);
+
+    waypoints.push({
+      kmMark: endKm,
+      elevation: endElevation,
+      terrain: segment.terrain,
+      techLevel: segment.techLevel,
+      windExp: segment.windExp,
+      markers: normalizeMarkers(segment.endMarkers),
+    });
+
+    kmMark = endKm;
+    elevation = endElevation;
+  });
+
+  return waypoints;
+}
+
 function inferFormat(fileName: string, fileContent: string): RouteImportFormat {
   const lowerName = fileName.toLowerCase();
   if (lowerName.endsWith('.gpx')) return 'gpx';
@@ -373,74 +447,85 @@ function inferFormat(fileName: string, fileContent: string): RouteImportFormat {
   throw new Error('Nur GPX- und TCX-Dateien werden unterstützt.');
 }
 
-function sanitizeWaypoints(waypoints: StageEditorWaypoint[]): StageEditorWaypoint[] {
-  if (waypoints.length < 2) {
-    throw new Error('Mindestens zwei Wegpunkte sind erforderlich.');
+function sanitizeSegments(segments: StageEditorSegment[]): StageEditorSegment[] {
+  if (segments.length === 0) {
+    throw new Error('Mindestens ein Segment ist erforderlich.');
   }
 
-  const sanitized = [...waypoints]
-    .map((waypoint) => ({
-      ...waypoint,
-      kmMark: round2(waypoint.kmMark),
-      elevation: Math.round(waypoint.elevation),
-      terrain: waypoint.terrain,
-      techLevel: clamp(Math.round(waypoint.techLevel), 1, 10),
-      windExp: clamp(Math.round(waypoint.windExp), 1, 10),
-      markers: normalizeMarkers(waypoint.markers),
+  const sanitized = [...segments]
+    .map((segment) => ({
+      ...segment,
+      startElevation: Math.round(segment.startElevation),
+      lengthKm: round2(segment.lengthKm),
+      gradientPercent: round3(segment.gradientPercent),
+      terrain: segment.terrain,
+      techLevel: clamp(Math.round(segment.techLevel), 1, 10),
+      windExp: clamp(Math.round(segment.windExp), 1, 10),
+      markers: normalizeMarkers(segment.markers),
+      endMarkers: normalizeMarkers(segment.endMarkers),
     }))
-    .sort((left, right) => left.kmMark - right.kmMark);
+    .filter((segment) => segment.lengthKm > 0);
 
   sanitized[0] = {
     ...sanitized[0],
-    kmMark: 0,
     markers: ensureMarker(sanitized[0].markers, 'start', 'Start'),
   };
   sanitized[sanitized.length - 1] = {
     ...sanitized[sanitized.length - 1],
-    markers: ensureFinishMarker(sanitized[sanitized.length - 1].markers, 'Ziel'),
+    endMarkers: ensureFinishMarker(sanitized[sanitized.length - 1].endMarkers, 'Ziel'),
   };
 
-  for (let index = 1; index < sanitized.length; index += 1) {
-    const deltaKm = round2(sanitized[index].kmMark - sanitized[index - 1].kmMark);
-    if (deltaKm < MIN_SEGMENT_KM) {
-      throw new Error(`Segment ${index} ist zu kurz (${deltaKm.toFixed(2)} km). Minimum sind ${MIN_SEGMENT_KM.toFixed(1)} km.`);
+  for (let index = 0; index < sanitized.length; index += 1) {
+    if (sanitized[index].lengthKm < MIN_SEGMENT_KM) {
+      throw new Error(`Segment ${index + 1} ist zu kurz (${sanitized[index].lengthKm.toFixed(2)} km). Minimum sind ${MIN_SEGMENT_KM.toFixed(1)} km.`);
     }
   }
 
-  const totalDistanceKm = sanitized[sanitized.length - 1].kmMark;
-  return sanitized.map((waypoint) => {
+  const totalDistanceKm = round2(sanitized.reduce((sum, segment) => sum + segment.lengthKm, 0));
+  let segmentStartKm = 0;
+  return sanitized.map((segment) => {
+    const nextSegment = {
+      ...segment,
+      startElevation: Math.round(segment.startElevation),
+    };
+    const filteredMarkers = nextSegment.markers.filter((marker) => marker.type !== 'sprint_intermediate' || segmentStartKm <= totalDistanceKm - SPRINT_CUT_KM);
+    segmentStartKm = round2(segmentStartKm + nextSegment.lengthKm);
     return {
-      ...waypoint,
-      markers: waypoint.markers.filter((marker) => marker.type !== 'sprint_intermediate' || waypoint.kmMark <= totalDistanceKm - SPRINT_CUT_KM),
+      ...nextSegment,
+      markers: filteredMarkers,
     };
   });
 }
 
 function buildStagesCsv(payload: StageEditorExportRequest): string {
   const { metadata } = payload;
-  const header = 'id,race_id,stage_number,date,profile,details_csv_file';
+  const header = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file';
   const row = [
     metadata.stageId,
     metadata.raceId,
     metadata.stageNumber,
     metadata.date,
     metadata.profile,
+    metadata.startElevation,
     metadata.detailsCsvFile,
   ].map(escapeCsv).join(',');
   return `${header}\n${row}\n`;
 }
 
-function buildStageDetailsCsv(waypoints: StageEditorWaypoint[]): string {
-  const header = 'km_mark,elevation,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat';
-  const rows = waypoints.map((waypoint) => [
-    waypoint.kmMark.toFixed(2),
-    waypoint.elevation,
-    waypoint.terrain,
-    waypoint.techLevel,
-    waypoint.windExp,
-    joinMarkerValues(waypoint.markers, 'type'),
-    joinMarkerValues(waypoint.markers, 'name'),
-    joinMarkerValues(waypoint.markers, 'cat'),
+function buildStageDetailsCsv(segments: StageEditorSegment[]): string {
+  const header = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
+  const rows = segments.map((segment) => [
+    segment.lengthKm.toFixed(2),
+    segment.gradientPercent.toFixed(3),
+    segment.terrain,
+    segment.techLevel,
+    segment.windExp,
+    joinMarkerValues(segment.markers, 'type'),
+    joinMarkerValues(segment.markers, 'name'),
+    joinMarkerValues(segment.markers, 'cat'),
+    joinMarkerValues(segment.endMarkers, 'type'),
+    joinMarkerValues(segment.endMarkers, 'name'),
+    joinMarkerValues(segment.endMarkers, 'cat'),
   ].map(escapeCsv).join(','));
   return `${header}\n${rows.join('\n')}\n`;
 }
@@ -463,11 +548,17 @@ function validateExportRequest(payload: StageEditorExportRequest): StageEditorEx
     throw new Error('stageNumber muss eine positive Ganzzahl sein.');
   }
 
+  const sanitizedSegments = sanitizeSegments(draft.segments);
+
   return {
-    metadata,
+    metadata: {
+      ...metadata,
+      startElevation: sanitizedSegments[0].startElevation,
+    },
     draft: {
       ...draft,
-      waypoints: sanitizeWaypoints(draft.waypoints),
+      segments: sanitizedSegments,
+      waypoints: deriveWaypointsFromSegments(sanitizedSegments),
     },
   };
 }
@@ -490,6 +581,7 @@ export class RouteImporter {
     );
     const climbs = detectClimbs(simplifiedProfile);
     const elevationGainMeters = calculateElevationGain(profile);
+    const segments = buildSegments(simplifiedProfile);
     const waypoints = buildWaypoints(simplifiedProfile);
     const totalDistanceKm = round2(simplifiedProfile[simplifiedProfile.length - 1].distanceKm);
 
@@ -499,6 +591,7 @@ export class RouteImporter {
       totalDistanceKm,
       elevationGainMeters,
       suggestedProfile: suggestProfile(totalDistanceKm, elevationGainMeters, climbs),
+      segments,
       waypoints,
       climbs,
       warnings: totalDistanceKm < 5 ? ['Die importierte Strecke ist sehr kurz. Prüfe, ob die Quelldatei vollständig ist.'] : [],
@@ -509,7 +602,7 @@ export class RouteImporter {
     const validated = validateExportRequest(request);
     return {
       stagesCsv: buildStagesCsv(validated),
-      stageDetailsCsv: buildStageDetailsCsv(validated.draft.waypoints),
+      stageDetailsCsv: buildStageDetailsCsv(validated.draft.segments),
       stagesFileName: `stage_${validated.metadata.stageId}.csv`,
       stageDetailsFileName: validated.metadata.detailsCsvFile,
     };

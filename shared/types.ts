@@ -223,6 +223,24 @@ export interface StageMarker {
   cat: StageMarkerCategory | null;
 }
 
+export interface StageMarkerClassificationEntry {
+  riderId: number;
+  rank: number;
+  crossingTimeSeconds: number;
+  gapSeconds: number;
+  photoFinishScore: number;
+  pointsAwarded?: number;
+}
+
+export interface StageMarkerClassification {
+  markerKey: string;
+  markerLabel: string;
+  markerType: StageMarkerType;
+  markerCategory: StageMarkerCategory | null;
+  kmMark: number;
+  entries: StageMarkerClassificationEntry[];
+}
+
 export interface StageProfilePoint {
   kmMark: number;
   elevation: number;
@@ -230,6 +248,17 @@ export interface StageProfilePoint {
   techLevel: number;
   windExp: number;
   markers: StageMarker[];
+}
+
+export interface StageCsvSegment {
+  startElevation: number;
+  lengthKm: number;
+  gradientPercent: number;
+  terrain: StageTerrain;
+  techLevel: number;
+  windExp: number;
+  markers: StageMarker[];
+  endMarkers: StageMarker[];
 }
 
 export interface ParsedStageSegment {
@@ -293,6 +322,7 @@ export interface RaceStageSummary {
   date: string;
   profile: StageProfile;
   detailsCsvFile: string;
+  startElevation: number;
   distanceKm: number;
   elevationGainMeters: number;
 }
@@ -320,6 +350,7 @@ export interface Stage {
   date: string;
   profile: StageProfile;
   detailsCsvFile: string;
+  startElevation: number;
   distanceKm?: number;
   elevationGainMeters?: number;
 }
@@ -374,6 +405,7 @@ export interface PendingStage {
   date: string;
   profile: StageProfile;
   detailsCsvFile: string;
+  startElevation: number;
   isStageRace: boolean;
 }
 
@@ -400,6 +432,8 @@ export interface RaceClassificationRow {
   gapSeconds: number | null;
   points: number | null;
   uciPoints: number | null;
+  gcPreviousRank?: number | null;
+  gcRankDelta?: number | null;
 }
 
 export type StageResultRow = RaceClassificationRow;
@@ -419,6 +453,8 @@ export interface StageResultsPayload {
   profile: StageProfile;
   resultTypes: ResultType[];
   classifications: StageClassification[];
+  previousGcStandings?: RealtimeGcStanding[];
+  markerClassifications?: StageMarkerClassification[];
 }
 
 export interface QuickSimResponse {
@@ -446,6 +482,7 @@ export interface RealtimeGcStanding {
 
 export interface RealtimeStageCommitRequest {
   entries: RealtimeStageCommitEntry[];
+  markerClassifications?: StageMarkerClassification[];
 }
 
 export interface RaceRosterSelectionRequest {
@@ -521,6 +558,17 @@ export interface ApiResponse<T> {
 
 export type RouteImportFormat = 'gpx' | 'tcx';
 
+export interface StageEditorSegment {
+  startElevation: number;
+  lengthKm: number;
+  gradientPercent: number;
+  terrain: StageTerrain;
+  techLevel: number;
+  windExp: number;
+  markers: StageMarker[];
+  endMarkers: StageMarker[];
+}
+
 export interface StageEditorWaypoint {
   kmMark: number;
   elevation: number;
@@ -545,6 +593,7 @@ export interface StageEditorDraft {
   totalDistanceKm: number;
   elevationGainMeters: number;
   suggestedProfile: StageProfile;
+  segments: StageEditorSegment[];
   waypoints: StageEditorWaypoint[];
   climbs: StageEditorClimb[];
   warnings: string[];
@@ -562,6 +611,7 @@ export interface StageEditorMetadata {
   date: string;
   profile: StageProfile;
   detailsCsvFile: string;
+  startElevation: number;
 }
 
 export interface StageEditorExportRequest {

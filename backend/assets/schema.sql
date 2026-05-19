@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS stages (
   stage_number      INTEGER NOT NULL CHECK(stage_number > 0),
   date              TEXT    NOT NULL,
   profile           TEXT    NOT NULL CHECK(profile IN ('Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'ITT', 'TTT', 'Cobble', 'Cobble_Hill')),
+  start_elevation   REAL    NOT NULL,
   details_csv_file  TEXT    NOT NULL CHECK(length(details_csv_file) > 0 AND instr(details_csv_file, '/') = 0 AND instr(details_csv_file, '\\') = 0),
   UNIQUE(race_id, stage_number)
 );
@@ -273,6 +274,28 @@ CREATE TABLE IF NOT EXISTS results (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_rider_type
   ON results(stage_id, rider_id, result_type_id)
   WHERE rider_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS stage_marker_results (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  race_id               INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  stage_id              INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  marker_key            TEXT    NOT NULL,
+  marker_label          TEXT    NOT NULL,
+  marker_type           TEXT    NOT NULL,
+  marker_category       TEXT,
+  km_mark               REAL    NOT NULL,
+  rider_id              INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  team_id               INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  rank                  INTEGER NOT NULL CHECK(rank > 0),
+  crossing_time_seconds REAL    NOT NULL CHECK(crossing_time_seconds >= 0),
+  gap_seconds           REAL    NOT NULL CHECK(gap_seconds >= 0),
+  points_awarded        INTEGER NOT NULL DEFAULT 0 CHECK(points_awarded >= 0),
+  photo_finish_score    REAL    NOT NULL,
+  UNIQUE(stage_id, marker_key, rider_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
+  ON stage_marker_results(stage_id, marker_key, rank);
 
 -- ---- Taeglicher Fahrerzustand -------------------------------
 CREATE TABLE IF NOT EXISTS rider_daily_state (

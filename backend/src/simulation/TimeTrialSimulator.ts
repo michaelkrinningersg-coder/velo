@@ -17,7 +17,7 @@ function resolveFormBonus(rider: Rider): number {
 
 export class TimeTrialSimulator {
   static simulate(race: Race, stage: Stage, riders: Rider[]): TimeTrialResult {
-    const segments = StageParser.parseStageProfile(stage.detailsCsvFile);
+    const segments = StageParser.parseStageProfile(stage.detailsCsvFile, stage.startElevation);
     const distanceKm = segments.reduce((sum, segment) => sum + segment.length_km, 0);
 
     const entries: TimeTrialEntry[] = riders.map(rider =>

@@ -16,8 +16,10 @@ import type {
   StageMarker,
   StageEditorClimb,
   StageEditorDraft,
+  StageEditorSegment,
   StageEditorMetadata,
   StageEditorWaypoint,
+  StageMarkerClassification,
   StageMarkerCategory,
   StageMarkerType,
   StageProfile,
@@ -103,7 +105,7 @@ const STAGE_MARKER_TYPES: StageMarkerType[] = ['start', 'climb_start', 'climb_to
 const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['Sprint', '4', '3', '2', '1', 'HC'];
 const STAGE_EDITOR_MIN_SEGMENT_KM = 0.2;
 const STAGE_EDITOR_SPRINT_CUT_KM = 0.3;
-const STAGE_EDITOR_TABLE_COLUMN_COUNT = 9;
+const STAGE_EDITOR_TABLE_COLUMN_COUNT = 10;
 const STAGE_EDITOR_CLIMB_MIN_GAIN_METERS = 60;
 const STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT = 3;
 const STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_METERS = 18;
@@ -158,6 +160,82 @@ function formatRaceGap(seconds: number | null): string {
   if (seconds == null) return '–';
   if (seconds === 0) return '—';
   return `+${formatRaceTime(seconds)}`;
+}
+
+const GC_RESULT_TYPE_ID = 2;
+const POINTS_RESULT_TYPE_ID = 3;
+const MOUNTAIN_RESULT_TYPE_ID = 4;
+
+function renderGcRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
+  if (previousRank == null || delta == null || delta === 0) {
+    return '<span class="results-gc-delta results-gc-delta-neutral">●</span>';
+  }
+
+  if (delta > 0) {
+    return `<span class="results-gc-delta results-gc-delta-up"><span class="results-gc-delta-symbol">▲</span><span>${delta}</span></span>`;
+  }
+
+  return `<span class="results-gc-delta results-gc-delta-down"><span class="results-gc-delta-symbol">▼</span><span>${Math.abs(delta)}</span></span>`;
+}
+
+function resolveGcRankDelta(
+  row: StageResultsPayload['classifications'][number]['rows'][number],
+  previousGcRanks: Map<number, number>,
+): { previousRank: number | null; delta: number | null } {
+  if (row.riderId == null) {
+    return { previousRank: null, delta: null };
+  }
+
+  const previousRank = previousGcRanks.get(row.riderId) ?? row.gcPreviousRank ?? null;
+  if (previousRank == null) {
+    return { previousRank: null, delta: null };
+  }
+
+  return {
+    previousRank,
+    delta: previousRank - row.rank,
+  };
+}
+
+function formatMarkerLabel(markerType: StageMarkerType, label: string): string {
+  if (markerType === 'sprint_intermediate') {
+    return `Sprint · ${label}`;
+  }
+  if (markerType === 'climb_top') {
+    return `Bergwertung · ${label}`;
+  }
+  return label;
+}
+
+function renderMarkerClassificationsHtml(classifications: StageMarkerClassification[]): string {
+  if (classifications.length === 0) {
+    return '';
+  }
+
+  return classifications.map((classification) => {
+    const rows = classification.entries.map((entry) => {
+      const rider = state.riders.find((candidate) => candidate.id === entry.riderId) ?? null;
+      const riderName = rider ? `${rider.firstName} ${rider.lastName}` : `Fahrer ${entry.riderId}`;
+      return `
+        <div class="results-marker-row">
+          <div class="results-marker-rank">${entry.rank}.</div>
+          <div class="results-marker-name">${esc(riderName)}</div>
+          <div class="results-marker-time">${esc(formatRaceTime(entry.crossingTimeSeconds))}</div>
+          <div class="results-marker-gap">${esc(formatRaceGap(entry.gapSeconds))}</div>
+          <div class="results-marker-points">${entry.pointsAwarded != null && entry.pointsAwarded > 0 ? entry.pointsAwarded : '–'}</div>
+        </div>`;
+    }).join('');
+
+    const categoryText = classification.markerCategory ? ` · Kat. ${classification.markerCategory}` : '';
+    return `
+      <section class="results-marker-card">
+        <div class="results-marker-card-head">
+          <h4>${esc(formatMarkerLabel(classification.markerType, classification.markerLabel))}</h4>
+          <div class="results-marker-card-meta">${esc(`${classification.kmMark.toFixed(1).replace('.', ',')} km${categoryText}`)}</div>
+        </div>
+        <div class="results-marker-list">${rows}</div>
+      </section>`;
+  }).join('');
 }
 
 function formatAverageSpeed(distanceKm: number, timeSeconds: number): string {
@@ -419,8 +497,27 @@ function terrainOptionsHtml(selected: StageTerrain): string {
     `<option value="${terrain}"${terrain === selected ? ' selected' : ''}>${esc(terrain)}</option>`).join('');
 }
 
-function markerTypeOptionsHtml(selected: StageMarkerType): string {
-  return STAGE_MARKER_TYPES.map((markerType) =>
+function markerTypeOptionsHtml(selected: StageMarkerType, scope: 'start' | 'end' = 'start', segmentIndex = 0, totalSegments = 1): string {
+  const allowedTypes = STAGE_MARKER_TYPES.filter((markerType) => {
+    if (scope === 'start') {
+      if (markerType === 'start') return segmentIndex === 0;
+      return markerType === 'climb_start' || markerType === 'sprint_intermediate';
+    }
+
+    if (markerType === 'start' || markerType === 'climb_start') {
+      return false;
+    }
+    if (isFinishMarkerType(markerType)) {
+      return segmentIndex === totalSegments - 1;
+    }
+    return markerType === 'climb_top' || markerType === 'sprint_intermediate';
+  });
+
+  const optionTypes = allowedTypes.includes(selected)
+    ? allowedTypes
+    : [selected, ...allowedTypes.filter((markerType) => markerType !== selected)];
+
+  return optionTypes.map((markerType) =>
     `<option value="${markerType}"${markerType === selected ? ' selected' : ''}>${esc(markerType)}</option>`).join('');
 }
 
@@ -460,15 +557,105 @@ function normalizeWaypointMarkers(waypoint: StageEditorWaypoint & {
   }];
 }
 
+function normalizeSegmentMarkers(markers: StageMarker[] | undefined): StageMarker[] {
+  return sortStageMarkers(Array.isArray(markers) ? markers : []);
+}
+
+function buildStageEditorSegmentsFromWaypoints(waypoints: StageEditorWaypoint[]): StageEditorSegment[] {
+  return waypoints.slice(0, -1).map((waypoint, index) => {
+    const nextWaypoint = waypoints[index + 1];
+    const lengthKm = roundStageEditorKm(nextWaypoint.kmMark - waypoint.kmMark);
+    const gradientPercent = lengthKm > 0
+      ? roundStageEditorOneDecimal(((nextWaypoint.elevation - waypoint.elevation) / (lengthKm * 1000)) * 100)
+      : 0;
+
+    return {
+      startElevation: waypoint.elevation,
+      lengthKm,
+      gradientPercent,
+      terrain: waypoint.terrain,
+      techLevel: waypoint.techLevel,
+      windExp: waypoint.windExp,
+      markers: sortStageMarkers(waypoint.markers),
+      endMarkers: sortStageMarkers(nextWaypoint.markers),
+    };
+  });
+}
+
+function buildStageEditorWaypointsFromSegments(segments: StageEditorSegment[]): StageEditorWaypoint[] {
+  if (segments.length === 0) return [];
+
+  const waypoints: StageEditorWaypoint[] = [{
+    kmMark: 0,
+    elevation: segments[0].startElevation,
+    terrain: segments[0].terrain,
+    techLevel: segments[0].techLevel,
+    windExp: segments[0].windExp,
+    markers: sortStageMarkers(segments[0].markers),
+  }];
+
+  let cumulativeKm = 0;
+  segments.forEach((segment) => {
+    cumulativeKm = roundStageEditorKm(cumulativeKm + segment.lengthKm);
+    const endElevation = Math.round(segment.startElevation + ((segment.lengthKm * 1000) * (segment.gradientPercent / 100)));
+    const previousWaypoint = waypoints[waypoints.length - 1];
+    previousWaypoint.terrain = segment.terrain;
+    previousWaypoint.techLevel = segment.techLevel;
+    previousWaypoint.windExp = segment.windExp;
+    previousWaypoint.markers = sortStageMarkers([...previousWaypoint.markers, ...segment.markers]);
+
+    waypoints.push({
+      kmMark: cumulativeKm,
+      elevation: endElevation,
+      terrain: segment.terrain,
+      techLevel: segment.techLevel,
+      windExp: segment.windExp,
+      markers: sortStageMarkers(segment.endMarkers),
+    });
+  });
+
+  return waypoints;
+}
+
+function recalculateStageEditorSegmentStartElevations(draft: StageEditorDraft): void {
+  if (draft.segments.length === 0) {
+    draft.waypoints = [];
+    return;
+  }
+
+  let startElevation = draft.segments[0].startElevation;
+  draft.segments = draft.segments.map((segment, index) => {
+    const nextSegment: StageEditorSegment = {
+      ...segment,
+      startElevation: Math.round(index === 0 ? segment.startElevation : startElevation),
+      lengthKm: roundStageEditorKm(segment.lengthKm),
+      gradientPercent: roundStageEditorOneDecimal(segment.gradientPercent),
+      markers: sortStageMarkers(segment.markers),
+      endMarkers: sortStageMarkers(segment.endMarkers),
+    };
+    startElevation = Math.round(nextSegment.startElevation + ((nextSegment.lengthKm * 1000) * (nextSegment.gradientPercent / 100)));
+    return nextSegment;
+  });
+  draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
+}
+
 function normalizeStageEditorDraft(draft: StageEditorDraft): StageEditorDraft {
   const normalizedDraft = {
     ...draft,
-    waypoints: draft.waypoints.map((waypoint) => ({
-      ...waypoint,
-      techLevel: Number.isFinite(waypoint.techLevel) ? waypoint.techLevel : 5,
-      windExp: Number.isFinite(waypoint.windExp) ? waypoint.windExp : 5,
-      markers: normalizeWaypointMarkers(waypoint),
+    segments: (draft.segments?.length
+      ? draft.segments
+      : buildStageEditorSegmentsFromWaypoints(draft.waypoints ?? [])
+    ).map((segment) => ({
+      ...segment,
+      startElevation: Math.round(segment.startElevation),
+      lengthKm: Number.isFinite(segment.lengthKm) ? roundStageEditorKm(segment.lengthKm) : STAGE_EDITOR_MIN_SEGMENT_KM,
+      gradientPercent: Number.isFinite(segment.gradientPercent) ? roundStageEditorOneDecimal(segment.gradientPercent) : 0,
+      techLevel: Number.isFinite(segment.techLevel) ? segment.techLevel : 5,
+      windExp: Number.isFinite(segment.windExp) ? segment.windExp : 5,
+      markers: normalizeSegmentMarkers(segment.markers),
+      endMarkers: normalizeSegmentMarkers(segment.endMarkers),
     })),
+    waypoints: [],
   };
   syncStageEditorDerivedState(normalizedDraft);
   return normalizedDraft;
@@ -495,6 +682,176 @@ function markerLabelValue(markers: StageMarker[]): string {
   return markers.map((marker) => marker.type).join(' | ');
 }
 
+function describeMarkerScope(scope: 'start' | 'end', segmentIndex: number, totalSegments: number): string {
+  if (scope === 'start') {
+    return segmentIndex === 0 ? 'Startgrenze · Pflichtmarker Start oder Bergbeginn' : 'Startgrenze · Bergbeginn';
+  }
+
+  return segmentIndex === totalSegments - 1
+    ? 'Endgrenze · Ziel oder Wertungsende'
+    : 'Endgrenze · Sprint oder Bergwertung';
+}
+
+function collectStageEditorClimbPairIssues(draft: StageEditorDraft): Map<number, string[]> {
+  const issuesBySegment = new Map<number, string[]>();
+  const openClimbs = new Map<string, number[]>();
+
+  const pushIssue = (segmentIndex: number, issue: string): void => {
+    const bucket = issuesBySegment.get(segmentIndex) ?? [];
+    bucket.push(issue);
+    issuesBySegment.set(segmentIndex, bucket);
+  };
+
+  draft.segments.forEach((segment, segmentIndex) => {
+    segment.markers.forEach((marker) => {
+      if (marker.type !== 'climb_start') {
+        return;
+      }
+
+      if (!marker.name) {
+        pushIssue(segmentIndex, 'climb_start braucht einen Namen fuer die Paarbildung.');
+        return;
+      }
+
+      const bucket = openClimbs.get(marker.name) ?? [];
+      bucket.push(segmentIndex);
+      openClimbs.set(marker.name, bucket);
+    });
+
+    segment.endMarkers.forEach((marker) => {
+      if (marker.type !== 'climb_top') {
+        return;
+      }
+
+      if (!marker.name) {
+        pushIssue(segmentIndex, 'climb_top braucht einen Namen fuer die Paarbildung.');
+        return;
+      }
+
+      const bucket = openClimbs.get(marker.name) ?? [];
+      const startSegmentIndex = bucket.pop();
+      if (startSegmentIndex == null) {
+        pushIssue(segmentIndex, `climb_top \"${marker.name}\" braucht einen vorherigen climb_start mit gleichem Namen.`);
+        return;
+      }
+
+      if (bucket.length === 0) {
+        openClimbs.delete(marker.name);
+      } else {
+        openClimbs.set(marker.name, bucket);
+      }
+    });
+  });
+
+  openClimbs.forEach((segmentIndexes, climbName) => {
+    segmentIndexes.forEach((segmentIndex) => {
+      pushIssue(segmentIndex, `climb_start \"${climbName}\" braucht einen spaeteren climb_top mit gleichem Namen.`);
+    });
+  });
+
+  return issuesBySegment;
+}
+
+function normalizeMarkerForType(marker: StageMarker): StageMarker {
+  if (marker.type === 'climb_top') {
+    return { ...marker, cat: marker.cat && ['HC', '1', '2', '3', '4'].includes(marker.cat) ? marker.cat : '4' };
+  }
+  if (marker.type === 'sprint_intermediate') {
+    return { ...marker, cat: marker.cat === 'Sprint' ? marker.cat : 'Sprint' };
+  }
+  return { ...marker, cat: null };
+}
+
+function getStageEditorSegmentIssuesAt(draft: StageEditorDraft, segmentIndex: number): string[] {
+  const segment = draft.segments[segmentIndex];
+  if (!segment) return [];
+
+  const issues: string[] = [];
+  const climbPairIssues = collectStageEditorClimbPairIssues(draft).get(segmentIndex) ?? [];
+  if (segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM) {
+    issues.push(`Laenge unter ${STAGE_EDITOR_MIN_SEGMENT_KM.toFixed(1).replace('.', ',')} km.`);
+  }
+  if (segment.techLevel < 1 || segment.techLevel > 10) {
+    issues.push('Tech ausserhalb 1-10.');
+  }
+  if (segment.windExp < 1 || segment.windExp > 10) {
+    issues.push('Wind ausserhalb 1-10.');
+  }
+  if (segmentIndex === 0 && !segment.markers.some((marker) => marker.type === 'start')) {
+    issues.push('Startmarker fehlt am ersten Segment.');
+  }
+  if (segmentIndex < draft.segments.length - 1 && segment.endMarkers.some((marker) => isFinishMarkerType(marker.type))) {
+    issues.push('Finish nur am Endmarker des letzten Segments.');
+  }
+  if (segmentIndex > 0 && segment.markers.some((marker) => marker.type === 'start')) {
+    issues.push('Startmarker nur am ersten Segment erlaubt.');
+  }
+  if (segmentIndex === draft.segments.length - 1 && !segment.endMarkers.some((marker) => isFinishMarkerType(marker.type))) {
+    issues.push('Finishmarker fehlt am letzten Segmentende.');
+  }
+
+  segment.markers.forEach((marker) => {
+    if (isFinishMarkerType(marker.type)) {
+      issues.push('Finishmarker gehoert in den Endmarker-Slot.');
+    }
+    if (marker.type === 'climb_top') {
+      issues.push('climb_top gehoert in den Endmarker-Slot.');
+    }
+    if (marker.type === 'sprint_intermediate') {
+      issues.push('Sprintmarker gehoert in den Endmarker-Slot.');
+    }
+  });
+
+  segment.endMarkers.forEach((marker) => {
+    if (marker.type === 'start' || marker.type === 'climb_start') {
+      issues.push(`${marker.type} gehoert in den Startmarker-Slot.`);
+    }
+    if (marker.type === 'climb_top' && (marker.cat == null || !['HC', '1', '2', '3', '4'].includes(marker.cat))) {
+      issues.push('climb_top braucht Kategorie HC oder 1-4.');
+    }
+  });
+
+  [...segment.markers, ...segment.endMarkers].forEach((marker) => {
+    if (marker.type === 'sprint_intermediate' && marker.cat != null && marker.cat !== 'Sprint') {
+      issues.push('Sprintmarker erlaubt nur Kategorie Sprint.');
+    }
+    if (isFinishMarkerType(marker.type) && marker.cat != null) {
+      issues.push('Finishmarker duerfen keine Kategorie haben.');
+    }
+  });
+
+  issues.push(...climbPairIssues);
+
+  return [...new Set(issues)];
+}
+
+function stageEditorFieldErrorClass(hasError: boolean): string {
+  return hasError ? ' stage-editor-input-invalid' : '';
+}
+
+function renderStageEditorSegmentIssues(draft: StageEditorDraft, segmentIndex: number): string {
+  const issues = getStageEditorSegmentIssuesAt(draft, segmentIndex);
+  if (issues.length === 0) {
+    return '<div class="stage-editor-segment-status">OK</div>';
+  }
+
+  return `<div class="stage-editor-segment-issues">${issues.map((issue) => `<div>${esc(issue)}</div>`).join('')}</div>`;
+}
+
+function renderSegmentMarkerBlock(markers: StageMarker[], segmentIndex: number, totalSegments: number, scope: 'start' | 'end'): string {
+  const title = scope === 'start' ? 'Startmarker' : 'Endmarker';
+  const addLabel = scope === 'start' ? 'Start / Berg+' : 'Sprint / Berg / Ziel+';
+  return `
+    <div class="stage-editor-marker-block">
+      <div class="stage-editor-marker-block-head">
+        <strong>${title}</strong>
+        <span>${esc(describeMarkerScope(scope, segmentIndex, totalSegments))}</span>
+      </div>
+      ${renderSegmentMarkerRows(markers, segmentIndex, totalSegments, scope)}
+      <button type="button" class="btn btn-secondary btn-xs stage-editor-marker-add" data-segment-action="add-marker" data-marker-scope="${scope}" data-segment-index="${segmentIndex}">${addLabel}</button>
+    </div>`;
+}
+
 function roundStageEditorOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
@@ -504,7 +861,7 @@ function roundStageEditorKm(value: number): number {
 }
 
 function syncStageEditorDraftStats(draft: StageEditorDraft): void {
-  draft.totalDistanceKm = draft.waypoints[draft.waypoints.length - 1]?.kmMark ?? 0;
+  draft.totalDistanceKm = roundStageEditorKm(draft.segments.reduce((sum, segment) => sum + segment.lengthKm, 0));
   draft.elevationGainMeters = draft.waypoints.reduce((sum, waypoint, index) => {
     if (index === 0) return 0;
     const gain = waypoint.elevation - draft.waypoints[index - 1].elevation;
@@ -600,8 +957,8 @@ function detectStageEditorClimbs(waypoints: StageEditorWaypoint[]): DetectedStag
 }
 
 function suggestStageEditorProfile(draft: StageEditorDraft): StageProfile {
-  const hasCobbleHill = draft.waypoints.some((waypoint) => waypoint.terrain === 'Cobble_Hill');
-  const hasCobble = draft.waypoints.some((waypoint) => waypoint.terrain === 'Cobble');
+  const hasCobbleHill = draft.segments.some((segment) => segment.terrain === 'Cobble_Hill');
+  const hasCobble = draft.segments.some((segment) => segment.terrain === 'Cobble');
   const hasHcOrCat1 = draft.climbs.some((climb) => climb.category === 'HC' || climb.category === '1');
 
   if (hasCobbleHill) return 'Cobble_Hill';
@@ -640,11 +997,11 @@ function classifyAutoClimbTerrain(climb: DetectedStageEditorClimb): StageTerrain
 }
 
 function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
-  const { waypoints } = draft;
-  if (waypoints.length === 0) return;
+  if (draft.segments.length === 0) return;
 
-  const nextTerrains = waypoints.map((waypoint) => (isManualStageEditorTerrain(waypoint.terrain) ? waypoint.terrain : 'Flat' as StageTerrain));
-  const climbs = detectStageEditorClimbs(waypoints);
+  draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
+  const nextTerrains = draft.segments.map((segment) => (isManualStageEditorTerrain(segment.terrain) ? segment.terrain : 'Flat' as StageTerrain));
+  const climbs = detectStageEditorClimbs(draft.waypoints);
   draft.climbs = climbs.map(({ startIndex: _startIndex, topIndex: _topIndex, topElevation: _topElevation, ...climb }) => climb);
 
   climbs.forEach((climb) => {
@@ -676,8 +1033,8 @@ function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
     descentDistanceKm = 0;
   };
 
-  for (let index = 0; index < waypoints.length - 1; index += 1) {
-    const segment = getWaypointSegmentInfo(waypoints, index);
+  for (let index = 0; index < draft.segments.length; index += 1) {
+    const segment = draft.segments[index];
     if (segment && segment.gradientPercent < STAGE_EDITOR_AUTO_DESCENT_MIN_GRADIENT) {
       if (descentStartIndex == null) descentStartIndex = index;
       descentDistanceKm += segment.lengthKm;
@@ -685,71 +1042,84 @@ function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
     }
     commitDescent(index);
   }
-  commitDescent(waypoints.length - 1);
+  commitDescent(draft.segments.length);
 
-  waypoints.forEach((waypoint, index) => {
-    if (!isManualStageEditorTerrain(waypoint.terrain)) {
-      waypoint.terrain = nextTerrains[index];
+  draft.segments.forEach((segment, index) => {
+    if (!isManualStageEditorTerrain(segment.terrain)) {
+      segment.terrain = nextTerrains[index];
     }
   });
 
-  if (waypoints.length >= 2 && !isManualStageEditorTerrain(waypoints[waypoints.length - 1].terrain)) {
-    waypoints[waypoints.length - 1].terrain = waypoints[waypoints.length - 2].terrain;
-  }
+  draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
 
   draft.suggestedProfile = suggestStageEditorProfile(draft);
 }
 
 function syncStageEditorDerivedState(draft: StageEditorDraft): void {
+  recalculateStageEditorSegmentStartElevations(draft);
   syncStageEditorDraftStats(draft);
   applyAutomaticStageEditorTerrain(draft);
+  draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
+  syncStageEditorDraftStats(draft);
 }
 
 function ensureStageEditorBoundaryMarkers(draft: StageEditorDraft): void {
-  const firstWaypoint = draft.waypoints[0];
-  const lastWaypoint = draft.waypoints[draft.waypoints.length - 1];
-  if (!firstWaypoint || !lastWaypoint) return;
+  const firstSegment = draft.segments[0];
+  const lastSegment = draft.segments[draft.segments.length - 1];
+  if (!firstSegment || !lastSegment) return;
 
-  if (!firstWaypoint.markers.some((marker) => marker.type === 'start')) {
-    firstWaypoint.markers = sortStageMarkers([{ type: 'start', name: null, cat: null }, ...firstWaypoint.markers]);
+  if (!firstSegment.markers.some((marker) => marker.type === 'start')) {
+    firstSegment.markers = sortStageMarkers([{ type: 'start', name: null, cat: null }, ...firstSegment.markers]);
   }
 
-  if (!lastWaypoint.markers.some((marker) => isFinishMarkerType(marker.type))) {
-    lastWaypoint.markers = sortStageMarkers([...lastWaypoint.markers, { type: 'finish_flat', name: null, cat: null }]);
+  if (!lastSegment.endMarkers.some((marker) => isFinishMarkerType(marker.type))) {
+    lastSegment.endMarkers = sortStageMarkers([...lastSegment.endMarkers, { type: 'finish_flat', name: null, cat: null }]);
   }
+
+  draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
 }
 
-function renderWaypointMarkerRows(waypoint: StageEditorWaypoint, waypointIndex: number, totalWaypoints: number): string {
-  if (waypoint.markers.length === 0) {
+function renderSegmentMarkerRows(markers: StageMarker[], segmentIndex: number, totalSegments: number, scope: 'start' | 'end'): string {
+  if (markers.length === 0) {
     return '<div class="stage-editor-marker-empty">Keine Marker</div>';
   }
 
-  return `<div class="stage-editor-marker-list">${waypoint.markers.map((marker, markerIndex) => {
-    const lockedStart = waypointIndex === 0 && marker.type === 'start';
-    const finishMarkerCount = waypoint.markers.filter((entry) => isFinishMarkerType(entry.type)).length;
-    const lockedFinish = waypointIndex === totalWaypoints - 1 && isFinishMarkerType(marker.type) && finishMarkerCount === 1;
+  return `<div class="stage-editor-marker-list">${markers.map((marker, markerIndex) => {
+    const lockedStart = scope === 'start' && segmentIndex === 0 && marker.type === 'start';
+    const finishMarkerCount = markers.filter((entry) => isFinishMarkerType(entry.type)).length;
+    const lockedFinish = scope === 'end' && segmentIndex === totalSegments - 1 && isFinishMarkerType(marker.type) && finishMarkerCount === 1;
     const canRemove = !(lockedStart || lockedFinish);
 
     return `
       <div class="stage-editor-marker-row">
-        <select data-field="markerType" data-marker-index="${markerIndex}">${markerTypeOptionsHtml(marker.type)}</select>
-        <input type="text" value="${esc(marker.name ?? '')}" data-field="markerName" data-marker-index="${markerIndex}" placeholder="Name" />
-        <select data-field="markerCat" data-marker-index="${markerIndex}">${markerCategoryOptionsHtml(marker.cat)}</select>
-        <button type="button" class="btn btn-danger btn-xs" data-waypoint-action="remove-marker" data-marker-index="${markerIndex}" data-waypoint-index="${waypointIndex}" ${canRemove ? '' : 'disabled'}>×</button>
+        <select data-field="markerType" data-marker-scope="${scope}" data-marker-index="${markerIndex}">${markerTypeOptionsHtml(marker.type, scope, segmentIndex, totalSegments)}</select>
+        <input type="text" value="${esc(marker.name ?? '')}" data-field="markerName" data-marker-scope="${scope}" data-marker-index="${markerIndex}" placeholder="Name" />
+        <select data-field="markerCat" data-marker-scope="${scope}" data-marker-index="${markerIndex}">${markerCategoryOptionsHtml(marker.cat)}</select>
+        <button type="button" class="btn btn-danger btn-xs" data-segment-action="remove-marker" data-marker-scope="${scope}" data-marker-index="${markerIndex}" data-segment-index="${segmentIndex}" ${canRemove ? '' : 'disabled'}>×</button>
       </div>`;
   }).join('')}</div>`;
 }
 
-function updateStageEditorMarker(waypointIndex: number, markerIndex: number, field: 'markerType' | 'markerName' | 'markerCat', rawValue: string): void {
+function updateStageEditorMarker(segmentIndex: number, markerIndex: number, scope: 'start' | 'end', field: 'markerType' | 'markerName' | 'markerCat', rawValue: string): void {
   if (!state.stageEditorDraft) return;
-  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
-  const marker = waypoint?.markers[markerIndex];
-  if (!waypoint || !marker) return;
+  const segment = state.stageEditorDraft.segments[segmentIndex];
+  if (!segment) return;
+  const markers = scope === 'start' ? segment.markers : segment.endMarkers;
+  const marker = markers[markerIndex];
+  if (!marker) return;
 
   if (field === 'markerType') {
     marker.type = rawValue as StageMarkerType;
+    const normalizedMarker = normalizeMarkerForType(marker);
+    marker.name = normalizedMarker.name;
+    marker.cat = normalizedMarker.cat;
     if (isFinishMarkerType(marker.type)) {
-      waypoint.markers = waypoint.markers.filter((entry, index) => index === markerIndex || !isFinishMarkerType(entry.type));
+      const nextMarkers = markers.filter((entry, index) => index === markerIndex || !isFinishMarkerType(entry.type));
+      if (scope === 'start') {
+        segment.markers = nextMarkers;
+      } else {
+        segment.endMarkers = nextMarkers;
+      }
     }
   } else if (field === 'markerName') {
     marker.name = rawValue.trim() || null;
@@ -757,26 +1127,49 @@ function updateStageEditorMarker(waypointIndex: number, markerIndex: number, fie
     marker.cat = rawValue ? rawValue as StageMarkerCategory : null;
   }
 
-  waypoint.markers = sortStageMarkers(waypoint.markers);
+  if (scope === 'start') {
+    segment.markers = sortStageMarkers(segment.markers);
+  } else {
+    segment.endMarkers = sortStageMarkers(segment.endMarkers);
+  }
+  syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
-function addStageEditorMarker(waypointIndex: number): void {
+function addStageEditorMarker(segmentIndex: number, scope: 'start' | 'end'): void {
   if (!state.stageEditorDraft) return;
-  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
-  if (!waypoint) return;
-  waypoint.markers.push({ type: 'sprint_intermediate', name: null, cat: null });
-  waypoint.markers = sortStageMarkers(waypoint.markers);
+  const segment = state.stageEditorDraft.segments[segmentIndex];
+  if (!segment) return;
+  const nextMarker = scope === 'start'
+    ? (segmentIndex === 0 && !segment.markers.some((marker) => marker.type === 'start')
+        ? { type: 'start', name: 'Start', cat: null }
+        : { type: 'climb_start', name: null, cat: null })
+    : (segmentIndex === state.stageEditorDraft.segments.length - 1 && !segment.endMarkers.some((marker) => isFinishMarkerType(marker.type))
+        ? { type: 'finish_flat', name: 'Ziel', cat: null }
+        : { type: 'sprint_intermediate', name: null, cat: 'Sprint' as StageMarkerCategory });
+  if (scope === 'start') {
+    segment.markers.push(nextMarker);
+    segment.markers = sortStageMarkers(segment.markers);
+  } else {
+    segment.endMarkers.push(nextMarker);
+    segment.endMarkers = sortStageMarkers(segment.endMarkers);
+  }
+  syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
-function removeStageEditorMarker(waypointIndex: number, markerIndex: number): void {
+function removeStageEditorMarker(segmentIndex: number, markerIndex: number, scope: 'start' | 'end'): void {
   if (!state.stageEditorDraft) return;
-  const waypoint = state.stageEditorDraft.waypoints[waypointIndex];
-  if (!waypoint) return;
-  waypoint.markers.splice(markerIndex, 1);
+  const segment = state.stageEditorDraft.segments[segmentIndex];
+  if (!segment) return;
+  if (scope === 'start') {
+    segment.markers.splice(markerIndex, 1);
+  } else {
+    segment.endMarkers.splice(markerIndex, 1);
+  }
+  syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
@@ -787,14 +1180,16 @@ function initializeStageEditorForm(): void {
   $('stage-editor-climbs').innerHTML = '<p class="text-muted">Climb-Vorschläge erscheinen nach dem Import.</p>';
 }
 
-function getWaypointSegmentInfo(waypoints: StageEditorWaypoint[], index: number): { lengthKm: number; gradientPercent: number } | null {
-  const start = waypoints[index];
-  const end = waypoints[index + 1];
-  if (!start || !end) return null;
-  const lengthKm = end.kmMark - start.kmMark;
-  if (lengthKm <= 0) return null;
-  const gradientPercent = ((end.elevation - start.elevation) / (lengthKm * 1000)) * 100;
-  return { lengthKm, gradientPercent };
+function getStageEditorSegmentStartKm(draft: StageEditorDraft, index: number): number {
+  let kmMark = 0;
+  for (let segmentIndex = 0; segmentIndex < index; segmentIndex += 1) {
+    kmMark += draft.segments[segmentIndex]?.lengthKm ?? 0;
+  }
+  return roundStageEditorKm(kmMark);
+}
+
+function getStageEditorSegmentEndElevation(segment: StageEditorSegment): number {
+  return Math.round(segment.startElevation + ((segment.lengthKm * 1000) * (segment.gradientPercent / 100)));
 }
 
 function setStageEditorDefaults(draft: StageEditorDraft): void {
@@ -815,26 +1210,19 @@ function setStageEditorDefaults(draft: StageEditorDraft): void {
 
 function updateStageEditorSegment(index: number, field: 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
   if (!state.stageEditorDraft) return;
-  const waypoints = state.stageEditorDraft.waypoints;
-  const start = waypoints[index];
-  const end = waypoints[index + 1];
-  if (!start || !end) return;
+  const segment = state.stageEditorDraft.segments[index];
+  if (!segment) return;
 
   if (field === 'segmentLengthKm') {
-    const currentLengthKm = end.kmMark - start.kmMark;
-    const nextLengthKm = Number.parseFloat(rawValue || String(currentLengthKm));
+    const nextLengthKm = Number.parseFloat(rawValue || String(segment.lengthKm));
     if (!Number.isFinite(nextLengthKm)) return;
-    const deltaKm = roundStageEditorKm(nextLengthKm - currentLengthKm);
-    for (let waypointIndex = index + 1; waypointIndex < waypoints.length; waypointIndex += 1) {
-      waypoints[waypointIndex].kmMark = roundStageEditorKm(waypoints[waypointIndex].kmMark + deltaKm);
-    }
+    segment.lengthKm = roundStageEditorKm(nextLengthKm);
   }
 
   if (field === 'segmentGradientPercent') {
-    const segmentLengthKm = end.kmMark - start.kmMark;
     const nextGradientPercent = Number.parseFloat(rawValue || '0');
-    if (!Number.isFinite(nextGradientPercent) || segmentLengthKm <= 0) return;
-    end.elevation = Math.round(start.elevation + ((segmentLengthKm * 1000) * (nextGradientPercent / 100)));
+    if (!Number.isFinite(nextGradientPercent) || segment.lengthKm <= 0) return;
+    segment.gradientPercent = roundStageEditorOneDecimal(nextGradientPercent);
   }
 
   syncStageEditorDerivedState(state.stageEditorDraft);
@@ -846,44 +1234,28 @@ function getStageEditorIssues(draft: StageEditorDraft | null): string[] {
   if (!draft) return ['Noch keine Strecke importiert.'];
 
   const issues: string[] = [];
-  if (draft.waypoints.length < 2) {
-    issues.push('Mindestens zwei Wegpunkte sind erforderlich.');
+  if (draft.segments.length === 0) {
+    issues.push('Mindestens ein Segment ist erforderlich.');
     return issues;
   }
 
-  if (draft.waypoints[0]?.kmMark !== 0) {
-    issues.push('Der erste Wegpunkt muss bei 0,00 km liegen.');
+  if (!draft.segments[0]?.markers.some((marker) => marker.type === 'start')) {
+    issues.push('Das erste Segment muss als Start markiert sein.');
   }
 
-  if (!(draft.waypoints[0]?.markers ?? []).some((marker) => marker.type === 'start')) {
-    issues.push('Der erste Wegpunkt muss als Start markiert sein.');
+  const lastSegment = draft.segments[draft.segments.length - 1];
+  if (!(lastSegment.endMarkers ?? []).some((marker) => isFinishMarkerType(marker.type))) {
+    issues.push('Das letzte Segment muss per Endmarker als Ziel markiert sein.');
   }
 
-  const lastWaypoint = draft.waypoints[draft.waypoints.length - 1];
-  if (!(lastWaypoint.markers ?? []).some((marker) => isFinishMarkerType(marker.type))) {
-    issues.push('Der letzte Wegpunkt muss als Ziel markiert sein.');
-  }
+  draft.segments.forEach((segment, segmentIndex) => {
+    getStageEditorSegmentIssuesAt(draft, segmentIndex).forEach((issue) => {
+      issues.push(`Segment ${segmentIndex + 1}: ${issue}`);
+    });
 
-  for (let index = 1; index < draft.waypoints.length; index += 1) {
-    const previous = draft.waypoints[index - 1];
-    const current = draft.waypoints[index];
-    const deltaKm = Number((current.kmMark - previous.kmMark).toFixed(2));
-    if (deltaKm < STAGE_EDITOR_MIN_SEGMENT_KM) {
-      issues.push(`Segment ${index} ist mit ${deltaKm.toFixed(2)} km zu kurz.`);
-    }
-  }
-
-  draft.waypoints.forEach((waypoint, waypointIndex) => {
-    if (waypoint.techLevel < 1 || waypoint.techLevel > 10) {
-      issues.push(`Wegpunkt ${waypointIndex + 1}: Tech muss zwischen 1 und 10 liegen.`);
-    }
-    if (waypoint.windExp < 1 || waypoint.windExp > 10) {
-      issues.push(`Wegpunkt ${waypointIndex + 1}: Wind muss zwischen 1 und 10 liegen.`);
-    }
-
-    (waypoint.markers ?? []).forEach((marker) => {
+    [...(segment.markers ?? []), ...(segment.endMarkers ?? [])].forEach((marker) => {
       if (marker.cat != null && !STAGE_MARKER_CATEGORIES.includes(marker.cat)) {
-        issues.push(`Wegpunkt ${waypointIndex + 1}: Ungültige Marker-Kategorie ${marker.cat}.`);
+        issues.push(`Segment ${segmentIndex + 1}: Ungültige Marker-Kategorie ${marker.cat}.`);
       }
     });
   });
@@ -918,6 +1290,7 @@ function readStageEditorMetadata(): StageEditorMetadata {
     date: $<HTMLInputElement>('stage-editor-date').value.trim(),
     profile: $<HTMLSelectElement>('stage-editor-profile').value as StageProfile,
     detailsCsvFile: $<HTMLInputElement>('stage-editor-details-file').value.trim(),
+    startElevation: state.stageEditorDraft?.segments[0]?.startElevation ?? 0,
   };
 }
 
@@ -999,7 +1372,7 @@ function renderStageEditor(): void {
     climbs.innerHTML = '<p class="text-muted">Climb-Vorschläge erscheinen nach dem Import.</p>';
     emptyState.classList.remove('hidden');
     chart.innerHTML = renderStageEditorChart(null);
-    tbody.innerHTML = `<tr><td colspan="${STAGE_EDITOR_TABLE_COLUMN_COUNT}" class="text-muted">Keine Wegpunkte vorhanden.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${STAGE_EDITOR_TABLE_COLUMN_COUNT}" class="text-muted">Keine Segmente vorhanden.</td></tr>`;
     exportHint.textContent = 'Importiere zuerst eine Datei.';
     exportButton.disabled = true;
     return;
@@ -1014,7 +1387,7 @@ function renderStageEditor(): void {
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Distanz</span><strong>${formatKm(draft.totalDistanceKm)}</strong></div>
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Anstieg</span><strong>${draft.elevationGainMeters} m</strong></div>
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Profil</span><strong>${esc(draft.suggestedProfile)}</strong></div>
-    <div class="stage-editor-stat"><span class="stage-editor-stat-label">Wegpunkte</span><strong>${draft.waypoints.length}</strong></div>`;
+    <div class="stage-editor-stat"><span class="stage-editor-stat-label">Segmente</span><strong>${draft.segments.length}</strong></div>`;
 
   const alertItems = [...draft.warnings, ...issues, ...metadataErrors];
   warnings.innerHTML = alertItems.length === 0
@@ -1031,22 +1404,27 @@ function renderStageEditor(): void {
       </div>`).join('');
 
   chart.innerHTML = renderStageEditorChart(draft);
-  tbody.innerHTML = draft.waypoints.map((waypoint, index) => `
-    <tr data-waypoint-index="${index}">
-      <td><input type="number" step="0.01" min="0" value="${waypoint.kmMark.toFixed(2)}" data-field="kmMark" ${index === 0 ? 'readonly' : ''}></td>
-      <td><input type="number" step="1" value="${waypoint.elevation}" data-field="elevation"></td>
-      <td><input type="number" step="0.01" min="0" value="${getWaypointSegmentInfo(draft.waypoints, index)?.lengthKm?.toFixed(2) ?? ''}" data-field="segmentLengthKm" ${index === draft.waypoints.length - 1 ? 'readonly placeholder="–"' : ''}></td>
-      <td><input type="number" step="0.1" value="${getWaypointSegmentInfo(draft.waypoints, index)?.gradientPercent?.toFixed(1) ?? ''}" data-field="segmentGradientPercent" ${index === draft.waypoints.length - 1 ? 'readonly placeholder="–"' : ''}></td>
-      <td><select data-field="terrain">${terrainOptionsHtml(waypoint.terrain)}</select></td>
-      <td><input type="number" step="1" min="1" max="10" value="${waypoint.techLevel}" data-field="techLevel"></td>
-      <td><input type="number" step="1" min="1" max="10" value="${waypoint.windExp}" data-field="windExp"></td>
+  tbody.innerHTML = draft.segments.map((segment, index) => `
+    <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}">
+      <td><input type="number" step="0.01" min="0" value="${getStageEditorSegmentStartKm(draft, index).toFixed(2)}" readonly></td>
+      <td><input type="number" step="1" value="${segment.startElevation}" data-field="startElevation" class="${index === 0 ? '' : 'stage-editor-input-readonly'}" ${index === 0 ? '' : 'readonly'}></td>
+      <td><input type="number" step="0.01" min="0.2" value="${segment.lengthKm.toFixed(2)}" data-field="segmentLengthKm" class="${stageEditorFieldErrorClass(segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM)}"></td>
+      <td><input type="number" step="0.1" value="${segment.gradientPercent.toFixed(1)}" data-field="segmentGradientPercent"></td>
+      <td><select data-field="terrain">${terrainOptionsHtml(segment.terrain)}</select></td>
+      <td><input type="number" step="1" min="1" max="10" value="${segment.techLevel}" data-field="techLevel" class="${stageEditorFieldErrorClass(segment.techLevel < 1 || segment.techLevel > 10)}"></td>
+      <td><input type="number" step="1" min="1" max="10" value="${segment.windExp}" data-field="windExp" class="${stageEditorFieldErrorClass(segment.windExp < 1 || segment.windExp > 10)}"></td>
       <td>
-        ${renderWaypointMarkerRows(waypoint, index, draft.waypoints.length)}
-        <button type="button" class="btn btn-secondary btn-xs stage-editor-marker-add" data-waypoint-action="add-marker" data-waypoint-index="${index}">Marker +</button>
+        ${renderSegmentMarkerBlock(segment.markers, index, draft.segments.length, 'start')}
+      </td>
+      <td>
+        ${renderSegmentMarkerBlock(segment.endMarkers, index, draft.segments.length, 'end')}
       </td>
       <td class="stage-editor-row-actions">
-        ${index < draft.waypoints.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-waypoint-action="insert" data-waypoint-index="${index}">+</button>` : `<button type="button" class="btn btn-secondary btn-xs" data-waypoint-action="append" data-waypoint-index="${index}">+ Ende</button>`}
-        ${index > 0 && index < draft.waypoints.length - 1 ? `<button type="button" class="btn btn-danger btn-xs" data-waypoint-action="delete" data-waypoint-index="${index}">×</button>` : ''}
+        <div class="text-muted">${getStageEditorSegmentEndElevation(segment)} m</div>
+        ${renderStageEditorSegmentIssues(draft, index)}
+        <button type="button" class="btn btn-secondary btn-xs" data-segment-action="insert" data-segment-index="${index}">+</button>
+        ${index === draft.segments.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-segment-action="append" data-segment-index="${index}">+ Ende</button>` : ''}
+        ${draft.segments.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" data-segment-action="delete" data-segment-index="${index}">×</button>` : ''}
       </td>
     </tr>`).join('');
 
@@ -1056,26 +1434,25 @@ function renderStageEditor(): void {
     : `Exportiert ${$<HTMLInputElement>('stage-editor-details-file').value || 'stage_details.csv'} und eine stages-Row.`;
 }
 
-function updateStageEditorWaypoint(index: number, field: keyof StageEditorWaypoint | 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
+function updateStageEditorWaypoint(index: number, field: 'startElevation' | keyof StageEditorSegment | 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
   if (!state.stageEditorDraft) return;
-  const waypoint = state.stageEditorDraft.waypoints[index];
-  if (!waypoint) return;
+  const segment = state.stageEditorDraft.segments[index];
+  if (!segment) return;
 
   switch (field) {
-    case 'kmMark':
-      waypoint.kmMark = Number.parseFloat(rawValue || '0');
-      break;
-    case 'elevation':
-      waypoint.elevation = Number.parseInt(rawValue || '0', 10);
+    case 'startElevation':
+      if (index === 0) {
+        segment.startElevation = Number.parseInt(rawValue || '0', 10);
+      }
       break;
     case 'terrain':
-      waypoint.terrain = rawValue as StageTerrain;
+      segment.terrain = rawValue as StageTerrain;
       break;
     case 'techLevel':
-      waypoint.techLevel = Number.parseInt(rawValue || '0', 10);
+      segment.techLevel = Number.parseInt(rawValue || '0', 10);
       break;
     case 'windExp':
-      waypoint.windExp = Number.parseInt(rawValue || '0', 10);
+      segment.windExp = Number.parseInt(rawValue || '0', 10);
       break;
     case 'segmentLengthKm':
     case 'segmentGradientPercent':
@@ -1085,29 +1462,32 @@ function updateStageEditorWaypoint(index: number, field: keyof StageEditorWaypoi
       break;
   }
 
-  if (field === 'kmMark' || field === 'elevation') {
-    syncStageEditorDerivedState(state.stageEditorDraft);
-  } else {
-    syncStageEditorDraftStats(state.stageEditorDraft);
-  }
+  syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
 }
 
 function insertStageEditorWaypoint(index: number): void {
   if (!state.stageEditorDraft) return;
-  const current = state.stageEditorDraft.waypoints[index];
-  const next = state.stageEditorDraft.waypoints[index + 1];
-  if (!current || !next) return;
-  const newWaypoint: StageEditorWaypoint = {
-    kmMark: Number(((current.kmMark + next.kmMark) / 2).toFixed(2)),
-    elevation: Math.round((current.elevation + next.elevation) / 2),
+  const current = state.stageEditorDraft.segments[index];
+  if (!current) return;
+  const firstLengthKm = roundStageEditorKm(current.lengthKm / 2);
+  const secondLengthKm = roundStageEditorKm(current.lengthKm - firstLengthKm);
+  if (firstLengthKm < STAGE_EDITOR_MIN_SEGMENT_KM || secondLengthKm < STAGE_EDITOR_MIN_SEGMENT_KM) return;
+
+  const insertedSegment: StageEditorSegment = {
+    startElevation: Math.round(current.startElevation + ((firstLengthKm * 1000) * (current.gradientPercent / 100))),
+    lengthKm: secondLengthKm,
+    gradientPercent: current.gradientPercent,
     terrain: current.terrain,
-    techLevel: Math.round((current.techLevel + next.techLevel) / 2),
-    windExp: Math.round((current.windExp + next.windExp) / 2),
+    techLevel: current.techLevel,
+    windExp: current.windExp,
     markers: [],
+    endMarkers: [...current.endMarkers],
   };
-  state.stageEditorDraft.waypoints.splice(index + 1, 0, newWaypoint);
+  current.lengthKm = firstLengthKm;
+  current.endMarkers = [];
+  state.stageEditorDraft.segments.splice(index + 1, 0, insertedSegment);
   syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
@@ -1115,23 +1495,25 @@ function insertStageEditorWaypoint(index: number): void {
 
 function appendStageEditorWaypoint(): void {
   if (!state.stageEditorDraft) return;
-  const waypoints = state.stageEditorDraft.waypoints;
-  const last = waypoints[waypoints.length - 1];
-  const previous = waypoints[waypoints.length - 2] ?? null;
+  const segments = state.stageEditorDraft.segments;
+  const last = segments[segments.length - 1];
+  const previous = segments[segments.length - 2] ?? null;
   if (!last) return;
 
-  const previousSegmentLength = previous ? Math.max(STAGE_EDITOR_MIN_SEGMENT_KM, roundStageEditorKm(last.kmMark - previous.kmMark)) : 1;
-  const previousElevationDelta = previous ? last.elevation - previous.elevation : 0;
-  const finishMarkers = last.markers.filter((marker) => isFinishMarkerType(marker.type));
-  last.markers = last.markers.filter((marker) => !isFinishMarkerType(marker.type));
+  const previousSegmentLength = previous ? Math.max(STAGE_EDITOR_MIN_SEGMENT_KM, previous.lengthKm) : 1;
+  const finishMarkers = last.endMarkers.filter((marker) => isFinishMarkerType(marker.type));
+  last.endMarkers = last.endMarkers.filter((marker) => !isFinishMarkerType(marker.type));
+  const lastEndElevation = getStageEditorSegmentEndElevation(last);
 
-  waypoints.push({
-    kmMark: roundStageEditorKm(last.kmMark + previousSegmentLength),
-    elevation: Math.round(last.elevation + previousElevationDelta),
+  segments.push({
+    startElevation: lastEndElevation,
+    lengthKm: roundStageEditorKm(previousSegmentLength),
+    gradientPercent: last.gradientPercent,
     terrain: last.terrain,
     techLevel: last.techLevel,
     windExp: last.windExp,
-    markers: finishMarkers.length > 0 ? finishMarkers : [{ type: 'finish_flat', name: null, cat: null }],
+    markers: [],
+    endMarkers: finishMarkers.length > 0 ? finishMarkers : [{ type: 'finish_flat', name: null, cat: null }],
   });
 
   syncStageEditorDerivedState(state.stageEditorDraft);
@@ -1141,8 +1523,8 @@ function appendStageEditorWaypoint(): void {
 
 function deleteStageEditorWaypoint(index: number): void {
   if (!state.stageEditorDraft) return;
-  if (index <= 0 || index >= state.stageEditorDraft.waypoints.length - 1) return;
-  state.stageEditorDraft.waypoints.splice(index, 1);
+  if (state.stageEditorDraft.segments.length <= 1) return;
+  state.stageEditorDraft.segments.splice(index, 1);
   syncStageEditorDerivedState(state.stageEditorDraft);
   ensureStageEditorBoundaryMarkers(state.stageEditorDraft);
   renderStageEditor();
@@ -1546,7 +1928,7 @@ function getRaceSimView(): RaceSimView {
             photoFinishScore: rider.photoFinishScore,
           }))
           .filter((entry): entry is { riderId: number; finishTimeSeconds: number; photoFinishScore: number } => entry.finishTimeSeconds != null);
-        void completeRealtimeStage(bootstrap.stage.id, entries);
+        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications);
       },
     });
   }
@@ -2139,16 +2521,18 @@ $('stage-editor-file').addEventListener('change', (event) => {
 
 $('stage-editor-waypoints').addEventListener('change', (event) => {
   const target = event.target as HTMLInputElement | HTMLSelectElement;
-  const row = target.closest<HTMLTableRowElement>('tr[data-waypoint-index]');
-  const field = target.dataset['field'] as (keyof StageEditorWaypoint | 'segmentLengthKm' | 'segmentGradientPercent' | 'markerType' | 'markerName' | 'markerCat') | undefined;
+  const row = target.closest<HTMLTableRowElement>('tr[data-segment-index]');
+  const field = target.dataset['field'] as ('startElevation' | keyof StageEditorSegment | 'segmentLengthKm' | 'segmentGradientPercent' | 'markerType' | 'markerName' | 'markerCat') | undefined;
   if (!row || !field) return;
-  const index = Number(row.dataset['waypointIndex']);
+  const index = Number(row.dataset['segmentIndex']);
   if (!Number.isInteger(index)) return;
 
   if (field === 'markerType' || field === 'markerName' || field === 'markerCat') {
     const markerIndex = Number(target.dataset['markerIndex']);
+    const markerScope = target.dataset['markerScope'];
     if (!Number.isInteger(markerIndex)) return;
-    updateStageEditorMarker(index, markerIndex, field, target.value);
+    if (markerScope !== 'start' && markerScope !== 'end') return;
+    updateStageEditorMarker(index, markerIndex, markerScope, field, target.value);
     return;
   }
 
@@ -2156,29 +2540,33 @@ $('stage-editor-waypoints').addEventListener('change', (event) => {
 });
 
 $('stage-editor-waypoints').addEventListener('click', (event) => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('button[data-waypoint-action]');
+  const button = (event.target as Element).closest<HTMLButtonElement>('button[data-segment-action]');
   if (!button) return;
-  const index = Number(button.dataset['waypointIndex']);
+  const index = Number(button.dataset['segmentIndex']);
   if (!Number.isInteger(index)) return;
-  if (button.dataset['waypointAction'] === 'insert') {
+  if (button.dataset['segmentAction'] === 'insert') {
     insertStageEditorWaypoint(index);
     return;
   }
-  if (button.dataset['waypointAction'] === 'append') {
+  if (button.dataset['segmentAction'] === 'append') {
     appendStageEditorWaypoint();
     return;
   }
-  if (button.dataset['waypointAction'] === 'add-marker') {
-    addStageEditorMarker(index);
+  if (button.dataset['segmentAction'] === 'add-marker') {
+    const markerScope = button.dataset['markerScope'];
+    if (markerScope !== 'start' && markerScope !== 'end') return;
+    addStageEditorMarker(index, markerScope);
     return;
   }
-  if (button.dataset['waypointAction'] === 'remove-marker') {
+  if (button.dataset['segmentAction'] === 'remove-marker') {
     const markerIndex = Number(button.dataset['markerIndex']);
+    const markerScope = button.dataset['markerScope'];
     if (!Number.isInteger(markerIndex)) return;
-    removeStageEditorMarker(index, markerIndex);
+    if (markerScope !== 'start' && markerScope !== 'end') return;
+    removeStageEditorMarker(index, markerIndex, markerScope);
     return;
   }
-  if (button.dataset['waypointAction'] === 'delete') {
+  if (button.dataset['segmentAction'] === 'delete') {
     deleteStageEditorWaypoint(index);
   }
 });
@@ -2306,7 +2694,11 @@ async function simulatePendingStage(stageId: number): Promise<void> {
   }
 }
 
-async function completeRealtimeStage(stageId: number, entries: Array<{ riderId: number; finishTimeSeconds: number; photoFinishScore: number }>): Promise<void> {
+async function completeRealtimeStage(
+  stageId: number,
+  entries: Array<{ riderId: number; finishTimeSeconds: number; photoFinishScore: number }>,
+  markerClassifications: StageMarkerClassification[],
+): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
   }
@@ -2314,7 +2706,7 @@ async function completeRealtimeStage(stageId: number, entries: Array<{ riderId: 
   realtimeCompletionInFlight = true;
   showLoading('Live-Ergebnis wird gespeichert...');
   try {
-    const res = await api.completeRealtimeSimulation(stageId, { entries });
+    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications });
     if (!res.success) {
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;
@@ -2376,7 +2768,9 @@ function renderResultsView(): void {
   const meta = $('results-stage-meta');
   const empty = $('results-empty');
   const table = $('results-table');
+  const headerRow = table.querySelector('thead tr');
   const tbody = $('results-tbody');
+  const markerClassifications = $('results-marker-classifications');
 
   if (state.stageResults) {
     state.selectedResultsRaceId = state.stageResults.raceId;
@@ -2410,6 +2804,8 @@ function renderResultsView(): void {
       : 'Noch keine Etappe ausgewählt.';
     tabs.innerHTML = '';
     tbody.innerHTML = '';
+    markerClassifications.innerHTML = '';
+    markerClassifications.classList.add('hidden');
     table.classList.add('hidden');
     empty.classList.remove('hidden');
     empty.textContent = state.selectedResultsStageId != null
@@ -2421,6 +2817,10 @@ function renderResultsView(): void {
   meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
   const resultStage = findStageById(state.stageResults.stageId);
   const stageDistanceKm = resultStage?.stage.distanceKm ?? null;
+  const isGcClassification = selectedClassification.resultTypeId === GC_RESULT_TYPE_ID;
+  const isPointsLikeClassification = selectedClassification.resultTypeId === POINTS_RESULT_TYPE_ID
+    || selectedClassification.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
+  const previousGcRanks = new Map((state.stageResults.previousGcStandings ?? []).map((standing) => [standing.riderId, standing.rank] as const));
   tabs.innerHTML = state.stageResults.classifications.map((classification) => `
     <button
       type="button"
@@ -2429,6 +2829,37 @@ function renderResultsView(): void {
     >${esc(classification.resultTypeName)}</button>
   `).join('');
 
+  if (headerRow) {
+    headerRow.innerHTML = isGcClassification
+      ? `
+        <th>Platz</th>
+        <th>GC</th>
+        <th>Fahrer / Team</th>
+        <th>Team</th>
+        <th>Zeit</th>
+        <th>Rückstand</th>
+        <th>Punktewertung</th>
+        <th>UCI Punkte</th>
+      `
+      : isPointsLikeClassification
+        ? `
+          <th>Platz</th>
+          <th>Fahrer / Team</th>
+          <th>Team</th>
+          <th>Punkte</th>
+          <th>UCI Punkte</th>
+        `
+      : `
+        <th>Platz</th>
+        <th>Fahrer / Team</th>
+        <th>Team</th>
+        <th>Zeit</th>
+        <th>Rückstand</th>
+        <th>Punktewertung</th>
+        <th>UCI Punkte</th>
+      `;
+  }
+
   tbody.innerHTML = selectedClassification.rows.map((row) => {
     const participant = row.riderName ?? row.teamName;
     const teamName = row.riderName ? row.teamName : '—';
@@ -2436,9 +2867,25 @@ function renderResultsView(): void {
     const timeCell = row.timeSeconds != null
       ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
       : '–';
+    const gcDelta = resolveGcRankDelta(row, previousGcRanks);
+    const gcDeltaCell = isGcClassification
+      ? `<td class="results-gc-delta-cell">${renderGcRankDelta(gcDelta.previousRank, gcDelta.delta)}</td>`
+      : '';
+    if (isPointsLikeClassification) {
+      return `
+        <tr>
+          <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+          <td><strong>${esc(participant)}</strong></td>
+          <td>${esc(teamName)}</td>
+          <td>${row.points != null ? row.points : '–'}</td>
+          <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
+        </tr>`;
+    }
+
     return `
       <tr>
         <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+        ${gcDeltaCell}
         <td><strong>${esc(participant)}</strong></td>
         <td>${esc(teamName)}</td>
         <td>${esc(timeCell)}</td>
@@ -2447,6 +2894,9 @@ function renderResultsView(): void {
         <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
       </tr>`;
   }).join('');
+
+  markerClassifications.innerHTML = renderMarkerClassificationsHtml(state.stageResults.markerClassifications ?? []);
+  markerClassifications.classList.toggle('hidden', (state.stageResults.markerClassifications?.length ?? 0) === 0);
 
   empty.classList.add('hidden');
   table.classList.remove('hidden');

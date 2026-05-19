@@ -1,6 +1,7 @@
-import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType, StageProfilePoint } from '../../../shared/types';
+import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType } from '../../../shared/types';
 import type { RiderCluster, RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
+import { buildIntermediateSplitLabels, collectStageBoundaryMarkers } from './stageSummary';
 
 function esc(value: unknown): string {
   return String(value)
@@ -127,55 +128,55 @@ function resolveMarkerAccent(category: StageMarkerCategory | null, markerType: S
 
 function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, height: number, paddingTop: number, paddingBottom: number, axisMaxElevation: number): ProfileEvent[] {
   const rawEvents: ProfileEvent[] = [];
-  const pendingClimbs: Array<{ startPoint: StageProfilePoint; name: string | null }> = [];
+  const pendingClimbs: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
 
-  for (const point of summary.points) {
-    for (const marker of point.markers) {
-      if (marker.type === 'climb_start') {
-        pendingClimbs.push({
-          startPoint: point,
-          name: marker.name,
-        });
-        continue;
-      }
+  for (const boundaryMarker of collectStageBoundaryMarkers(summary)) {
+    const { marker, kmMark, elevation } = boundaryMarker;
+    if (marker.type === 'climb_start') {
+      pendingClimbs.push({
+        kmMark,
+        elevation,
+        name: marker.name,
+      });
+      continue;
+    }
 
-      if (marker.type === 'climb_top') {
-        let matchingIndex = -1;
-        for (let index = pendingClimbs.length - 1; index >= 0; index -= 1) {
-          if (pendingClimbs[index]?.name === marker.name) {
-            matchingIndex = index;
-            break;
-          }
+    if (marker.type === 'climb_top') {
+      let matchingIndex = -1;
+      for (let index = pendingClimbs.length - 1; index >= 0; index -= 1) {
+        if (pendingClimbs[index]?.name === marker.name) {
+          matchingIndex = index;
+          break;
         }
-        const climbStart = matchingIndex >= 0
-          ? pendingClimbs.splice(matchingIndex, 1)[0]
-          : pendingClimbs.pop();
-        const lengthKm = climbStart ? Math.max(0, point.kmMark - climbStart.startPoint.kmMark) : 0;
-        const gainMeters = climbStart ? Math.max(0, point.elevation - climbStart.startPoint.elevation) : 0;
-        const avgGradient = lengthKm > 0 ? gainMeters / (lengthKm * 10) : 0;
-        const accent = resolveMarkerAccent(marker.cat, marker.type);
-        rawEvents.push({
-          x: scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX),
-          anchorY: scaleElevation(point.elevation, axisMaxElevation, height, paddingTop, paddingBottom),
-          primaryLabel: `${marker.name ?? 'Anstieg'} · Kat. ${marker.cat ?? '?'}`,
-          secondaryLabel: lengthKm > 0 ? `${formatClimbLength(lengthKm)} · ${formatGradient(avgGradient)}` : null,
-          distanceLabel: `${point.kmMark.toFixed(1).replace('.', ',')} km`,
-          accentColor: accent.accentColor,
-        });
-        continue;
       }
+      const climbStart = matchingIndex >= 0
+        ? pendingClimbs.splice(matchingIndex, 1)[0]
+        : pendingClimbs.pop();
+      const lengthKm = climbStart ? Math.max(0, kmMark - climbStart.kmMark) : 0;
+      const gainMeters = climbStart ? Math.max(0, elevation - climbStart.elevation) : 0;
+      const avgGradient = lengthKm > 0 ? gainMeters / (lengthKm * 10) : 0;
+      const accent = resolveMarkerAccent(marker.cat, marker.type);
+      rawEvents.push({
+        x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
+        anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
+        primaryLabel: `${marker.name ?? 'Anstieg'} · Kat. ${marker.cat ?? '?'}`,
+        secondaryLabel: lengthKm > 0 ? `${formatClimbLength(lengthKm)} · ${formatGradient(avgGradient)}` : null,
+        distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
+        accentColor: accent.accentColor,
+      });
+      continue;
+    }
 
-      if (marker.type === 'sprint_intermediate') {
-        const accent = resolveMarkerAccent(marker.cat, marker.type);
-        rawEvents.push({
-          x: scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX),
-          anchorY: scaleElevation(point.elevation, axisMaxElevation, height, paddingTop, paddingBottom),
-          primaryLabel: marker.name ?? 'Zwischensprint',
-          secondaryLabel: formatElevationLabel(point.elevation),
-          distanceLabel: `${point.kmMark.toFixed(1).replace('.', ',')} km`,
-          accentColor: accent.accentColor,
-        });
-      }
+    if (marker.type === 'sprint_intermediate') {
+      const accent = resolveMarkerAccent(marker.cat, marker.type);
+      rawEvents.push({
+        x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
+        anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
+        primaryLabel: marker.name ?? 'Zwischensprint',
+        secondaryLabel: formatElevationLabel(elevation),
+        distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
+        accentColor: accent.accentColor,
+      });
     }
   }
 
@@ -223,9 +224,10 @@ function buildDistanceTicks(summary: ParsedStageSummary, stageDistanceMeters: nu
 }
 
 function renderDistanceTicks(tickMeters: number[], summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, baselineY: number): string {
+  const markerMeters = new Set(collectStageBoundaryMarkers(summary).map((entry) => Math.round(entry.kmMark * 1000)));
   return tickMeters.map((distanceMeter) => {
     const x = scaleDistance(distanceMeter, stageDistanceMeters, width, paddingX);
-    const hasMarker = summary.points.some((point) => Math.round(point.kmMark * 1000) === distanceMeter && (point.markers?.length ?? 0) > 0);
+    const hasMarker = markerMeters.has(distanceMeter);
     const tickLength = hasMarker ? 18 : 12;
     const labelY = baselineY + tickLength + 26;
     return `
@@ -366,10 +368,7 @@ function formatFinishGap(seconds: number): string {
 }
 
 function buildSplitLabels(summary: ParsedStageSummary): string[] {
-  return summary.points
-    .flatMap((point, pointIndex) => point.markers
-      .filter((marker) => marker.type === 'sprint_intermediate')
-      .map((marker, markerIndex) => marker.name ?? `SZ ${pointIndex + markerIndex + 1}`));
+  return buildIntermediateSplitLabels(summary);
 }
 
 function buildTimingEntries(snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap): { finishedEntries: TimingRailEntry[]; splitEntries: TimingRailEntry[] } {
@@ -394,6 +393,10 @@ function buildTimingEntries(snapshot: SimulationSnapshot, bootstrap: RealtimeSim
     .map(mapEntry);
 
   return { finishedEntries, splitEntries };
+}
+
+function findMarkerClassification(snapshot: SimulationSnapshot, label: string) {
+  return snapshot.markerClassifications.find((classification) => classification.markerLabel === label) ?? null;
 }
 
 function renderFinishRail(snapshot: SimulationSnapshot, bootstrap: RealtimeSimulationBootstrap): string {
@@ -429,17 +432,18 @@ function renderTimingRail(summary: ParsedStageSummary, snapshot: SimulationSnaps
   const { finishedEntries, splitEntries } = buildTimingEntries(snapshot, bootstrap);
   const splitLabels = buildSplitLabels(summary);
   const activeSplitLabel = splitModeLabel(mode);
+  const activeClassification = activeSplitLabel ? findMarkerClassification(snapshot, activeSplitLabel) : null;
   const rankingEntries = activeSplitLabel
-    ? splitEntries
-        .filter((entry) => entry.rider.splitTimes[activeSplitLabel] != null)
-        .sort((left, right) => (left.rider.splitTimes[activeSplitLabel] ?? 0) - (right.rider.splitTimes[activeSplitLabel] ?? 0) || left.rider.riderId - right.rider.riderId)
+    ? (activeClassification?.entries ?? [])
+        .map((classificationEntry) => splitEntries.find((entry) => entry.rider.riderId === classificationEntry.riderId) ?? null)
+        .filter((entry): entry is TimingRailEntry => entry != null)
     : finishedEntries;
   if (rankingEntries.length === 0) {
     return `<div class="race-sim-cluster-rail-empty">${activeSplitLabel ? 'Noch keine Zwischenzeiten an dieser Messung' : 'Noch keine Fahrer im Ziel'}</div>`;
   }
 
   const latestFive = activeSplitLabel
-    ? [...rankingEntries].sort((left, right) => (right.rider.splitTimes[activeSplitLabel] ?? 0) - (left.rider.splitTimes[activeSplitLabel] ?? 0)).slice(0, 5)
+    ? [...rankingEntries].sort((left, right) => (right.rider.splitTimes[activeSplitLabel] ?? 0) - (left.rider.splitTimes[activeSplitLabel] ?? 0) || right.rider.photoFinishScore - left.rider.photoFinishScore || left.rider.riderId - right.rider.riderId).slice(0, 5)
     : [...rankingEntries].sort((left, right) => (right.rider.finishTimeSeconds ?? 0) - (left.rider.finishTimeSeconds ?? 0)).slice(0, 5);
   const latestIds = new Set(latestFive.map((entry) => entry.rider.riderId));
   const latestTitle = activeSplitLabel ? `Zuletzt bei ${esc(activeSplitLabel)}` : 'Zuletzt im Ziel';

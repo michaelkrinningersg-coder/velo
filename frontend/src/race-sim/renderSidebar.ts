@@ -1,6 +1,7 @@
 import type { RealtimeSimulationBootstrap, Rider, Team } from '../../../shared/types';
 import type { RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
+import { buildIntermediateSplitLabels } from './stageSummary';
 
 interface LeaderboardColumn {
   label: string;
@@ -141,6 +142,18 @@ function formatGradientPercent(value: number): string {
   return `${formatSigned(value)}%`;
 }
 
+function formatKmValue(value: number): string {
+  return `${value.toFixed(1).replace('.', ',')} km`;
+}
+
+function formatSegmentWindow(rider: RealtimeRiderSnapshot): string {
+  return `${formatKmValue(rider.segmentStartKm)} - ${formatKmValue(rider.segmentEndKm)}`;
+}
+
+function formatSegmentElevationBand(rider: RealtimeRiderSnapshot): string {
+  return `${Math.round(rider.segmentStartElevation)} - ${Math.round(rider.segmentEndElevation)} m`;
+}
+
 function labelValue(value: string): string {
   return value.replace(/_/g, ' ');
 }
@@ -194,11 +207,27 @@ function getRiderCountryCode(rider: Rider): string {
 }
 
 function buildIntermediateLabels(bootstrap: RealtimeSimulationBootstrap): string[] {
-  return bootstrap.stageSummary.points
-    .flatMap((point, pointIndex) => point.markers
-      .filter((marker) => marker.type === 'sprint_intermediate')
-      .map((marker, markerIndex) => marker.name ?? `SZ ${pointIndex + markerIndex + 1}`))
-    .slice(0, 2);
+  return buildIntermediateSplitLabels(bootstrap.stageSummary);
+}
+
+function buildMarkerRankLookup(snapshot: SimulationSnapshot): Map<string, Map<number, number>> {
+  return new Map(snapshot.markerClassifications.map((classification) => [
+    classification.markerLabel,
+    new Map(classification.entries.map((entry) => [entry.riderId, entry.rank])),
+  ]));
+}
+
+function resolveSplitSortValue(
+  rider: RealtimeRiderSnapshot,
+  label: string,
+  stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
+  markerRanksByLabel: Map<string, Map<number, number>>,
+): number | null {
+  if (stageProfile !== 'ITT') {
+    return markerRanksByLabel.get(label)?.get(rider.riderId) ?? null;
+  }
+
+  return rider.splitTimes[label] ?? null;
 }
 
 function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitLabels: string[]): LeaderboardColumn[] {
@@ -214,7 +243,7 @@ function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitLabels: strin
     { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
     { label: 'GC', width: '52px', sortKey: 'gcRank' },
     { label: 'GC Gap', width: '70px', sortKey: 'gcGap' },
-    { label: 'Steigung', width: '72px', sortKey: 'gradientPercent' },
+    { label: 'Aktive Segment-Steigung', displayLabel: 'Grad', width: '72px', sortKey: 'gradientPercent' },
     { label: 'Speed', width: '82px', sortKey: 'speed' },
   ];
 
@@ -383,6 +412,7 @@ function compareValues(left: string | number | null, right: string | number | nu
 function buildRiderComparator(
   bootstrap: RealtimeSimulationBootstrap,
   splitLabels: string[],
+  markerRanksByLabel: Map<string, Map<number, number>>,
   sortState: LeaderboardSortState,
   riderById: Map<number, Rider>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -404,8 +434,8 @@ function buildRiderComparator(
   return (left, right) => {
     const leftSourceRider = riderById.get(left.riderId) ?? null;
     const rightSourceRider = riderById.get(right.riderId) ?? null;
-    const leftValue = resolveSortValue(left, leftSourceRider, sortState.manualSortKey ?? '', bootstrap, gcByRiderId, teamAbbreviationById);
-    const rightValue = resolveSortValue(right, rightSourceRider, sortState.manualSortKey ?? '', bootstrap, gcByRiderId, teamAbbreviationById);
+    const leftValue = resolveSortValue(left, leftSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByLabel, gcByRiderId, teamAbbreviationById);
+    const rightValue = resolveSortValue(right, rightSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByLabel, gcByRiderId, teamAbbreviationById);
     return (compareValues(leftValue, rightValue) * directionFactor) || left.riderId - right.riderId;
   };
 }
@@ -440,6 +470,7 @@ function resolveSortValue(
   sourceRider: Rider | null,
   sortKey: string,
   bootstrap: RealtimeSimulationBootstrap,
+  markerRanksByLabel: Map<string, Map<number, number>>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
   teamAbbreviationById: Map<number, string>,
 ): string | number | null {
@@ -493,7 +524,7 @@ function resolveSortValue(
       return rider.currentSpeedMps;
     default:
       if (sortKey.startsWith('split:')) {
-        return rider.splitTimes[sortKey.slice('split:'.length)] ?? null;
+        return resolveSplitSortValue(rider, sortKey.slice('split:'.length), bootstrap.stage.profile, markerRanksByLabel);
       }
       return null;
   }
@@ -503,6 +534,7 @@ function sortRiders(
   riders: RealtimeRiderSnapshot[],
   bootstrap: RealtimeSimulationBootstrap,
   splitLabels: string[],
+  markerRanksByLabel: Map<string, Map<number, number>>,
   sortState: LeaderboardSortState,
   riderById: Map<number, Rider>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -511,7 +543,7 @@ function sortRiders(
 ): RealtimeRiderSnapshot[] {
   if (!sortState.manualSortKey) {
     if (sortState.autoSort) {
-      const comparator = buildRiderComparator(bootstrap, splitLabels, sortState, riderById, gcByRiderId, teamAbbreviationById);
+      const comparator = buildRiderComparator(bootstrap, splitLabels, markerRanksByLabel, sortState, riderById, gcByRiderId, teamAbbreviationById);
       if (!comparator) {
         return [...riders];
       }
@@ -527,7 +559,7 @@ function sortRiders(
     ));
   }
 
-  const comparator = buildRiderComparator(bootstrap, splitLabels, sortState, riderById, gcByRiderId, teamAbbreviationById);
+  const comparator = buildRiderComparator(bootstrap, splitLabels, markerRanksByLabel, sortState, riderById, gcByRiderId, teamAbbreviationById);
   if (!comparator) {
     return [...riders];
   }
@@ -733,7 +765,17 @@ function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, T
     </span>`;
 }
 
-function renderSplitCell(rider: RealtimeRiderSnapshot, label: string): string {
+function renderSplitCell(
+  rider: RealtimeRiderSnapshot,
+  label: string,
+  stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
+  markerRanksByLabel: Map<string, Map<number, number>>,
+): string {
+  if (stageProfile !== 'ITT') {
+    const rank = markerRanksByLabel.get(label)?.get(rider.riderId);
+    return rank != null ? `${rank}.` : '—';
+  }
+
   const value = rider.splitTimes[label];
   return value != null ? formatClock(value) : '—';
 }
@@ -741,6 +783,8 @@ function renderSplitCell(rider: RealtimeRiderSnapshot, label: string): string {
 function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | null, gcStanding: { rank: number; gapSeconds: number } | null): string {
   const detailItems = [
     { label: 'Terrain / Skill', value: `${formatTerrain(rider.activeTerrain)} / ${formatSkill(rider.skillName)}` },
+    { label: 'Aktiver Abschnitt', value: formatSegmentWindow(rider) },
+    { label: 'Segmenthöhe', value: formatSegmentElevationBand(rider) },
     { label: 'Basis', value: formatNumber(rider.baseSkill) },
     { label: 'Team+', value: rider.teamGroupBonus > 0 ? `+${formatNumber(rider.teamGroupBonus)}` : '—' },
     { label: 'S-Form', value: formatSigned(sourceRider?.formBonus ?? 0) },
@@ -865,6 +909,7 @@ function updateSidebarRow(
   isDetailOpen: boolean,
   splitLabels: string[],
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
+  markerRanksByLabel: Map<string, Map<number, number>>,
   raceIsStageRace: boolean,
   stageNumber: number,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -890,7 +935,7 @@ function updateSidebarRow(
     if (!splitField) {
       return;
     }
-    const splitValue = renderSplitCell(rider, label);
+    const splitValue = renderSplitCell(rider, label, stageProfile, markerRanksByLabel);
     updateText(splitField, splitValue);
     updateTitle(splitField, label);
   });
@@ -925,11 +970,16 @@ function updateSidebarRow(
   updateText(rowCache.gcGapField, gcStanding ? formatGcGap(gcStanding.gapSeconds) : '—');
   updateText(rowCache.gradientPercentField, formatGradientPercent(rider.gradientPercent));
   updateClassName(rowCache.gradientPercentField, getSlopeClassName(rider.gradientPercent));
+  updateTitle(rowCache.gradientPercentField, `${formatTerrain(rider.activeTerrain)} · ${formatSegmentWindow(rider)}`);
   updateText(rowCache.speedField, formatSpeed(rider.currentSpeedMps));
 
   const detailKey = [
     isDetailOpen ? 'open' : 'closed',
     rider.activeTerrain,
+    rider.segmentStartKm,
+    rider.segmentEndKm,
+    rider.segmentStartElevation,
+    rider.segmentEndElevation,
     rider.skillName,
     rider.baseSkill,
     rider.teamGroupBonus,
@@ -986,6 +1036,7 @@ export function renderRaceSimSidebar(
   const prepStartMs = performance.now();
   const sidebarData = getBootstrapSidebarData(bootstrap);
   const { splitLabels } = sidebarData;
+  const markerRanksByLabel = buildMarkerRankLookup(snapshot);
   const sortState = getLeaderboardSortState(container);
   const previousCache = sidebarRenderCache.get(container);
   telemetry.prepMs = performance.now() - prepStartMs;
@@ -995,6 +1046,7 @@ export function renderRaceSimSidebar(
     snapshot.riders,
     bootstrap,
     splitLabels,
+    markerRanksByLabel,
     sortState,
     sidebarData.riderById,
     sidebarData.gcByRiderId,
@@ -1091,6 +1143,7 @@ export function renderRaceSimSidebar(
       cached.openDetailRiderId === rider.riderId,
       splitLabels,
       bootstrap.stage.profile,
+      markerRanksByLabel,
       bootstrap.race.isStageRace,
       bootstrap.stage.stageNumber,
       sidebarData.gcByRiderId,

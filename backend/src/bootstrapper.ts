@@ -468,8 +468,8 @@ function seedRaces(db: Database.Database): void {
 function seedStages(db: Database.Database): void {
   const rows = readCsv('stages.csv');
   const insert = db.prepare(`
-    INSERT INTO stages (id, race_id, stage_number, date, profile, details_csv_file)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -480,6 +480,7 @@ function seedStages(db: Database.Database): void {
       int(req(row, 'stage_number', ctx), ctx),
       req(row, 'date', ctx),
       req(row, 'profile', ctx),
+      int(req(row, 'start_elevation', ctx), ctx),
       req(row, 'details_csv_file', ctx),
     );
   }
