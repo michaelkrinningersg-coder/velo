@@ -287,30 +287,52 @@ export class DatabaseService {
       return;
     }
 
-    if (!columnExists(db, 'skill_weights', 'ttt_speed_multiplier')) {
-      db.prepare(`
-        ALTER TABLE skill_weights
-        ADD COLUMN ttt_speed_multiplier REAL NOT NULL DEFAULT 1 CHECK(ttt_speed_multiplier > 0)
-      `).run();
+    const missingColumns = [
+      ['ttt_speed_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(ttt_speed_multiplier > 0)'],
+      ['final_spread_late_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(final_spread_late_multiplier > 0)'],
+      ['final_spread_peak_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(final_spread_peak_multiplier > 0)'],
+    ] as const;
+
+    for (const [columnName, columnDefinition] of missingColumns) {
+      if (!columnExists(db, 'skill_weights', columnName)) {
+        db.prepare(`
+          ALTER TABLE skill_weights
+          ADD COLUMN ${columnName} ${columnDefinition}
+        `).run();
+      }
     }
 
     const existingCount = db.prepare('SELECT COUNT(*) AS count FROM skill_weights').get() as { count: number } | undefined;
-    const fallbackMultiplierByKey = new Map<string, number>(
-      DEFAULT_SKILL_WEIGHT_RULES.map((rule) => [`${rule.simulationMode}:${rule.terrain}`, rule.tttSpeedMultiplier] as const),
+    const fallbackRuleByKey = new Map<string, (typeof DEFAULT_SKILL_WEIGHT_RULES)[number]>(
+      DEFAULT_SKILL_WEIGHT_RULES.map((rule) => [`${rule.simulationMode}:${rule.terrain}`, rule] as const),
     );
 
     const updateMultiplier = db.prepare(`
       UPDATE skill_weights
-      SET ttt_speed_multiplier = ?
+      SET ttt_speed_multiplier = ?,
+          final_spread_late_multiplier = ?,
+          final_spread_peak_multiplier = ?
       WHERE simulation_mode = ? AND terrain = ?
     `);
 
-    const applyMultiplierFallbacks = (rows: Array<{ simulation_mode: string; terrain: string; ttt_speed_multiplier?: number }>): void => {
+    const applyMultiplierFallbacks = (rows: Array<{
+      simulation_mode: string;
+      terrain: string;
+      ttt_speed_multiplier?: number;
+      final_spread_late_multiplier?: number;
+      final_spread_peak_multiplier?: number;
+    }>): void => {
       db.transaction(() => {
         for (const row of rows) {
           const key = `${row.simulation_mode}:${row.terrain}`;
-          const multiplier = row.ttt_speed_multiplier ?? fallbackMultiplierByKey.get(key) ?? 1;
-          updateMultiplier.run(multiplier, row.simulation_mode, row.terrain);
+          const fallbackRule = fallbackRuleByKey.get(key);
+          updateMultiplier.run(
+            row.ttt_speed_multiplier ?? fallbackRule?.tttSpeedMultiplier ?? 1,
+            row.final_spread_late_multiplier ?? fallbackRule?.finalSpreadLateMultiplier ?? 1,
+            row.final_spread_peak_multiplier ?? fallbackRule?.finalSpreadPeakMultiplier ?? 1,
+            row.simulation_mode,
+            row.terrain,
+          );
         }
       })();
     };
@@ -321,10 +343,19 @@ export class DatabaseService {
         try {
           if (tableExists(masterDb, 'skill_weights')) {
             const masterHasMultiplierColumn = columnExists(masterDb, 'skill_weights', 'ttt_speed_multiplier');
+            const masterHasLateSpreadColumn = columnExists(masterDb, 'skill_weights', 'final_spread_late_multiplier');
+            const masterHasPeakSpreadColumn = columnExists(masterDb, 'skill_weights', 'final_spread_peak_multiplier');
             const masterRows = masterDb.prepare(`
-              SELECT simulation_mode, terrain${masterHasMultiplierColumn ? ', ttt_speed_multiplier' : ''}
+              SELECT simulation_mode,
+                     terrain${masterHasMultiplierColumn ? ', ttt_speed_multiplier' : ''}${masterHasLateSpreadColumn ? ', final_spread_late_multiplier' : ''}${masterHasPeakSpreadColumn ? ', final_spread_peak_multiplier' : ''}
               FROM skill_weights
-            `).all() as Array<{ simulation_mode: string; terrain: string; ttt_speed_multiplier?: number }>;
+            `).all() as Array<{
+              simulation_mode: string;
+              terrain: string;
+              ttt_speed_multiplier?: number;
+              final_spread_late_multiplier?: number;
+              final_spread_peak_multiplier?: number;
+            }>;
             applyMultiplierFallbacks(masterRows);
             return;
           }
@@ -337,6 +368,8 @@ export class DatabaseService {
         simulation_mode: rule.simulationMode,
         terrain: rule.terrain,
         ttt_speed_multiplier: rule.tttSpeedMultiplier,
+        final_spread_late_multiplier: rule.finalSpreadLateMultiplier,
+        final_spread_peak_multiplier: rule.finalSpreadPeakMultiplier,
       })));
       return;
     }
@@ -370,6 +403,8 @@ export class DatabaseService {
                weight_resistance,
                weight_recuperation,
                weight_bike_handling,
+               ${columnExists(masterDb, 'skill_weights', 'final_spread_late_multiplier') ? 'final_spread_late_multiplier' : '1 AS final_spread_late_multiplier'},
+               ${columnExists(masterDb, 'skill_weights', 'final_spread_peak_multiplier') ? 'final_spread_peak_multiplier' : '1 AS final_spread_peak_multiplier'},
                ${columnExists(masterDb, 'skill_weights', 'ttt_speed_multiplier') ? 'ttt_speed_multiplier' : '1 AS ttt_speed_multiplier'}
         FROM skill_weights
       `).all() as Array<{
@@ -391,6 +426,8 @@ export class DatabaseService {
         weight_resistance: number;
         weight_recuperation: number;
         weight_bike_handling: number;
+        final_spread_late_multiplier: number;
+        final_spread_peak_multiplier: number;
         ttt_speed_multiplier: number;
       }>;
 
@@ -400,8 +437,9 @@ export class DatabaseService {
           weight_flat, weight_mountain, weight_medium_mountain, weight_hill, weight_time_trial,
           weight_prologue, weight_cobble, weight_sprint, weight_acceleration, weight_downhill,
           weight_attack, weight_stamina, weight_resistance, weight_recuperation, weight_bike_handling,
+          final_spread_late_multiplier, final_spread_peak_multiplier,
           ttt_speed_multiplier
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       db.transaction(() => {
@@ -425,12 +463,142 @@ export class DatabaseService {
             row.weight_resistance,
             row.weight_recuperation,
             row.weight_bike_handling,
-            row.ttt_speed_multiplier ?? fallbackMultiplierByKey.get(`${row.simulation_mode}:${row.terrain}`) ?? 1,
+            row.final_spread_late_multiplier ?? fallbackRuleByKey.get(`${row.simulation_mode}:${row.terrain}`)?.finalSpreadLateMultiplier ?? 1,
+            row.final_spread_peak_multiplier ?? fallbackRuleByKey.get(`${row.simulation_mode}:${row.terrain}`)?.finalSpreadPeakMultiplier ?? 1,
+            row.ttt_speed_multiplier ?? fallbackRuleByKey.get(`${row.simulation_mode}:${row.terrain}`)?.tttSpeedMultiplier ?? 1,
           );
         }
       })();
     } finally {
       masterDb.close();
+    }
+  }
+
+  private ensureStageSpreadData(db: Database.Database): void {
+    if (!tableExists(db, 'stages')) {
+      return;
+    }
+
+    const missingColumns = [
+      ['final_spread_start_percent', 'REAL NOT NULL DEFAULT 70 CHECK(final_spread_start_percent BETWEEN 0 AND 100)'],
+      ['final_push_start_percent', 'REAL NOT NULL DEFAULT 90 CHECK(final_push_start_percent BETWEEN 0 AND 100)'],
+      ['final_spread_difficulty_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(final_spread_difficulty_multiplier > 0)'],
+      ['crash_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0)'],
+      ['mechanical_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0)'],
+    ] as const;
+
+    for (const [columnName, columnDefinition] of missingColumns) {
+      if (!columnExists(db, 'stages', columnName)) {
+        db.prepare(`
+          ALTER TABLE stages
+          ADD COLUMN ${columnName} ${columnDefinition}
+        `).run();
+      }
+    }
+
+    if (!fs.existsSync(this.masterDbPath)) {
+      return;
+    }
+
+    const existingCount = db.prepare('SELECT COUNT(*) AS count FROM stages').get() as { count: number } | undefined;
+    if ((existingCount?.count ?? 0) <= 0) {
+      return;
+    }
+
+    const masterDb = new Database(this.masterDbPath, { readonly: true });
+    try {
+      if (!tableExists(masterDb, 'stages')) {
+        return;
+      }
+
+      const rows = masterDb.prepare(`
+        SELECT id,
+               ${columnExists(masterDb, 'stages', 'final_spread_start_percent') ? 'final_spread_start_percent' : '70 AS final_spread_start_percent'},
+               ${columnExists(masterDb, 'stages', 'final_push_start_percent') ? 'final_push_start_percent' : '90 AS final_push_start_percent'},
+               ${columnExists(masterDb, 'stages', 'final_spread_difficulty_multiplier') ? 'final_spread_difficulty_multiplier' : '1 AS final_spread_difficulty_multiplier'},
+               ${columnExists(masterDb, 'stages', 'crash_incident_multiplier') ? 'crash_incident_multiplier' : '1 AS crash_incident_multiplier'},
+               ${columnExists(masterDb, 'stages', 'mechanical_incident_multiplier') ? 'mechanical_incident_multiplier' : '1 AS mechanical_incident_multiplier'}
+        FROM stages
+      `).all() as Array<{
+        id: number;
+        final_spread_start_percent: number;
+        final_push_start_percent: number;
+        final_spread_difficulty_multiplier: number;
+        crash_incident_multiplier: number;
+        mechanical_incident_multiplier: number;
+      }>;
+
+      const update = db.prepare(`
+        UPDATE stages
+        SET final_spread_start_percent = ?,
+            final_push_start_percent = ?,
+            final_spread_difficulty_multiplier = ?,
+            crash_incident_multiplier = ?,
+            mechanical_incident_multiplier = ?
+        WHERE id = ?
+      `);
+
+      db.transaction(() => {
+        for (const row of rows) {
+          update.run(
+            row.final_spread_start_percent ?? 70,
+            row.final_push_start_percent ?? 90,
+            row.final_spread_difficulty_multiplier ?? 1,
+            row.crash_incident_multiplier ?? 1,
+            row.mechanical_incident_multiplier ?? 1,
+            row.id,
+          );
+        }
+      })();
+    } finally {
+      masterDb.close();
+    }
+  }
+
+  private ensureStageRaceStateSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_stage_race_state (
+        race_id INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        accumulated_random_fatigue REAL NOT NULL DEFAULT 0,
+        last_applied_stage_number INTEGER NOT NULL DEFAULT 0,
+        incident_day_form_penalty REAL NOT NULL DEFAULT 0,
+        incident_micro_form_penalty REAL NOT NULL DEFAULT 0,
+        incident_stamina_penalty REAL NOT NULL DEFAULT 0,
+        incident_day_form_cap REAL,
+        race_recuperation_penalty REAL NOT NULL DEFAULT 0,
+        current_recovery_penalty REAL NOT NULL DEFAULT 0,
+        pending_recovery_penalty_1 REAL NOT NULL DEFAULT 0,
+        pending_recovery_penalty_2 REAL NOT NULL DEFAULT 0,
+        pending_recovery_penalty_3 REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY (race_id, rider_id)
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_stage_race_state_race
+      ON rider_stage_race_state(race_id, rider_id)
+    `).run();
+
+    const missingColumns = [
+      ['incident_day_form_penalty', 'REAL NOT NULL DEFAULT 0'],
+      ['incident_micro_form_penalty', 'REAL NOT NULL DEFAULT 0'],
+      ['incident_stamina_penalty', 'REAL NOT NULL DEFAULT 0'],
+      ['incident_day_form_cap', 'REAL'],
+      ['race_recuperation_penalty', 'REAL NOT NULL DEFAULT 0'],
+      ['current_recovery_penalty', 'REAL NOT NULL DEFAULT 0'],
+      ['pending_recovery_penalty_1', 'REAL NOT NULL DEFAULT 0'],
+      ['pending_recovery_penalty_2', 'REAL NOT NULL DEFAULT 0'],
+      ['pending_recovery_penalty_3', 'REAL NOT NULL DEFAULT 0'],
+    ] as const;
+
+    for (const [columnName, columnDefinition] of missingColumns) {
+      if (!columnExists(db, 'rider_stage_race_state', columnName)) {
+        db.prepare(`
+          ALTER TABLE rider_stage_race_state
+          ADD COLUMN ${columnName} ${columnDefinition}
+        `).run();
+      }
     }
   }
 
@@ -548,6 +716,14 @@ export class DatabaseService {
       ON rider_form_history(date, rider_id)
     `).run();
 
+    if (tableExists(db, 'rider_daily_state')) {
+      db.prepare(`
+        UPDATE rider_daily_state
+        SET form_bonus = 0
+        WHERE form_bonus = -1
+      `).run();
+    }
+
     db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_r_form_daily_awards (
         rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
@@ -636,6 +812,8 @@ export class DatabaseService {
     this.ensureRaceCategoryRoleSchema(this.activeConnection);
     this.ensureRulesData(this.activeConnection);
     this.ensureSkillWeightsData(this.activeConnection);
+    this.ensureStageSpreadData(this.activeConnection);
+    this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRiderFormSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
@@ -650,6 +828,7 @@ export class DatabaseService {
 
     this.applyLatestSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
+    this.ensureStageRaceStateSchema(this.activeConnection);
 
     return this.activeConnection;
   }

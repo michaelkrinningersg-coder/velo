@@ -130,6 +130,14 @@ export interface Rider {
   activePeakDate?: string | null;
   fatigueMalus?: number;
   accumulatedRandomFatigue?: number;
+  stageRaceDayFormPenalty?: number;
+  stageRaceMicroFormPenalty?: number;
+  stageRaceStaminaPenalty?: number;
+  stageRaceDayFormCap?: number | null;
+  stageRaceRecuperationPenalty?: number;
+  hasSuperform?: boolean;
+  hasSupermalus?: boolean;
+  specialFormDelta?: number;
   seasonFormPeakDates?: string[];
   formHistory?: RiderFormSnapshot[];
   formForecast?: FormDebugPoint[];
@@ -314,6 +322,8 @@ export interface SkillWeightRule {
   simulationMode: SkillWeightSimulationMode;
   terrain: StageTerrain;
   weights: Partial<Record<RiderSkillKey, number>>;
+  finalSpreadLateMultiplier: number;
+  finalSpreadPeakMultiplier: number;
   tttSpeedMultiplier: number;
 }
 
@@ -374,6 +384,11 @@ export interface Stage {
   profile: StageProfile;
   detailsCsvFile: string;
   startElevation: number;
+  finalSpreadStartPercent: number;
+  finalPushStartPercent: number;
+  finalSpreadDifficultyMultiplier: number;
+  crashIncidentMultiplier: number;
+  mechanicalIncidentMultiplier: number;
   distanceKm?: number;
   elevationGainMeters?: number;
 }
@@ -490,9 +505,34 @@ export interface QuickSimResponse {
   resultTypes: ResultType[];
 }
 
+export type RaceIncidentType = 'crash' | 'mechanical';
+
+export type CrashSeverity = 'light' | 'medium' | 'severe';
+
+export type RealtimeFinishStatus = 'finished' | 'dnf';
+
+export interface PrecalculatedRaceIncident {
+  riderId: number;
+  type: RaceIncidentType;
+  severity: CrashSeverity | null;
+  triggerDistanceKm: number;
+  triggerDistanceMeters: number;
+  triggerDistancePercent: number;
+  waitDurationSeconds: number;
+  draftBoostMultiplier: number;
+  draftBoostDistanceMeters: number;
+  dayFormPenalty: number;
+  staminaPenalty: number;
+  recoveryPenaltyStages: number[];
+  raceRecuperationPenalty: number;
+  supportRiderIds: number[];
+}
+
 export interface RealtimeStageCommitEntry {
   riderId: number;
-  finishTimeSeconds: number;
+  finishTimeSeconds: number | null;
+  finishStatus: RealtimeFinishStatus;
+  statusReason?: string | null;
   photoFinishScore?: number;
 }
 
@@ -503,9 +543,17 @@ export interface RealtimeGcStanding {
   gapSeconds: number;
 }
 
+export interface RealtimeClassificationLeaders {
+  gcLeaderRiderId: number | null;
+  pointsLeaderRiderId: number | null;
+  mountainLeaderRiderId: number | null;
+  youthLeaderRiderId: number | null;
+}
+
 export interface RealtimeStageCommitRequest {
   entries: RealtimeStageCommitEntry[];
   markerClassifications?: StageMarkerClassification[];
+  incidents?: PrecalculatedRaceIncident[];
 }
 
 export interface RaceRosterSelectionRequest {
@@ -538,6 +586,7 @@ export interface RealtimeSimulationBootstrap {
   teams: Team[];
   stageSummary: ParsedStageSummary;
   gcStandings: RealtimeGcStanding[];
+  classificationLeaders: RealtimeClassificationLeaders;
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
 }
@@ -561,14 +610,33 @@ export interface SeasonStandingRow {
   teamId: number | null;
   teamName: string;
   countryCode: Nationality | null;
+  countryName?: string | null;
   points: number;
   gapPoints: number;
+}
+
+export interface SeasonStandingCountryRiderRow {
+  rank: number;
+  riderId: number;
+  riderName: string;
+  countryCode: Nationality | null;
+  points: number;
+}
+
+export interface SeasonStandingCountryRow {
+  rank: number;
+  countryCode: Nationality | null;
+  countryName: string;
+  points: number;
+  gapPoints: number;
+  topRiders: SeasonStandingCountryRiderRow[];
 }
 
 export interface SeasonStandingsPayload {
   season: number;
   riderStandings: SeasonStandingRow[];
   teamStandings: SeasonStandingRow[];
+  countryStandings: SeasonStandingCountryRow[];
 }
 
 // ------ Generische API-Response ------------------------------
@@ -637,6 +705,11 @@ export interface StageEditorMetadata {
   profile: StageProfile;
   detailsCsvFile: string;
   startElevation: number;
+  finalSpreadStartPercent: number;
+  finalPushStartPercent: number;
+  finalSpreadDifficultyMultiplier: number;
+  crashIncidentMultiplier: number;
+  mechanicalIncidentMultiplier: number;
 }
 
 export interface StageEditorExportRequest {

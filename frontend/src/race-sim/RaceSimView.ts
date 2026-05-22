@@ -1,6 +1,9 @@
 import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { renderRaceSimControls, type TimeControlValue } from './renderControls';
+import type { FavoriteItem } from './stageFavorites';
+import { renderRaceMessages } from './renderMessages';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
+import { renderStageFavorites } from './renderStageFavorites';
 import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRenderTelemetry } from './renderSidebar';
 import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
 import { summarizeStageMarkers } from './stageSummary';
@@ -9,6 +12,8 @@ interface RaceSimElements {
   layout: HTMLElement;
   emptyState: HTMLElement;
   profile: HTMLElement;
+  messages: HTMLElement;
+  favorites: HTMLElement;
   sidebar: HTMLElement;
   controls: HTMLElement;
   meta: HTMLElement;
@@ -80,6 +85,8 @@ export class RaceSimView {
   private lastProfileRenderTime = Number.NEGATIVE_INFINITY;
 
   private sidebarPaintSequence = 0;
+
+  private favorites: FavoriteItem[] = [];
 
   private perfTelemetry: RaceSimPerfTelemetry = {
     engineStepMs: 0,
@@ -203,6 +210,7 @@ export class RaceSimView {
     this.engine = new SimulationEngine(bootstrap);
     this.detailSnapshot = this.engine.getSnapshot();
     this.frameSnapshot = this.detailSnapshot;
+    this.favorites = this.detailSnapshot.stageFavorites;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
     this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
@@ -226,9 +234,12 @@ export class RaceSimView {
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
     this.resetPerfTelemetry();
+    this.favorites = [];
     this.elements.layout.classList.add('hidden');
     this.elements.emptyState.classList.remove('hidden');
     this.elements.emptyState.textContent = message;
+    this.elements.messages.innerHTML = '';
+    this.elements.favorites.innerHTML = '';
     this.elements.meta.textContent = '';
   }
 
@@ -243,8 +254,11 @@ export class RaceSimView {
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
     this.resetPerfTelemetry();
+    this.favorites = [];
     this.elements.layout.classList.add('hidden');
     this.elements.emptyState.classList.add('hidden');
+    this.elements.messages.innerHTML = '';
+    this.elements.favorites.innerHTML = '';
     this.elements.meta.textContent = '';
   }
 
@@ -365,6 +379,11 @@ export class RaceSimView {
       const sidebarWriteMs = performance.now() - sidebarRenderStartMs;
       this.recordPerfTelemetry('sidebarWriteMs', sidebarWriteMs);
       this.scheduleSidebarPaintTelemetry(sidebarRenderStartMs, sidebarWriteMs);
+    }
+
+    if (this.detailSnapshot) {
+      renderRaceMessages(this.elements.messages, this.detailSnapshot.messages);
+      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap.gcStandings, this.bootstrap.classificationLeaders);
     }
 
     renderRaceSimControls(this.elements.controls, {

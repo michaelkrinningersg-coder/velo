@@ -9,14 +9,15 @@ const DIVISION_BY_TIER = {
     2: 'ProTour',
     3: 'U23',
 };
-const RACE_ROLE_REQUIREMENTS = [
-    { roleName: 'Kapitaen', count: 1 },
-    { roleName: 'Co-Kapitaen', count: 1 },
-    { roleName: 'Edelhelfer', count: 1 },
-    { roleName: 'Starke Helfer', count: 1 },
-    { roleName: 'Sprinter', count: 1 },
-    { roleName: 'Wassertraeger', count: 2 },
-];
+const DEFAULT_ROLE_REQUIREMENTS = {
+    1: 1,
+    2: 1,
+    3: 1,
+    4: 1,
+    5: 2,
+    6: 1,
+};
+const COBBLE_SELECTION_MIN_SKILL = 65;
 const RIDER_LOCK_MESSAGES = {
     'already-raced-today': 'Heute bereits in einem anderen Rennen gestartet.',
     'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
@@ -34,6 +35,14 @@ function shuffleDeterministically(items, seed) {
     const random = createDeterministicRandom(seed);
     for (let index = shuffled.length - 1; index > 0; index -= 1) {
         const swapIndex = Math.floor(random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
+}
+function shuffleRandomly(items) {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
         [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
     }
     return shuffled;
@@ -99,31 +108,121 @@ function buildRiderLockMap(db, repo, race) {
 function getEligibleRiders(roster, riderLocks) {
     return roster.filter((rider) => !riderLocks.has(rider.id));
 }
-function selectRaceRoster(team, eligibleRoster, targetCount, raceId) {
+function isCobbleStage(stage) {
+    return stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill';
+}
+function resolveRoleRequirements(race) {
+    const roleRequirements = race.category?.roleRequirements ?? DEFAULT_ROLE_REQUIREMENTS;
+    return Object.entries(roleRequirements)
+        .map(([roleId, count]) => ({ roleId: Number(roleId), count }))
+        .filter((requirement) => Number.isFinite(requirement.roleId) && requirement.count > 0)
+        .sort((left, right) => left.roleId - right.roleId);
+}
+function resolveRoleName(roleNameById, roleId) {
+    if (roleId == null) {
+        return 'Restplatz';
+    }
+    return roleNameById.get(roleId) ?? `Rolle ${roleId}`;
+}
+function orderCandidatesForStage(candidates, stage, seed, useTrueRandom = false) {
+    const shuffled = useTrueRandom
+        ? shuffleRandomly(candidates)
+        : shuffleDeterministically(candidates, seed);
+    if (!isCobbleStage(stage)) {
+        return shuffled;
+    }
+    const cobbleReady = shuffled.filter((rider) => rider.skills.cobble >= COBBLE_SELECTION_MIN_SKILL);
+    const fallback = shuffled
+        .filter((rider) => rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL)
+        .sort((left, right) => right.skills.cobble - left.skills.cobble || left.id - right.id);
+    return [...cobbleReady, ...fallback];
+}
+function logAutomaticRosterSelection(team, race, stage, entries) {
+    console.log(`[RaceRoster] ${race.name} | ${formatStageDebugLabel(stage)} | ${team.name} | ${entries.length} Fahrer automatisch ausgewaehlt`);
+    entries.forEach((entry, index) => {
+        const riderRoleId = entry.rider.roleId ?? null;
+        const riderRoleName = entry.rider.role?.name ?? `Rolle ${riderRoleId ?? 'unbekannt'}`;
+        const targetRoleLabel = entry.targetRoleId == null ? 'Restplatz' : `Sollrolle ${entry.targetRoleId}`;
+        const reasonText = entry.reasons.length > 0 ? entry.reasons.join('; ') : 'ohne Abweichung';
+        console.log(`  ${index + 1}. ${entry.rider.firstName} ${entry.rider.lastName} | role_id=${riderRoleId ?? 'null'} (${riderRoleName}) | ${targetRoleLabel} | Phase=${entry.phase} | ${reasonText}`);
+    });
+}
+function formatStageDebugLabel(stage) {
+    return `Etappe ${stage.stageNumber} ${stage.profile}`;
+}
+function selectRaceRoster(team, eligibleRoster, targetCount, raceId, race, stage) {
     const requestedCount = Math.min(targetCount, eligibleRoster.length);
     if (requestedCount <= 0) {
         return [];
     }
+    const roleRequirements = resolveRoleRequirements(race);
+    const roleNameById = new Map();
+    eligibleRoster.forEach((rider) => {
+        if (rider.roleId != null && rider.role?.name) {
+            roleNameById.set(rider.roleId, rider.role.name);
+        }
+    });
+    const roleIdsAscending = Array.from(new Set([
+        ...roleRequirements.map((requirement) => requirement.roleId),
+        ...eligibleRoster.map((rider) => rider.roleId).filter((roleId) => roleId != null),
+    ])).sort((left, right) => left - right);
+    const roleIdsDescending = [...roleIdsAscending].sort((left, right) => right - left);
     const selectedIds = new Set();
     const selected = [];
     let seedOffset = 0;
-    for (const requirement of RACE_ROLE_REQUIREMENTS) {
+    const addSelection = (rider, targetRoleId, phase, reasons) => {
+        selected.push({ rider, targetRoleId, phase, reasons });
+        selectedIds.add(rider.id);
+    };
+    const takeCandidates = (roleId, takeCount, targetRoleId, phase, extraReason) => {
+        if (takeCount <= 0) {
+            return 0;
+        }
+        const orderedCandidates = orderCandidatesForStage(eligibleRoster.filter((rider) => !selectedIds.has(rider.id) && rider.roleId === roleId), stage, raceId * 1000 + team.id * 100 + seedOffset, phase === 'fill');
+        let taken = 0;
+        for (const rider of orderedCandidates.slice(0, takeCount)) {
+            const reasons = extraReason ? [extraReason] : [];
+            if (isCobbleStage(stage) && rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL) {
+                reasons.push(`Cobble-Filter nicht voll erfuellbar, ${rider.skills.cobble} Cobble nachgerueckt`);
+            }
+            addSelection(rider, targetRoleId, phase, reasons);
+            taken += 1;
+        }
+        seedOffset += 1;
+        return taken;
+    };
+    for (const requirement of roleRequirements) {
         if (selected.length >= requestedCount) {
             break;
         }
-        const roleCandidates = shuffleDeterministically(eligibleRoster.filter((rider) => !selectedIds.has(rider.id) && rider.role?.name === requirement.roleName), raceId * 1000 + team.id * 100 + seedOffset);
-        const takeCount = Math.min(requirement.count, requestedCount - selected.length, roleCandidates.length);
-        for (const rider of roleCandidates.slice(0, takeCount)) {
-            selected.push(rider);
-            selectedIds.add(rider.id);
+        const desiredCount = Math.min(requirement.count, requestedCount - selected.length);
+        let filled = takeCandidates(requirement.roleId, desiredCount, requirement.roleId, 'exact');
+        if (filled >= desiredCount) {
+            continue;
         }
-        seedOffset += 1;
+        for (const replacementRoleId of roleIdsAscending) {
+            if (replacementRoleId <= requirement.roleId || filled >= desiredCount) {
+                continue;
+            }
+            filled += takeCandidates(replacementRoleId, desiredCount - filled, requirement.roleId, 'replacement', `Exakte Rolle ${resolveRoleName(roleNameById, requirement.roleId)} nicht verfuegbar, ersetzt durch ${resolveRoleName(roleNameById, replacementRoleId)}`);
+        }
     }
     if (selected.length < requestedCount) {
-        const remaining = shuffleDeterministically(eligibleRoster.filter((rider) => !selectedIds.has(rider.id)), raceId * 1000 + team.id * 100 + 97);
+        for (const roleId of roleIdsDescending) {
+            if (selected.length >= requestedCount) {
+                break;
+            }
+            takeCandidates(roleId, requestedCount - selected.length, roleId, 'fill', 'Restplatz von unten nach oben aufgefuellt');
+        }
+    }
+    if (selected.length < requestedCount) {
+        const remaining = orderCandidatesForStage(eligibleRoster.filter((rider) => !selectedIds.has(rider.id)), stage, raceId * 1000 + team.id * 100 + 997, true);
         for (const rider of remaining.slice(0, requestedCount - selected.length)) {
-            selected.push(rider);
-            selectedIds.add(rider.id);
+            const reasons = ['Restplatz ohne verwertbare Rollenbindung aufgefuellt'];
+            if (isCobbleStage(stage) && rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL) {
+                reasons.push(`Cobble-Filter nicht voll erfuellbar, ${rider.skills.cobble} Cobble nachgerueckt`);
+            }
+            addSelection(rider, rider.roleId ?? null, 'fill', reasons);
         }
     }
     return selected;
@@ -141,11 +240,17 @@ function resolveParticipatingTeams(repo, race, riderLocks) {
         .filter((team) => getEligibleRiders(repo.getRiders(team.id), riderLocks).length >= riderLimit)
         .slice(0, race.category?.numberOfTeams ?? 0);
 }
-function buildRaceRoster(db, repo, race) {
+function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
     const riderLocks = buildRiderLockMap(db, repo, race);
     const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks);
     return eligibleTeams
-        .flatMap((team) => selectRaceRoster(team, getEligibleRiders(repo.getRiders(team.id), riderLocks), race.category?.numberOfRiders ?? 0, race.id))
+        .flatMap((team) => {
+        const selectedEntries = selectRaceRoster(team, getEligibleRiders(repo.getRiders(team.id), riderLocks), race.category?.numberOfRiders ?? 0, race.id, race, stage);
+        if (enableDebug) {
+            logAutomaticRosterSelection(team, race, stage, selectedEntries);
+        }
+        return selectedEntries.map((entry) => entry.rider);
+    })
         .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
 }
 function previewRaceRoster(db, repo, race, stage) {
@@ -157,7 +262,7 @@ function previewRaceRoster(db, repo, race, stage) {
         repo.ensureStageEntries(stage);
         return repo.getStageRiders(stage.id);
     }
-    const selected = buildRaceRoster(db, repo, race);
+    const selected = buildRaceRoster(db, repo, race, stage);
     if (race.isStageRace) {
         repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
         return repo.attachStageRaceFatigue(race.id, selected, stage.stageNumber);
@@ -240,7 +345,7 @@ function ensureRaceEntries(db, repo, race, stage) {
         repo.ensureStageEntries(stage);
         return repo.getStageRiders(stage.id);
     }
-    const selected = buildRaceRoster(db, repo, race);
+    const selected = buildRaceRoster(db, repo, race, stage, true);
     const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
     db.transaction(() => {
         for (const rider of selected) {

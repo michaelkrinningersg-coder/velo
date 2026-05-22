@@ -499,7 +499,7 @@ function sanitizeSegments(segments: StageEditorSegment[]): StageEditorSegment[] 
 
 function buildStagesCsv(payload: StageEditorExportRequest): string {
   const { metadata } = payload;
-  const header = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file';
+  const header = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
   const row = [
     metadata.stageId,
     metadata.raceId,
@@ -508,6 +508,11 @@ function buildStagesCsv(payload: StageEditorExportRequest): string {
     metadata.profile,
     metadata.startElevation,
     metadata.detailsCsvFile,
+    metadata.finalSpreadStartPercent,
+    metadata.finalPushStartPercent,
+    metadata.finalSpreadDifficultyMultiplier,
+    metadata.crashIncidentMultiplier,
+    metadata.mechanicalIncidentMultiplier,
   ].map(escapeCsv).join(',');
   return `${header}\n${row}\n`;
 }
@@ -546,6 +551,21 @@ function validateExportRequest(payload: StageEditorExportRequest): StageEditorEx
   }
   if (!Number.isInteger(metadata.stageNumber) || metadata.stageNumber <= 0) {
     throw new Error('stageNumber muss eine positive Ganzzahl sein.');
+  }
+  if (!Number.isFinite(metadata.finalSpreadStartPercent) || metadata.finalSpreadStartPercent < 0 || metadata.finalSpreadStartPercent > 100) {
+    throw new Error('finalSpreadStartPercent muss zwischen 0 und 100 liegen.');
+  }
+  if (!Number.isFinite(metadata.finalPushStartPercent) || metadata.finalPushStartPercent < 0 || metadata.finalPushStartPercent > 100) {
+    throw new Error('finalPushStartPercent muss zwischen 0 und 100 liegen.');
+  }
+  if (!Number.isFinite(metadata.finalSpreadDifficultyMultiplier) || metadata.finalSpreadDifficultyMultiplier <= 0) {
+    throw new Error('finalSpreadDifficultyMultiplier muss groesser als 0 sein.');
+  }
+  if (!Number.isFinite(metadata.crashIncidentMultiplier) || metadata.crashIncidentMultiplier <= 0) {
+    throw new Error('crashIncidentMultiplier muss groesser als 0 sein.');
+  }
+  if (!Number.isFinite(metadata.mechanicalIncidentMultiplier) || metadata.mechanicalIncidentMultiplier <= 0) {
+    throw new Error('mechanicalIncidentMultiplier muss groesser als 0 sein.');
   }
 
   const sanitizedSegments = sanitizeSegments(draft.segments);

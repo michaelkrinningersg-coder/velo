@@ -427,6 +427,83 @@ html, body {
   color: var(--text-500);
 }
 
+.season-standings-country-cell {
+  position: relative;
+}
+
+.season-standings-country-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  outline: none;
+}
+
+.season-standings-country-name {
+  color: var(--text-100);
+  font-weight: 700;
+}
+
+.season-standings-country-popover {
+  position: absolute;
+  top: calc(100% + .45rem);
+  left: 0;
+  z-index: 12;
+  min-width: min(32rem, 78vw);
+  display: none;
+}
+
+.season-standings-country-anchor:hover .season-standings-country-popover,
+.season-standings-country-anchor:focus-within .season-standings-country-popover {
+  display: block;
+}
+
+.season-standings-country-popover-card {
+  padding: .8rem .9rem;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(15, 23, 42, .98) 0%, rgba(2, 6, 23, .98) 100%);
+  box-shadow: var(--shadow);
+}
+
+.season-standings-country-popover-head {
+  margin-bottom: .55rem;
+  color: var(--text-100);
+  font-size: .78rem;
+}
+
+.season-standings-country-popover-grid {
+  display: grid;
+  grid-template-columns: 3rem 3rem minmax(0, 1fr) 4.5rem;
+  gap: .45rem;
+  align-items: center;
+  padding: .22rem 0;
+  font-size: .76rem;
+}
+
+.season-standings-country-popover-grid-head {
+  color: var(--text-500);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  margin-bottom: .2rem;
+  padding-bottom: .35rem;
+}
+
+.season-standings-country-rider-name {
+  color: var(--text-100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-standings-country-popover-empty {
+  color: var(--text-500);
+  font-size: .78rem;
+}
+
 .results-marker-classifications {
   display: grid;
   gap: 1rem;
@@ -464,8 +541,8 @@ html, body {
 
 .results-marker-row {
   display: grid;
-  grid-template-columns: 3rem 2.2rem minmax(0, 1fr) 7rem 6rem 5rem;
-  gap: .75rem;
+  grid-template-columns: 3rem 2.2rem minmax(0, 1fr) 2.4rem 7rem 6rem 5rem;
+  gap: .6rem;
   align-items: center;
   padding: .35rem 0;
   border-bottom: 1px solid rgba(148, 163, 184, .12);
@@ -492,11 +569,29 @@ html, body {
   text-align: center;
 }
 
+.results-flag-col,
+.results-flag-col-cell,
+.results-marker-flag {
+  width: 2.4rem;
+  text-align: center;
+}
+
 .results-jersey-cell {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 100%;
+}
+
+.results-flag-col-cell,
+.results-marker-flag {
+  vertical-align: middle;
+}
+
+.results-flag-placeholder {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
 }
 
 .results-team-jersey {
@@ -1053,6 +1148,181 @@ html, body {
   font-size: 1rem;
 }
 
+.race-sim-messages-body {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  max-height: min(42vh, 18rem);
+  overflow-y: auto;
+  padding-right: .15rem;
+  scrollbar-gutter: stable both-edges;
+}
+
+.race-sim-message-empty {
+  padding: .9rem 1rem;
+  border: 1px dashed rgba(148, 163, 184, .2);
+  border-radius: var(--radius-sm);
+  color: var(--text-500);
+  font-size: .82rem;
+}
+
+.race-sim-message-item {
+  display: grid;
+  gap: .28rem;
+  padding: .7rem .8rem;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid rgba(148, 163, 184, .35);
+  background: rgba(15, 23, 42, .72);
+}
+
+.race-sim-message-item[data-tone="warning"] {
+  border-left-color: rgba(245, 158, 11, .9);
+}
+
+.race-sim-message-item[data-tone="danger"] {
+  border-left-color: rgba(248, 113, 113, .95);
+}
+
+.race-sim-message-item[data-tone="neutral"] {
+  border-left-color: rgba(96, 165, 250, .8);
+}
+
+.race-sim-message-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .65rem;
+}
+
+.race-sim-message-title {
+  color: var(--text-100);
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.race-sim-message-time {
+  color: var(--text-500);
+  font-size: .72rem;
+  white-space: nowrap;
+}
+
+.race-sim-message-detail {
+  color: var(--text-300);
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+.race-sim-favorites-body {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.race-sim-favorites-empty {
+  padding: .9rem 1rem;
+  border: 1px dashed rgba(148, 163, 184, .2);
+  border-radius: var(--radius-sm);
+  color: var(--text-500);
+  font-size: .82rem;
+}
+
+.race-sim-favorites-column {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  min-width: 0;
+}
+
+.race-sim-favorite-item {
+  display: grid;
+  grid-template-columns: 2rem 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  padding: .6rem .65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid rgba(148, 163, 184, .14);
+}
+
+.race-sim-favorite-item.is-gc-leader {
+  border-color: #facc15;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, .2) inset;
+}
+
+.race-sim-favorite-item.is-points-leader {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, .18) inset;
+}
+
+.race-sim-favorite-item.is-mountain-leader {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, .18) inset;
+}
+
+.race-sim-favorite-item.is-youth-leader {
+  border-color: rgba(248, 250, 252, .85);
+  box-shadow: 0 0 0 1px rgba(248, 250, 252, .12) inset;
+}
+
+.race-sim-favorite-rank {
+  color: var(--text-400);
+  font-size: .76rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.race-sim-favorite-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .08rem;
+}
+
+.race-sim-favorite-name {
+  color: var(--text-100);
+  font-size: .8rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-favorite-role {
+  color: var(--text-500);
+  font-size: .68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-favorite-gc {
+  color: #93c5fd;
+  font-size: .66rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-favorite-skill {
+  color: #dbeafe;
+  font-size: .78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .race-sim-favorites-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .race-sim-favorites-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .race-sim-sidebar-body {
   display: flex;
   flex-direction: column;
@@ -1191,6 +1461,15 @@ html, body {
 
 .race-sim-row-name-btn:hover {
   color: #dbeafe;
+}
+
+.race-sim-row-name-btn.is-attacking {
+  color: #facc15;
+  text-shadow: 0 0 10px rgba(250, 204, 21, .28);
+}
+
+.race-sim-row-name-btn.is-attacking:hover {
+  color: #fde047;
 }
 
 .race-sim-row-flag {

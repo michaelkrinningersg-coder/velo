@@ -722,13 +722,15 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
   const fatigue = sourceRider?.fatigueMalus ?? 0;
   const teamBonus = rider.teamGroupBonus;
   const scaledMicroForm = Math.max(-2.5, Math.min(2.5, rider.microForm * 2.5));
-  const baseWithoutStamina = rider.baseSkill + seasonForm + raceForm + rider.dailyForm + rider.microForm + teamBonus - fatigue;
+  const attackBonus = rider.isAttacking ? 10 : 0;
+  const baseWithoutStamina = rider.baseSkill + attackBonus + seasonForm + raceForm + rider.dailyForm + rider.microForm + teamBonus - fatigue;
   const afterStamina = Math.max(0, baseWithoutStamina - rider.staminaPenalty);
   const staminaImpact = baseWithoutStamina - afterStamina;
   const heightImpact = afterStamina - rider.effectiveSkill;
 
   return [
     `Basis ${formatNumber(rider.baseSkill)}`,
+    rider.isAttacking ? `+ Attacke ${formatNumber(attackBonus)}` : null,
     `+ S-Form ${formatNumber(seasonForm)}`,
     `+ R-Form ${formatNumber(raceForm)}`,
     `+ T-Form ${formatNumber(rider.dailyForm)}`,
@@ -738,7 +740,7 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
     `- Stamina ${formatNumber(staminaImpact)}`,
     `- HM ${formatNumber(heightImpact)}`,
     `= Effektiv ${formatNumber(rider.effectiveSkill)}`,
-  ].join('\n');
+  ].filter((line): line is string => line != null).join('\n');
 }
 
 function formatScaledMicroForm(value: number): string {
@@ -962,6 +964,8 @@ function updateSidebarRow(
   updateText(rowCache.gapField, formatGap(rider.gapToLeaderMeters));
   updateText(rowCache.clockField, clockValue);
   rowCache.nameButton.setAttribute('aria-expanded', isDetailOpen ? 'true' : 'false');
+  updateClassName(rowCache.nameButton, `race-sim-row-name-btn${rider.isAttacking ? ' is-attacking' : ''}`);
+  updateTitle(rowCache.nameButton, rider.isAttacking ? `${rider.riderName} (Attacke aktiv)` : rider.riderName);
 
   splitLabels.forEach((label, index) => {
     const splitField = rowCache.splitFields[index];
@@ -1292,6 +1296,7 @@ export function renderRaceSimSidebar(
     orderedRiderIds: [],
     rowsByRiderId: new Map(),
     openDetailRiderId: null,
+    openTeamId: null,
   };
 
   if (previousLayoutKey != null && previousLayoutKey !== layoutKey) {
@@ -1385,6 +1390,7 @@ export function renderRaceSimSidebar(
     orderedRiderIds: nextRiderIds,
     rowsByRiderId: cached.rowsByRiderId,
     openDetailRiderId: cached.openDetailRiderId,
+    openTeamId: cached.openTeamId,
   });
   telemetry.finalizeMs = performance.now() - (totalStartMs + telemetry.prepMs + telemetry.sortMs + telemetry.layoutMs + telemetry.removeRowsMs + telemetry.createRowsMs + telemetry.orderCheckMs + telemetry.reorderMs + telemetry.visibilityMs + telemetry.updateRowsMs);
 

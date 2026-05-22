@@ -7,6 +7,11 @@ export interface SkillWeightComponent {
   weight: number;
 }
 
+export interface FinalSpreadConfig {
+  lateMultiplier: number;
+  peakMultiplier: number;
+}
+
 export const SKILL_WEIGHT_RIDER_COLUMNS = [
   ['flat', 'flat'],
   ['mountain', 'mountain'],
@@ -37,17 +42,32 @@ const DEFAULT_TTT_SPEED_MULTIPLIERS: Record<StageTerrain, number> = {
   Sprint: 1.05,
 };
 
+const DEFAULT_FINAL_SPREAD_CONFIGS: Record<StageTerrain, FinalSpreadConfig> = {
+  Flat: { lateMultiplier: 1, peakMultiplier: 1 },
+  Hill: { lateMultiplier: 1.1, peakMultiplier: 1.6 },
+  Medium_Mountain: { lateMultiplier: 1.6, peakMultiplier: 2.5 },
+  Mountain: { lateMultiplier: 1.6, peakMultiplier: 2.5 },
+  High_Mountain: { lateMultiplier: 1.6, peakMultiplier: 2.5 },
+  Cobble: { lateMultiplier: 1.5, peakMultiplier: 1.5 },
+  Cobble_Hill: { lateMultiplier: 1.5, peakMultiplier: 1.5 },
+  Abfahrt: { lateMultiplier: 1, peakMultiplier: 1 },
+  Sprint: { lateMultiplier: 1, peakMultiplier: 1 },
+};
+
 function createSkillWeightRule(
   id: number,
   simulationMode: SkillWeightSimulationMode,
   terrain: StageTerrain,
   weights: Partial<Record<RiderSkillKey, number>>,
 ): SkillWeightRule {
+  const finalSpreadConfig = DEFAULT_FINAL_SPREAD_CONFIGS[terrain];
   return {
     id,
     simulationMode,
     terrain,
     weights,
+    finalSpreadLateMultiplier: finalSpreadConfig.lateMultiplier,
+    finalSpreadPeakMultiplier: finalSpreadConfig.peakMultiplier,
     tttSpeedMultiplier: simulationMode === 'ttt' ? DEFAULT_TTT_SPEED_MULTIPLIERS[terrain] : 1,
   };
 }
@@ -86,6 +106,10 @@ const DEFAULT_SKILL_WEIGHT_RULE_MAP = new Map(
   DEFAULT_SKILL_WEIGHT_RULES.map((rule) => [buildSkillWeightLookupKey(rule.simulationMode, rule.terrain), rule.weights]),
 );
 
+const DEFAULT_SKILL_WEIGHT_CONFIG_MAP = new Map(
+  DEFAULT_SKILL_WEIGHT_RULES.map((rule) => [buildSkillWeightLookupKey(rule.simulationMode, rule.terrain), rule]),
+);
+
 export function resolveSkillWeightSimulationMode(stageProfile: StageProfile): SkillWeightSimulationMode {
   if (stageProfile === 'ITT') {
     return 'itt';
@@ -102,6 +126,10 @@ export function buildSkillWeightLookupKey(mode: SkillWeightSimulationMode, terra
 
 export function buildSkillWeightRuleMap(rules: SkillWeightRule[]): Map<string, SkillWeightRule['weights']> {
   return new Map(rules.map((rule) => [buildSkillWeightLookupKey(rule.simulationMode, rule.terrain), rule.weights]));
+}
+
+export function buildSkillWeightConfigMap(rules: SkillWeightRule[]): Map<string, SkillWeightRule> {
+  return new Map(rules.map((rule) => [buildSkillWeightLookupKey(rule.simulationMode, rule.terrain), rule]));
 }
 
 export function resolvePrimaryTerrainSkillKey(terrain: StageTerrain): RiderSkillKey {
@@ -168,4 +196,18 @@ export function resolveTttTerrainSpeedMultiplier(
 ): number {
   const rule = rules.find((candidate) => candidate.simulationMode === 'ttt' && candidate.terrain === terrain);
   return rule?.tttSpeedMultiplier ?? DEFAULT_TTT_SPEED_MULTIPLIERS[terrain] ?? 1.05;
+}
+
+export function resolveFinalSpreadConfig(
+  mode: SkillWeightSimulationMode,
+  terrain: StageTerrain,
+  rulesByKey?: Map<string, SkillWeightRule>,
+): FinalSpreadConfig {
+  const rule = rulesByKey?.get(buildSkillWeightLookupKey(mode, terrain))
+    ?? DEFAULT_SKILL_WEIGHT_CONFIG_MAP.get(buildSkillWeightLookupKey(mode, terrain));
+
+  return {
+    lateMultiplier: rule?.finalSpreadLateMultiplier ?? DEFAULT_FINAL_SPREAD_CONFIGS[terrain].lateMultiplier,
+    peakMultiplier: rule?.finalSpreadPeakMultiplier ?? DEFAULT_FINAL_SPREAD_CONFIGS[terrain].peakMultiplier,
+  };
 }

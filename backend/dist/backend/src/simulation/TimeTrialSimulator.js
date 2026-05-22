@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TimeTrialSimulator = void 0;
+const skillWeights_1 = require("../../../shared/skillWeights");
 const StageParser_1 = require("./StageParser");
 const SPEED_BASE_FLAT = 50.0;
 const SPEED_BASE_HILLY = 41.0;
@@ -15,10 +16,14 @@ function resolveFormBonus(rider) {
     return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
 class TimeTrialSimulator {
-    static simulate(race, stage, riders) {
-        const segments = StageParser_1.StageParser.parseStageProfile(stage.detailsCsvFile);
+    static sampleDayFormFactor() {
+        return FORM_MIN + Math.random() * (FORM_MAX - FORM_MIN);
+    }
+    static simulate(race, stage, riders, skillWeightRules = []) {
+        const segments = StageParser_1.StageParser.parseStageProfile(stage.detailsCsvFile, stage.startElevation);
+        const skillWeightRuleMap = (0, skillWeights_1.buildSkillWeightRuleMap)(skillWeightRules);
         const distanceKm = segments.reduce((sum, segment) => sum + segment.length_km, 0);
-        const entries = riders.map(rider => TimeTrialSimulator.simulateRider(rider, segments));
+        const entries = riders.map(rider => TimeTrialSimulator.simulateRider(rider, stage.profile, segments, skillWeightRuleMap));
         entries.sort((a, b) => a.finishTimeSeconds - b.finishTimeSeconds);
         const leaderTime = entries[0].finishTimeSeconds;
         for (const entry of entries) {
@@ -46,9 +51,9 @@ class TimeTrialSimulator {
             return SPEED_BASE_HILLY;
         return SPEED_BASE_FLAT;
     }
-    static simulateRider(rider, segments) {
-        const dayForm = FORM_MIN + Math.random() * (FORM_MAX - FORM_MIN);
-        const finishTimeSeconds = segments.reduce((sum, segment) => sum + TimeTrialSimulator.simulateSegment(rider, segment, dayForm), 0);
+    static simulateRider(rider, stageProfile, segments, skillWeightRuleMap) {
+        const dayForm = TimeTrialSimulator.sampleDayFormFactor();
+        const finishTimeSeconds = segments.reduce((sum, segment) => sum + TimeTrialSimulator.simulateSegment(rider, stageProfile, segment, dayForm, skillWeightRuleMap), 0);
         return {
             rider,
             dayFormFactor: Math.round(dayForm * 1000) / 1000,
@@ -58,49 +63,25 @@ class TimeTrialSimulator {
             gapFormatted: '',
         };
     }
-    static simulateSegment(rider, segment, dayForm) {
+    static simulateSegment(rider, stageProfile, segment, dayForm, skillWeightRuleMap) {
+        const segmentSkill = TimeTrialSimulator.resolveSegmentSkill(rider, stageProfile, segment, skillWeightRuleMap);
+        return TimeTrialSimulator.simulateSegmentForEffectiveSkill(segment, segmentSkill * dayForm);
+    }
+    static resolveEffectiveSegmentSkill(rider, stageProfile, segment, dayForm, skillWeightRuleMap) {
+        return TimeTrialSimulator.resolveSegmentSkill(rider, stageProfile, segment, skillWeightRuleMap) * dayForm;
+    }
+    static simulateSegmentForEffectiveSkill(segment, effectiveSkill) {
         const baseSpeed = TimeTrialSimulator.resolveBaseSpeed(segment);
-        const segmentSkill = TimeTrialSimulator.resolveSegmentSkill(rider, segment);
-        const attrDelta = (segmentSkill - 50) * ATTR_SPEED_FACTOR;
+        const attrDelta = (effectiveSkill - 50) * ATTR_SPEED_FACTOR;
         const noise = (Math.random() * 2 - 1) * NOISE_RANGE;
         const techPenalty = 1 - ((segment.tech_level - 1) * TECH_PENALTY_FACTOR);
         const windPenalty = 1 - ((segment.wind_exp - 1) * WIND_FACTOR);
-        const speed = Math.max(15, (baseSpeed + attrDelta) * dayForm * (1 + noise) * techPenalty * windPenalty);
+        const speed = Math.max(15, (baseSpeed + attrDelta) * (1 + noise) * techPenalty * windPenalty);
         return (segment.length_km / speed) * 3600;
     }
-    static resolveSegmentSkill(rider, segment) {
+    static resolveSegmentSkill(rider, stageProfile, segment, skillWeightRuleMap) {
         const formBonus = resolveFormBonus(rider);
-        if (segment.length_km <= 10) {
-            return (rider.skills.timeTrial + formBonus) * 0.45
-                + (rider.skills.prologue + formBonus) * 0.25
-                + (rider.skills.acceleration + formBonus) * 0.1
-                + (rider.skills.bikeHandling + formBonus) * 0.1
-                + (rider.skills.flat + formBonus) * 0.1;
-        }
-        if (segment.gradient_percent >= 5.0) {
-            return (rider.skills.timeTrial + formBonus) * 0.45
-                + (rider.skills.mountain + formBonus) * 0.25
-                + (rider.skills.resistance + formBonus) * 0.15
-                + (rider.skills.downhill + formBonus) * 0.05
-                + (rider.skills.bikeHandling + formBonus) * 0.1;
-        }
-        if (segment.gradient_percent <= -3.0) {
-            return (rider.skills.timeTrial + formBonus) * 0.5
-                + (rider.skills.downhill + formBonus) * (2 / 6)
-                + (rider.skills.flat + formBonus) * (1 / 6);
-        }
-        if (segment.terrain === 'Cobble') {
-            return (rider.skills.timeTrial + formBonus) * 0.4
-                + (rider.skills.cobble + formBonus) * 0.25
-                + (rider.skills.flat + formBonus) * 0.15
-                + (rider.skills.bikeHandling + formBonus) * 0.1
-                + (rider.skills.resistance + formBonus) * 0.1;
-        }
-        return (rider.skills.timeTrial + formBonus) * 0.6
-            + (rider.skills.resistance + formBonus) * 0.15
-            + (rider.skills.flat + formBonus) * 0.15
-            + (rider.skills.prologue + formBonus) * 0.05
-            + (rider.skills.bikeHandling + formBonus) * 0.05;
+        return (0, skillWeights_1.resolveWeightedSkillFromSkills)(rider.skills, (0, skillWeights_1.resolveSkillWeightSimulationMode)(stageProfile), segment.terrain, skillWeightRuleMap) + formBonus;
     }
     static formatTime(totalSec) {
         const h = Math.floor(totalSec / 3600);

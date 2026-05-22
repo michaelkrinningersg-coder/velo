@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-Cn-D8JQl.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DXrOZgzv.css">
+  <script type="module" crossorigin src="/assets/index-B2WJuygN.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Be0TQ3Sh.css">
 </head>
 <body>
 
@@ -60,13 +60,13 @@
           <span class="nav-icon">⌂</span> Dashboard
         </button>
         <button class="nav-btn" data-view="teams">
-          <span class="nav-icon">🏆</span> Teams
+          <span class="nav-icon">◫</span> Teams
         </button>
         <button class="nav-btn" data-view="live-race">
           <span class="nav-icon">◔</span> Live Race
         </button>
         <button class="nav-btn" data-view="results">
-          <span class="nav-icon">📋</span> Results
+          <span class="nav-icon">▤</span> Results
         </button>
         <button class="nav-btn" data-view="season-standings">
           <span class="nav-icon">★</span> Season Standings
@@ -165,6 +165,20 @@
             </div>
             <div id="race-sim-profile" class="race-sim-profile"></div>
           </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Messages</h3>
+              <p class="text-muted">Incidents, Helfer-Warten und Ausfälle während der Etappe.</p>
+            </div>
+            <div id="race-sim-messages-body" class="race-sim-messages-body"></div>
+          </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Stage Favorites</h3>
+              <p class="text-muted">Top 20 nach Etappenprofil, Form und Renntyp.</p>
+            </div>
+            <div id="race-sim-favorites-body" class="race-sim-favorites-body"></div>
+          </section>
           <section class="race-sim-sidebar-card">
             <div class="race-sim-card-header">
               <h3>Leaderboard</h3>
@@ -201,11 +215,13 @@
           </div>
         </div>
         <div id="results-type-tabs" class="results-type-tabs"></div>
+        <div id="results-marker-tabs" class="results-type-tabs hidden"></div>
         <div id="results-empty" class="results-empty">Noch keine Ergebnisse geladen.</div>
         <table class="data-table hidden" id="results-table">
           <thead>
             <tr>
               <th>Platz</th>
+              <th class="results-jersey-col">Trikot</th>
               <th>Fahrer / Team</th>
               <th>Team</th>
               <th>Zeit</th>
@@ -216,6 +232,7 @@
           </thead>
           <tbody id="results-tbody"></tbody>
         </table>
+        <div id="results-marker-classifications" class="results-marker-classifications hidden"></div>
       </div>
 
       <!-- Season Standings -->
@@ -232,7 +249,9 @@
           <thead>
             <tr>
               <th>Platz</th>
+              <th id="season-standings-jersey-header" class="results-jersey-col">Trikot</th>
               <th id="season-standings-primary-header">Fahrer</th>
+              <th id="season-standings-flag-header" class="results-flag-col">Flagge</th>
               <th id="season-standings-secondary-header">Team</th>
               <th>Punkte</th>
               <th>Rückstand</th>
@@ -247,7 +266,7 @@
         <div class="view-header view-header-stack">
           <div>
             <h2>Stage Editor</h2>
-            <p class="text-muted">GPX oder TCX importieren, Wegpunkte justieren und beide CSV-Zieldateien direkt herunterladen.</p>
+            <p class="text-muted">GPX oder TCX importieren, Segmente justieren und beide CSV-Zieldateien direkt herunterladen.</p>
           </div>
         </div>
 
@@ -299,6 +318,26 @@
                   <label for="stage-editor-profile">Profil</label>
                   <select id="stage-editor-profile"></select>
                 </div>
+                <div class="form-group">
+                  <label for="stage-editor-final-spread-start">Final Spread Start %</label>
+                  <input type="number" id="stage-editor-final-spread-start" min="0" max="100" step="1" value="70" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-final-push-start">Final Push Start %</label>
+                  <input type="number" id="stage-editor-final-push-start" min="0" max="100" step="1" value="90" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-final-spread-difficulty">Final Spread Multiplikator</label>
+                  <input type="number" id="stage-editor-final-spread-difficulty" min="0.1" step="0.1" value="1" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-crash-multiplier">Sturz-Multiplikator</label>
+                  <input type="number" id="stage-editor-crash-multiplier" min="0.1" step="0.1" value="1" />
+                </div>
+                <div class="form-group">
+                  <label for="stage-editor-mechanical-multiplier">Defekt-Multiplikator</label>
+                  <input type="number" id="stage-editor-mechanical-multiplier" min="0.1" step="0.1" value="1" />
+                </div>
               </div>
               <div class="stage-editor-actions">
                 <p id="stage-editor-export-hint" class="text-muted">Importiere zuerst eine Datei.</p>
@@ -311,28 +350,29 @@
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
                 <h3>Höhenprofil</h3>
-                <p class="text-muted">Marker und Segmentdichte spiegeln direkt die editierbare Tabelle wider.</p>
+                <p class="text-muted">Marker und Segmentdichte spiegeln direkt die editierbaren Segmentzeilen wider.</p>
               </div>
               <div id="stage-editor-chart" class="stage-editor-chart"></div>
             </div>
 
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
-                <h3>Wegpunkte</h3>
-                <p class="text-muted">Jedes Segment muss mindestens 0,2 km lang sein. Sprintmarker werden im letzten 0,3-km-Abschnitt entfernt.</p>
+                <h3>Segmente</h3>
+                <p class="text-muted">Jedes Segment muss mindestens 0,2 km lang sein. Die CSV-Starthoehe liegt in stages.csv; alle Segmenthoehen der Detaildatei werden aus Laenge und Steigung berechnet. Start- und Endmarker werden separat gepflegt; Sprintmarker werden im letzten 0,3-km-Abschnitt entfernt.</p>
               </div>
               <div class="stage-editor-table-wrap">
                 <table class="data-table stage-editor-table" id="stage-editor-waypoints">
                   <thead>
                     <tr>
-                      <th>km</th>
-                      <th>hm</th>
-                      <th>Segment</th>
+                      <th>Start-km</th>
+                      <th>Start-hm</th>
+                      <th>Länge</th>
                       <th>Steigung</th>
                       <th>Terrain</th>
                       <th>Tech</th>
                       <th>Wind</th>
-                      <th>Marker</th>
+                      <th>Startmarker</th>
+                      <th>Endmarker</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -386,6 +426,32 @@
         <button class="btn btn-secondary" id="btn-cancel-roster-editor">Abbrechen</button>
         <button class="btn btn-primary" id="btn-apply-roster-editor">Teilnehmer übernehmen</button>
       </div>
+    </div>
+  </div>
+
+  <div id="modal-raceStages" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="race-stages-title">Etappen</h2>
+          <p id="race-stages-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">✕</button>
+      </div>
+      <div id="race-stages-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-stageProfile" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-stage-profile-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="stage-profile-title">Etappenprofil</h2>
+          <p id="stage-profile-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">✕</button>
+      </div>
+      <div id="stage-profile-view" class="race-sim-profile dashboard-stage-profile-view"></div>
     </div>
   </div>
 

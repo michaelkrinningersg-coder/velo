@@ -18,6 +18,7 @@ import {
   QuickSimResponse,
   RaceRosterEditorPayload,
   RaceRosterSelectionRequest,
+  RealtimeClassificationLeaders,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
   SeasonStandingsPayload,
@@ -270,6 +271,7 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
       });
@@ -357,6 +359,7 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
       });
@@ -379,7 +382,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
-      ok<QuickSimResponse>(res, new QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? []));
+      ok<QuickSimResponse>(res, new QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? []));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

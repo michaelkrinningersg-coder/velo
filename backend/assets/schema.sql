@@ -240,6 +240,8 @@ CREATE TABLE IF NOT EXISTS skill_weights (
   weight_resistance      REAL    NOT NULL DEFAULT 0 CHECK(weight_resistance >= 0),
   weight_recuperation    REAL    NOT NULL DEFAULT 0 CHECK(weight_recuperation >= 0),
   weight_bike_handling   REAL    NOT NULL DEFAULT 0 CHECK(weight_bike_handling >= 0),
+  final_spread_late_multiplier REAL NOT NULL DEFAULT 1 CHECK(final_spread_late_multiplier > 0),
+  final_spread_peak_multiplier REAL NOT NULL DEFAULT 1 CHECK(final_spread_peak_multiplier > 0),
   ttt_speed_multiplier   REAL    NOT NULL DEFAULT 1 CHECK(ttt_speed_multiplier > 0),
   UNIQUE(simulation_mode, terrain)
 );
@@ -274,6 +276,11 @@ CREATE TABLE IF NOT EXISTS stages (
   profile           TEXT    NOT NULL CHECK(profile IN ('Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'ITT', 'TTT', 'Cobble', 'Cobble_Hill')),
   start_elevation   REAL    NOT NULL,
   details_csv_file  TEXT    NOT NULL CHECK(length(details_csv_file) > 0 AND instr(details_csv_file, '/') = 0 AND instr(details_csv_file, '\\') = 0),
+  final_spread_start_percent REAL NOT NULL DEFAULT 70 CHECK(final_spread_start_percent BETWEEN 0 AND 100),
+  final_push_start_percent REAL NOT NULL DEFAULT 90 CHECK(final_push_start_percent BETWEEN 0 AND 100),
+  final_spread_difficulty_multiplier REAL NOT NULL DEFAULT 1 CHECK(final_spread_difficulty_multiplier > 0),
+  crash_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0),
+  mechanical_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0),
   UNIQUE(race_id, stage_number)
 );
 
@@ -360,7 +367,7 @@ CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
 CREATE TABLE IF NOT EXISTS rider_daily_state (
   rider_id                INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
   season                  INTEGER NOT NULL,
-  form_bonus              REAL NOT NULL DEFAULT -1.0,
+  form_bonus              REAL NOT NULL DEFAULT 0.0,
   race_form_bonus         REAL NOT NULL DEFAULT 0.0,
   peak_s_form             REAL NOT NULL DEFAULT 0.0,
   peak_r_form             REAL NOT NULL DEFAULT 0.0,
@@ -411,6 +418,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_team_type
 
 CREATE INDEX IF NOT EXISTS idx_results_stage_type_rank
   ON results(stage_id, result_type_id, rank);
+
+CREATE TABLE IF NOT EXISTS rider_stage_race_state (
+  race_id                         INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  rider_id                        INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  accumulated_random_fatigue      REAL NOT NULL DEFAULT 0,
+  last_applied_stage_number       INTEGER NOT NULL DEFAULT 0,
+  incident_day_form_penalty       REAL NOT NULL DEFAULT 0,
+  incident_micro_form_penalty     REAL NOT NULL DEFAULT 0,
+  incident_stamina_penalty        REAL NOT NULL DEFAULT 0,
+  incident_day_form_cap           REAL,
+  race_recuperation_penalty       REAL NOT NULL DEFAULT 0,
+  current_recovery_penalty        REAL NOT NULL DEFAULT 0,
+  pending_recovery_penalty_1      REAL NOT NULL DEFAULT 0,
+  pending_recovery_penalty_2      REAL NOT NULL DEFAULT 0,
+  pending_recovery_penalty_3      REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (race_id, rider_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_stage_race_state_race
+  ON rider_stage_race_state(race_id, rider_id);
 
 CREATE INDEX IF NOT EXISTS idx_results_race_type
   ON results(race_id, result_type_id);

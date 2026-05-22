@@ -6,6 +6,7 @@ import { ensureRaceEntries } from './RaceRosterService';
 import { StageParser } from './StageParser';
 import { TimeTrialSimulator } from './TimeTrialSimulator';
 import {
+  PrecalculatedRaceIncident,
   ParsedStageSegment,
   QuickSimResponse,
   Race,
@@ -52,6 +53,17 @@ const COBBLE_FATIGUE_THRESHOLD_KM = 10;
 const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
+
+function randomInteger(min: number, max: number): number {
+  return Math.floor(Math.random() * ((max - min) + 1)) + min;
+}
+
+function addDaysIso(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split('-').map((value) => Number(value));
+  const date = new Date(Date.UTC(year, Math.max(0, month - 1), day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 type MarkerSkillKey = keyof Rider['skills'];
 
@@ -326,32 +338,45 @@ export class QuickSimEngine {
     return this.persistStagePerformance(race, stage, outcome.performance, outcome.markerClassifications);
   }
 
-  public commitRealtimeStage(stageId: number, entries: RealtimeStageCommitEntry[], markerClassifications: StageMarkerClassification[] = []): QuickSimResponse {
+  public commitRealtimeStage(stageId: number, entries: RealtimeStageCommitEntry[], markerClassifications: StageMarkerClassification[] = [], incidents: PrecalculatedRaceIncident[] = []): QuickSimResponse {
     const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
     const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
     const sanitizedEntries = [...entries]
-      .filter((entry) => Number.isFinite(entry.riderId) && Number.isFinite(entry.finishTimeSeconds))
+      .filter((entry) => Number.isFinite(entry.riderId))
       .map((entry) => ({
         riderId: entry.riderId,
-        finishTimeSeconds: roundSeconds(entry.finishTimeSeconds),
+        finishStatus: entry.finishStatus,
+        statusReason: entry.statusReason ?? null,
+        finishTimeSeconds: entry.finishStatus === 'finished' && entry.finishTimeSeconds != null && Number.isFinite(entry.finishTimeSeconds)
+          ? roundSeconds(entry.finishTimeSeconds)
+          : null,
         photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
       }))
-      .sort((left, right) => left.finishTimeSeconds - right.finishTimeSeconds || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
+      .sort((left, right) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
     if (sanitizedEntries.length !== riders.length) {
-      throw new Error('Die Live-Simulation muss genau eine Zielzeit für jeden Starter übergeben.');
+      throw new Error('Die Live-Simulation muss genau einen Zielstatus für jeden Starter übergeben.');
     }
 
     const seenRiderIds = new Set<number>();
-    const performance = sanitizedEntries.map((entry) => {
+    for (const entry of sanitizedEntries) {
+      if (seenRiderIds.has(entry.riderId)) {
+        throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
+      }
+      if (entry.finishStatus === 'finished' && entry.finishTimeSeconds == null) {
+        throw new Error(`Fahrer ${entry.riderId} wurde als Finisher ohne Zielzeit uebergeben.`);
+      }
+      seenRiderIds.add(entry.riderId);
+    }
+
+    const finishedEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'finished');
+    const dnfEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'dnf');
+
+    const performance = finishedEntries.map((entry) => {
       const rider = rosterById.get(entry.riderId);
       if (!rider) {
         throw new Error(`Live-Ergebnis für unbekannten Fahrer ${entry.riderId} erhalten.`);
       }
-      if (seenRiderIds.has(entry.riderId)) {
-        throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
-      }
-      seenRiderIds.add(entry.riderId);
 
       const team = teamsById.get(rider.activeTeamId ?? -1);
       if (!team) {
@@ -363,8 +388,8 @@ export class QuickSimEngine {
         team,
         dayForm: 1,
         performanceScore: 0,
-        rawTimeSeconds: entry.finishTimeSeconds,
-        stageTimeSeconds: entry.finishTimeSeconds,
+        rawTimeSeconds: entry.finishTimeSeconds ?? 0,
+        stageTimeSeconds: entry.finishTimeSeconds ?? 0,
         photoFinishScore: entry.photoFinishScore ?? 0,
         points: 0,
         gcBonusSeconds: 0,
@@ -384,7 +409,7 @@ export class QuickSimEngine {
       awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
     });
 
-    return this.persistStagePerformance(race, stage, performance, awardedMarkerClassifications);
+    return this.persistStagePerformance(race, stage, performance, awardedMarkerClassifications, dnfEntries, incidents);
   }
 
   private loadSimulatableStageContext(stageId: number): {
@@ -528,6 +553,8 @@ export class QuickSimEngine {
     stage: Stage,
     performance: PerformanceEntry[],
     markerClassifications: StageMarkerClassification[] = [],
+    dnfEntries: Array<{ riderId: number; statusReason: string | null }> = [],
+    incidents: PrecalculatedRaceIncident[] = [],
   ): QuickSimResponse {
     const rankedPerformance = [...performance].sort(comparePerformanceEntries);
 
@@ -644,8 +671,10 @@ export class QuickSimEngine {
     `);
     const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
     const completedRiderIds = performance.map((entry) => entry.rider.id);
+    const severeCrashRiderIds = new Set(incidents.filter((incident) => incident.type === 'crash' && incident.severity === 'severe').map((incident) => incident.riderId));
 
     this.db.transaction(() => {
+      this.repo.applyIncidentRaceState(race.id, incidents);
       for (const row of stageRows) {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.stage, row);
       }
@@ -693,6 +722,12 @@ export class QuickSimEngine {
         }
       }
       this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
+      for (const entry of dnfEntries) {
+        this.repo.updateStageEntryStatus(stage.id, entry.riderId, 'dnf', entry.statusReason);
+      }
+      for (const riderId of severeCrashRiderIds) {
+        this.applySevereCrashInjury(stage.date, riderId);
+      }
     })();
 
     new GameStateService(this.db).applyRaceDayFormBonuses(stage.date, completedRiderIds);
@@ -708,6 +743,38 @@ export class QuickSimEngine {
       profile: stage.profile,
       resultTypes: SUPPORTED_RESULT_TYPES,
     };
+  }
+
+  private applySevereCrashInjury(currentDate: string, riderId: number): void {
+    this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_daily_state (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        form_bonus REAL NOT NULL DEFAULT 0.0,
+        race_form_bonus REAL NOT NULL DEFAULT 0.0,
+        peak_s_form REAL NOT NULL DEFAULT 0.0,
+        peak_r_form REAL NOT NULL DEFAULT 0.0,
+        active_peak_date TEXT,
+        peak_dates_json TEXT NOT NULL DEFAULT '[]',
+        health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
+        unavailable_until TEXT,
+        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+      )
+    `).run();
+
+    const isLongInjury = Math.random() < 0.1;
+    const durationDays = isLongInjury
+      ? randomInteger(6, 30)
+      : randomInteger(2, 14);
+    const unavailableUntil = addDaysIso(currentDate, durationDays - 1);
+
+    this.db.prepare(`
+      UPDATE rider_daily_state
+      SET health_status = 'injured',
+          unavailable_until = ?,
+          unavailable_days_remaining = ?
+      WHERE rider_id = ?
+    `).run(unavailableUntil, durationDays, riderId);
   }
 
   private ensureStageCanBeSimulated(stage: Stage): void {

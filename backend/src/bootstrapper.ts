@@ -81,6 +81,10 @@ const RULE_WEIGHT_COLUMNS = [
   'weight_recuperation',
   'weight_bike_handling',
 ] as const;
+const RULE_SPREAD_COLUMNS = [
+  'final_spread_late_multiplier',
+  'final_spread_peak_multiplier',
+] as const;
 const SKILL_WEIGHT_SIMULATION_MODES = new Set(['road', 'itt', 'ttt']);
 const SKILL_WEIGHT_TERRAINS = new Set(['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint']);
 
@@ -526,8 +530,9 @@ function seedSkillWeights(db: Database.Database): void {
       weight_flat, weight_mountain, weight_medium_mountain, weight_hill, weight_time_trial,
       weight_prologue, weight_cobble, weight_sprint, weight_acceleration, weight_downhill,
       weight_attack, weight_stamina, weight_resistance, weight_recuperation, weight_bike_handling,
+      final_spread_late_multiplier, final_spread_peak_multiplier,
       ttt_speed_multiplier
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -555,6 +560,14 @@ function seedSkillWeights(db: Database.Database): void {
       throw new Error(`${ctx}: Mindestens ein Gewicht muss groesser als 0 sein.`);
     }
 
+    const spreadValues = RULE_SPREAD_COLUMNS.map((columnName) => {
+      const value = real(row[columnName] ?? '1', `${ctx} / ${columnName}`);
+      if (value <= 0) {
+        throw new Error(`${ctx}: ${columnName} muss groesser als 0 sein.`);
+      }
+      return value;
+    });
+
     const tttSpeedMultiplier = real(row['ttt_speed_multiplier'] ?? '1', `${ctx} / ttt_speed_multiplier`);
     if (tttSpeedMultiplier <= 0) {
       throw new Error(`${ctx}: ttt_speed_multiplier muss groesser als 0 sein.`);
@@ -565,6 +578,7 @@ function seedSkillWeights(db: Database.Database): void {
       simulationMode,
       terrain,
       ...weightValues,
+      ...spreadValues,
       tttSpeedMultiplier,
     );
   }
@@ -631,12 +645,49 @@ function seedRaces(db: Database.Database): void {
 function seedStages(db: Database.Database): void {
   const rows = readCsv('stages.csv');
   const insert = db.prepare(`
-    INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO stages (
+      id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
+      final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
+      crash_incident_multiplier, mechanical_incident_multiplier
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `stages.csv Zeile ${index + 2}`;
+    const finalSpreadStartPercent = real(row['final_spread_start_percent'] ?? '70', `${ctx} / final_spread_start_percent`);
+    if (finalSpreadStartPercent < 0 || finalSpreadStartPercent > 100) {
+      throw new Error(`${ctx}: final_spread_start_percent muss zwischen 0 und 100 liegen.`);
+    }
+
+    const finalPushStartPercent = real(row['final_push_start_percent'] ?? '90', `${ctx} / final_push_start_percent`);
+    if (finalPushStartPercent < 0 || finalPushStartPercent > 100) {
+      throw new Error(`${ctx}: final_push_start_percent muss zwischen 0 und 100 liegen.`);
+    }
+
+    const finalSpreadDifficultyMultiplier = real(
+      row['final_spread_difficulty_multiplier'] ?? '1',
+      `${ctx} / final_spread_difficulty_multiplier`,
+    );
+    if (finalSpreadDifficultyMultiplier <= 0) {
+      throw new Error(`${ctx}: final_spread_difficulty_multiplier muss groesser als 0 sein.`);
+    }
+
+    const crashIncidentMultiplier = real(
+      row['crash_incident_multiplier'] ?? '1',
+      `${ctx} / crash_incident_multiplier`,
+    );
+    if (crashIncidentMultiplier <= 0) {
+      throw new Error(`${ctx}: crash_incident_multiplier muss groesser als 0 sein.`);
+    }
+
+    const mechanicalIncidentMultiplier = real(
+      row['mechanical_incident_multiplier'] ?? '1',
+      `${ctx} / mechanical_incident_multiplier`,
+    );
+    if (mechanicalIncidentMultiplier <= 0) {
+      throw new Error(`${ctx}: mechanical_incident_multiplier muss groesser als 0 sein.`);
+    }
+
     insert.run(
       int(req(row, 'id', ctx), ctx),
       int(req(row, 'race_id', ctx), ctx),
@@ -645,6 +696,11 @@ function seedStages(db: Database.Database): void {
       req(row, 'profile', ctx),
       int(req(row, 'start_elevation', ctx), ctx),
       req(row, 'details_csv_file', ctx),
+      finalSpreadStartPercent,
+      finalPushStartPercent,
+      finalSpreadDifficultyMultiplier,
+      crashIncidentMultiplier,
+      mechanicalIncidentMultiplier,
     );
   }
 

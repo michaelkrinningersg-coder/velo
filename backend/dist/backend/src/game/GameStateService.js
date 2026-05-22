@@ -4,11 +4,12 @@ exports.GameStateService = void 0;
 const events_1 = require("events");
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
-const FORM_MIN_BONUS = -1;
-const FORM_MAX_BONUS = 3;
-const FORM_RISE_DAYS = 42;
-const FORM_RISE_STEP = 0.1;
-const FORM_FALL_DAYS = 10;
+const SEASON_FORM_MIN_RAW = 0;
+const SEASON_FORM_MAX_RAW = 9;
+const SEASON_FORM_RISE_DAYS = 28;
+const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
+const SEASON_FORM_FALL_DAYS = 10;
+const RACE_FORM_BUILD_STEP = 0.1;
 const FREE_R_FORM_EXPIRY_DAYS = 20;
 const PEAK_MIN_SPACING_DAYS = 56;
 const ILLNESS_CHANCE = 0.0025;
@@ -112,7 +113,7 @@ class GameStateService {
       CREATE TABLE IF NOT EXISTS rider_daily_state (
         rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
         season INTEGER NOT NULL,
-        form_bonus REAL NOT NULL DEFAULT -1.0,
+        form_bonus REAL NOT NULL DEFAULT 0.0,
         race_form_bonus REAL NOT NULL DEFAULT 0.0,
         peak_s_form REAL NOT NULL DEFAULT 0.0,
         peak_r_form REAL NOT NULL DEFAULT 0.0,
@@ -180,7 +181,7 @@ class GameStateService {
         for (const rider of riderRows) {
             const existing = selectState.get(rider.id);
             if (!existing) {
-                insertState.run(rider.id, season, FORM_MIN_BONUS, JSON.stringify(resolveSeasonPeakDates([], season)));
+                insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(resolveSeasonPeakDates([], season)));
             }
         }
     }
@@ -227,7 +228,7 @@ class GameStateService {
             const peakDates = seasonChanged
                 ? resolveSeasonPeakDates([], nextSeason)
                 : resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), nextSeason);
-            let formBonus = seasonChanged ? FORM_MIN_BONUS : row.form_bonus;
+            let formBonus = seasonChanged ? SEASON_FORM_MIN_RAW : row.form_bonus;
             let raceFormBonus = seasonChanged ? 0 : row.race_form_bonus;
             let peakSForm = seasonChanged ? 0 : row.peak_s_form;
             let peakRForm = seasonChanged ? 0 : row.peak_r_form;
@@ -263,8 +264,8 @@ class GameStateService {
             else if (phase?.phase === 'decline') {
                 activePeakDate = phase.peakDate;
                 formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
-                raceFormBonus = resolveDeclineValue(peakRForm, phase.elapsedDays);
-                if (phase.elapsedDays >= FORM_FALL_DAYS) {
+                raceFormBonus = resolveRaceDeclineValue(peakRForm, phase.elapsedDays);
+                if (phase.elapsedDays >= SEASON_FORM_FALL_DAYS) {
                     activePeakDate = null;
                     peakSForm = 0;
                     peakRForm = 0;
@@ -275,7 +276,7 @@ class GameStateService {
                 peakSForm = 0;
                 peakRForm = 0;
                 if (healthStatus === 'healthy') {
-                    formBonus = roundFormBonus(Math.min(FORM_MAX_BONUS, formBonus + FORM_RISE_STEP));
+                    formBonus = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, formBonus + SEASON_FORM_RISE_STEP_RAW));
                 }
             }
             else {
@@ -287,8 +288,9 @@ class GameStateService {
             }
             const freeRaceForm = selectFreeRaceForm.get(row.rider_id)?.total ?? 0;
             const totalRaceForm = roundFormBonus(raceFormBonus + freeRaceForm);
+            const effectiveSeasonForm = resolveEffectiveSeasonForm(formBonus);
             updateState.run(nextSeason, formBonus, raceFormBonus, peakSForm, peakRForm, activePeakDate, JSON.stringify(peakDates), healthStatus, unavailableUntil, remainingDays, row.rider_id);
-            upsertHistory.run(row.rider_id, nextDate, formBonus, totalRaceForm, roundFormBonus(formBonus + totalRaceForm));
+            upsertHistory.run(row.rider_id, nextDate, effectiveSeasonForm, totalRaceForm, roundFormBonus(effectiveSeasonForm + totalRaceForm));
         }
         this.removeUnavailableRidersFromFutureRaceEntries(nextDate);
     }
@@ -323,7 +325,8 @@ class GameStateService {
         for (const row of rows) {
             const freeRaceForm = selectFreeRaceForm.get(row.rider_id)?.total ?? 0;
             const totalRaceForm = roundFormBonus(row.race_form_bonus + freeRaceForm);
-            upsertHistory.run(row.rider_id, currentDate, row.form_bonus, totalRaceForm, roundFormBonus(row.form_bonus + totalRaceForm));
+            const effectiveSeasonForm = resolveEffectiveSeasonForm(row.form_bonus);
+            upsertHistory.run(row.rider_id, currentDate, effectiveSeasonForm, totalRaceForm, roundFormBonus(effectiveSeasonForm + totalRaceForm));
         }
     }
     applyRaceDayFormBonuses(raceDate, riderIds) {
@@ -368,7 +371,7 @@ class GameStateService {
                 const peakDates = resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), row.season);
                 const phase = resolvePeakPhase(raceDate, peakDates);
                 if (phase?.phase === 'build') {
-                    updateRaceForm.run(roundFormBonus(row.race_form_bonus + FORM_RISE_STEP), riderId);
+                    updateRaceForm.run(roundFormBonus(row.race_form_bonus + RACE_FORM_BUILD_STEP), riderId);
                     insertAward.run(riderId, raceDate, 'build');
                     continue;
                 }
@@ -429,6 +432,7 @@ class GameStateService {
             stages.stage_number AS stage_number,
             stages.date AS date,
             stages.profile AS profile,
+            stages.start_elevation AS start_elevation,
             stages.details_csv_file AS details_csv_file,
             races.is_stage_race AS is_stage_race
           FROM stages
@@ -444,6 +448,7 @@ class GameStateService {
             stages.stage_number,
             stages.date,
             stages.profile,
+            stages.start_elevation,
             stages.details_csv_file,
             races.is_stage_race
           HAVING COUNT(stage_results.id) = 0
@@ -457,6 +462,7 @@ class GameStateService {
             stages.stage_number AS stage_number,
             stages.date AS date,
             stages.profile AS profile,
+            stages.start_elevation AS start_elevation,
             stages.details_csv_file AS details_csv_file,
             races.is_stage_race AS is_stage_race
           FROM stages
@@ -471,6 +477,7 @@ class GameStateService {
             stageNumber: row.stage_number,
             date: row.date,
             profile: row.profile,
+            startElevation: row.start_elevation,
             detailsCsvFile: row.details_csv_file,
             isStageRace: row.is_stage_race === 1,
         }));
@@ -524,20 +531,29 @@ function resolvePeakPhase(currentDate, peakDates) {
         if (currentDay === peakDay) {
             return { phase: 'peak', peakDate, elapsedDays: 0 };
         }
-        if (currentDay > peakDay && currentDay <= peakDay + FORM_FALL_DAYS) {
+        if (currentDay > peakDay && currentDay <= peakDay + SEASON_FORM_FALL_DAYS) {
             return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
         }
-        if (currentDay >= peakDay - FORM_RISE_DAYS && currentDay < peakDay) {
+        if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
             return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
         }
     }
     return null;
 }
 function resolveDeclineValue(peakValue, elapsedDays) {
-    if (elapsedDays >= FORM_FALL_DAYS) {
+    if (elapsedDays >= SEASON_FORM_FALL_DAYS) {
         return 0;
     }
-    return roundFormBonus(Math.max(0, peakValue * (1 - (elapsedDays / FORM_FALL_DAYS))));
+    return roundFormBonus(Math.max(0, peakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
+}
+function resolveRaceDeclineValue(peakValue, elapsedDays) {
+    if (elapsedDays >= SEASON_FORM_FALL_DAYS) {
+        return 0;
+    }
+    return roundFormBonus(Math.max(0, peakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
+}
+function resolveEffectiveSeasonForm(rawSeasonForm) {
+    return roundFormBonus(rawSeasonForm / 10);
 }
 function generateSeasonPeakDates(season) {
     const firstPeakWindowStart = isoDateToDayNumber(`${season}-02-15`);

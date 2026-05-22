@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuickSimEngine = void 0;
+const skillWeights_1 = require("../../../shared/skillWeights");
 const GameRepository_1 = require("../db/GameRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RaceRosterService_1 = require("./RaceRosterService");
@@ -34,6 +35,107 @@ const COBBLE_FATIGUE_THRESHOLD_KM = 10;
 const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
+function randomInteger(min, max) {
+    return Math.floor(Math.random() * ((max - min) + 1)) + min;
+}
+function addDaysIso(isoDate, days) {
+    const [year, month, day] = isoDate.split('-').map((value) => Number(value));
+    const date = new Date(Date.UTC(year, Math.max(0, month - 1), day));
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+}
+const SPRINT_INTERMEDIATE_WEIGHTS = {
+    sprint: 0.46,
+    acceleration: 0.24,
+    hill: 0.06,
+    attack: 0.08,
+    resistance: 0.08,
+    stamina: 0.04,
+    flat: 0.04,
+};
+const FINISH_FLAT_WEIGHTS = {
+    sprint: 0.45,
+    acceleration: 0.2,
+    hill: 0.04,
+    attack: 0.06,
+    resistance: 0.06,
+    stamina: 0.04,
+    flat: 0.15,
+};
+const FINISH_HILL_WEIGHTS = {
+    mountain: 0.05,
+    mediumMountain: 0.05,
+    hill: 0.28,
+    sprint: 0.18,
+    acceleration: 0.12,
+    attack: 0.12,
+    resistance: 0.1,
+    stamina: 0.06,
+    flat: 0.04,
+};
+const FINISH_MOUNTAIN_WEIGHTS = {
+    mountain: 0.38,
+    mediumMountain: 0.2,
+    hill: 0.1,
+    sprint: 0.03,
+    acceleration: 0.03,
+    attack: 0.12,
+    resistance: 0.08,
+    stamina: 0.06,
+};
+const CLIMB_TOP_WEIGHTS = {
+    HC: {
+        mountain: 0.4,
+        mediumMountain: 0.2,
+        hill: 0.07,
+        sprint: 0.01,
+        acceleration: 0.02,
+        attack: 0.16,
+        resistance: 0.08,
+        stamina: 0.06,
+    },
+    '1': {
+        mountain: 0.31,
+        mediumMountain: 0.18,
+        hill: 0.12,
+        sprint: 0.03,
+        acceleration: 0.04,
+        attack: 0.16,
+        resistance: 0.09,
+        stamina: 0.07,
+    },
+    '2': {
+        mountain: 0.2,
+        mediumMountain: 0.14,
+        hill: 0.22,
+        sprint: 0.08,
+        acceleration: 0.08,
+        attack: 0.15,
+        resistance: 0.08,
+        stamina: 0.05,
+    },
+    '3': {
+        mountain: 0.05,
+        mediumMountain: 0.09,
+        hill: 0.27,
+        sprint: 0.14,
+        acceleration: 0.12,
+        attack: 0.16,
+        resistance: 0.1,
+        stamina: 0.07,
+    },
+    '4': {
+        hill: 0.3,
+        sprint: 0.18,
+        acceleration: 0.16,
+        attack: 0.16,
+        resistance: 0.12,
+        stamina: 0.08,
+    },
+};
+function usesMountainStageSprintFinishPoints(profile) {
+    return !['ITT', 'TTT', 'Flat', 'Rolling', 'Hilly'].includes(profile);
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -65,42 +167,98 @@ function comparePerformanceEntries(left, right) {
 function resolveFormBonus(rider) {
     return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
 }
+function normalizeMarkerClassifications(classifications) {
+    return classifications.map((classification) => ({
+        ...classification,
+        entries: [...classification.entries].sort((left, right) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId),
+    }));
+}
+function buildStageBoundaryMarkerKey(segmentIndex, boundary, markerIndex, marker) {
+    return `${marker.type}:${segmentIndex}:${boundary}:${markerIndex}`;
+}
+function buildDefaultMarkerLabel(marker, ordinal) {
+    if (marker.type === 'sprint_intermediate')
+        return `SZ ${ordinal}`;
+    if (marker.type === 'climb_top')
+        return `Berg ${ordinal}`;
+    if (marker.type === 'climb_start')
+        return `Anstieg ${ordinal}`;
+    if (marker.type === 'start')
+        return 'Start';
+    return 'Ziel';
+}
+function resolveWeightProfileValue(rider, weights, formBonus) {
+    return Object.entries(weights).reduce((sum, [skillKey, weight]) => {
+        if (!weight) {
+            return sum;
+        }
+        return sum + ((rider.skills[skillKey] + formBonus) * weight);
+    }, 0);
+}
+function buildStageScoringRuleLookupKey(appliesTo, markerType, markerCategory) {
+    return `${appliesTo}|${markerType}|${markerCategory ?? ''}`;
+}
 class QuickSimEngine {
     constructor(db) {
         this.db = db;
         this.repo = new GameRepository_1.GameRepository(db);
+        this.skillWeightRules = this.repo.getSkillWeightRules();
+        this.skillWeightRuleMap = (0, skillWeights_1.buildSkillWeightRuleMap)(this.skillWeightRules);
+        this.stageScoringRuleWeights = new Map(this.repo.getStageScoringRules().map((rule) => [
+            buildStageScoringRuleLookupKey(rule.appliesTo, rule.markerType, rule.markerCategory),
+            rule.weights,
+        ]));
     }
     simulateStage(stageId) {
         const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
-        const performance = stage.profile === 'ITT'
-            ? this.simulateTimeTrialStage(race, stage, riders, teamsById)
-            : this.simulateMassStartStage(race, stage, riders, teamsById);
-        return this.persistStagePerformance(race, stage, performance);
+        const outcome = stage.profile === 'ITT'
+            ? {
+                performance: this.simulateTimeTrialStage(race, stage, riders, teamsById),
+                markerClassifications: [],
+            }
+            : stage.profile === 'TTT'
+                ? {
+                    performance: this.simulateTeamTimeTrialStage(race, stage, riders, teamsById),
+                    markerClassifications: [],
+                }
+                : this.simulateMassStartStage(race, stage, riders, teamsById);
+        return this.persistStagePerformance(race, stage, outcome.performance, outcome.markerClassifications);
     }
-    commitRealtimeStage(stageId, entries) {
+    commitRealtimeStage(stageId, entries, markerClassifications = [], incidents = []) {
         const { race, stage, riders, teamsById } = this.loadSimulatableStageContext(stageId);
         const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
         const sanitizedEntries = [...entries]
-            .filter((entry) => Number.isFinite(entry.riderId) && Number.isFinite(entry.finishTimeSeconds))
+            .filter((entry) => Number.isFinite(entry.riderId))
             .map((entry) => ({
             riderId: entry.riderId,
-            finishTimeSeconds: roundSeconds(entry.finishTimeSeconds),
+            finishStatus: entry.finishStatus,
+            statusReason: entry.statusReason ?? null,
+            finishTimeSeconds: entry.finishStatus === 'finished' && entry.finishTimeSeconds != null && Number.isFinite(entry.finishTimeSeconds)
+                ? roundSeconds(entry.finishTimeSeconds)
+                : null,
             photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
         }))
-            .sort((left, right) => left.finishTimeSeconds - right.finishTimeSeconds || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
+            .sort((left, right) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
         if (sanitizedEntries.length !== riders.length) {
-            throw new Error('Die Live-Simulation muss genau eine Zielzeit für jeden Starter übergeben.');
+            throw new Error('Die Live-Simulation muss genau einen Zielstatus für jeden Starter übergeben.');
         }
         const seenRiderIds = new Set();
-        const performance = sanitizedEntries.map((entry) => {
+        for (const entry of sanitizedEntries) {
+            if (seenRiderIds.has(entry.riderId)) {
+                throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
+            }
+            if (entry.finishStatus === 'finished' && entry.finishTimeSeconds == null) {
+                throw new Error(`Fahrer ${entry.riderId} wurde als Finisher ohne Zielzeit uebergeben.`);
+            }
+            seenRiderIds.add(entry.riderId);
+        }
+        const finishedEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'finished');
+        const dnfEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'dnf');
+        const performance = finishedEntries.map((entry) => {
             const rider = rosterById.get(entry.riderId);
             if (!rider) {
                 throw new Error(`Live-Ergebnis für unbekannten Fahrer ${entry.riderId} erhalten.`);
             }
-            if (seenRiderIds.has(entry.riderId)) {
-                throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
-            }
-            seenRiderIds.add(entry.riderId);
             const team = teamsById.get(rider.activeTeamId ?? -1);
             if (!team) {
                 throw new Error(`Team für Fahrer ${rider.firstName} ${rider.lastName} konnte nicht geladen werden.`);
@@ -110,8 +268,8 @@ class QuickSimEngine {
                 team,
                 dayForm: 1,
                 performanceScore: 0,
-                rawTimeSeconds: entry.finishTimeSeconds,
-                stageTimeSeconds: entry.finishTimeSeconds,
+                rawTimeSeconds: entry.finishTimeSeconds ?? 0,
+                stageTimeSeconds: entry.finishTimeSeconds ?? 0,
                 photoFinishScore: entry.photoFinishScore ?? 0,
                 points: 0,
                 gcBonusSeconds: 0,
@@ -121,11 +279,13 @@ class QuickSimEngine {
         if (seenRiderIds.size !== riders.length) {
             throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
         }
+        const normalizedMarkerClassifications = normalizeMarkerClassifications(markerClassifications);
+        const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, stage, performance, normalizedMarkerClassifications);
         this.applyFinishLineAwards(race, stage, performance, {
             awardPoints: stage.profile !== 'TTT',
             awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
         });
-        return this.persistStagePerformance(race, stage, performance);
+        return this.persistStagePerformance(race, stage, performance, awardedMarkerClassifications, dnfEntries, incidents);
     }
     loadSimulatableStageContext(stageId) {
         if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
@@ -156,7 +316,9 @@ class QuickSimEngine {
             return;
         }
         const finishPointValues = options.awardPoints && race.isStageRace
-            ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
+            ? parseRankedValues(usesMountainStageSprintFinishPoints(stage.profile)
+                ? race.category.bonusSystem.pointsMountainStage
+                : race.category.bonusSystem.pointsSprintFinish)
             : [];
         const finishBonusValues = options.awardTimeBonuses
             ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)
@@ -175,20 +337,84 @@ class QuickSimEngine {
             entry.gcBonusSeconds += bonusSeconds;
         });
     }
-    persistStagePerformance(race, stage, performance) {
+    applyMarkerClassificationAwards(race, stage, performance, markerClassifications) {
+        if (markerClassifications.length === 0) {
+            return [];
+        }
+        if (!race.isStageRace || !race.category?.bonusSystem) {
+            return markerClassifications.map((classification) => ({
+                ...classification,
+                entries: classification.entries.map((entry) => ({
+                    ...entry,
+                    pointsAwarded: entry.pointsAwarded ?? 0,
+                })),
+            }));
+        }
+        const sprintPointValues = parseRankedValues(race.category.bonusSystem.pointsSprintIntermediate);
+        const sprintBonusValues = parseRankedValues(race.category.bonusSystem.bonusSecondsIntermediate);
+        const mountainPointValues = {
+            HC: parseRankedValues(race.category.bonusSystem.pointsMountainHc),
+            '1': parseRankedValues(race.category.bonusSystem.pointsMountainCat1),
+            '2': parseRankedValues(race.category.bonusSystem.pointsMountainCat2),
+            '3': parseRankedValues(race.category.bonusSystem.pointsMountainCat3),
+            '4': parseRankedValues(race.category.bonusSystem.pointsMountainCat4),
+        };
+        const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
+        return markerClassifications.map((classification) => {
+            const awardedEntries = classification.entries.map((markerEntry, index) => {
+                let pointsAwarded = 0;
+                const performanceEntry = performanceByRiderId.get(markerEntry.riderId) ?? null;
+                if (classification.markerType === 'sprint_intermediate' && stage.profile !== 'ITT' && stage.profile !== 'TTT') {
+                    pointsAwarded = sprintPointValues[index] ?? 0;
+                    if (performanceEntry) {
+                        performanceEntry.points += pointsAwarded;
+                        performanceEntry.gcBonusSeconds += sprintBonusValues[index] ?? 0;
+                    }
+                }
+                if (classification.markerType === 'climb_top' && classification.markerCategory != null && classification.markerCategory !== 'Sprint') {
+                    pointsAwarded = mountainPointValues[classification.markerCategory][index] ?? 0;
+                    if (performanceEntry) {
+                        performanceEntry.mountainPoints += pointsAwarded;
+                    }
+                }
+                return {
+                    ...markerEntry,
+                    pointsAwarded,
+                };
+            });
+            return {
+                ...classification,
+                entries: awardedEntries,
+            };
+        });
+    }
+    persistStagePerformance(race, stage, performance, markerClassifications = [], dnfEntries = [], incidents = []) {
         const rankedPerformance = [...performance].sort(comparePerformanceEntries);
         const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
         const previousGc = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.gc, 'time_seconds');
         const previousPoints = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.points, 'points');
         const previousMountain = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.mountain, 'points');
         const previousTeam = this.loadPreviousTeamMetricMap(previousStageId, RESULT_TYPES.team, 'time_seconds');
-        const stageRows = rankedPerformance.map((entry, index) => ({
-            rank: index + 1,
-            riderId: entry.rider.id,
-            teamId: entry.team.id,
-            timeSeconds: entry.stageTimeSeconds,
-            points: race.isStageRace ? entry.points : null,
-        }));
+        const stageRows = stage.profile === 'TTT'
+            ? [...new Map(rankedPerformance.map((entry) => [entry.team.id, {
+                        teamId: entry.team.id,
+                        timeSeconds: entry.stageTimeSeconds,
+                    }])).values()]
+                .sort((left, right) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
+                .map((entry, index) => ({
+                rank: index + 1,
+                riderId: null,
+                teamId: entry.teamId,
+                timeSeconds: entry.timeSeconds,
+                points: null,
+            }))
+            : rankedPerformance.map((entry, index) => ({
+                rank: index + 1,
+                riderId: entry.rider.id,
+                teamId: entry.team.id,
+                timeSeconds: entry.stageTimeSeconds,
+                points: race.isStageRace ? entry.points : null,
+            }));
         const gcRows = [...performance]
             .map((entry) => ({
             riderId: entry.rider.id,
@@ -260,7 +486,17 @@ class QuickSimEngine {
         race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
+        const insertMarkerResult = this.db.prepare(`
+      INSERT INTO stage_marker_results (
+        race_id, stage_id, marker_key, marker_label, marker_type, marker_category, km_mark,
+        rider_id, team_id, rank, crossing_time_seconds, gap_seconds, points_awarded, photo_finish_score
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+        const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
+        const completedRiderIds = performance.map((entry) => entry.rider.id);
+        const severeCrashRiderIds = new Set(incidents.filter((incident) => incident.type === 'crash' && incident.severity === 'severe').map((incident) => incident.riderId));
         this.db.transaction(() => {
+            this.repo.applyIncidentRaceState(race.id, incidents);
             for (const row of stageRows) {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.stage, row);
             }
@@ -285,9 +521,23 @@ class QuickSimEngine {
                     points: row.points,
                 });
             }
-            this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
+            for (const classification of markerClassifications) {
+                for (const entry of classification.entries) {
+                    const performanceEntry = performanceByRiderId.get(entry.riderId);
+                    if (!performanceEntry)
+                        continue;
+                    insertMarkerResult.run(race.id, stage.id, classification.markerKey, classification.markerLabel, classification.markerType, classification.markerCategory, classification.kmMark, entry.riderId, performanceEntry.team.id, entry.rank, entry.crossingTimeSeconds, entry.gapSeconds, entry.pointsAwarded ?? 0, entry.photoFinishScore);
+                }
+            }
+            this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
+            for (const entry of dnfEntries) {
+                this.repo.updateStageEntryStatus(stage.id, entry.riderId, 'dnf', entry.statusReason);
+            }
+            for (const riderId of severeCrashRiderIds) {
+                this.applySevereCrashInjury(stage.date, riderId);
+            }
         })();
-        new GameStateService_1.GameStateService(this.db).applyRaceDayFormBonuses(stage.date, stageRows.map((row) => row.riderId));
+        new GameStateService_1.GameStateService(this.db).applyRaceDayFormBonuses(stage.date, completedRiderIds);
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
         return {
             raceId: race.id,
@@ -298,6 +548,35 @@ class QuickSimEngine {
             profile: stage.profile,
             resultTypes: SUPPORTED_RESULT_TYPES,
         };
+    }
+    applySevereCrashInjury(currentDate, riderId) {
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_daily_state (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        form_bonus REAL NOT NULL DEFAULT 0.0,
+        race_form_bonus REAL NOT NULL DEFAULT 0.0,
+        peak_s_form REAL NOT NULL DEFAULT 0.0,
+        peak_r_form REAL NOT NULL DEFAULT 0.0,
+        active_peak_date TEXT,
+        peak_dates_json TEXT NOT NULL DEFAULT '[]',
+        health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
+        unavailable_until TEXT,
+        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+      )
+    `).run();
+        const isLongInjury = Math.random() < 0.1;
+        const durationDays = isLongInjury
+            ? randomInteger(6, 30)
+            : randomInteger(2, 14);
+        const unavailableUntil = addDaysIso(currentDate, durationDays - 1);
+        this.db.prepare(`
+      UPDATE rider_daily_state
+      SET health_status = 'injured',
+          unavailable_until = ?,
+          unavailable_days_remaining = ?
+      WHERE rider_id = ?
+    `).run(unavailableUntil, durationDays, riderId);
     }
     ensureStageCanBeSimulated(stage) {
         const existing = this.db.prepare(`
@@ -321,7 +600,7 @@ class QuickSimEngine {
         }
     }
     simulateTimeTrialStage(race, stage, riders, teamsById) {
-        const ttResult = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, stage, riders);
+        const ttResult = TimeTrialSimulator_1.TimeTrialSimulator.simulate(race, stage, riders, this.skillWeightRules);
         const performance = ttResult.entries.map((entry) => {
             const team = teamsById.get(entry.rider.activeTeamId ?? -1);
             if (!team) {
@@ -346,27 +625,73 @@ class QuickSimEngine {
         });
         return performance;
     }
+    simulateTeamTimeTrialStage(race, stage, riders, teamsById) {
+        const segments = StageParser_1.StageParser.parseStageProfile(stage.detailsCsvFile, stage.startElevation);
+        const ridersByTeamId = new Map();
+        for (const rider of riders) {
+            const teamId = rider.activeTeamId;
+            if (teamId == null) {
+                throw new Error(`Team fuer Fahrer ${rider.firstName} ${rider.lastName} konnte nicht geladen werden.`);
+            }
+            const bucket = ridersByTeamId.get(teamId) ?? [];
+            bucket.push(rider);
+            ridersByTeamId.set(teamId, bucket);
+        }
+        const performance = [];
+        for (const [teamId, teamRiders] of ridersByTeamId.entries()) {
+            const team = teamsById.get(teamId);
+            if (!team) {
+                throw new Error(`Team ${teamId} konnte fuer das TTT nicht geladen werden.`);
+            }
+            const dayFormByRiderId = new Map(teamRiders.map((rider) => [rider.id, TimeTrialSimulator_1.TimeTrialSimulator.sampleDayFormFactor()]));
+            let teamFinishTimeSeconds = 0;
+            let finalSegmentEffectiveSkills = new Map();
+            for (const segment of segments) {
+                const segmentMetrics = teamRiders.map((rider) => ({
+                    rider,
+                    effectiveSkill: TimeTrialSimulator_1.TimeTrialSimulator.resolveEffectiveSegmentSkill(rider, stage.profile, segment, dayFormByRiderId.get(rider.id) ?? 1, this.skillWeightRuleMap),
+                }));
+                finalSegmentEffectiveSkills = new Map(segmentMetrics.map((metric) => [metric.rider.id, metric.effectiveSkill]));
+                const topCount = Math.min(5, segmentMetrics.length);
+                const topAverageEffectiveSkill = segmentMetrics
+                    .sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.rider.id - right.rider.id)
+                    .slice(0, topCount)
+                    .reduce((sum, metric) => sum + metric.effectiveSkill, 0) / Math.max(topCount, 1);
+                const missingRiderMalus = Math.max(0, 8 - segmentMetrics.length);
+                const teamEffectiveSkill = Math.max(1, topAverageEffectiveSkill - missingRiderMalus);
+                const teamSpeedMultiplier = (0, skillWeights_1.resolveTttTerrainSpeedMultiplier)(segment.terrain, this.skillWeightRules);
+                teamFinishTimeSeconds += TimeTrialSimulator_1.TimeTrialSimulator.simulateSegmentForEffectiveSkill(segment, teamEffectiveSkill) / teamSpeedMultiplier;
+            }
+            const roundedTeamFinishTime = roundSeconds(teamFinishTimeSeconds);
+            for (const rider of teamRiders) {
+                performance.push({
+                    rider,
+                    team,
+                    dayForm: dayFormByRiderId.get(rider.id) ?? 1,
+                    performanceScore: finalSegmentEffectiveSkills.get(rider.id) ?? 0,
+                    rawTimeSeconds: teamFinishTimeSeconds,
+                    stageTimeSeconds: roundedTeamFinishTime,
+                    photoFinishScore: finalSegmentEffectiveSkills.get(rider.id) ?? 0,
+                    points: 0,
+                    gcBonusSeconds: 0,
+                    mountainPoints: 0,
+                });
+            }
+        }
+        this.applyFinishLineAwards(race, stage, performance, {
+            awardPoints: false,
+            awardTimeBonuses: false,
+        });
+        return performance;
+    }
     simulateMassStartStage(race, stage, riders, teamsById) {
-        const summary = StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile);
-        const markers = summary.points.flatMap((point) => point.markers.map((marker) => ({ kmMark: point.kmMark, marker })));
-        const sprintPointValues = race.isStageRace
-            ? parseRankedValues(race.category?.bonusSystem?.pointsSprintIntermediate)
-            : [];
-        const sprintBonusValues = race.isStageRace
-            ? parseRankedValues(race.category?.bonusSystem?.bonusSecondsIntermediate)
-            : [];
+        const summary = StageParser_1.StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation);
         const finishBonusValues = parseRankedValues(race.category?.bonusSystem?.bonusSecondsFinal);
         // Finish-line sprint points feed the race-internal points jersey, not season stage awards.
         const finishPointValues = race.isStageRace
             ? parseRankedValues(race.category?.bonusSystem?.pointsSprintFinish)
             : [];
-        const mountainPointValues = {
-            HC: parseRankedValues(race.category?.bonusSystem?.pointsMountainHc),
-            '1': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat1),
-            '2': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat2),
-            '3': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat3),
-            '4': parseRankedValues(race.category?.bonusSystem?.pointsMountainCat4),
-        };
+        const markers = this.collectIntermediateMarkers(summary);
         const states = riders.map((rider) => {
             const team = teamsById.get(rider.activeTeamId ?? -1);
             if (!team) {
@@ -399,11 +724,11 @@ class QuickSimEngine {
             this.applyPelotonEffect(states, segment);
         }
         const sorted = [...states]
-            .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || this.resolvePhotoFinishScore(right.rider, right.dayForm, summary.distanceKm) - this.resolvePhotoFinishScore(left.rider, left.dayForm, summary.distanceKm) || left.rider.id - right.rider.id)
+            .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || this.resolvePhotoFinishScore(right.rider, right.dayForm, summary.distanceKm, stage.profile) - this.resolvePhotoFinishScore(left.rider, left.dayForm, summary.distanceKm, stage.profile) || left.rider.id - right.rider.id)
             .map((entry) => ({
             ...entry,
             stageTimeSeconds: roundSeconds(entry.rawTimeSeconds),
-            photoFinishScore: this.resolvePhotoFinishScore(entry.rider, entry.dayForm, summary.distanceKm),
+            photoFinishScore: this.resolvePhotoFinishScore(entry.rider, entry.dayForm, summary.distanceKm, stage.profile),
         }));
         finishPointValues.forEach((points, index) => {
             const entry = sorted[index];
@@ -417,42 +742,71 @@ class QuickSimEngine {
                 return;
             entry.gcBonusSeconds += bonusSeconds;
         });
-        const sprintPointsByRider = new Map();
-        const sprintBonusesByRider = new Map();
-        for (const marker of markers.filter((candidate) => candidate.marker.type === 'sprint_intermediate')) {
-            const sprintRanking = [...sorted]
-                .sort((left, right) => this.resolveSprintScore(right.rider, marker.kmMark / summary.distanceKm, right.dayForm) - this.resolveSprintScore(left.rider, marker.kmMark / summary.distanceKm, left.dayForm));
-            sprintPointValues.forEach((points, index) => {
-                const entry = sprintRanking[index];
-                if (!entry)
+        const markerClassifications = this.applyMarkerClassificationAwards(race, stage, sorted, markers.map((marker) => this.buildQuickSimMarkerClassification(marker, sorted, summary.distanceKm)));
+        return {
+            performance: sorted,
+            markerClassifications,
+        };
+    }
+    collectIntermediateMarkers(summary) {
+        const markers = [];
+        const counts = new Map();
+        summary.segments.forEach((segment, segmentIndex) => {
+            (segment.start_markers ?? []).forEach((marker, markerIndex) => {
+                if (marker.type !== 'sprint_intermediate' && marker.type !== 'climb_top') {
                     return;
-                appendToNumberMap(sprintPointsByRider, entry.rider.id, points);
+                }
+                const ordinal = (counts.get(marker.type) ?? 0) + 1;
+                counts.set(marker.type, ordinal);
+                markers.push({
+                    key: buildStageBoundaryMarkerKey(segmentIndex, 'start', markerIndex, marker),
+                    label: marker.name ?? buildDefaultMarkerLabel(marker, ordinal),
+                    kmMark: segment.start_km,
+                    marker,
+                });
             });
-            sprintBonusValues.forEach((bonusSeconds, index) => {
-                const entry = sprintRanking[index];
-                if (!entry)
+            (segment.end_markers ?? []).forEach((marker, markerIndex) => {
+                if (marker.type !== 'sprint_intermediate' && marker.type !== 'climb_top') {
                     return;
-                appendToNumberMap(sprintBonusesByRider, entry.rider.id, bonusSeconds);
+                }
+                const ordinal = (counts.get(marker.type) ?? 0) + 1;
+                counts.set(marker.type, ordinal);
+                markers.push({
+                    key: buildStageBoundaryMarkerKey(segmentIndex, 'end', markerIndex, marker),
+                    label: marker.name ?? buildDefaultMarkerLabel(marker, ordinal),
+                    kmMark: segment.end_km,
+                    marker,
+                });
             });
-        }
-        const mountainPointsByRider = new Map();
-        for (const marker of markers.filter((candidate) => candidate.marker.type === 'climb_top' && candidate.marker.cat != null && candidate.marker.cat !== 'Sprint')) {
-            const pointValues = mountainPointValues[marker.marker.cat];
-            const climbingRanking = [...sorted]
-                .sort((left, right) => this.resolveClimbScore(right.rider, marker.kmMark / summary.distanceKm, right.dayForm) - this.resolveClimbScore(left.rider, marker.kmMark / summary.distanceKm, left.dayForm));
-            pointValues.forEach((points, index) => {
-                const entry = climbingRanking[index];
-                if (!entry)
-                    return;
-                appendToNumberMap(mountainPointsByRider, entry.rider.id, points);
-            });
-        }
-        return sorted.map((entry) => ({
-            ...entry,
-            points: entry.points + (sprintPointsByRider.get(entry.rider.id) ?? 0),
-            gcBonusSeconds: entry.gcBonusSeconds + (sprintBonusesByRider.get(entry.rider.id) ?? 0),
-            mountainPoints: mountainPointsByRider.get(entry.rider.id) ?? 0,
-        }));
+        });
+        return markers.sort((left, right) => left.kmMark - right.kmMark || left.key.localeCompare(right.key, 'de'));
+    }
+    buildQuickSimMarkerClassification(marker, sortedPerformance, stageDistanceKm) {
+        const progressFactor = stageDistanceKm > 0 ? Math.max(0.02, Math.min(1, marker.kmMark / stageDistanceKm)) : 1;
+        const ranking = [...sortedPerformance].sort((left, right) => {
+            return this.resolveMarkerCrossingScore(right.rider, marker.marker, progressFactor, right.dayForm)
+                - this.resolveMarkerCrossingScore(left.rider, marker.marker, progressFactor, left.dayForm)
+                || left.rider.id - right.rider.id;
+        });
+        const leaderCrossingTime = roundSeconds((ranking[0]?.stageTimeSeconds ?? 0) * progressFactor);
+        return {
+            markerKey: marker.key,
+            markerLabel: marker.label,
+            markerType: marker.marker.type,
+            markerCategory: marker.marker.cat,
+            kmMark: marker.kmMark,
+            entries: ranking.map((entry, index) => {
+                const crossingTimeSeconds = roundSeconds(entry.stageTimeSeconds * progressFactor);
+                const photoFinishScore = this.resolveMarkerCrossingScore(entry.rider, marker.marker, progressFactor, entry.dayForm);
+                return {
+                    riderId: entry.rider.id,
+                    rank: index + 1,
+                    crossingTimeSeconds,
+                    gapSeconds: Math.max(0, crossingTimeSeconds - leaderCrossingTime),
+                    photoFinishScore,
+                };
+            }),
+        };
     }
     simulateMassStartSegment(rider, segment, dayForm, currentKm, cobbleKm) {
         const activeSkill = this.resolveActiveSkill(rider, segment);
@@ -496,27 +850,7 @@ class QuickSimEngine {
     }
     resolveActiveSkill(rider, segment) {
         const formBonus = resolveFormBonus(rider);
-        switch (segment.terrain) {
-            case 'Flat':
-                return rider.skills.flat + formBonus;
-            case 'Hill':
-                return rider.skills.hill + formBonus;
-            case 'Medium_Mountain':
-                return rider.skills.mediumMountain * 0.7 + rider.skills.mountain * 0.3 + formBonus;
-            case 'Mountain':
-            case 'High_Mountain':
-                return rider.skills.mountain + formBonus;
-            case 'Cobble':
-                return rider.skills.cobble + formBonus;
-            case 'Cobble_Hill':
-                return rider.skills.cobble * 0.6 + rider.skills.hill * 0.4 + formBonus;
-            case 'Abfahrt':
-                return rider.skills.downhill + formBonus;
-            case 'Sprint':
-                return rider.skills.sprint * 0.7 + rider.skills.acceleration * 0.3 + formBonus;
-            default:
-                return rider.skills.flat + formBonus;
-        }
+        return (0, skillWeights_1.resolveWeightedSkillFromSkills)(rider.skills, 'road', segment.terrain, this.skillWeightRuleMap) + formBonus;
     }
     resolveAltitudeSpeedFactor(rider, segment) {
         const averageElevation = (segment.start_elevation + segment.end_elevation) / 2;
@@ -569,21 +903,12 @@ class QuickSimEngine {
         return 2;
     }
     resolveSprintScore(rider, stageFraction, dayForm) {
-        const formBonus = resolveFormBonus(rider);
         const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 250) * stageFraction;
-        return ((rider.skills.sprint + formBonus) * 0.45
-            + (rider.skills.acceleration + formBonus) * 0.25
-            + (rider.skills.flat + formBonus) * 0.1
-            + (rider.skills.resistance + formBonus) * 0.1
-            + (rider.skills.bikeHandling + formBonus) * 0.1) * fatigueBoost * dayForm;
+        return this.resolveWeightedScore(rider, this.resolveSprintWeightProfile(), fatigueBoost, dayForm);
     }
-    resolvePhotoFinishScore(rider, dayForm, stageDistanceKm) {
+    resolvePhotoFinishScore(rider, dayForm, stageDistanceKm, stageProfile) {
         const staminaModifier = this.resolveStaminaModifier(rider, dayForm, stageDistanceKm);
-        const formBonus = resolveFormBonus(rider);
-        const effectiveSprint = ((rider.skills.sprint + formBonus) * dayForm) * staminaModifier;
-        const effectiveAcceleration = ((rider.skills.acceleration + formBonus) * dayForm) * staminaModifier;
-        const effectiveFlat = ((rider.skills.flat + formBonus) * dayForm) * staminaModifier;
-        return (effectiveSprint * 0.6) + (effectiveAcceleration * 0.2) + (effectiveFlat * 0.2);
+        return this.resolveWeightedScore(rider, this.resolveFinishWeightProfile(stageProfile), staminaModifier, dayForm);
     }
     resolveStaminaModifier(rider, dayForm, stageDistanceKm) {
         if (stageDistanceKm <= 150) {
@@ -593,13 +918,54 @@ class QuickSimEngine {
         return (((rider.skills.stamina + resolveFormBonus(rider)) * dayForm) / 90) * distanceFactor;
     }
     resolveClimbScore(rider, stageFraction, dayForm) {
-        const formBonus = resolveFormBonus(rider);
         const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 220) * stageFraction;
-        return ((rider.skills.mountain + formBonus) * 0.45
-            + (rider.skills.mediumMountain + formBonus) * 0.2
-            + (rider.skills.hill + formBonus) * 0.1
-            + (rider.skills.attack + formBonus) * 0.1
-            + (rider.skills.resistance + formBonus) * 0.15) * fatigueBoost * dayForm;
+        return this.resolveWeightedScore(rider, this.resolveClimbWeightProfile('HC'), fatigueBoost, dayForm);
+    }
+    resolveWeightedScore(rider, weights, effortModifier, dayForm) {
+        return resolveWeightProfileValue(rider, weights, resolveFormBonus(rider)) * effortModifier * dayForm;
+    }
+    resolveMarkerCrossingScore(rider, marker, stageFraction, dayForm) {
+        if (marker.type === 'sprint_intermediate') {
+            return this.resolveSprintScore(rider, stageFraction, dayForm);
+        }
+        const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 220) * stageFraction;
+        return this.resolveWeightedScore(rider, this.resolveClimbWeightProfile(marker.cat), fatigueBoost, dayForm);
+    }
+    resolveRuleWeightProfile(appliesTo, markerType, markerCategory, fallback) {
+        return this.stageScoringRuleWeights.get(buildStageScoringRuleLookupKey(appliesTo, markerType, markerCategory)) ?? fallback;
+    }
+    resolveSprintWeightProfile() {
+        return this.resolveRuleWeightProfile('sprint_intermediate', 'sprint_intermediate', null, SPRINT_INTERMEDIATE_WEIGHTS);
+    }
+    resolveClimbWeightProfile(category) {
+        if (!category || category === 'Sprint') {
+            return this.resolveRuleWeightProfile('climb_top', 'climb_top', 'HC', CLIMB_TOP_WEIGHTS.HC);
+        }
+        return this.resolveRuleWeightProfile('climb_top', 'climb_top', category, CLIMB_TOP_WEIGHTS[category]);
+    }
+    resolveFinishMarkerType(stageProfile) {
+        switch (stageProfile) {
+            case 'Hilly':
+            case 'Hilly_Difficult':
+            case 'Rolling':
+            case 'Cobble_Hill':
+                return 'finish_hill';
+            case 'Medium_Mountain':
+            case 'Mountain':
+            case 'High_Mountain':
+                return 'finish_mountain';
+            default:
+                return 'finish_flat';
+        }
+    }
+    resolveFinishWeightProfile(stageProfile) {
+        const markerType = this.resolveFinishMarkerType(stageProfile);
+        const fallback = markerType === 'finish_hill'
+            ? FINISH_HILL_WEIGHTS
+            : markerType === 'finish_mountain'
+                ? FINISH_MOUNTAIN_WEIGHTS
+                : FINISH_FLAT_WEIGHTS;
+        return this.resolveRuleWeightProfile('finish', markerType, null, fallback);
     }
     getPreviousSimulatedStageId(raceId, stageNumber) {
         const row = this.db.prepare(`
