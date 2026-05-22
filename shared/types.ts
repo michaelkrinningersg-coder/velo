@@ -288,6 +288,7 @@ export interface RaceCategoryBonus {
   bonusSecondsFinal: string;
   bonusSecondsIntermediate: string;
   pointsStage: string;
+  pointsMountainStage: string;
   pointsSprintFinish: string;
   pointsOneDay: string;
   pointsGcFinal: string;
@@ -306,6 +307,27 @@ export interface RaceCategoryBonus {
   pointsJerseyYouthFinal: string;
 }
 
+export type SkillWeightSimulationMode = 'road' | 'itt' | 'ttt';
+
+export interface SkillWeightRule {
+  id: number;
+  simulationMode: SkillWeightSimulationMode;
+  terrain: StageTerrain;
+  weights: Partial<Record<RiderSkillKey, number>>;
+  tttSpeedMultiplier: number;
+}
+
+export type StageScoringRuleAppliesTo = 'sprint_intermediate' | 'climb_top' | 'finish';
+
+export interface StageScoringRule {
+  id: number;
+  ruleKey: string;
+  appliesTo: StageScoringRuleAppliesTo;
+  markerType: 'sprint_intermediate' | 'climb_top' | 'finish_flat' | 'finish_hill' | 'finish_mountain';
+  markerCategory: StageMarkerCategory | null;
+  weights: Partial<Record<RiderSkillKey, number>>;
+}
+
 export interface RaceCategory {
   id: number;
   name: string;
@@ -313,6 +335,7 @@ export interface RaceCategory {
   numberOfTeams: number;
   numberOfRiders: number;
   bonusSystemId: number;
+  roleRequirements: Record<number, number>;
   bonusSystem?: RaceCategoryBonus;
 }
 
@@ -515,6 +538,8 @@ export interface RealtimeSimulationBootstrap {
   teams: Team[];
   stageSummary: ParsedStageSummary;
   gcStandings: RealtimeGcStanding[];
+  teamStartOrder: number[];
+  skillWeightRules: SkillWeightRule[];
 }
 
 export type SeasonPointAwardType =

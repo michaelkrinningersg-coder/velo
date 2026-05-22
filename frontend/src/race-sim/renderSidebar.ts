@@ -26,6 +26,7 @@ interface SidebarRenderCache {
   orderedRiderIds: number[];
   rowsByRiderId: Map<number, SidebarRowCache>;
   openDetailRiderId: number | null;
+  openTeamId: number | null;
 }
 
 interface SidebarRowCache {
@@ -70,6 +71,18 @@ export interface SidebarRenderTelemetry {
   rowsUpdated: number;
   rowsSkippedInvisible: number;
   orderChanged: number;
+}
+
+interface TeamTimeTrialRow {
+  team: Team;
+  riders: RealtimeRiderSnapshot[];
+  representative: RealtimeRiderSnapshot;
+  teamClockSeconds: number | null;
+  teamDistanceMeters: number;
+  teamEffectiveSkill: number;
+  teamSpeedMps: number;
+  splitTimes: Record<string, number>;
+  finishedRiders: number;
 }
 
 const bootstrapSidebarDataCache = new WeakMap<RealtimeSimulationBootstrap, BootstrapSidebarData>();
@@ -223,7 +236,7 @@ function resolveSplitSortValue(
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
   markerRanksByLabel: Map<string, Map<number, number>>,
 ): number | null {
-  if (stageProfile !== 'ITT') {
+  if (stageProfile !== 'ITT' && stageProfile !== 'TTT') {
     return markerRanksByLabel.get(label)?.get(rider.riderId) ?? null;
   }
 
@@ -318,6 +331,7 @@ function applyLeaderboardLayout(container: HTMLElement, columns: LeaderboardColu
     orderedRiderIds: cached?.orderedRiderIds ?? [],
     rowsByRiderId: cached?.rowsByRiderId ?? new Map(),
     openDetailRiderId: cached?.openDetailRiderId ?? null,
+    openTeamId: cached?.openTeamId ?? null,
   });
   return layoutKey;
 }
@@ -573,6 +587,25 @@ function sortRiders(
 }
 
 export function handleRaceSimSidebarInteraction(container: HTMLElement, target: Element): boolean {
+  const teamToggleButton = target.closest<HTMLButtonElement>('button[data-race-sim-ttt-team-toggle]');
+  if (teamToggleButton) {
+    const teamId = Number(teamToggleButton.dataset['raceSimTttTeamToggle']);
+    if (!Number.isFinite(teamId)) {
+      return false;
+    }
+
+    const cached = sidebarRenderCache.get(container);
+    if (!cached) {
+      return false;
+    }
+
+    cached.openTeamId = cached.openTeamId === teamId ? null : teamId;
+    if (cached.openTeamId == null) {
+      cached.openDetailRiderId = null;
+    }
+    return true;
+  }
+
   const detailToggleButton = target.closest<HTMLButtonElement>('button[data-race-sim-rider-toggle]');
   if (detailToggleButton) {
     const riderId = Number(detailToggleButton.dataset['raceSimRiderToggle']);
@@ -771,7 +804,7 @@ function renderSplitCell(
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
   markerRanksByLabel: Map<string, Map<number, number>>,
 ): string {
-  if (stageProfile !== 'ITT') {
+  if (stageProfile !== 'ITT' && stageProfile !== 'TTT') {
     const rank = markerRanksByLabel.get(label)?.get(rider.riderId);
     return rank != null ? `${rank}.` : '—';
   }
@@ -917,7 +950,7 @@ function updateSidebarRow(
   const seasonForm = sourceRider?.formBonus ?? 0;
   const raceForm = sourceRider?.raceFormBonus ?? 0;
   const gcStanding = raceIsStageRace && stageNumber > 1 ? gcByRiderId.get(rider.riderId) ?? null : null;
-  const clockValue = stageProfile !== 'ITT'
+  const clockValue = stageProfile !== 'ITT' && stageProfile !== 'TTT'
     ? '—'
     : !rider.hasStarted
       ? formatStartOffset(rider.startOffsetSeconds)
@@ -1008,11 +1041,206 @@ function updateSidebarRow(
   rowCache.initialized = true;
 }
 
+function renderTeamTimeTrialButton(team: Team, isOpen: boolean): string {
+  return `<button type="button" class="race-sim-row-name-btn" data-race-sim-ttt-team-toggle="${team.id}" aria-expanded="${isOpen ? 'true' : 'false'}" title="${esc(team.name)}">${esc(team.name)}</button>`;
+}
+
+function renderTeamJerseyCellByTeam(team: Team): string {
+  const jerseyPath = resolveTeamJerseyAssetPath(team.id);
+  return `
+    <span class="race-sim-team-visual" title="${esc(team.name)}">
+      <img
+        class="race-sim-team-jersey-img"
+        src="${esc(jerseyPath)}"
+        alt=""
+        width="18"
+        height="18"
+        loading="lazy"
+        decoding="async"
+        onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';"
+      >
+    </span>`;
+}
+
+function buildTeamTimeTrialRows(
+  snapshot: SimulationSnapshot,
+  bootstrap: RealtimeSimulationBootstrap,
+  riderById: Map<number, Rider>,
+): TeamTimeTrialRow[] {
+  const ridersByTeamId = new Map<number, RealtimeRiderSnapshot[]>();
+
+  for (const rider of snapshot.riders) {
+    const sourceRider = riderById.get(rider.riderId);
+    const teamId = sourceRider?.activeTeamId;
+    if (teamId == null) {
+      continue;
+    }
+
+    const bucket = ridersByTeamId.get(teamId) ?? [];
+    bucket.push(rider);
+    ridersByTeamId.set(teamId, bucket);
+  }
+
+  return bootstrap.teams
+    .filter((team) => ridersByTeamId.has(team.id))
+    .map((team) => {
+      const riders = (ridersByTeamId.get(team.id) ?? [])
+        .slice()
+        .sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.riderId - right.riderId);
+      const representative = riders[0] ?? snapshot.riders[0];
+      const topCount = Math.min(5, riders.length);
+      const averageTopEffectiveSkill = riders
+        .slice(0, topCount)
+        .reduce((sum, rider) => sum + rider.effectiveSkill, 0) / Math.max(topCount, 1);
+      const missingRiderMalus = Math.max(0, 8 - riders.length);
+
+      return {
+        team,
+        riders,
+        representative,
+        teamClockSeconds: representative?.riderClockSeconds ?? null,
+        teamDistanceMeters: representative?.distanceCoveredMeters ?? 0,
+        teamEffectiveSkill: Math.max(1, averageTopEffectiveSkill - missingRiderMalus),
+        teamSpeedMps: representative?.currentSpeedMps ?? 0,
+        splitTimes: representative?.splitTimes ?? {},
+        finishedRiders: riders.filter((rider) => rider.isFinished).length,
+      } satisfies TeamTimeTrialRow;
+    })
+    .sort((left, right) => compareIttLeaderboard(left.representative, right.representative, buildIntermediateSplitLabels(bootstrap.stageSummary)) || left.team.id - right.team.id);
+}
+
+function renderTeamTimeTrialDetail(
+  row: TeamTimeTrialRow,
+  sidebarData: BootstrapSidebarData,
+  raceIsStageRace: boolean,
+  stageNumber: number,
+  openDetailRiderId: number | null,
+): string {
+  return `
+    <section class="race-sim-rider-detail-panel" aria-label="Teamdetails ${esc(row.team.name)}">
+      <div class="race-sim-rider-detail-head">
+        <strong>${esc(row.team.name)}</strong>
+        <span>${row.finishedRiders}/${row.riders.length} im Ziel</span>
+      </div>
+      <div class="race-sim-rider-detail-grid">
+        <div class="race-sim-rider-detail-item"><span>Tempo-Skill</span><strong>${esc(formatNumber(row.teamEffectiveSkill))}</strong></div>
+        <div class="race-sim-rider-detail-item"><span>Speed</span><strong>${esc(formatSpeed(row.teamSpeedMps))}</strong></div>
+        <div class="race-sim-rider-detail-item"><span>Teamuhr</span><strong>${esc(row.teamClockSeconds != null ? formatClock(row.teamClockSeconds) : '—')}</strong></div>
+        <div class="race-sim-rider-detail-item"><span>Distanz</span><strong>${esc(formatKmValue(row.teamDistanceMeters / 1000))}</strong></div>
+      </div>
+      <div class="race-sim-rider-detail-foot">Fahrer nach aktueller effektiver Fähigkeit sortiert</div>
+      <div class="race-sim-ttt-team-detail-list">
+        ${row.riders.map((rider) => {
+          const sourceRider = sidebarData.riderById.get(rider.riderId) ?? null;
+          const gcStanding = raceIsStageRace && stageNumber > 1 ? sidebarData.gcByRiderId.get(rider.riderId) ?? null : null;
+          const isOpen = openDetailRiderId === rider.riderId;
+          return `
+            <article class="race-sim-ttt-team-rider">
+              <div class="race-sim-ttt-team-rider-head">
+                ${renderRiderButton(rider, isOpen)}
+                <strong>${esc(formatNumber(rider.effectiveSkill))}</strong>
+                <span>${esc(rider.riderClockSeconds != null ? formatClock(rider.riderClockSeconds) : '—')}</span>
+              </div>
+              ${isOpen ? renderDetailPanel(rider, sourceRider, gcStanding) : ''}
+            </article>`;
+        }).join('')}
+      </div>
+    </section>`;
+}
+
+function renderTeamTimeTrialSidebar(
+  container: HTMLElement,
+  snapshot: SimulationSnapshot,
+  bootstrap: RealtimeSimulationBootstrap,
+): SidebarRenderTelemetry {
+  const totalStartMs = performance.now();
+  const sidebarData = getBootstrapSidebarData(bootstrap);
+  const splitLabels = sidebarData.splitLabels;
+  const columns: LeaderboardColumn[] = [
+    { label: 'Pos', width: '50px', className: 'race-sim-col-rank' },
+    { label: 'Team', width: '220px', className: 'race-sim-col-name' },
+    { label: 'Jer', width: '46px', className: 'race-sim-col-team-visual' },
+    { label: 'Abr.', width: '58px', className: 'race-sim-col-team' },
+    { label: 'Gap', width: '72px' },
+    { label: 'Uhr', width: '96px' },
+    ...splitLabels.map((splitLabel) => ({ label: splitLabel, width: '92px', className: 'race-sim-col-split' })),
+    { label: 'Eff.', width: '74px' },
+    { label: 'Speed', width: '82px' },
+  ];
+  const previousLayoutKey = sidebarRenderCache.get(container)?.layoutKey;
+  const layoutKey = applyLeaderboardLayout(container, columns);
+  const cached = sidebarRenderCache.get(container) ?? {
+    layoutKey,
+    orderedRiderIds: [],
+    rowsByRiderId: new Map(),
+    openDetailRiderId: null,
+    openTeamId: null,
+  };
+
+  if (previousLayoutKey != null && previousLayoutKey !== layoutKey) {
+    container.innerHTML = '';
+  }
+
+  const teamRows = buildTeamTimeTrialRows(snapshot, bootstrap, sidebarData.riderById);
+  const leaderDistance = teamRows[0]?.teamDistanceMeters ?? 0;
+  container.innerHTML = teamRows.map((row, index) => {
+    const isOpen = cached.openTeamId === row.team.id;
+    return `
+      <article class="race-sim-row${index === 0 ? ' race-sim-row-leader' : ''}${isOpen ? ' race-sim-row-detail-open' : ''}">
+        <div class="race-sim-row-grid">
+          <strong class="race-sim-row-rank">${index + 1}.</strong>
+          <span class="race-sim-row-name">${renderTeamTimeTrialButton(row.team, isOpen)}</span>
+          <span class="race-sim-row-team-visual">${renderTeamJerseyCellByTeam(row.team)}</span>
+          <strong class="race-sim-row-team"><span class="race-sim-team-code" title="${esc(row.team.name)}">${esc(row.team.abbreviation)}</span></strong>
+          <strong class="race-sim-gap">${esc(formatGap(Math.max(0, leaderDistance - row.teamDistanceMeters)))}</strong>
+          <strong>${esc(row.teamClockSeconds != null ? formatClock(row.teamClockSeconds) : formatStartOffset(row.representative.startOffsetSeconds))}</strong>
+          ${splitLabels.map((label) => `<strong>${esc(row.splitTimes[label] != null ? formatClock(row.splitTimes[label] as number) : '—')}</strong>`).join('')}
+          <strong class="race-sim-cell-effective-skill ${getEffectiveSkillClassName(row.representative)}">${esc(formatNumber(row.teamEffectiveSkill))}</strong>
+          <strong>${esc(formatSpeed(row.teamSpeedMps))}</strong>
+        </div>
+        <div class="race-sim-row-detail-popover${isOpen ? '' : ' hidden'}">${isOpen ? renderTeamTimeTrialDetail(row, sidebarData, bootstrap.race.isStageRace, bootstrap.stage.stageNumber, cached.openDetailRiderId) : ''}</div>
+      </article>`;
+  }).join('');
+
+  sidebarRenderCache.set(container, {
+    layoutKey,
+    orderedRiderIds: [],
+    rowsByRiderId: new Map(),
+    openDetailRiderId: cached.openDetailRiderId,
+    openTeamId: cached.openTeamId,
+  });
+
+  const totalMs = performance.now() - totalStartMs;
+  return {
+    totalMs,
+    prepMs: 0,
+    sortMs: 0,
+    layoutMs: 0,
+    createRowsMs: 0,
+    removeRowsMs: 0,
+    orderCheckMs: 0,
+    reorderMs: 0,
+    visibilityMs: 0,
+    updateRowsMs: 0,
+    finalizeMs: 0,
+    rowsTotal: teamRows.length,
+    rowsCreated: teamRows.length,
+    rowsRemoved: 0,
+    rowsUpdated: teamRows.length,
+    rowsSkippedInvisible: 0,
+    orderChanged: 1,
+  };
+}
+
 export function renderRaceSimSidebar(
   container: HTMLElement,
   snapshot: SimulationSnapshot,
   bootstrap: RealtimeSimulationBootstrap,
 ): SidebarRenderTelemetry {
+  if (bootstrap.stage.profile === 'TTT') {
+    return renderTeamTimeTrialSidebar(container, snapshot, bootstrap);
+  }
+
   const totalStartMs = performance.now();
   const telemetry: SidebarRenderTelemetry = {
     totalMs: 0,

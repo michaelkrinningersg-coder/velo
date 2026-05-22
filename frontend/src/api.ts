@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  ParsedStageSummary,
   SavegameMeta,
   Team,
   Rider,
@@ -55,6 +56,7 @@ export const api = {
   getRaces:            () => call<Race[]>('GET', '/api/races'),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
+  getStageSummary:     (stageId: number) => call<ParsedStageSummary>('GET', `/api/stages/${stageId}/summary`),
   getRealtimeSimulation: (stageId: number) => call<RealtimeSimulationBootstrap>('GET', `/api/simulation/realtime/${stageId}`),
   getRosterEditor:     (stageId: number) => call<RaceRosterEditorPayload>('GET', `/api/simulation/roster/${stageId}`),
   applyRosterEditor:   (stageId: number, payload: RaceRosterSelectionRequest) => call<RealtimeSimulationBootstrap>('POST', `/api/simulation/roster/${stageId}/apply`, payload),

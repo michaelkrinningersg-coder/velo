@@ -1,4 +1,4 @@
-import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType } from '../../../shared/types';
+import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType, StageProfile } from '../../../shared/types';
 import type { RiderCluster, RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
 import { buildIntermediateSplitLabels, collectStageBoundaryMarkers } from './stageSummary';
@@ -206,6 +206,14 @@ function renderProfileEvent(event: ProfileEvent, topGuideY: number, baselineY: n
       <circle cx="${event.x.toFixed(1)}" cy="${event.anchorY.toFixed(1)}" r="3.2" fill="${event.accentColor}" opacity="0.9"></circle>
       <text x="${event.x.toFixed(1)}" y="${topTextY.toFixed(1)}" text-anchor="end" transform="rotate(-90 ${event.x.toFixed(1)} ${topTextY.toFixed(1)})" class="race-sim-marker-title" fill="${event.accentColor}">${esc(combinedLabel)}</text>
       <text x="${event.x.toFixed(1)}" y="${bottomTextY.toFixed(1)}" text-anchor="start" transform="rotate(-90 ${event.x.toFixed(1)} ${bottomTextY.toFixed(1)})" class="race-sim-marker-detail">${esc(event.distanceLabel)}</text>
+    </g>`;
+}
+
+function renderCompactProfileEvent(event: ProfileEvent, topGuideY: number, baselineY: number): string {
+  return `
+    <g class="race-sim-marker-group">
+      <line x1="${event.x.toFixed(1)}" y1="${topGuideY.toFixed(1)}" x2="${event.x.toFixed(1)}" y2="${(baselineY - 2).toFixed(1)}" stroke="${event.accentColor}" stroke-width="1.5" opacity="0.72"></line>
+      <circle cx="${event.x.toFixed(1)}" cy="${event.anchorY.toFixed(1)}" r="2.6" fill="${event.accentColor}" opacity="0.95"></circle>
     </g>`;
 }
 
@@ -527,6 +535,86 @@ function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSumm
         </g>`;
     })
     .join('');
+}
+
+function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean): string {
+  const width = compact ? 260 : 1320;
+  const height = compact ? 120 : 440;
+  const paddingX = compact ? 12 : 28;
+  const paddingTop = compact ? 12 : 74;
+  const paddingBottom = compact ? 18 : 84;
+  const stageDistanceMeters = summary.distanceKm * 1000;
+  const maxElevation = Math.max(...summary.points.map((point) => point.elevation));
+  const axisScaleFactor = maxElevation >= 500 ? 1.1 : 1.5;
+  const axisMaxElevation = Math.max(500, Math.ceil((maxElevation * axisScaleFactor) / 50) * 50);
+  const baselineY = height - paddingBottom;
+  const markerGuideTopY = compact ? 10 : 12;
+  const points = summary.points.map((point) => {
+    const x = scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX);
+    const y = scaleElevation(point.elevation, axisMaxElevation, height, paddingTop, paddingBottom);
+    return { x, y };
+  });
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
+  const markerEvents = buildProfileEvents(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMaxElevation)
+    .map((event) => compact
+      ? renderCompactProfileEvent(event, markerGuideTopY, baselineY)
+      : renderProfileEvent(event, markerGuideTopY, baselineY))
+    .join('');
+  const tickValues = compact
+    ? []
+    : Array.from({ length: 5 }, (_value, index) => (axisMaxElevation / 4) * index);
+  const gridLines = tickValues.map((value) => {
+    const y = scaleElevation(value, axisMaxElevation, height, paddingTop, paddingBottom);
+    return `
+      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
+      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
+      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label">${formatElevationLabel(value)}</text>`;
+  }).join('');
+  const distanceTickMarkup = compact
+    ? ''
+    : renderDistanceTicks(buildDistanceTicks(summary, stageDistanceMeters), summary, stageDistanceMeters, width, paddingX, baselineY);
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(label)}" class="${compact ? 'dashboard-stage-profile-svg' : 'dashboard-stage-profile-svg dashboard-stage-profile-svg-large'}" data-stage-profile="${stageProfile}">
+      <defs>
+        <linearGradient id="${compact ? 'dashboard-mini-paper' : 'dashboard-large-paper'}" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#fffdf7"></stop>
+          <stop offset="100%" stop-color="#f8f1df"></stop>
+        </linearGradient>
+        <linearGradient id="${compact ? 'dashboard-mini-area' : 'dashboard-large-area'}" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#fbbf24"></stop>
+          <stop offset="100%" stop-color="#f59e0b"></stop>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${width}" height="${height}" fill="url(#${compact ? 'dashboard-mini-paper' : 'dashboard-large-paper'})"></rect>
+      ${gridLines}
+      <line x1="${paddingX}" y1="${baselineY}" x2="${width - paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
+      ${compact ? '' : `<line x1="${paddingX}" y1="${paddingTop}" x2="${paddingX}" y2="${baselineY}" class="race-sim-axis"></line>`}
+      <path d="${areaPath}" fill="url(#${compact ? 'dashboard-mini-area' : 'dashboard-large-area'})"></path>
+      <path d="${linePath}" class="race-sim-profile-line"></path>
+      ${markerEvents}
+      ${distanceTickMarkup}
+      ${compact ? '' : `<text x="${paddingX.toFixed(1)}" y="${(paddingTop - 20).toFixed(1)}" class="race-sim-scale race-sim-scale-title" text-anchor="start">Höhe</text>`}
+    </svg>`;
+}
+
+export function renderStaticStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {
+  if (summary.points.length < 2) {
+    container.innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false)}</div>`;
+}
+
+export function renderMiniStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {
+  if (summary.points.length < 2) {
+    container.innerHTML = '<div class="dashboard-stage-profile-empty">–</div>';
+    return;
+  }
+
+  container.innerHTML = buildStaticProfileMarkup(summary, stageProfile, label, true);
 }
 
 export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSummary, snapshot: SimulationSnapshot, label: string, bootstrap: RealtimeSimulationBootstrap, timingMode: TimingRailMode = 'finish'): void {

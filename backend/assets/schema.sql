@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS race_categories_bonus (
   bonus_seconds_final          TEXT    NOT NULL DEFAULT '',
   bonus_seconds_intermediate   TEXT    NOT NULL DEFAULT '',
   points_stage                 TEXT    NOT NULL DEFAULT '',
+  points_mountainstage         TEXT    NOT NULL DEFAULT '',
   points_sprint_finish         TEXT    NOT NULL DEFAULT '',
   points_one_day               TEXT    NOT NULL DEFAULT '',
   points_gc_final              TEXT    NOT NULL DEFAULT '',
@@ -184,10 +185,66 @@ CREATE TABLE IF NOT EXISTS race_categories (
   tier              INTEGER NOT NULL CHECK(tier IN (1, 2, 3)),
   number_of_teams   INTEGER NOT NULL CHECK(number_of_teams > 0),
   number_of_riders  INTEGER NOT NULL CHECK(number_of_riders > 0),
-  bonus_system_id   INTEGER NOT NULL REFERENCES race_categories_bonus(id)
+  bonus_system_id   INTEGER NOT NULL REFERENCES race_categories_bonus(id),
+  role_1            INTEGER NOT NULL DEFAULT 0 CHECK(role_1 >= 0),
+  role_2            INTEGER NOT NULL DEFAULT 0 CHECK(role_2 >= 0),
+  role_3            INTEGER NOT NULL DEFAULT 0 CHECK(role_3 >= 0),
+  role_4            INTEGER NOT NULL DEFAULT 0 CHECK(role_4 >= 0),
+  role_5            INTEGER NOT NULL DEFAULT 0 CHECK(role_5 >= 0),
+  role_6            INTEGER NOT NULL DEFAULT 0 CHECK(role_6 >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_race_categories_tier ON race_categories(tier);
+
+CREATE TABLE IF NOT EXISTS rules (
+  id                     INTEGER PRIMARY KEY,
+  rule_key               TEXT    NOT NULL UNIQUE,
+  applies_to             TEXT    NOT NULL CHECK(applies_to IN ('sprint_intermediate', 'climb_top', 'finish')),
+  marker_type            TEXT    NOT NULL CHECK(marker_type IN ('sprint_intermediate', 'climb_top', 'finish_flat', 'finish_hill', 'finish_mountain')),
+  marker_category        TEXT    CHECK(marker_category IS NULL OR marker_category IN ('HC', '1', '2', '3', '4', 'Sprint')),
+  weight_flat            REAL    NOT NULL DEFAULT 0 CHECK(weight_flat >= 0),
+  weight_mountain        REAL    NOT NULL DEFAULT 0 CHECK(weight_mountain >= 0),
+  weight_medium_mountain REAL    NOT NULL DEFAULT 0 CHECK(weight_medium_mountain >= 0),
+  weight_hill            REAL    NOT NULL DEFAULT 0 CHECK(weight_hill >= 0),
+  weight_time_trial      REAL    NOT NULL DEFAULT 0 CHECK(weight_time_trial >= 0),
+  weight_prologue        REAL    NOT NULL DEFAULT 0 CHECK(weight_prologue >= 0),
+  weight_cobble          REAL    NOT NULL DEFAULT 0 CHECK(weight_cobble >= 0),
+  weight_sprint          REAL    NOT NULL DEFAULT 0 CHECK(weight_sprint >= 0),
+  weight_acceleration    REAL    NOT NULL DEFAULT 0 CHECK(weight_acceleration >= 0),
+  weight_downhill        REAL    NOT NULL DEFAULT 0 CHECK(weight_downhill >= 0),
+  weight_attack          REAL    NOT NULL DEFAULT 0 CHECK(weight_attack >= 0),
+  weight_stamina         REAL    NOT NULL DEFAULT 0 CHECK(weight_stamina >= 0),
+  weight_resistance      REAL    NOT NULL DEFAULT 0 CHECK(weight_resistance >= 0),
+  weight_recuperation    REAL    NOT NULL DEFAULT 0 CHECK(weight_recuperation >= 0),
+  weight_bike_handling   REAL    NOT NULL DEFAULT 0 CHECK(weight_bike_handling >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rules_context ON rules(applies_to, marker_type, marker_category);
+
+CREATE TABLE IF NOT EXISTS skill_weights (
+  id                     INTEGER PRIMARY KEY,
+  simulation_mode        TEXT    NOT NULL CHECK(simulation_mode IN ('road', 'itt', 'ttt')),
+  terrain                TEXT    NOT NULL CHECK(terrain IN ('Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint')),
+  weight_flat            REAL    NOT NULL DEFAULT 0 CHECK(weight_flat >= 0),
+  weight_mountain        REAL    NOT NULL DEFAULT 0 CHECK(weight_mountain >= 0),
+  weight_medium_mountain REAL    NOT NULL DEFAULT 0 CHECK(weight_medium_mountain >= 0),
+  weight_hill            REAL    NOT NULL DEFAULT 0 CHECK(weight_hill >= 0),
+  weight_time_trial      REAL    NOT NULL DEFAULT 0 CHECK(weight_time_trial >= 0),
+  weight_prologue        REAL    NOT NULL DEFAULT 0 CHECK(weight_prologue >= 0),
+  weight_cobble          REAL    NOT NULL DEFAULT 0 CHECK(weight_cobble >= 0),
+  weight_sprint          REAL    NOT NULL DEFAULT 0 CHECK(weight_sprint >= 0),
+  weight_acceleration    REAL    NOT NULL DEFAULT 0 CHECK(weight_acceleration >= 0),
+  weight_downhill        REAL    NOT NULL DEFAULT 0 CHECK(weight_downhill >= 0),
+  weight_attack          REAL    NOT NULL DEFAULT 0 CHECK(weight_attack >= 0),
+  weight_stamina         REAL    NOT NULL DEFAULT 0 CHECK(weight_stamina >= 0),
+  weight_resistance      REAL    NOT NULL DEFAULT 0 CHECK(weight_resistance >= 0),
+  weight_recuperation    REAL    NOT NULL DEFAULT 0 CHECK(weight_recuperation >= 0),
+  weight_bike_handling   REAL    NOT NULL DEFAULT 0 CHECK(weight_bike_handling >= 0),
+  ttt_speed_multiplier   REAL    NOT NULL DEFAULT 1 CHECK(ttt_speed_multiplier > 0),
+  UNIQUE(simulation_mode, terrain)
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_weights_context ON skill_weights(simulation_mode, terrain);
 
 -- ---- Rennen -------------------------------------------------
 CREATE TABLE IF NOT EXISTS races (
@@ -265,9 +322,11 @@ CREATE TABLE IF NOT EXISTS results (
   time_seconds     INTEGER,
   points           INTEGER,
   CHECK(
+    (result_type_id = 1 AND team_id IS NOT NULL)
+    OR
     (result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)
     OR
-    (result_type_id != 6 AND rider_id IS NOT NULL AND team_id IS NOT NULL)
+    (result_type_id NOT IN (1, 6) AND rider_id IS NOT NULL AND team_id IS NOT NULL)
   )
 );
 

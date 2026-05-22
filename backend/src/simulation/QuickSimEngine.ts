@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { buildSkillWeightRuleMap, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills, SkillWeightRule } from '../../../shared/skillWeights';
 import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { ensureRaceEntries } from './RaceRosterService';
@@ -14,8 +15,10 @@ import {
   ResultType,
   Rider,
   Stage,
+  StageFinishMarkerType,
   StageMarker,
   StageMarkerCategory,
+  StageScoringRule,
   Team,
 } from '../../../shared/types';
 
@@ -50,6 +53,104 @@ const TECH_PENALTY_FACTOR = 0.002;
 const WIND_FACTOR = 0.0025;
 const MIN_SEGMENT_SPEED_KMH = 6;
 
+type MarkerSkillKey = keyof Rider['skills'];
+
+type MarkerWeightProfile = Partial<Record<MarkerSkillKey, number>>;
+
+const SPRINT_INTERMEDIATE_WEIGHTS: MarkerWeightProfile = {
+  sprint: 0.46,
+  acceleration: 0.24,
+  hill: 0.06,
+  attack: 0.08,
+  resistance: 0.08,
+  stamina: 0.04,
+  flat: 0.04,
+};
+
+const FINISH_FLAT_WEIGHTS: MarkerWeightProfile = {
+  sprint: 0.45,
+  acceleration: 0.2,
+  hill: 0.04,
+  attack: 0.06,
+  resistance: 0.06,
+  stamina: 0.04,
+  flat: 0.15,
+};
+
+const FINISH_HILL_WEIGHTS: MarkerWeightProfile = {
+  mountain: 0.05,
+  mediumMountain: 0.05,
+  hill: 0.28,
+  sprint: 0.18,
+  acceleration: 0.12,
+  attack: 0.12,
+  resistance: 0.1,
+  stamina: 0.06,
+  flat: 0.04,
+};
+
+const FINISH_MOUNTAIN_WEIGHTS: MarkerWeightProfile = {
+  mountain: 0.38,
+  mediumMountain: 0.2,
+  hill: 0.1,
+  sprint: 0.03,
+  acceleration: 0.03,
+  attack: 0.12,
+  resistance: 0.08,
+  stamina: 0.06,
+};
+
+const CLIMB_TOP_WEIGHTS: Record<Exclude<StageMarkerCategory, 'Sprint'>, MarkerWeightProfile> = {
+  HC: {
+    mountain: 0.4,
+    mediumMountain: 0.2,
+    hill: 0.07,
+    sprint: 0.01,
+    acceleration: 0.02,
+    attack: 0.16,
+    resistance: 0.08,
+    stamina: 0.06,
+  },
+  '1': {
+    mountain: 0.31,
+    mediumMountain: 0.18,
+    hill: 0.12,
+    sprint: 0.03,
+    acceleration: 0.04,
+    attack: 0.16,
+    resistance: 0.09,
+    stamina: 0.07,
+  },
+  '2': {
+    mountain: 0.2,
+    mediumMountain: 0.14,
+    hill: 0.22,
+    sprint: 0.08,
+    acceleration: 0.08,
+    attack: 0.15,
+    resistance: 0.08,
+    stamina: 0.05,
+  },
+  '3': {
+    mountain: 0.05,
+    mediumMountain: 0.09,
+    hill: 0.27,
+    sprint: 0.14,
+    acceleration: 0.12,
+    attack: 0.16,
+    resistance: 0.1,
+    stamina: 0.07,
+  },
+  '4': {
+    hill: 0.3,
+    sprint: 0.18,
+    acceleration: 0.16,
+    attack: 0.16,
+    resistance: 0.12,
+    stamina: 0.08,
+  },
+};
+
 interface PerformanceEntry {
   rider: Rider;
   team: Team;
@@ -61,6 +162,10 @@ interface PerformanceEntry {
   points: number;
   gcBonusSeconds: number;
   mountainPoints: number;
+}
+
+function usesMountainStageSprintFinishPoints(profile: Stage['profile']): boolean {
+  return !['ITT', 'TTT', 'Flat', 'Rolling', 'Hilly'].includes(profile);
 }
 
 interface RiderStageState extends PerformanceEntry {
@@ -171,11 +276,36 @@ function buildDefaultMarkerLabel(marker: StageMarker, ordinal: number): string {
   return 'Ziel';
 }
 
+function resolveWeightProfileValue(rider: Rider, weights: MarkerWeightProfile, formBonus: number): number {
+  return Object.entries(weights).reduce((sum, [skillKey, weight]) => {
+    if (!weight) {
+      return sum;
+    }
+
+    return sum + ((rider.skills[skillKey as MarkerSkillKey] + formBonus) * weight);
+  }, 0);
+}
+
+function buildStageScoringRuleLookupKey(appliesTo: StageScoringRule['appliesTo'], markerType: StageScoringRule['markerType'], markerCategory: StageMarkerCategory | null): string {
+  return `${appliesTo}|${markerType}|${markerCategory ?? ''}`;
+}
+
 export class QuickSimEngine {
   private readonly repo: GameRepository;
+  private readonly stageScoringRuleWeights: Map<string, MarkerWeightProfile>;
+  private readonly skillWeightRules: SkillWeightRule[];
+  private readonly skillWeightRuleMap: Map<string, SkillWeightRule['weights']>;
 
   constructor(private readonly db: Database.Database) {
     this.repo = new GameRepository(db);
+    this.skillWeightRules = this.repo.getSkillWeightRules();
+    this.skillWeightRuleMap = buildSkillWeightRuleMap(this.skillWeightRules);
+    this.stageScoringRuleWeights = new Map(
+      this.repo.getStageScoringRules().map((rule) => [
+        buildStageScoringRuleLookupKey(rule.appliesTo, rule.markerType, rule.markerCategory),
+        rule.weights,
+      ]),
+    );
   }
 
   public simulateStage(stageId: number): QuickSimResponse {
@@ -186,6 +316,11 @@ export class QuickSimEngine {
           performance: this.simulateTimeTrialStage(race, stage, riders, teamsById),
           markerClassifications: [],
         }
+      : stage.profile === 'TTT'
+        ? {
+            performance: this.simulateTeamTimeTrialStage(race, stage, riders, teamsById),
+            markerClassifications: [],
+          }
       : this.simulateMassStartStage(race, stage, riders, teamsById);
 
     return this.persistStagePerformance(race, stage, outcome.performance, outcome.markerClassifications);
@@ -242,7 +377,7 @@ export class QuickSimEngine {
     }
 
     const normalizedMarkerClassifications = normalizeMarkerClassifications(markerClassifications);
-    const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, performance, normalizedMarkerClassifications);
+    const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, stage, performance, normalizedMarkerClassifications);
 
     this.applyFinishLineAwards(race, stage, performance, {
       awardPoints: stage.profile !== 'TTT',
@@ -299,7 +434,11 @@ export class QuickSimEngine {
     }
 
     const finishPointValues = options.awardPoints && race.isStageRace
-      ? parseRankedValues(race.category.bonusSystem.pointsSprintFinish)
+      ? parseRankedValues(
+          usesMountainStageSprintFinishPoints(stage.profile)
+            ? race.category.bonusSystem.pointsMountainStage
+            : race.category.bonusSystem.pointsSprintFinish,
+        )
       : [];
     const finishBonusValues = options.awardTimeBonuses
       ? parseRankedValues(race.category.bonusSystem.bonusSecondsFinal)
@@ -321,6 +460,7 @@ export class QuickSimEngine {
 
   private applyMarkerClassificationAwards(
     race: Race,
+    stage: Stage,
     performance: PerformanceEntry[],
     markerClassifications: StageMarkerClassification[],
   ): StageMarkerClassification[] {
@@ -355,7 +495,7 @@ export class QuickSimEngine {
         let pointsAwarded = 0;
         const performanceEntry = performanceByRiderId.get(markerEntry.riderId) ?? null;
 
-        if (classification.markerType === 'sprint_intermediate') {
+        if (classification.markerType === 'sprint_intermediate' && stage.profile !== 'ITT' && stage.profile !== 'TTT') {
           pointsAwarded = sprintPointValues[index] ?? 0;
           if (performanceEntry) {
             performanceEntry.points += pointsAwarded;
@@ -397,13 +537,28 @@ export class QuickSimEngine {
     const previousMountain = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.mountain, 'points');
     const previousTeam = this.loadPreviousTeamMetricMap(previousStageId, RESULT_TYPES.team, 'time_seconds');
 
-    const stageRows = rankedPerformance.map((entry, index) => ({
-      rank: index + 1,
-      riderId: entry.rider.id,
-      teamId: entry.team.id,
-      timeSeconds: entry.stageTimeSeconds,
-      points: race.isStageRace ? entry.points : null,
-    }));
+    const stageRows = stage.profile === 'TTT'
+      ? [...new Map(
+          rankedPerformance.map((entry) => [entry.team.id, {
+            teamId: entry.team.id,
+            timeSeconds: entry.stageTimeSeconds,
+          }]),
+        ).values()]
+          .sort((left, right) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
+          .map((entry, index) => ({
+            rank: index + 1,
+            riderId: null,
+            teamId: entry.teamId,
+            timeSeconds: entry.timeSeconds,
+            points: null,
+          }))
+      : rankedPerformance.map((entry, index) => ({
+          rank: index + 1,
+          riderId: entry.rider.id,
+          teamId: entry.team.id,
+          timeSeconds: entry.stageTimeSeconds,
+          points: race.isStageRace ? entry.points : null,
+        }));
 
     const gcRows = [...performance]
       .map((entry) => ({
@@ -488,6 +643,7 @@ export class QuickSimEngine {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
+    const completedRiderIds = performance.map((entry) => entry.rider.id);
 
     this.db.transaction(() => {
       for (const row of stageRows) {
@@ -536,10 +692,10 @@ export class QuickSimEngine {
           );
         }
       }
-      this.repo.markStageEntriesFinished(stage.id, stageRows.map((row) => row.riderId));
+      this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
     })();
 
-    new GameStateService(this.db).applyRaceDayFormBonuses(stage.date, stageRows.map((row) => row.riderId));
+    new GameStateService(this.db).applyRaceDayFormBonuses(stage.date, completedRiderIds);
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
 
@@ -583,7 +739,7 @@ export class QuickSimEngine {
     riders: Rider[],
     teamsById: Map<number, Team>,
   ): PerformanceEntry[] {
-    const ttResult = TimeTrialSimulator.simulate(race, stage, riders);
+    const ttResult = TimeTrialSimulator.simulate(race, stage, riders, this.skillWeightRules);
     const performance = ttResult.entries.map((entry) => {
       const team = teamsById.get(entry.rider.activeTeamId ?? -1);
       if (!team) {
@@ -605,6 +761,83 @@ export class QuickSimEngine {
 
     this.applyFinishLineAwards(race, stage, performance, {
       awardPoints: stage.profile !== 'TTT',
+      awardTimeBonuses: false,
+    });
+
+    return performance;
+  }
+
+  private simulateTeamTimeTrialStage(
+    race: Race,
+    stage: Stage,
+    riders: Rider[],
+    teamsById: Map<number, Team>,
+  ): PerformanceEntry[] {
+    const segments = StageParser.parseStageProfile(stage.detailsCsvFile, stage.startElevation);
+    const ridersByTeamId = new Map<number, Rider[]>();
+
+    for (const rider of riders) {
+      const teamId = rider.activeTeamId;
+      if (teamId == null) {
+        throw new Error(`Team fuer Fahrer ${rider.firstName} ${rider.lastName} konnte nicht geladen werden.`);
+      }
+
+      const bucket = ridersByTeamId.get(teamId) ?? [];
+      bucket.push(rider);
+      ridersByTeamId.set(teamId, bucket);
+    }
+
+    const performance: PerformanceEntry[] = [];
+
+    for (const [teamId, teamRiders] of ridersByTeamId.entries()) {
+      const team = teamsById.get(teamId);
+      if (!team) {
+        throw new Error(`Team ${teamId} konnte fuer das TTT nicht geladen werden.`);
+      }
+
+      const dayFormByRiderId = new Map(teamRiders.map((rider) => [rider.id, TimeTrialSimulator.sampleDayFormFactor()]));
+      let teamFinishTimeSeconds = 0;
+      let finalSegmentEffectiveSkills = new Map<number, number>();
+
+      for (const segment of segments) {
+        const segmentMetrics = teamRiders.map((rider) => ({
+          rider,
+          effectiveSkill: TimeTrialSimulator.resolveEffectiveSegmentSkill(rider, stage.profile, segment, dayFormByRiderId.get(rider.id) ?? 1, this.skillWeightRuleMap),
+        }));
+
+        finalSegmentEffectiveSkills = new Map(segmentMetrics.map((metric) => [metric.rider.id, metric.effectiveSkill]));
+
+        const topCount = Math.min(5, segmentMetrics.length);
+        const topAverageEffectiveSkill = segmentMetrics
+          .sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.rider.id - right.rider.id)
+          .slice(0, topCount)
+          .reduce((sum, metric) => sum + metric.effectiveSkill, 0) / Math.max(topCount, 1);
+        const missingRiderMalus = Math.max(0, 8 - segmentMetrics.length);
+        const teamEffectiveSkill = Math.max(1, topAverageEffectiveSkill - missingRiderMalus);
+
+        const teamSpeedMultiplier = resolveTttTerrainSpeedMultiplier(segment.terrain, this.skillWeightRules);
+        teamFinishTimeSeconds += TimeTrialSimulator.simulateSegmentForEffectiveSkill(segment, teamEffectiveSkill) / teamSpeedMultiplier;
+      }
+
+      const roundedTeamFinishTime = roundSeconds(teamFinishTimeSeconds);
+      for (const rider of teamRiders) {
+        performance.push({
+          rider,
+          team,
+          dayForm: dayFormByRiderId.get(rider.id) ?? 1,
+          performanceScore: finalSegmentEffectiveSkills.get(rider.id) ?? 0,
+          rawTimeSeconds: teamFinishTimeSeconds,
+          stageTimeSeconds: roundedTeamFinishTime,
+          photoFinishScore: finalSegmentEffectiveSkills.get(rider.id) ?? 0,
+          points: 0,
+          gcBonusSeconds: 0,
+          mountainPoints: 0,
+        });
+      }
+    }
+
+    this.applyFinishLineAwards(race, stage, performance, {
+      awardPoints: false,
       awardTimeBonuses: false,
     });
 
@@ -666,11 +899,11 @@ export class QuickSimEngine {
     }
 
     const sorted = [...states]
-      .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || this.resolvePhotoFinishScore(right.rider, right.dayForm, summary.distanceKm) - this.resolvePhotoFinishScore(left.rider, left.dayForm, summary.distanceKm) || left.rider.id - right.rider.id)
+      .sort((left, right) => left.rawTimeSeconds - right.rawTimeSeconds || this.resolvePhotoFinishScore(right.rider, right.dayForm, summary.distanceKm, stage.profile) - this.resolvePhotoFinishScore(left.rider, left.dayForm, summary.distanceKm, stage.profile) || left.rider.id - right.rider.id)
       .map((entry) => ({
         ...entry,
         stageTimeSeconds: roundSeconds(entry.rawTimeSeconds),
-        photoFinishScore: this.resolvePhotoFinishScore(entry.rider, entry.dayForm, summary.distanceKm),
+        photoFinishScore: this.resolvePhotoFinishScore(entry.rider, entry.dayForm, summary.distanceKm, stage.profile),
       }));
 
     finishPointValues.forEach((points, index) => {
@@ -686,6 +919,7 @@ export class QuickSimEngine {
 
     const markerClassifications = this.applyMarkerClassificationAwards(
       race,
+      stage,
       sorted,
       markers.map((marker) => this.buildQuickSimMarkerClassification(marker, sorted, summary.distanceKm)),
     );
@@ -740,12 +974,8 @@ export class QuickSimEngine {
   ): StageMarkerClassification {
     const progressFactor = stageDistanceKm > 0 ? Math.max(0.02, Math.min(1, marker.kmMark / stageDistanceKm)) : 1;
     const ranking = [...sortedPerformance].sort((left, right) => {
-      if (marker.marker.type === 'sprint_intermediate') {
-        return this.resolveSprintScore(right.rider, progressFactor, right.dayForm) - this.resolveSprintScore(left.rider, progressFactor, left.dayForm)
-          || left.rider.id - right.rider.id;
-      }
-
-      return this.resolveClimbScore(right.rider, progressFactor, right.dayForm) - this.resolveClimbScore(left.rider, progressFactor, left.dayForm)
+      return this.resolveMarkerCrossingScore(right.rider, marker.marker, progressFactor, right.dayForm)
+        - this.resolveMarkerCrossingScore(left.rider, marker.marker, progressFactor, left.dayForm)
         || left.rider.id - right.rider.id;
     });
 
@@ -758,9 +988,7 @@ export class QuickSimEngine {
       kmMark: marker.kmMark,
       entries: ranking.map((entry, index) => {
         const crossingTimeSeconds = roundSeconds(entry.stageTimeSeconds * progressFactor);
-        const photoFinishScore = marker.marker.type === 'sprint_intermediate'
-          ? this.resolveSprintScore(entry.rider, progressFactor, entry.dayForm)
-          : this.resolveClimbScore(entry.rider, progressFactor, entry.dayForm);
+        const photoFinishScore = this.resolveMarkerCrossingScore(entry.rider, marker.marker, progressFactor, entry.dayForm);
         return {
           riderId: entry.rider.id,
           rank: index + 1,
@@ -829,27 +1057,7 @@ export class QuickSimEngine {
 
   private resolveActiveSkill(rider: Rider, segment: ParsedStageSegment): number {
     const formBonus = resolveFormBonus(rider);
-    switch (segment.terrain) {
-      case 'Flat':
-        return rider.skills.flat + formBonus;
-      case 'Hill':
-        return rider.skills.hill + formBonus;
-      case 'Medium_Mountain':
-        return rider.skills.mediumMountain * 0.7 + rider.skills.mountain * 0.3 + formBonus;
-      case 'Mountain':
-      case 'High_Mountain':
-        return rider.skills.mountain + formBonus;
-      case 'Cobble':
-        return rider.skills.cobble + formBonus;
-      case 'Cobble_Hill':
-        return rider.skills.cobble * 0.6 + rider.skills.hill * 0.4 + formBonus;
-      case 'Abfahrt':
-        return rider.skills.downhill + formBonus;
-      case 'Sprint':
-        return rider.skills.sprint * 0.7 + rider.skills.acceleration * 0.3 + formBonus;
-      default:
-        return rider.skills.flat + formBonus;
-    }
+    return resolveWeightedSkillFromSkills(rider.skills, 'road', segment.terrain, this.skillWeightRuleMap) + formBonus;
   }
 
   private resolveAltitudeSpeedFactor(rider: Rider, segment: ParsedStageSegment): number {
@@ -924,24 +1132,13 @@ export class QuickSimEngine {
   }
 
   private resolveSprintScore(rider: Rider, stageFraction: number, dayForm: number): number {
-    const formBonus = resolveFormBonus(rider);
     const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 250) * stageFraction;
-    return (
-      (rider.skills.sprint + formBonus) * 0.45
-      + (rider.skills.acceleration + formBonus) * 0.25
-      + (rider.skills.flat + formBonus) * 0.1
-      + (rider.skills.resistance + formBonus) * 0.1
-      + (rider.skills.bikeHandling + formBonus) * 0.1
-    ) * fatigueBoost * dayForm;
+    return this.resolveWeightedScore(rider, this.resolveSprintWeightProfile(), fatigueBoost, dayForm);
   }
 
-  private resolvePhotoFinishScore(rider: Rider, dayForm: number, stageDistanceKm: number): number {
+  private resolvePhotoFinishScore(rider: Rider, dayForm: number, stageDistanceKm: number, stageProfile: Stage['profile']): number {
     const staminaModifier = this.resolveStaminaModifier(rider, dayForm, stageDistanceKm);
-    const formBonus = resolveFormBonus(rider);
-    const effectiveSprint = ((rider.skills.sprint + formBonus) * dayForm) * staminaModifier;
-    const effectiveAcceleration = ((rider.skills.acceleration + formBonus) * dayForm) * staminaModifier;
-    const effectiveFlat = ((rider.skills.flat + formBonus) * dayForm) * staminaModifier;
-    return (effectiveSprint * 0.6) + (effectiveAcceleration * 0.2) + (effectiveFlat * 0.2);
+    return this.resolveWeightedScore(rider, this.resolveFinishWeightProfile(stageProfile), staminaModifier, dayForm);
   }
 
   private resolveStaminaModifier(rider: Rider, dayForm: number, stageDistanceKm: number): number {
@@ -954,15 +1151,68 @@ export class QuickSimEngine {
   }
 
   private resolveClimbScore(rider: Rider, stageFraction: number, dayForm: number): number {
-    const formBonus = resolveFormBonus(rider);
     const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 220) * stageFraction;
-    return (
-      (rider.skills.mountain + formBonus) * 0.45
-      + (rider.skills.mediumMountain + formBonus) * 0.2
-      + (rider.skills.hill + formBonus) * 0.1
-      + (rider.skills.attack + formBonus) * 0.1
-      + (rider.skills.resistance + formBonus) * 0.15
-    ) * fatigueBoost * dayForm;
+    return this.resolveWeightedScore(rider, this.resolveClimbWeightProfile('HC'), fatigueBoost, dayForm);
+  }
+
+  private resolveWeightedScore(rider: Rider, weights: MarkerWeightProfile, effortModifier: number, dayForm: number): number {
+    return resolveWeightProfileValue(rider, weights, resolveFormBonus(rider)) * effortModifier * dayForm;
+  }
+
+  private resolveMarkerCrossingScore(rider: Rider, marker: StageMarker, stageFraction: number, dayForm: number): number {
+    if (marker.type === 'sprint_intermediate') {
+      return this.resolveSprintScore(rider, stageFraction, dayForm);
+    }
+
+    const fatigueBoost = 1 + ((rider.skills.stamina - 50) / 220) * stageFraction;
+    return this.resolveWeightedScore(rider, this.resolveClimbWeightProfile(marker.cat), fatigueBoost, dayForm);
+  }
+
+  private resolveRuleWeightProfile(
+    appliesTo: StageScoringRule['appliesTo'],
+    markerType: StageScoringRule['markerType'],
+    markerCategory: StageMarkerCategory | null,
+    fallback: MarkerWeightProfile,
+  ): MarkerWeightProfile {
+    return this.stageScoringRuleWeights.get(buildStageScoringRuleLookupKey(appliesTo, markerType, markerCategory)) ?? fallback;
+  }
+
+  private resolveSprintWeightProfile(): MarkerWeightProfile {
+    return this.resolveRuleWeightProfile('sprint_intermediate', 'sprint_intermediate', null, SPRINT_INTERMEDIATE_WEIGHTS);
+  }
+
+  private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {
+    if (!category || category === 'Sprint') {
+      return this.resolveRuleWeightProfile('climb_top', 'climb_top', 'HC', CLIMB_TOP_WEIGHTS.HC);
+    }
+
+    return this.resolveRuleWeightProfile('climb_top', 'climb_top', category, CLIMB_TOP_WEIGHTS[category]);
+  }
+
+  private resolveFinishMarkerType(stageProfile: Stage['profile']): Exclude<StageFinishMarkerType, 'finish_TT'> {
+    switch (stageProfile) {
+      case 'Hilly':
+      case 'Hilly_Difficult':
+      case 'Rolling':
+      case 'Cobble_Hill':
+        return 'finish_hill';
+      case 'Medium_Mountain':
+      case 'Mountain':
+      case 'High_Mountain':
+        return 'finish_mountain';
+      default:
+        return 'finish_flat';
+    }
+  }
+
+  private resolveFinishWeightProfile(stageProfile: Stage['profile']): MarkerWeightProfile {
+    const markerType = this.resolveFinishMarkerType(stageProfile);
+    const fallback = markerType === 'finish_hill'
+      ? FINISH_HILL_WEIGHTS
+      : markerType === 'finish_mountain'
+        ? FINISH_MOUNTAIN_WEIGHTS
+        : FINISH_FLAT_WEIGHTS;
+    return this.resolveRuleWeightProfile('finish', markerType, null, fallback);
   }
 
   private getPreviousSimulatedStageId(raceId: number, stageNumber: number): number | null {

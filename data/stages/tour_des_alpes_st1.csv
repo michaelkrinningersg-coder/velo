@@ -1,5 +1,0 @@
-length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
-41.00,0.137,Flat,4,5,start,Tour des Alpes Stage 1,,sprint_intermediate,Sprint Trento,Sprint
-56.50,0.432,Sprint,5,5,,,,,,
-34.50,2.754,Mountain,6,6,climb_start,Passo di Redebus,,climb_top,Passo di Redebus,HC
-24.30,-1.827,High_Mountain,8,7,,,,finish_mountain,Tour des Alpes Stage 1,

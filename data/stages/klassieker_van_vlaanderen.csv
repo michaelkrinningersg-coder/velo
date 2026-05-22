@@ -1,5 +1,0 @@
-length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
-72.00,0.022,Cobble,6,8,start,Klassieker van Vlaanderen,,sprint_intermediate,Sprint Oudenaarde,Sprint
-89.00,0.047,Cobble,7,8,,,,,,
-62.50,0.131,Cobble_Hill,8,9,climb_start,Oude Kwaremont,,climb_top,Oude Kwaremont,1
-45.00,-0.124,Cobble_Hill,9,9,,,,finish_flat,Klassieker van Vlaanderen,

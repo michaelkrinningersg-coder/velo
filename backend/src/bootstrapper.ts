@@ -61,6 +61,28 @@ const CSV_DIR = path.join(BACKEND_ROOT, '..', 'data', 'csv');
 const SCHEMA_PATH = path.join(ASSETS_DIR, 'schema.sql');
 const DB_PATH = path.join(ASSETS_DIR, 'world_data.db');
 const DEFAULT_RIDER_TYPE_ID = 1;
+const RULE_APPLIES_TO = new Set(['sprint_intermediate', 'climb_top', 'finish']);
+const RULE_MARKER_TYPES = new Set(['sprint_intermediate', 'climb_top', 'finish_flat', 'finish_hill', 'finish_mountain']);
+const RULE_CLIMB_CATEGORIES = new Set(['HC', '1', '2', '3', '4']);
+const RULE_WEIGHT_COLUMNS = [
+  'weight_flat',
+  'weight_mountain',
+  'weight_medium_mountain',
+  'weight_hill',
+  'weight_time_trial',
+  'weight_prologue',
+  'weight_cobble',
+  'weight_sprint',
+  'weight_acceleration',
+  'weight_downhill',
+  'weight_attack',
+  'weight_stamina',
+  'weight_resistance',
+  'weight_recuperation',
+  'weight_bike_handling',
+] as const;
+const SKILL_WEIGHT_SIMULATION_MODES = new Set(['road', 'itt', 'ttt']);
+const SKILL_WEIGHT_TERRAINS = new Set(['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint']);
 
 function clamp(value: number, min = 0, max = 85): number {
   return Math.max(min, Math.min(max, Math.round(value * 100) / 100));
@@ -173,6 +195,14 @@ function int(value: string, ctx: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed)) {
     throw new Error(`${ctx}: Ganzzahl erwartet, erhalten "${value}".`);
+  }
+  return parsed;
+}
+
+function real(value: string, ctx: string): number {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${ctx}: Zahl erwartet, erhalten "${value}".`);
   }
   return parsed;
 }
@@ -379,12 +409,12 @@ function seedRaceCategoriesBonus(db: Database.Database): void {
   const insert = db.prepare(`
     INSERT INTO race_categories_bonus (
       id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage,
-      points_sprint_finish, points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
+      points_mountainstage, points_sprint_finish, points_one_day, points_gc_final, points_jersey_leader_day, points_jersey_sprint_day,
       points_jersey_mountain_day, points_jersey_youth_day, points_sprint_intermediate,
       points_mountain_hc, points_mountain_cat1, points_mountain_cat2, points_mountain_cat3,
       points_mountain_cat4, points_jersey_sprint_final, points_jersey_mountain_final,
       points_jersey_youth_final
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -395,6 +425,7 @@ function seedRaceCategoriesBonus(db: Database.Database): void {
       req(row, 'bonus_seconds_final', ctx),
       req(row, 'bonus_seconds_intermediate', ctx),
       req(row, 'points_stage', ctx),
+      req(row, 'points_mountainstage', ctx),
       req(row, 'points_sprint_finish', ctx),
       req(row, 'points_one_day', ctx),
       req(row, 'points_gc_final', ctx),
@@ -417,22 +448,154 @@ function seedRaceCategoriesBonus(db: Database.Database): void {
   console.log(`  ${rows.length} Kategorie-Bonussysteme eingefuegt.`);
 }
 
+function seedRules(db: Database.Database): void {
+  const rows = readCsv('rules.csv');
+  const insert = db.prepare(`
+    INSERT INTO rules (
+      id, rule_key, applies_to, marker_type, marker_category,
+      weight_flat, weight_mountain, weight_medium_mountain, weight_hill,
+      weight_time_trial, weight_prologue, weight_cobble, weight_sprint,
+      weight_acceleration, weight_downhill, weight_attack, weight_stamina,
+      weight_resistance, weight_recuperation, weight_bike_handling
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const seenContextKeys = new Set<string>();
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `rules.csv Zeile ${index + 2}`;
+    const appliesTo = req(row, 'applies_to', ctx);
+    const markerType = req(row, 'marker_type', ctx);
+    const markerCategory = row['marker_category']?.trim() || null;
+
+    if (!RULE_APPLIES_TO.has(appliesTo)) {
+      throw new Error(`${ctx}: applies_to "${appliesTo}" ist ungueltig.`);
+    }
+
+    if (!RULE_MARKER_TYPES.has(markerType)) {
+      throw new Error(`${ctx}: marker_type "${markerType}" ist ungueltig.`);
+    }
+
+    if (appliesTo === 'sprint_intermediate' && (markerType !== 'sprint_intermediate' || markerCategory != null)) {
+      throw new Error(`${ctx}: Sprint-Zwischenwertungen erwarten marker_type sprint_intermediate ohne marker_category.`);
+    }
+
+    if (appliesTo === 'climb_top' && (markerType !== 'climb_top' || markerCategory == null || !RULE_CLIMB_CATEGORIES.has(markerCategory))) {
+      throw new Error(`${ctx}: Bergwertungen erwarten marker_type climb_top und marker_category HC/1/2/3/4.`);
+    }
+
+    if (appliesTo === 'finish' && (!['finish_flat', 'finish_hill', 'finish_mountain'].includes(markerType) || markerCategory != null)) {
+      throw new Error(`${ctx}: Zielregeln erwarten finish_flat/finish_hill/finish_mountain ohne marker_category.`);
+    }
+
+    const weightValues = RULE_WEIGHT_COLUMNS.map((columnName) => {
+      const value = real(row[columnName] ?? '0', `${ctx} / ${columnName}`);
+      if (value < 0) {
+        throw new Error(`${ctx}: ${columnName} darf nicht negativ sein.`);
+      }
+      return value;
+    });
+
+    if (weightValues.every((value) => value === 0)) {
+      throw new Error(`${ctx}: Mindestens ein Gewicht muss groesser als 0 sein.`);
+    }
+
+    const contextKey = `${appliesTo}|${markerType}|${markerCategory ?? ''}`;
+    if (seenContextKeys.has(contextKey)) {
+      throw new Error(`${ctx}: Doppelte Regel fuer Kontext ${contextKey}.`);
+    }
+    seenContextKeys.add(contextKey);
+
+    insert.run(
+      int(req(row, 'id', ctx), ctx),
+      req(row, 'rule_key', ctx),
+      appliesTo,
+      markerType,
+      markerCategory,
+      ...weightValues,
+    );
+  }
+
+  console.log(`  ${rows.length} Regelprofile eingefuegt.`);
+}
+
+function seedSkillWeights(db: Database.Database): void {
+  const rows = readCsv('skill_weights.csv');
+  const insert = db.prepare(`
+    INSERT INTO skill_weights (
+      id, simulation_mode, terrain,
+      weight_flat, weight_mountain, weight_medium_mountain, weight_hill, weight_time_trial,
+      weight_prologue, weight_cobble, weight_sprint, weight_acceleration, weight_downhill,
+      weight_attack, weight_stamina, weight_resistance, weight_recuperation, weight_bike_handling,
+      ttt_speed_multiplier
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `skill_weights.csv Zeile ${index + 2}`;
+    const simulationMode = req(row, 'simulation_mode', ctx);
+    const terrain = req(row, 'terrain', ctx);
+
+    if (!SKILL_WEIGHT_SIMULATION_MODES.has(simulationMode)) {
+      throw new Error(`${ctx}: simulation_mode "${simulationMode}" ist ungueltig.`);
+    }
+
+    if (!SKILL_WEIGHT_TERRAINS.has(terrain)) {
+      throw new Error(`${ctx}: terrain "${terrain}" ist ungueltig.`);
+    }
+
+    const weightValues = RULE_WEIGHT_COLUMNS.map((columnName) => {
+      const value = real(row[columnName] ?? '0', `${ctx} / ${columnName}`);
+      if (value < 0) {
+        throw new Error(`${ctx}: ${columnName} darf nicht negativ sein.`);
+      }
+      return value;
+    });
+
+    if (weightValues.every((value) => value === 0)) {
+      throw new Error(`${ctx}: Mindestens ein Gewicht muss groesser als 0 sein.`);
+    }
+
+    const tttSpeedMultiplier = real(row['ttt_speed_multiplier'] ?? '1', `${ctx} / ttt_speed_multiplier`);
+    if (tttSpeedMultiplier <= 0) {
+      throw new Error(`${ctx}: ttt_speed_multiplier muss groesser als 0 sein.`);
+    }
+
+    insert.run(
+      int(req(row, 'id', ctx), ctx),
+      simulationMode,
+      terrain,
+      ...weightValues,
+      tttSpeedMultiplier,
+    );
+  }
+
+  console.log(`  ${rows.length} Skill-Gewichte eingefuegt.`);
+}
+
 function seedRaceCategories(db: Database.Database): void {
   const rows = readCsv('race_categories.csv');
   const insert = db.prepare(`
-    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id, role_1, role_2, role_3, role_4, role_5, role_6)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `race_categories.csv Zeile ${index + 2}`;
+    const roleRequirements = [1, 2, 3, 4, 5, 6].map((roleId) => int(req(row, `role_${roleId}`, ctx), ctx));
+    const roleRequirementSum = roleRequirements.reduce((sum, value) => sum + value, 0);
+    const riderCount = int(req(row, 'number_of_riders', ctx), ctx);
+    if (roleRequirementSum > riderCount) {
+      throw new Error(`${ctx}: Summe der role_* Werte (${roleRequirementSum}) darf number_of_riders (${riderCount}) nicht ueberschreiten.`);
+    }
+
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
       int(req(row, 'tier', ctx), ctx),
       int(req(row, 'number_of_teams', ctx), ctx),
-      int(req(row, 'number_of_riders', ctx), ctx),
+      riderCount,
       int(req(row, 'bonus_system_id', ctx), ctx),
+      ...roleRequirements,
     );
   }
 
@@ -707,7 +870,9 @@ export function bootstrap(force = false): void {
     const divisionIdByName = seedDivisionTeams(db);
     seedTeams(db, divisionIdByName);
     seedRaceCategoriesBonus(db);
+    seedRules(db);
     seedRaceCategories(db);
+    seedSkillWeights(db);
     seedRaces(db);
     seedStages(db);
     seedRiders(db);

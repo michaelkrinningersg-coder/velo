@@ -4,10 +4,11 @@ import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { QuickSimEngine } from '../simulation/QuickSimEngine';
-import { applyRaceRosterSelection, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { StageParser } from '../simulation/StageParser';
 import {
   ApiResponse,
+  ParsedStageSummary,
   SavegameMeta,
   Team,
   Rider,
@@ -35,6 +36,74 @@ function ok<T>(res: Response, data: T): void {
 function fail(res: Response, status: number, message: string): void {
   const body: ApiResponse<never> = { success: false, error: message };
   res.status(status).json(body);
+}
+
+function resolveRealtimeTeamStartOrder(repo: GameRepository, race: Race, stageNumber: number, riders: Rider[]): number[] {
+  const participatingTeams = new Map<number, Team>();
+  for (const team of repo.getTeams()) {
+    if (riders.some((rider) => rider.activeTeamId === team.id)) {
+      participatingTeams.set(team.id, team);
+    }
+  }
+
+  const participatingTeamIds = new Set(participatingTeams.keys());
+  if (participatingTeamIds.size === 0) {
+    return [];
+  }
+
+  if (race.isStageRace && stageNumber > 1) {
+    const previousGcStandings = repo.getPreviousGcStandings(race.id, stageNumber);
+    const riderById = new Map(riders.map((rider) => [rider.id, rider]));
+    const teamTotals = new Map<number, number[]>();
+
+    for (const standing of previousGcStandings) {
+      const rider = riderById.get(standing.riderId);
+      const teamId = rider?.activeTeamId;
+      if (teamId == null || !participatingTeamIds.has(teamId)) {
+        continue;
+      }
+
+      const bucket = teamTotals.get(teamId) ?? [];
+      bucket.push(standing.timeSeconds);
+      teamTotals.set(teamId, bucket);
+    }
+
+    return [...participatingTeams.values()]
+      .sort((left, right) => {
+        const leftTimes = teamTotals.get(left.id);
+        const rightTimes = teamTotals.get(right.id);
+        const leftTotal = leftTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, leftTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
+        const rightTotal = rightTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, rightTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
+
+        if (leftTotal != null && rightTotal != null) {
+          return rightTotal - leftTotal || left.name.localeCompare(right.name, 'de');
+        }
+        if (leftTotal != null) return 1;
+        if (rightTotal != null) return -1;
+        return left.name.localeCompare(right.name, 'de');
+      })
+      .map((team) => team.id);
+  }
+
+  const seasonTeamPoints = new Map(
+    repo.getSeasonStandings().teamStandings
+      .filter((row) => row.teamId != null && participatingTeamIds.has(row.teamId))
+      .map((row) => [row.teamId as number, row.points] as const),
+  );
+
+  return [...participatingTeams.values()]
+    .sort((left, right) => {
+      const leftPoints = seasonTeamPoints.get(left.id) ?? 0;
+      const rightPoints = seasonTeamPoints.get(right.id) ?? 0;
+
+      if (leftPoints === 0 && rightPoints === 0) {
+        return left.name.localeCompare(right.name, 'de');
+      }
+      if (leftPoints === 0) return -1;
+      if (rightPoints === 0) return 1;
+      return leftPoints - rightPoints || left.name.localeCompare(right.name, 'de');
+    })
+    .map((team) => team.id);
 }
 
 export function createRouter(dbService: DatabaseService): Router {
@@ -189,7 +258,7 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
       }
 
-      const riders = previewRaceRoster(db, repo, race, stage);
+      const riders = ensureRaceEntries(db, repo, race, stage);
       if (riders.length === 0) {
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
@@ -201,7 +270,25 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
+        skillWeightRules: repo.getSkillWeightRules(),
       });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/stages/:stageId/summary', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+
+    try {
+      const db = dbService.getActiveConnection();
+      const repo = new GameRepository(db);
+      const stage = repo.getStageById(stageId);
+      if (!stage) {
+        return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
+      }
+
+      ok<ParsedStageSummary>(res, StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -270,6 +357,8 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
+        skillWeightRules: repo.getSkillWeightRules(),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

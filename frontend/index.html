@@ -59,13 +59,13 @@
           <span class="nav-icon">⌂</span> Dashboard
         </button>
         <button class="nav-btn" data-view="teams">
-          <span class="nav-icon">🏆</span> Teams
+          <span class="nav-icon">◫</span> Teams
         </button>
         <button class="nav-btn" data-view="live-race">
           <span class="nav-icon">◔</span> Live Race
         </button>
         <button class="nav-btn" data-view="results">
-          <span class="nav-icon">📋</span> Results
+          <span class="nav-icon">▤</span> Results
         </button>
         <button class="nav-btn" data-view="season-standings">
           <span class="nav-icon">★</span> Season Standings
@@ -200,11 +200,13 @@
           </div>
         </div>
         <div id="results-type-tabs" class="results-type-tabs"></div>
+        <div id="results-marker-tabs" class="results-type-tabs hidden"></div>
         <div id="results-empty" class="results-empty">Noch keine Ergebnisse geladen.</div>
         <table class="data-table hidden" id="results-table">
           <thead>
             <tr>
               <th>Platz</th>
+              <th class="results-jersey-col">Trikot</th>
               <th>Fahrer / Team</th>
               <th>Team</th>
               <th>Zeit</th>
@@ -232,6 +234,7 @@
           <thead>
             <tr>
               <th>Platz</th>
+              <th id="season-standings-jersey-header" class="results-jersey-col">Trikot</th>
               <th id="season-standings-primary-header">Fahrer</th>
               <th id="season-standings-secondary-header">Team</th>
               <th>Punkte</th>
@@ -387,6 +390,32 @@
         <button class="btn btn-secondary" id="btn-cancel-roster-editor">Abbrechen</button>
         <button class="btn btn-primary" id="btn-apply-roster-editor">Teilnehmer übernehmen</button>
       </div>
+    </div>
+  </div>
+
+  <div id="modal-raceStages" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="race-stages-title">Etappen</h2>
+          <p id="race-stages-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">✕</button>
+      </div>
+      <div id="race-stages-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-stageProfile" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-stage-profile-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="stage-profile-title">Etappenprofil</h2>
+          <p id="stage-profile-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">✕</button>
+      </div>
+      <div id="stage-profile-view" class="race-sim-profile dashboard-stage-profile-view"></div>
     </div>
   </div>
 

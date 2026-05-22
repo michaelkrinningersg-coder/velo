@@ -126,7 +126,7 @@ function validateMarkerPlacement(markerType: StageMarkerType, scope: 'start' | '
     if (markerType === 'climb_top') {
       throw new Error(`${ctx}: climb_top ist nur als Endmarker erlaubt.`);
     }
-    if (isFinishMarkerType(markerType) && markerType !== 'start') {
+    if (isFinishMarkerType(markerType)) {
       throw new Error(`${ctx}: Finish-Marker sind nur als Endmarker erlaubt.`);
     }
     return;

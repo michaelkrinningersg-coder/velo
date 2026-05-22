@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Country, FormDebugPoint, Nationality, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceStageSummary, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderSkillKey, RiderSkills, Role, SeasonPointAwardType, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageResultsPayload, Team } from '../../../shared/types';
+import { Country, FormDebugPoint, Nationality, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceStageSummary, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderSkillKey, RiderSkills, Role, SeasonPointAwardType, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
+import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../shared/skillWeights';
 import { summarizeStageProfile } from '../simulation/StageParser';
 
 const RESULT_TYPE_IDS = {
@@ -177,10 +178,17 @@ interface RaceRow {
   category_number_of_teams: number;
   category_number_of_riders: number;
   category_bonus_system_id: number;
+  category_role_1: number;
+  category_role_2: number;
+  category_role_3: number;
+  category_role_4: number;
+  category_role_5: number;
+  category_role_6: number;
   bonus_name: string;
   bonus_seconds_final: string;
   bonus_seconds_intermediate: string;
   points_stage: string;
+  points_mountainstage: string;
   points_sprint_finish: string;
   points_one_day: string;
   points_gc_final: string;
@@ -218,6 +226,51 @@ interface StageResultsMetaRow {
   profile: Stage['profile'];
   is_stage_race: number;
   number_of_stages: number;
+}
+
+interface RuleRow {
+  id: number;
+  rule_key: string;
+  applies_to: StageScoringRule['appliesTo'];
+  marker_type: StageScoringRule['markerType'];
+  marker_category: StageMarkerCategory | null;
+  weight_flat: number;
+  weight_mountain: number;
+  weight_medium_mountain: number;
+  weight_hill: number;
+  weight_time_trial: number;
+  weight_prologue: number;
+  weight_cobble: number;
+  weight_sprint: number;
+  weight_acceleration: number;
+  weight_downhill: number;
+  weight_attack: number;
+  weight_stamina: number;
+  weight_resistance: number;
+  weight_recuperation: number;
+  weight_bike_handling: number;
+}
+
+interface SkillWeightRow {
+  id: number;
+  simulation_mode: SkillWeightRule['simulationMode'];
+  terrain: SkillWeightRule['terrain'];
+  weight_flat: number;
+  weight_mountain: number;
+  weight_medium_mountain: number;
+  weight_hill: number;
+  weight_time_trial: number;
+  weight_prologue: number;
+  weight_cobble: number;
+  weight_sprint: number;
+  weight_acceleration: number;
+  weight_downhill: number;
+  weight_attack: number;
+  weight_stamina: number;
+  weight_resistance: number;
+  weight_recuperation: number;
+  weight_bike_handling: number;
+  ttt_speed_multiplier: number;
 }
 
 type StageEntryStatus = 'scheduled' | 'started' | 'finished' | 'dns' | 'dnf';
@@ -270,9 +323,11 @@ interface SeasonPointStageRow {
   race_id: number;
   stage_number: number;
   date: string;
+  profile: Stage['profile'];
   is_stage_race: number;
   number_of_stages: number;
   points_stage: string;
+  points_mountainstage: string;
   points_one_day: string;
   points_gc_final: string;
   points_jersey_leader_day: number;
@@ -373,6 +428,18 @@ function parsePeakDates(value: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function usesMountainStagePoints(profile: Stage['profile']): boolean {
+  return !['ITT', 'Flat', 'Rolling', 'Hilly'].includes(profile);
+}
+
+function resolveStageResultPointValues(stage: SeasonPointStageRow): number[] {
+  if (stage.profile === 'TTT') {
+    return [];
+  }
+
+  return parseRankedValues(stage.points_stage);
 }
 
 function isoDateToDayNumber(isoDate: string): number {
@@ -585,6 +652,7 @@ function mapRaceCategoryBonus(row: RaceRow): RaceCategoryBonus {
     bonusSecondsFinal: row.bonus_seconds_final,
     bonusSecondsIntermediate: row.bonus_seconds_intermediate,
     pointsStage: row.points_stage,
+    pointsMountainStage: row.points_mountainstage,
     pointsSprintFinish: row.points_sprint_finish,
     pointsOneDay: row.points_one_day,
     pointsGcFinal: row.points_gc_final,
@@ -613,7 +681,52 @@ function mapRaceCategory(row: RaceRow): RaceCategory {
     numberOfTeams: row.category_number_of_teams,
     numberOfRiders: row.category_number_of_riders,
     bonusSystemId: row.category_bonus_system_id,
+    roleRequirements: {
+      1: row.category_role_1,
+      2: row.category_role_2,
+      3: row.category_role_3,
+      4: row.category_role_4,
+      5: row.category_role_5,
+      6: row.category_role_6,
+    },
     bonusSystem,
+  };
+}
+
+function mapStageScoringRule(row: RuleRow): StageScoringRule {
+  const weights = RIDER_SKILL_COLUMNS.reduce<StageScoringRule['weights']>((result, [skillKey, columnSuffix]) => {
+    const value = row[`weight_${columnSuffix}` as keyof RuleRow];
+    if (typeof value === 'number' && value > 0) {
+      result[skillKey] = value;
+    }
+    return result;
+  }, {});
+
+  return {
+    id: row.id,
+    ruleKey: row.rule_key,
+    appliesTo: row.applies_to,
+    markerType: row.marker_type,
+    markerCategory: row.marker_category,
+    weights,
+  };
+}
+
+function mapSkillWeightRule(row: SkillWeightRow): SkillWeightRule {
+  const weights = SKILL_WEIGHT_RIDER_COLUMNS.reduce<SkillWeightRule['weights']>((result, [skillKey, columnSuffix]) => {
+    const value = row[`weight_${columnSuffix}` as keyof SkillWeightRow];
+    if (typeof value === 'number' && value > 0) {
+      result[skillKey] = value;
+    }
+    return result;
+  }, {});
+
+  return {
+    id: row.id,
+    simulationMode: row.simulation_mode,
+    terrain: row.terrain,
+    weights,
+    tttSpeedMultiplier: row.ttt_speed_multiplier,
   };
 }
 
@@ -702,10 +815,17 @@ function buildRaceSelect(): string {
            race_categories.number_of_teams AS category_number_of_teams,
            race_categories.number_of_riders AS category_number_of_riders,
            race_categories.bonus_system_id AS category_bonus_system_id,
+           race_categories.role_1 AS category_role_1,
+           race_categories.role_2 AS category_role_2,
+           race_categories.role_3 AS category_role_3,
+           race_categories.role_4 AS category_role_4,
+           race_categories.role_5 AS category_role_5,
+           race_categories.role_6 AS category_role_6,
            race_categories_bonus.name AS bonus_name,
            race_categories_bonus.bonus_seconds_final,
            race_categories_bonus.bonus_seconds_intermediate,
            race_categories_bonus.points_stage,
+           race_categories_bonus.points_mountainstage,
            race_categories_bonus.points_sprint_finish,
            race_categories_bonus.points_one_day,
            race_categories_bonus.points_gc_final,
@@ -1092,6 +1212,71 @@ export class GameRepository {
       ORDER BY dt.tier ASC, t.name ASC
     `).all() as TeamRow[];
     return rows.map(mapTeam);
+  }
+
+  public getStageScoringRules(): StageScoringRule[] {
+    if (!tableExists(this.db, 'rules')) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT id,
+             rule_key,
+             applies_to,
+             marker_type,
+             marker_category,
+             weight_flat,
+             weight_mountain,
+             weight_medium_mountain,
+             weight_hill,
+             weight_time_trial,
+             weight_prologue,
+             weight_cobble,
+             weight_sprint,
+             weight_acceleration,
+             weight_downhill,
+             weight_attack,
+             weight_stamina,
+             weight_resistance,
+             weight_recuperation,
+             weight_bike_handling
+      FROM rules
+      ORDER BY id ASC
+    `).all() as RuleRow[];
+
+    return rows.map(mapStageScoringRule);
+  }
+
+  public getSkillWeightRules(): SkillWeightRule[] {
+    if (!tableExists(this.db, 'skill_weights')) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT id,
+             simulation_mode,
+             terrain,
+             weight_flat,
+             weight_mountain,
+             weight_medium_mountain,
+             weight_hill,
+             weight_time_trial,
+             weight_prologue,
+             weight_cobble,
+             weight_sprint,
+             weight_acceleration,
+             weight_downhill,
+             weight_attack,
+             weight_stamina,
+             weight_resistance,
+             weight_recuperation,
+             weight_bike_handling,
+             ttt_speed_multiplier
+      FROM skill_weights
+      ORDER BY id ASC
+    `).all() as SkillWeightRow[];
+
+    return rows.map(mapSkillWeightRule);
   }
 
   public getTeamById(id: number): Team | null {
@@ -1646,9 +1831,11 @@ export class GameRepository {
         stages.race_id AS race_id,
         stages.stage_number AS stage_number,
         stages.date AS date,
+        stages.profile AS profile,
         races.is_stage_race AS is_stage_race,
         races.number_of_stages AS number_of_stages,
         race_categories_bonus.points_stage AS points_stage,
+        race_categories_bonus.points_mountainstage AS points_mountainstage,
         race_categories_bonus.points_one_day AS points_one_day,
         race_categories_bonus.points_gc_final AS points_gc_final,
         race_categories_bonus.points_jersey_leader_day AS points_jersey_leader_day,
@@ -1690,7 +1877,7 @@ export class GameRepository {
         const youthRows = this.loadSeasonPointResultRows(stage.stage_id, RESULT_TYPE_IDS.youth);
 
         if (stage.is_stage_race === 1) {
-          this.insertSeasonPointAwards(insert, season, stage, 'stage_result', stageRows, parseRankedValues(stage.points_stage));
+          this.insertSeasonPointAwards(insert, season, stage, 'stage_result', stageRows, resolveStageResultPointValues(stage));
           this.insertSeasonPointLeaderAward(insert, season, stage, 'gc_leader_day', gcRows[0], stage.points_jersey_leader_day);
           this.insertSeasonPointLeaderAward(insert, season, stage, 'points_leader_day', pointsRows[0], stage.points_jersey_sprint_day);
           this.insertSeasonPointLeaderAward(insert, season, stage, 'mountain_leader_day', mountainRows[0], stage.points_jersey_mountain_day);
