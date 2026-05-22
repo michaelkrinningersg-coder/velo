@@ -3,10 +3,10 @@ import type { CrashSeverity, PrecalculatedRaceIncident, Rider, Stage, StageProfi
 const BASE_CRASH_CHANCE = 0.005;
 const BASE_MECHANICAL_CHANCE = 0.005;
 const EARLY_INCIDENT_THRESHOLD_PERCENT = 70;
-const EARLY_DRAFT_MULTIPLIER = 1.45;
-const EARLY_DRAFT_DISTANCE_METERS = 5000;
-const LATE_DRAFT_MULTIPLIER = 1.5;
-const LATE_DRAFT_DISTANCE_METERS = 2500;
+const EARLY_RECOVERY_SECONDS = 360;
+const EARLY_RECOVERY_FORM_BONUS = 10;
+const LATE_RECOVERY_SECONDS = 240;
+const LATE_RECOVERY_FORM_BONUS = 5;
 const BASE_DAY_FORM_PENALTY = -0.75;
 const BASE_STAMINA_PENALTY = 10;
 
@@ -73,8 +73,8 @@ function buildIncident(
     waitDurationSeconds: type === 'crash'
       ? Math.round(randomBetween(10, 60))
       : Math.round(randomBetween(10, 45)),
-    draftBoostMultiplier: isEarlyIncident ? EARLY_DRAFT_MULTIPLIER : LATE_DRAFT_MULTIPLIER,
-    draftBoostDistanceMeters: isEarlyIncident ? EARLY_DRAFT_DISTANCE_METERS : LATE_DRAFT_DISTANCE_METERS,
+    recoverySeconds: isEarlyIncident ? EARLY_RECOVERY_SECONDS : LATE_RECOVERY_SECONDS,
+    recoveryFormBonus: isEarlyIncident ? EARLY_RECOVERY_FORM_BONUS : LATE_RECOVERY_FORM_BONUS,
     dayFormPenalty: BASE_DAY_FORM_PENALTY,
     staminaPenalty: BASE_STAMINA_PENALTY,
     recoveryPenaltyStages: type === 'crash'

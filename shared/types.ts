@@ -466,6 +466,7 @@ export interface RaceClassificationRow {
   riderName: string | null;
   teamId: number | null;
   teamName: string;
+  isBreakaway?: boolean;
   timeSeconds: number | null;
   gapSeconds: number | null;
   points: number | null;
@@ -519,8 +520,8 @@ export interface PrecalculatedRaceIncident {
   triggerDistanceMeters: number;
   triggerDistancePercent: number;
   waitDurationSeconds: number;
-  draftBoostMultiplier: number;
-  draftBoostDistanceMeters: number;
+  recoverySeconds: number;
+  recoveryFormBonus: number;
   dayFormPenalty: number;
   staminaPenalty: number;
   recoveryPenaltyStages: number[];

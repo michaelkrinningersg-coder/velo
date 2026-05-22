@@ -5,5 +5,5 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 4,1,4,2026-01-14,Hilly,36,santos_tour_down_under_st4.csv,70,90,1,1,1
 5,1,1,2026-01-11,TTT,36,santos_tour_down_under_st5.csv,70,90,1,1,1
 6,2,1,2026-01-29,Flat,19,surf_coast_classic_me_2026.csv,70,90,1,1,1
-7,1,1,2026-01-16,Rolling,262,santos_tour_down_under_st6.csv,80,95,1,1.5,1.5
+7,1,6,2026-01-16,Rolling,262,santos_tour_down_under_st6.csv,80,95,1,1.5,1.5
 

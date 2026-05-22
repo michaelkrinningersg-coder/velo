@@ -53,6 +53,7 @@ const state: {
   selectedDashboardProfileStageId: number | null;
   stageSummariesByStageId: Record<number, ParsedStageSummary | undefined>;
   stageSummaryErrorsByStageId: Record<number, string | undefined>;
+  realtimeBreakawayRiderIdsByStageId: Record<number, number[] | undefined>;
   selectedRealtimeStageId: number | null;
   stageResults: StageResultsPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
@@ -82,6 +83,7 @@ const state: {
   selectedDashboardProfileStageId: null,
   stageSummariesByStageId: {},
   stageSummaryErrorsByStageId: {},
+  realtimeBreakawayRiderIdsByStageId: {},
   selectedRealtimeStageId: null,
   stageResults: null,
   seasonStandings: null,
@@ -231,11 +233,34 @@ function resolveRiderCountryCode(riderId: number | null | undefined): string | n
   return rider?.country?.code3 ?? rider?.nationality ?? null;
 }
 
-function renderResultsParticipant(name: string, strong = true): string {
+function renderResultsParticipant(name: string, strong = true, isBreakaway = false): string {
   const label = strong
     ? `<strong class="results-participant-label">${esc(name)}</strong>`
     : `<span class="results-participant-label">${esc(name)}</span>`;
-  return `<span class="results-participant">${label}</span>`;
+  return `<span class="results-participant${isBreakaway ? ' is-breakaway' : ''}">${label}</span>`;
+}
+
+function decorateStageResultsWithRealtimeBreakaways(payload: StageResultsPayload | null): StageResultsPayload | null {
+  if (!payload) {
+    return null;
+  }
+
+  const breakawayRiderIds = state.realtimeBreakawayRiderIdsByStageId[payload.stageId] ?? [];
+  if (breakawayRiderIds.length === 0) {
+    return payload;
+  }
+
+  const breakawayRiderIdSet = new Set(breakawayRiderIds);
+  return {
+    ...payload,
+    classifications: payload.classifications.map((classification) => ({
+      ...classification,
+      rows: classification.rows.map((row) => ({
+        ...row,
+        isBreakaway: row.riderId != null && breakawayRiderIdSet.has(row.riderId),
+      })),
+    })),
+  };
 }
 
 function renderGcRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
@@ -398,6 +423,53 @@ function renderSeasonCountryNameCell(row: SeasonStandingCountryRow): string {
       <span class="season-standings-country-name">${esc(row.countryName)}</span>
       <div class="season-standings-country-popover">
         ${renderSeasonCountryTopRiders(row.topRiders)}
+      </div>
+    </div>`;
+}
+
+function renderSeasonTeamTopRiders(
+  teamRow: SeasonStandingsPayload['teamStandings'][number],
+  riderStandings: SeasonStandingsPayload['riderStandings'],
+): string {
+  const topRiders = riderStandings
+    .filter((rider) => rider.teamId != null && teamRow.teamId != null && rider.teamId === teamRow.teamId)
+    .slice(0, 30);
+
+  if (topRiders.length === 0) {
+    return '<div class="season-standings-country-popover-empty">Noch keine Fahrer mit Saisonpunkten.</div>';
+  }
+
+  return `
+    <div class="season-standings-country-popover-card">
+      <div class="season-standings-country-popover-head">
+        <strong>Top 30 Fahrer</strong>
+      </div>
+      <div class="season-standings-country-popover-grid season-standings-country-popover-grid-head">
+        <span>Platz</span>
+        <span>Flagge</span>
+        <span>Fahrer</span>
+        <span>Punkte</span>
+      </div>
+      ${topRiders.map((rider) => `
+        <div class="season-standings-country-popover-grid">
+          <strong>${rider.rank}</strong>
+          <span class="results-flag-col-cell">${renderResultsFlagColumn(rider.countryCode)}</span>
+          <span class="season-standings-country-rider-name">${esc(rider.riderName ?? '—')}</span>
+          <strong>${rider.points}</strong>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function renderSeasonTeamNameCell(
+  row: SeasonStandingsPayload['teamStandings'][number],
+  riderStandings: SeasonStandingsPayload['riderStandings'],
+): string {
+  return `
+    <div class="season-standings-country-anchor" tabindex="0">
+      <span class="season-standings-country-name">${esc(row.teamName)}</span>
+      <div class="season-standings-country-popover">
+        ${renderSeasonTeamTopRiders(row, riderStandings)}
       </div>
     </div>`;
 }
@@ -2123,7 +2195,13 @@ function getRaceSimView(): RaceSimView {
             photoFinishScore: rider.photoFinishScore,
           } satisfies RealtimeStageCommitEntry))
           .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
-        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents);
+        void completeRealtimeStage(
+          bootstrap.stage.id,
+          entries,
+          snapshot.markerClassifications,
+          snapshot.incidents,
+          snapshot.riders.filter((rider) => rider.isBreakaway).map((rider) => rider.riderId),
+        );
       },
     });
   }
@@ -2934,6 +3012,7 @@ async function completeRealtimeStage(
   entries: RealtimeStageCommitEntry[],
   markerClassifications: StageMarkerClassification[],
   incidents: PrecalculatedRaceIncident[],
+  breakawayRiderIds: number[] = [],
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -2947,6 +3026,8 @@ async function completeRealtimeStage(
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;
     }
+
+    state.realtimeBreakawayRiderIdsByStageId[stageId] = breakawayRiderIds;
 
     const data = res.data as QuickSimResponse | undefined;
     state.selectedResultsRaceId = data?.raceId ?? state.selectedResultsRaceId;
@@ -2988,7 +3069,7 @@ async function loadStageResults(stageId: number, silentIfMissing: boolean): Prom
     return;
   }
 
-  state.stageResults = res.data ?? null;
+  state.stageResults = decorateStageResultsWithRealtimeBreakaways(res.data ?? null);
   if (state.stageResults) {
     state.selectedResultsRaceId = state.stageResults.raceId;
     state.selectedResultsStageId = state.stageResults.stageId;
@@ -3140,7 +3221,7 @@ function renderResultsView(): void {
       const participant = row.riderName ?? row.teamName;
       const teamName = row.riderName ? row.teamName : '—';
       const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
-      const participantCell = renderResultsParticipant(participant);
+      const participantCell = renderResultsParticipant(participant, true, row.isBreakaway === true);
       const flagCell = renderResultsFlagColumn(resolveRiderCountryCode(row.riderId));
       const showAverageSpeed = selectedClassification.resultTypeId === 1 && row.rank === 1 && row.timeSeconds != null && stageDistanceKm != null;
       const timeCell = row.timeSeconds != null
@@ -3275,7 +3356,9 @@ function renderSeasonStandingsView(): void {
     : standardRows.map((row) => {
       const primary = row.riderName ?? row.teamName;
       const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
-      const primaryCell = renderResultsParticipant(primary);
+      const primaryCell = state.selectedSeasonStandingScope === 'teams'
+        ? renderSeasonTeamNameCell(row, state.seasonStandings?.riderStandings ?? [])
+        : renderResultsParticipant(primary);
       const flagCell = renderResultsFlagColumn(row.countryCode);
       const secondary = state.selectedSeasonStandingScope === 'teams'
         ? (row.countryName ?? row.countryCode ?? '—')

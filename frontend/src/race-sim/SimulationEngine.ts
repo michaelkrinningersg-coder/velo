@@ -17,6 +17,7 @@ import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadC
 import { precalculateRaceIncidents } from './incidents';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
+import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers } from './stageSummary';
 import {
   ATTACK_SKILL_BONUS,
@@ -80,6 +81,7 @@ export interface RealtimeRiderSnapshot {
   finishStatus: RealtimeFinishStatus | null;
   statusReason: string | null;
   isAttacking: boolean;
+  isBreakaway: boolean;
   isLeadingGroup: boolean;
   isFinished: boolean;
 }
@@ -89,6 +91,7 @@ export interface RaceSimMessage {
   elapsedSeconds: number;
   riderId: number | null;
   riderName: string | null;
+  riderTeamId: number | null;
   type: 'incident' | 'support_wait' | 'support_resume' | 'dnf' | 'attack' | 'counter_attack';
   tone: 'neutral' | 'warning' | 'danger';
   title: string;
@@ -180,14 +183,16 @@ interface RiderState {
   pendingIncident: PrecalculatedRaceIncident | null;
   appliedIncident: PrecalculatedRaceIncident | null;
   incidentDelaySecondsRemaining: number;
-  forcedDraftMultiplier: number;
-  forcedDraftDistanceRemaining: number;
+  incidentRecoverySecondsRemaining: number;
+  incidentRecoveryFormBonus: number;
   incidentStaminaPenalty: number;
   dailyFormCap: number | null;
   waitingForCaptainId: number | null;
-  waitAfterCaptainBoostMeter: number | null;
+  waitForCaptainRecovery: boolean;
   waitLogged: boolean;
+  breakawayMalus: number;
   isAttacking: boolean;
+  isBreakaway: boolean;
   isLeadingGroup: boolean;
 }
 
@@ -666,6 +671,12 @@ export class SimulationEngine {
 
   private readonly activeStageAttacksByRiderId = new Map<number, ActiveStageAttack>();
 
+  private readonly breakawayPlan: PrecalculatedStageBreakaway | null;
+
+  private breakawayPhaseActive = false;
+
+  private breakawayPhaseEnded = false;
+
   private readonly messages: RaceSimMessage[] = [];
 
   private nextMessageId = 1;
@@ -749,14 +760,16 @@ export class SimulationEngine {
         pendingIncident: this.incidentsByRiderId.get(rider.id) ?? null,
         appliedIncident: null,
         incidentDelaySecondsRemaining: 0,
-        forcedDraftMultiplier: 1,
-        forcedDraftDistanceRemaining: 0,
+        incidentRecoverySecondsRemaining: 0,
+        incidentRecoveryFormBonus: 0,
         incidentStaminaPenalty: 0,
         dailyFormCap: null,
         waitingForCaptainId: null,
-        waitAfterCaptainBoostMeter: null,
+        waitForCaptainRecovery: false,
         waitLogged: false,
+        breakawayMalus: 0,
         isAttacking: false,
+        isBreakaway: false,
         isLeadingGroup: !this.isTimeTrialMode,
       };
       this.applyPersistentStageRaceState(riderState);
@@ -781,6 +794,14 @@ export class SimulationEngine {
       bucket.push(attack);
       this.precalculatedStageAttacksByRiderId.set(attack.riderId, bucket);
     }
+
+    this.breakawayPlan = precalculateStageBreakaway(
+      bootstrap.riders,
+      bootstrap.stage,
+      bootstrap.stageSummary,
+      this.stageFavorites,
+      bootstrap.gcStandings,
+    );
 
     const ridersWithSpecialStates = applySpecialFormStatesWithContext(bootstrap.riders, bootstrap.stage, {
       teams: bootstrap.teams,
@@ -882,6 +903,7 @@ export class SimulationEngine {
         finishStatus: rider.finishStatus,
         statusReason: rider.statusReason,
         isAttacking: rider.isAttacking,
+        isBreakaway: rider.isBreakaway,
         isLeadingGroup: rider.isLeadingGroup,
         isFinished: rider.finishTimeSeconds != null,
       })),
@@ -902,10 +924,15 @@ export class SimulationEngine {
     }
   }
 
-  private pushMessage(message: Omit<RaceSimMessage, 'id'>): void {
+  private pushMessage(message: Omit<RaceSimMessage, 'id' | 'riderTeamId'> & { riderTeamId?: number | null }): void {
+    const riderTeamId = message.riderTeamId
+      ?? (message.riderId != null
+        ? this.riders.find((candidate) => candidate.rider.id === message.riderId)?.rider.activeTeamId ?? null
+        : null);
     this.messages.unshift({
       id: this.nextMessageId,
       ...message,
+      riderTeamId,
     });
     this.nextMessageId += 1;
     if (this.messages.length > 60) {
@@ -974,6 +1001,8 @@ export class SimulationEngine {
     const stepStartSeconds = this.elapsedSeconds;
     const stepEndSeconds = stepStartSeconds + deltaSeconds;
     const currentTeamGroupBonusByRiderId = this.isTimeTrialMode ? null : this.buildTeamGroupBonusByRiderId();
+
+    this.updateBreakawayPhaseState();
 
     for (const rider of this.riders) {
       if (rider.finishTimeSeconds != null) {
@@ -1053,8 +1082,8 @@ export class SimulationEngine {
       rider.gradientModifier = basePhysics.gradientModifier;
       rider.windModifier = basePhysics.windModifier;
       rider.tempSpeedMps = basePhysics.tempSpeedMps;
-      if (rider.forcedDraftDistanceRemaining > 0) {
-        rider.tempSpeedMps *= rider.forcedDraftMultiplier;
+      if (this.breakawayPlan?.riderIds.includes(rider.rider.id) && this.breakawayPhaseActive && !this.breakawayPhaseEnded) {
+        rider.tempSpeedMps += this.breakawayPlan.speedBonusKph / 3.6;
       }
       rider.draftModifier = 1;
       rider.draftNearbyRiderCount = 0;
@@ -1090,7 +1119,7 @@ export class SimulationEngine {
 
         for (let candidateIndex = 0; candidateIndex < index; candidateIndex += 1) {
           const candidate = ordered[candidateIndex];
-          if (candidate.isAttacking) {
+          if (candidate.isAttacking || (candidate.isBreakaway && this.breakawayPhaseActive && !this.breakawayPhaseEnded)) {
             continue;
           }
           const gapMeters = candidate.distanceCoveredMeters - rider.distanceCoveredMeters;
@@ -1166,11 +1195,16 @@ export class SimulationEngine {
 
         rider.currentSpeedMps = draftedSpeed;
         rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
-        if (rider.forcedDraftDistanceRemaining > 0 && rider.activeTerrain === 'Flat' && rider.draftNearbyRiderCount >= 20 && rider.draftModifier > 1) {
-          rider.forcedDraftDistanceRemaining = 0;
-          rider.forcedDraftMultiplier = 1;
-        }
         this.applyCaptainWaitLogic(rider);
+      }
+    }
+
+    this.applyBreakawayGroupTempo(deltaSeconds);
+
+    for (const rider of this.riders) {
+      if (rider.incidentRecoverySecondsRemaining > 0 && rider.draftModifier >= 1.2) {
+        rider.incidentRecoverySecondsRemaining = 0;
+        rider.incidentRecoveryFormBonus = 0;
       }
     }
 
@@ -1226,10 +1260,10 @@ export class SimulationEngine {
       this.triggerStageAttacksForRider(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds);
 
       rider.nextDistanceCoveredMeters = null;
-      if (rider.forcedDraftDistanceRemaining > 0) {
-        rider.forcedDraftDistanceRemaining = Math.max(0, rider.forcedDraftDistanceRemaining - Math.max(0, rider.distanceCoveredMeters - previousDistance));
-        if (rider.forcedDraftDistanceRemaining <= 0) {
-          rider.forcedDraftMultiplier = 1;
+      if (rider.incidentRecoverySecondsRemaining > 0) {
+        rider.incidentRecoverySecondsRemaining = Math.max(0, rider.incidentRecoverySecondsRemaining - activeDeltaSeconds);
+        if (rider.incidentRecoverySecondsRemaining <= 0) {
+          rider.incidentRecoveryFormBonus = 0;
         }
       }
 
@@ -1241,6 +1275,8 @@ export class SimulationEngine {
       this.advanceIndexForDistance(rider);
       this.syncRiderTelemetry(rider, nextTeamGroupBonusByRiderId);
     }
+
+    this.updateBreakawayPhaseState();
 
     const updatedActiveAttacks = updateActiveStageAttacks(this.activeStageAttacksByRiderId, deltaSeconds);
     this.activeStageAttacksByRiderId.clear();
@@ -1515,6 +1551,7 @@ export class SimulationEngine {
       rider.draftPackFactor = 0;
       rider.currentSpeedMps = 0;
       rider.isAttacking = false;
+      rider.isBreakaway = false;
       return;
     }
 
@@ -1540,6 +1577,90 @@ export class SimulationEngine {
     rider.currentSpeedMps = basePhysics.tempSpeedMps * rider.draftModifier;
     rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
     rider.isAttacking = this.activeStageAttacksByRiderId.has(rider.rider.id);
+    rider.isBreakaway = this.breakawayPlan?.riderIds.includes(rider.rider.id) ?? false;
+  }
+
+  private updateBreakawayPhaseState(): void {
+    const breakawayPlan = this.breakawayPlan;
+    if (!breakawayPlan || this.breakawayPhaseEnded) {
+      return;
+    }
+
+    const breakawayRiders = this.riders.filter((rider) => breakawayPlan.riderIds.includes(rider.rider.id));
+    if (breakawayRiders.length === 0) {
+      return;
+    }
+
+    if (!this.breakawayPhaseActive && breakawayRiders.some((rider) => rider.distanceCoveredMeters >= breakawayPlan.triggerDistanceMeters)) {
+      this.breakawayPhaseActive = true;
+      const breakawayRiderNames = breakawayRiders.map((rider) => rider.riderName).join(', ');
+      this.pushMessage({
+        elapsedSeconds: this.elapsedSeconds,
+        riderId: null,
+        riderName: null,
+        type: 'attack',
+        tone: 'warning',
+        title: 'Ausreißergruppe löst sich',
+        detail: `${breakawayRiderNames} starten bei ${(breakawayPlan.triggerDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
+      });
+    }
+
+    if (this.breakawayPhaseActive && breakawayRiders.some((rider) => rider.distanceCoveredMeters >= breakawayPlan.phaseEndDistanceMeters)) {
+      this.breakawayPhaseEnded = true;
+      for (const rider of breakawayRiders) {
+        rider.breakawayMalus = breakawayPlan.malusValue;
+      }
+      this.pushMessage({
+        elapsedSeconds: this.elapsedSeconds,
+        riderId: null,
+        riderName: null,
+        type: 'incident',
+        tone: 'danger',
+        title: 'Ausreißerphase endet',
+        detail: `Die Fahrer erhalten -${breakawayPlan.malusValue} Form für den Rest der Etappe.`,
+      });
+    }
+  }
+
+  private applyBreakawayGroupTempo(deltaSeconds: number): void {
+    const breakawayPlan = this.breakawayPlan;
+    if (!breakawayPlan || !this.breakawayPhaseActive || this.breakawayPhaseEnded || this.isTimeTrialMode) {
+      return;
+    }
+
+    const activeBreakawayRiders = this.riders
+      .filter((rider) => rider.finishTimeSeconds == null && breakawayPlan.riderIds.includes(rider.rider.id));
+    if (activeBreakawayRiders.length === 0) {
+      return;
+    }
+
+    const bestBreakawayRider = [...activeBreakawayRiders].sort((left, right) => (
+      right.distanceCoveredMeters - left.distanceCoveredMeters
+      || right.currentSpeedMps - left.currentSpeedMps
+      || left.rider.id - right.rider.id
+    ))[0];
+    if (!bestBreakawayRider) {
+      return;
+    }
+
+    const groupSpeedMps = Math.max(0.1, bestBreakawayRider.currentSpeedMps);
+    const leaderTargetDistance = bestBreakawayRider.distanceCoveredMeters + (groupSpeedMps * deltaSeconds);
+
+    for (const rider of activeBreakawayRiders) {
+      const gapToBestMeters = Math.max(0, bestBreakawayRider.distanceCoveredMeters - rider.distanceCoveredMeters);
+      if (gapToBestMeters > 0) {
+        const catchUpSpeedMps = groupSpeedMps + 0.1;
+        rider.currentSpeedMps = catchUpSpeedMps;
+        rider.nextDistanceCoveredMeters = Math.min(
+          leaderTargetDistance,
+          rider.distanceCoveredMeters + (catchUpSpeedMps * deltaSeconds),
+        );
+        continue;
+      }
+
+      rider.currentSpeedMps = groupSpeedMps;
+      rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (groupSpeedMps * deltaSeconds);
+    }
   }
 
   private resolveAttackSkillBonus(rider: RiderState): number {
@@ -1558,6 +1679,12 @@ export class SimulationEngine {
 
     const nextAttack = plannedAttacks[0];
     if (!nextAttack || previousDistance >= nextAttack.triggerDistanceMeters || currentDistance < nextAttack.triggerDistanceMeters) {
+      return;
+    }
+
+    const currentStagePosition = this.getOrderedRiders().findIndex((candidate) => candidate.rider.id === rider.rider.id) + 1;
+    if (currentStagePosition > 30) {
+      plannedAttacks.shift();
       return;
     }
 
@@ -1587,7 +1714,22 @@ export class SimulationEngine {
     });
 
     const activeAttackerIds = new Set(this.activeStageAttacksByRiderId.keys());
-    const counterRiderIds = resolveCounterAttackStarterIds(this.stageFavorites.slice(0, 20), rider.rider.id, activeAttackerIds);
+    const nearbyCounterFavorites = this.stageFavorites
+      .slice(0, 20)
+      .filter((favorite) => {
+        if (favorite.kind !== 'rider' || favorite.riderId == null) {
+          return false;
+        }
+
+        const candidate = this.riders.find((entry) => entry.rider.id === favorite.riderId);
+        if (!candidate || candidate.finishTimeSeconds != null) {
+          return false;
+        }
+
+        const gapBehindAttackerMeters = rider.distanceCoveredMeters - candidate.distanceCoveredMeters;
+        return gapBehindAttackerMeters >= 0 && gapBehindAttackerMeters <= 150;
+      });
+    const counterRiderIds = resolveCounterAttackStarterIds(nearbyCounterFavorites, rider.rider.id, activeAttackerIds);
     for (const counterRiderId of counterRiderIds) {
       const counterRider = this.riders.find((candidate) => candidate.rider.id === counterRiderId);
       if (!counterRider || counterRider.finishTimeSeconds != null || this.activeStageAttacksByRiderId.has(counterRiderId)) {
@@ -1730,8 +1872,10 @@ export class SimulationEngine {
     const baseWithForm = input.baseSkill
       + resolveConditionFormBonus(input.rider.rider)
       + input.rider.dailyForm
+      + input.rider.incidentRecoveryFormBonus
       + input.rider.microForm
-      + input.teamGroupBonus;
+      + input.teamGroupBonus
+      - input.rider.breakawayMalus;
     const staminaPenalty = input.distanceMeters === input.rider.distanceCoveredMeters
       ? this.resolveRiderStaminaPenalty(input.rider)
       : this.resolveStaminaPenalty(input.rider.rider.skills.stamina, input.distanceMeters);
@@ -2031,8 +2175,8 @@ export class SimulationEngine {
     rider.pendingIncident = null;
     rider.appliedIncident = incident;
     rider.incidentDelaySecondsRemaining = incident.waitDurationSeconds;
-    rider.forcedDraftMultiplier = incident.draftBoostMultiplier;
-    rider.forcedDraftDistanceRemaining = incident.draftBoostDistanceMeters;
+    rider.incidentRecoverySecondsRemaining = incident.recoverySeconds;
+    rider.incidentRecoveryFormBonus = incident.recoveryFormBonus;
     rider.dailyForm += incident.dayFormPenalty;
     rider.incidentStaminaPenalty += incident.staminaPenalty;
     rider.statusReason = incident.type === 'crash'
@@ -2057,8 +2201,8 @@ export class SimulationEngine {
         rider.currentSpeedMps = 0;
         rider.tempSpeedMps = 0;
         rider.incidentDelaySecondsRemaining = 0;
-        rider.forcedDraftDistanceRemaining = 0;
-        rider.forcedDraftMultiplier = 1;
+        rider.incidentRecoverySecondsRemaining = 0;
+        rider.incidentRecoveryFormBonus = 0;
       }
     }
 
@@ -2069,7 +2213,7 @@ export class SimulationEngine {
           continue;
         }
         supportRider.waitingForCaptainId = rider.rider.id;
-        supportRider.waitAfterCaptainBoostMeter = rider.distanceCoveredMeters + incident.draftBoostDistanceMeters;
+        supportRider.waitForCaptainRecovery = true;
         supportRider.waitLogged = false;
       }
     }
@@ -2119,14 +2263,15 @@ export class SimulationEngine {
     const captain = this.riders.find((candidate) => candidate.rider.id === rider.waitingForCaptainId) ?? null;
     if (!captain || captain.finishStatus === 'dnf') {
       rider.waitingForCaptainId = null;
-      rider.waitAfterCaptainBoostMeter = null;
+      rider.waitForCaptainRecovery = false;
       rider.waitLogged = false;
       return;
     }
 
-    if ((rider.waitAfterCaptainBoostMeter ?? Number.POSITIVE_INFINITY) > captain.distanceCoveredMeters) {
+    if (rider.waitForCaptainRecovery && (captain.incidentDelaySecondsRemaining > 0 || captain.incidentRecoverySecondsRemaining > 0)) {
       return;
     }
+    rider.waitForCaptainRecovery = false;
 
     if (rider.distanceCoveredMeters > captain.distanceCoveredMeters + CLUSTER_DISTANCE_METERS) {
       rider.currentSpeedMps = 0;
@@ -2163,7 +2308,7 @@ export class SimulationEngine {
     }
 
     rider.waitingForCaptainId = null;
-    rider.waitAfterCaptainBoostMeter = null;
+    rider.waitForCaptainRecovery = false;
     rider.waitLogged = false;
   }
 }

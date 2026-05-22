@@ -16,6 +16,30 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function resolveTeamJerseyAssetPath(teamId: number): string {
+  return `/jersey/Jer_${teamId}.png`;
+}
+
+function renderMessageJersey(message: RaceSimMessage): string {
+  if (message.riderId == null || message.riderTeamId == null) {
+    return '';
+  }
+
+  return `
+    <span class="race-sim-message-jersey" aria-hidden="true">
+      <img
+        class="race-sim-message-jersey-img"
+        src="${escapeHtml(resolveTeamJerseyAssetPath(message.riderTeamId))}"
+        alt=""
+        width="16"
+        height="16"
+        loading="lazy"
+        decoding="async"
+        onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';"
+      >
+    </span>`;
+}
+
 export function renderRaceMessages(container: HTMLElement, messages: RaceSimMessage[]): void {
   if (messages.length === 0) {
     container.innerHTML = '<div class="race-sim-message-empty">Noch keine Events in dieser Etappe.</div>';
@@ -24,11 +48,12 @@ export function renderRaceMessages(container: HTMLElement, messages: RaceSimMess
 
   container.innerHTML = messages.map((message) => `
     <article class="race-sim-message-item" data-tone="${message.tone}">
-      <div class="race-sim-message-head">
+      <span class="race-sim-message-time">t=${formatElapsedTime(message.elapsedSeconds)}</span>
+      ${renderMessageJersey(message)}
+      <span class="race-sim-message-text">
         <strong class="race-sim-message-title">${escapeHtml(message.title)}</strong>
-        <span class="race-sim-message-time">t=${formatElapsedTime(message.elapsedSeconds)}</span>
-      </div>
-      <div class="race-sim-message-detail">${escapeHtml(message.detail)}</div>
+        ${message.detail ? `<span class="race-sim-message-detail"> · ${escapeHtml(message.detail)}</span>` : ''}
+      </span>
     </article>
   `).join('');
 }

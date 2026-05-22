@@ -7,6 +7,8 @@ export type TimeControlValue = (typeof TIME_CONTROL_VALUES)[number];
 interface ControlRenderState {
   isRunning: boolean;
   timeMultiplier: TimeControlValue;
+  messageSort: 'newest' | 'oldest';
+  favoriteSort: 'rank' | 'skill';
   snapshot: SimulationFrameSnapshot;
   totalRiders: number;
   perf: {
@@ -41,6 +43,8 @@ interface ControlElements {
   finishedField: HTMLElement | null;
   toggleButton: HTMLButtonElement | null;
   speedButtons: HTMLButtonElement[];
+  messageSortButtons: HTMLButtonElement[];
+  favoriteSortButtons: HTMLButtonElement[];
 }
 
 const controlElementsByContainer = new WeakMap<HTMLElement, ControlElements>();
@@ -88,6 +92,14 @@ function ensureControlsMarkup(container: HTMLElement): ControlElements {
           data-race-sim-speed="${value}"
         >${value}x</button>
       `).join('')}
+    </div>
+    <div class="race-sim-sort-strip">
+      <span class="race-sim-sort-label">Messages</span>
+      <button type="button" class="race-sim-speed-btn" data-race-sim-sort-target="messages" data-race-sim-sort-value="newest">Neueste</button>
+      <button type="button" class="race-sim-speed-btn" data-race-sim-sort-target="messages" data-race-sim-sort-value="oldest">Älteste</button>
+      <span class="race-sim-sort-label">Favorites</span>
+      <button type="button" class="race-sim-speed-btn" data-race-sim-sort-target="favorites" data-race-sim-sort-value="rank">Rang</button>
+      <button type="button" class="race-sim-speed-btn" data-race-sim-sort-target="favorites" data-race-sim-sort-value="skill">Skill</button>
     </div>`;
 
   const elements: ControlElements = {
@@ -96,6 +108,8 @@ function ensureControlsMarkup(container: HTMLElement): ControlElements {
     finishedField: container.querySelector<HTMLElement>('[data-race-sim-field="finished"]'),
     toggleButton: container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]'),
     speedButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]')),
+    messageSortButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-sort-target="messages"]')),
+    favoriteSortButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-sort-target="favorites"]')),
   };
   controlElementsByContainer.set(container, elements);
   return elements;
@@ -121,5 +135,11 @@ export function renderRaceSimControls(container: HTMLElement, state: ControlRend
   elements.speedButtons.forEach((button) => {
     const speedValue = Number(button.dataset['raceSimSpeed']);
     button.classList.toggle('active', speedValue === state.timeMultiplier);
+  });
+  elements.messageSortButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset['raceSimSortValue'] === state.messageSort);
+  });
+  elements.favoriteSortButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset['raceSimSortValue'] === state.favoriteSort);
   });
 }

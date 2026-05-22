@@ -236,16 +236,43 @@ export function resolveCounterAttackStarterIds(top20Favorites: FavoriteItem[], a
     return [];
   }
 
-  const eligibleRiderIds = top20Favorites
-    .filter((favorite) => favorite.kind === 'rider' && favorite.riderId != null)
-    .map((favorite) => favorite.riderId as number)
-    .filter((riderId) => riderId !== attackerRiderId && !activeAttackerIds.has(riderId));
-  if (eligibleRiderIds.length === 0) {
+  const attackerTeamId = top20Favorites.find((favorite) => favorite.kind === 'rider' && favorite.riderId === attackerRiderId)?.teamId ?? null;
+  const eligibleFavorites = top20Favorites.filter((favorite) => {
+    if (favorite.kind !== 'rider' || favorite.riderId == null) {
+      return false;
+    }
+
+    if (favorite.riderId === attackerRiderId || activeAttackerIds.has(favorite.riderId)) {
+      return false;
+    }
+
+    if (attackerTeamId != null && favorite.teamId === attackerTeamId) {
+      return false;
+    }
+
+    return true;
+  });
+  if (eligibleFavorites.length === 0) {
     return [];
   }
 
-  const desiredCounterCount = Math.min(randomInteger(0, 3), eligibleRiderIds.length);
-  return sampleWithoutReplacement(eligibleRiderIds, desiredCounterCount);
+  const eligibleFavoritesByTeamId = new Map<number, FavoriteItem[]>();
+  for (const favorite of eligibleFavorites) {
+    const bucket = eligibleFavoritesByTeamId.get(favorite.teamId) ?? [];
+    bucket.push(favorite);
+    eligibleFavoritesByTeamId.set(favorite.teamId, bucket);
+  }
+
+  const teamRepresentatives = [...eligibleFavoritesByTeamId.values()]
+    .map((teamFavorites) => sampleWithoutReplacement(teamFavorites, 1)[0] ?? null)
+    .filter((favorite): favorite is FavoriteItem => favorite != null && favorite.riderId != null);
+  if (teamRepresentatives.length === 0) {
+    return [];
+  }
+
+  const desiredCounterCount = Math.min(randomInteger(0, 3), teamRepresentatives.length);
+  return sampleWithoutReplacement(teamRepresentatives, desiredCounterCount)
+    .map((favorite) => favorite.riderId as number);
 }
 
 export function updateActiveStageAttacks(activeAttacks: ReadonlyMap<number, ActiveStageAttack>, deltaSeconds: number): StageAttackTickTrigger {

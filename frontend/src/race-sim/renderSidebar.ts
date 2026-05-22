@@ -756,7 +756,14 @@ function formatDraftPackInfluence(rider: RealtimeRiderSnapshot): string {
 }
 
 function renderRiderButton(rider: RealtimeRiderSnapshot, isOpen: boolean): string {
-  return `<button type="button" class="race-sim-row-name-btn" data-race-sim-rider-toggle="${rider.riderId}" aria-expanded="${isOpen ? 'true' : 'false'}" title="${esc(rider.riderName)}">${esc(rider.riderName)}</button>`;
+  const classNames = ['race-sim-row-name-btn'];
+  if (rider.isAttacking) {
+    classNames.push('is-attacking');
+  }
+  if (rider.isBreakaway) {
+    classNames.push('is-breakaway');
+  }
+  return `<button type="button" class="${classNames.join(' ')}" data-race-sim-rider-toggle="${rider.riderId}" aria-expanded="${isOpen ? 'true' : 'false'}" title="${esc(rider.riderName)}">${esc(rider.riderName)}</button>`;
 }
 
 function renderTeamCell(sourceRider: Rider | null, teamAbbreviationById: Map<number, string>, teamNameById: Map<number, string>): string {
@@ -964,8 +971,12 @@ function updateSidebarRow(
   updateText(rowCache.gapField, formatGap(rider.gapToLeaderMeters));
   updateText(rowCache.clockField, clockValue);
   rowCache.nameButton.setAttribute('aria-expanded', isDetailOpen ? 'true' : 'false');
-  updateClassName(rowCache.nameButton, `race-sim-row-name-btn${rider.isAttacking ? ' is-attacking' : ''}`);
-  updateTitle(rowCache.nameButton, rider.isAttacking ? `${rider.riderName} (Attacke aktiv)` : rider.riderName);
+  updateClassName(rowCache.nameButton, `race-sim-row-name-btn${rider.isAttacking ? ' is-attacking' : ''}${rider.isBreakaway ? ' is-breakaway' : ''}`);
+  updateTitle(rowCache.nameButton, rider.isBreakaway
+    ? `${rider.riderName} (Ausreißer)`
+    : rider.isAttacking
+      ? `${rider.riderName} (Attacke aktiv)`
+      : rider.riderName);
 
   splitLabels.forEach((label, index) => {
     const splitField = rowCache.splitFields[index];
