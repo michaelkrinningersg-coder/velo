@@ -1,0 +1,31 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+6.80,0.200,Flat,4,6,start,Lagos,null,,,
+5.40,0.600,Flat,4,6,,,,,,
+7.20,-0.700,Flat,4,7,,,,,,
+4.80,1.800,Flat,5,6,,,,,,
+6.10,2.900,Hill,5,5,climb_start,Rocha Rise,null,,,
+3.20,4.600,Hill,5,5,,,,climb_top,Rocha Rise,3
+5.90,-2.300,Abfahrt,5,5,,,,,,
+6.60,0.400,Flat,4,7,,,,sprint_intermediate,Sprint Aljezur,Sprint
+7.30,1.100,Flat,4,6,,,,,,
+4.90,3.800,Hill,5,5,,,,,,
+5.80,-1.600,Flat,4,6,,,,,,
+6.20,2.200,Hill,5,5,,,,,,
+5.40,-3.100,Abfahrt,6,5,,,,,,
+7.10,0.300,Flat,4,7,,,,,,
+4.60,4.100,Hill,5,5,climb_start,Vila do Bispo,null,,,
+3.10,5.200,Hill,5,5,,,,climb_top,Vila do Bispo,2
+6.70,-2.800,Abfahrt,6,5,,,,,,
+5.20,0.500,Flat,4,7,,,,,,
+6.40,1.900,Flat,4,6,,,,sprint_intermediate,Sprint Silves,Sprint
+5.30,0.700,Flat,4,6,,,,,,
+4.70,3.100,Hill,5,5,,,,,,
+6.10,-1.400,Flat,4,6,,,,,,
+5.50,2.400,Hill,5,5,,,,,,
+4.80,-2.000,Abfahrt,6,5,,,,,,
+6.20,0.400,Flat,4,7,,,,,,
+5.70,1.600,Flat,4,6,,,,,,
+4.20,4.500,Hill,5,5,,,,,,
+3.40,5.300,Hill,6,5,,,,,,
+2.80,6.100,Hill,6,4,,,,,,
+4.10,4.800,Hill,6,4,,,,finish_hill,Monchique,null

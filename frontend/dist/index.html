@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-a-flQgU4.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-qNwkrYmX.css">
+  <script type="module" crossorigin src="/assets/index-hYSIHqSK.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BbS5EKkd.css">
 </head>
 <body>
 
@@ -113,7 +113,7 @@
           <table class="data-table" id="dashboard-races-table">
             <thead>
               <tr>
-                <th>Datum</th><th>Rennen</th><th>Format</th><th>Land</th><th>Rennklasse</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th>
+                <th>Datum</th><th>Rennen</th><th>Format</th><th>Land</th><th>Rennklasse</th><th>Teilnehmer</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="dashboard-races-tbody"></tbody>
@@ -153,6 +153,13 @@
         <div id="race-sim-layout" class="race-sim-shell hidden">
           <section class="race-sim-card">
             <div class="race-sim-card-header">
+              <h3>Stage Overview</h3>
+              <p class="text-muted">Favoriten, Wertungen und Bergwertungen der laufenden Etappe.</p>
+            </div>
+            <div id="race-sim-favorites-body" class="race-sim-favorites-body"></div>
+          </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
               <h3>Time Controls</h3>
               <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
             </div>
@@ -171,13 +178,6 @@
               <p class="text-muted">Incidents, Helfer-Warten und Ausfälle während der Etappe.</p>
             </div>
             <div id="race-sim-messages-body" class="race-sim-messages-body"></div>
-          </section>
-          <section class="race-sim-card">
-            <div class="race-sim-card-header">
-              <h3>Stage Favorites</h3>
-              <p class="text-muted">Top 20 nach Etappenprofil, Form und Renntyp.</p>
-            </div>
-            <div id="race-sim-favorites-body" class="race-sim-favorites-body"></div>
           </section>
           <section class="race-sim-sidebar-card">
             <div class="race-sim-card-header">
@@ -274,6 +274,18 @@
           <section class="stage-editor-panel">
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
+                <h3>Vorhandene CSV-Stage</h3>
+                <p class="text-muted">Masterdaten aus data/csv/stages.csv und data/stages laden, bearbeiten und wieder als Download exportieren.</p>
+              </div>
+              <div class="stage-editor-load-row">
+                <select id="stage-editor-existing-stage"></select>
+                <button class="btn btn-secondary" id="btn-stage-editor-load-existing">Stage laden</button>
+              </div>
+              <p id="stage-editor-existing-hint" class="text-muted">CSV-Stages werden beim Öffnen des Editors geladen.</p>
+            </div>
+
+            <div class="stage-editor-card">
+              <div class="stage-editor-card-header">
                 <h3>Import</h3>
                 <p class="text-muted">Backend-Import mit Glättung, Mindestsegmenten und Climb-Erkennung.</p>
               </div>
@@ -340,7 +352,7 @@
                 </div>
               </div>
               <div class="stage-editor-actions">
-                <p id="stage-editor-export-hint" class="text-muted">Importiere zuerst eine Datei.</p>
+                <p id="stage-editor-export-hint" class="text-muted">Importiere oder lade zuerst eine Strecke. Export erzeugt Downloads und überschreibt keine Masterdateien automatisch.</p>
                 <button class="btn btn-primary" id="btn-stage-editor-export" disabled>CSV-Export</button>
               </div>
             </div>
@@ -452,6 +464,32 @@
         <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">✕</button>
       </div>
       <div id="stage-profile-view" class="race-sim-profile dashboard-stage-profile-view"></div>
+    </div>
+  </div>
+
+  <div id="modal-riderProgram" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="rider-program-title">Programm</h2>
+          <p id="rider-program-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-program">✕</button>
+      </div>
+      <div id="rider-program-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-raceParticipants" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="race-participants-title">Teilnehmer</h2>
+          <p id="race-participants-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-participants">✕</button>
+      </div>
+      <div id="race-participants-body" class="dashboard-race-stages-body"></div>
     </div>
   </div>
 

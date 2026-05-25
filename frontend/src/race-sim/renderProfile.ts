@@ -1,7 +1,7 @@
 import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType, StageProfile } from '../../../shared/types';
 import type { RiderCluster, RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
-import { buildIntermediateSplitLabels, collectStageBoundaryMarkers } from './stageSummary';
+import { buildIntermediateSplitLabels, collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
 function esc(value: unknown): string {
   return String(value)
@@ -141,10 +141,10 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
       continue;
     }
 
-    if (marker.type === 'climb_top') {
+    if (isMountainClassificationMarker(marker)) {
       let matchingIndex = -1;
       for (let index = pendingClimbs.length - 1; index >= 0; index -= 1) {
-        if (pendingClimbs[index]?.name === marker.name) {
+        if (marker.name && pendingClimbs[index]?.name === marker.name) {
           matchingIndex = index;
           break;
         }
@@ -569,7 +569,7 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
     return `
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
-      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label">${formatElevationLabel(value)}</text>`;
+      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label race-sim-elevation-label">${formatElevationLabel(value)}</text>`;
   }).join('');
   const distanceTickMarkup = compact
     ? ''

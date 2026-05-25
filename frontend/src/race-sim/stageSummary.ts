@@ -16,13 +16,18 @@ export interface StageSummaryMeta {
   climbCount: number;
 }
 
+export function isMountainClassificationMarker(marker: StageMarker): boolean {
+  return marker.type === 'climb_top'
+    || ((marker.type === 'finish_hill' || marker.type === 'finish_mountain') && marker.cat != null && marker.cat !== 'Sprint');
+}
+
 function buildStageBoundaryMarkerKey(segmentIndex: number, boundary: 'start' | 'end', markerIndex: number, marker: StageMarker): string {
   return `${marker.type}:${segmentIndex}:${boundary}:${markerIndex}`;
 }
 
 function buildDefaultMarkerLabel(marker: StageMarker, ordinal: number): string {
   if (marker.type === 'sprint_intermediate') return `SZ ${ordinal}`;
-  if (marker.type === 'climb_top') return `Berg ${ordinal}`;
+  if (isMountainClassificationMarker(marker)) return `Berg ${ordinal}`;
   if (marker.type === 'climb_start') return `Anstieg ${ordinal}`;
   if (marker.type === 'start') return 'Start';
   return 'Ziel';
@@ -72,7 +77,7 @@ export function collectStageBoundaryMarkers(summary: ParsedStageSummary): StageB
 
 export function buildIntermediateSplitLabels(summary: ParsedStageSummary): string[] {
   return collectStageBoundaryMarkers(summary)
-    .filter(({ marker }) => marker.type === 'sprint_intermediate' || marker.type === 'climb_top')
+    .filter(({ marker }) => marker.type === 'sprint_intermediate' || isMountainClassificationMarker(marker))
     .map(({ label }) => label);
 }
 
@@ -81,6 +86,6 @@ export function summarizeStageMarkers(summary: ParsedStageSummary): StageSummary
   return {
     segmentCount: summary.segments.length,
     sprintCount: boundaryMarkers.filter(({ marker }) => marker.type === 'sprint_intermediate').length,
-    climbCount: boundaryMarkers.filter(({ marker }) => marker.type === 'climb_top').length,
+    climbCount: boundaryMarkers.filter(({ marker }) => isMountainClassificationMarker(marker)).length,
   };
 }

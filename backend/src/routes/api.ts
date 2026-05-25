@@ -3,8 +3,8 @@ import { DatabaseService } from '../db/DatabaseService';
 import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
-import { QuickSimEngine } from '../simulation/QuickSimEngine';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { StageResultCommitService } from '../simulation/StageResultCommitService';
 import { StageParser } from '../simulation/StageParser';
 import {
   ApiResponse,
@@ -13,16 +13,20 @@ import {
   Team,
   Rider,
   Race,
+  RaceProgramParticipant,
   GameState,
   GameStatus,
-  QuickSimResponse,
+  StageResultCommitResponse,
   RaceRosterEditorPayload,
   RaceRosterSelectionRequest,
+  RiderProgramRaceSummary,
   RealtimeClassificationLeaders,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
   SeasonStandingsPayload,
   StageEditorDraft,
+  StageEditorExistingStageListResponse,
+  StageEditorExistingStageLoadResponse,
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
@@ -185,6 +189,7 @@ export function createRouter(dbService: DatabaseService): Router {
     if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Team-ID.');
     try {
       const db   = dbService.getActiveConnection();
+      getGss().ensureState();
       const repo = new GameRepository(db);
       const team = repo.getTeamById(id);
       if (!team) return fail(res, 404, `Team ${id} nicht gefunden.`);
@@ -198,7 +203,20 @@ export function createRouter(dbService: DatabaseService): Router {
     const teamId = req.query['teamId'] ? Number(req.query['teamId']) : undefined;
     try {
       const db = dbService.getActiveConnection();
+      getGss().ensureState();
       ok<Rider[]>(res, new GameRepository(db).getRiders(teamId));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/riders/:id/program-races', (req: Request, res: Response) => {
+    const riderId = Number(req.params['id']);
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const payload = new GameRepository(db).getRiderProgramRaceSummary(riderId);
+      if (!payload) return fail(res, 404, `Kein Programm fuer Fahrer ${riderId} gefunden.`);
+      ok<RiderProgramRaceSummary>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -211,7 +229,31 @@ export function createRouter(dbService: DatabaseService): Router {
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
+  router.get('/races/:id/program-participants', (req: Request, res: Response) => {
+    const raceId = Number(req.params['id']);
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      ok<RaceProgramParticipant[]>(res, new GameRepository(db).getRaceProgramParticipants(raceId));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   // ---- Stage Editor --------------------------------------
+
+  router.get('/stage-editor/stages', (_req: Request, res: Response) => {
+    try {
+      ok<StageEditorExistingStageListResponse>(res, routeImporter.listExistingStages());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/stage-editor/stages/:stageId', (req: Request, res: Response) => {
+    const stageId = Number(req.params['stageId']);
+    if (!Number.isInteger(stageId) || stageId <= 0) return fail(res, 400, 'Ungültige Stage-ID.');
+    try {
+      ok<StageEditorExistingStageLoadResponse>(res, routeImporter.loadExistingStage(stageId));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
 
   router.post('/stage-editor/import', (req: Request, res: Response) => {
     try {
@@ -271,6 +313,9 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
+        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
+        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
         classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
@@ -359,6 +404,9 @@ export function createRouter(dbService: DatabaseService): Router {
         teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
+        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
+        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
+        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
         classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
@@ -382,22 +430,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
-      ok<QuickSimResponse>(res, new QuickSimEngine(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? []));
-    } catch (e) { fail(res, 400, (e as Error).message); }
-  });
-
-  router.post('/simulation/quick/:stageId', (req: Request, res: Response) => {
-    const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
-
-    try {
-      const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
-      if (!pendingStageIds.has(stageId)) {
-        return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Simulation freigegeben.');
-      }
-
-      const db = dbService.getActiveConnection();
-      ok<QuickSimResponse>(res, new QuickSimEngine(db).simulateStage(stageId));
+      ok<StageResultCommitResponse>(res, new StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? []));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

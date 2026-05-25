@@ -1,7 +1,12 @@
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
 import type {
   RouteImportFormat,
   StageEditorClimb,
   StageEditorDraft,
+  StageEditorExistingStageListResponse,
+  StageEditorExistingStageLoadResponse,
+  StageEditorExistingStageOption,
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
@@ -34,6 +39,8 @@ const CLIMB_MIN_GAIN_METERS = 60;
 const CLIMB_MIN_AVG_GRADIENT = 3;
 const BRIEF_DESCENT_TOLERANCE_METERS = 18;
 const BRIEF_DESCENT_TOLERANCE_KM = 0.6;
+const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
+const STAGE_DETAILS_HEADER = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -92,6 +99,139 @@ function escapeCsv(value: string | number): string {
   const text = String(value);
   if (!/[",\n]/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function parseCsvRows(content: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = '';
+  let quoted = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        value += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        value += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+      continue;
+    }
+
+    if (char === ',') {
+      row.push(value);
+      value = '';
+      continue;
+    }
+
+    if (char === '\n') {
+      row.push(value);
+      if (row.some((cell) => cell.trim().length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+      value = '';
+      continue;
+    }
+
+    if (char !== '\r') {
+      value += char;
+    }
+  }
+
+  row.push(value);
+  if (row.some((cell) => cell.trim().length > 0)) {
+    rows.push(row);
+  }
+
+  if (quoted) {
+    throw new Error('CSV enthält ein nicht geschlossenes Anführungszeichen.');
+  }
+
+  return rows;
+}
+
+function parseRequiredInteger(value: string, field: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Ungültiger Ganzzahlwert für ${field}: ${value}`);
+  }
+  return parsed;
+}
+
+function parseRequiredNumber(value: string, field: string): number {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Ungültiger Zahlenwert für ${field}: ${value}`);
+  }
+  return parsed;
+}
+
+function parseNullableCsvValue(value: string | undefined): string | null {
+  const normalized = (value ?? '').trim();
+  return normalized.length === 0 || normalized.toLowerCase() === 'null' ? null : normalized;
+}
+
+function isValidStageProfile(value: string): value is StageProfile {
+  return ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'ITT', 'TTT', 'Cobble', 'Cobble_Hill'].includes(value);
+}
+
+function isValidStageTerrain(value: string): value is StageTerrain {
+  return ['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint'].includes(value);
+}
+
+function isValidStageMarkerType(value: string): value is StageMarkerType {
+  return ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(value);
+}
+
+function isValidStageMarkerCategory(value: string): value is StageMarkerCategory {
+  return ['HC', '1', '2', '3', '4', 'Sprint'].includes(value);
+}
+
+function parseStageMarkers(typesValue: string, namesValue: string, categoriesValue: string, rowLabel: string): StageMarker[] {
+  const types = typesValue.split('|').map((value) => value.trim()).filter((value) => value.length > 0);
+  if (types.length === 0) return [];
+  const names = namesValue.split('|');
+  const categories = categoriesValue.split('|');
+
+  return types.map((type, index) => {
+    if (!isValidStageMarkerType(type)) {
+      throw new Error(`${rowLabel}: Ungültiger Marker-Typ ${type}.`);
+    }
+    const rawCategory = parseNullableCsvValue(categories[index]);
+    if (rawCategory != null && !isValidStageMarkerCategory(rawCategory)) {
+      throw new Error(`${rowLabel}: Ungültige Marker-Kategorie ${rawCategory}.`);
+    }
+    return {
+      type,
+      name: parseNullableCsvValue(names[index]),
+      cat: rawCategory,
+    };
+  });
+}
+
+function safeStageDetailsFileName(fileName: string): string {
+  const trimmed = fileName.trim();
+  if (!/^[A-Za-z0-9_.-]+\.csv$/.test(trimmed) || trimmed.includes('..') || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error('details_csv_file muss ein sicherer CSV-Dateiname ohne Pfad sein.');
+  }
+  return trimmed;
+}
+
+function resolveDataRoot(): string {
+  const backendRelative = resolve(process.cwd(), '..', 'data');
+  if (existsSync(backendRelative)) return backendRelative;
+  return resolve(process.cwd(), 'data');
 }
 
 function stripNamespaces(xml: string): string {
@@ -584,6 +724,54 @@ function validateExportRequest(payload: StageEditorExportRequest): StageEditorEx
 }
 
 export class RouteImporter {
+  private readonly dataRoot: string;
+
+  constructor(dataRoot = resolveDataRoot()) {
+    this.dataRoot = dataRoot;
+  }
+
+  listExistingStages(): StageEditorExistingStageListResponse {
+    return {
+      stages: this.loadStageMetadataRows(),
+    };
+  }
+
+  loadExistingStage(stageId: number): StageEditorExistingStageLoadResponse {
+    if (!Number.isInteger(stageId) || stageId <= 0) {
+      throw new Error('Ungültige Stage-ID.');
+    }
+
+    const metadata = this.loadStageMetadataRows().find((stage) => stage.stageId === stageId);
+    if (!metadata) {
+      throw new Error(`Stage ${stageId} wurde in data/csv/stages.csv nicht gefunden.`);
+    }
+
+    const segments = this.loadStageDetailSegments(metadata);
+    const waypoints = deriveWaypointsFromSegments(segments);
+    const profilePoints = waypoints.map((waypoint) => ({
+      distanceKm: waypoint.kmMark,
+      elevation: waypoint.elevation,
+    }));
+    const elevationGainMeters = calculateElevationGain(profilePoints);
+
+    return {
+      metadata,
+      draft: {
+        routeName: metadata.raceName != null
+          ? `${metadata.raceName} - Etappe ${metadata.stageNumber}`
+          : `Stage ${metadata.stageId}`,
+        sourceFormat: 'csv',
+        totalDistanceKm: round2(segments.reduce((sum, segment) => sum + segment.lengthKm, 0)),
+        elevationGainMeters,
+        suggestedProfile: metadata.profile,
+        segments,
+        waypoints,
+        climbs: detectClimbs(profilePoints),
+        warnings: [],
+      },
+    };
+  }
+
   importRoute(request: StageEditorImportRequest): StageEditorDraft {
     if (!request.fileName.trim() || !request.fileContent.trim()) {
       throw new Error('fileName und fileContent sind erforderlich.');
@@ -626,5 +814,108 @@ export class RouteImporter {
       stagesFileName: `stage_${validated.metadata.stageId}.csv`,
       stageDetailsFileName: validated.metadata.detailsCsvFile,
     };
+  }
+
+  private loadStageMetadataRows(): StageEditorExistingStageOption[] {
+    const stagesPath = resolve(this.dataRoot, 'csv', 'stages.csv');
+    if (!existsSync(stagesPath)) {
+      throw new Error(`stages.csv wurde nicht gefunden: ${stagesPath}`);
+    }
+
+    const rows = parseCsvRows(readFileSync(stagesPath, 'utf8'));
+    const [header, ...dataRows] = rows;
+    if (!header || header.join(',') !== STAGES_METADATA_HEADER) {
+      throw new Error('data/csv/stages.csv hat nicht den erwarteten Header.');
+    }
+
+    const raceNames = this.loadRaceNames();
+    return dataRows.map((row, index) => {
+      if (row.length !== header.length) {
+        throw new Error(`stages.csv Zeile ${index + 2}: Erwartet ${header.length} Spalten, gefunden ${row.length}.`);
+      }
+      const profile = row[4]?.trim() ?? '';
+      if (!isValidStageProfile(profile)) {
+        throw new Error(`stages.csv Zeile ${index + 2}: Ungültiges Profil ${profile}.`);
+      }
+      const raceId = parseRequiredInteger(row[1], `stages.csv Zeile ${index + 2} race_id`);
+      return {
+        stageId: parseRequiredInteger(row[0], `stages.csv Zeile ${index + 2} id`),
+        raceId,
+        stageNumber: parseRequiredInteger(row[2], `stages.csv Zeile ${index + 2} stage_number`),
+        date: row[3]?.trim() ?? '',
+        profile,
+        startElevation: parseRequiredInteger(row[5], `stages.csv Zeile ${index + 2} start_elevation`),
+        detailsCsvFile: safeStageDetailsFileName(row[6] ?? ''),
+        finalSpreadStartPercent: parseRequiredNumber(row[7], `stages.csv Zeile ${index + 2} final_spread_start_percent`),
+        finalPushStartPercent: parseRequiredNumber(row[8], `stages.csv Zeile ${index + 2} final_push_start_percent`),
+        finalSpreadDifficultyMultiplier: parseRequiredNumber(row[9], `stages.csv Zeile ${index + 2} final_spread_difficulty_multiplier`),
+        crashIncidentMultiplier: parseRequiredNumber(row[10], `stages.csv Zeile ${index + 2} crash_incident_multiplier`),
+        mechanicalIncidentMultiplier: parseRequiredNumber(row[11], `stages.csv Zeile ${index + 2} mechanical_incident_multiplier`),
+        raceName: raceNames.get(raceId),
+      };
+    }).sort((left, right) => left.date.localeCompare(right.date) || left.raceId - right.raceId || left.stageNumber - right.stageNumber || left.stageId - right.stageId);
+  }
+
+  private loadRaceNames(): Map<number, string> {
+    const racesPath = resolve(this.dataRoot, 'csv', 'races.csv');
+    if (!existsSync(racesPath)) return new Map();
+    const rows = parseCsvRows(readFileSync(racesPath, 'utf8'));
+    const [header, ...dataRows] = rows;
+    const idIndex = header?.indexOf('id') ?? -1;
+    const nameIndex = header?.indexOf('name') ?? -1;
+    if (idIndex < 0 || nameIndex < 0) return new Map();
+    const result = new Map<number, string>();
+    for (const row of dataRows) {
+      const id = Number.parseInt(row[idIndex] ?? '', 10);
+      const name = row[nameIndex]?.trim();
+      if (Number.isInteger(id) && name) {
+        result.set(id, name);
+      }
+    }
+    return result;
+  }
+
+  private loadStageDetailSegments(metadata: StageEditorExistingStageOption): StageEditorSegment[] {
+    const detailsPath = resolve(this.dataRoot, 'stages', safeStageDetailsFileName(metadata.detailsCsvFile));
+    if (!existsSync(detailsPath)) {
+      throw new Error(`Detaildatei wurde nicht gefunden: ${metadata.detailsCsvFile}`);
+    }
+
+    const rows = parseCsvRows(readFileSync(detailsPath, 'utf8'));
+    const [header, ...dataRows] = rows;
+    if (!header || header.join(',') !== STAGE_DETAILS_HEADER) {
+      throw new Error(`${metadata.detailsCsvFile} hat nicht den erwarteten Stage-Detail-Header.`);
+    }
+    if (dataRows.length === 0) {
+      throw new Error(`${metadata.detailsCsvFile} enthält keine Segmente.`);
+    }
+
+    let startElevation = metadata.startElevation;
+    const segments = dataRows.map((row, index) => {
+      if (row.length !== header.length) {
+        throw new Error(`${metadata.detailsCsvFile} Zeile ${index + 2}: Erwartet ${header.length} Spalten, gefunden ${row.length}.`);
+      }
+      const terrain = row[2]?.trim() ?? '';
+      if (!isValidStageTerrain(terrain)) {
+        throw new Error(`${metadata.detailsCsvFile} Zeile ${index + 2}: Ungültiges Terrain ${terrain}.`);
+      }
+
+      const lengthKm = parseRequiredNumber(row[0], `${metadata.detailsCsvFile} Zeile ${index + 2} length_km`);
+      const gradientPercent = parseRequiredNumber(row[1], `${metadata.detailsCsvFile} Zeile ${index + 2} gradient_percent`);
+      const segment: StageEditorSegment = {
+        startElevation: Math.round(startElevation),
+        lengthKm,
+        gradientPercent,
+        terrain,
+        techLevel: parseRequiredInteger(row[3], `${metadata.detailsCsvFile} Zeile ${index + 2} tech_level`),
+        windExp: parseRequiredInteger(row[4], `${metadata.detailsCsvFile} Zeile ${index + 2} wind_exp`),
+        markers: parseStageMarkers(row[5] ?? '', row[6] ?? '', row[7] ?? '', `${metadata.detailsCsvFile} Zeile ${index + 2}`),
+        endMarkers: parseStageMarkers(row[8] ?? '', row[9] ?? '', row[10] ?? '', `${metadata.detailsCsvFile} Zeile ${index + 2}`),
+      };
+      startElevation = Math.round(startElevation + ((lengthKm * 1000) * (gradientPercent / 100)));
+      return segment;
+    });
+
+    return sanitizeSegments(segments);
   }
 }

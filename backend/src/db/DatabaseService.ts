@@ -132,50 +132,6 @@ export class DatabaseService {
     }
   }
 
-  private ensureRaceCategoryRoleSchema(db: Database.Database): void {
-    if (!tableExists(db, 'race_categories') || columnExists(db, 'race_categories', 'role_1')) {
-      return;
-    }
-
-    const roleColumns = ['role_1', 'role_2', 'role_3', 'role_4', 'role_5', 'role_6'] as const;
-    for (const columnName of roleColumns) {
-      db.prepare(`
-        ALTER TABLE race_categories
-        ADD COLUMN ${columnName} INTEGER NOT NULL DEFAULT 0 CHECK(${columnName} >= 0)
-      `).run();
-    }
-
-    if (!fs.existsSync(this.masterDbPath)) {
-      return;
-    }
-
-    const masterDb = new Database(this.masterDbPath, { readonly: true });
-    try {
-      if (!tableExists(masterDb, 'race_categories') || !columnExists(masterDb, 'race_categories', 'role_1')) {
-        return;
-      }
-
-      const rows = masterDb.prepare(`
-        SELECT id, role_1, role_2, role_3, role_4, role_5, role_6
-        FROM race_categories
-      `).all() as Array<{ id: number; role_1: number; role_2: number; role_3: number; role_4: number; role_5: number; role_6: number }>;
-
-      const update = db.prepare(`
-        UPDATE race_categories
-        SET role_1 = ?, role_2 = ?, role_3 = ?, role_4 = ?, role_5 = ?, role_6 = ?
-        WHERE id = ?
-      `);
-
-      db.transaction(() => {
-        for (const row of rows) {
-          update.run(row.role_1, row.role_2, row.role_3, row.role_4, row.role_5, row.role_6, row.id);
-        }
-      })();
-    } finally {
-      masterDb.close();
-    }
-  }
-
   private ensureRulesData(db: Database.Database): void {
     if (!tableExists(db, 'rules')) {
       return;
@@ -607,6 +563,13 @@ export class DatabaseService {
       return;
     }
 
+    if (!columnExists(db, 'results', 'is_breakaway')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN is_breakaway INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1))
+      `).run();
+    }
+
     const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'results'").get() as { sql: string | null } | undefined;
     const createSql = row?.sql ?? '';
     const needsMigration = createSql.includes('(result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)')
@@ -630,6 +593,7 @@ export class DatabaseService {
           rank             INTEGER NOT NULL CHECK(rank > 0),
           time_seconds     INTEGER,
           points           INTEGER,
+          is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
           CHECK(
             (result_type_id = 1 AND team_id IS NOT NULL)
             OR
@@ -640,10 +604,10 @@ export class DatabaseService {
         );
 
         INSERT INTO results_new (
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
         )
         SELECT
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
         FROM results;
 
         DROP TABLE results;
@@ -716,6 +680,23 @@ export class DatabaseService {
       ON rider_form_history(date, rider_id)
     `).run();
 
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        growth_total REAL NOT NULL DEFAULT 0,
+        decline_total REAL NOT NULL DEFAULT 0,
+        blocked_reason TEXT,
+        skill_deltas_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (rider_id, date)
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
+      ON rider_skill_development_daily(date, rider_id)
+    `).run();
+
     if (tableExists(db, 'rider_daily_state')) {
       db.prepare(`
         UPDATE rider_daily_state
@@ -732,6 +713,118 @@ export class DatabaseService {
         PRIMARY KEY (rider_id, award_date)
       )
     `).run();
+  }
+
+  private ensureRaceProgramSchema(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS race_programs (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE
+      );
+
+      CREATE TABLE IF NOT EXISTS race_program_races (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        program_id INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
+        race_id INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        UNIQUE(program_id, race_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_race_program_races_race
+        ON race_program_races(race_id, program_id);
+
+      CREATE TABLE IF NOT EXISTS race_program_probability_rules (
+        id INTEGER PRIMARY KEY,
+        role_name TEXT NOT NULL,
+        spec_1 INTEGER REFERENCES type_rider(id),
+        spec_2 INTEGER REFERENCES type_rider(id),
+        spec_3 INTEGER REFERENCES type_rider(id),
+        program_id INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
+        probability REAL NOT NULL CHECK(probability >= 0)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_race_program_probability_rules_lookup
+        ON race_program_probability_rules(role_name, spec_1, spec_2, spec_3);
+
+      CREATE TABLE IF NOT EXISTS rider_season_programs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        program_id INTEGER NOT NULL REFERENCES race_programs(id),
+        assigned_on TEXT NOT NULL,
+        UNIQUE(season, rider_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
+        ON rider_season_programs(season, program_id);
+    `);
+
+    const ruleColumns = db.prepare('PRAGMA table_info(race_program_probability_rules)').all() as Array<{ name: string; type: string }>;
+    const specColumns = ruleColumns.filter((column) => ['spec_1', 'spec_2', 'spec_3'].includes(column.name));
+    const needsRuleTableRebuild = specColumns.length !== 3 || specColumns.some((column) => column.type.toUpperCase() !== 'INTEGER');
+
+    if (needsRuleTableRebuild) {
+      db.exec(`
+        DROP TABLE IF EXISTS race_program_probability_rules;
+
+        CREATE TABLE race_program_probability_rules (
+          id INTEGER PRIMARY KEY,
+          role_name TEXT NOT NULL,
+          spec_1 INTEGER REFERENCES type_rider(id),
+          spec_2 INTEGER REFERENCES type_rider(id),
+          spec_3 INTEGER REFERENCES type_rider(id),
+          program_id INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
+          probability REAL NOT NULL CHECK(probability >= 0)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_race_program_probability_rules_lookup
+          ON race_program_probability_rules(role_name, spec_1, spec_2, spec_3);
+      `);
+    }
+
+    if (!fs.existsSync(this.masterDbPath)) {
+      return;
+    }
+
+    const masterDb = new Database(this.masterDbPath, { readonly: true });
+    try {
+      if (!tableExists(masterDb, 'race_programs') || !tableExists(masterDb, 'race_program_races') || !tableExists(masterDb, 'race_program_probability_rules')) {
+        return;
+      }
+
+      const programs = masterDb.prepare('SELECT id, name FROM race_programs ORDER BY id ASC').all() as Array<{ id: number; name: string }>;
+      const programRaces = masterDb.prepare('SELECT id, program_id, race_id FROM race_program_races ORDER BY id ASC').all() as Array<{ id: number; program_id: number; race_id: number }>;
+      const rules = masterDb.prepare(`
+        SELECT id, role_name, spec_1, spec_2, spec_3, program_id, probability
+        FROM race_program_probability_rules
+        ORDER BY id ASC
+      `).all() as Array<{ id: number; role_name: string; spec_1: number | null; spec_2: number | null; spec_3: number | null; program_id: number; probability: number }>;
+
+      const insertProgram = db.prepare(`
+        INSERT INTO race_programs (id, name) VALUES (?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name
+      `);
+      const insertProgramRace = db.prepare('INSERT OR REPLACE INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
+      const insertRule = db.prepare(`
+        INSERT OR REPLACE INTO race_program_probability_rules (id, role_name, spec_1, spec_2, spec_3, program_id, probability)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      db.transaction(() => {
+        db.prepare('DELETE FROM race_program_probability_rules').run();
+        db.prepare('DELETE FROM race_program_races').run();
+        for (const program of programs) {
+          insertProgram.run(program.id, program.name);
+        }
+        for (const row of programRaces) {
+          insertProgramRace.run(row.id, row.program_id, row.race_id);
+        }
+        for (const row of rules) {
+          insertRule.run(row.id, row.role_name, row.spec_1, row.spec_2, row.spec_3, row.program_id, row.probability);
+        }
+      })();
+    } finally {
+      masterDb.close();
+    }
   }
 
   private ensureSavegamesDir(): void {
@@ -809,12 +902,12 @@ export class DatabaseService {
     this.applyLatestSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureRaceCategoryBonusSchema(this.activeConnection);
-    this.ensureRaceCategoryRoleSchema(this.activeConnection);
     this.ensureRulesData(this.activeConnection);
     this.ensureSkillWeightsData(this.activeConnection);
     this.ensureStageSpreadData(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRiderFormSchema(this.activeConnection);
+    this.ensureRaceProgramSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
@@ -829,6 +922,7 @@ export class DatabaseService {
     this.applyLatestSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
+    this.ensureRaceProgramSchema(this.activeConnection);
 
     return this.activeConnection;
   }

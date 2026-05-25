@@ -1,7 +1,12 @@
 import type { RealtimeSimulationBootstrap, Rider, Team } from '../../../shared/types';
 import type { RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
-import { buildIntermediateSplitLabels } from './stageSummary';
+import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
+
+interface IntermediateSplit {
+  key: string;
+  label: string;
+}
 
 interface LeaderboardColumn {
   label: string;
@@ -12,7 +17,7 @@ interface LeaderboardColumn {
 }
 
 interface BootstrapSidebarData {
-  splitLabels: string[];
+  splitMarkers: IntermediateSplit[];
   columns: LeaderboardColumn[];
   riderById: Map<number, Rider>;
   teamById: Map<number, Team>;
@@ -219,31 +224,33 @@ function getRiderCountryCode(rider: Rider): string {
   return rider.country?.code3 ?? rider.nationality;
 }
 
-function buildIntermediateLabels(bootstrap: RealtimeSimulationBootstrap): string[] {
-  return buildIntermediateSplitLabels(bootstrap.stageSummary);
+function buildIntermediateSplits(bootstrap: RealtimeSimulationBootstrap): IntermediateSplit[] {
+  return collectStageBoundaryMarkers(bootstrap.stageSummary)
+    .filter(({ marker }) => marker.type === 'sprint_intermediate' || isMountainClassificationMarker(marker))
+    .map(({ key, label }) => ({ key, label }));
 }
 
 function buildMarkerRankLookup(snapshot: SimulationSnapshot): Map<string, Map<number, number>> {
   return new Map(snapshot.markerClassifications.map((classification) => [
-    classification.markerLabel,
+    classification.markerKey,
     new Map(classification.entries.map((entry) => [entry.riderId, entry.rank])),
   ]));
 }
 
 function resolveSplitSortValue(
   rider: RealtimeRiderSnapshot,
-  label: string,
+  splitKey: string,
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  markerRanksByKey: Map<string, Map<number, number>>,
 ): number | null {
   if (stageProfile !== 'ITT' && stageProfile !== 'TTT') {
-    return markerRanksByLabel.get(label)?.get(rider.riderId) ?? null;
+    return markerRanksByKey.get(splitKey)?.get(rider.riderId) ?? null;
   }
 
-  return rider.splitTimes[label] ?? null;
+  return rider.splitTimes[splitKey] ?? null;
 }
 
-function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitLabels: string[]): LeaderboardColumn[] {
+function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitMarkers: IntermediateSplit[]): LeaderboardColumn[] {
   const columns: LeaderboardColumn[] = [
     { label: 'Pos', width: '50px', className: 'race-sim-col-rank', sortKey: 'gap' },
     { label: 'Flag', width: '40px', className: 'race-sim-col-flag' },
@@ -252,7 +259,7 @@ function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitLabels: strin
     { label: 'Team', width: '58px', className: 'race-sim-col-team', sortKey: 'team' },
     { label: 'Gap', width: '72px', sortKey: 'gap' },
     { label: 'Uhr', width: '96px', sortKey: 'clock' },
-    ...splitLabels.map((splitLabel) => ({ label: splitLabel, width: '92px', className: 'race-sim-col-split', sortKey: `split:${splitLabel}` })),
+    ...splitMarkers.map((split) => ({ label: split.key, displayLabel: split.label, width: '92px', className: 'race-sim-col-split', sortKey: `split:${split.key}` })),
     { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
     { label: 'GC', width: '52px', sortKey: 'gcRank' },
     { label: 'GC Gap', width: '70px', sortKey: 'gcGap' },
@@ -277,10 +284,10 @@ function getBootstrapSidebarData(bootstrap: RealtimeSimulationBootstrap): Bootst
     return cached;
   }
 
-  const splitLabels = buildIntermediateLabels(bootstrap);
+  const splitMarkers = buildIntermediateSplits(bootstrap);
   const data: BootstrapSidebarData = {
-    splitLabels,
-    columns: buildColumns(bootstrap, splitLabels),
+    splitMarkers,
+    columns: buildColumns(bootstrap, splitMarkers),
     riderById: new Map(bootstrap.riders.map((rider) => [rider.id, rider])),
     teamById: new Map((bootstrap.teams ?? []).map((team) => [team.id, team])),
     teamAbbreviationById: new Map((bootstrap.teams ?? []).map((team) => [team.id, team.abbreviation])),
@@ -425,8 +432,8 @@ function compareValues(left: string | number | null, right: string | number | nu
 
 function buildRiderComparator(
   bootstrap: RealtimeSimulationBootstrap,
-  splitLabels: string[],
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  splitMarkers: IntermediateSplit[],
+  markerRanksByKey: Map<string, Map<number, number>>,
   sortState: LeaderboardSortState,
   riderById: Map<number, Rider>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -435,7 +442,7 @@ function buildRiderComparator(
   if (sortState.autoSort) {
     return (left, right) => (
       bootstrap.stage.profile === 'ITT'
-        ? compareIttLeaderboard(left, right, splitLabels)
+        ? compareIttLeaderboard(left, right, splitMarkers)
         : compareStandardLeaderboard(left, right)
     );
   }
@@ -448,8 +455,8 @@ function buildRiderComparator(
   return (left, right) => {
     const leftSourceRider = riderById.get(left.riderId) ?? null;
     const rightSourceRider = riderById.get(right.riderId) ?? null;
-    const leftValue = resolveSortValue(left, leftSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByLabel, gcByRiderId, teamAbbreviationById);
-    const rightValue = resolveSortValue(right, rightSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByLabel, gcByRiderId, teamAbbreviationById);
+    const leftValue = resolveSortValue(left, leftSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByKey, gcByRiderId, teamAbbreviationById);
+    const rightValue = resolveSortValue(right, rightSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByKey, gcByRiderId, teamAbbreviationById);
     return (compareValues(leftValue, rightValue) * directionFactor) || left.riderId - right.riderId;
   };
 }
@@ -484,7 +491,7 @@ function resolveSortValue(
   sourceRider: Rider | null,
   sortKey: string,
   bootstrap: RealtimeSimulationBootstrap,
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  markerRanksByKey: Map<string, Map<number, number>>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
   teamAbbreviationById: Map<number, string>,
 ): string | number | null {
@@ -538,7 +545,7 @@ function resolveSortValue(
       return rider.currentSpeedMps;
     default:
       if (sortKey.startsWith('split:')) {
-        return resolveSplitSortValue(rider, sortKey.slice('split:'.length), bootstrap.stage.profile, markerRanksByLabel);
+        return resolveSplitSortValue(rider, sortKey.slice('split:'.length), bootstrap.stage.profile, markerRanksByKey);
       }
       return null;
   }
@@ -547,8 +554,8 @@ function resolveSortValue(
 function sortRiders(
   riders: RealtimeRiderSnapshot[],
   bootstrap: RealtimeSimulationBootstrap,
-  splitLabels: string[],
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  splitMarkers: IntermediateSplit[],
+  markerRanksByKey: Map<string, Map<number, number>>,
   sortState: LeaderboardSortState,
   riderById: Map<number, Rider>,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -557,7 +564,7 @@ function sortRiders(
 ): RealtimeRiderSnapshot[] {
   if (!sortState.manualSortKey) {
     if (sortState.autoSort) {
-      const comparator = buildRiderComparator(bootstrap, splitLabels, markerRanksByLabel, sortState, riderById, gcByRiderId, teamAbbreviationById);
+      const comparator = buildRiderComparator(bootstrap, splitMarkers, markerRanksByKey, sortState, riderById, gcByRiderId, teamAbbreviationById);
       if (!comparator) {
         return [...riders];
       }
@@ -573,7 +580,7 @@ function sortRiders(
     ));
   }
 
-  const comparator = buildRiderComparator(bootstrap, splitLabels, markerRanksByLabel, sortState, riderById, gcByRiderId, teamAbbreviationById);
+  const comparator = buildRiderComparator(bootstrap, splitMarkers, markerRanksByKey, sortState, riderById, gcByRiderId, teamAbbreviationById);
   if (!comparator) {
     return [...riders];
   }
@@ -659,11 +666,11 @@ export function handleRaceSimSidebarInteraction(container: HTMLElement, target: 
   return true;
 }
 
-function hasAnySplitTime(rider: RealtimeRiderSnapshot, splitLabels: string[]): boolean {
-  return splitLabels.some((label) => rider.splitTimes[label] != null);
+function hasAnySplitTime(rider: RealtimeRiderSnapshot, splitMarkers: IntermediateSplit[]): boolean {
+  return splitMarkers.some((split) => rider.splitTimes[split.key] != null);
 }
 
-function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRiderSnapshot, splitLabels: string[]): number {
+function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRiderSnapshot, splitMarkers: IntermediateSplit[]): number {
   if (left.finishTimeSeconds != null && right.finishTimeSeconds != null) {
     return (left.riderClockSeconds ?? left.finishTimeSeconds ?? Number.POSITIVE_INFINITY)
       - (right.riderClockSeconds ?? right.finishTimeSeconds ?? Number.POSITIVE_INFINITY)
@@ -672,13 +679,13 @@ function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRider
   if (left.finishTimeSeconds != null) return -1;
   if (right.finishTimeSeconds != null) return 1;
 
-  for (let index = splitLabels.length - 1; index >= 0; index -= 1) {
-    const label = splitLabels[index];
-    if (!label) {
+  for (let index = splitMarkers.length - 1; index >= 0; index -= 1) {
+    const split = splitMarkers[index];
+    if (!split) {
       continue;
     }
-    const leftTime = left.splitTimes[label];
-    const rightTime = right.splitTimes[label];
+    const leftTime = left.splitTimes[split.key];
+    const rightTime = right.splitTimes[split.key];
     if (leftTime != null && rightTime != null && leftTime !== rightTime) {
       return leftTime - rightTime;
     }
@@ -686,8 +693,8 @@ function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRider
     if (leftTime == null && rightTime != null) return 1;
   }
 
-  const leftHasTime = hasAnySplitTime(left, splitLabels);
-  const rightHasTime = hasAnySplitTime(right, splitLabels);
+  const leftHasTime = hasAnySplitTime(left, splitMarkers);
+  const rightHasTime = hasAnySplitTime(right, splitMarkers);
   if (leftHasTime !== rightHasTime) {
     return leftHasTime ? -1 : 1;
   }
@@ -809,16 +816,16 @@ function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, T
 
 function renderSplitCell(
   rider: RealtimeRiderSnapshot,
-  label: string,
+  splitKey: string,
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  markerRanksByKey: Map<string, Map<number, number>>,
 ): string {
   if (stageProfile !== 'ITT' && stageProfile !== 'TTT') {
-    const rank = markerRanksByLabel.get(label)?.get(rider.riderId);
+    const rank = markerRanksByKey.get(splitKey)?.get(rider.riderId);
     return rank != null ? `${rank}.` : '—';
   }
 
-  const value = rider.splitTimes[label];
+  const value = rider.splitTimes[splitKey];
   return value != null ? formatClock(value) : '—';
 }
 
@@ -861,7 +868,7 @@ function buildSidebarRowCache(
   rider: RealtimeRiderSnapshot,
   sourceRider: Rider | null,
   isOpen: boolean,
-  splitLabels: string[],
+  splitMarkers: IntermediateSplit[],
   teamById: Map<number, Team>,
   teamAbbreviationById: Map<number, string>,
   teamNameById: Map<number, string>,
@@ -914,7 +921,7 @@ function buildSidebarRowCache(
 
   const gapField = makeStrong('race-sim-gap');
   const clockField = makeStrong();
-  const splitFields = splitLabels.map(() => makeStrong());
+  const splitFields = splitMarkers.map(() => makeStrong());
   const effectiveSkillField = makeStrong('race-sim-cell-effective-skill');
   const gcRankField = makeStrong();
   const gcGapField = makeStrong();
@@ -949,9 +956,9 @@ function updateSidebarRow(
   rider: RealtimeRiderSnapshot,
   sourceRider: Rider | null,
   isDetailOpen: boolean,
-  splitLabels: string[],
+  splitMarkers: IntermediateSplit[],
   stageProfile: RealtimeSimulationBootstrap['stage']['profile'],
-  markerRanksByLabel: Map<string, Map<number, number>>,
+  markerRanksByKey: Map<string, Map<number, number>>,
   raceIsStageRace: boolean,
   stageNumber: number,
   gcByRiderId: Map<number, { rank: number; gapSeconds: number }>,
@@ -978,14 +985,14 @@ function updateSidebarRow(
       ? `${rider.riderName} (Attacke aktiv)`
       : rider.riderName);
 
-  splitLabels.forEach((label, index) => {
+  splitMarkers.forEach((split, index) => {
     const splitField = rowCache.splitFields[index];
     if (!splitField) {
       return;
     }
-    const splitValue = renderSplitCell(rider, label, stageProfile, markerRanksByLabel);
+    const splitValue = renderSplitCell(rider, split.key, stageProfile, markerRanksByKey);
     updateText(splitField, splitValue);
-    updateTitle(splitField, label);
+    updateTitle(splitField, split.label);
   });
 
   if (hasChanged(rowCache, 'effectiveSkillValue', rider.effectiveSkill)) {
@@ -1121,7 +1128,7 @@ function buildTeamTimeTrialRows(
         finishedRiders: riders.filter((rider) => rider.isFinished).length,
       } satisfies TeamTimeTrialRow;
     })
-    .sort((left, right) => compareIttLeaderboard(left.representative, right.representative, buildIntermediateSplitLabels(bootstrap.stageSummary)) || left.team.id - right.team.id);
+    .sort((left, right) => compareIttLeaderboard(left.representative, right.representative, buildIntermediateSplits(bootstrap)) || left.team.id - right.team.id);
 }
 
 function renderTeamTimeTrialDetail(
@@ -1170,7 +1177,7 @@ function renderTeamTimeTrialSidebar(
 ): SidebarRenderTelemetry {
   const totalStartMs = performance.now();
   const sidebarData = getBootstrapSidebarData(bootstrap);
-  const splitLabels = sidebarData.splitLabels;
+  const splitMarkers = sidebarData.splitMarkers;
   const columns: LeaderboardColumn[] = [
     { label: 'Pos', width: '50px', className: 'race-sim-col-rank' },
     { label: 'Team', width: '220px', className: 'race-sim-col-name' },
@@ -1178,7 +1185,7 @@ function renderTeamTimeTrialSidebar(
     { label: 'Abr.', width: '58px', className: 'race-sim-col-team' },
     { label: 'Gap', width: '72px' },
     { label: 'Uhr', width: '96px' },
-    ...splitLabels.map((splitLabel) => ({ label: splitLabel, width: '92px', className: 'race-sim-col-split' })),
+    ...splitMarkers.map((split) => ({ label: split.key, displayLabel: split.label, width: '92px', className: 'race-sim-col-split' })),
     { label: 'Eff.', width: '74px' },
     { label: 'Speed', width: '82px' },
   ];
@@ -1209,7 +1216,7 @@ function renderTeamTimeTrialSidebar(
           <strong class="race-sim-row-team"><span class="race-sim-team-code" title="${esc(row.team.name)}">${esc(row.team.abbreviation)}</span></strong>
           <strong class="race-sim-gap">${esc(formatGap(Math.max(0, leaderDistance - row.teamDistanceMeters)))}</strong>
           <strong>${esc(row.teamClockSeconds != null ? formatClock(row.teamClockSeconds) : formatStartOffset(row.representative.startOffsetSeconds))}</strong>
-          ${splitLabels.map((label) => `<strong>${esc(row.splitTimes[label] != null ? formatClock(row.splitTimes[label] as number) : '—')}</strong>`).join('')}
+          ${splitMarkers.map((split) => `<strong>${esc(row.splitTimes[split.key] != null ? formatClock(row.splitTimes[split.key] as number) : '—')}</strong>`).join('')}
           <strong class="race-sim-cell-effective-skill ${getEffectiveSkillClassName(row.representative)}">${esc(formatNumber(row.teamEffectiveSkill))}</strong>
           <strong>${esc(formatSpeed(row.teamSpeedMps))}</strong>
         </div>
@@ -1278,8 +1285,8 @@ export function renderRaceSimSidebar(
   };
   const prepStartMs = performance.now();
   const sidebarData = getBootstrapSidebarData(bootstrap);
-  const { splitLabels } = sidebarData;
-  const markerRanksByLabel = buildMarkerRankLookup(snapshot);
+  const { splitMarkers } = sidebarData;
+  const markerRanksByKey = buildMarkerRankLookup(snapshot);
   const sortState = getLeaderboardSortState(container);
   const previousCache = sidebarRenderCache.get(container);
   telemetry.prepMs = performance.now() - prepStartMs;
@@ -1288,8 +1295,8 @@ export function renderRaceSimSidebar(
   const sortedRiders = sortRiders(
     snapshot.riders,
     bootstrap,
-    splitLabels,
-    markerRanksByLabel,
+    splitMarkers,
+    markerRanksByKey,
     sortState,
     sidebarData.riderById,
     sidebarData.gcByRiderId,
@@ -1340,7 +1347,7 @@ export function renderRaceSimSidebar(
         rider,
         sourceRider,
         cached.openDetailRiderId === rider.riderId,
-        splitLabels,
+        splitMarkers,
         sidebarData.teamById,
         sidebarData.teamAbbreviationById,
         sidebarData.teamNameById,
@@ -1385,9 +1392,9 @@ export function renderRaceSimSidebar(
       rider,
       sourceRider,
       cached.openDetailRiderId === rider.riderId,
-      splitLabels,
+      splitMarkers,
       bootstrap.stage.profile,
-      markerRanksByLabel,
+      markerRanksByKey,
       bootstrap.race.isStageRace,
       bootstrap.stage.stageNumber,
       sidebarData.gcByRiderId,

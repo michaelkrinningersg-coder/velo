@@ -85,6 +85,56 @@ export interface RiderFormSnapshot {
   rForm: number;
 }
 
+export interface RiderRaceFormSource {
+  date: string;
+  amount: number;
+  label: string;
+  type: 'build' | 'free';
+}
+
+export type RiderSeasonFormPhase = 'rise' | 'fall' | 'neutral';
+
+export interface RaceProgram {
+  id: number;
+  name: string;
+}
+
+export interface RaceProgramRace {
+  id: number;
+  programId: number;
+  raceId: number;
+}
+
+export interface RaceProgramProbabilityRule {
+  id: number;
+  roleName: string;
+  spec1: number | null;
+  spec2: number | null;
+  spec3: number | null;
+  programId: number;
+  probability: number;
+}
+
+export interface RiderSeasonProgram {
+  id: number;
+  season: number;
+  riderId: number;
+  programId: number;
+  assignedOn: string;
+  program?: RaceProgram;
+}
+
+export interface RiderProgramRaceSummary {
+  program: RaceProgram;
+  races: Race[];
+}
+
+export interface RaceProgramParticipant {
+  rider: Rider;
+  team: Team | null;
+  program: RaceProgram;
+}
+
 export interface Rider {
   id: number;
   firstName: string;
@@ -123,6 +173,8 @@ export interface Rider {
   activeContractId: number | null;
   contractEndSeason?: number | null;
   seasonPoints?: number;
+  seasonRaceDays?: number;
+  seasonWins?: number;
   formBonus?: number;
   raceFormBonus?: number;
   peakSForm?: number;
@@ -139,6 +191,10 @@ export interface Rider {
   hasSupermalus?: boolean;
   specialFormDelta?: number;
   seasonFormPeakDates?: string[];
+  seasonFormPhase?: RiderSeasonFormPhase;
+  seasonProgram?: RaceProgram | null;
+  seasonProgramRaceIds?: number[];
+  raceFormSources?: RiderRaceFormSource[];
   formHistory?: RiderFormSnapshot[];
   formForecast?: FormDebugPoint[];
   healthStatus?: RiderHealthStatus;
@@ -345,7 +401,6 @@ export interface RaceCategory {
   numberOfTeams: number;
   numberOfRiders: number;
   bonusSystemId: number;
-  roleRequirements: Record<number, number>;
   bonusSystem?: RaceCategoryBonus;
 }
 
@@ -496,7 +551,7 @@ export interface StageResultsPayload {
   markerClassifications?: StageMarkerClassification[];
 }
 
-export interface QuickSimResponse {
+export interface StageResultCommitResponse {
   raceId: number;
   raceName: string;
   stageId: number;
@@ -533,6 +588,7 @@ export interface RealtimeStageCommitEntry {
   riderId: number;
   finishTimeSeconds: number | null;
   finishStatus: RealtimeFinishStatus;
+  isBreakaway?: boolean;
   statusReason?: string | null;
   photoFinishScore?: number;
 }
@@ -542,6 +598,14 @@ export interface RealtimeGcStanding {
   rank: number;
   timeSeconds: number;
   gapSeconds: number;
+}
+
+export interface RealtimeClassificationStanding {
+  riderId: number;
+  rank: number;
+  points: number | null;
+  timeSeconds: number | null;
+  gapSeconds: number | null;
 }
 
 export interface RealtimeClassificationLeaders {
@@ -587,6 +651,9 @@ export interface RealtimeSimulationBootstrap {
   teams: Team[];
   stageSummary: ParsedStageSummary;
   gcStandings: RealtimeGcStanding[];
+  pointsStandings: RealtimeClassificationStanding[];
+  mountainStandings: RealtimeClassificationStanding[];
+  youthStandings: RealtimeClassificationStanding[];
   classificationLeaders: RealtimeClassificationLeaders;
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
@@ -650,7 +717,7 @@ export interface ApiResponse<T> {
 
 // ------ Stage Editor ----------------------------------------
 
-export type RouteImportFormat = 'gpx' | 'tcx';
+export type RouteImportFormat = 'gpx' | 'tcx' | 'csv';
 
 export interface StageEditorSegment {
   startElevation: number;
@@ -711,6 +778,19 @@ export interface StageEditorMetadata {
   finalSpreadDifficultyMultiplier: number;
   crashIncidentMultiplier: number;
   mechanicalIncidentMultiplier: number;
+}
+
+export interface StageEditorExistingStageOption extends StageEditorMetadata {
+  raceName?: string;
+}
+
+export interface StageEditorExistingStageListResponse {
+  stages: StageEditorExistingStageOption[];
+}
+
+export interface StageEditorExistingStageLoadResponse {
+  metadata: StageEditorMetadata;
+  draft: StageEditorDraft;
 }
 
 export interface StageEditorExportRequest {

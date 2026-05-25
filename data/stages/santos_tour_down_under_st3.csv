@@ -1,5 +1,5 @@
 length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
-46.00,0.052,Flat,3,6,start,Santos Tour Down Under Stage 2,,sprint_intermediate,Sprint Birdwood,Sprint
-50.00,0.088,Flat,4,5,,,,,,
-32.00,0.588,Hill,4,6,climb_start,Mt Torrens Rise,,climb_top,Mt Torrens Rise,2
-20.70,-0.184,Flat,6,7,,,,finish_flat,Santos Tour Down Under Stage 2,
+46.00,0.100,Flat,3,6,start,Santos Tour Down Under Stage 2,null,sprint_intermediate,Sprint Birdwood,Sprint
+50.00,0.100,Flat,4,5,climb_start,Mt Torrens Rise,null,,,
+31.60,2.100,Hill,4,6,,,,climb_top,Mt Torrens Rise,3
+20.70,-0.200,Flat,6,7,,,,finish_flat,Santos Tour Down Under Stage 2,null

@@ -46,6 +46,18 @@ const RESULT_TYPE_IDS = {
     youth: 5,
     team: 6,
 };
+const RACE_FORM_BUILD_SOURCE_AMOUNT = 0.25;
+function isMountainClassificationType(markerType, markerCategory) {
+    return markerType === 'climb_top'
+        || ((markerType === 'finish_hill' || markerType === 'finish_mountain') && markerCategory != null && markerCategory !== 'Sprint');
+}
+function resolveMarkerResultsSortPriority(classification) {
+    if (isMountainClassificationType(classification.markerType, classification.markerCategory))
+        return 0;
+    if (classification.markerType === 'sprint_intermediate')
+        return 1;
+    return 2;
+}
 const SEASON_POINT_AWARD_TYPES = [
     'stage_result',
     'one_day_result',
@@ -75,10 +87,15 @@ const RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
-const SEASON_FORM_RISE_DAYS = 28;
-const SEASON_FORM_RISE_STEP_RAW = 9 / SEASON_FORM_RISE_DAYS;
-const SEASON_FORM_FALL_DAYS = 10;
-const SEASON_FORM_MAX_RAW = 9;
+const SEASON_FORM_RISE_DAYS = 42;
+const SEASON_FORM_FALL_DAYS = 14;
+const SEASON_FORM_MAX_RAW = 6;
+const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
+const DIVISION_BY_TIER = {
+    1: 'WorldTour',
+    2: 'ProTour',
+    3: 'U23',
+};
 function resolveDataCsvDir() {
     const candidates = [
         path.resolve(__dirname, '..', '..', '..', 'data', 'csv'),
@@ -183,10 +200,7 @@ function resolvePeakPhase(currentDate, peakDates) {
     const currentDay = isoDateToDayNumber(currentDate);
     for (const peakDate of peakDates) {
         const peakDay = isoDateToDayNumber(peakDate);
-        if (currentDay === peakDay) {
-            return { phase: 'peak', peakDate, elapsedDays: 0 };
-        }
-        if (currentDay > peakDay && currentDay <= peakDay + SEASON_FORM_FALL_DAYS) {
+        if (currentDay >= peakDay && currentDay < peakDay + SEASON_FORM_FALL_DAYS) {
             return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
         }
         if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
@@ -199,10 +213,11 @@ function resolveDeclineValue(peakValue, elapsedDays) {
     if (elapsedDays >= SEASON_FORM_FALL_DAYS) {
         return 0;
     }
-    return roundToTwoDecimals(Math.max(0, peakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
+    const boundedPeakValue = Math.min(SEASON_FORM_MAX_RAW, Math.max(0, peakValue));
+    return roundToTwoDecimals(Math.max(0, boundedPeakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
 }
 function resolveEffectiveSeasonForm(rawSeasonForm) {
-    return roundToTwoDecimals(rawSeasonForm / 10);
+    return roundToTwoDecimals(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, rawSeasonForm)));
 }
 function resolveProjectionPoint(date, peakDates) {
     const phase = resolvePeakPhase(date, peakDates);
@@ -214,13 +229,18 @@ function resolveProjectionPoint(date, peakDates) {
         const sForm = resolveEffectiveSeasonForm(sFormRaw);
         return { sForm, rForm: 0 };
     }
-    if (phase.phase === 'peak') {
-        return { sForm: resolveEffectiveSeasonForm(SEASON_FORM_MAX_RAW), rForm: 0 };
-    }
     return {
         sForm: resolveEffectiveSeasonForm(resolveDeclineValue(SEASON_FORM_MAX_RAW, phase.elapsedDays)),
         rForm: 0,
     };
+}
+function resolveRiderSeasonFormPhase(currentDate, peakDates) {
+    const phase = resolvePeakPhase(currentDate, peakDates);
+    if (!phase)
+        return 'neutral';
+    if (phase.phase === 'build')
+        return 'rise';
+    return 'fall';
 }
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
@@ -316,6 +336,7 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
         stageRaceDayFormCap: row.incident_day_form_cap,
         stageRaceRecuperationPenalty,
         seasonFormPeakDates: peakDates,
+        seasonFormPhase: resolveRiderSeasonFormPhase(_currentDate, peakDates),
         healthStatus: row.health_status ?? 'healthy',
         unavailableUntil: row.unavailable_until,
         unavailableDaysRemaining: row.unavailable_days_remaining ?? 0,
@@ -384,14 +405,6 @@ function mapRaceCategory(row) {
         numberOfTeams: row.category_number_of_teams,
         numberOfRiders: row.category_number_of_riders,
         bonusSystemId: row.category_bonus_system_id,
-        roleRequirements: {
-            1: row.category_role_1,
-            2: row.category_role_2,
-            3: row.category_role_3,
-            4: row.category_role_4,
-            5: row.category_role_5,
-            6: row.category_role_6,
-        },
         bonusSystem,
     };
 }
@@ -521,12 +534,6 @@ function buildRaceSelect() {
            race_categories.number_of_teams AS category_number_of_teams,
            race_categories.number_of_riders AS category_number_of_riders,
            race_categories.bonus_system_id AS category_bonus_system_id,
-           race_categories.role_1 AS category_role_1,
-           race_categories.role_2 AS category_role_2,
-           race_categories.role_3 AS category_role_3,
-           race_categories.role_4 AS category_role_4,
-           race_categories.role_5 AS category_role_5,
-           race_categories.role_6 AS category_role_6,
            race_categories_bonus.name AS bonus_name,
            race_categories_bonus.bonus_seconds_final,
            race_categories_bonus.bonus_seconds_intermediate,
@@ -571,7 +578,7 @@ class GameRepository {
     }
     getCurrentDate() {
         const row = this.db
-            .prepare('SELECT current_date FROM game_state WHERE id = 1')
+            .prepare('SELECT "current_date" AS current_date FROM game_state WHERE id = 1')
             .get();
         if (row?.current_date)
             return row.current_date;
@@ -898,8 +905,249 @@ class GameRepository {
                 ? this.db.prepare(this.getRidersQuery(true, false)).all(season, season)
                 : this.db.prepare(this.getRidersQuery(false, false)).all());
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
-        const riders = rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0));
-        return includeFormDebug ? this.attachFormDebugData(riders, season, currentDate) : riders;
+        const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
+        const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
+        const riders = rows.map((row) => ({
+            ...mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+            raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
+            seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
+            seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
+        }));
+        const ridersWithPrograms = this.attachProgramData(riders, season);
+        return includeFormDebug ? this.attachFormDebugData(ridersWithPrograms, season, currentDate) : ridersWithPrograms;
+    }
+    attachProgramData(riders, season) {
+        if (riders.length === 0 || !tableExists(this.db, 'rider_season_programs') || !tableExists(this.db, 'race_programs')) {
+            return riders;
+        }
+        const riderIds = riders.map((rider) => rider.id);
+        const placeholders = riderIds.map(() => '?').join(', ');
+        const programRows = this.db.prepare(`
+      SELECT rider_season_programs.rider_id,
+             rider_season_programs.program_id,
+             race_programs.name AS program_name
+      FROM rider_season_programs
+      JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+      WHERE rider_season_programs.season = ?
+        AND rider_season_programs.rider_id IN (${placeholders})
+    `).all(season, ...riderIds);
+        const programByRiderId = new Map(programRows.map((row) => [row.rider_id, { id: row.program_id, name: row.program_name }]));
+        const raceRows = tableExists(this.db, 'race_program_races')
+            ? this.db.prepare(`
+          SELECT rider_season_programs.rider_id,
+                 race_program_races.race_id
+          FROM rider_season_programs
+          JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+          WHERE rider_season_programs.season = ?
+            AND rider_season_programs.rider_id IN (${placeholders})
+          ORDER BY race_program_races.race_id ASC
+        `).all(season, ...riderIds)
+            : [];
+        const raceIdsByRiderId = new Map();
+        for (const row of raceRows) {
+            const raceIds = raceIdsByRiderId.get(row.rider_id) ?? [];
+            raceIds.push(row.race_id);
+            raceIdsByRiderId.set(row.rider_id, raceIds);
+        }
+        return riders.map((rider) => ({
+            ...rider,
+            seasonProgram: programByRiderId.get(rider.id) ?? null,
+            seasonProgramRaceIds: raceIdsByRiderId.get(rider.id) ?? [],
+        }));
+    }
+    getRaceProgramsForRace(raceId) {
+        if (!tableExists(this.db, 'race_programs') || !tableExists(this.db, 'race_program_races')) {
+            return [];
+        }
+        const rows = this.db.prepare(`
+      SELECT race_programs.id, race_programs.name
+      FROM race_programs
+      JOIN race_program_races ON race_program_races.program_id = race_programs.id
+      WHERE race_program_races.race_id = ?
+      ORDER BY race_programs.id ASC
+    `).all(raceId);
+        return rows.map((row) => ({ id: row.id, name: row.name }));
+    }
+    getRiderProgramRaceSummary(riderId) {
+        const season = this.getCurrentSeason();
+        if (!tableExists(this.db, 'rider_season_programs') || !tableExists(this.db, 'race_programs')) {
+            return null;
+        }
+        const programRow = this.db.prepare(`
+      SELECT race_programs.id, race_programs.name
+      FROM rider_season_programs
+      JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+      WHERE rider_season_programs.season = ?
+        AND rider_season_programs.rider_id = ?
+    `).get(season, riderId);
+        if (!programRow) {
+            return null;
+        }
+        const raceRows = this.db.prepare(`
+      ${buildRaceSelect()}
+      JOIN race_program_races ON race_program_races.race_id = races.id
+      WHERE race_program_races.program_id = ?
+      ORDER BY races.start_date ASC, races.id ASC
+    `).all(programRow.id);
+        const stagesByRaceId = this.getStagesByRaceIds(raceRows.map(row => row.id));
+        const currentDate = this.getCurrentDate();
+        return {
+            program: { id: programRow.id, name: programRow.name },
+            races: raceRows.map((row) => {
+                const stages = stagesByRaceId.get(row.id) ?? [];
+                return mapRaceWithSummary(row, stages, this.getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
+            }),
+        };
+    }
+    getRaceProgramParticipants(raceId) {
+        const season = this.getCurrentSeason();
+        if (!tableExists(this.db, 'rider_season_programs') || !tableExists(this.db, 'race_program_races')) {
+            return [];
+        }
+        const race = this.getRaces().find((entry) => entry.id === raceId);
+        const targetDivision = race?.category?.tier != null ? DIVISION_BY_TIER[race.category.tier] : undefined;
+        const rows = this.db.prepare(`
+      SELECT rider_season_programs.rider_id,
+             race_programs.id AS program_id,
+             race_programs.name AS program_name
+      FROM rider_season_programs
+      JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+      JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+      WHERE rider_season_programs.season = ?
+        AND race_program_races.race_id = ?
+      ORDER BY race_programs.id ASC, rider_season_programs.rider_id ASC
+    `).all(season, raceId);
+        const ridersById = new Map(this.getRiders().map((rider) => [rider.id, rider]));
+        const teamsById = new Map(this.getTeams().map((team) => [team.id, team]));
+        return rows
+            .map((row) => {
+            const rider = ridersById.get(row.rider_id);
+            if (!rider)
+                return null;
+            return {
+                rider,
+                team: rider.activeTeamId != null ? teamsById.get(rider.activeTeamId) ?? null : null,
+                program: { id: row.program_id, name: row.program_name },
+            };
+        })
+            .filter((entry) => entry != null)
+            .filter((entry) => targetDivision == null || entry.team?.division === targetDivision)
+            .sort((left, right) => {
+            const teamCompare = (left.team?.name ?? '').localeCompare(right.team?.name ?? '', 'de');
+            if (teamCompare !== 0)
+                return teamCompare;
+            const roleCompare = (left.rider.roleId ?? 99) - (right.rider.roleId ?? 99);
+            if (roleCompare !== 0)
+                return roleCompare;
+            return right.rider.overallRating - left.rider.overallRating || left.rider.lastName.localeCompare(right.rider.lastName, 'de');
+        });
+    }
+    getSeasonRaceStatsByRiderId(season) {
+        const statsByRiderId = new Map();
+        if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
+            return statsByRiderId;
+        }
+        const rows = this.db.prepare(`
+      SELECT
+        results.rider_id AS rider_id,
+        COUNT(*) AS race_days,
+        SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      WHERE results.result_type_id = ?
+        AND results.rider_id IS NOT NULL
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+      GROUP BY results.rider_id
+    `).all(RESULT_TYPE_IDS.stage, season);
+        for (const row of rows) {
+            statsByRiderId.set(row.rider_id, {
+                raceDays: row.race_days,
+                wins: row.wins ?? 0,
+            });
+        }
+        return statsByRiderId;
+    }
+    loadRaceFormSourcesByRiderId(riderIds, season, currentDate) {
+        const sourcesByRiderId = new Map();
+        if (riderIds.length === 0) {
+            return sourcesByRiderId;
+        }
+        const labelsByDate = this.loadRaceFormSourceLabelsByDate(season);
+        const placeholders = riderIds.map(() => '?').join(', ');
+        const seasonStart = `${season}-01-01`;
+        const seasonEnd = `${season}-12-31`;
+        if (tableExists(this.db, 'rider_r_form_daily_awards')) {
+            const awardRows = this.db.prepare(`
+        SELECT rider_id, award_date, award_type
+        FROM rider_r_form_daily_awards
+        WHERE rider_id IN (${placeholders})
+          AND award_date >= ?
+          AND award_date <= ?
+          AND award_type = 'build'
+        ORDER BY award_date ASC
+      `).all(...riderIds, seasonStart, seasonEnd);
+            for (const row of awardRows) {
+                const sources = sourcesByRiderId.get(row.rider_id) ?? [];
+                sources.push({
+                    date: row.award_date,
+                    amount: RACE_FORM_BUILD_SOURCE_AMOUNT,
+                    label: labelsByDate.get(row.award_date) ?? 'Rennbonus-Aufbau',
+                    type: 'build',
+                });
+                sourcesByRiderId.set(row.rider_id, sources);
+            }
+        }
+        if (tableExists(this.db, 'rider_r_form_events')) {
+            const eventRows = this.db.prepare(`
+        SELECT rider_id, source_date, amount
+        FROM rider_r_form_events
+        WHERE rider_id IN (${placeholders})
+          AND source_date >= ?
+          AND source_date <= ?
+          AND expires_on > ?
+        ORDER BY source_date ASC
+      `).all(...riderIds, seasonStart, seasonEnd, currentDate);
+            for (const row of eventRows) {
+                const sources = sourcesByRiderId.get(row.rider_id) ?? [];
+                sources.push({
+                    date: row.source_date,
+                    amount: row.amount,
+                    label: labelsByDate.get(row.source_date) ?? 'Freier Rennbonus',
+                    type: 'free',
+                });
+                sourcesByRiderId.set(row.rider_id, sources);
+            }
+        }
+        for (const [riderId, sources] of sourcesByRiderId.entries()) {
+            sourcesByRiderId.set(riderId, sources.sort((left, right) => left.date.localeCompare(right.date) || left.label.localeCompare(right.label, 'de')));
+        }
+        return sourcesByRiderId;
+    }
+    loadRaceFormSourceLabelsByDate(season) {
+        const labelsByDate = new Map();
+        if (!tableExists(this.db, 'stages') || !tableExists(this.db, 'races')) {
+            return labelsByDate;
+        }
+        const rows = this.db.prepare(`
+      SELECT
+        stages.date AS date,
+        stages.stage_number AS stage_number,
+        races.name AS race_name,
+        races.is_stage_race AS is_stage_race
+      FROM stages
+      JOIN races ON races.id = stages.race_id
+      WHERE stages.date >= ?
+        AND stages.date <= ?
+      ORDER BY stages.date ASC, races.id ASC, stages.stage_number ASC
+    `).all(`${season}-01-01`, `${season}-12-31`);
+        for (const row of rows) {
+            const label = row.is_stage_race === 1
+                ? `${row.race_name} Etappe ${row.stage_number}`
+                : row.race_name;
+            const existing = labelsByDate.get(row.date);
+            labelsByDate.set(row.date, existing ? `${existing} / ${label}` : label);
+        }
+        return labelsByDate;
     }
     getRiderById(id) {
         const season = this.getCurrentSeason();
@@ -1440,6 +1688,15 @@ class GameRepository {
         }
         return this.getPreviousGcStandings(stage.raceId, stage.stageNumber);
     }
+    getPreviousPointsStandings(raceId, stageNumber) {
+        return this.getPreviousClassificationStandings(raceId, stageNumber, RESULT_TYPE_IDS.points);
+    }
+    getPreviousMountainStandings(raceId, stageNumber) {
+        return this.getPreviousClassificationStandings(raceId, stageNumber, RESULT_TYPE_IDS.mountain);
+    }
+    getPreviousYouthStandings(raceId, stageNumber) {
+        return this.getPreviousClassificationStandings(raceId, stageNumber, RESULT_TYPE_IDS.youth);
+    }
     getPreviousClassificationLeaders(raceId, stageNumber) {
         return {
             gcLeaderRiderId: this.getPreviousClassificationLeaderRiderId(raceId, stageNumber, RESULT_TYPE_IDS.gc),
@@ -1484,6 +1741,7 @@ class GameRepository {
         results.rank AS rank,
         results.time_seconds AS time_seconds,
         results.points AS points,
+        results.is_breakaway AS is_breakaway,
         results.rider_id AS rider_id,
         riders.first_name AS rider_first_name,
         riders.last_name AS rider_last_name,
@@ -1532,6 +1790,7 @@ class GameRepository {
                         : `${row.rider_first_name ?? ''} ${row.rider_last_name ?? ''}`.trim(),
                     teamId: row.team_id,
                     teamName: row.team_name ?? '',
+                    isBreakaway: resultType.id === RESULT_TYPE_IDS.stage ? row.is_breakaway === 1 : false,
                     timeSeconds: row.time_seconds,
                     gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
                     points: row.points,
@@ -1603,7 +1862,10 @@ class GameRepository {
                 pointsAwarded: row.points_awarded,
                 photoFinishScore: row.photo_finish_score,
             })),
-        }));
+        })).sort((left, right) => (resolveMarkerResultsSortPriority(left) - resolveMarkerResultsSortPriority(right)
+            || left.kmMark - right.kmMark
+            || left.markerLabel.localeCompare(right.markerLabel, 'de')
+            || left.markerKey.localeCompare(right.markerKey, 'de')));
     }
     getStagesForRace(raceId) {
         return this.getStagesByRaceIds([raceId]).get(raceId) ?? [];
@@ -1926,6 +2188,41 @@ class GameRepository {
       LIMIT 1
     `).get(previousStage.stage_id, resultTypeId);
         return row?.rider_id ?? null;
+    }
+    getPreviousClassificationStandings(raceId, stageNumber, resultTypeId) {
+        if (!tableExists(this.db, 'results')) {
+            return [];
+        }
+        const previousStage = this.db.prepare(`
+      SELECT stages.id AS stage_id
+      FROM stages
+      JOIN results ON results.stage_id = stages.id
+      WHERE stages.race_id = ?
+        AND stages.stage_number < ?
+        AND results.result_type_id = ?
+      GROUP BY stages.id, stages.stage_number
+      ORDER BY stages.stage_number DESC
+      LIMIT 1
+    `).get(raceId, stageNumber, resultTypeId);
+        if (!previousStage) {
+            return [];
+        }
+        const rows = this.db.prepare(`
+      SELECT rider_id, rank, time_seconds, points
+      FROM results
+      WHERE stage_id = ?
+        AND result_type_id = ?
+        AND rider_id IS NOT NULL
+      ORDER BY rank ASC
+    `).all(previousStage.stage_id, resultTypeId);
+        const leaderTime = rows.find((row) => row.time_seconds != null)?.time_seconds ?? null;
+        return rows.map((row) => ({
+            riderId: row.rider_id,
+            rank: row.rank,
+            points: row.points,
+            timeSeconds: row.time_seconds,
+            gapSeconds: row.time_seconds != null && leaderTime != null ? Math.max(0, row.time_seconds - leaderTime) : null,
+        }));
     }
 }
 exports.GameRepository = GameRepository;

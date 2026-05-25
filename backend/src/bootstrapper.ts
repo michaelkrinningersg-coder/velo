@@ -589,18 +589,13 @@ function seedSkillWeights(db: Database.Database): void {
 function seedRaceCategories(db: Database.Database): void {
   const rows = readCsv('race_categories.csv');
   const insert = db.prepare(`
-    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id, role_1, role_2, role_3, role_4, role_5, role_6)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `race_categories.csv Zeile ${index + 2}`;
-    const roleRequirements = [1, 2, 3, 4, 5, 6].map((roleId) => int(req(row, `role_${roleId}`, ctx), ctx));
-    const roleRequirementSum = roleRequirements.reduce((sum, value) => sum + value, 0);
     const riderCount = int(req(row, 'number_of_riders', ctx), ctx);
-    if (roleRequirementSum > riderCount) {
-      throw new Error(`${ctx}: Summe der role_* Werte (${roleRequirementSum}) darf number_of_riders (${riderCount}) nicht ueberschreiten.`);
-    }
 
     insert.run(
       int(req(row, 'id', ctx), ctx),
@@ -609,7 +604,6 @@ function seedRaceCategories(db: Database.Database): void {
       int(req(row, 'number_of_teams', ctx), ctx),
       riderCount,
       int(req(row, 'bonus_system_id', ctx), ctx),
-      ...roleRequirements,
     );
   }
 
@@ -640,6 +634,101 @@ function seedRaces(db: Database.Database): void {
   }
 
   console.log(`  ${rows.length} Rennen eingefuegt.`);
+}
+
+function seedRacePrograms(db: Database.Database): void {
+  const rows = readCsv('race_programs.csv');
+  const insert = db.prepare('INSERT INTO race_programs (id, name) VALUES (?, ?)');
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `race_programs.csv Zeile ${index + 2}`;
+    insert.run(
+      int(req(row, 'id', ctx), ctx),
+      req(row, 'name', ctx),
+    );
+  }
+
+  console.log(`  ${rows.length} Rennprogramme eingefuegt.`);
+}
+
+function seedRaceProgramRaces(db: Database.Database): void {
+  const rows = readCsv('race_program_races.csv');
+  const insert = db.prepare('INSERT INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
+  const hasProgram = db.prepare('SELECT 1 FROM race_programs WHERE id = ?');
+  const hasRace = db.prepare('SELECT 1 FROM races WHERE id = ?');
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `race_program_races.csv Zeile ${index + 2}`;
+    const id = int(req(row, 'id', ctx), ctx);
+    const programId = int(req(row, 'program_id', ctx), ctx);
+    const raceId = int(req(row, 'race_id', ctx), ctx);
+    if (!hasProgram.get(programId)) {
+      throw new Error(`${ctx}: program_id ${programId} existiert nicht.`);
+    }
+    if (!hasRace.get(raceId)) {
+      throw new Error(`${ctx}: race_id ${raceId} existiert nicht.`);
+    }
+    insert.run(id, programId, raceId);
+  }
+
+  console.log(`  ${rows.length} Rennprogramm-Rennen-Zuordnungen eingefuegt.`);
+}
+
+function seedRaceProgramProbabilityRules(db: Database.Database): void {
+  const rows = readCsv('race_program_probability_rules.csv');
+  const insert = db.prepare(`
+    INSERT INTO race_program_probability_rules (
+      id, role_name, spec_1, spec_2, spec_3, program_id, probability
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const hasRole = db.prepare('SELECT 1 FROM sta_role WHERE name = ?');
+  const hasRiderType = db.prepare('SELECT 1 FROM type_rider WHERE id = ?');
+  const programs = db.prepare('SELECT id, name FROM race_programs ORDER BY id ASC').all() as Array<{ id: number; name: string }>;
+  let insertedRows = 0;
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `race_program_probability_rules.csv Zeile ${index + 2}`;
+    const matrixId = int(req(row, 'id', ctx), ctx);
+    const roleName = req(row, 'role_name', ctx);
+    const specs = [
+      int(req(row, 'spec_1', ctx), `${ctx} / spec_1`),
+      int(req(row, 'spec_2', ctx), `${ctx} / spec_2`),
+      int(req(row, 'spec_3', ctx), `${ctx} / spec_3`),
+    ].sort((left, right) => left - right);
+
+    if (!hasRole.get(roleName)) {
+      throw new Error(`${ctx}: role_name "${roleName}" existiert nicht in sta_role.`);
+    }
+    for (const spec of specs) {
+      if (!hasRiderType.get(spec)) {
+        throw new Error(`${ctx}: spec ${spec} existiert nicht in type_rider.`);
+      }
+    }
+    if (new Set(specs).size !== 3) {
+      throw new Error(`${ctx}: spec_1, spec_2 und spec_3 muessen drei unterschiedliche type_rider-IDs sein.`);
+    }
+
+    let probabilitySum = 0;
+    for (const program of programs) {
+      const probability = real(req(row, program.name, ctx), `${ctx} / ${program.name}`);
+      if (probability < 0) {
+        throw new Error(`${ctx}: ${program.name} muss groesser oder gleich 0 sein.`);
+      }
+      probabilitySum += probability;
+      insertedRows += 1;
+      insert.run(insertedRows, roleName, specs[0], specs[1], specs[2], program.id, probability);
+    }
+
+    if (Math.abs(probabilitySum - 100) > 0.0001) {
+      throw new Error(`${ctx}: Wahrscheinlichkeiten fuer ${roleName}|${specs.join('|')} ergeben ${probabilitySum}, erwartet 100.`);
+    }
+
+    if (matrixId !== index + 1) {
+      throw new Error(`${ctx}: id ${matrixId} ist nicht fortlaufend, erwartet ${index + 1}.`);
+    }
+  }
+
+  console.log(`  ${rows.length} Matrixregeln gelesen, ${insertedRows} Rennprogramm-Wahrscheinlichkeiten eingefuegt.`);
 }
 
 function seedStages(db: Database.Database): void {
@@ -838,7 +927,7 @@ function seedGameState(db: Database.Database): number {
   const isGameOver = boolFlag(req(row, 'is_game_over', ctx), ctx);
 
   db.prepare(`
-    INSERT OR REPLACE INTO game_state (id, current_date, season, is_game_over)
+    INSERT OR REPLACE INTO game_state (id, "current_date", season, is_game_over)
     VALUES (1, ?, ?, ?)
   `).run(currentDate, season, isGameOver);
 
@@ -930,6 +1019,9 @@ export function bootstrap(force = false): void {
     seedRaceCategories(db);
     seedSkillWeights(db);
     seedRaces(db);
+    seedRacePrograms(db);
+    seedRaceProgramRaces(db);
+    seedRaceProgramProbabilityRules(db);
     seedStages(db);
     seedRiders(db);
     const currentSeason = seedGameState(db);

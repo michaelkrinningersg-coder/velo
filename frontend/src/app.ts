@@ -3,7 +3,7 @@ import type {
   GameStatus,
   GameState,
   ParsedStageSummary,
-  QuickSimResponse,
+  StageResultCommitResponse,
   PrecalculatedRaceIncident,
   PendingStage,
   RaceRosterEditorPayload,
@@ -14,12 +14,15 @@ import type {
   Team,
   Rider,
   Race,
+  RaceProgramParticipant,
+  RiderProgramRaceSummary,
   Stage,
   StageClassification,
   StageFinishMarkerType,
   StageMarker,
   StageEditorClimb,
   StageEditorDraft,
+  StageEditorExistingStageOption,
   StageEditorSegment,
   StageEditorMetadata,
   StageEditorWaypoint,
@@ -50,10 +53,10 @@ const state: {
   selectedResultTypeId: number;
   selectedResultsMarkerKey: string | null;
   selectedDashboardRaceId: number | null;
+  selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
   stageSummariesByStageId: Record<number, ParsedStageSummary | undefined>;
   stageSummaryErrorsByStageId: Record<number, string | undefined>;
-  realtimeBreakawayRiderIdsByStageId: Record<number, number[] | undefined>;
   selectedRealtimeStageId: number | null;
   stageResults: StageResultsPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
@@ -62,12 +65,19 @@ const state: {
     key: TeamTableSortKey;
     direction: 'asc' | 'desc';
   };
-  teamDetailsRiderId: number | null;
+  teamDetailPage: TeamDetailPage;
   stageEditorDraft: StageEditorDraft | null;
+  stageEditorExistingStages: StageEditorExistingStageOption[];
+  stageEditorExistingStagesLoaded: boolean;
   realtimeBootstrap: RealtimeSimulationBootstrap | null;
   realtimeError: string | null;
   rosterEditor: RaceRosterEditorPayload | null;
   rosterEditorSelectedRiderIds: number[];
+  raceParticipants: RaceProgramParticipant[];
+  raceParticipantsSort: {
+    key: RaceParticipantsSortKey;
+    direction: 'asc' | 'desc';
+  };
 } = {
   currentSave: null,
   gameState: null,
@@ -80,10 +90,10 @@ const state: {
   selectedResultTypeId: 1,
   selectedResultsMarkerKey: null,
   selectedDashboardRaceId: null,
+  selectedRaceParticipantsRaceId: null,
   selectedDashboardProfileStageId: null,
   stageSummariesByStageId: {},
   stageSummaryErrorsByStageId: {},
-  realtimeBreakawayRiderIdsByStageId: {},
   selectedRealtimeStageId: null,
   stageResults: null,
   seasonStandings: null,
@@ -92,12 +102,19 @@ const state: {
     key: 'name',
     direction: 'asc',
   },
-  teamDetailsRiderId: null,
+  teamDetailPage: 'skills',
   stageEditorDraft: null,
+  stageEditorExistingStages: [],
+  stageEditorExistingStagesLoaded: false,
   realtimeBootstrap: null,
   realtimeError: null,
   rosterEditor: null,
   rosterEditorSelectedRiderIds: [],
+  raceParticipants: [],
+  raceParticipantsSort: {
+    key: 'team',
+    direction: 'asc',
+  },
 };
 
 let raceSimView: RaceSimView | null = null;
@@ -144,6 +161,18 @@ const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_TOP_METERS = 2000;
 
 function isFinishMarkerType(markerType: StageMarkerType): markerType is StageFinishMarkerType {
   return ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(markerType);
+}
+
+function isMountainFinishMarkerType(markerType: StageMarkerType): markerType is Extract<StageFinishMarkerType, 'finish_hill' | 'finish_mountain'> {
+  return markerType === 'finish_hill' || markerType === 'finish_mountain';
+}
+
+function hasClimbMarkerCategory(category: StageMarkerCategory | null | undefined): category is Exclude<StageMarkerCategory, 'Sprint'> {
+  return category != null && ['HC', '1', '2', '3', '4'].includes(category);
+}
+
+function isMountainClassificationMarkerType(markerType: StageMarkerType, markerCategory: StageMarkerCategory | null | undefined): boolean {
+  return markerType === 'climb_top' || (isMountainFinishMarkerType(markerType) && hasClimbMarkerCategory(markerCategory));
 }
 
 // ============================================================
@@ -240,29 +269,6 @@ function renderResultsParticipant(name: string, strong = true, isBreakaway = fal
   return `<span class="results-participant${isBreakaway ? ' is-breakaway' : ''}">${label}</span>`;
 }
 
-function decorateStageResultsWithRealtimeBreakaways(payload: StageResultsPayload | null): StageResultsPayload | null {
-  if (!payload) {
-    return null;
-  }
-
-  const breakawayRiderIds = state.realtimeBreakawayRiderIdsByStageId[payload.stageId] ?? [];
-  if (breakawayRiderIds.length === 0) {
-    return payload;
-  }
-
-  const breakawayRiderIdSet = new Set(breakawayRiderIds);
-  return {
-    ...payload,
-    classifications: payload.classifications.map((classification) => ({
-      ...classification,
-      rows: classification.rows.map((row) => ({
-        ...row,
-        isBreakaway: row.riderId != null && breakawayRiderIdSet.has(row.riderId),
-      })),
-    })),
-  };
-}
-
 function renderGcRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
   if (previousRank == null || delta == null || delta === 0) {
     return '<span class="results-gc-delta results-gc-delta-neutral">●</span>';
@@ -298,10 +304,25 @@ function formatMarkerLabel(markerType: StageMarkerType, label: string): string {
   if (markerType === 'sprint_intermediate') {
     return `Sprint · ${label}`;
   }
-  if (markerType === 'climb_top') {
+  if (markerType === 'climb_top' || markerType === 'finish_hill' || markerType === 'finish_mountain') {
     return `Bergwertung · ${label}`;
   }
   return label;
+}
+
+function resolveMarkerResultsSortPriority(classification: StageMarkerClassification): number {
+  if (isMountainClassificationMarkerType(classification.markerType, classification.markerCategory)) return 0;
+  if (classification.markerType === 'sprint_intermediate') return 1;
+  return 2;
+}
+
+function sortStageMarkerClassifications(classifications: StageMarkerClassification[]): StageMarkerClassification[] {
+  return [...classifications].sort((left, right) => (
+    resolveMarkerResultsSortPriority(left) - resolveMarkerResultsSortPriority(right)
+    || left.kmMark - right.kmMark
+    || left.markerLabel.localeCompare(right.markerLabel, 'de')
+    || left.markerKey.localeCompare(right.markerKey, 'de')
+  ));
 }
 
 function renderMarkerClassificationsHtml(classifications: StageMarkerClassification[]): string {
@@ -309,7 +330,7 @@ function renderMarkerClassificationsHtml(classifications: StageMarkerClassificat
     return '';
   }
 
-  return classifications.map((classification) => {
+  return sortStageMarkerClassifications(classifications).map((classification) => {
     const rows = classification.entries.map((entry) => {
       const rider = state.riders.find((candidate) => candidate.id === entry.riderId) ?? null;
       const riderName = rider ? `${rider.firstName} ${rider.lastName}` : `Fahrer ${entry.riderId}`;
@@ -372,7 +393,7 @@ function renderSingleMarkerClassificationHtml(classification: StageMarkerClassif
 
 function resolveMarkerResultButtonLabel(classification: StageMarkerClassification): string {
   const markerPrefix = classification.markerType === 'sprint_intermediate' ? 'Sprint' : 'Berg';
-  const categorySuffix = classification.markerType === 'climb_top' && classification.markerCategory
+  const categorySuffix = isMountainClassificationMarkerType(classification.markerType, classification.markerCategory) && classification.markerCategory
     ? ` ${classification.markerCategory}`
     : '';
   return `${markerPrefix}${categorySuffix} · ${classification.markerLabel}`;
@@ -529,7 +550,10 @@ const TEAM_SKILL_COLUMNS: Array<{ key: keyof Rider['skills']; label: string }> =
   { key: 'bikeHandling', label: 'Ftg' },
 ];
 
-type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'seasonPoints' | 'contractEndSeason' | 'roleName' | 'riderType' | keyof Rider['skills'];
+type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
+
+type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
+type RaceParticipantsSortKey = 'team' | 'rider' | 'spec1' | 'role' | 'overall' | 'phase' | 'program';
 
 interface TeamTableColumn {
   id: string;
@@ -559,16 +583,14 @@ const TEAM_SKILL_TITLES: Record<keyof Rider['skills'], string> = {
 
 const TEAM_TABLE_COLUMNS: TeamTableColumn[] = [
   { id: 'name', label: 'Name', title: 'Name - Nachname, Vorname', sortKey: 'name', className: 'team-table-col-name' },
-  { id: 'flag', label: '', title: '', className: 'team-table-col-flag' },
-  { id: 'code', label: 'Country', title: 'Country - Sortierung nach 3er-Code', sortKey: 'countryCode', className: 'team-table-col-code' },
-  { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
+  { id: 'country', label: 'Country', title: 'Country - Flagge und 3er-Code', sortKey: 'countryCode', className: 'team-table-col-country' },
   { id: 'age', label: 'Alt', title: 'Alter', sortKey: 'age', className: 'team-table-col-age' },
-  { id: 'overallRating', label: 'Ges', title: 'Gesamtstärke', sortKey: 'overallRating', className: 'team-table-col-overall' },
-  { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
-  { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
-  { id: 'seasonPoints', label: 'Pkt', title: 'Saisonpunkte - kumulierte Punkte der aktuellen Saison', sortKey: 'seasonPoints', className: 'team-table-col-points' },
-  { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
   { id: 'roleName', label: 'Rolle', title: 'Teamrolle des Fahrers', sortKey: 'roleName', className: 'team-table-col-role' },
+];
+
+const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]> = {
+  skills: [
+  { id: 'overallRating', label: 'Ges', title: 'Gesamtstärke', sortKey: 'overallRating', className: 'team-table-col-overall' },
   ...TEAM_SKILL_COLUMNS.map((column) => ({
     id: column.key,
     label: column.label,
@@ -576,10 +598,45 @@ const TEAM_TABLE_COLUMNS: TeamTableColumn[] = [
     sortKey: column.key,
     className: 'team-table-col-skill',
   })),
-  { id: 'info', label: 'Info', title: 'Info - Profil und Vorlieben anzeigen', sortKey: 'riderType', className: 'team-table-col-info' },
-];
+  ],
+  form: [
+    { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
+    { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
+    { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
+    { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
+    { id: 'seasonFormPhase', label: 'Phase', title: 'Formphase', className: 'team-table-col-phase' },
+    { id: 'seasonPoints', label: 'Pkt', title: 'Saisonpunkte - kumulierte Punkte der aktuellen Saison', sortKey: 'seasonPoints', className: 'team-table-col-points' },
+    { id: 'seasonRaceDays', label: 'Renntage', title: 'Renntage in der laufenden Saison', sortKey: 'seasonRaceDays', className: 'team-table-col-points' },
+    { id: 'seasonWins', label: 'Siege', title: 'Siege in der laufenden Saison', sortKey: 'seasonWins', className: 'team-table-col-points' },
+    { id: 'peak1', label: 'Peak 1', title: 'Erster Formhöhepunkt', sortKey: 'peak1', className: 'team-table-col-date' },
+    { id: 'peak2', label: 'Peak 2', title: 'Zweiter Formhöhepunkt', sortKey: 'peak2', className: 'team-table-col-date' },
+    { id: 'peak3', label: 'Peak 3', title: 'Dritter Formhöhepunkt', sortKey: 'peak3', className: 'team-table-col-date' },
+  ],
+  profile: [
+    { id: 'specialization1', label: 'Spec1', title: 'Spezialisierung 1', sortKey: 'specialization1', className: 'team-table-col-profile' },
+    { id: 'specialization2', label: 'Spec2', title: 'Spezialisierung 2', sortKey: 'specialization2', className: 'team-table-col-profile' },
+    { id: 'specialization3', label: 'Spec3', title: 'Spezialisierung 3', sortKey: 'specialization3', className: 'team-table-col-profile' },
+    { id: 'skillDevelopment', label: 'Entw.', title: 'Skill Development', sortKey: 'skillDevelopment', className: 'team-table-col-points' },
+  ],
+  preferences: [
+    { id: 'seasonProgram', label: 'Programm', title: 'Saisonprogramm', className: 'team-table-col-program' },
+    { id: 'favoriteRaces', label: 'Favs', title: 'Lieblingsrennen', className: 'team-table-col-preferences' },
+    { id: 'nonFavoriteRaces', label: 'Nos', title: 'Nicht bevorzugte Rennen', className: 'team-table-col-preferences' },
+  ],
+};
 
-const TEAM_TABLE_COLUMN_COUNT = TEAM_TABLE_COLUMNS.length;
+const TEAM_DETAIL_PAGE_LABELS: Record<TeamDetailPage, string> = {
+  skills: 'Skills',
+  form: 'Form',
+  profile: 'Profil',
+  preferences: 'Vorlieben',
+};
+
+const TEAM_DETAIL_PAGE_ORDER: TeamDetailPage[] = ['skills', 'form', 'profile', 'preferences'];
+
+function getActiveTeamTableColumns(): TeamTableColumn[] {
+  return [...TEAM_TABLE_COLUMNS, ...TEAM_DETAIL_PAGE_COLUMNS[state.teamDetailPage]];
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -623,8 +680,11 @@ function renderSkillValue(value: number): string {
 
 function renderRaceFormBonusValue(value: number | undefined): string {
   const amount = value ?? 0;
-  if (amount <= 0) {
-    return '–';
+  if (amount < 0) {
+    return `${amount.toFixed(1).replace('.', ',')}`;
+  }
+  if (amount === 0) {
+    return '0,0';
   }
   return `<span class="race-sim-form-positive">+${amount.toFixed(1).replace('.', ',')}</span>`;
 }
@@ -632,11 +692,29 @@ function renderRaceFormBonusValue(value: number | undefined): string {
 function renderSeasonFormValue(value: number | undefined): string {
   const amount = value ?? 0;
   if (amount === 0) {
-    return '–';
+    return '0,0';
   }
   const className = amount > 0 ? 'race-sim-form-positive' : 'race-sim-form-negative';
   const prefix = amount > 0 ? '+' : '';
   return `<span class="${className}">${prefix}${amount.toFixed(1).replace('.', ',')}</span>`;
+}
+
+function renderSeasonFormPhase(rider: Rider): string {
+  const phase = rider.seasonFormPhase ?? 'neutral';
+  const meta: Record<string, { symbol: string; label: string; className: string }> = {
+    rise: { symbol: '↑', label: 'Aufbau', className: 'team-form-phase-rise' },
+    fall: { symbol: '↓', label: 'Abbau', className: 'team-form-phase-fall' },
+    neutral: { symbol: '●', label: 'Neutral', className: 'team-form-phase-neutral' },
+  };
+  const item = meta[phase] ?? meta['neutral'];
+  return `<span class="team-form-phase ${item.className}" title="${esc(item.label)}">${item.symbol}</span>`;
+}
+
+function renderRiderProgramButton(rider: Rider): string {
+  if (!rider.seasonProgram) {
+    return '–';
+  }
+  return `<button type="button" class="team-program-button" data-rider-program-id="${rider.id}">${esc(rider.seasonProgram.name)}</button>`;
 }
 
 const FLAG_CODE_BY_CODE3: Record<string, string> = {
@@ -932,7 +1010,7 @@ function describeMarkerScope(scope: 'start' | 'end', segmentIndex: number, total
 
 function collectStageEditorClimbPairIssues(draft: StageEditorDraft): Map<number, string[]> {
   const issuesBySegment = new Map<number, string[]>();
-  const openClimbs = new Map<string, number[]>();
+  const openClimbs: Array<{ name: string | null; segmentIndex: number }> = [];
 
   const pushIssue = (segmentIndex: number, issue: string): void => {
     const bucket = issuesBySegment.get(segmentIndex) ?? [];
@@ -946,45 +1024,40 @@ function collectStageEditorClimbPairIssues(draft: StageEditorDraft): Map<number,
         return;
       }
 
-      if (!marker.name) {
-        pushIssue(segmentIndex, 'climb_start braucht einen Namen fuer die Paarbildung.');
-        return;
-      }
-
-      const bucket = openClimbs.get(marker.name) ?? [];
-      bucket.push(segmentIndex);
-      openClimbs.set(marker.name, bucket);
+      openClimbs.push({ name: marker.name ?? null, segmentIndex });
     });
 
     segment.endMarkers.forEach((marker) => {
-      if (marker.type !== 'climb_top') {
+      if (!isMountainClassificationMarkerType(marker.type, marker.cat)) {
         return;
       }
 
       if (!marker.name) {
-        pushIssue(segmentIndex, 'climb_top braucht einen Namen fuer die Paarbildung.');
+        pushIssue(segmentIndex, `${marker.type} braucht einen Namen fuer die Paarbildung.`);
         return;
       }
 
-      const bucket = openClimbs.get(marker.name) ?? [];
-      const startSegmentIndex = bucket.pop();
-      if (startSegmentIndex == null) {
-        pushIssue(segmentIndex, `climb_top \"${marker.name}\" braucht einen vorherigen climb_start mit gleichem Namen.`);
+      let matchingIndex = -1;
+      for (let index = openClimbs.length - 1; index >= 0; index -= 1) {
+        if (openClimbs[index]?.name === marker.name) {
+          matchingIndex = index;
+          break;
+        }
+      }
+
+      const openIndex = matchingIndex >= 0 ? matchingIndex : openClimbs.length - 1;
+      if (openIndex < 0) {
+        pushIssue(segmentIndex, `${marker.type} \"${marker.name}\" braucht einen vorherigen climb_start.`);
         return;
       }
 
-      if (bucket.length === 0) {
-        openClimbs.delete(marker.name);
-      } else {
-        openClimbs.set(marker.name, bucket);
-      }
+      openClimbs.splice(openIndex, 1);
     });
   });
 
-  openClimbs.forEach((segmentIndexes, climbName) => {
-    segmentIndexes.forEach((segmentIndex) => {
-      pushIssue(segmentIndex, `climb_start \"${climbName}\" braucht einen spaeteren climb_top mit gleichem Namen.`);
-    });
+  openClimbs.forEach((openClimb) => {
+    const climbLabel = openClimb.name ? ` \"${openClimb.name}\"` : '';
+    pushIssue(openClimb.segmentIndex, `climb_start${climbLabel} braucht einen spaeteren climb_top oder kategorisierten finish_hill/finish_mountain.`);
   });
 
   return issuesBySegment;
@@ -993,6 +1066,9 @@ function collectStageEditorClimbPairIssues(draft: StageEditorDraft): Map<number,
 function normalizeMarkerForType(marker: StageMarker): StageMarker {
   if (marker.type === 'climb_top') {
     return { ...marker, cat: marker.cat && ['HC', '1', '2', '3', '4'].includes(marker.cat) ? marker.cat : '4' };
+  }
+  if (isMountainFinishMarkerType(marker.type)) {
+    return { ...marker, cat: hasClimbMarkerCategory(marker.cat) ? marker.cat : null };
   }
   if (marker.type === 'sprint_intermediate') {
     return { ...marker, cat: marker.cat === 'Sprint' ? marker.cat : 'Sprint' };
@@ -1044,8 +1120,8 @@ function getStageEditorSegmentIssuesAt(draft: StageEditorDraft, segmentIndex: nu
     if (marker.type === 'start' || marker.type === 'climb_start') {
       issues.push(`${marker.type} gehoert in den Startmarker-Slot.`);
     }
-    if (marker.type === 'climb_top' && (marker.cat == null || !['HC', '1', '2', '3', '4'].includes(marker.cat))) {
-      issues.push('climb_top braucht Kategorie HC oder 1-4.');
+    if (isMountainClassificationMarkerType(marker.type, marker.cat) && !hasClimbMarkerCategory(marker.cat)) {
+      issues.push(`${marker.type} braucht Kategorie HC oder 1-4.`);
     }
   });
 
@@ -1053,8 +1129,11 @@ function getStageEditorSegmentIssuesAt(draft: StageEditorDraft, segmentIndex: nu
     if (marker.type === 'sprint_intermediate' && marker.cat != null && marker.cat !== 'Sprint') {
       issues.push('Sprintmarker erlaubt nur Kategorie Sprint.');
     }
-    if (isFinishMarkerType(marker.type) && marker.cat != null) {
-      issues.push('Finishmarker duerfen keine Kategorie haben.');
+    if (isFinishMarkerType(marker.type) && !isMountainFinishMarkerType(marker.type) && marker.cat != null) {
+      issues.push('finish_flat und finish_TT duerfen keine Kategorie haben.');
+    }
+    if (isMountainFinishMarkerType(marker.type) && marker.cat != null && !hasClimbMarkerCategory(marker.cat)) {
+      issues.push(`${marker.type} erlaubt nur Kategorie HC oder 1-4.`);
     }
   });
 
@@ -1238,6 +1317,12 @@ function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
   if (draft.segments.length === 0) return;
 
   draft.waypoints = buildStageEditorWaypointsFromSegments(draft.segments);
+  if (draft.sourceFormat === 'csv') {
+    const climbs = detectStageEditorClimbs(draft.waypoints);
+    draft.climbs = climbs.map(({ startIndex: _startIndex, topIndex: _topIndex, topElevation: _topElevation, ...climb }) => climb);
+    return;
+  }
+
   const nextTerrains = draft.segments.map((segment) => (isManualStageEditorTerrain(segment.terrain) ? segment.terrain : 'Flat' as StageTerrain));
   const climbs = detectStageEditorClimbs(draft.waypoints);
   draft.climbs = climbs.map(({ startIndex: _startIndex, topIndex: _topIndex, topElevation: _topElevation, ...climb }) => climb);
@@ -1446,6 +1531,75 @@ function setStageEditorDefaults(draft: StageEditorDraft): void {
   }
 }
 
+function setStageEditorMetadataFields(metadata: StageEditorMetadata): void {
+  $<HTMLInputElement>('stage-editor-stage-id').value = String(metadata.stageId);
+  $<HTMLInputElement>('stage-editor-race-id').value = String(metadata.raceId);
+  $<HTMLInputElement>('stage-editor-stage-number').value = String(metadata.stageNumber);
+  $<HTMLInputElement>('stage-editor-date').value = metadata.date;
+  $<HTMLInputElement>('stage-editor-details-file').value = metadata.detailsCsvFile;
+  const profileSelect = $<HTMLSelectElement>('stage-editor-profile');
+  profileSelect.innerHTML = stageProfileOptionsHtml(metadata.profile);
+  profileSelect.value = metadata.profile;
+  $<HTMLInputElement>('stage-editor-final-spread-start').value = String(metadata.finalSpreadStartPercent);
+  $<HTMLInputElement>('stage-editor-final-push-start').value = String(metadata.finalPushStartPercent);
+  $<HTMLInputElement>('stage-editor-final-spread-difficulty').value = String(metadata.finalSpreadDifficultyMultiplier);
+  $<HTMLInputElement>('stage-editor-crash-multiplier').value = String(metadata.crashIncidentMultiplier);
+  $<HTMLInputElement>('stage-editor-mechanical-multiplier').value = String(metadata.mechanicalIncidentMultiplier);
+}
+
+function renderStageEditorExistingStages(): void {
+  const select = $<HTMLSelectElement>('stage-editor-existing-stage');
+  const button = $<HTMLButtonElement>('btn-stage-editor-load-existing');
+  const hint = $('stage-editor-existing-hint');
+
+  if (!state.stageEditorExistingStagesLoaded) {
+    select.innerHTML = '<option value="">CSV-Stages werden geladen...</option>';
+    button.disabled = true;
+    hint.textContent = 'CSV-Stages werden beim Öffnen des Editors geladen.';
+    return;
+  }
+
+  if (state.stageEditorExistingStages.length === 0) {
+    select.innerHTML = '<option value="">Keine CSV-Stages gefunden</option>';
+    button.disabled = true;
+    hint.textContent = 'Keine Einträge in data/csv/stages.csv gefunden.';
+    return;
+  }
+
+  select.innerHTML = state.stageEditorExistingStages.map((stage) => {
+    const label = [
+      stage.raceName ?? `Race ${stage.raceId}`,
+      `Etappe ${stage.stageNumber}`,
+      stage.date,
+      stage.profile,
+      stage.detailsCsvFile,
+    ].join(' · ');
+    return `<option value="${stage.stageId}">${esc(label)}</option>`;
+  }).join('');
+  button.disabled = false;
+  hint.textContent = `${state.stageEditorExistingStages.length} CSV-Stages verfügbar. Export lädt neue Dateien herunter und schreibt nichts automatisch.`;
+}
+
+async function loadStageEditorExistingStages(force = false): Promise<void> {
+  if (state.stageEditorExistingStagesLoaded && !force) {
+    renderStageEditorExistingStages();
+    return;
+  }
+
+  state.stageEditorExistingStagesLoaded = false;
+  renderStageEditorExistingStages();
+  const res = await api.listStageEditorStages();
+  state.stageEditorExistingStagesLoaded = true;
+  if (!res.success || !res.data) {
+    state.stageEditorExistingStages = [];
+    renderStageEditorExistingStages();
+    $('stage-editor-existing-hint').textContent = `CSV-Stages konnten nicht geladen werden: ${res.error ?? 'Unbekannter Fehler'}`;
+    return;
+  }
+  state.stageEditorExistingStages = res.data.stages;
+  renderStageEditorExistingStages();
+}
+
 function updateStageEditorSegment(index: number, field: 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
   if (!state.stageEditorDraft) return;
   const segment = state.stageEditorDraft.segments[index];
@@ -1619,6 +1773,7 @@ function renderStageEditorChart(draft: StageEditorDraft | null): string {
 }
 
 function renderStageEditor(): void {
+  renderStageEditorExistingStages();
   const draft = state.stageEditorDraft;
   const summary = $('stage-editor-import-summary');
   const warnings = $('stage-editor-warnings');
@@ -1636,7 +1791,7 @@ function renderStageEditor(): void {
     emptyState.classList.remove('hidden');
     chart.innerHTML = renderStageEditorChart(null);
     tbody.innerHTML = `<tr><td colspan="${STAGE_EDITOR_TABLE_COLUMN_COUNT}" class="text-muted">Keine Segmente vorhanden.</td></tr>`;
-    exportHint.textContent = 'Importiere zuerst eine Datei.';
+    exportHint.textContent = 'Importiere oder lade zuerst eine Strecke. Export erzeugt Downloads und überschreibt keine Masterdateien automatisch.';
     exportButton.disabled = true;
     return;
   }
@@ -1694,7 +1849,7 @@ function renderStageEditor(): void {
   exportButton.disabled = alertItems.length > 0;
   exportHint.textContent = alertItems.length > 0
     ? `${alertItems.length} Validierungshinweise vor dem Export.`
-    : `Exportiert ${$<HTMLInputElement>('stage-editor-details-file').value || 'stage_details.csv'} und eine stages-Row.`;
+    : `Exportiert ${$<HTMLInputElement>('stage-editor-details-file').value || 'stage_details.csv'} und eine stages-Row als Download.`;
 }
 
 function updateStageEditorWaypoint(index: number, field: 'startElevation' | keyof StageEditorSegment | 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
@@ -1822,9 +1977,35 @@ async function onStageEditorImport(): Promise<void> {
   }
 }
 
+async function onStageEditorLoadExisting(): Promise<void> {
+  const stageId = Number($<HTMLSelectElement>('stage-editor-existing-stage').value);
+  if (!Number.isInteger(stageId) || stageId <= 0) {
+    alert('Bitte zuerst eine vorhandene CSV-Stage auswählen.');
+    return;
+  }
+
+  showLoading('CSV-Stage wird geladen...');
+  try {
+    const res = await api.loadStageEditorStage(stageId);
+    if (!res.success || !res.data) {
+      alert(`Stage konnte nicht geladen werden: ${res.error ?? 'Unbekannter Fehler'}`);
+      return;
+    }
+
+    const normalizedDraft = normalizeStageEditorDraft(res.data.draft);
+    state.stageEditorDraft = normalizedDraft;
+    ensureStageEditorBoundaryMarkers(normalizedDraft);
+    setStageEditorMetadataFields(res.data.metadata);
+    renderStageEditor();
+    activateView('stage-editor');
+  } finally {
+    hideLoading();
+  }
+}
+
 async function onStageEditorExport(): Promise<void> {
   if (!state.stageEditorDraft) {
-    alert('Es gibt noch keine importierte Strecke.');
+    alert('Es gibt noch keine importierte oder geladene Strecke.');
     return;
   }
 
@@ -1909,9 +2090,122 @@ function compareStrings(left: string, right: string): number {
   return left.localeCompare(right, 'de', { sensitivity: 'base' });
 }
 
+function compareOptionalStrings(left: string | null | undefined, right: string | null | undefined): number {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return compareStrings(left, right);
+}
+
+function getPeakDate(rider: Rider, index: number): string | undefined {
+  return rider.seasonFormPeakDates?.[index];
+}
+
+function getSpecializationSortLabel(value: Rider['specialization1']): string | undefined {
+  return value == null ? undefined : getRiderSpecializationLabel(value);
+}
+
+function getDefaultTeamSortDirection(sortKey: TeamTableSortKey): 'asc' | 'desc' {
+  return ['birthYear', 'age', 'overallRating', 'formBonus', 'raceFormBonus', 'seasonPoints', 'seasonRaceDays', 'seasonWins', 'skillDevelopment', ...TEAM_SKILL_COLUMNS.map((column) => column.key)].includes(sortKey)
+    ? 'desc'
+    : 'asc';
+}
+
 function getSortIndicator(sortKey: TeamTableSortKey): string {
   if (state.teamTableSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
   return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.teamTableSort.direction === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+function getRaceParticipantsSortIndicator(sortKey: RaceParticipantsSortKey): string {
+  if (state.raceParticipantsSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
+  return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.raceParticipantsSort.direction === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+function renderRaceParticipantsHeader(label: string, sortKey: RaceParticipantsSortKey, title: string): string {
+  const activeClass = state.raceParticipantsSort.key === sortKey ? ' race-participants-sort-active' : '';
+  return `
+    <th>
+      <button
+        type="button"
+        class="race-participants-sort${activeClass}"
+        data-race-participants-sort="${sortKey}"
+        title="${esc(title)}"
+        aria-label="${esc(title)}"
+      >
+        <span>${esc(label)}</span>
+        ${getRaceParticipantsSortIndicator(sortKey)}
+      </button>
+    </th>`;
+}
+
+function getDefaultRaceParticipantsSortDirection(sortKey: RaceParticipantsSortKey): 'asc' | 'desc' {
+  return sortKey === 'overall' ? 'desc' : 'asc';
+}
+
+function getSpecLabel(rider: Rider): string {
+  if (rider.specialization1) {
+    return rider.specialization1;
+  }
+
+  return getSpecIdLabel(rider.specialization1Id);
+}
+
+function getSpecIdLabel(specId: number | null | undefined): string {
+  switch (specId) {
+    case 1:
+      return 'Berg';
+    case 2:
+      return 'Hill';
+    case 3:
+      return 'Sprint';
+    case 4:
+      return 'Timetrial';
+    case 5:
+      return 'Cobble';
+    case 6:
+      return 'Attacker';
+    default:
+      return 'Keine Spezialisierung';
+  }
+}
+
+function getRaceParticipantPhaseRank(participant: RaceProgramParticipant): number {
+  const order: Record<string, number> = { rise: 0, neutral: 1, fall: 2 };
+  return order[participant.rider.seasonFormPhase ?? 'neutral'] ?? order['neutral'];
+}
+
+function sortRaceParticipants(participants: RaceProgramParticipant[]): RaceProgramParticipant[] {
+  const direction = state.raceParticipantsSort.direction === 'asc' ? 1 : -1;
+  return [...participants].sort((left, right) => {
+    let result = 0;
+    switch (state.raceParticipantsSort.key) {
+      case 'team':
+        result = compareOptionalStrings(left.team?.name, right.team?.name) || compareOptionalStrings(left.team?.abbreviation, right.team?.abbreviation);
+        break;
+      case 'rider':
+        result = compareStrings(formatRiderName(left.rider), formatRiderName(right.rider));
+        break;
+      case 'spec1':
+        result = compareStrings(getSpecLabel(left.rider), getSpecLabel(right.rider));
+        break;
+      case 'role':
+        result = compareStrings(getRiderRoleName(left.rider), getRiderRoleName(right.rider));
+        break;
+      case 'overall':
+        result = left.rider.overallRating - right.rider.overallRating;
+        break;
+      case 'phase':
+        result = getRaceParticipantPhaseRank(left) - getRaceParticipantPhaseRank(right);
+        break;
+      case 'program':
+        result = compareStrings(left.program.name, right.program.name);
+        break;
+      default:
+        result = 0;
+    }
+
+    return (result || compareStrings(formatRiderName(left.rider), formatRiderName(right.rider))) * direction;
+  });
 }
 
 function renderTeamTableHeader(column: TeamTableColumn): string {
@@ -1933,6 +2227,144 @@ function renderTeamTableHeader(column: TeamTableColumn): string {
         ${getSortIndicator(column.sortKey)}
       </button>
     </th>`;
+}
+
+function renderTeamDetailPageTabs(): string {
+  return `
+    <div class="team-detail-page-tabs" role="tablist" aria-label="Fahrer-Detailseite">
+      ${TEAM_DETAIL_PAGE_ORDER.map((page) => `
+        <button
+          type="button"
+          class="team-detail-page-tab${state.teamDetailPage === page ? ' team-detail-page-tab-active' : ''}"
+          data-team-detail-page="${page}"
+          aria-selected="${state.teamDetailPage === page ? 'true' : 'false'}"
+        >${esc(TEAM_DETAIL_PAGE_LABELS[page])}</button>
+      `).join('')}
+    </div>`;
+}
+
+function renderTeamCountryCell(rider: Rider): string {
+  const countryCode = getRiderCountryCode(rider);
+  return `<span class="team-table-country-cell">${renderFlag(countryCode)}<span>${esc(countryCode)}</span></span>`;
+}
+
+function renderRiderTags(rider: Rider): string {
+  const tags = [
+    rider.hasGrandTourTag ? 'Grand Tour' : null,
+    rider.hasStageRaceTag ? 'Etappenrennen' : null,
+    rider.hasOneDayClassicTag ? 'One Day Classic' : null,
+  ].filter((value): value is string => value != null);
+  return tags.length > 0 ? tags.map(esc).join(', ') : '–';
+}
+
+function renderRiderRaceFocus(rider: Rider): string {
+  const focus = [
+    rider.isStageRacer ? 'Etappenrennen' : null,
+    rider.isOneDayRacer ? 'Eintagesrennen' : null,
+  ].filter((value): value is string => value != null);
+  return focus.length > 0 ? focus.join(', ') : '–';
+}
+
+function renderRaceFormSourceList(rider: Rider): string {
+  const sources = rider.raceFormSources ?? [];
+  if (sources.length === 0) {
+    return '–';
+  }
+
+  return `<div class="team-table-source-list">${sources.map((source) => `
+    <span class="team-table-source-item" title="${esc(source.date)} · +${source.amount.toFixed(2).replace('.', ',')}">
+      ${esc(formatDate(source.date))}: ${esc(source.label)} <span class="text-muted">+${source.amount.toFixed(2).replace('.', ',')}</span>
+    </span>
+  `).join('')}</div>`;
+}
+
+function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
+  switch (column.id) {
+    case 'name':
+      return `<td class="team-table-name-cell"><strong>${esc(formatRiderName(rider))}</strong>${renderRiderAvailabilityMarker(rider)}</td>`;
+    case 'country':
+      return `<td>${renderTeamCountryCell(rider)}</td>`;
+    case 'age':
+      return `<td>${rider.age ?? '–'}</td>`;
+    case 'roleName':
+      return `<td>${esc(getRiderRoleName(rider))}</td>`;
+    case 'overallRating':
+      return `<td>${renderSkillValue(rider.overallRating)}</td>`;
+    case 'birthYear':
+      return `<td>${rider.birthYear}</td>`;
+    case 'contractEndSeason':
+      return `<td>${rider.contractEndSeason ?? '–'}</td>`;
+    case 'formBonus':
+      return `<td>${renderSeasonFormValue(rider.formBonus)}</td>`;
+    case 'raceFormBonus':
+      return `<td>${renderRaceFormBonusValue(rider.raceFormBonus)}</td>`;
+    case 'seasonFormPhase':
+      return `<td>${renderSeasonFormPhase(rider)}</td>`;
+    case 'raceFormSources':
+      return `<td class="team-table-wrap-cell">${renderRaceFormSourceList(rider)}</td>`;
+    case 'seasonPoints':
+      return `<td>${rider.seasonPoints ?? 0}</td>`;
+    case 'seasonRaceDays':
+      return `<td>${rider.seasonRaceDays ?? 0}</td>`;
+    case 'seasonWins':
+      return `<td>${rider.seasonWins ?? 0}</td>`;
+    case 'peak1':
+      return `<td>${esc(getPeakDate(rider, 0) ?? '–')}</td>`;
+    case 'peak2':
+      return `<td>${esc(getPeakDate(rider, 1) ?? '–')}</td>`;
+    case 'peak3':
+      return `<td>${esc(getPeakDate(rider, 2) ?? '–')}</td>`;
+    case 'riderType':
+      return `<td>${esc(getRiderSpecializationLabel(rider.riderType))}</td>`;
+    case 'specialization1':
+      return `<td>${esc(rider.specialization1 ? getRiderSpecializationLabel(rider.specialization1) : '–')}</td>`;
+    case 'specialization2':
+      return `<td>${esc(rider.specialization2 ? getRiderSpecializationLabel(rider.specialization2) : '–')}</td>`;
+    case 'specialization3':
+      return `<td>${esc(rider.specialization3 ? getRiderSpecializationLabel(rider.specialization3) : '–')}</td>`;
+    case 'tags':
+      return `<td class="team-table-wrap-cell">${renderRiderTags(rider)}</td>`;
+    case 'raceFocus':
+      return `<td class="team-table-wrap-cell">${renderRiderRaceFocus(rider)}</td>`;
+    case 'skillDevelopment':
+      return `<td>${rider.skillDevelopment ?? '–'}</td>`;
+    case 'favoriteRaces':
+      return `<td class="team-table-wrap-cell">${renderRacePrefs(rider.favoriteRaces)}</td>`;
+    case 'nonFavoriteRaces':
+      return `<td class="team-table-wrap-cell">${renderRacePrefs(rider.nonFavoriteRaces)}</td>`;
+    case 'seasonProgram':
+      return `<td>${renderRiderProgramButton(rider)}</td>`;
+    default:
+      if (column.id in rider.skills) {
+        const skillKey = column.id as keyof Rider['skills'];
+        return `<td>${renderSkillValue(rider.skills[skillKey])}</td>`;
+      }
+      return '<td>–</td>';
+  }
+}
+
+function getTeamSortLabel(sortKey: TeamTableSortKey): string {
+  if (sortKey === 'name') return 'Nachname';
+  if (sortKey === 'countryCode') return 'Country';
+  if (sortKey === 'birthYear') return 'Jahrgang';
+  if (sortKey === 'age') return 'Alter';
+  if (sortKey === 'overallRating') return 'Gesamt';
+  if (sortKey === 'formBonus') return 'Saisonform';
+  if (sortKey === 'raceFormBonus') return 'Rennbonus';
+  if (sortKey === 'seasonPoints') return 'Saisonpunkte';
+  if (sortKey === 'seasonRaceDays') return 'Renntage';
+  if (sortKey === 'seasonWins') return 'Siege';
+  if (sortKey === 'contractEndSeason') return 'Vertragsende';
+  if (sortKey === 'roleName') return 'Rolle';
+  if (sortKey === 'riderType') return 'Profil';
+  if (sortKey === 'specialization1') return 'Spec1';
+  if (sortKey === 'specialization2') return 'Spec2';
+  if (sortKey === 'specialization3') return 'Spec3';
+  if (sortKey === 'skillDevelopment') return 'Skill Development';
+  if (sortKey === 'peak1') return 'Peak 1';
+  if (sortKey === 'peak2') return 'Peak 2';
+  if (sortKey === 'peak3') return 'Peak 3';
+  return TEAM_SKILL_TITLES[sortKey];
 }
 
 function sortTeamRiders(riders: Rider[]): Rider[] {
@@ -1967,6 +2399,12 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
       case 'seasonPoints':
         comparison = (left.seasonPoints ?? 0) - (right.seasonPoints ?? 0);
         break;
+      case 'seasonRaceDays':
+        comparison = (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0);
+        break;
+      case 'seasonWins':
+        comparison = (left.seasonWins ?? 0) - (right.seasonWins ?? 0);
+        break;
       case 'contractEndSeason':
         comparison = (left.contractEndSeason ?? Number.MAX_SAFE_INTEGER) - (right.contractEndSeason ?? Number.MAX_SAFE_INTEGER);
         break;
@@ -1976,6 +2414,27 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
       case 'riderType':
         comparison = compareStrings(left.riderType, right.riderType)
           || compareStrings(formatRiderName(left), formatRiderName(right));
+        break;
+      case 'skillDevelopment':
+        comparison = (left.skillDevelopment ?? 0) - (right.skillDevelopment ?? 0);
+        break;
+      case 'specialization1':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization1), getSpecializationSortLabel(right.specialization1));
+        break;
+      case 'specialization2':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization2), getSpecializationSortLabel(right.specialization2));
+        break;
+      case 'specialization3':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization3), getSpecializationSortLabel(right.specialization3));
+        break;
+      case 'peak1':
+        comparison = compareOptionalStrings(getPeakDate(left, 0), getPeakDate(right, 0));
+        break;
+      case 'peak2':
+        comparison = compareOptionalStrings(getPeakDate(left, 1), getPeakDate(right, 1));
+        break;
+      case 'peak3':
+        comparison = compareOptionalStrings(getPeakDate(left, 2), getPeakDate(right, 2));
         break;
       default:
         comparison = left.skills[state.teamTableSort.key] - right.skills[state.teamTableSort.key];
@@ -2037,6 +2496,8 @@ function renderRiderFormSparkline(rider: Rider): string {
 
   const width = 320;
   const height = 110;
+  const chartMinForm = -1;
+  const chartMaxForm = 8;
   const historyPoints = points.filter((point) => !point.isProjection);
   const projectionStartIndex = Math.max(0, historyPoints.length - 1);
   const projectionPoints = points.slice(projectionStartIndex);
@@ -2060,11 +2521,11 @@ function renderRiderFormSparkline(rider: Rider): string {
       <line class="rider-form-axis" x1="10" y1="100" x2="310" y2="100"></line>
       <line class="rider-form-axis" x1="10" y1="10" x2="10" y2="100"></line>
       ${peakMarkers}
-      <path class="rider-form-line rider-form-line-history" d="${buildFormSparklinePath(historyPoints, width, height, -1, 5)}"></path>
-      <path class="rider-form-line rider-form-line-projection" d="${buildFormSparklinePath(projectionPoints, width, height, -1, 5)}"></path>
+      <path class="rider-form-line rider-form-line-history" d="${buildFormSparklinePath(historyPoints, width, height, chartMinForm, chartMaxForm)}"></path>
+      <path class="rider-form-line rider-form-line-projection" d="${buildFormSparklinePath(projectionPoints, width, height, chartMinForm, chartMaxForm)}"></path>
       <text class="rider-form-axis-label" x="10" y="108">01.01.</text>
       <text class="rider-form-axis-label" x="286" y="108">31.10.</text>
-      <text class="rider-form-axis-label" x="2" y="16">5,0</text>
+      <text class="rider-form-axis-label" x="2" y="16">8,0</text>
       <text class="rider-form-axis-label" x="2" y="100">-1,0</text>
     </svg>
     <div class="text-muted">Durchgezogen = Ist, gestrichelt = Prognose.</div>
@@ -2088,46 +2549,6 @@ function getRiderSpecializationLabel(value: Rider['riderType'] | Rider['speciali
     default:
       return value ?? 'Keine Spezialisierung';
   }
-}
-
-function renderRiderInsightRow(rider: Rider): string {
-  const riderTags = [
-    rider.hasGrandTourTag ? 'Grand Tour' : null,
-    rider.hasStageRaceTag ? 'Etappenrennen' : null,
-    rider.hasOneDayClassicTag ? 'One Day Classic' : null,
-  ].filter(Boolean).join(' · ');
-  const riderSpecializations = [rider.specialization1, rider.specialization2, rider.specialization3]
-    .filter((value): value is NonNullable<typeof value> => value != null)
-    .map(getRiderSpecializationLabel)
-    .join(' · ');
-
-  return `
-    <tr class="team-detail-expansion-row">
-      <td colspan="${TEAM_TABLE_COLUMN_COUNT}">
-        <div class="rider-insight-panel">
-          <div class="rider-insight-group">
-            <div class="rider-insight-title">Profil</div>
-            <div><span class="text-muted">Rolle:</span> ${esc(getRiderRoleName(rider))}</div>
-            <div><strong>${esc(getRiderSpecializationLabel(rider.riderType))}</strong></div>
-            <div class="text-muted">${esc(riderSpecializations || 'Keine Spezialisierung')}</div>
-            <div class="text-muted">Tags: ${esc(riderTags || 'Keine Tags')}</div>
-            <div class="text-muted">Formhöhepunkte: ${esc(renderPeakDatesSummary(rider))}</div>
-            <div class="text-muted">Skill-Development: ${rider.skillDevelopment ?? '–'}</div>
-            <div class="text-muted">${rider.isStageRacer ? 'Etappenfahrer' : 'Kein Etappenfokus'} / ${rider.isOneDayRacer ? 'Eintagesfahrer' : 'Kein Eintagesfokus'}</div>
-            <div class="text-muted">Vertragsende: ${rider.contractEndSeason ?? '–'}</div>
-          </div>
-          <div class="rider-insight-group">
-            <div class="rider-insight-title">Vorlieben</div>
-            <div><span class="text-muted">Fav:</span> ${renderRacePrefs(rider.favoriteRaces)}</div>
-            <div><span class="text-muted">No:</span> ${renderRacePrefs(rider.nonFavoriteRaces)}</div>
-          </div>
-          <div class="rider-insight-group rider-form-debug-group">
-            <div class="rider-insight-title">Form-Debug</div>
-            ${renderRiderFormSparkline(rider)}
-          </div>
-        </div>
-      </td>
-    </tr>`;
 }
 
 // ============================================================
@@ -2161,6 +2582,9 @@ function activateView(name: string): void {
   $(`view-${name}`).classList.add('active');
   document.querySelector<HTMLElement>(`.nav-btn[data-view="${name}"]`)?.classList.add('active');
   $('game-state-bar').classList.toggle('hidden', name === 'live-race');
+  if (name === 'stage-editor') {
+    void loadStageEditorExistingStages();
+  }
   if (name !== 'live-race') {
     raceSimView?.pause();
     return;
@@ -2191,17 +2615,12 @@ function getRaceSimView(): RaceSimView {
               ? rider.riderClockSeconds
               : rider.finishTimeSeconds,
             finishStatus: rider.finishStatus ?? 'finished',
+            isBreakaway: rider.isBreakaway,
             statusReason: rider.statusReason ?? null,
             photoFinishScore: rider.photoFinishScore,
           } satisfies RealtimeStageCommitEntry))
           .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
-        void completeRealtimeStage(
-          bootstrap.stage.id,
-          entries,
-          snapshot.markerClassifications,
-          snapshot.incidents,
-          snapshot.riders.filter((rider) => rider.isBreakaway).map((rider) => rider.riderId),
-        );
+        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents);
       },
     });
   }
@@ -2554,6 +2973,8 @@ $('btn-new-career').addEventListener('click', async () => {
 $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
 $('btn-close-race-stages').addEventListener('click', () => hideModal('raceStages'));
 $('btn-close-stage-profile').addEventListener('click', () => hideModal('stageProfile'));
+$('btn-close-rider-program').addEventListener('click', () => hideModal('riderProgram'));
+$('btn-close-race-participants').addEventListener('click', () => hideModal('raceParticipants'));
 $('btn-close-roster-editor').addEventListener('click', () => hideRosterEditor());
 $('btn-cancel-roster-editor').addEventListener('click', () => hideRosterEditor());
 $('btn-apply-roster-editor').addEventListener('click', () => {
@@ -2640,8 +3061,7 @@ async function enterGameScreen(): Promise<void> {
   try {
     await loadGameState();
     await loadRaces();
-    await loadTeams();   // erst Teams laden
-    await loadRoster();  // dann Kader (renderTeams hat dann vollst. Daten)
+    await refreshTeamsViewData();
     renderDashboard();
   } catch (e) {
     alert('Fehler beim Laden des Spiels: ' + (e as Error).message);
@@ -2654,7 +3074,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const view = btn.dataset['view'] ?? '';
     activateView(view);
-    if (view === 'teams') loadTeams(); // immer neu laden bei Nav-Klick
+    if (view === 'teams') void refreshTeamsViewData(); // immer neu laden bei Nav-Klick
     if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
     if (view === 'season-standings') void loadSeasonStandings(true);
@@ -2663,11 +3083,35 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
 
 $<HTMLSelectElement>('teams-dropdown').addEventListener('change', (e) => {
   const val = (e.target as HTMLSelectElement).value;
-  state.teamDetailsRiderId = null;
+  state.teamDetailPage = 'skills';
   renderTeamDetail(val ? Number(val) : null);
 });
 
 $('teams-detail').addEventListener('click', (event) => {
+  const programButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-program-id]');
+  if (programButton) {
+    const riderId = Number(programButton.dataset['riderProgramId']);
+    if (Number.isFinite(riderId)) {
+      void openRiderProgram(riderId);
+    }
+    return;
+  }
+
+  const pageButton = (event.target as Element).closest<HTMLButtonElement>('button[data-team-detail-page]');
+  if (pageButton) {
+    const nextPage = pageButton.dataset['teamDetailPage'] as TeamDetailPage;
+    if (TEAM_DETAIL_PAGE_ORDER.includes(nextPage)) {
+      state.teamDetailPage = nextPage;
+      const visibleSortKeys = new Set(getActiveTeamTableColumns().map((column) => column.sortKey).filter((sortKey): sortKey is TeamTableSortKey => sortKey != null));
+      if (!visibleSortKeys.has(state.teamTableSort.key)) {
+        state.teamTableSort = { key: 'name', direction: 'asc' };
+      }
+      const selectedTeamId = Number($<HTMLSelectElement>('teams-dropdown').value);
+      renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
+    }
+    return;
+  }
+
   const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-team-sort]');
   if (sortButton) {
     const sortKey = sortButton.dataset['teamSort'] as TeamTableSortKey;
@@ -2676,21 +3120,13 @@ $('teams-detail').addEventListener('click', (event) => {
     } else {
       state.teamTableSort = {
         key: sortKey,
-        direction: sortKey === 'birthYear' || sortKey === 'age' || sortKey === 'overallRating' || sortKey === 'seasonPoints' ? 'desc' : 'asc',
+        direction: getDefaultTeamSortDirection(sortKey),
       };
     }
     const selectedTeamId = Number($<HTMLSelectElement>('teams-dropdown').value);
     renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
     return;
   }
-
-  const infoButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-info]');
-  if (!infoButton) return;
-
-  const riderId = Number(infoButton.dataset['riderInfo']);
-  state.teamDetailsRiderId = state.teamDetailsRiderId === riderId ? null : riderId;
-  const selectedTeamId = Number($<HTMLSelectElement>('teams-dropdown').value);
-  renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
 });
 
 $('btn-back-menu').addEventListener('click', () => {
@@ -2713,14 +3149,7 @@ $('pending-stages-list').addEventListener('click', (event) => {
     const stageId = Number(liveButton.dataset['liveStage']);
     if (!Number.isFinite(stageId)) return;
     void openRealtimeStage(stageId, true);
-    return;
   }
-
-  const button = (event.target as Element).closest<HTMLButtonElement>('button[data-simulate-stage]');
-  if (!button) return;
-  const stageId = Number(button.dataset['simulateStage']);
-  if (!Number.isFinite(stageId)) return;
-  void simulatePendingStage(stageId);
 });
 
 $<HTMLSelectElement>('race-sim-stage-select').addEventListener('change', (event) => {
@@ -2752,6 +3181,15 @@ $<HTMLSelectElement>('results-race-select').addEventListener('change', (event) =
 });
 
 $('dashboard-races-tbody').addEventListener('click', (event) => {
+  const participantsButton = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-participants-id]');
+  if (participantsButton) {
+    const raceId = Number(participantsButton.dataset['dashboardRaceParticipantsId']);
+    if (Number.isFinite(raceId)) {
+      void openRaceProgramParticipants(raceId);
+    }
+    return;
+  }
+
   const raceButton = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-id]');
   if (!raceButton) {
     return;
@@ -2777,6 +3215,33 @@ $('race-stages-body').addEventListener('click', (event) => {
   }
 
   void openDashboardStageProfile(stageId);
+});
+
+$('race-participants-body').addEventListener('click', (event) => {
+  const programButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-program-id]');
+  if (programButton) {
+    const riderId = Number(programButton.dataset['riderProgramId']);
+    if (Number.isFinite(riderId)) {
+      void openRiderProgram(riderId);
+    }
+    return;
+  }
+
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-participants-sort]');
+  if (!sortButton) {
+    return;
+  }
+
+  const sortKey = sortButton.dataset['raceParticipantsSort'] as RaceParticipantsSortKey;
+  if (state.raceParticipantsSort.key === sortKey) {
+    state.raceParticipantsSort.direction = state.raceParticipantsSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.raceParticipantsSort = {
+      key: sortKey,
+      direction: getDefaultRaceParticipantsSortDirection(sortKey),
+    };
+  }
+  void refreshRaceProgramParticipants();
 });
 
 $<HTMLSelectElement>('results-stage-select').addEventListener('change', (event) => {
@@ -2819,6 +3284,10 @@ $('season-standings-scope-tabs').addEventListener('click', (event) => {
 
 $('btn-stage-editor-import').addEventListener('click', () => {
   void onStageEditorImport();
+});
+
+$('btn-stage-editor-load-existing').addEventListener('click', () => {
+  void onStageEditorLoadExisting();
 });
 
 $('btn-stage-editor-export').addEventListener('click', () => {
@@ -2899,6 +3368,7 @@ $('btn-advance-day').addEventListener('click', async () => {
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
     await loadGameState();
     await loadRaces();
+    await refreshTeamsViewData();
   } catch (e) {
     alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
   } finally {
@@ -2916,6 +3386,9 @@ async function loadGameState(): Promise<void> {
   renderResultsView();
   renderRealtimeRaceView();
   renderSeasonStandingsView();
+  if (state.selectedRaceParticipantsRaceId != null && !$('modal-raceParticipants').classList.contains('hidden')) {
+    void refreshRaceProgramParticipants();
+  }
   if (state.currentSave && gameStateRes.data) state.currentSave.currentSeason = gameStateRes.data.season;
 }
 
@@ -2946,7 +3419,6 @@ function renderGameState(): void {
           <div class="pending-stage-actions">
             ${rosterButton}
             <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
-            <button class="btn btn-primary btn-sm" data-simulate-stage="${pendingStage.stageId}">Quick Sim</button>
           </div>
         </div>`;
     }).join('');
@@ -2979,40 +3451,11 @@ function renderDashboard(): void {
   renderDashboardRaces();
 }
 
-async function simulatePendingStage(stageId: number): Promise<void> {
-  showLoading('Etappe wird simuliert...');
-  try {
-    const res = await api.quickSimStage(stageId);
-    if (!res.success) {
-      alert('Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
-      return;
-    }
-
-    const data = res.data as QuickSimResponse | undefined;
-    state.selectedResultsRaceId = data?.raceId ?? state.selectedResultsRaceId;
-    state.selectedResultsStageId = data?.stageId ?? stageId;
-    state.selectedResultTypeId = 1;
-    await loadStageResults(stageId, false);
-    await loadGameState();
-    await loadRaces();
-    await loadRoster();
-    if (state.seasonStandings != null) {
-      await loadSeasonStandings(true);
-    }
-    activateView('results');
-  } catch (error) {
-    alert('Unerwarteter Fehler bei der Simulation: ' + (error as Error).message);
-  } finally {
-    hideLoading();
-  }
-}
-
 async function completeRealtimeStage(
   stageId: number,
   entries: RealtimeStageCommitEntry[],
   markerClassifications: StageMarkerClassification[],
   incidents: PrecalculatedRaceIncident[],
-  breakawayRiderIds: number[] = [],
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -3027,9 +3470,7 @@ async function completeRealtimeStage(
       return;
     }
 
-    state.realtimeBreakawayRiderIdsByStageId[stageId] = breakawayRiderIds;
-
-    const data = res.data as QuickSimResponse | undefined;
+    const data = res.data as StageResultCommitResponse | undefined;
     state.selectedResultsRaceId = data?.raceId ?? state.selectedResultsRaceId;
     state.selectedResultsStageId = data?.stageId ?? stageId;
     state.selectedResultTypeId = 1;
@@ -3069,7 +3510,7 @@ async function loadStageResults(stageId: number, silentIfMissing: boolean): Prom
     return;
   }
 
-  state.stageResults = decorateStageResultsWithRealtimeBreakaways(res.data ?? null);
+  state.stageResults = res.data ?? null;
   if (state.stageResults) {
     state.selectedResultsRaceId = state.stageResults.raceId;
     state.selectedResultsStageId = state.stageResults.stageId;
@@ -3150,7 +3591,7 @@ function renderResultsView(): void {
     >${esc(classification.resultTypeName)}</button>
   `).join('');
 
-  const stageMarkerClassifications = state.stageResults.markerClassifications ?? [];
+  const stageMarkerClassifications = sortStageMarkerClassifications(state.stageResults.markerClassifications ?? []);
   const showMarkerTabs = selectedClassification.resultTypeId === 1 && stageMarkerClassifications.length > 0;
   const selectedStageSubViewKey = showMarkerTabs
     ? (state.selectedResultsMarkerKey ?? RESULTS_STAGE_OVERVIEW_KEY)
@@ -3398,7 +3839,7 @@ function renderDashboardRaces(): void {
     .slice(0, 8);
 
   if (visibleRaces.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Keine kommenden Rennen.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Keine kommenden Rennen.</td></tr>';
     return;
   }
 
@@ -3438,6 +3879,7 @@ function renderDashboardRaces(): void {
         </td>
         <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
         <td>${esc(categoryName)}</td>
+        <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
         <td>${distance}</td>
         <td>${elevation}</td>
         <td>${statusBadge}</td>
@@ -3468,6 +3910,14 @@ function summarizeStageProfiles(stages: Stage[]): string {
     })
     .map(([profile, count]) => `${count}× ${profile}`)
     .join(' · ');
+}
+
+function getStageProfileClassName(profile: StageProfile): string {
+  return `stage-profile-badge-${profile.toLowerCase().replace(/_/g, '-')}`;
+}
+
+function renderStageProfileBadge(profile: StageProfile): string {
+  return `<span class="stage-profile-badge ${getStageProfileClassName(profile)}">${esc(profile)}</span>`;
 }
 
 function buildDashboardStageProfileLabel(race: Race, stage: Stage): string {
@@ -3552,7 +4002,7 @@ function renderDashboardRaceStagesModal(): void {
               <tr class="dashboard-race-stage-row">
                 <td>${formatDate(stage.date)}</td>
                 <td><strong>${esc(getStageDisplayName(stage))}</strong></td>
-                <td>${esc(stage.profile)}</td>
+                <td>${renderStageProfileBadge(stage.profile)}</td>
                 <td>${stage.distanceKm != null ? formatKm(stage.distanceKm) : '–'}</td>
                 <td>${stage.elevationGainMeters != null ? formatElevationGain(stage.elevationGainMeters) : '–'}</td>
                 <td>
@@ -3581,6 +4031,121 @@ async function openDashboardRaceStages(raceId: number): Promise<void> {
   state.selectedDashboardRaceId = raceId;
   renderDashboardRaceStagesModal();
   showModal('raceStages');
+}
+
+function renderProgramRaceRows(payload: RiderProgramRaceSummary): string {
+  if (payload.races.length === 0) {
+    return '<div class="results-empty">Keine Rennen in diesem Programm.</div>';
+  }
+
+  return `
+    <div class="dashboard-race-stages-table-wrap">
+      <table class="data-table dashboard-race-stages-table">
+        <thead><tr><th>Datum</th><th>Land</th><th>Rennen</th><th>Kategorie</th><th>Format</th></tr></thead>
+        <tbody>
+          ${payload.races.map((race) => `
+            <tr>
+              <td>${formatRaceDateRange(race)}</td>
+              <td><span class="dashboard-race-country">${race.country?.code3 ? renderFlag(race.country.code3) : ''}<span>${esc(race.country?.name ?? `Land ${race.countryId}`)}</span></span></td>
+              <td><strong>${esc(race.name)}</strong></td>
+              <td>${esc(race.category?.name ?? `Kategorie ${race.categoryId}`)}</td>
+              <td>${raceCategoryBadge(race)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function openRiderProgram(riderId: number): Promise<void> {
+  const rider = state.riders.find((entry) => entry.id === riderId);
+  $('rider-program-title').textContent = rider ? formatRiderName(rider) : 'Programm';
+  $('rider-program-meta').textContent = 'Lade Programmrennen ...';
+  $('rider-program-body').innerHTML = '';
+  showModal('riderProgram');
+
+  const res = await api.getRiderProgramRaces(riderId);
+  if (!res.success || !res.data) {
+    $('rider-program-meta').textContent = '';
+    $('rider-program-body').innerHTML = `<div class="results-empty">${esc(res.error ?? 'Programm konnte nicht geladen werden.')}</div>`;
+    return;
+  }
+
+  $('rider-program-title').textContent = res.data.program.name;
+  $('rider-program-meta').textContent = rider ? formatRiderName(rider) : '';
+  $('rider-program-body').innerHTML = renderProgramRaceRows(res.data);
+}
+
+function renderRaceParticipantRows(participants: RaceProgramParticipant[]): string {
+  if (participants.length === 0) {
+    return '<div class="results-empty">Keine Programmfahrer für dieses Rennen.</div>';
+  }
+
+  const sortedParticipants = sortRaceParticipants(participants);
+
+  return `
+    <div class="dashboard-race-stages-table-wrap">
+      <table class="data-table dashboard-race-stages-table race-participants-table">
+        <thead><tr>
+          ${renderRaceParticipantsHeader('Team', 'team', 'Team')}
+          ${renderRaceParticipantsHeader('Fahrer', 'rider', 'Fahrer')}
+          ${renderRaceParticipantsHeader('Spec1', 'spec1', 'Spezialisierung 1')}
+          ${renderRaceParticipantsHeader('Rolle', 'role', 'Rolle')}
+          ${renderRaceParticipantsHeader('Ges', 'overall', 'Gesamtstärke')}
+          ${renderRaceParticipantsHeader('Phase', 'phase', 'Formphase')}
+          ${renderRaceParticipantsHeader('Programm', 'program', 'Saisonprogramm')}
+        </tr></thead>
+        <tbody>
+          ${sortedParticipants.map((participant) => `
+            <tr class="race-participants-row">
+              <td class="race-participants-team-cell">${renderMiniJersey(participant.team?.id, participant.team?.name)}</td>
+              <td><span class="race-participant-rider-cell">${renderFlag(getRiderCountryCode(participant.rider))}<strong>${esc(formatRiderName(participant.rider))}</strong></span></td>
+              <td>${esc(getSpecLabel(participant.rider))}</td>
+              <td>${esc(getRiderRoleName(participant.rider))}</td>
+              <td>${renderSkillValue(participant.rider.overallRating)}</td>
+              <td>${renderSeasonFormPhase(participant.rider)}</td>
+              <td><button type="button" class="team-program-button" data-rider-program-id="${participant.rider.id}">${esc(participant.program.name)}</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function openRaceProgramParticipants(raceId: number): Promise<void> {
+  const race = findRaceById(raceId);
+  state.selectedRaceParticipantsRaceId = raceId;
+  $('race-participants-title').textContent = race?.name ?? 'Teilnehmer';
+  $('race-participants-meta').textContent = 'Lade Programmfahrer ...';
+  $('race-participants-body').innerHTML = '';
+  state.raceParticipants = [];
+  showModal('raceParticipants');
+
+  await refreshRaceProgramParticipants();
+}
+
+async function refreshRaceProgramParticipants(showLoadingState = false): Promise<void> {
+  const raceId = state.selectedRaceParticipantsRaceId;
+  if (raceId == null) {
+    return;
+  }
+
+  const race = findRaceById(raceId);
+  if (showLoadingState) {
+    $('race-participants-meta').textContent = 'Lade Programmfahrer ...';
+  }
+
+  const res = await api.getRaceProgramParticipants(raceId);
+  if (!res.success || !res.data) {
+    $('race-participants-meta').textContent = '';
+    $('race-participants-body').innerHTML = `<div class="results-empty">${esc(res.error ?? 'Teilnehmer konnten nicht geladen werden.')}</div>`;
+    return;
+  }
+
+  state.raceParticipants = res.data;
+  $('race-participants-title').textContent = race?.name ?? 'Teilnehmer';
+  $('race-participants-meta').textContent = `${res.data.length} Programmfahrer · ${race ? formatRaceDateRange(race) : ''}`;
+  $('race-participants-body').innerHTML = renderRaceParticipantRows(state.raceParticipants);
 }
 
 async function openDashboardStageProfile(stageId: number): Promise<void> {
@@ -3613,6 +4178,11 @@ async function loadRoster(): Promise<void> {
   renderTeams();
   renderDashboard();
   renderSeasonStandingsView();
+}
+
+async function refreshTeamsViewData(): Promise<void> {
+  await loadTeams();
+  await loadRoster();
 }
 
 async function loadTeams(): Promise<void> {
@@ -3649,6 +4219,7 @@ function renderTeamDetail(teamId: number | null): void {
   if (!team) { detail.innerHTML = ''; return; }
   const riders = sortTeamRiders(state.riders.filter(r => r.activeTeamId === teamId));
   const divBadge = team.division === 'U23' ? 'badge-u23' : 'badge-classics';
+  const activeColumns = getActiveTeamTableColumns();
   detail.innerHTML = `
     <div class="team-detail-card">
       <div class="team-detail-header">
@@ -3662,47 +4233,26 @@ function renderTeamDetail(teamId: number | null): void {
       </div>
       <div class="team-detail-meta" style="margin-top:0.75rem">
         <span>${riders.length} Fahrer</span>
-        <span class="text-muted">Sortierung: ${esc(state.teamTableSort.key === 'name' ? 'Nachname' : state.teamTableSort.key === 'countryCode' ? 'Country' : state.teamTableSort.key === 'birthYear' ? 'Jahrgang' : state.teamTableSort.key === 'age' ? 'Alter' : state.teamTableSort.key === 'overallRating' ? 'Gesamt' : state.teamTableSort.key === 'formBonus' ? 'Saisonform' : state.teamTableSort.key === 'raceFormBonus' ? 'Rennbonus' : state.teamTableSort.key === 'seasonPoints' ? 'Saisonpunkte' : state.teamTableSort.key === 'contractEndSeason' ? 'Vertragsende' : state.teamTableSort.key === 'roleName' ? 'Rolle' : state.teamTableSort.key === 'riderType' ? 'Profil' : TEAM_SKILL_TITLES[state.teamTableSort.key])} ${state.teamTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
+        <span class="text-muted">Sortierung: ${esc(getTeamSortLabel(state.teamTableSort.key))} ${state.teamTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
       </div>
-      <table class="data-table data-table-teams" style="margin-top:1rem">
-        <thead><tr>
-          ${TEAM_TABLE_COLUMNS.map(renderTeamTableHeader).join('')}
-        </tr></thead>
-        <tbody>
-          ${riders.length === 0
-            ? `<tr><td colspan="${TEAM_TABLE_COLUMN_COUNT}" class="text-muted">Keine Fahrer.</td></tr>`
-            : riders.map(r => {
-              const countryCode = getRiderCountryCode(r);
-              const isExpanded = state.teamDetailsRiderId === r.id;
-              return `
-              <tr class="team-detail-row${isExpanded ? ' team-detail-row-expanded' : ''}">
-                <td class="team-table-name-cell"><strong>${esc(formatRiderName(r))}</strong>${renderRiderAvailabilityMarker(r)}</td>
-                <td class="team-table-flag-cell">${renderFlag(countryCode)}</td>
-                <td class="team-table-code-cell">${esc(countryCode)}</td>
-                <td>${r.birthYear}</td>
-                <td>${r.age ?? '–'}</td>
-                <td>${renderSkillValue(r.overallRating)}</td>
-                <td>${renderSeasonFormValue(r.formBonus)}</td>
-                <td>${renderRaceFormBonusValue(r.raceFormBonus)}</td>
-                <td>${r.seasonPoints ?? 0}</td>
-                <td>${r.contractEndSeason ?? '–'}</td>
-                <td>${esc(getRiderRoleName(r))}</td>
-                ${TEAM_SKILL_COLUMNS.map(column => `<td>${renderSkillValue(r.skills[column.key])}</td>`).join('')}
-                <td class="team-table-info-cell">
-                  <button
-                    type="button"
-                    class="info-toggle${isExpanded ? ' info-toggle-active' : ''}"
-                    data-rider-info="${r.id}"
-                    title="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'} · Peaks: ${esc(renderPeakDatesSummary(r))}"
-                    aria-expanded="${isExpanded ? 'true' : 'false'}"
-                    aria-label="Profil und Vorlieben ${isExpanded ? 'ausblenden' : 'anzeigen'}"
-                  >i</button>
-                </td>
-              </tr>
-              ${isExpanded ? renderRiderInsightRow(r) : ''}`;
-            }).join('')}
-        </tbody>
-      </table>
+      ${renderTeamDetailPageTabs()}
+      <div class="team-detail-table-scroll">
+        <table class="data-table data-table-teams">
+          <thead><tr>
+            ${activeColumns.map(renderTeamTableHeader).join('')}
+          </tr></thead>
+          <tbody>
+            ${riders.length === 0
+              ? `<tr><td colspan="${activeColumns.length}" class="text-muted">Keine Fahrer.</td></tr>`
+              : riders.map(r => {
+                return `
+                <tr class="team-detail-row">
+                  ${activeColumns.map((column) => renderTeamTableCell(r, column)).join('')}
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>`;
 }
 

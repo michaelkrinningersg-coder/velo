@@ -18,7 +18,7 @@ import { precalculateRaceIncidents } from './incidents';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
-import { collectStageBoundaryMarkers } from './stageSummary';
+import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import {
   ATTACK_SKILL_BONUS,
   COUNTER_ATTACK_DURATION_SECONDS,
@@ -318,6 +318,7 @@ const START_SPREAD_MIN = 0.1;
 const START_SPREAD_MAX = 0.4;
 const LATE_STAGE_START_MIN = 0.6;
 const LATE_STAGE_START_MAX = 0.8;
+const TIME_TIE_THRESHOLD_SECONDS = 1;
 const DRAFT_BONUS_SCALE = 2 / 3;
 const DRAFT_PACK_SOFT_CAP_START = 10;
 const DRAFT_PACK_HARD_CAP_SIZE = 50;
@@ -383,6 +384,15 @@ function chooseOne<T>(values: T[]): T {
 
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function resolveDeterministicRatio(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
 }
 
 function resolveDraftRetentionFactor(gradientPercent: number): number {
@@ -545,6 +555,108 @@ function compareRiders(left: RiderState, right: RiderState): number {
   if (left.finishTimeSeconds != null) return -1;
   if (right.finishTimeSeconds != null) return 1;
   return left.rider.id - right.rider.id;
+}
+
+function normalizeMarkerClassificationEntries(entries: MarkerCrossing[], applyTimeTieGroups: boolean): StageMarkerClassificationEntry[] {
+  if (!applyTimeTieGroups) {
+    const sorted = [...entries].sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+    const leaderTime = sorted[0]?.crossingTimeSeconds ?? 0;
+    return sorted.map((entry, index) => ({
+      riderId: entry.riderId,
+      rank: index + 1,
+      crossingTimeSeconds: entry.crossingTimeSeconds,
+      gapSeconds: Math.max(0, entry.crossingTimeSeconds - leaderTime),
+      photoFinishScore: entry.photoFinishScore,
+    }));
+  }
+
+  const sortedByTime = [...entries].sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+  const leaderTime = sortedByTime[0]?.crossingTimeSeconds ?? 0;
+  const ranked: StageMarkerClassificationEntry[] = [];
+  let group: MarkerCrossing[] = [];
+  let groupLeaderTime = 0;
+  let previousTime: number | null = null;
+
+  const flushGroup = (): void => {
+    const gapSeconds = Math.max(0, groupLeaderTime - leaderTime);
+    const orderedGroup = group.sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+    for (const entry of orderedGroup) {
+      ranked.push({
+        riderId: entry.riderId,
+        rank: ranked.length + 1,
+        crossingTimeSeconds: entry.crossingTimeSeconds,
+        gapSeconds,
+        photoFinishScore: entry.photoFinishScore,
+      });
+    }
+  };
+
+  for (const entry of sortedByTime) {
+    if (group.length === 0) {
+      group = [entry];
+      groupLeaderTime = entry.crossingTimeSeconds;
+      previousTime = entry.crossingTimeSeconds;
+      continue;
+    }
+
+    if (previousTime != null && entry.crossingTimeSeconds - previousTime <= TIME_TIE_THRESHOLD_SECONDS) {
+      group.push(entry);
+      previousTime = entry.crossingTimeSeconds;
+      continue;
+    }
+
+    flushGroup();
+    group = [entry];
+    groupLeaderTime = entry.crossingTimeSeconds;
+    previousTime = entry.crossingTimeSeconds;
+  }
+
+  if (group.length > 0) {
+    flushGroup();
+  }
+
+  return ranked;
+}
+
+function orderRoadRiders(riders: RiderState[]): RiderState[] {
+  const finishedRiders = riders
+    .filter((rider) => rider.finishTimeSeconds != null)
+    .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0) || right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id);
+  const activeRiders = riders
+    .filter((rider) => rider.finishTimeSeconds == null)
+    .sort(compareRiders);
+  const rankedFinished: RiderState[] = [];
+  let group: RiderState[] = [];
+  let previousTime: number | null = null;
+
+  const flushGroup = (): void => {
+    rankedFinished.push(...group.sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id));
+  };
+
+  for (const rider of finishedRiders) {
+    const finishTime = rider.finishTimeSeconds ?? 0;
+    if (group.length === 0) {
+      group = [rider];
+      previousTime = finishTime;
+      continue;
+    }
+
+    if (previousTime != null && finishTime - previousTime <= TIME_TIE_THRESHOLD_SECONDS) {
+      group.push(rider);
+      previousTime = finishTime;
+      continue;
+    }
+
+    flushGroup();
+    group = [rider];
+    previousTime = finishTime;
+  }
+
+  if (group.length > 0) {
+    flushGroup();
+  }
+
+  return [...rankedFinished, ...activeRiders];
 }
 
 function compareDraftOrder(left: RiderState, right: RiderState): number {
@@ -797,6 +909,7 @@ export class SimulationEngine {
 
     this.breakawayPlan = precalculateStageBreakaway(
       bootstrap.riders,
+      bootstrap.race,
       bootstrap.stage,
       bootstrap.stageSummary,
       this.stageFavorites,
@@ -944,17 +1057,9 @@ export class SimulationEngine {
     return this.intermediateMarkers.map((marker) => {
       const markerEntries = ordered
         .map((rider) => rider.markerCrossings[marker.key] ?? null)
-        .filter((entry): entry is MarkerCrossing => entry != null)
-        .sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+        .filter((entry): entry is MarkerCrossing => entry != null);
 
-      const leaderTime = markerEntries[0]?.crossingTimeSeconds ?? 0;
-      const entries: StageMarkerClassificationEntry[] = markerEntries.map((entry, index) => ({
-        riderId: entry.riderId,
-        rank: index + 1,
-        crossingTimeSeconds: entry.crossingTimeSeconds,
-        gapSeconds: Math.max(0, entry.crossingTimeSeconds - leaderTime),
-        photoFinishScore: entry.photoFinishScore,
-      }));
+      const entries = normalizeMarkerClassificationEntries(markerEntries, !this.isTimeTrialMode);
 
       return {
         markerKey: marker.key,
@@ -968,7 +1073,7 @@ export class SimulationEngine {
   }
 
   private getOrderedRiders(): RiderState[] {
-    const ordered = [...this.riders].sort(compareRiders);
+    const ordered = this.isTimeTrialMode ? [...this.riders].sort(compareRiders) : orderRoadRiders(this.riders);
     return ordered;
   }
 
@@ -1082,9 +1187,6 @@ export class SimulationEngine {
       rider.gradientModifier = basePhysics.gradientModifier;
       rider.windModifier = basePhysics.windModifier;
       rider.tempSpeedMps = basePhysics.tempSpeedMps;
-      if (this.breakawayPlan?.riderIds.includes(rider.rider.id) && this.breakawayPhaseActive && !this.breakawayPhaseEnded) {
-        rider.tempSpeedMps += this.breakawayPlan.speedBonusKph / 3.6;
-      }
       rider.draftModifier = 1;
       rider.draftNearbyRiderCount = 0;
       rider.draftPackFactor = 0;
@@ -1096,6 +1198,8 @@ export class SimulationEngine {
       rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * activeDeltaSeconds);
     }
 
+    this.applyBreakawaySkillTempo(deltaSeconds);
+
     if (this.isTeamTimeTrial) {
       this.applyTeamTimeTrialTempo(stepStartSeconds, stepEndSeconds);
     } else if (!this.isTimeTrialMode) {
@@ -1103,6 +1207,9 @@ export class SimulationEngine {
       for (let index = 0; index < ordered.length; index += 1) {
         const rider = ordered[index];
         if (rider.finishTimeSeconds != null) {
+          continue;
+        }
+        if (this.breakawayPlan?.riderIds.includes(rider.rider.id) && this.breakawayPhaseActive && !this.breakawayPhaseEnded) {
           continue;
         }
 
@@ -1448,7 +1555,7 @@ export class SimulationEngine {
 
   private buildIntermediateMarkers(): IntermediateMarker[] {
     return collectStageBoundaryMarkers(this.bootstrap.stageSummary)
-      .filter(({ marker }) => marker.type === 'sprint_intermediate' || marker.type === 'climb_top')
+      .filter(({ marker }) => marker.type === 'sprint_intermediate' || isMountainClassificationMarker(marker))
       .map(({ key, label, marker, kmMark }) => ({
         key,
         distanceMeters: kmMark * 1000,
@@ -1515,6 +1622,86 @@ export class SimulationEngine {
     const baseSpeedKph = 40 + ((effectiveSkill - 50) * speedSkillFactor * spreadFactor);
     const baseSpeedMps = baseSpeedKph / 3.6;
     return Math.max(0.5, baseSpeedMps * gradientModifier * windModifier);
+  }
+
+  private resolveRoadSpeedSkillFactor(skillName: TerrainSkillName | 'Finish'): number {
+    if (skillName === 'Flat') return 0.14;
+    if (skillName === 'Downhill') return 0.18;
+    return 10 / 35;
+  }
+
+  private resolveBreakawayReferenceSkill(rider: RiderState, activeNonBreakawayRiders: RiderState[]): number {
+    const sameTerrainRiders = activeNonBreakawayRiders.filter((candidate) => candidate.activeTerrain === rider.activeTerrain);
+    const referenceRiders = sameTerrainRiders.length > 0 ? sameTerrainRiders : activeNonBreakawayRiders;
+    return referenceRiders.reduce((bestSkill, candidate) => Math.max(bestSkill, candidate.effectiveSkill), rider.effectiveSkill);
+  }
+
+  private resolveMaxBreakawayDraftModifier(rider: RiderState, segment: ParsedStageSegment, groupSize: number): { draftModifier: number; draftPackFactor: number } {
+    if (groupSize <= 1) {
+      return { draftModifier: 1, draftPackFactor: 0 };
+    }
+
+    const refV = rider.tempSpeedMps / 14;
+    const windZone = this.currentWindZone(rider);
+    const currentWindVector = windZone?.vector ?? 0;
+    const currentWindSpeed = windZone?.windSpeedKph ?? 0;
+    const windEffect = -currentWindVector * (currentWindSpeed / 70);
+    const baseBonus = Math.max(0.30, 0.35 + (0.35 * windEffect));
+    const maxBonus = (baseBonus * Math.min(1, refV)) * DRAFT_BONUS_SCALE;
+    const gradientPercent = clamp(segment.gradient_percent, -20, 20);
+    const draftRetentionFactor = resolveDraftRetentionFactor(gradientPercent);
+    const draftPackFactor = resolveDraftPackFactor(groupSize);
+    return {
+      draftModifier: 1 + (maxBonus * draftPackFactor * draftRetentionFactor),
+      draftPackFactor,
+    };
+  }
+
+  private applyBreakawaySkillTempo(deltaSeconds: number): void {
+    const breakawayPlan = this.breakawayPlan;
+    if (!breakawayPlan || !this.breakawayPhaseActive || this.breakawayPhaseEnded || this.isTimeTrialMode) {
+      return;
+    }
+
+    const breakawayRiderIds = new Set(breakawayPlan.riderIds);
+    const activeBreakawayRiders = this.riders.filter((rider) => (
+      rider.finishTimeSeconds == null
+      && breakawayRiderIds.has(rider.rider.id)
+    ));
+    if (activeBreakawayRiders.length === 0) {
+      return;
+    }
+
+    const activeNonBreakawayRiders = this.riders.filter((rider) => (
+      rider.finishTimeSeconds == null
+      && !breakawayRiderIds.has(rider.rider.id)
+      && rider.activeTerrain !== 'Finish'
+    ));
+
+    for (const rider of activeBreakawayRiders) {
+      const segment = this.currentSegment(rider);
+      if (!segment) {
+        continue;
+      }
+
+      const bestReferenceSkill = this.resolveBreakawayReferenceSkill(rider, activeNonBreakawayRiders);
+      const breakawayTargetSkill = bestReferenceSkill + breakawayPlan.skillBonus;
+      rider.effectiveSkill = breakawayTargetSkill;
+      rider.tempSpeedMps = this.resolveRoadStageSpeedMps(
+        breakawayTargetSkill,
+        rider.distanceCoveredMeters,
+        segment,
+        rider.gradientModifier,
+        rider.windModifier,
+        this.resolveRoadSpeedSkillFactor(rider.skillName),
+      );
+      const breakawayDraft = this.resolveMaxBreakawayDraftModifier(rider, segment, activeBreakawayRiders.length);
+      rider.draftModifier = breakawayDraft.draftModifier;
+      rider.draftNearbyRiderCount = Math.max(0, activeBreakawayRiders.length - 1);
+      rider.draftPackFactor = breakawayDraft.draftPackFactor;
+      rider.currentSpeedMps = rider.tempSpeedMps * breakawayDraft.draftModifier;
+      rider.nextDistanceCoveredMeters = rider.distanceCoveredMeters + (rider.currentSpeedMps * deltaSeconds);
+    }
   }
 
   private resolveTimeTrialSpeedMps(
@@ -2101,9 +2288,10 @@ export class SimulationEngine {
       const crossingTimeSeconds = Math.max(0, this.isTimeTrialMode
         ? stepStartSeconds + secondsToMarker - rider.startOffsetSeconds
         : stepStartSeconds + secondsToMarker);
-      const photoFinishScore = this.resolveMarkerCrossingScore(rider, marker.markerType, marker.markerCategory);
+      const photoFinishScore = this.resolveMarkerCrossingScore(rider, marker);
       rider.lastSplitLabel = marker.label;
       rider.lastSplitTimeSeconds = crossingTimeSeconds;
+      rider.splitTimes[marker.key] = crossingTimeSeconds;
       rider.splitTimes[marker.label] = crossingTimeSeconds;
       rider.markerCrossings[marker.key] = {
         riderId: rider.rider.id,
@@ -2121,14 +2309,15 @@ export class SimulationEngine {
 
   private resolveMarkerCrossingScore(
     rider: RiderState,
-    markerType: StageMarkerType,
-    markerCategory: StageMarkerCategory | null,
+    marker: IntermediateMarker,
   ): number {
-    if (markerType === 'sprint_intermediate') {
+    if (marker.markerType === 'sprint_intermediate') {
       return resolveLiveWeightProfileValue(rider, SPRINT_INTERMEDIATE_WEIGHTS);
     }
 
-    return resolveLiveWeightProfileValue(rider, this.resolveClimbWeightProfile(markerCategory));
+    const baseScore = resolveLiveWeightProfileValue(rider, this.resolveClimbWeightProfile(marker.markerCategory));
+    const markerTieBreak = resolveDeterministicRatio(`${this.bootstrap.stage.id}:${marker.key}:${rider.rider.id}`) * 25;
+    return baseScore + markerTieBreak;
   }
 
   private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {

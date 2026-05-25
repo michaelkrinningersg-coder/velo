@@ -711,8 +711,8 @@ html, body {
 }
 
 .dashboard-stage-list {
-  margin-top: .45rem;
-  padding: .55rem .65rem;
+  margin-top: .24rem;
+  padding: .18rem .32rem;
   border: 1px solid rgba(148, 163, 184, .16);
   border-radius: var(--radius-sm);
   background: rgba(15, 23, 42, .45);
@@ -721,9 +721,11 @@ html, body {
 .dashboard-stage-row {
   display: grid;
   grid-template-columns: minmax(88px, 1fr) minmax(88px, 1fr) minmax(90px, .9fr) minmax(90px, .9fr);
-  gap: .5rem;
-  padding: .22rem 0;
-  font-size: .76rem;
+  gap: .35rem;
+  min-height: 1.2rem;
+  padding: .04rem 0;
+  font-size: .68rem;
+  line-height: 1.05;
 }
 
 .dashboard-stage-value {
@@ -736,9 +738,9 @@ html, body {
 
 .dashboard-stage-row-head {
   color: var(--text-500);
-  font-size: .68rem;
+  font-size: .6rem;
   font-weight: 700;
-  letter-spacing: .05em;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
@@ -754,6 +756,18 @@ html, body {
 
 .data-table-teams {
   table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+.team-detail-table-scroll {
+  max-width: 100%;
+  margin-top: 1rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: .5rem;
 }
 
 .data-table-teams thead th,
@@ -837,20 +851,141 @@ html, body {
   color: var(--text-300);
 }
 
+.team-table-country-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--text-300);
+  white-space: nowrap;
+}
+
 .team-table-col-flag,
 .team-table-col-info {
   width: 4.5rem;
 }
 
 .team-table-col-code,
+.team-table-col-country,
 .team-table-col-year,
 .team-table-col-age,
 .team-table-col-overall {
   width: 5.1rem;
 }
 
+.team-table-col-date,
+.team-table-col-points,
+.team-table-col-contract {
+  width: 5.8rem;
+}
+
+.team-table-col-phase {
+  width: 4.8rem;
+}
+
+.team-table-col-program {
+  min-width: 11rem;
+}
+
+.team-table-col-profile {
+  min-width: 7.8rem;
+}
+
+.team-table-col-wide {
+  min-width: 12rem;
+}
+
+.team-table-col-preferences {
+  min-width: 18rem;
+}
+
+.team-form-phase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, .28);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.team-form-phase-rise { color: #86efac; background: rgba(34, 197, 94, .12); }
+.team-form-phase-fall { color: #fca5a5; background: rgba(239, 68, 68, .12); }
+.team-form-phase-neutral { color: var(--text-300); background: rgba(148, 163, 184, .1); }
+
+.team-program-button {
+  max-width: 12rem;
+  padding: .25rem .55rem;
+  border: 1px solid rgba(129, 140, 248, .34);
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, .12);
+  color: var(--accent-h);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-program-button:hover {
+  border-color: var(--accent-h);
+  color: var(--text-100);
+}
+
 .team-table-col-skill {
-  width: 8.9rem;
+  width: 8.4rem;
+}
+
+.team-table-wrap-cell {
+  max-width: 24rem;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.team-table-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.team-table-source-item {
+  display: block;
+}
+
+.team-detail-page-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  margin-top: .85rem;
+  padding: .25rem;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: .5rem;
+  background: rgba(15, 23, 42, .55);
+}
+
+.team-detail-page-tab {
+  border: none;
+  border-radius: .35rem;
+  padding: .42rem .7rem;
+  background: transparent;
+  color: var(--text-300);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.team-detail-page-tab:hover,
+.team-detail-page-tab-active {
+  background: rgba(59, 130, 246, .28);
+  color: #fff;
 }
 
 .info-toggle {
@@ -1236,9 +1371,133 @@ html, body {
 }
 
 .race-sim-favorites-body {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+}
+
+.race-sim-favorites-section,
+.race-sim-classification-box,
+.race-sim-mountain-primes-box {
+  padding: .8rem;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .42);
+}
+
+.race-sim-favorites-section h4,
+.race-sim-classification-box h4,
+.race-sim-mountain-primes-box h4 {
+  margin: 0 0 .65rem;
+  color: var(--text-100);
+  font-size: .86rem;
+  font-weight: 800;
+}
+
+.race-sim-stage-favorites-grid,
+.race-sim-classification-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: .75rem;
+}
+
+.race-sim-classifications-section {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+}
+
+.race-sim-classification-row {
+  display: grid;
+  grid-template-columns: 2rem 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  padding: .6rem .65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid rgba(148, 163, 184, .14);
+}
+
+.race-sim-classification-box-gc {
+  border-color: rgba(250, 204, 21, .3);
+}
+
+.race-sim-classification-box-points {
+  border-color: rgba(34, 197, 94, .24);
+}
+
+.race-sim-classification-box-mountain {
+  border-color: rgba(239, 68, 68, .24);
+}
+
+.race-sim-classification-box-youth {
+  border-color: rgba(248, 250, 252, .22);
+}
+
+.race-sim-classification-name {
+  color: var(--text-100);
+  font-size: .8rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-classification-value {
+  color: #dbeafe;
+  font-size: .78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.race-sim-classification-empty {
+  padding: .75rem .85rem;
+  border: 1px dashed rgba(148, 163, 184, .18);
+  border-radius: var(--radius-sm);
+  color: var(--text-500);
+  font-size: .78rem;
+}
+
+.race-sim-mountain-primes-list {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.race-sim-mountain-prime-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1.3fr) repeat(4, minmax(4.2rem, .7fr)) minmax(8rem, 1.2fr);
+  align-items: center;
+  gap: .55rem;
+  padding: .55rem .65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, .7);
+  border: 1px solid rgba(148, 163, 184, .12);
+  color: var(--text-300);
+  font-size: .74rem;
+}
+
+.race-sim-mountain-prime-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: .08rem;
+}
+
+.race-sim-mountain-prime-title span {
+  color: var(--text-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-mountain-prime-row strong,
+.race-sim-mountain-prime-leader {
+  color: var(--text-100);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .race-sim-favorites-empty {
@@ -1335,14 +1594,28 @@ html, body {
 }
 
 @media (max-width: 1200px) {
-  .race-sim-favorites-body {
+  .race-sim-stage-favorites-grid,
+  .race-sim-classification-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-sim-mountain-prime-row {
+    grid-template-columns: minmax(7.5rem, 1.3fr) repeat(3, minmax(4.2rem, .7fr));
+  }
+
+  .race-sim-mountain-prime-leader {
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 720px) {
-  .race-sim-favorites-body {
+  .race-sim-stage-favorites-grid,
+  .race-sim-classification-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .race-sim-mountain-prime-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2013,6 +2286,15 @@ html, body {
   font-size: 10px;
 }
 
+.race-sim-elevation-label {
+  fill: rgba(17, 24, 39, .98);
+  font-size: 12px;
+  font-weight: 800;
+  stroke: rgba(255, 255, 255, .92);
+  stroke-width: 2.4px;
+  paint-order: stroke;
+}
+
 .race-sim-marker-title {
   font-size: 11px;
   font-weight: 800;
@@ -2065,21 +2347,6 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   gap: .35rem;
-}
-
-.race-sim-sort-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .35rem;
-}
-
-.race-sim-sort-label {
-  color: var(--text-500);
-  font-size: .68rem;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  margin-right: .1rem;
 }
 
 .race-sim-speed-btn {
@@ -2147,6 +2414,17 @@ html, body {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: .75rem;
   margin-bottom: .65rem;
+}
+
+.stage-editor-load-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .75rem;
+  margin-bottom: .65rem;
+}
+
+.stage-editor-load-row select {
+  min-width: 0;
 }
 
 .stage-editor-import-row input[type="file"] {
@@ -2596,11 +2874,101 @@ html, body {
 }
 
 .dashboard-race-stages-table tbody tr.dashboard-race-stage-row {
-  height: 8.4rem;
+  height: 1.68rem;
+}
+
+.dashboard-race-stages-table th,
+.dashboard-race-stages-table td {
+  padding: .16rem .45rem;
 }
 
 .dashboard-race-stages-table td {
   vertical-align: middle;
+  line-height: 1.08;
+  font-size: .73rem;
+}
+
+.stage-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.8rem;
+  padding: .12rem .42rem;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: .45rem;
+  font-size: .68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.stage-profile-badge-flat { color: #bfdbfe; background: rgba(37, 99, 235, .14); border-color: rgba(96, 165, 250, .42); }
+.stage-profile-badge-rolling { color: #bbf7d0; background: rgba(22, 163, 74, .14); border-color: rgba(74, 222, 128, .42); }
+.stage-profile-badge-hilly { color: #fde68a; background: rgba(202, 138, 4, .16); border-color: rgba(250, 204, 21, .46); }
+.stage-profile-badge-hilly-difficult { color: #fed7aa; background: rgba(234, 88, 12, .16); border-color: rgba(251, 146, 60, .46); }
+.stage-profile-badge-medium-mountain { color: #fecaca; background: rgba(220, 38, 38, .14); border-color: rgba(248, 113, 113, .44); }
+.stage-profile-badge-mountain { color: #ddd6fe; background: rgba(124, 58, 237, .15); border-color: rgba(167, 139, 250, .45); }
+.stage-profile-badge-high-mountain { color: #e0f2fe; background: rgba(14, 116, 144, .18); border-color: rgba(103, 232, 249, .42); }
+.stage-profile-badge-itt { color: #f5d0fe; background: rgba(192, 38, 211, .14); border-color: rgba(232, 121, 249, .42); }
+.stage-profile-badge-ttt { color: #fbcfe8; background: rgba(219, 39, 119, .14); border-color: rgba(244, 114, 182, .42); }
+.stage-profile-badge-cobble { color: #e5e7eb; background: rgba(75, 85, 99, .42); border-color: rgba(156, 163, 175, .48); }
+.stage-profile-badge-cobble-hill { color: #ccfbf1; background: rgba(13, 148, 136, .16); border-color: rgba(45, 212, 191, .42); }
+
+.race-participants-table th,
+.race-participants-table td {
+  padding: .38rem .55rem;
+  line-height: 1.15;
+}
+
+.race-participants-row {
+  height: 2.15rem;
+}
+
+.race-participants-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.race-participants-sort-active {
+  color: var(--accent-h);
+}
+
+.race-participants-team-cell {
+  width: 3.1rem;
+  text-align: center;
+}
+
+.race-participants-team-cell .results-team-jersey {
+  width: 20px;
+  height: 20px;
+}
+
+.race-participants-team-cell .results-team-jersey-img {
+  width: 20px;
+  height: 20px;
+}
+
+.race-participant-rider-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  min-width: 0;
+}
+
+.race-participant-rider-cell .country-flag {
+  flex: 0 0 auto;
 }
 
 .dashboard-stage-profile-link {

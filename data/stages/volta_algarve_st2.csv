@@ -1,0 +1,31 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+7.20,0.500,Flat,4,6,start,Albufeira,null,,,
+6.10,0.800,Flat,4,7,,,,,,
+5.80,-0.900,Flat,4,7,,,,,,
+6.40,1.700,Flat,4,6,,,,sprint_intermediate,Sprint Loulé,Sprint
+5.10,3.200,Hill,5,5,climb_start,Salir Ramp,null,,,
+3.60,5.400,Hill,5,5,,,,climb_top,Salir Ramp,3
+6.20,-2.600,Abfahrt,6,5,,,,,,
+7.40,0.400,Flat,4,7,,,,,,
+5.90,1.800,Flat,4,6,,,,,,
+6.30,2.700,Hill,5,5,,,,,,
+5.60,-1.900,Flat,4,6,,,,,,
+6.00,0.600,Flat,4,7,,,,sprint_intermediate,Sprint São Brás,Sprint
+5.20,3.500,Hill,5,5,climb_start,Barranco do Velho,null,,,
+4.10,5.700,Mountain,5,5,,,,,,
+3.30,7.100,Mountain,5,5,,,,climb_top,Barranco do Velho,2
+5.00,-4.400,Abfahrt,6,5,,,,,,
+6.80,0.300,Flat,4,7,,,,,,
+5.70,1.400,Flat,4,6,,,,,,
+6.10,2.100,Hill,5,5,,,,,,
+4.80,-1.500,Flat,4,6,,,,,,
+5.50,0.900,Flat,4,7,climb_start,Malhão Pass,null,,,
+4.90,3.000,Hill,5,5,,,,,,
+3.60,4.800,Hill,5,5,,,,,,
+2.80,6.900,Mountain,5,5,,,,,,
+2.40,8.700,Mountain,6,4,,,,,,
+2.10,7.900,Mountain,6,4,,,,,,
+1.90,9.400,Mountain,6,4,,,,,,
+1.70,8.600,Mountain,6,4,,,,,,
+1.40,7.200,Mountain,6,4,,,,,,
+2.30,8.900,Mountain,7,4,,,,finish_mountain,Malhão Pass,1

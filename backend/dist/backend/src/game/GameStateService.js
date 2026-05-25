@@ -2,14 +2,20 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameStateService = void 0;
 const events_1 = require("events");
+const GameRepository_1 = require("../db/GameRepository");
+const RaceRosterService_1 = require("../simulation/RaceRosterService");
+const ContractService_1 = require("./ContractService");
+const RiderDevelopmentService_1 = require("./RiderDevelopmentService");
+const RiderProgramService_1 = require("./RiderProgramService");
+const RiderRoleService_1 = require("./RiderRoleService");
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 const SEASON_FORM_MIN_RAW = 0;
-const SEASON_FORM_MAX_RAW = 9;
-const SEASON_FORM_RISE_DAYS = 28;
+const SEASON_FORM_MAX_RAW = 6;
+const SEASON_FORM_RISE_DAYS = 42;
 const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
-const SEASON_FORM_FALL_DAYS = 10;
-const RACE_FORM_BUILD_STEP = 0.1;
+const SEASON_FORM_FALL_DAYS = 14;
+const RACE_FORM_BUILD_STEP = 0.25;
 const FREE_R_FORM_EXPIRY_DAYS = 20;
 const PEAK_MIN_SPACING_DAYS = 56;
 const ILLNESS_CHANCE = 0.0025;
@@ -40,6 +46,8 @@ class GameStateService {
         this.ensureRiderFormTables();
         this.ensureRiderDailyStateRows(DEFAULT_START_SEASON);
         const state = this.loadState();
+        new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
+        this.syncCurrentSeasonFormState(state.currentDate, state.season);
         this.syncCurrentFormHistory(state.currentDate);
         this.db.prepare(`
       INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
@@ -80,12 +88,19 @@ class GameStateService {
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
             this.advanceRiderDailyStates(nextDate, nextSeason);
-            const checks = this.runDailyChecks(nextDate);
+            if (nextSeason !== currentRow.season) {
+                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason);
+                new RiderDevelopmentService_1.RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
+                new RiderRoleService_1.RiderRoleService(this.db).recalculateAllTeamRoles();
+                new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
+            }
             this.db.prepare('UPDATE game_state SET "current_date" = ?, season = ?, is_game_over = ? WHERE id = 1').run(nextDate, nextSeason, currentRow.is_game_over);
             this.db.prepare(`
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
+            this.prepareRaceEntriesForRaceStarts(nextDate);
+            const checks = this.runDailyChecks(nextDate);
             return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
         })();
         this.events.emit('dayAdvanced', nextState);
@@ -185,6 +200,48 @@ class GameStateService {
             }
         }
     }
+    syncCurrentSeasonFormState(currentDate, currentSeason) {
+        if (!tableExists(this.db, 'rider_daily_state')) {
+            return;
+        }
+        this.ensureRiderDailyStateRows(currentSeason);
+        const rows = this.db.prepare(`
+      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining
+      FROM rider_daily_state
+    `).all();
+        const updateState = this.db.prepare(`
+      UPDATE rider_daily_state
+      SET season = ?,
+          form_bonus = ?,
+          peak_s_form = ?,
+          active_peak_date = ?,
+          peak_dates_json = ?
+      WHERE rider_id = ?
+    `);
+        for (const row of rows) {
+            const peakDates = resolveSeasonPeakDates(row.season !== currentSeason ? [] : parsePeakDates(row.peak_dates_json), currentSeason);
+            const phase = resolvePeakPhase(currentDate, peakDates);
+            let formBonus = row.form_bonus;
+            let peakSForm = row.peak_s_form;
+            let activePeakDate = row.active_peak_date;
+            if (phase?.phase === 'build') {
+                activePeakDate = null;
+                peakSForm = 0;
+                formBonus = resolveBuildValue(phase.elapsedDays);
+            }
+            else if (phase?.phase === 'decline') {
+                formBonus = resolveDeclineValue(SEASON_FORM_MAX_RAW, phase.elapsedDays);
+                peakSForm = SEASON_FORM_MAX_RAW;
+                activePeakDate = phase.peakDate;
+            }
+            else {
+                formBonus = 0;
+                peakSForm = 0;
+                activePeakDate = null;
+            }
+            updateState.run(currentSeason, roundFormBonus(formBonus), roundFormBonus(peakSForm), activePeakDate, JSON.stringify(peakDates), row.rider_id);
+        }
+    }
     advanceRiderDailyStates(nextDate, nextSeason) {
         if (!tableExists(this.db, 'rider_daily_state')) {
             return;
@@ -209,20 +266,8 @@ class GameStateService {
           unavailable_days_remaining = ?
       WHERE rider_id = ?
     `);
-        const selectFreeRaceForm = this.db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) AS total
-      FROM rider_r_form_events
-      WHERE rider_id = ?
-    `);
         const deleteRiderRaceFormEvents = this.db.prepare('DELETE FROM rider_r_form_events WHERE rider_id = ?');
-        const upsertHistory = this.db.prepare(`
-      INSERT INTO rider_form_history (rider_id, date, s_form, r_form, total_form)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(rider_id, date) DO UPDATE SET
-        s_form = excluded.s_form,
-        r_form = excluded.r_form,
-        total_form = excluded.total_form
-    `);
+        const developmentContexts = [];
         for (const row of rows) {
             const seasonChanged = row.season !== nextSeason;
             const peakDates = seasonChanged
@@ -256,10 +301,11 @@ class GameStateService {
                 }
             }
             const phase = resolvePeakPhase(nextDate, peakDates);
-            if (phase?.phase === 'peak') {
+            if (phase?.phase === 'decline' && phase.elapsedDays === 0) {
                 activePeakDate = phase.peakDate;
-                peakSForm = roundFormBonus(Math.max(0, formBonus));
+                peakSForm = SEASON_FORM_MAX_RAW;
                 peakRForm = roundFormBonus(Math.max(0, raceFormBonus));
+                formBonus = SEASON_FORM_MAX_RAW;
             }
             else if (phase?.phase === 'decline') {
                 activePeakDate = phase.peakDate;
@@ -286,13 +332,41 @@ class GameStateService {
                 formBonus = 0;
                 raceFormBonus = 0;
             }
-            const freeRaceForm = selectFreeRaceForm.get(row.rider_id)?.total ?? 0;
-            const totalRaceForm = roundFormBonus(raceFormBonus + freeRaceForm);
-            const effectiveSeasonForm = resolveEffectiveSeasonForm(formBonus);
+            developmentContexts.push({
+                riderId: row.rider_id,
+                healthStatus,
+                unavailableDaysRemaining: remainingDays,
+                formPhase: phase?.phase ?? null,
+            });
             updateState.run(nextSeason, formBonus, raceFormBonus, peakSForm, peakRForm, activePeakDate, JSON.stringify(peakDates), healthStatus, unavailableUntil, remainingDays, row.rider_id);
-            upsertHistory.run(row.rider_id, nextDate, effectiveSeasonForm, totalRaceForm, roundFormBonus(effectiveSeasonForm + totalRaceForm));
         }
+        new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
         this.removeUnavailableRidersFromFutureRaceEntries(nextDate);
+    }
+    prepareRaceEntriesForRaceStarts(currentDate) {
+        if (!tableExists(this.db, 'races') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'race_entries')) {
+            return;
+        }
+        const rows = this.db.prepare(`
+      SELECT races.id AS race_id, stages.id AS stage_id
+      FROM races
+      JOIN stages ON stages.race_id = races.id
+      WHERE stages.date = ?
+        AND (races.is_stage_race = 0 OR stages.stage_number = 1)
+      ORDER BY races.id ASC, stages.stage_number ASC
+    `).all(currentDate);
+        if (rows.length === 0) {
+            return;
+        }
+        const repo = new GameRepository_1.GameRepository(this.db);
+        for (const row of rows) {
+            const race = repo.getRaceById(row.race_id);
+            const stage = repo.getStageById(row.stage_id);
+            if (!race || !stage) {
+                continue;
+            }
+            (0, RaceRosterService_1.refreshRaceEntriesForRaceStart)(this.db, repo, race, stage);
+        }
     }
     removeExpiredRaceFormEvents(currentDate) {
         if (!tableExists(this.db, 'rider_r_form_events')) {
@@ -528,10 +602,7 @@ function resolvePeakPhase(currentDate, peakDates) {
     const currentDay = isoDateToDayNumber(currentDate);
     for (const peakDate of peakDates) {
         const peakDay = isoDateToDayNumber(peakDate);
-        if (currentDay === peakDay) {
-            return { phase: 'peak', peakDate, elapsedDays: 0 };
-        }
-        if (currentDay > peakDay && currentDay <= peakDay + SEASON_FORM_FALL_DAYS) {
+        if (currentDay >= peakDay && currentDay < peakDay + SEASON_FORM_FALL_DAYS) {
             return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
         }
         if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
@@ -544,7 +615,11 @@ function resolveDeclineValue(peakValue, elapsedDays) {
     if (elapsedDays >= SEASON_FORM_FALL_DAYS) {
         return 0;
     }
-    return roundFormBonus(Math.max(0, peakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
+    const boundedPeakValue = Math.min(SEASON_FORM_MAX_RAW, Math.max(0, peakValue));
+    return roundFormBonus(Math.max(0, boundedPeakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
+}
+function resolveBuildValue(elapsedDays) {
+    return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, (SEASON_FORM_RISE_DAYS - elapsedDays + 1) * SEASON_FORM_RISE_STEP_RAW)));
 }
 function resolveRaceDeclineValue(peakValue, elapsedDays) {
     if (elapsedDays >= SEASON_FORM_FALL_DAYS) {
@@ -553,7 +628,7 @@ function resolveRaceDeclineValue(peakValue, elapsedDays) {
     return roundFormBonus(Math.max(0, peakValue * (1 - (elapsedDays / SEASON_FORM_FALL_DAYS))));
 }
 function resolveEffectiveSeasonForm(rawSeasonForm) {
-    return roundFormBonus(rawSeasonForm / 10);
+    return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, rawSeasonForm)));
 }
 function generateSeasonPeakDates(season) {
     const firstPeakWindowStart = isoDateToDayNumber(`${season}-02-15`);

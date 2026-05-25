@@ -185,13 +185,7 @@ CREATE TABLE IF NOT EXISTS race_categories (
   tier              INTEGER NOT NULL CHECK(tier IN (1, 2, 3)),
   number_of_teams   INTEGER NOT NULL CHECK(number_of_teams > 0),
   number_of_riders  INTEGER NOT NULL CHECK(number_of_riders > 0),
-  bonus_system_id   INTEGER NOT NULL REFERENCES race_categories_bonus(id),
-  role_1            INTEGER NOT NULL DEFAULT 0 CHECK(role_1 >= 0),
-  role_2            INTEGER NOT NULL DEFAULT 0 CHECK(role_2 >= 0),
-  role_3            INTEGER NOT NULL DEFAULT 0 CHECK(role_3 >= 0),
-  role_4            INTEGER NOT NULL DEFAULT 0 CHECK(role_4 >= 0),
-  role_5            INTEGER NOT NULL DEFAULT 0 CHECK(role_5 >= 0),
-  role_6            INTEGER NOT NULL DEFAULT 0 CHECK(role_6 >= 0)
+  bonus_system_id   INTEGER NOT NULL REFERENCES race_categories_bonus(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_race_categories_tier ON race_categories(tier);
@@ -267,6 +261,47 @@ CREATE INDEX IF NOT EXISTS idx_races_end_date ON races(end_date);
 CREATE INDEX IF NOT EXISTS idx_races_category ON races(category_id);
 CREATE INDEX IF NOT EXISTS idx_races_country ON races(country_id);
 
+-- ---- Saisonale Rennprogramme -------------------------------
+CREATE TABLE IF NOT EXISTS race_programs (
+  id    INTEGER PRIMARY KEY,
+  name  TEXT    NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS race_program_races (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  program_id  INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
+  race_id     INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  UNIQUE(program_id, race_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_program_races_race
+  ON race_program_races(race_id, program_id);
+
+CREATE TABLE IF NOT EXISTS race_program_probability_rules (
+  id          INTEGER PRIMARY KEY,
+  role_name   TEXT NOT NULL,
+  spec_1      INTEGER REFERENCES type_rider(id),
+  spec_2      INTEGER REFERENCES type_rider(id),
+  spec_3      INTEGER REFERENCES type_rider(id),
+  program_id  INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
+  probability REAL NOT NULL CHECK(probability >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_program_probability_rules_lookup
+  ON race_program_probability_rules(role_name, spec_1, spec_2, spec_3);
+
+CREATE TABLE IF NOT EXISTS rider_season_programs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  season       INTEGER NOT NULL,
+  rider_id     INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  program_id   INTEGER NOT NULL REFERENCES race_programs(id),
+  assigned_on  TEXT    NOT NULL,
+  UNIQUE(season, rider_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
+  ON rider_season_programs(season, program_id);
+
 -- ---- Etappen -----------------------------------------------
 CREATE TABLE IF NOT EXISTS stages (
   id                INTEGER PRIMARY KEY,
@@ -328,6 +363,7 @@ CREATE TABLE IF NOT EXISTS results (
   rank             INTEGER NOT NULL CHECK(rank > 0),
   time_seconds     INTEGER,
   points           INTEGER,
+  is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
   CHECK(
     (result_type_id = 1 AND team_id IS NOT NULL)
     OR
@@ -404,6 +440,19 @@ CREATE TABLE IF NOT EXISTS rider_form_history (
 
 CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
   ON rider_form_history(date, rider_id);
+
+CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
+  rider_id          INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  date              TEXT    NOT NULL,
+  growth_total      REAL    NOT NULL DEFAULT 0,
+  decline_total     REAL    NOT NULL DEFAULT 0,
+  blocked_reason    TEXT,
+  skill_deltas_json TEXT    NOT NULL DEFAULT '{}',
+  PRIMARY KEY (rider_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
+  ON rider_skill_development_daily(date, rider_id);
 
 CREATE TABLE IF NOT EXISTS rider_r_form_daily_awards (
   rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,

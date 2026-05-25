@@ -4,6 +4,8 @@ exports.previewRaceRoster = previewRaceRoster;
 exports.previewRaceRosterEditor = previewRaceRosterEditor;
 exports.applyRaceRosterSelection = applyRaceRosterSelection;
 exports.ensureRaceEntries = ensureRaceEntries;
+exports.refreshRaceEntriesForRaceStart = refreshRaceEntriesForRaceStart;
+const RiderProgramService_1 = require("../game/RiderProgramService");
 const DIVISION_BY_TIER = {
     1: 'WorldTour',
     2: 'ProTour',
@@ -18,6 +20,24 @@ const DEFAULT_ROLE_REQUIREMENTS = {
     6: 1,
 };
 const COBBLE_SELECTION_MIN_SKILL = 65;
+const CAPTAIN_ROLE_IDS = new Set([1, 2]);
+const GENERIC_FILL_ROLE_PRIORITY = new Map([
+    [5, 0],
+    [4, 1],
+    [3, 2],
+    [6, 3],
+]);
+const SPECIAL_FILL_CATEGORIES = new Set([1, 2, 3, 6]);
+const SPECIAL_FILL_SEQUENCE = [
+    { roleId: 3, phase: 'rise' },
+    { roleId: 3, phase: 'neutral' },
+    { roleId: 4, phase: 'rise' },
+    { roleId: 4, phase: 'neutral' },
+    { roleId: 6, phase: 'rise' },
+    { roleId: 6, phase: 'neutral' },
+    { roleId: 5, phase: 'rise' },
+    { roleId: 5, phase: 'neutral' },
+];
 const RIDER_LOCK_MESSAGES = {
     'already-raced-today': 'Heute bereits in einem anderen Rennen gestartet.',
     'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
@@ -111,9 +131,8 @@ function getEligibleRiders(roster, riderLocks) {
 function isCobbleStage(stage) {
     return stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill';
 }
-function resolveRoleRequirements(race) {
-    const roleRequirements = race.category?.roleRequirements ?? DEFAULT_ROLE_REQUIREMENTS;
-    return Object.entries(roleRequirements)
+function resolveRoleRequirements() {
+    return Object.entries(DEFAULT_ROLE_REQUIREMENTS)
         .map(([roleId, count]) => ({ roleId: Number(roleId), count }))
         .filter((requirement) => Number.isFinite(requirement.roleId) && requirement.count > 0)
         .sort((left, right) => left.roleId - right.roleId);
@@ -155,7 +174,7 @@ function selectRaceRoster(team, eligibleRoster, targetCount, raceId, race, stage
     if (requestedCount <= 0) {
         return [];
     }
-    const roleRequirements = resolveRoleRequirements(race);
+    const roleRequirements = resolveRoleRequirements();
     const roleNameById = new Map();
     eligibleRoster.forEach((rider) => {
         if (rider.roleId != null && rider.role?.name) {
@@ -240,7 +259,7 @@ function resolveParticipatingTeams(repo, race, riderLocks) {
         .filter((team) => getEligibleRiders(repo.getRiders(team.id), riderLocks).length >= riderLimit)
         .slice(0, race.category?.numberOfTeams ?? 0);
 }
-function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
+function buildLegacyRaceRoster(db, repo, race, stage, enableDebug = false) {
     const riderLocks = buildRiderLockMap(db, repo, race);
     const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks);
     return eligibleTeams
@@ -252,6 +271,125 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
         return selectedEntries.map((entry) => entry.rider);
     })
         .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
+}
+function resolveProgramPhasePriority(rider) {
+    if (rider.seasonFormPhase === 'rise')
+        return 0;
+    if (rider.seasonFormPhase === 'fall')
+        return 2;
+    return 1;
+}
+function isNeutralPhase(rider) {
+    return rider.seasonFormPhase === 'neutral' || rider.seasonFormPhase == null;
+}
+function orderProgramCandidates(candidates) {
+    return [...candidates].sort((left, right) => {
+        const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
+        if (phaseCompare !== 0)
+            return phaseCompare;
+        return right.overallRating - left.overallRating || left.id - right.id;
+    });
+}
+function hasProgramCollision(db, riderId, season, race) {
+    const row = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM rider_season_programs
+    JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+    JOIN races program_race ON program_race.id = race_program_races.race_id
+    WHERE rider_season_programs.season = ?
+      AND rider_season_programs.rider_id = ?
+      AND program_race.id != ?
+      AND program_race.start_date <= ?
+      AND program_race.end_date >= ?
+  `).get(season, riderId, race.id, race.endDate, race.startDate);
+    return (row?.count ?? 0) > 0;
+}
+function canFillRosterSlot(db, rider, season, race) {
+    if (rider.roleId == null || CAPTAIN_ROLE_IDS.has(rider.roleId)) {
+        return false;
+    }
+    if (!GENERIC_FILL_ROLE_PRIORITY.has(rider.roleId)) {
+        return false;
+    }
+    return !hasProgramCollision(db, rider.id, season, race);
+}
+function resolveSpecialFillIndex(rider) {
+    return SPECIAL_FILL_SEQUENCE.findIndex((entry) => {
+        if (rider.roleId !== entry.roleId)
+            return false;
+        if (entry.phase === 'rise')
+            return rider.seasonFormPhase === 'rise';
+        return isNeutralPhase(rider);
+    });
+}
+function orderFillCandidates(candidates, race) {
+    if (SPECIAL_FILL_CATEGORIES.has(race.categoryId)) {
+        return [...candidates]
+            .map((rider) => ({ rider, index: resolveSpecialFillIndex(rider) }))
+            .filter((entry) => entry.index >= 0)
+            .sort((left, right) => left.index - right.index || right.rider.overallRating - left.rider.overallRating || left.rider.id - right.rider.id)
+            .map((entry) => entry.rider);
+    }
+    return [...candidates].sort((left, right) => {
+        const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
+        if (phaseCompare !== 0)
+            return phaseCompare;
+        const roleCompare = (GENERIC_FILL_ROLE_PRIORITY.get(left.roleId ?? 0) ?? 99) - (GENERIC_FILL_ROLE_PRIORITY.get(right.roleId ?? 0) ?? 99);
+        if (roleCompare !== 0)
+            return roleCompare;
+        const raceDaysCompare = (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0);
+        if (raceDaysCompare !== 0)
+            return raceDaysCompare;
+        return hashString(`${race.id}|${left.activeTeamId ?? 0}|${left.id}`) - hashString(`${race.id}|${right.activeTeamId ?? 0}|${right.id}`);
+    });
+}
+function hashString(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
+    const season = repo.getCurrentSeason();
+    new RiderProgramService_1.RiderProgramService(db).ensureSeasonPrograms(season, repo.getCurrentDate());
+    const racePrograms = repo.getRaceProgramsForRace(race.id);
+    if (racePrograms.length === 0) {
+        return buildLegacyRaceRoster(db, repo, race, stage, enableDebug);
+    }
+    const programIds = new Set(racePrograms.map((program) => program.id));
+    const riderLocks = buildRiderLockMap(db, repo, race);
+    const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
+    const riderLimit = race.category?.numberOfRiders ?? 0;
+    const teamLimit = race.category?.numberOfTeams ?? 0;
+    const selectedTeams = repo.getTeams()
+        .filter((team) => team.division === targetDivision)
+        .filter((team) => repo.getRiders(team.id).some((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
+        .slice(0, teamLimit);
+    const selected = selectedTeams.flatMap((team) => {
+        const roster = getEligibleRiders(repo.getRiders(team.id), riderLocks);
+        const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
+        const teamSelection = programCandidates.slice(0, riderLimit);
+        const selectedIds = new Set(teamSelection.map((rider) => rider.id));
+        if (teamSelection.length < riderLimit) {
+            const fillCandidates = orderFillCandidates(roster.filter((rider) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)), race);
+            for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
+                teamSelection.push(rider);
+                selectedIds.add(rider.id);
+            }
+        }
+        if (enableDebug) {
+            const underfilled = teamSelection.length < riderLimit ? ` | unterbesetzt ${teamSelection.length}/${riderLimit}` : '';
+            console.log(`[RaceRoster] ${race.name} | ${formatStageDebugLabel(stage)} | ${team.name} | ${teamSelection.length} Programmfahrer/Fuellfahrer ausgewaehlt${underfilled}`);
+            teamSelection.forEach((rider, index) => {
+                const source = programCandidates.some((candidate) => candidate.id === rider.id) ? 'Programm' : 'Fuellung';
+                console.log(`  ${index + 1}. ${rider.firstName} ${rider.lastName} | ${source} | Phase=${rider.seasonFormPhase ?? 'neutral'} | Rolle=${rider.role?.name ?? rider.roleId ?? 'unbekannt'} | Renntage=${rider.seasonRaceDays ?? 0}`);
+            });
+        }
+        return teamSelection;
+    });
+    return selected.sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
 }
 function previewRaceRoster(db, repo, race, stage) {
     const existingEntries = repo.getRaceRiders(race.id);
@@ -348,6 +486,27 @@ function ensureRaceEntries(db, repo, race, stage) {
     const selected = buildRaceRoster(db, repo, race, stage, true);
     const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
     db.transaction(() => {
+        for (const rider of selected) {
+            if (rider.activeTeamId == null) {
+                continue;
+            }
+            insertEntry.run(race.id, rider.activeTeamId, rider.id);
+        }
+    })();
+    if (race.isStageRace) {
+        repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+    }
+    repo.ensureStageEntries(stage);
+    return repo.getStageRiders(stage.id);
+}
+function refreshRaceEntriesForRaceStart(db, repo, race, stage) {
+    const selected = buildRaceRoster(db, repo, race, stage);
+    const deleteRaceEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
+    const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
+    const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+    db.transaction(() => {
+        deleteStageEntries.run(race.id);
+        deleteRaceEntries.run(race.id);
         for (const rider of selected) {
             if (rider.activeTeamId == null) {
                 continue;

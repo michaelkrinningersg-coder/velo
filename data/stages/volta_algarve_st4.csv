@@ -1,0 +1,31 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+6.50,0.300,Flat,4,6,start,Tavira,null,,,
+5.70,0.600,Flat,4,7,,,,,,
+6.20,-0.800,Flat,4,7,,,,sprint_intermediate,Sprint Olhão,Sprint
+4.90,2.400,Hill,5,5,,,,,,
+5.30,3.700,Hill,5,5,climb_start,Santa Catarina,null,,,
+3.40,5.400,Hill,5,5,,,,climb_top,Santa Catarina,3
+5.80,-2.900,Abfahrt,6,5,,,,,,
+6.70,0.500,Flat,4,7,,,,,,
+5.10,1.700,Flat,4,6,,,,,,
+4.60,3.900,Hill,5,5,,,,,,
+5.20,-1.400,Flat,4,6,,,,,,
+6.00,0.700,Flat,4,7,,,,sprint_intermediate,Sprint Loulé,Sprint
+4.70,2.800,Hill,5,5,,,,,,
+5.40,-2.200,Abfahrt,6,5,,,,,,
+6.30,0.400,Flat,4,7,,,,,,
+4.80,3.100,Hill,5,5,climb_start,Paderne,null,,,
+3.20,5.900,Hill,5,5,,,,climb_top,Paderne,2
+5.60,-3.100,Abfahrt,6,5,,,,,,
+6.10,0.200,Flat,4,7,,,,,,
+5.00,1.600,Flat,4,6,,,,,,
+4.90,2.900,Hill,5,5,,,,,,
+4.40,-1.200,Flat,4,6,,,,,,
+5.30,1.800,Flat,4,6,,,,,,
+3.90,4.100,Hill,5,5,climb_start,Alto da Serra,null,,,
+3.60,5.300,Hill,5,5,,,,,,
+2.80,6.700,Hill,6,4,,,,,,
+2.30,7.900,Hill,6,4,,,,,,
+1.90,8.400,Hill,6,4,,,,,,
+1.60,6.900,Hill,6,4,,,,,,
+2.20,7.200,Hill,7,4,,,,finish_hill,Alto da Serra,2

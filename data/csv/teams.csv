@@ -19,7 +19,7 @@ team_id,name,abbreviation,division_name,is_player_team,country_id,color_primary,
 18,Google - Pinarello,GOO,WorldTour,0,2,#4285F4,#DB4437,2,1,3
 19,Microsoft - Tacx,MST,WorldTour,0,5,#F25022,#00A4EF,4,1,2
 20,Nintendo - Colnago,NIN,WorldTour,0,2,#E60012,#000000,4,2,5
-21,Continental - Rose,COR,WorldTour,0,7,#FFA500,#000000,1,4,2
+21,VW - Continental - Rose,VWC,WorldTour,0,7,#FFA500,#000000,1,4,2
 22,Samsung - Cube,SAM,WorldTour,0,79,#1428A0,#E3000F,2,3,4
 23,Michelin - Look,MIC,WorldTour,0,3,#27509B,#FFDD00,4,3,2
 24,Toyota - Lapierre,TOY,WorldTour,0,3,#EB0A1E,#000000,4,1,5

@@ -28,12 +28,25 @@ const STAGE_FILE_HEADERS = [
 
 const STAGE_MARKER_TYPES: StageMarkerType[] = ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
 const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['HC', '1', '2', '3', '4', 'Sprint'];
+const STAGE_CLIMB_CATEGORIES: Array<Exclude<StageMarkerCategory, 'Sprint'>> = ['HC', '1', '2', '3', '4'];
 const STAGE_TERRAINS: StageTerrain[] = ['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint'];
 const STAGE_FINISH_MARKER_TYPES: StageFinishMarkerType[] = ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
 const STAGE_ELEVATION_TOLERANCE_METERS = 0.5;
 
 function isFinishMarkerType(markerType: StageMarkerType): markerType is StageFinishMarkerType {
   return STAGE_FINISH_MARKER_TYPES.includes(markerType as StageFinishMarkerType);
+}
+
+function isMountainFinishMarkerType(markerType: StageMarkerType): markerType is Extract<StageFinishMarkerType, 'finish_hill' | 'finish_mountain'> {
+  return markerType === 'finish_hill' || markerType === 'finish_mountain';
+}
+
+function hasClimbMarkerCategory(markerCategory: StageMarkerCategory | null): markerCategory is Exclude<StageMarkerCategory, 'Sprint'> {
+  return markerCategory != null && STAGE_CLIMB_CATEGORIES.includes(markerCategory as Exclude<StageMarkerCategory, 'Sprint'>);
+}
+
+function isMountainClassificationMarker(markerType: StageMarkerType, markerCategory: StageMarkerCategory | null): boolean {
+  return markerType === 'climb_top' || (isMountainFinishMarkerType(markerType) && hasClimbMarkerCategory(markerCategory));
 }
 
 function resolveStagesDir(): string {
@@ -138,9 +151,9 @@ function validateMarkerPlacement(markerType: StageMarkerType, scope: 'start' | '
 }
 
 function validateMarkerCategory(markerType: StageMarkerType, markerCategory: StageMarkerCategory | null, ctx: string): void {
-  if (markerType === 'climb_top') {
-    if (markerCategory == null || !['HC', '1', '2', '3', '4'].includes(markerCategory)) {
-      throw new Error(`${ctx}: climb_top verlangt marker_cat HC, 1, 2, 3 oder 4.`);
+  if (isMountainClassificationMarker(markerType, markerCategory)) {
+    if (!hasClimbMarkerCategory(markerCategory)) {
+      throw new Error(`${ctx}: ${markerType} verlangt marker_cat HC, 1, 2, 3 oder 4.`);
     }
     return;
   }
@@ -153,7 +166,7 @@ function validateMarkerCategory(markerType: StageMarkerType, markerCategory: Sta
   }
 
   if (isFinishMarkerType(markerType) && markerCategory != null) {
-    throw new Error(`${ctx}: Finish-Marker erlauben keine marker_cat.`);
+    throw new Error(`${ctx}: Finish-Marker erlauben nur fuer finish_hill/finish_mountain die marker_cat HC, 1, 2, 3 oder 4.`);
   }
 
   if (markerCategory != null && !STAGE_MARKER_CATEGORIES.includes(markerCategory)) {
@@ -247,36 +260,37 @@ function parseSegmentRow(row: Record<string, string>, index: number, startElevat
 }
 
 function validateClimbPairs(segments: StageCsvSegment[], filename: string): void {
-  const openClimbs = new Map<string, number>();
+  const openClimbs: Array<{ name: string | null; segmentIndex: number }> = [];
 
   const openClimb = (marker: StageMarker, ctx: string): void => {
     if (marker.type !== 'climb_start') {
       return;
     }
-    if (!marker.name) {
-      throw new Error(`${ctx}: climb_start braucht einen Namen fuer die Paarbildung.`);
-    }
-    openClimbs.set(marker.name, (openClimbs.get(marker.name) ?? 0) + 1);
+    openClimbs.push({ name: marker.name ?? null, segmentIndex: Number.parseInt(ctx.match(/Segment (\d+)/)?.[1] ?? '0', 10) });
   };
 
   const closeClimb = (marker: StageMarker, ctx: string): void => {
-    if (marker.type !== 'climb_top') {
+    if (!isMountainClassificationMarker(marker.type, marker.cat)) {
       return;
     }
     if (!marker.name) {
-      throw new Error(`${ctx}: climb_top braucht einen Namen fuer die Paarbildung.`);
+      throw new Error(`${ctx}: ${marker.type} braucht einen Namen fuer die Paarbildung.`);
     }
 
-    const openCount = openClimbs.get(marker.name) ?? 0;
-    if (openCount <= 0) {
-      throw new Error(`${ctx}: climb_top "${marker.name}" hat keinen vorherigen climb_start mit gleichem Namen.`);
+    let matchingIndex = -1;
+    for (let index = openClimbs.length - 1; index >= 0; index -= 1) {
+      if (openClimbs[index]?.name === marker.name) {
+        matchingIndex = index;
+        break;
+      }
     }
 
-    if (openCount === 1) {
-      openClimbs.delete(marker.name);
-    } else {
-      openClimbs.set(marker.name, openCount - 1);
+    const openIndex = matchingIndex >= 0 ? matchingIndex : openClimbs.length - 1;
+    if (openIndex < 0) {
+      throw new Error(`${ctx}: ${marker.type} "${marker.name}" hat keinen vorherigen climb_start.`);
     }
+
+    openClimbs.splice(openIndex, 1);
   };
 
   segments.forEach((segment, index) => {
@@ -285,9 +299,10 @@ function validateClimbPairs(segments: StageCsvSegment[], filename: string): void
     segment.endMarkers.forEach((marker) => closeClimb(marker, `${rowCtx} Endmarker`));
   });
 
-  const danglingClimb = [...openClimbs.entries()][0];
+  const danglingClimb = openClimbs[0];
   if (danglingClimb) {
-    throw new Error(`Stage-Datei ${filename}: climb_start "${danglingClimb[0]}" hat keinen spaeteren climb_top mit gleichem Namen.`);
+    const climbLabel = danglingClimb.name ? ` \"${danglingClimb.name}\"` : '';
+    throw new Error(`Stage-Datei ${filename}: climb_start${climbLabel} hat keinen spaeteren climb_top oder kategorisierten finish_hill/finish_mountain.`);
   }
 }
 

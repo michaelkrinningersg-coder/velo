@@ -88,10 +88,6 @@ export class RaceSimView {
 
   private favorites: FavoriteItem[] = [];
 
-  private messageSort: 'newest' | 'oldest' = 'newest';
-
-  private favoriteSort: 'rank' | 'skill' = 'rank';
-
   private perfTelemetry: RaceSimPerfTelemetry = {
     engineStepMs: 0,
     snapshotBuildMs: 0,
@@ -142,21 +138,6 @@ export class RaceSimView {
         const speedValue = Number(speedButton.dataset['raceSimSpeed']) as TimeControlValue;
         if (!Number.isFinite(speedValue)) return;
         this.timeMultiplier = speedValue;
-        this.render();
-        return;
-      }
-
-      const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-sort-target]');
-      if (!sortButton) return;
-      const sortTarget = sortButton.dataset['raceSimSortTarget'];
-      const sortValue = sortButton.dataset['raceSimSortValue'];
-      if (sortTarget === 'messages' && (sortValue === 'newest' || sortValue === 'oldest')) {
-        this.messageSort = sortValue;
-        this.render();
-        return;
-      }
-      if (sortTarget === 'favorites' && (sortValue === 'rank' || sortValue === 'skill')) {
-        this.favoriteSort = sortValue;
         this.render();
       }
     });
@@ -226,8 +207,6 @@ export class RaceSimView {
     if (options.resetSpeed ?? true) {
       this.timeMultiplier = 1;
     }
-    this.messageSort = 'newest';
-    this.favoriteSort = 'rank';
     this.timingRailMode = 'finish';
     this.engine = new SimulationEngine(bootstrap);
     this.detailSnapshot = this.engine.getSnapshot();
@@ -404,33 +383,17 @@ export class RaceSimView {
     }
 
     if (this.detailSnapshot) {
-      renderRaceMessages(this.elements.messages, this.getSortedMessages(this.detailSnapshot.messages));
-      renderStageFavorites(this.elements.favorites, this.getSortedFavorites(this.favorites), this.bootstrap.gcStandings, this.bootstrap.classificationLeaders);
+      renderRaceMessages(this.elements.messages, this.detailSnapshot.messages);
+      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications);
     }
 
     renderRaceSimControls(this.elements.controls, {
       isRunning: this.isRunning,
       timeMultiplier: this.timeMultiplier,
-      messageSort: this.messageSort,
-      favoriteSort: this.favoriteSort,
       snapshot: this.frameSnapshot,
       totalRiders: this.bootstrap.riders.length,
       perf: this.perfTelemetry,
     });
-  }
-
-  private getSortedMessages(messages: SimulationSnapshot['messages']): SimulationSnapshot['messages'] {
-    if (this.messageSort === 'oldest') {
-      return [...messages].sort((left, right) => left.elapsedSeconds - right.elapsedSeconds || left.id - right.id);
-    }
-    return [...messages];
-  }
-
-  private getSortedFavorites(favorites: FavoriteItem[]): FavoriteItem[] {
-    if (this.favoriteSort === 'skill') {
-      return [...favorites].sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.rank - right.rank || left.displayName.localeCompare(right.displayName));
-    }
-    return [...favorites].sort((left, right) => left.rank - right.rank || right.effectiveSkill - left.effectiveSkill || left.displayName.localeCompare(right.displayName));
   }
 
   private resetPerfTelemetry(): void {
@@ -508,8 +471,6 @@ export class RaceSimView {
     renderRaceSimControls(this.elements.controls, {
       isRunning: this.isRunning,
       timeMultiplier: this.timeMultiplier,
-      messageSort: this.messageSort,
-      favoriteSort: this.favoriteSort,
       snapshot: this.frameSnapshot,
       totalRiders: this.bootstrap.riders.length,
       perf: this.perfTelemetry,

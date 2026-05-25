@@ -53,11 +53,21 @@ const STAGE_FILE_HEADERS = [
 ];
 const STAGE_MARKER_TYPES = ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
 const STAGE_MARKER_CATEGORIES = ['HC', '1', '2', '3', '4', 'Sprint'];
+const STAGE_CLIMB_CATEGORIES = ['HC', '1', '2', '3', '4'];
 const STAGE_TERRAINS = ['Flat', 'Hill', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'Abfahrt', 'Sprint'];
 const STAGE_FINISH_MARKER_TYPES = ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'];
 const STAGE_ELEVATION_TOLERANCE_METERS = 0.5;
 function isFinishMarkerType(markerType) {
     return STAGE_FINISH_MARKER_TYPES.includes(markerType);
+}
+function isMountainFinishMarkerType(markerType) {
+    return markerType === 'finish_hill' || markerType === 'finish_mountain';
+}
+function hasClimbMarkerCategory(markerCategory) {
+    return markerCategory != null && STAGE_CLIMB_CATEGORIES.includes(markerCategory);
+}
+function isMountainClassificationMarker(markerType, markerCategory) {
+    return markerType === 'climb_top' || (isMountainFinishMarkerType(markerType) && hasClimbMarkerCategory(markerCategory));
 }
 function resolveStagesDir() {
     const candidates = [
@@ -148,9 +158,9 @@ function validateMarkerPlacement(markerType, scope, ctx) {
     }
 }
 function validateMarkerCategory(markerType, markerCategory, ctx) {
-    if (markerType === 'climb_top') {
-        if (markerCategory == null || !['HC', '1', '2', '3', '4'].includes(markerCategory)) {
-            throw new Error(`${ctx}: climb_top verlangt marker_cat HC, 1, 2, 3 oder 4.`);
+    if (isMountainClassificationMarker(markerType, markerCategory)) {
+        if (!hasClimbMarkerCategory(markerCategory)) {
+            throw new Error(`${ctx}: ${markerType} verlangt marker_cat HC, 1, 2, 3 oder 4.`);
         }
         return;
     }
@@ -161,7 +171,7 @@ function validateMarkerCategory(markerType, markerCategory, ctx) {
         return;
     }
     if (isFinishMarkerType(markerType) && markerCategory != null) {
-        throw new Error(`${ctx}: Finish-Marker erlauben keine marker_cat.`);
+        throw new Error(`${ctx}: Finish-Marker erlauben nur fuer finish_hill/finish_mountain die marker_cat HC, 1, 2, 3 oder 4.`);
     }
     if (markerCategory != null && !STAGE_MARKER_CATEGORIES.includes(markerCategory)) {
         throw new Error(`${ctx}: Ungueltige marker_cat "${markerCategory}".`);
@@ -235,42 +245,42 @@ function parseSegmentRow(row, index, startElevation) {
     };
 }
 function validateClimbPairs(segments, filename) {
-    const openClimbs = new Map();
+    const openClimbs = [];
     const openClimb = (marker, ctx) => {
         if (marker.type !== 'climb_start') {
             return;
         }
-        if (!marker.name) {
-            throw new Error(`${ctx}: climb_start braucht einen Namen fuer die Paarbildung.`);
-        }
-        openClimbs.set(marker.name, (openClimbs.get(marker.name) ?? 0) + 1);
+        openClimbs.push({ name: marker.name ?? null, segmentIndex: Number.parseInt(ctx.match(/Segment (\d+)/)?.[1] ?? '0', 10) });
     };
     const closeClimb = (marker, ctx) => {
-        if (marker.type !== 'climb_top') {
+        if (!isMountainClassificationMarker(marker.type, marker.cat)) {
             return;
         }
         if (!marker.name) {
-            throw new Error(`${ctx}: climb_top braucht einen Namen fuer die Paarbildung.`);
+            throw new Error(`${ctx}: ${marker.type} braucht einen Namen fuer die Paarbildung.`);
         }
-        const openCount = openClimbs.get(marker.name) ?? 0;
-        if (openCount <= 0) {
-            throw new Error(`${ctx}: climb_top "${marker.name}" hat keinen vorherigen climb_start mit gleichem Namen.`);
+        let matchingIndex = -1;
+        for (let index = openClimbs.length - 1; index >= 0; index -= 1) {
+            if (openClimbs[index]?.name === marker.name) {
+                matchingIndex = index;
+                break;
+            }
         }
-        if (openCount === 1) {
-            openClimbs.delete(marker.name);
+        const openIndex = matchingIndex >= 0 ? matchingIndex : openClimbs.length - 1;
+        if (openIndex < 0) {
+            throw new Error(`${ctx}: ${marker.type} "${marker.name}" hat keinen vorherigen climb_start.`);
         }
-        else {
-            openClimbs.set(marker.name, openCount - 1);
-        }
+        openClimbs.splice(openIndex, 1);
     };
     segments.forEach((segment, index) => {
         const rowCtx = `Stage-Datei ${filename}, Segment ${index + 1}`;
         segment.markers.forEach((marker) => openClimb(marker, `${rowCtx} Startmarker`));
         segment.endMarkers.forEach((marker) => closeClimb(marker, `${rowCtx} Endmarker`));
     });
-    const danglingClimb = [...openClimbs.entries()][0];
+    const danglingClimb = openClimbs[0];
     if (danglingClimb) {
-        throw new Error(`Stage-Datei ${filename}: climb_start "${danglingClimb[0]}" hat keinen spaeteren climb_top mit gleichem Namen.`);
+        const climbLabel = danglingClimb.name ? ` \"${danglingClimb.name}\"` : '';
+        throw new Error(`Stage-Datei ${filename}: climb_start${climbLabel} hat keinen spaeteren climb_top oder kategorisierten finish_hill/finish_mountain.`);
     }
 }
 function toRecords(content, filename) {
