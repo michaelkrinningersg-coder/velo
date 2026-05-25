@@ -657,6 +657,18 @@ class GameRepository {
     `).run();
         this.db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_race_stage_status ON stage_entries(race_id, stage_id, status)').run();
         this.db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_rider_status ON stage_entries(rider_id, status)').run();
+        if (tableExists(this.db, 'rider_daily_state')) {
+            this.db.prepare(`
+        DELETE FROM stage_entries
+        WHERE stage_id = ?
+          AND status = 'scheduled'
+          AND rider_id IN (
+            SELECT rider_id
+            FROM rider_daily_state
+            WHERE unavailable_days_remaining > 0
+          )
+      `).run(stage.id);
+        }
         const inactiveRiderIds = new Set(this.db.prepare(`
       SELECT DISTINCT stage_entries.rider_id AS rider_id
       FROM stage_entries
@@ -665,12 +677,21 @@ class GameRepository {
         AND stages.stage_number < ?
         AND stage_entries.status IN ('dns', 'dnf')
     `).all(stage.raceId, stage.stageNumber).map((row) => row.rider_id));
-        const raceEntries = this.db.prepare(`
-      SELECT race_id, team_id, rider_id
-      FROM race_entries
-      WHERE race_id = ?
-      ORDER BY rider_id ASC
-    `).all(stage.raceId);
+        const raceEntries = (tableExists(this.db, 'rider_daily_state')
+            ? this.db.prepare(`
+          SELECT re.race_id, re.team_id, re.rider_id
+          FROM race_entries re
+          LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = re.rider_id
+          WHERE re.race_id = ?
+            AND COALESCE(rider_state.unavailable_days_remaining, 0) = 0
+          ORDER BY re.rider_id ASC
+        `).all(stage.raceId)
+            : this.db.prepare(`
+          SELECT race_id, team_id, rider_id
+          FROM race_entries
+          WHERE race_id = ?
+          ORDER BY rider_id ASC
+        `).all(stage.raceId));
         const insertStageEntry = this.db.prepare(`
       INSERT OR IGNORE INTO stage_entries (stage_id, race_id, team_id, rider_id, status, status_reason)
       VALUES (?, ?, ?, ?, 'scheduled', NULL)
@@ -895,7 +916,6 @@ class GameRepository {
     getRiders(teamId, includeFormDebug = false) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
-        this.syncSeasonPointEventsForSeason(season);
         const useContracts = tableExists(this.db, 'contracts');
         const rows = teamId != null
             ? (useContracts
@@ -1337,7 +1357,6 @@ class GameRepository {
     getRaceRiders(raceId) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
-        this.syncSeasonPointEventsForSeason(season);
         const useDailyState = tableExists(this.db, 'rider_daily_state');
         this.ensureStageRaceStateSchema();
         const useStageRaceState = tableExists(this.db, 'rider_stage_race_state');
@@ -1399,7 +1418,6 @@ class GameRepository {
     getStageRiders(stageId) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
-        this.syncSeasonPointEventsForSeason(season);
         const useDailyState = tableExists(this.db, 'rider_daily_state');
         this.ensureStageRaceStateSchema();
         const useStageRaceState = tableExists(this.db, 'rider_stage_race_state');
@@ -1822,7 +1840,52 @@ class GameRepository {
             markerClassifications: tableExists(this.db, 'stage_marker_results')
                 ? this.loadStageMarkerClassifications(stageId)
                 : [],
+            nonFinishers: this.loadStageNonFinishers(meta.race_id, meta.stage_number),
         };
+    }
+    loadStageNonFinishers(raceId, upToStageNumber) {
+        if (!tableExists(this.db, 'stage_entries')) {
+            return [];
+        }
+        const rows = this.db.prepare(`
+      SELECT
+        stage_entries.rider_id AS rider_id,
+        riders.first_name AS rider_first_name,
+        riders.last_name AS rider_last_name,
+        stage_entries.team_id AS team_id,
+        teams.name AS team_name,
+        sta_country.code_3 AS country_code,
+        stages.id AS stage_id,
+        stages.stage_number AS stage_number,
+        stage_entries.status AS status,
+        stage_entries.status_reason AS status_reason
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      JOIN riders ON riders.id = stage_entries.rider_id
+      LEFT JOIN teams ON teams.id = stage_entries.team_id
+      LEFT JOIN sta_country ON sta_country.id = riders.country_id
+      WHERE stage_entries.race_id = ?
+        AND stages.stage_number <= ?
+        AND stage_entries.status = 'dnf'
+      ORDER BY stages.stage_number ASC,
+        CASE WHEN stage_entries.status_reason LIKE 'OTL %' THEN 0 ELSE 1 END ASC,
+        teams.name ASC,
+        riders.last_name ASC,
+        riders.first_name ASC,
+        riders.id ASC
+    `).all(raceId, upToStageNumber);
+        return rows.map((row) => ({
+            riderId: row.rider_id,
+            riderName: `${row.rider_first_name ?? ''} ${row.rider_last_name ?? ''}`.trim(),
+            teamId: row.team_id,
+            teamName: row.team_name ?? '',
+            countryCode: row.country_code ?? null,
+            stageId: row.stage_id,
+            stageNumber: row.stage_number,
+            status: row.status,
+            statusReason: row.status_reason,
+            isOtl: row.status_reason?.startsWith('OTL ') ?? false,
+        }));
     }
     loadStageMarkerClassifications(stageId) {
         const rows = this.db.prepare(`

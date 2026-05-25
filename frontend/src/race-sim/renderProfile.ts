@@ -651,7 +651,7 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
     return `
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
-      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label">${formatElevationLabel(value)}</text>`;
+      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label race-sim-elevation-label">${formatElevationLabel(value)}</text>`;
   }).join('');
   const distanceTickMarkup = renderDistanceTicks(distanceTicks, summary, snapshot.stageDistanceMeters, width, paddingX, baselineY);
   const clusters = displayClusters

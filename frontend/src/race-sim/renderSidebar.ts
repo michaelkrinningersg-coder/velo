@@ -46,6 +46,7 @@ interface SidebarRowCache {
   gcGapField: HTMLElement;
   gradientPercentField: HTMLElement;
   speedField: HTMLElement;
+  formStateField: HTMLElement;
   detailPanel: HTMLElement;
   initialized: boolean;
   lastValues: Record<string, string | number | null>;
@@ -258,13 +259,14 @@ function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitMarkers: Inte
     { label: 'Jersey', displayLabel: 'Jer', width: '46px', className: 'race-sim-col-team-visual', sortKey: 'team' },
     { label: 'Team', width: '58px', className: 'race-sim-col-team', sortKey: 'team' },
     { label: 'Gap', width: '72px', sortKey: 'gap' },
+    { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
     { label: 'Uhr', width: '96px', sortKey: 'clock' },
     ...splitMarkers.map((split) => ({ label: split.key, displayLabel: split.label, width: '92px', className: 'race-sim-col-split', sortKey: `split:${split.key}` })),
-    { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
     { label: 'GC', width: '52px', sortKey: 'gcRank' },
     { label: 'GC Gap', width: '70px', sortKey: 'gcGap' },
     { label: 'Aktive Segment-Steigung', displayLabel: 'Grad', width: '72px', sortKey: 'gradientPercent' },
     { label: 'Speed', width: '82px', sortKey: 'speed' },
+    { label: 'Sonderform', displayLabel: '', width: '28px', className: 'race-sim-col-form-state', sortKey: 'specialForm' },
   ];
 
   return columns;
@@ -453,6 +455,10 @@ function buildRiderComparator(
 
   const directionFactor = sortState.manualSortDirection === 'asc' ? 1 : -1;
   return (left, right) => {
+    if (isDnfRider(left) !== isDnfRider(right)) {
+      return isDnfRider(left) ? 1 : -1;
+    }
+
     const leftSourceRider = riderById.get(left.riderId) ?? null;
     const rightSourceRider = riderById.get(right.riderId) ?? null;
     const leftValue = resolveSortValue(left, leftSourceRider, sortState.manualSortKey ?? '', bootstrap, markerRanksByKey, gcByRiderId, teamAbbreviationById);
@@ -543,6 +549,8 @@ function resolveSortValue(
       return rider.draftModifier;
     case 'speed':
       return rider.currentSpeedMps;
+    case 'specialForm':
+      return rider.hasSuperform ? 1 : rider.hasSupermalus ? -1 : 0;
     default:
       if (sortKey.startsWith('split:')) {
         return resolveSplitSortValue(rider, sortKey.slice('split:'.length), bootstrap.stage.profile, markerRanksByKey);
@@ -574,6 +582,8 @@ function sortRiders(
 
     const frozenOrderIndexByRiderId = new Map(sortState.frozenOrder.map((riderId, index) => [riderId, index]));
     return [...riders].sort((left, right) => (
+      (isDnfRider(left) === isDnfRider(right) ? 0 : isDnfRider(left) ? 1 : -1)
+      ||
       (frozenOrderIndexByRiderId.get(left.riderId) ?? Number.MAX_SAFE_INTEGER)
       - (frozenOrderIndexByRiderId.get(right.riderId) ?? Number.MAX_SAFE_INTEGER)
       || left.riderId - right.riderId
@@ -670,7 +680,15 @@ function hasAnySplitTime(rider: RealtimeRiderSnapshot, splitMarkers: Intermediat
   return splitMarkers.some((split) => rider.splitTimes[split.key] != null);
 }
 
+function isDnfRider(rider: RealtimeRiderSnapshot): boolean {
+  return rider.finishStatus === 'dnf';
+}
+
 function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRiderSnapshot, splitMarkers: IntermediateSplit[]): number {
+  if (isDnfRider(left) !== isDnfRider(right)) {
+    return isDnfRider(left) ? 1 : -1;
+  }
+
   if (left.finishTimeSeconds != null && right.finishTimeSeconds != null) {
     return (left.riderClockSeconds ?? left.finishTimeSeconds ?? Number.POSITIVE_INFINITY)
       - (right.riderClockSeconds ?? right.finishTimeSeconds ?? Number.POSITIVE_INFINITY)
@@ -711,6 +729,10 @@ function compareIttLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRider
 }
 
 function compareStandardLeaderboard(left: RealtimeRiderSnapshot, right: RealtimeRiderSnapshot): number {
+  if (isDnfRider(left) !== isDnfRider(right)) {
+    return isDnfRider(left) ? 1 : -1;
+  }
+
   if (left.isFinished !== right.isFinished) {
     return left.isFinished ? -1 : 1;
   }
@@ -812,6 +834,16 @@ function renderTeamJerseyCell(sourceRider: Rider | null, teamById: Map<number, T
         onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';"
       >
     </span>`;
+}
+
+function renderSpecialFormDot(rider: RealtimeRiderSnapshot): string {
+  if (rider.hasSuperform) {
+    return '<span class="race-sim-special-form-dot race-sim-special-form-dot-good" title="Superform"></span>';
+  }
+  if (rider.hasSupermalus) {
+    return '<span class="race-sim-special-form-dot race-sim-special-form-dot-bad" title="Supermalus"></span>';
+  }
+  return '';
 }
 
 function renderSplitCell(
@@ -920,13 +952,14 @@ function buildSidebarRowCache(
   };
 
   const gapField = makeStrong('race-sim-gap');
+  const effectiveSkillField = makeStrong('race-sim-cell-effective-skill');
   const clockField = makeStrong();
   const splitFields = splitMarkers.map(() => makeStrong());
-  const effectiveSkillField = makeStrong('race-sim-cell-effective-skill');
   const gcRankField = makeStrong();
   const gcGapField = makeStrong();
   const gradientPercentField = makeStrong();
   const speedField = makeStrong();
+  const formStateField = makeStrong('race-sim-form-state-cell');
 
   const detailPanel = document.createElement('div');
   detailPanel.className = 'race-sim-row-detail-popover hidden';
@@ -944,6 +977,7 @@ function buildSidebarRowCache(
     gcGapField,
     gradientPercentField,
     speedField,
+    formStateField,
     detailPanel,
     initialized: false,
     lastValues: {},
@@ -966,16 +1000,19 @@ function updateSidebarRow(
   const seasonForm = sourceRider?.formBonus ?? 0;
   const raceForm = sourceRider?.raceFormBonus ?? 0;
   const gcStanding = raceIsStageRace && stageNumber > 1 ? gcByRiderId.get(rider.riderId) ?? null : null;
+  const isDnf = isDnfRider(rider);
   const clockValue = stageProfile !== 'ITT' && stageProfile !== 'TTT'
-    ? '—'
+    ? isDnf ? 'DNF' : '—'
     : !rider.hasStarted
       ? formatStartOffset(rider.startOffsetSeconds)
-      : rider.riderClockSeconds != null
-        ? formatClock(rider.riderClockSeconds)
-        : '—';
-  updateClassName(rowCache.row, `race-sim-row${position === 1 ? ' race-sim-row-leader' : ''}${isDetailOpen ? ' race-sim-row-detail-open' : ''}`);
+      : isDnf
+        ? 'DNF'
+        : rider.riderClockSeconds != null
+          ? formatClock(rider.riderClockSeconds)
+          : '—';
+  updateClassName(rowCache.row, `race-sim-row${position === 1 && !isDnf ? ' race-sim-row-leader' : ''}${isDetailOpen ? ' race-sim-row-detail-open' : ''}${isDnf ? ' race-sim-row-dnf' : ''}`);
   updateText(rowCache.rankField, `${position}.`);
-  updateText(rowCache.gapField, formatGap(rider.gapToLeaderMeters));
+  updateText(rowCache.gapField, isDnf ? 'DNF' : formatGap(rider.gapToLeaderMeters));
   updateText(rowCache.clockField, clockValue);
   rowCache.nameButton.setAttribute('aria-expanded', isDetailOpen ? 'true' : 'false');
   updateClassName(rowCache.nameButton, `race-sim-row-name-btn${rider.isAttacking ? ' is-attacking' : ''}${rider.isBreakaway ? ' is-breakaway' : ''}`);
@@ -1027,6 +1064,7 @@ function updateSidebarRow(
   updateClassName(rowCache.gradientPercentField, getSlopeClassName(rider.gradientPercent));
   updateTitle(rowCache.gradientPercentField, `${formatTerrain(rider.activeTerrain)} · ${formatSegmentWindow(rider)}`);
   updateText(rowCache.speedField, formatSpeed(rider.currentSpeedMps));
+  rowCache.formStateField.innerHTML = renderSpecialFormDot(rider);
 
   const detailKey = [
     isDetailOpen ? 'open' : 'closed',

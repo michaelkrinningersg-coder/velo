@@ -7,6 +7,7 @@ import { SavegameMeta } from '../../../shared/types';
 import { bootstrap } from '../bootstrapper';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
+import { RiderProgramService } from '../game/RiderProgramService';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -665,6 +666,11 @@ export class DatabaseService {
     `).run();
 
     db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_expires_on
+      ON rider_r_form_events(expires_on)
+    `).run();
+
+    db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_form_history (
         rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
         date TEXT NOT NULL,
@@ -678,23 +684,6 @@ export class DatabaseService {
     db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
       ON rider_form_history(date, rider_id)
-    `).run();
-
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
-        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-        date TEXT NOT NULL,
-        growth_total REAL NOT NULL DEFAULT 0,
-        decline_total REAL NOT NULL DEFAULT 0,
-        blocked_reason TEXT,
-        skill_deltas_json TEXT NOT NULL DEFAULT '{}',
-        PRIMARY KEY (rider_id, date)
-      )
-    `).run();
-
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
-      ON rider_skill_development_daily(date, rider_id)
     `).run();
 
     if (tableExists(db, 'rider_daily_state')) {
@@ -879,7 +868,8 @@ export class DatabaseService {
       const teamName = teamRow.name;
 
       const gss = new GameStateService(db);
-      gss.ensureState();
+      const gameState = gss.ensureState();
+      new RiderProgramService(db).ensureSeasonPrograms(gameState.season, gameState.currentDate);
       db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -910,6 +900,7 @@ export class DatabaseService {
     this.ensureRaceProgramSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
+    new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
     return this.activeConnection;
   }

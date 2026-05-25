@@ -6,6 +6,8 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 5,1,1,2026-01-11,TTT,36,santos_tour_down_under_st5.csv,70,90,1,1,1
 6,2,1,2026-01-29,Flat,19,surf_coast_classic_me_2026.csv,70,90,1,1,1
 7,1,6,2026-01-16,Rolling,262,santos_tour_down_under_st6.csv,80,95,1,1.5,1.5
+13,1,7,2026-01-17,High_Mountain,1225,santos_tour_down_under_st7.csv,70,80,1.05,3,3
+14,1,8,2026-01-18,High_Mountain,915,santos_tour_down_under_st8.csv,70,80,1.05,3,3
 8,3,1,2026-02-18,Hilly,18,volta_algarve_st1.csv,70,90,1,1,1
 9,3,2,2026-02-19,Mountain,112,volta_algarve_st2.csv,70,82,1.08,1.8,1.6
 10,3,3,2026-02-20,ITT,12,volta_algarve_st3.csv,75,92,1,0.8,0.8

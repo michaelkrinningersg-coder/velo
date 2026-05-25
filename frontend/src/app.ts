@@ -52,6 +52,7 @@ const state: {
   selectedResultsStageId: number | null;
   selectedResultTypeId: number;
   selectedResultsMarkerKey: string | null;
+  selectedResultsSpecialView: 'nonFinishers' | null;
   selectedDashboardRaceId: number | null;
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
@@ -89,6 +90,7 @@ const state: {
   selectedResultsStageId: null,
   selectedResultTypeId: 1,
   selectedResultsMarkerKey: null,
+  selectedResultsSpecialView: null,
   selectedDashboardRaceId: null,
   selectedRaceParticipantsRaceId: null,
   selectedDashboardProfileStageId: null,
@@ -122,6 +124,7 @@ let raceSimView: RaceSimView | null = null;
 let realtimeCompletionInFlight = false;
 
 const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
+const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
 
 const STAGE_PROFILE_OPTIONS: StageProfile[] = [
   'Flat',
@@ -267,6 +270,23 @@ function renderResultsParticipant(name: string, strong = true, isBreakaway = fal
     ? `<strong class="results-participant-label">${esc(name)}</strong>`
     : `<span class="results-participant-label">${esc(name)}</span>`;
   return `<span class="results-participant${isBreakaway ? ' is-breakaway' : ''}">${label}</span>`;
+}
+
+function renderNonFinisherStatusBadge(isOtl: boolean): string {
+  return `<span class="results-status-badge ${isOtl ? 'results-status-badge-otl' : 'results-status-badge-dnf'}">${isOtl ? 'OTL' : 'DNF'}</span>`;
+}
+
+function formatNonFinisherReason(reason: string | null | undefined, isOtl: boolean): string {
+  if (!reason) {
+    return isOtl ? 'Außerhalb des Zeitlimits' : 'Aufgegeben';
+  }
+  if (reason.startsWith('crash:')) {
+    return `Sturz · ${reason.slice('crash:'.length)}`;
+  }
+  if (reason === 'mechanical') {
+    return 'Defekt';
+  }
+  return reason;
 }
 
 function renderGcRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
@@ -2595,6 +2615,10 @@ function activateView(name: string): void {
   }
 }
 
+function isActiveView(name: string): boolean {
+  return document.getElementById(`view-${name}`)?.classList.contains('active') === true;
+}
+
 function getRaceSimView(): RaceSimView {
   if (!raceSimView) {
     raceSimView = new RaceSimView({
@@ -3061,7 +3085,6 @@ async function enterGameScreen(): Promise<void> {
   try {
     await loadGameState();
     await loadRaces();
-    await refreshTeamsViewData();
     renderDashboard();
   } catch (e) {
     alert('Fehler beim Laden des Spiels: ' + (e as Error).message);
@@ -3173,6 +3196,7 @@ $<HTMLSelectElement>('results-race-select').addEventListener('change', (event) =
   state.selectedResultsStageId = race?.stages?.[0]?.id ?? null;
   state.selectedResultTypeId = 1;
   state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
+  state.selectedResultsSpecialView = null;
   state.stageResults = null;
   renderResultsView();
   if (state.selectedResultsStageId != null) {
@@ -3249,6 +3273,7 @@ $<HTMLSelectElement>('results-stage-select').addEventListener('change', (event) 
   state.selectedResultsStageId = Number.isFinite(stageId) ? stageId : null;
   state.selectedResultTypeId = 1;
   state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
+  state.selectedResultsSpecialView = null;
   state.stageResults = null;
   renderResultsView();
   if (state.selectedResultsStageId != null) {
@@ -3263,6 +3288,17 @@ $('results-type-tabs').addEventListener('click', (event) => {
   if (!Number.isFinite(resultTypeId)) return;
   state.selectedResultTypeId = resultTypeId;
   state.selectedResultsMarkerKey = resultTypeId === 1 ? RESULTS_STAGE_OVERVIEW_KEY : null;
+  state.selectedResultsSpecialView = null;
+  renderResultsView();
+});
+
+$('results-type-tabs').addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('button[data-results-special-view]');
+  if (!button) return;
+  const specialView = button.dataset['resultsSpecialView'];
+  if (specialView !== RESULTS_NON_FINISHERS_KEY) return;
+  state.selectedResultsSpecialView = 'nonFinishers';
+  state.selectedResultsMarkerKey = null;
   renderResultsView();
 });
 
@@ -3368,7 +3404,9 @@ $('btn-advance-day').addEventListener('click', async () => {
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
     await loadGameState();
     await loadRaces();
-    await refreshTeamsViewData();
+    if (isActiveView('teams')) {
+      await refreshTeamsViewData();
+    }
   } catch (e) {
     alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
   } finally {
@@ -3516,6 +3554,7 @@ async function loadStageResults(stageId: number, silentIfMissing: boolean): Prom
     state.selectedResultsStageId = state.stageResults.stageId;
     state.selectedResultTypeId = state.stageResults.classifications[0]?.resultTypeId ?? 1;
     state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
+    state.selectedResultsSpecialView = null;
   }
   renderResultsView();
 }
@@ -3553,11 +3592,12 @@ function renderResultsView(): void {
   const selectedClassification = state.stageResults?.classifications.find(
     (classification) => classification.resultTypeId === state.selectedResultTypeId,
   ) ?? state.stageResults?.classifications[0] ?? null;
-  if (selectedClassification) {
+  const showNonFinishers = state.selectedResultsSpecialView === 'nonFinishers';
+  if (selectedClassification && !showNonFinishers) {
     state.selectedResultTypeId = selectedClassification.resultTypeId;
   }
 
-  if (!state.stageResults || !selectedClassification) {
+  if (!state.stageResults || (!selectedClassification && !showNonFinishers)) {
     const selectedStage = findStageById(state.selectedResultsStageId);
     meta.textContent = selectedStage
       ? `${selectedStage.race.name} · ${selectedStage.stage.profile} · ${formatDate(selectedStage.stage.date)}`
@@ -3579,20 +3619,34 @@ function renderResultsView(): void {
   meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
   const resultStage = findStageById(state.stageResults.stageId);
   const stageDistanceKm = resultStage?.stage.distanceKm ?? null;
-  const isGcClassification = selectedClassification.resultTypeId === GC_RESULT_TYPE_ID;
-  const isPointsLikeClassification = selectedClassification.resultTypeId === POINTS_RESULT_TYPE_ID
-    || selectedClassification.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
+  const isGcClassification = selectedClassification?.resultTypeId === GC_RESULT_TYPE_ID;
+  const isPointsLikeClassification = selectedClassification?.resultTypeId === POINTS_RESULT_TYPE_ID
+    || selectedClassification?.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
   const previousGcRanks = new Map((state.stageResults.previousGcStandings ?? []).map((standing) => [standing.riderId, standing.rank] as const));
-  tabs.innerHTML = state.stageResults.classifications.map((classification) => `
+  const resultTypeButtons = state.stageResults.classifications.map((classification) => `
     <button
       type="button"
-      class="results-type-btn${classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
+      class="results-type-btn${!showNonFinishers && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
       data-result-type-id="${classification.resultTypeId}"
     >${esc(classification.resultTypeName)}</button>
-  `).join('');
+  `);
+  const nonFinishersButton = `
+    <button
+      type="button"
+      class="results-type-btn${showNonFinishers ? ' active' : ''}"
+      data-results-special-view="${RESULTS_NON_FINISHERS_KEY}"
+    >OTL/DNF</button>
+  `;
+  const teamButtonIndex = state.stageResults.classifications.findIndex((classification) => classification.resultTypeName.toLocaleLowerCase('de').includes('team'));
+  if (teamButtonIndex >= 0) {
+    resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton);
+  } else {
+    resultTypeButtons.push(nonFinishersButton);
+  }
+  tabs.innerHTML = resultTypeButtons.join('');
 
   const stageMarkerClassifications = sortStageMarkerClassifications(state.stageResults.markerClassifications ?? []);
-  const showMarkerTabs = selectedClassification.resultTypeId === 1 && stageMarkerClassifications.length > 0;
+  const showMarkerTabs = !showNonFinishers && selectedClassification?.resultTypeId === 1 && stageMarkerClassifications.length > 0;
   const selectedStageSubViewKey = showMarkerTabs
     ? (state.selectedResultsMarkerKey ?? RESULTS_STAGE_OVERVIEW_KEY)
     : null;
@@ -3618,10 +3672,20 @@ function renderResultsView(): void {
     : '';
   markerTabs.classList.toggle('hidden', !showMarkerTabs);
 
-  const showStageOverviewTable = !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
+  const showStageOverviewTable = showNonFinishers || !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
 
   if (headerRow && showStageOverviewTable) {
-    headerRow.innerHTML = isGcClassification
+    headerRow.innerHTML = showNonFinishers
+      ? `
+        <th>Etappe</th>
+        <th>Status</th>
+        <th class="results-jersey-col">Trikot</th>
+        <th>Fahrer</th>
+        <th class="results-flag-col">Flagge</th>
+        <th>Team</th>
+        <th>Grund</th>
+      `
+      : isGcClassification
       ? `
         <th>Platz</th>
         <th>GC</th>
@@ -3657,7 +3721,19 @@ function renderResultsView(): void {
       `;
   }
 
-  tbody.innerHTML = showStageOverviewTable
+  tbody.innerHTML = showNonFinishers
+    ? (state.stageResults.nonFinishers ?? []).map((row) => `
+      <tr>
+        <td>${row.stageNumber}</td>
+        <td>${renderNonFinisherStatusBadge(row.isOtl)}</td>
+        <td class="results-jersey-col-cell">${renderResultsJerseyColumn(row.teamId, row.teamName)}</td>
+        <td>${renderResultsParticipant(row.riderName, true)}</td>
+        <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
+        <td>${esc(row.teamName || '—')}</td>
+        <td>${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
+    : showStageOverviewTable && selectedClassification
     ? selectedClassification.rows.map((row) => {
       const participant = row.riderName ?? row.teamName;
       const teamName = row.riderName ? row.teamName : '—';
@@ -3701,10 +3777,10 @@ function renderResultsView(): void {
     }).join('')
     : '';
 
-  markerClassifications.innerHTML = showMarkerTabs && selectedMarkerClassification
+  markerClassifications.innerHTML = !showNonFinishers && showMarkerTabs && selectedMarkerClassification
     ? renderSingleMarkerClassificationHtml(selectedMarkerClassification)
     : '';
-  markerClassifications.classList.toggle('hidden', !showMarkerTabs || selectedMarkerClassification == null);
+  markerClassifications.classList.toggle('hidden', showNonFinishers || !showMarkerTabs || selectedMarkerClassification == null);
 
   empty.classList.add('hidden');
   table.classList.toggle('hidden', !showStageOverviewTable);

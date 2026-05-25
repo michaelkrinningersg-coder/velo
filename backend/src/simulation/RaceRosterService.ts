@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import { GameRepository } from '../db/GameRepository';
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
-import { RiderProgramService } from '../game/RiderProgramService';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
   1: 'WorldTour',
@@ -101,11 +100,24 @@ function getPlayerTeam(repo: GameRepository): Team {
   return playerTeam;
 }
 
-function buildRiderLockMap(db: Database.Database, repo: GameRepository, race: Race): Map<number, RiderLockReason> {
+function groupRidersByTeam(riders: Rider[]): Map<number, Rider[]> {
+  const ridersByTeamId = new Map<number, Rider[]>();
+  for (const rider of riders) {
+    if (rider.activeTeamId == null) {
+      continue;
+    }
+    const teamRiders = ridersByTeamId.get(rider.activeTeamId) ?? [];
+    teamRiders.push(rider);
+    ridersByTeamId.set(rider.activeTeamId, teamRiders);
+  }
+  return ridersByTeamId;
+}
+
+function buildRiderLockMap(db: Database.Database, repo: GameRepository, race: Race, riders = repo.getRiders()): Map<number, RiderLockReason> {
   const currentDate = repo.getCurrentDate();
   const locks = new Map<number, RiderLockReason>();
 
-  for (const rider of repo.getRiders()) {
+  for (const rider of riders) {
     if (rider.isUnavailable) {
       locks.set(rider.id, 'unavailable');
     }
@@ -321,7 +333,7 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
   return selected;
 }
 
-function resolveParticipatingTeams(repo: GameRepository, race: Race, riderLocks: Map<number, RiderLockReason>): Team[] {
+function resolveParticipatingTeams(repo: GameRepository, race: Race, riderLocks: Map<number, RiderLockReason>, ridersByTeamId: Map<number, Rider[]>): Team[] {
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
@@ -332,17 +344,19 @@ function resolveParticipatingTeams(repo: GameRepository, race: Race, riderLocks:
   const riderLimit = race.category?.numberOfRiders ?? 0;
   return repo.getTeams()
     .filter((team) => team.division === targetDivision)
-    .filter((team) => getEligibleRiders(repo.getRiders(team.id), riderLocks).length >= riderLimit)
+    .filter((team) => getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks).length >= riderLimit)
     .slice(0, race.category?.numberOfTeams ?? 0);
 }
 
 function buildLegacyRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage, enableDebug = false): Rider[] {
-  const riderLocks = buildRiderLockMap(db, repo, race);
-  const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks);
+  const riders = repo.getRiders();
+  const ridersByTeamId = groupRidersByTeam(riders);
+  const riderLocks = buildRiderLockMap(db, repo, race, riders);
+  const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks, ridersByTeamId);
 
   return eligibleTeams
     .flatMap((team) => {
-      const selectedEntries = selectRaceRoster(team, getEligibleRiders(repo.getRiders(team.id), riderLocks), race.category?.numberOfRiders ?? 0, race.id, race, stage);
+      const selectedEntries = selectRaceRoster(team, getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks), race.category?.numberOfRiders ?? 0, race.id, race, stage);
       if (enableDebug) {
         logAutomaticRosterSelection(team, race, stage, selectedEntries);
       }
@@ -433,24 +447,25 @@ function hashString(value: string): number {
 
 function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage, enableDebug = false): Rider[] {
   const season = repo.getCurrentSeason();
-  new RiderProgramService(db).ensureSeasonPrograms(season, repo.getCurrentDate());
   const racePrograms = repo.getRaceProgramsForRace(race.id);
   if (racePrograms.length === 0) {
     return buildLegacyRaceRoster(db, repo, race, stage, enableDebug);
   }
 
+  const riders = repo.getRiders();
   const programIds = new Set(racePrograms.map((program) => program.id));
-  const riderLocks = buildRiderLockMap(db, repo, race);
+  const riderLocks = buildRiderLockMap(db, repo, race, riders);
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
   const riderLimit = race.category?.numberOfRiders ?? 0;
   const teamLimit = race.category?.numberOfTeams ?? 0;
+  const ridersByTeamId = groupRidersByTeam(riders);
   const selectedTeams = repo.getTeams()
     .filter((team) => team.division === targetDivision)
-    .filter((team) => repo.getRiders(team.id).some((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
+    .filter((team) => (ridersByTeamId.get(team.id) ?? []).some((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
     .slice(0, teamLimit);
 
   const selected = selectedTeams.flatMap((team) => {
-    const roster = getEligibleRiders(repo.getRiders(team.id), riderLocks);
+    const roster = getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks);
     const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
     const teamSelection = programCandidates.slice(0, riderLimit);
     const selectedIds = new Set(teamSelection.map((rider) => rider.id));

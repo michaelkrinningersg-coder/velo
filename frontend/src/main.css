@@ -427,6 +427,36 @@ html, body {
   color: var(--text-500);
 }
 
+.results-empty-cell {
+  padding: 1rem;
+  color: var(--text-500);
+  text-align: center;
+}
+
+.results-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3rem;
+  padding: .22rem .5rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.results-status-badge-otl {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, .12);
+  border: 1px solid rgba(34, 211, 238, .32);
+}
+
+.results-status-badge-dnf {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(239, 68, 68, .28);
+}
+
 .season-standings-country-cell {
   position: relative;
 }
@@ -1409,13 +1439,20 @@ html, body {
 
 .race-sim-classification-row {
   display: grid;
-  grid-template-columns: 2rem 1.9rem minmax(0, 1fr) auto;
+  grid-template-columns: 2rem 1.9rem minmax(0, 1fr);
   align-items: center;
   gap: .45rem;
   padding: .6rem .65rem;
   border-radius: var(--radius-sm);
   background: rgba(15, 23, 42, .72);
   border: 1px solid rgba(148, 163, 184, .14);
+}
+
+.race-sim-classification-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: .08rem;
 }
 
 .race-sim-classification-box-gc {
@@ -1444,8 +1481,8 @@ html, body {
 }
 
 .race-sim-classification-value {
-  color: #dbeafe;
-  font-size: .78rem;
+  color: #22d3ee;
+  font-size: .7rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -1465,16 +1502,153 @@ html, body {
 }
 
 .race-sim-mountain-prime-row {
-  display: grid;
-  grid-template-columns: minmax(7.5rem, 1.3fr) repeat(4, minmax(4.2rem, .7fr)) minmax(8rem, 1.2fr);
-  align-items: center;
-  gap: .55rem;
   padding: .55rem .65rem;
   border-radius: var(--radius-sm);
   background: rgba(15, 23, 42, .7);
   border: 1px solid rgba(148, 163, 184, .12);
   color: var(--text-300);
   font-size: .74rem;
+}
+
+.race-sim-mountain-prime-row:not(details) {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1.3fr) repeat(4, minmax(4.2rem, .7fr)) minmax(8rem, 1.2fr);
+  align-items: center;
+  gap: .55rem;
+}
+
+.race-sim-stage-points-event {
+  position: relative;
+}
+
+.race-sim-stage-points-event summary {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(10rem, auto);
+  align-items: center;
+  gap: .65rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.race-sim-stage-points-event summary::-webkit-details-marker {
+  display: none;
+}
+
+.race-sim-stage-points-event summary:hover .race-sim-stage-points-leader strong {
+  color: #67e8f9;
+}
+
+.race-sim-stage-points-event-finish {
+  border-color: rgba(34, 211, 238, .32);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, .1) inset;
+}
+
+.race-sim-stage-points-event-sprint {
+  border-color: rgba(34, 197, 94, .25);
+}
+
+.race-sim-stage-points-event-mountain {
+  border-color: rgba(239, 68, 68, .24);
+}
+
+.race-sim-stage-points-leader {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .35rem;
+  color: #22d3ee;
+}
+
+.race-sim-stage-points-leader strong {
+  color: #22d3ee;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-sim-stage-points-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.25rem;
+  padding: 0 .35rem;
+  border-radius: 999px;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.race-sim-stage-points-badge-points,
+.race-sim-stage-points-value-points {
+  color: #86efac;
+}
+
+.race-sim-stage-points-badge-points {
+  background: rgba(34, 197, 94, .12);
+  border: 1px solid rgba(34, 197, 94, .28);
+}
+
+.race-sim-stage-points-badge-mountain,
+.race-sim-stage-points-value-mountain {
+  color: #fca5a5;
+}
+
+.race-sim-stage-points-badge-mountain {
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .28);
+}
+
+.race-sim-stage-points-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + .35rem);
+  right: .25rem;
+  z-index: 20;
+  min-width: min(28rem, 92vw);
+  padding: .7rem;
+  border: 1px solid rgba(96, 165, 250, .24);
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: var(--shadow);
+}
+
+.race-sim-stage-points-event[open] .race-sim-stage-points-popover {
+  display: block;
+}
+
+.race-sim-stage-points-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+.race-sim-stage-points-popover-row {
+  display: grid;
+  grid-template-columns: 2.2rem 1.8rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: .45rem;
+  padding: .35rem .45rem;
+  border-radius: var(--radius-sm);
+  background: rgba(30, 41, 59, .72);
+}
+
+.race-sim-stage-points-popover-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-100);
+  font-weight: 700;
+}
+
+.race-sim-stage-points-popover-row strong:last-child {
+  text-align: right;
+}
+
+.race-sim-stage-points-popover-empty {
+  color: var(--text-500);
+  font-size: .78rem;
 }
 
 .race-sim-mountain-prime-title {
@@ -1731,6 +1905,16 @@ html, body {
   box-shadow: 0 0 0 1px rgba(96, 165, 250, .12) inset;
 }
 
+.race-sim-row-dnf {
+  border-color: rgba(248, 113, 113, .22);
+  background: rgba(30, 41, 59, .52);
+  color: rgba(226, 232, 240, .62);
+}
+
+.race-sim-row-dnf .race-sim-gap {
+  color: #fca5a5;
+}
+
 .race-sim-row-name {
   display: flex;
   align-items: center;
@@ -1832,6 +2016,30 @@ html, body {
 
 .race-sim-row-grid > span {
   min-width: 0;
+}
+
+.race-sim-form-state-cell {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.race-sim-special-form-dot {
+  display: inline-block;
+  width: .55rem;
+  height: .55rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, .9), 0 0 12px currentColor;
+}
+
+.race-sim-special-form-dot-good {
+  color: #22c55e;
+  background: #22c55e;
+}
+
+.race-sim-special-form-dot-bad {
+  color: #ef4444;
+  background: #ef4444;
 }
 
 .race-sim-row-team {

@@ -258,27 +258,10 @@ class RiderDevelopmentService {
     constructor(db) {
         this.db = db;
     }
-    ensureDevelopmentHistoryTable() {
-        this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
-        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-        date TEXT NOT NULL,
-        growth_total REAL NOT NULL DEFAULT 0,
-        decline_total REAL NOT NULL DEFAULT 0,
-        blocked_reason TEXT,
-        skill_deltas_json TEXT NOT NULL DEFAULT '{}',
-        PRIMARY KEY (rider_id, date)
-      )
-    `).run();
-        this.db.prepare(`
-      CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
-      ON rider_skill_development_daily(date, rider_id)
-    `).run();
-    }
-    advanceDailyDevelopment(currentDate, season, contexts) {
+    advanceDailyDevelopment(currentDate, season, contexts, dayMultiplier = 1) {
         if (!tableExists(this.db, 'riders') || !tableExists(this.db, 'type_rider'))
             return;
-        this.ensureDevelopmentHistoryTable();
+        const boundedDayMultiplier = Math.max(1, Math.min(31, Math.floor(dayMultiplier)));
         const contextByRiderId = new Map(contexts.map((context) => [context.riderId, context]));
         const rows = this.db.prepare(`
       SELECT riders.id, riders.birth_year, riders.skill_development, riders.peak_age, riders.decline_age, riders.retirement_age,
@@ -312,15 +295,6 @@ class RiderDevelopmentService {
           skill_bike_handling = ?
       WHERE id = ?
     `);
-        const upsertHistory = this.db.prepare(`
-      INSERT INTO rider_skill_development_daily (rider_id, date, growth_total, decline_total, blocked_reason, skill_deltas_json)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(rider_id, date) DO UPDATE SET
-        growth_total = excluded.growth_total,
-        decline_total = excluded.decline_total,
-        blocked_reason = excluded.blocked_reason,
-        skill_deltas_json = excluded.skill_deltas_json
-    `);
         for (const row of rows) {
             const age = season - row.birth_year;
             const context = contextByRiderId.get(row.id);
@@ -339,7 +313,7 @@ class RiderDevelopmentService {
                     const headroom = Math.max(0, potentialSkills[skillKey] - currentSkills[skillKey]);
                     if (headroom <= 0.01)
                         continue;
-                    const dailyGrowth = Math.min(DAILY_GROWTH_CAP, headroom * 0.0023 * ageFactor * developmentFactor * resolveSkillFocusFactor(row.rider_type, skillKey) * randomNoise(0.75, 1.25));
+                    const dailyGrowth = Math.min(DAILY_GROWTH_CAP * boundedDayMultiplier, headroom * 0.0023 * ageFactor * developmentFactor * resolveSkillFocusFactor(row.rider_type, skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25));
                     if (dailyGrowth <= 0)
                         continue;
                     const applied = clamp(Math.min(potentialSkills[skillKey], currentSkills[skillKey] + dailyGrowth)) - currentSkills[skillKey];
@@ -355,7 +329,7 @@ class RiderDevelopmentService {
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
                     if (skillKey === 'bikeHandling')
                         continue;
-                    const dailyDecline = Math.min(DAILY_DECLINE_CAP, 0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * randomNoise(0.75, 1.25));
+                    const dailyDecline = Math.min(DAILY_DECLINE_CAP * boundedDayMultiplier, 0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25));
                     if (dailyDecline <= 0)
                         continue;
                     const applied = currentSkills[skillKey] - clamp(currentSkills[skillKey] - dailyDecline);
@@ -366,13 +340,7 @@ class RiderDevelopmentService {
                 }
             }
             const hasDelta = growthTotal > 0 || declineTotal > 0;
-            const effectiveBlockedReason = hasDelta
-                ? blockedReason
-                : blockedReason === 'healthy'
-                    ? 'no_headroom'
-                    : blockedReason;
             if (!hasDelta) {
-                upsertHistory.run(row.id, currentDate, 0, 0, effectiveBlockedReason, '{}');
                 continue;
             }
             const updatedSkills = { ...currentSkills };
@@ -383,7 +351,6 @@ class RiderDevelopmentService {
             }
             updatedSkills.bikeHandling = calcBikeHandling(updatedSkills);
             update.run(calcOverall(updatedSkills), updatedSkills.flat, updatedSkills.mountain, updatedSkills.mediumMountain, updatedSkills.hill, updatedSkills.timeTrial, updatedSkills.prologue, updatedSkills.cobble, updatedSkills.sprint, updatedSkills.acceleration, updatedSkills.downhill, updatedSkills.attack, updatedSkills.stamina, updatedSkills.resistance, updatedSkills.recuperation, updatedSkills.bikeHandling, row.id);
-            upsertHistory.run(row.id, currentDate, round2(growthTotal), round2(declineTotal), effectiveBlockedReason, JSON.stringify(deltas));
         }
     }
     recalculateSpecializations(_currentSeason) {

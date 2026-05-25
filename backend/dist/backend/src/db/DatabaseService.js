@@ -45,6 +45,7 @@ const skillWeights_1 = require("../../../shared/skillWeights");
 const bootstrapper_1 = require("../bootstrapper");
 const ContractService_1 = require("../game/ContractService");
 const GameStateService_1 = require("../game/GameStateService");
+const RiderProgramService_1 = require("../game/RiderProgramService");
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
     { id: 1, name: 'Stage' },
@@ -523,6 +524,10 @@ class DatabaseService {
       ON rider_r_form_events(rider_id, source_date, expires_on)
     `).run();
         db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_expires_on
+      ON rider_r_form_events(expires_on)
+    `).run();
+        db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_form_history (
         rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
         date TEXT NOT NULL,
@@ -535,21 +540,6 @@ class DatabaseService {
         db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
       ON rider_form_history(date, rider_id)
-    `).run();
-        db.prepare(`
-      CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
-        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-        date TEXT NOT NULL,
-        growth_total REAL NOT NULL DEFAULT 0,
-        decline_total REAL NOT NULL DEFAULT 0,
-        blocked_reason TEXT,
-        skill_deltas_json TEXT NOT NULL DEFAULT '{}',
-        PRIMARY KEY (rider_id, date)
-      )
-    `).run();
-        db.prepare(`
-      CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
-      ON rider_skill_development_daily(date, rider_id)
     `).run();
         if (tableExists(db, 'rider_daily_state')) {
             db.prepare(`
@@ -715,7 +705,8 @@ class DatabaseService {
             db.prepare('UPDATE teams SET is_player_team = 1 WHERE id = ?').run(teamId);
             const teamName = teamRow.name;
             const gss = new GameStateService_1.GameStateService(db);
-            gss.ensureState();
+            const gameState = gss.ensureState();
+            new RiderProgramService_1.RiderProgramService(db).ensureSeasonPrograms(gameState.season, gameState.currentDate);
             db.prepare(`
         INSERT OR REPLACE INTO career_meta (key, value)
         VALUES ('career_name', ?), ('team_name', ?), ('current_season', '2026'), ('last_saved', ?)
@@ -746,6 +737,7 @@ class DatabaseService {
         this.ensureRaceProgramSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
+        new RiderProgramService_1.RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
         new ContractService_1.ContractService(this.activeConnection).checkContractStatuses(gameState.season);
         return this.activeConnection;
     }

@@ -13,6 +13,14 @@ import type {
   StageMarkerClassification,
   Team,
 } from '../../../shared/types';
+import {
+  TIME_TIE_THRESHOLD_SECONDS,
+  isTimeTrialProfile,
+  rankStageResultEntries,
+  resolveStageTimeLimitSeconds,
+  resolveTimeLimitPercent,
+  roundStageResultSeconds,
+} from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
 
 const RESULT_TYPES = {
@@ -24,8 +32,6 @@ const RESULT_TYPES = {
   team: 6,
 } as const;
 
-const TIME_TIE_THRESHOLD_SECONDS = 1;
-
 const SUPPORTED_RESULT_TYPES: ResultType[] = [
   { id: RESULT_TYPES.stage, name: 'Stage' },
   { id: RESULT_TYPES.gc, name: 'GC' },
@@ -36,6 +42,7 @@ const SUPPORTED_RESULT_TYPES: ResultType[] = [
 ];
 
 interface PerformanceEntry {
+  riderId: number;
   rider: Rider;
   team: Team;
   dayForm: number;
@@ -47,6 +54,11 @@ interface PerformanceEntry {
   gcBonusSeconds: number;
   mountainPoints: number;
   isBreakaway?: boolean;
+}
+
+interface OtlEntry {
+  riderId: number;
+  statusReason: string;
 }
 
 interface RiderMetricRow {
@@ -95,61 +107,43 @@ function addDaysIso(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function roundSeconds(value: number): number {
-  return Math.max(0, Math.round(value));
-}
-
-function comparePerformanceEntries(left: Pick<PerformanceEntry, 'stageTimeSeconds' | 'photoFinishScore' | 'rider'>, right: Pick<PerformanceEntry, 'stageTimeSeconds' | 'photoFinishScore' | 'rider'>): number {
-  return left.stageTimeSeconds - right.stageTimeSeconds
-    || right.photoFinishScore - left.photoFinishScore
-    || left.rider.id - right.rider.id;
-}
-
-function isTimeTrialProfile(profile: Stage['profile']): boolean {
-  return profile === 'ITT' || profile === 'TTT';
-}
-
-function comparePerformanceWithinTimeGroup(left: Pick<PerformanceEntry, 'photoFinishScore' | 'rider'>, right: Pick<PerformanceEntry, 'photoFinishScore' | 'rider'>): number {
-  return right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id;
-}
-
 function rankPerformanceEntries(entries: PerformanceEntry[], profile: Stage['profile']): PerformanceEntry[] {
-  if (isTimeTrialProfile(profile)) {
-    return [...entries].sort(comparePerformanceEntries);
+  return rankStageResultEntries(entries, profile);
+}
+
+function resolveTimeLimitSeconds(stage: Stage, performance: PerformanceEntry[]): number | null {
+  return resolveStageTimeLimitSeconds(stage.profile, performance.map((entry) => entry.stageTimeSeconds));
+}
+
+function splitOtlPerformance(stage: Stage, performance: PerformanceEntry[]): { classifiedPerformance: PerformanceEntry[]; otlEntries: OtlEntry[] } {
+  const timeLimitSeconds = resolveTimeLimitSeconds(stage, performance);
+  if (timeLimitSeconds == null) {
+    return { classifiedPerformance: performance, otlEntries: [] };
   }
 
-  const sortedByTime = [...entries].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || comparePerformanceWithinTimeGroup(left, right));
-  const ranked: PerformanceEntry[] = [];
-  let group: PerformanceEntry[] = [];
-  let previousTime: number | null = null;
-
-  const flushGroup = (): void => {
-    ranked.push(...group.sort(comparePerformanceWithinTimeGroup));
-  };
-
-  for (const entry of sortedByTime) {
-    if (group.length === 0) {
-      group = [entry];
-      previousTime = entry.stageTimeSeconds;
+  const classifiedPerformance: PerformanceEntry[] = [];
+  const otlEntries: OtlEntry[] = [];
+  const timeLimitPercent = resolveTimeLimitPercent(stage.profile);
+  for (const entry of performance) {
+    if (entry.stageTimeSeconds <= timeLimitSeconds) {
+      classifiedPerformance.push(entry);
       continue;
     }
 
-    if (previousTime != null && entry.stageTimeSeconds - previousTime <= TIME_TIE_THRESHOLD_SECONDS) {
-      group.push(entry);
-      previousTime = entry.stageTimeSeconds;
-      continue;
-    }
-
-    flushGroup();
-    group = [entry];
-    previousTime = entry.stageTimeSeconds;
+    otlEntries.push({
+      riderId: entry.rider.id,
+      statusReason: `OTL +${Math.round(entry.stageTimeSeconds - timeLimitSeconds)}s ueber Zeitlimit (${timeLimitPercent}%)`,
+    });
   }
 
-  if (group.length > 0) {
-    flushGroup();
-  }
+  return { classifiedPerformance, otlEntries };
+}
 
-  return ranked;
+function filterMarkerClassificationsForClassifiedRiders(classifications: StageMarkerClassification[], classifiedRiderIds: Set<number>): StageMarkerClassification[] {
+  return classifications.map((classification) => ({
+    ...classification,
+    entries: classification.entries.filter((entry) => classifiedRiderIds.has(entry.riderId)),
+  }));
 }
 
 function normalizeRoadStageTimeGroups(entries: PerformanceEntry[], profile: Stage['profile']): void {
@@ -157,7 +151,7 @@ function normalizeRoadStageTimeGroups(entries: PerformanceEntry[], profile: Stag
     return;
   }
 
-  const sortedByTime = [...entries].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || comparePerformanceWithinTimeGroup(left, right));
+  const sortedByTime = [...entries].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
   let groupTime: number | null = null;
   let previousTime: number | null = null;
 
@@ -280,7 +274,7 @@ export class StageResultCommitService {
         isBreakaway: entry.isBreakaway === true,
         statusReason: entry.statusReason ?? null,
         finishTimeSeconds: entry.finishStatus === 'finished' && entry.finishTimeSeconds != null && Number.isFinite(entry.finishTimeSeconds)
-          ? roundSeconds(entry.finishTimeSeconds)
+          ? roundStageResultSeconds(entry.finishTimeSeconds)
           : null,
         photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
       }))
@@ -317,6 +311,7 @@ export class StageResultCommitService {
 
       return {
         rider,
+        riderId: rider.id,
         team,
         dayForm: 1,
         performanceScore: 0,
@@ -334,15 +329,20 @@ export class StageResultCommitService {
       throw new Error('Die Live-Simulation hat nicht alle Starter geliefert.');
     }
 
-    const normalizedMarkerClassifications = normalizeMarkerClassifications(markerClassifications, !isTimeTrialProfile(stage.profile));
-    const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, stage, performance, normalizedMarkerClassifications);
+    const { classifiedPerformance, otlEntries } = splitOtlPerformance(stage, performance);
+    const classifiedRiderIds = new Set(classifiedPerformance.map((entry) => entry.rider.id));
+    const normalizedMarkerClassifications = filterMarkerClassificationsForClassifiedRiders(
+      normalizeMarkerClassifications(markerClassifications, !isTimeTrialProfile(stage.profile)),
+      classifiedRiderIds,
+    );
+    const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, stage, classifiedPerformance, normalizedMarkerClassifications);
 
-    this.applyFinishLineAwards(race, stage, performance, {
+    this.applyFinishLineAwards(race, stage, classifiedPerformance, {
       awardPoints: stage.profile !== 'TTT',
       awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
     });
 
-    return this.persistStagePerformance(race, stage, performance, awardedMarkerClassifications, dnfEntries, incidents);
+    return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents);
   }
 
   private loadStageContext(stageId: number): {

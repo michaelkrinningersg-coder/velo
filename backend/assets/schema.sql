@@ -330,6 +330,9 @@ CREATE TABLE IF NOT EXISTS race_entries (
   PRIMARY KEY (race_id, rider_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_race_entries_rider_race
+  ON race_entries(rider_id, race_id);
+
 CREATE TABLE IF NOT EXISTS stage_entries (
   stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
   race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
@@ -429,6 +432,9 @@ CREATE TABLE IF NOT EXISTS rider_r_form_events (
 CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_rider_date
   ON rider_r_form_events(rider_id, source_date, expires_on);
 
+CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_expires_on
+  ON rider_r_form_events(expires_on);
+
 CREATE TABLE IF NOT EXISTS rider_form_history (
   rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
   date             TEXT    NOT NULL,
@@ -440,19 +446,6 @@ CREATE TABLE IF NOT EXISTS rider_form_history (
 
 CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
   ON rider_form_history(date, rider_id);
-
-CREATE TABLE IF NOT EXISTS rider_skill_development_daily (
-  rider_id          INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-  date              TEXT    NOT NULL,
-  growth_total      REAL    NOT NULL DEFAULT 0,
-  decline_total     REAL    NOT NULL DEFAULT 0,
-  blocked_reason    TEXT,
-  skill_deltas_json TEXT    NOT NULL DEFAULT '{}',
-  PRIMARY KEY (rider_id, date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_rider_skill_development_daily_date
-  ON rider_skill_development_daily(date, rider_id);
 
 CREATE TABLE IF NOT EXISTS rider_r_form_daily_awards (
   rider_id         INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,

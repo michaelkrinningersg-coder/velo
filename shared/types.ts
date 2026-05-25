@@ -538,6 +538,19 @@ export interface StageClassification {
   rows: RaceClassificationRow[];
 }
 
+export interface StageNonFinisherRow {
+  riderId: number;
+  riderName: string;
+  teamId: number | null;
+  teamName: string;
+  countryCode: string | null;
+  stageId: number;
+  stageNumber: number;
+  status: 'dnf';
+  statusReason: string | null;
+  isOtl: boolean;
+}
+
 export interface StageResultsPayload {
   raceId: number;
   raceName: string;
@@ -549,6 +562,7 @@ export interface StageResultsPayload {
   classifications: StageClassification[];
   previousGcStandings?: RealtimeGcStanding[];
   markerClassifications?: StageMarkerClassification[];
+  nonFinishers?: StageNonFinisherRow[];
 }
 
 export interface StageResultCommitResponse {

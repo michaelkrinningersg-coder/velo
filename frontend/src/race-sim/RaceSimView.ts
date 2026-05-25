@@ -384,7 +384,7 @@ export class RaceSimView {
 
     if (this.detailSnapshot) {
       renderRaceMessages(this.elements.messages, this.detailSnapshot.messages);
-      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications);
+      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications, this.detailSnapshot);
     }
 
     renderRaceSimControls(this.elements.controls, {
