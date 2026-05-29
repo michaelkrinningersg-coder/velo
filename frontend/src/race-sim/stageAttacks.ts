@@ -72,6 +72,37 @@ function sampleWithoutReplacement<T>(values: T[], count: number): T[] {
   return shuffleInPlace([...values]).slice(0, Math.min(count, values.length));
 }
 
+function sampleWeightedWithoutReplacement<T>(values: T[], count: number, resolveWeight: (value: T) => number): T[] {
+  if (count <= 0 || values.length === 0) {
+    return [];
+  }
+
+  const pool = [...values];
+  const selected: T[] = [];
+  while (pool.length > 0 && selected.length < count) {
+    const totalWeight = pool.reduce((sum, value) => sum + Math.max(0, resolveWeight(value)), 0);
+    if (totalWeight <= 0) {
+      selected.push(...sampleWithoutReplacement(pool, count - selected.length));
+      break;
+    }
+
+    let threshold = Math.random() * totalWeight;
+    let selectedIndex = pool.length - 1;
+    for (let index = 0; index < pool.length; index += 1) {
+      threshold -= Math.max(0, resolveWeight(pool[index]!));
+      if (threshold <= 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+
+    selected.push(pool[selectedIndex]!);
+    pool.splice(selectedIndex, 1);
+  }
+
+  return selected;
+}
+
 function isAttackStage(stage: Stage): boolean {
   return ALLOWED_ATTACK_PROFILES.has(stage.profile);
 }
@@ -167,7 +198,12 @@ function sampleTriggerFromWindows(windows: AttackWindow[], excludeDistanceMeters
   return null;
 }
 
-export function precalculateStageAttacks(top15Riders: Rider[], stage: Stage, stageSummary: ParsedStageSummary): PrecalculatedStageAttack[] {
+export function precalculateStageAttacks(
+  top15Riders: Rider[],
+  stage: Stage,
+  stageSummary: ParsedStageSummary,
+  resolveAttackWeight: (rider: Rider) => number = () => 1,
+): PrecalculatedStageAttack[] {
   const validTop15 = top15Riders.slice(0, 15);
   const attackWindows = buildAttackWindows(stage, stageSummary);
   if (validTop15.length === 0 || attackWindows.length === 0) {
@@ -175,7 +211,7 @@ export function precalculateStageAttacks(top15Riders: Rider[], stage: Stage, sta
   }
 
   const desiredPrimaryAttackers = randomInteger(MIN_PRIMARY_ATTACKERS, Math.min(MAX_PRIMARY_ATTACKERS, validTop15.length));
-  const selectedAttackers = sampleWithoutReplacement(validTop15, desiredPrimaryAttackers);
+  const selectedAttackers = sampleWeightedWithoutReplacement(validTop15, desiredPrimaryAttackers, resolveAttackWeight);
   const attacks: PrecalculatedStageAttack[] = [];
 
   for (const rider of selectedAttackers) {

@@ -796,10 +796,44 @@ export interface StageEditorMetadata {
 
 export interface StageEditorExistingStageOption extends StageEditorMetadata {
   raceName?: string;
+  countryCode?: Nationality | null;
 }
 
 export interface StageEditorExistingStageListResponse {
   stages: StageEditorExistingStageOption[];
+}
+
+export interface StageEditorStageOverviewRow {
+  stageId: number;
+  raceId: number;
+  countryCode: Nationality | null;
+  raceName: string;
+  stageNumber: number;
+  profile: StageProfile;
+  distanceKm: number;
+  elevationGainMeters: number;
+  sprintCount: number;
+  climbCount: number;
+  profileScore: string;
+}
+
+export interface StageEditorClimbOverviewRow {
+  id: string;
+  placementKm: number;
+  name: string;
+  countryCode: Nationality | null;
+  raceName: string;
+  stageNumber: number;
+  gainMeters: number;
+  distanceKm: number;
+  avgGradient: number;
+  maxGradient: number;
+  climbScore: string;
+}
+
+export interface StageEditorOverviewResponse {
+  stages: StageEditorStageOverviewRow[];
+  climbs: StageEditorClimbOverviewRow[];
 }
 
 export interface StageEditorExistingStageLoadResponse {

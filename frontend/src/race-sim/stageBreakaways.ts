@@ -1,9 +1,11 @@
-import type { ParsedStageSummary, Race, RealtimeGcStanding, Rider, Stage } from '../../../shared/types';
+import type { ParsedStageSummary, Race, RealtimeClassificationStanding, RealtimeGcStanding, Rider, Stage } from '../../../shared/types';
 import type { FavoriteItem } from './stageFavorites';
+import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
 export interface PrecalculatedStageBreakaway {
   riderIds: number[];
   triggerDistanceMeters: number;
+  groupPhaseEndDistanceMeters: number;
   phaseEndDistanceMeters: number;
   skillBonus: number;
   malusValue: number;
@@ -35,6 +37,30 @@ function sampleWithoutReplacement<T>(values: T[], count: number): T[] {
   return shuffleInPlace([...values]).slice(0, Math.min(count, values.length));
 }
 
+function sampleWeightedWithoutReplacement<T>(values: T[], count: number, resolveWeight: (value: T) => number): T[] {
+  const pool = [...values];
+  const selected: T[] = [];
+
+  while (selected.length < count && pool.length > 0) {
+    const totalWeight = pool.reduce((sum, value) => sum + Math.max(0.0001, resolveWeight(value)), 0);
+    let roll = Math.random() * totalWeight;
+    let selectedIndex = 0;
+    for (let index = 0; index < pool.length; index += 1) {
+      roll -= Math.max(0.0001, resolveWeight(pool[index] as T));
+      if (roll <= 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+    const [picked] = pool.splice(selectedIndex, 1);
+    if (picked) {
+      selected.push(picked);
+    }
+  }
+
+  return selected;
+}
+
 function getTopFavoriteIds(favorites: FavoriteItem[], limit: number): Set<number> {
   return new Set(
     favorites
@@ -46,6 +72,139 @@ function getTopFavoriteIds(favorites: FavoriteItem[], limit: number): Set<number
 
 function getTopGcIds(gcStandings: RealtimeGcStanding[], limit: number): Set<number> {
   return new Set(gcStandings.slice(0, limit).map((standing) => standing.riderId));
+}
+
+function getTopClassificationIds(standings: RealtimeClassificationStanding[], limit: number): Set<number> {
+  return new Set(standings.slice(0, limit).map((standing) => standing.riderId));
+}
+
+function getTopClassificationIdsWithExclusions(
+  standings: RealtimeClassificationStanding[],
+  excludedIds: ReadonlySet<number>,
+  limit: number,
+): Set<number> {
+  return new Set(
+    standings
+      .filter((standing) => !excludedIds.has(standing.riderId))
+      .slice(0, limit)
+      .map((standing) => standing.riderId),
+  );
+}
+
+function normalizeRoleName(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function resolveRiderRoleName(rider: Rider): string {
+  return normalizeRoleName(rider.role?.name);
+}
+
+function hasMountainClassifications(stageSummary: ParsedStageSummary): boolean {
+  return collectStageBoundaryMarkers(stageSummary).some(({ marker }) => isMountainClassificationMarker(marker));
+}
+
+function resolveAttackInitiativeWeight(rider: Rider): number {
+  return Math.max(1, Math.pow(10, (rider.skills.attack - 65) / 10));
+}
+
+function resolveBreakawayWeightFactors(
+  rider: Rider,
+  options: {
+    isEarlyStageRace: boolean;
+    race: Race;
+    gcLeaderTeamId: number | null;
+    stageHasMountainClassifications: boolean;
+    topMountainIds: ReadonlySet<number>;
+    isHardStage: boolean;
+  },
+): {
+  attackFactor: number;
+  superformFactor: number;
+  gcLeaderTeamFactor: number;
+  mountainFactor: number;
+  sprinterFactor: number;
+  finalWeight: number;
+} {
+  const attackFactor = resolveAttackInitiativeWeight(rider);
+  const superformFactor = rider.hasSuperform === true ? 40 : 1;
+  const gcLeaderTeamFactor = !options.isEarlyStageRace && options.race.isStageRace && options.gcLeaderTeamId != null && rider.activeTeamId === options.gcLeaderTeamId
+    ? 0.25
+    : 1;
+  const mountainFactor = options.stageHasMountainClassifications && options.topMountainIds.has(rider.id) ? 50 : 1;
+  const sprinterFactor = options.isHardStage && resolveRiderRoleName(rider) === 'sprinter' && rider.skills.hill > 67 ? 20 : 1;
+  const finalWeight = attackFactor * superformFactor * gcLeaderTeamFactor * mountainFactor * sprinterFactor;
+
+  return {
+    attackFactor,
+    superformFactor,
+    gcLeaderTeamFactor,
+    mountainFactor,
+    sprinterFactor,
+    finalWeight,
+  };
+}
+
+function isHarderThanHillyStage(stage: Stage): boolean {
+  return stage.profile === 'Hilly_Difficult'
+    || stage.profile === 'Medium_Mountain'
+    || stage.profile === 'Mountain'
+    || stage.profile === 'High_Mountain'
+    || stage.profile === 'Cobble_Hill';
+}
+
+function resolveGcLeaderTeamId(riders: Rider[], gcStandings: RealtimeGcStanding[]): number | null {
+  const gcLeaderId = gcStandings[0]?.riderId ?? null;
+  if (gcLeaderId == null) {
+    return null;
+  }
+
+  return riders.find((rider) => rider.id === gcLeaderId)?.activeTeamId ?? null;
+}
+
+function getTopFavoriteTeamIds(favorites: FavoriteItem[], riders: Rider[], limit: number): Set<number> {
+  const riderById = new Map(riders.map((rider) => [rider.id, rider]));
+  const teamIds = new Set<number>();
+
+  for (const favorite of favorites) {
+    if (favorite.kind !== 'rider' || favorite.riderId == null) {
+      continue;
+    }
+
+    const rider = riderById.get(favorite.riderId) ?? null;
+    if (!rider || rider.activeTeamId == null || teamIds.has(rider.activeTeamId)) {
+      continue;
+    }
+
+    teamIds.add(rider.activeTeamId);
+    if (teamIds.size >= limit) {
+      break;
+    }
+  }
+
+  return teamIds;
+}
+
+function buildTeamHasCaptainInRace(riders: Rider[]): Map<number, boolean> {
+  const result = new Map<number, boolean>();
+
+  for (const rider of riders) {
+    if (rider.activeTeamId == null) {
+      continue;
+    }
+
+    if (!result.has(rider.activeTeamId)) {
+      result.set(rider.activeTeamId, false);
+    }
+
+    if (resolveRiderRoleName(rider) === 'kapitaen') {
+      result.set(rider.activeTeamId, true);
+    }
+  }
+
+  return result;
 }
 
 function resolveBreakawaySizeBounds(race: Race, stage: Stage, riderCount: number): { min: number; max: number } {
@@ -78,6 +237,7 @@ export function precalculateStageBreakaway(
   stageSummary: ParsedStageSummary,
   stageFavorites: FavoriteItem[],
   gcStandings: RealtimeGcStanding[],
+  mountainStandings: RealtimeClassificationStanding[],
 ): PrecalculatedStageBreakaway | null {
   if ((stage.profile === 'ITT' || stage.profile === 'TTT') || riders.length === 0 || stageSummary.distanceKm <= 0) {
     return null;
@@ -86,31 +246,110 @@ export function precalculateStageBreakaway(
   const riderCount = riders.length;
   const { min: minBreakawaySize, max: maxBreakawaySize } = resolveBreakawaySizeBounds(race, stage, riderCount);
   const desiredBreakawaySize = randomInteger(minBreakawaySize, maxBreakawaySize);
-
+  const isEarlyStageRace = race.isStageRace && stage.stageNumber <= 10;
+  const gcLeaderTeamId = resolveGcLeaderTeamId(riders, gcStandings);
+  const topFavoriteTeamIds = isEarlyStageRace ? getTopFavoriteTeamIds(stageFavorites, riders, 5) : new Set<number>();
+  const teamHasCaptainInRace = isEarlyStageRace ? buildTeamHasCaptainInRace(riders) : new Map<number, boolean>();
+  const stageHasMountainClassifications = hasMountainClassifications(stageSummary);
   const topFavoriteIds = getTopFavoriteIds(stageFavorites, 5);
   const topGcIds = getTopGcIds(gcStandings, 10);
+  const excludedByFavoritesOrGc = new Set<number>([...topFavoriteIds, ...topGcIds]);
+  const topMountainIds = stageHasMountainClassifications
+    ? getTopClassificationIdsWithExclusions(mountainStandings, excludedByFavoritesOrGc, 5)
+    : new Set<number>();
+  const isHardStage = isHarderThanHillyStage(stage);
 
-  const eligibleRiders = riders.filter((rider) => rider.activeTeamId != null && !topFavoriteIds.has(rider.id) && !topGcIds.has(rider.id));
+  const eligibleRiders = riders.filter((rider) => {
+    if (rider.activeTeamId == null || topFavoriteIds.has(rider.id) || topGcIds.has(rider.id)) {
+      return false;
+    }
+
+    if (isEarlyStageRace && gcLeaderTeamId != null && rider.activeTeamId === gcLeaderTeamId) {
+      return false;
+    }
+
+    if (isEarlyStageRace && topFavoriteTeamIds.has(rider.activeTeamId)) {
+      return false;
+    }
+
+    const roleName = resolveRiderRoleName(rider);
+    if (isEarlyStageRace && roleName === 'kapitaen') {
+      return false;
+    }
+
+    if (isEarlyStageRace && roleName === 'co-kapitaen' && teamHasCaptainInRace.get(rider.activeTeamId) !== true) {
+      return false;
+    }
+
+    return true;
+  });
   if (eligibleRiders.length === 0) {
     return null;
   }
 
-  const selectedRiders = sampleWithoutReplacement(eligibleRiders, Math.min(desiredBreakawaySize, eligibleRiders.length));
+  const weightByRiderId = new Map(eligibleRiders.map((rider) => [
+    rider.id,
+    resolveBreakawayWeightFactors(rider, {
+      isEarlyStageRace,
+      race,
+      gcLeaderTeamId,
+      stageHasMountainClassifications,
+      topMountainIds,
+      isHardStage,
+    }),
+  ]));
+
+  const totalEligibleWeight = eligibleRiders.reduce((sum, rider) => sum + (weightByRiderId.get(rider.id)?.finalWeight ?? 0), 0);
+
+  const selectedRiders = sampleWeightedWithoutReplacement(
+    eligibleRiders,
+    Math.min(desiredBreakawaySize, eligibleRiders.length),
+    (rider) => weightByRiderId.get(rider.id)?.finalWeight ?? 1,
+  );
   if (selectedRiders.length === 0) {
     return null;
   }
+
+  console.groupCollapsed(
+    `[BreakawaySelection] ${stage.profile} Etappe ${stage.stageNumber}: ${selectedRiders.length}/${desiredBreakawaySize} ausgewählt aus ${eligibleRiders.length}`,
+  );
+  console.log(`Gesamtgewicht im Pool: ${totalEligibleWeight.toFixed(2)}`);
+  console.table(selectedRiders.map((rider) => {
+    const weight = weightByRiderId.get(rider.id);
+    return {
+      Fahrer: `${rider.firstName} ${rider.lastName}`,
+      Team: rider.activeTeamId,
+      Rolle: rider.role?.name ?? null,
+      Atk: rider.skills.attack,
+      Hill: rider.skills.hill,
+      Chance: `${(((totalEligibleWeight > 0 && weight != null ? weight.finalWeight / totalEligibleWeight : 0) * 100)).toFixed(2)}%`,
+      Gewicht: (weight?.finalWeight ?? 1).toFixed(2),
+      Attacke: `x${(weight?.attackFactor ?? 1).toFixed(2)}`,
+      Superform: `x${weight?.superformFactor ?? 1}`,
+      GC_Team: `x${(weight?.gcLeaderTeamFactor ?? 1).toFixed(2)}`,
+      Berg: `x${weight?.mountainFactor ?? 1}`,
+      Sprinter: `x${weight?.sprinterFactor ?? 1}`,
+    };
+  }));
+  console.groupEnd();
 
   const stageDistanceMeters = stageSummary.distanceKm * 1000;
   const triggerDistanceMeters = randomInteger(0, Math.min(10000, Math.max(0, Math.floor(stageDistanceMeters * 0.1))));
   const phaseEndRange = resolveBreakawayPhaseEndRange(race, stage);
   const phaseEndDistanceMeters = Math.round(stageDistanceMeters * randomBetween(phaseEndRange.min, phaseEndRange.max));
+  const groupPhaseLeadOutMeters = Math.round(stageDistanceMeters * randomBetween(0.1, 0.25));
+  const groupPhaseEndDistanceMeters = Math.max(
+    triggerDistanceMeters + 1000,
+    Math.min(phaseEndDistanceMeters - 1000, phaseEndDistanceMeters - groupPhaseLeadOutMeters),
+  );
   const skillBonus = randomInteger(4, 9);
 
   return {
     riderIds: selectedRiders.map((rider) => rider.id),
     triggerDistanceMeters,
+    groupPhaseEndDistanceMeters,
     phaseEndDistanceMeters,
     skillBonus,
-    malusValue: 10,
+    malusValue: randomInteger(5, 8),
   };
 }

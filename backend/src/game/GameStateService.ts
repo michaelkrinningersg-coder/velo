@@ -142,6 +142,7 @@ export class GameStateService {
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);
       this.advanceRiderDailyStates(nextDate, nextSeason);
+      new GameRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
       if (nextSeason !== currentRow.season) {
         new ContractService(this.db).checkContractStatuses(nextSeason);
         new RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);

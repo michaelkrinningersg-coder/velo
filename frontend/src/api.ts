@@ -20,6 +20,7 @@ import type {
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
+  StageEditorOverviewResponse,
   SeasonStandingsPayload,
   StageResultsPayload,
 } from '../../shared/types';
@@ -71,6 +72,7 @@ export const api = {
   getStageResults:     (stageId: number) => call<StageResultsPayload>('GET', `/api/results/${stageId}`),
   getSeasonStandings:  () => call<SeasonStandingsPayload>('GET', '/api/season-standings'),
   listStageEditorStages: () => call<StageEditorExistingStageListResponse>('GET', '/api/stage-editor/stages'),
+  getStageEditorOverview: () => call<StageEditorOverviewResponse>('GET', '/api/stage-editor/overview'),
   loadStageEditorStage:  (stageId: number) => call<StageEditorExistingStageLoadResponse>('GET', `/api/stage-editor/stages/${stageId}`),
   importStageRoute:    (payload: StageEditorImportRequest) => call<StageEditorDraft>('POST', '/api/stage-editor/import', payload),
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),

@@ -7,9 +7,13 @@ import type {
   StageEditorExistingStageListResponse,
   StageEditorExistingStageLoadResponse,
   StageEditorExistingStageOption,
+  StageEditorOverviewResponse,
+  StageEditorClimbOverviewRow,
+  StageEditorStageOverviewRow,
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
+  Nationality,
   StageFinishMarkerType,
   StageMarker,
   StageEditorSegment,
@@ -30,6 +34,16 @@ interface RawTrackPoint {
 interface ProfilePoint {
   distanceKm: number;
   elevation: number;
+}
+
+interface RaceLookupRow {
+  name: string;
+  countryCode: Nationality | null;
+}
+
+interface PositionedClimbMarker {
+  kmMark: number;
+  name: string | null;
 }
 
 const MIN_SEGMENT_KM = 0.2;
@@ -481,6 +495,68 @@ function detectClimbs(points: ProfilePoint[]): StageEditorClimb[] {
   return climbs;
 }
 
+function countMarkers(segments: StageEditorSegment[], markerType: StageMarkerType): number {
+  return segments.reduce(
+    (count, segment) => count
+      + segment.markers.filter((marker) => marker.type === markerType).length
+      + segment.endMarkers.filter((marker) => marker.type === markerType).length,
+    0,
+  );
+}
+
+function buildPositionedClimbMarkers(segments: StageEditorSegment[]): PositionedClimbMarker[] {
+  const markers: PositionedClimbMarker[] = [];
+  let startKm = 0;
+
+  for (const segment of segments) {
+    const endKm = round2(startKm + segment.lengthKm);
+    for (const marker of segment.markers) {
+      if (marker.type === 'climb_top') {
+        markers.push({ kmMark: round2(startKm), name: marker.name });
+      }
+    }
+    for (const marker of segment.endMarkers) {
+      if (marker.type === 'climb_top') {
+        markers.push({ kmMark: endKm, name: marker.name });
+      }
+    }
+    startKm = endKm;
+  }
+
+  return markers;
+}
+
+function findClosestClimbMarker(markers: PositionedClimbMarker[], endKm: number): PositionedClimbMarker | null {
+  let closest: PositionedClimbMarker | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (const marker of markers) {
+    const distance = Math.abs(marker.kmMark - endKm);
+    if (distance < closestDistance) {
+      closest = marker;
+      closestDistance = distance;
+    }
+  }
+
+  return closestDistance <= 1 ? closest : null;
+}
+
+function resolveMaxGradient(segments: StageEditorSegment[], startKm: number, endKm: number, fallbackGradient: number): number {
+  let segmentStartKm = 0;
+  let maxGradient = Number.NEGATIVE_INFINITY;
+
+  for (const segment of segments) {
+    const segmentEndKm = segmentStartKm + segment.lengthKm;
+    const overlapsClimb = segmentEndKm > startKm && segmentStartKm < endKm;
+    if (overlapsClimb && segment.gradientPercent > maxGradient) {
+      maxGradient = segment.gradientPercent;
+    }
+    segmentStartKm = segmentEndKm;
+  }
+
+  return Number.isFinite(maxGradient) ? round1(maxGradient) : fallbackGradient;
+}
+
 function suggestProfile(totalDistanceKm: number, elevationGainMeters: number, climbs: StageEditorClimb[]): StageProfile {
   const hasHcOrCat1 = climbs.some((climb) => climb.category === 'HC' || climb.category === '1');
   const hasCobble = false;
@@ -736,6 +812,80 @@ export class RouteImporter {
     };
   }
 
+  listOverview(): StageEditorOverviewResponse {
+    const stages = this.loadStageMetadataRows();
+    const stageRows: StageEditorStageOverviewRow[] = [];
+    const climbRows: StageEditorClimbOverviewRow[] = [];
+
+    for (const stage of stages) {
+      let segments: StageEditorSegment[] = [];
+      let profilePoints: ProfilePoint[] = [];
+      let totalDistanceKm = 0;
+      let elevationGainMeters = 0;
+      let sprintCount = 0;
+      let climbCount = 0;
+
+      try {
+        segments = this.loadStageDetailSegments(stage);
+        const waypoints = deriveWaypointsFromSegments(segments);
+        profilePoints = waypoints.map((waypoint) => ({
+          distanceKm: waypoint.kmMark,
+          elevation: waypoint.elevation,
+        }));
+        totalDistanceKm = round2(segments.reduce((sum, segment) => sum + segment.lengthKm, 0));
+        elevationGainMeters = calculateElevationGain(profilePoints);
+        sprintCount = countMarkers(segments, 'sprint_intermediate');
+        climbCount = countMarkers(segments, 'climb_top');
+      } catch {
+        totalDistanceKm = 0;
+        elevationGainMeters = 0;
+        sprintCount = 0;
+        climbCount = 0;
+      }
+
+      stageRows.push({
+        stageId: stage.stageId,
+        raceId: stage.raceId,
+        countryCode: stage.countryCode ?? null,
+        raceName: stage.raceName ?? `Race ${stage.raceId}`,
+        stageNumber: stage.stageNumber,
+        profile: stage.profile,
+        distanceKm: totalDistanceKm,
+        elevationGainMeters,
+        sprintCount,
+        climbCount,
+        profileScore: 'Platzhalter',
+      });
+
+      if (segments.length === 0 || profilePoints.length < 2) {
+        continue;
+      }
+
+      const climbMarkers = buildPositionedClimbMarkers(segments);
+      detectClimbs(profilePoints).forEach((climb, index) => {
+        const marker = findClosestClimbMarker(climbMarkers, climb.endKm);
+        climbRows.push({
+          id: `${stage.stageId}-${index + 1}`,
+          placementKm: climb.endKm,
+          name: marker?.name ?? `Climb ${index + 1}`,
+          countryCode: stage.countryCode ?? null,
+          raceName: stage.raceName ?? `Race ${stage.raceId}`,
+          stageNumber: stage.stageNumber,
+          gainMeters: climb.gainMeters,
+          distanceKm: climb.distanceKm,
+          avgGradient: climb.avgGradient,
+          maxGradient: resolveMaxGradient(segments, climb.startKm, climb.endKm, climb.avgGradient),
+          climbScore: 'Platzhalter',
+        });
+      });
+    }
+
+    return {
+      stages: stageRows,
+      climbs: climbRows,
+    };
+  }
+
   loadExistingStage(stageId: number): StageEditorExistingStageLoadResponse {
     if (!Number.isInteger(stageId) || stageId <= 0) {
       throw new Error('Ungültige Stage-ID.');
@@ -828,7 +978,7 @@ export class RouteImporter {
       throw new Error('data/csv/stages.csv hat nicht den erwarteten Header.');
     }
 
-    const raceNames = this.loadRaceNames();
+    const races = this.loadRaceLookupRows();
     return dataRows.map((row, index) => {
       if (row.length !== header.length) {
         throw new Error(`stages.csv Zeile ${index + 2}: Erwartet ${header.length} Spalten, gefunden ${row.length}.`);
@@ -838,6 +988,7 @@ export class RouteImporter {
         throw new Error(`stages.csv Zeile ${index + 2}: Ungültiges Profil ${profile}.`);
       }
       const raceId = parseRequiredInteger(row[1], `stages.csv Zeile ${index + 2} race_id`);
+      const race = races.get(raceId);
       return {
         stageId: parseRequiredInteger(row[0], `stages.csv Zeile ${index + 2} id`),
         raceId,
@@ -851,25 +1002,55 @@ export class RouteImporter {
         finalSpreadDifficultyMultiplier: parseRequiredNumber(row[9], `stages.csv Zeile ${index + 2} final_spread_difficulty_multiplier`),
         crashIncidentMultiplier: parseRequiredNumber(row[10], `stages.csv Zeile ${index + 2} crash_incident_multiplier`),
         mechanicalIncidentMultiplier: parseRequiredNumber(row[11], `stages.csv Zeile ${index + 2} mechanical_incident_multiplier`),
-        raceName: raceNames.get(raceId),
+        raceName: race?.name,
+        countryCode: race?.countryCode ?? null,
       };
     }).sort((left, right) => left.date.localeCompare(right.date) || left.raceId - right.raceId || left.stageNumber - right.stageNumber || left.stageId - right.stageId);
   }
 
   private loadRaceNames(): Map<number, string> {
+    return new Map([...this.loadRaceLookupRows()].map(([raceId, row]) => [raceId, row.name] as const));
+  }
+
+  private loadRaceLookupRows(): Map<number, RaceLookupRow> {
     const racesPath = resolve(this.dataRoot, 'csv', 'races.csv');
     if (!existsSync(racesPath)) return new Map();
+    const countries = this.loadCountryCodes();
     const rows = parseCsvRows(readFileSync(racesPath, 'utf8'));
     const [header, ...dataRows] = rows;
     const idIndex = header?.indexOf('id') ?? -1;
     const nameIndex = header?.indexOf('name') ?? -1;
+    const countryIdIndex = header?.indexOf('country_id') ?? -1;
     if (idIndex < 0 || nameIndex < 0) return new Map();
-    const result = new Map<number, string>();
+    const result = new Map<number, RaceLookupRow>();
     for (const row of dataRows) {
       const id = Number.parseInt(row[idIndex] ?? '', 10);
       const name = row[nameIndex]?.trim();
       if (Number.isInteger(id) && name) {
-        result.set(id, name);
+        const countryId = countryIdIndex >= 0 ? Number.parseInt(row[countryIdIndex] ?? '', 10) : Number.NaN;
+        result.set(id, {
+          name,
+          countryCode: Number.isInteger(countryId) ? countries.get(countryId) ?? null : null,
+        });
+      }
+    }
+    return result;
+  }
+
+  private loadCountryCodes(): Map<number, Nationality> {
+    const countriesPath = resolve(this.dataRoot, 'csv', 'sta_country.csv');
+    if (!existsSync(countriesPath)) return new Map();
+    const rows = parseCsvRows(readFileSync(countriesPath, 'utf8'));
+    const [header, ...dataRows] = rows;
+    const idIndex = header?.indexOf('id') ?? -1;
+    const codeIndex = header?.indexOf('code_3') ?? -1;
+    if (idIndex < 0 || codeIndex < 0) return new Map();
+    const result = new Map<number, Nationality>();
+    for (const row of dataRows) {
+      const id = Number.parseInt(row[idIndex] ?? '', 10);
+      const code = row[codeIndex]?.trim() as Nationality | undefined;
+      if (Number.isInteger(id) && code) {
+        result.set(id, code);
       }
     }
     return result;

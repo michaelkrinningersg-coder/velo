@@ -73,6 +73,12 @@
         <button class="nav-btn" data-view="stage-editor">
           <span class="nav-icon">🗺</span> Stage Editor
         </button>
+        <button class="nav-btn" data-view="stage-editor-stages">
+          <span class="nav-icon">▦</span> Stages
+        </button>
+        <button class="nav-btn" data-view="stage-editor-climbs">
+          <span class="nav-icon">△</span> Climbs
+        </button>
       </nav>
       <div class="sidebar-meta">
         <div id="meta-career"></div>
@@ -392,6 +398,38 @@
               </div>
             </div>
           </section>
+        </div>
+      </div>
+
+      <div id="view-stage-editor-stages" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Stages</h2>
+            <p id="stage-editor-stages-meta" class="text-muted">CSV-Etappen werden geladen.</p>
+          </div>
+        </div>
+        <div id="stage-editor-stages-empty" class="results-empty hidden">Keine Etappen gefunden.</div>
+        <div class="stage-editor-overview-table-wrap">
+          <table class="data-table stage-editor-overview-table" id="stage-editor-stages-table">
+            <thead id="stage-editor-stages-head"></thead>
+            <tbody id="stage-editor-stages-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-stage-editor-climbs" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Climbs</h2>
+            <p id="stage-editor-climbs-meta" class="text-muted">CSV-Anstiege werden geladen.</p>
+          </div>
+        </div>
+        <div id="stage-editor-climbs-empty" class="results-empty hidden">Keine Anstiege gefunden.</div>
+        <div class="stage-editor-overview-table-wrap">
+          <table class="data-table stage-editor-overview-table" id="stage-editor-climbs-table">
+            <thead id="stage-editor-climbs-head"></thead>
+            <tbody id="stage-editor-climbs-body"></tbody>
+          </table>
         </div>
       </div>
     </main>

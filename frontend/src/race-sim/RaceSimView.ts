@@ -1,7 +1,7 @@
 import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { renderRaceSimControls, type TimeControlValue } from './renderControls';
 import type { FavoriteItem } from './stageFavorites';
-import { renderRaceMessages } from './renderMessages';
+import { renderRaceMessages, type RaceSimMessageFilter } from './renderMessages';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
 import { renderStageFavorites } from './renderStageFavorites';
 import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRenderTelemetry } from './renderSidebar';
@@ -86,6 +86,8 @@ export class RaceSimView {
 
   private sidebarPaintSequence = 0;
 
+  private messageFilter: RaceSimMessageFilter = 'all';
+
   private favorites: FavoriteItem[] = [];
 
   private perfTelemetry: RaceSimPerfTelemetry = {
@@ -134,6 +136,21 @@ export class RaceSimView {
       }
 
       const speedButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-speed]');
+
+    this.elements.messages.addEventListener('click', (event) => {
+      const filterButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-message-filter]');
+      if (!filterButton || this.detailSnapshot == null) {
+        return;
+      }
+
+      const nextFilter = filterButton.dataset['raceSimMessageFilter'] as RaceSimMessageFilter | undefined;
+      if (!nextFilter) {
+        return;
+      }
+
+      this.messageFilter = nextFilter;
+      renderRaceMessages(this.elements.messages, this.detailSnapshot.messages, this.messageFilter);
+    });
       if (speedButton) {
         const speedValue = Number(speedButton.dataset['raceSimSpeed']) as TimeControlValue;
         if (!Number.isFinite(speedValue)) return;
@@ -383,7 +400,7 @@ export class RaceSimView {
     }
 
     if (this.detailSnapshot) {
-      renderRaceMessages(this.elements.messages, this.detailSnapshot.messages);
+      renderRaceMessages(this.elements.messages, this.detailSnapshot.messages, this.messageFilter);
       renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications, this.detailSnapshot);
     }
 

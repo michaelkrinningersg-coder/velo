@@ -13,4 +13,10 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 10,3,3,2026-02-20,ITT,12,volta_algarve_st3.csv,75,92,1,0.8,0.8
 11,3,4,2026-02-21,Hilly,47,volta_algarve_st4.csv,72,90,1.02,1.1,1.1
 12,3,5,2026-02-22,Hilly,34,volta_algarve_st5.csv,74,92,1.03,1.2,1.2
+15,4,1,2026-02-02,Rolling,25,cadel_evans_great_ocean_road_race.csv,65,80,1.2,2,1.5
+16,5,1,2026-02-05,Rolling,296,volta_valencia_st1.csv,70,85,1,1,1
+17,5,2,2026-02-06,ITT,54,volta_valencia_st2.csv,70,85,1,1,1
+18,5,3,2026-02-07,Hilly_Difficult,26,volta_valencia_st3.csv,70,85,1,1,1
+19,5,4,2026-02-08,Medium_Mountain,231,volta_valencia_st4.csv,65,80,1.8,1.5,2.5
+20,5,5,2026-02-09,Hilly,84,volta_valencia_st5.csv,60,90,1,2.5,0.5
 

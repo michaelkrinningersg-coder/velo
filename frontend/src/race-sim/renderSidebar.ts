@@ -54,6 +54,7 @@ interface SidebarRowCache {
 
 interface LeaderboardSortState {
   autoSort: boolean;
+  showSplitColumns: boolean;
   manualSortKey: string | null;
   manualSortDirection: 'asc' | 'desc';
   frozenOrder: number[];
@@ -251,7 +252,7 @@ function resolveSplitSortValue(
   return rider.splitTimes[splitKey] ?? null;
 }
 
-function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitMarkers: IntermediateSplit[]): LeaderboardColumn[] {
+function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitMarkers: IntermediateSplit[], showSplitColumns: boolean): LeaderboardColumn[] {
   const columns: LeaderboardColumn[] = [
     { label: 'Pos', width: '50px', className: 'race-sim-col-rank', sortKey: 'gap' },
     { label: 'Flag', width: '40px', className: 'race-sim-col-flag' },
@@ -260,10 +261,10 @@ function buildColumns(bootstrap: RealtimeSimulationBootstrap, splitMarkers: Inte
     { label: 'Team', width: '58px', className: 'race-sim-col-team', sortKey: 'team' },
     { label: 'Gap', width: '72px', sortKey: 'gap' },
     { label: 'Eff.', width: '74px', sortKey: 'effectiveSkill' },
-    { label: 'Uhr', width: '96px', sortKey: 'clock' },
-    ...splitMarkers.map((split) => ({ label: split.key, displayLabel: split.label, width: '92px', className: 'race-sim-col-split', sortKey: `split:${split.key}` })),
     { label: 'GC', width: '52px', sortKey: 'gcRank' },
     { label: 'GC Gap', width: '70px', sortKey: 'gcGap' },
+    { label: 'Uhr', width: '96px', sortKey: 'clock' },
+    ...(showSplitColumns ? splitMarkers.map((split) => ({ label: split.key, displayLabel: split.label, width: '92px', className: 'race-sim-col-split', sortKey: `split:${split.key}` })) : []),
     { label: 'Aktive Segment-Steigung', displayLabel: 'Grad', width: '72px', sortKey: 'gradientPercent' },
     { label: 'Speed', width: '82px', sortKey: 'speed' },
     { label: 'Sonderform', displayLabel: '', width: '28px', className: 'race-sim-col-form-state', sortKey: 'specialForm' },
@@ -277,7 +278,7 @@ function buildColumnsKey(columns: LeaderboardColumn[]): string {
 }
 
 function buildLayoutKey(columnsKey: string, sortState: LeaderboardSortState): string {
-  return `${columnsKey}|${sortState.autoSort ? 'auto' : 'manual'}|${sortState.manualSortKey ?? ''}|${sortState.manualSortDirection}`;
+  return `${columnsKey}|${sortState.autoSort ? 'auto' : 'manual'}|${sortState.showSplitColumns ? 'splits' : 'no-splits'}|${sortState.manualSortKey ?? ''}|${sortState.manualSortDirection}`;
 }
 
 function getBootstrapSidebarData(bootstrap: RealtimeSimulationBootstrap): BootstrapSidebarData {
@@ -289,7 +290,7 @@ function getBootstrapSidebarData(bootstrap: RealtimeSimulationBootstrap): Bootst
   const splitMarkers = buildIntermediateSplits(bootstrap);
   const data: BootstrapSidebarData = {
     splitMarkers,
-    columns: buildColumns(bootstrap, splitMarkers),
+    columns: buildColumns(bootstrap, splitMarkers, false),
     riderById: new Map(bootstrap.riders.map((rider) => [rider.id, rider])),
     teamById: new Map((bootstrap.teams ?? []).map((team) => [team.id, team])),
     teamAbbreviationById: new Map((bootstrap.teams ?? []).map((team) => [team.id, team.abbreviation])),
@@ -328,6 +329,12 @@ function applyLeaderboardLayout(container: HTMLElement, columns: LeaderboardColu
 
   scrollContainer.style.setProperty('--race-sim-leaderboard-columns', columns.map((column) => column.width).join(' '));
   toolbar.innerHTML = `
+    <button
+      type="button"
+      class="race-sim-leaderboard-auto-sort-btn${sortState.showSplitColumns ? ' active' : ''}"
+      data-race-sim-splits-toggle="toggle"
+      aria-pressed="${sortState.showSplitColumns ? 'true' : 'false'}"
+    >Zwischenzeiten ${sortState.showSplitColumns ? 'AN' : 'AUS'}</button>
     <button
       type="button"
       class="race-sim-leaderboard-auto-sort-btn${sortState.autoSort ? ' active' : ''}"
@@ -379,6 +386,7 @@ function getLeaderboardSortState(container: HTMLElement): LeaderboardSortState {
 
   const initialState: LeaderboardSortState = {
     autoSort: true,
+    showSplitColumns: false,
     manualSortKey: null,
     manualSortDirection: 'asc',
     frozenOrder: [],
@@ -640,6 +648,16 @@ export function handleRaceSimSidebarInteraction(container: HTMLElement, target: 
   }
 
   const sortState = getLeaderboardSortState(container);
+  const splitsToggleButton = target.closest<HTMLButtonElement>('button[data-race-sim-splits-toggle]');
+  if (splitsToggleButton) {
+    sortState.showSplitColumns = !sortState.showSplitColumns;
+    if (!sortState.showSplitColumns && sortState.manualSortKey?.startsWith('split:')) {
+      sortState.manualSortKey = null;
+      sortState.manualSortDirection = 'asc';
+    }
+    return true;
+  }
+
   const autoSortButton = target.closest<HTMLButtonElement>('button[data-race-sim-auto-sort]');
   if (autoSortButton) {
     sortState.autoSort = !sortState.autoSort;
@@ -745,7 +763,7 @@ function compareStandardLeaderboard(left: RealtimeRiderSnapshot, right: Realtime
   return left.gapToLeaderMeters - right.gapToLeaderMeters || left.riderId - right.riderId;
 }
 
-function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string {
+function buildEffectiveSkillLines(rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string[] {
   const seasonForm = sourceRider?.formBonus ?? 0;
   const raceForm = sourceRider?.raceFormBonus ?? 0;
   const fatigue = sourceRider?.fatigueMalus ?? 0;
@@ -769,7 +787,11 @@ function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rid
     `- Stamina ${formatNumber(staminaImpact)}`,
     `- HM ${formatNumber(heightImpact)}`,
     `= Effektiv ${formatNumber(rider.effectiveSkill)}`,
-  ].filter((line): line is string => line != null).join('\n');
+  ].filter((line): line is string => line != null);
+}
+
+function buildEffectiveSkillTitle(rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string {
+  return buildEffectiveSkillLines(rider, sourceRider).join('\n');
 }
 
 function formatScaledMicroForm(value: number): string {
@@ -862,6 +884,7 @@ function renderSplitCell(
 }
 
 function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | null, gcStanding: { rank: number; gapSeconds: number } | null): string {
+  const effectiveSkillLines = buildEffectiveSkillLines(rider, sourceRider);
   const detailItems = [
     { label: 'Terrain / Skill', value: `${formatTerrain(rider.activeTerrain)} / ${formatSkill(rider.skillName)}` },
     { label: 'Aktiver Abschnitt', value: formatSegmentWindow(rider) },
@@ -891,6 +914,10 @@ function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | nu
       </div>
       <div class="race-sim-rider-detail-grid">
         ${detailItems.map((item) => `<div class="race-sim-rider-detail-item"><span>${esc(item.label)}</span><strong>${esc(item.value)}</strong></div>`).join('')}
+      </div>
+      <div class="race-sim-rider-detail-breakdown">
+        <span>Effektivskill</span>
+        <strong>${effectiveSkillLines.map((line) => esc(line)).join('<br>')}</strong>
       </div>
       <div class="race-sim-rider-detail-foot">${esc(rider.skillBreakdown || 'Primärskill ohne Mischgewichtung')}</div>
     </section>`;
@@ -953,10 +980,10 @@ function buildSidebarRowCache(
 
   const gapField = makeStrong('race-sim-gap');
   const effectiveSkillField = makeStrong('race-sim-cell-effective-skill');
-  const clockField = makeStrong();
-  const splitFields = splitMarkers.map(() => makeStrong());
   const gcRankField = makeStrong();
   const gcGapField = makeStrong();
+  const clockField = makeStrong();
+  const splitFields = splitMarkers.map(() => makeStrong());
   const gradientPercentField = makeStrong();
   const speedField = makeStrong();
   const formStateField = makeStrong('race-sim-form-state-cell');
@@ -1326,6 +1353,7 @@ export function renderRaceSimSidebar(
   const { splitMarkers } = sidebarData;
   const markerRanksByKey = buildMarkerRankLookup(snapshot);
   const sortState = getLeaderboardSortState(container);
+  const visibleSplitMarkers = sortState.showSplitColumns ? splitMarkers : [];
   const previousCache = sidebarRenderCache.get(container);
   telemetry.prepMs = performance.now() - prepStartMs;
 
@@ -1345,7 +1373,7 @@ export function renderRaceSimSidebar(
 
   const previousLayoutKey = previousCache?.layoutKey;
   const layoutStartMs = performance.now();
-  const layoutKey = applyLeaderboardLayout(container, sidebarData.columns);
+  const layoutKey = applyLeaderboardLayout(container, buildColumns(bootstrap, visibleSplitMarkers, sortState.showSplitColumns));
   telemetry.layoutMs = performance.now() - layoutStartMs;
   const cached = sidebarRenderCache.get(container) ?? {
     layoutKey,
@@ -1385,7 +1413,7 @@ export function renderRaceSimSidebar(
         rider,
         sourceRider,
         cached.openDetailRiderId === rider.riderId,
-        splitMarkers,
+        visibleSplitMarkers,
         sidebarData.teamById,
         sidebarData.teamAbbreviationById,
         sidebarData.teamNameById,
@@ -1430,7 +1458,7 @@ export function renderRaceSimSidebar(
       rider,
       sourceRider,
       cached.openDetailRiderId === rider.riderId,
-      splitMarkers,
+      visibleSplitMarkers,
       bootstrap.stage.profile,
       markerRanksByKey,
       bootstrap.race.isStageRace,

@@ -30,6 +30,7 @@ import {
   StageEditorExportPayload,
   StageEditorExportRequest,
   StageEditorImportRequest,
+  StageEditorOverviewResponse,
   StageResultsPayload,
 } from '../../../shared/types';
 
@@ -244,6 +245,12 @@ export function createRouter(dbService: DatabaseService): Router {
   router.get('/stage-editor/stages', (_req: Request, res: Response) => {
     try {
       ok<StageEditorExistingStageListResponse>(res, routeImporter.listExistingStages());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/stage-editor/overview', (_req: Request, res: Response) => {
+    try {
+      ok<StageEditorOverviewResponse>(res, routeImporter.listOverview());
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

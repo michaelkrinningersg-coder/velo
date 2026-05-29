@@ -2,3 +2,5 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 1,Santos Tour Down Under,20,4,1,8,2026-01-11,2026-01-18,72
 2,Surf Coast Classic ME,20,7,0,1,2026-01-29,2026-01-29,60
 3,Volta Algarve,29,4,1,5,2026-02-18,2026-02-22,68
+4,Cadel Evans Great Ocean Road  Race,20,6,0,1,2026-02-02,2026-02-02,65
+5,Volta a Valencia,8,4,1,5,2026-02-05,2026-02-09,63  

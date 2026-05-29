@@ -102,6 +102,13 @@ function formatGradient(value: number): string {
   return `${value.toFixed(1).replace('.', ',')}%`;
 }
 
+function formatProfileCategory(category: StageMarkerCategory | null): string | null {
+  if (!category || category === 'Sprint') {
+    return null;
+  }
+  return `Kat. ${category}`;
+}
+
 function resolveMarkerAccent(category: StageMarkerCategory | null, markerType: StageMarkerType): { accentColor: string; fillColor: string } {
   if (markerType === 'sprint_intermediate') {
     return {
@@ -129,6 +136,8 @@ function resolveMarkerAccent(category: StageMarkerCategory | null, markerType: S
 function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, height: number, paddingTop: number, paddingBottom: number, axisMaxElevation: number): ProfileEvent[] {
   const rawEvents: ProfileEvent[] = [];
   const pendingClimbs: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
+  let finishCategory: StageMarkerCategory | null = null;
+  let finishAccentColor = '#b91c1c';
 
   for (const boundaryMarker of collectStageBoundaryMarkers(summary)) {
     const { marker, kmMark, elevation } = boundaryMarker;
@@ -156,11 +165,17 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
       const gainMeters = climbStart ? Math.max(0, elevation - climbStart.elevation) : 0;
       const avgGradient = lengthKm > 0 ? gainMeters / (lengthKm * 10) : 0;
       const accent = resolveMarkerAccent(marker.cat, marker.type);
+      const categoryLabel = formatProfileCategory(marker.cat);
+      if (marker.type === 'finish_hill' || marker.type === 'finish_mountain') {
+        finishCategory = marker.cat ?? null;
+        finishAccentColor = accent.accentColor;
+        continue;
+      }
       rawEvents.push({
         x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
         anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
-        primaryLabel: `${marker.name ?? 'Anstieg'} · Kat. ${marker.cat ?? '?'}`,
-        secondaryLabel: lengthKm > 0 ? `${formatClimbLength(lengthKm)} · ${formatGradient(avgGradient)}` : null,
+        primaryLabel: categoryLabel ?? 'Berg',
+        secondaryLabel: formatElevationLabel(elevation),
         distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
         accentColor: accent.accentColor,
       });
@@ -172,7 +187,7 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
       rawEvents.push({
         x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
         anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
-        primaryLabel: marker.name ?? 'Zwischensprint',
+        primaryLabel: 'Sprint',
         secondaryLabel: formatElevationLabel(elevation),
         distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
         accentColor: accent.accentColor,
@@ -184,10 +199,10 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
   rawEvents.push({
     x: scaleDistance(finishPoint.kmMark * 1000, stageDistanceMeters, width, paddingX),
     anchorY: scaleElevation(finishPoint.elevation, axisMaxElevation, height, paddingTop, paddingBottom),
-    primaryLabel: 'Ziel',
+    primaryLabel: finishCategory ? `${formatProfileCategory(finishCategory) ?? 'Ziel'} · Ziel` : 'Ziel',
     secondaryLabel: formatElevationLabel(finishPoint.elevation),
     distanceLabel: `${finishPoint.kmMark.toFixed(1).replace('.', ',')} km`,
-    accentColor: '#b91c1c',
+    accentColor: finishAccentColor,
   });
 
   return rawEvents.sort((left, right) => left.x - right.x);
@@ -538,11 +553,11 @@ function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSumm
 }
 
 function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean): string {
-  const width = compact ? 260 : 1320;
-  const height = compact ? 120 : 440;
+  const width = compact ? 312 : 1584;
+  const height = compact ? 173 : 634;
   const paddingX = compact ? 12 : 28;
-  const paddingTop = compact ? 12 : 74;
-  const paddingBottom = compact ? 18 : 84;
+  const paddingTop = compact ? 36 : 168;
+  const paddingBottom = compact ? 22 : 101;
   const stageDistanceMeters = summary.distanceKm * 1000;
   const maxElevation = Math.max(...summary.points.map((point) => point.elevation));
   const axisScaleFactor = maxElevation >= 500 ? 1.1 : 1.5;
@@ -623,11 +638,11 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
     return;
   }
 
-  const width = 1320;
-  const height = 440;
+  const width = 1584;
+  const height = 634;
   const paddingX = 28;
-  const paddingTop = 74;
-  const paddingBottom = 84;
+  const paddingTop = 168;
+  const paddingBottom = 101;
   const maxElevation = Math.max(...summary.points.map((point) => point.elevation));
   const axisScaleFactor = maxElevation >= 500 ? 1.1 : 1.5;
   const axisMaxElevation = Math.max(500, Math.ceil((maxElevation * axisScaleFactor) / 50) * 50);

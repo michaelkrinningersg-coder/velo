@@ -85,7 +85,7 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
         ...rider,
         hasSuperform: true,
         hasSupermalus: false,
-        specialFormDelta: 3,
+        specialFormDelta: 4,
       } satisfies Rider;
     }
 
@@ -94,7 +94,7 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
         ...rider,
         hasSuperform: false,
         hasSupermalus: true,
-        specialFormDelta: -5,
+        specialFormDelta: -6,
       } satisfies Rider;
     }
 

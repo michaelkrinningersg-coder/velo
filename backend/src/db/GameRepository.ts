@@ -529,7 +529,10 @@ function resolveStageRaceBaseFatigue(stageNumber: number, recuperationSkill: num
   }
 
   const cappedRecuperation = Math.min(85, recuperationSkill);
-  return (stageNumber - 1) * (0.01 + ((85 - cappedRecuperation) * 0.01));
+  const completedStages = stageNumber - 1;
+  const baseFatigueRate = 0.10 + (((85 - cappedRecuperation) / 35) * 0.75);
+  const stageProgressionFatigue = 0.01 * ((stageNumber - 2) * completedStages / 2);
+  return (completedStages * baseFatigueRate) + stageProgressionFatigue;
 }
 
 function resolveStageRaceFatigueMalus(stageNumber: number | undefined, recuperationSkill: number, accumulatedRandomFatigue: number): number {
@@ -1155,6 +1158,123 @@ export class GameRepository {
         this.updateStageEntryStatus(stageId, riderId, 'finished');
       }
     })();
+  }
+
+  public getFullyClassifiedStageRaceRiderIds(raceId: number, upToStageNumber: number): number[] {
+    if (upToStageNumber < 1 || !tableExists(this.db, 'stages') || !tableExists(this.db, 'stage_entries') || !tableExists(this.db, 'races')) {
+      return [];
+    }
+
+    const raceRow = this.db.prepare('SELECT is_stage_race FROM races WHERE id = ?').get(raceId) as { is_stage_race: number } | undefined;
+    if (!raceRow || raceRow.is_stage_race !== 1) {
+      return [];
+    }
+
+    const expectedStageCount = (this.db.prepare(`
+      SELECT COUNT(*) AS stage_count
+      FROM stages
+      WHERE race_id = ?
+        AND stage_number <= ?
+    `).get(raceId, upToStageNumber) as { stage_count: number } | undefined)?.stage_count ?? 0;
+    if (expectedStageCount < 1) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT stage_entries.rider_id AS rider_id
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.race_id = ?
+        AND stages.stage_number <= ?
+      GROUP BY stage_entries.rider_id
+      HAVING COUNT(*) = ?
+        AND SUM(CASE WHEN stage_entries.status = 'finished' THEN 1 ELSE 0 END) = ?
+        AND SUM(CASE WHEN stage_entries.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
+    `).all(raceId, upToStageNumber, expectedStageCount, expectedStageCount) as Array<{ rider_id: number }>;
+
+    return rows.map((row) => row.rider_id);
+  }
+
+  public markUnavailableStageRaceParticipantsAsDnf(): number {
+    if (!tableExists(this.db, 'races')
+      || !tableExists(this.db, 'stages')
+      || !tableExists(this.db, 'race_entries')
+      || !tableExists(this.db, 'stage_entries')
+      || !tableExists(this.db, 'rider_daily_state')) {
+      return 0;
+    }
+
+    const candidates = this.db.prepare(`
+      SELECT
+        target_stage.id AS stage_id,
+        candidate.race_id AS race_id,
+        candidate.team_id AS team_id,
+        candidate.rider_id AS rider_id,
+        candidate.health_status AS health_status
+      FROM (
+        SELECT
+          race_entries.race_id AS race_id,
+          race_entries.team_id AS team_id,
+          race_entries.rider_id AS rider_id,
+          rider_daily_state.health_status AS health_status,
+          MAX(stages.stage_number) AS last_finished_stage_number
+        FROM race_entries
+        JOIN races ON races.id = race_entries.race_id
+        JOIN rider_daily_state ON rider_daily_state.rider_id = race_entries.rider_id
+        JOIN stage_entries ON stage_entries.race_id = race_entries.race_id
+          AND stage_entries.rider_id = race_entries.rider_id
+          AND stage_entries.status = 'finished'
+        JOIN stages ON stages.id = stage_entries.stage_id
+        WHERE races.is_stage_race = 1
+          AND rider_daily_state.unavailable_days_remaining > 0
+          AND rider_daily_state.health_status IN ('ill', 'injured')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM stage_entries AS exited_entries
+            WHERE exited_entries.race_id = race_entries.race_id
+              AND exited_entries.rider_id = race_entries.rider_id
+              AND exited_entries.status IN ('dns', 'dnf')
+          )
+        GROUP BY race_entries.race_id, race_entries.team_id, race_entries.rider_id, rider_daily_state.health_status
+      ) AS candidate
+      JOIN stages AS target_stage
+        ON target_stage.race_id = candidate.race_id
+       AND target_stage.stage_number = candidate.last_finished_stage_number + 1
+    `).all() as Array<{
+      stage_id: number;
+      race_id: number;
+      team_id: number;
+      rider_id: number;
+      health_status: 'ill' | 'injured';
+    }>;
+
+    if (candidates.length === 0) {
+      return 0;
+    }
+
+    const upsertStageEntry = this.db.prepare(`
+      INSERT INTO stage_entries (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (?, ?, ?, ?, 'dnf', ?)
+      ON CONFLICT(stage_id, rider_id) DO UPDATE SET
+        race_id = excluded.race_id,
+        team_id = excluded.team_id,
+        status = excluded.status,
+        status_reason = excluded.status_reason
+    `);
+
+    this.db.transaction(() => {
+      for (const candidate of candidates) {
+        upsertStageEntry.run(
+          candidate.stage_id,
+          candidate.race_id,
+          candidate.team_id,
+          candidate.rider_id,
+          candidate.health_status === 'ill' ? 'Krankheit' : 'Verletzung',
+        );
+      }
+    })();
+
+    return candidates.length;
   }
 
   public attachStageRaceFatigue(raceId: number, riders: Rider[], stageNumber: number): Rider[] {
@@ -2330,8 +2450,12 @@ export class GameRepository {
 
     const uciPointsByRiderAndAwardType = this.loadStageUciPointsByRiderAndAwardType(stageId);
     const uciPointsByTeamId = this.loadStageUciPointsByTeamId(stageId);
+    const fullyClassifiedRiderIds = meta.is_stage_race === 1
+      ? new Set(this.getFullyClassifiedStageRaceRiderIds(meta.race_id, meta.stage_number))
+      : null;
     const previousGcStandings = meta.stage_number > 1
       ? this.getPreviousGcStandingsForStage(stageId)
+          .filter((standing) => fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(standing.riderId))
       : [];
     const previousGcRanks = previousGcStandings.length > 0
       ? new Map(
@@ -2349,19 +2473,28 @@ export class GameRepository {
     const classifications: StageClassification[] = resultTypes
       .map((resultType) => {
         const typeRows = groupedRows.get(resultType.id) ?? [];
-        if (typeRows.length === 0) {
+        const shouldFilterCompletedRiders = fullyClassifiedRiderIds != null
+          && (resultType.id === RESULT_TYPE_IDS.gc
+            || resultType.id === RESULT_TYPE_IDS.points
+            || resultType.id === RESULT_TYPE_IDS.mountain
+            || resultType.id === RESULT_TYPE_IDS.youth);
+        const visibleRows = shouldFilterCompletedRiders
+          ? typeRows.filter((row) => row.rider_id != null && fullyClassifiedRiderIds.has(row.rider_id))
+          : typeRows;
+        if (visibleRows.length === 0) {
           return null;
         }
 
-        const leaderTime = typeRows[0]?.time_seconds ?? null;
+        const leaderTime = visibleRows[0]?.time_seconds ?? null;
         const isGcClassification = resultType.id === RESULT_TYPE_IDS.gc;
-        const mappedRows: RaceClassificationRow[] = typeRows.map((row) => {
+        const mappedRows: RaceClassificationRow[] = visibleRows.map((row, index) => {
           const previousGcRank = isGcClassification && row.rider_id != null
             ? previousGcRanks.get(row.rider_id) ?? null
             : null;
+          const displayRank = shouldFilterCompletedRiders ? index + 1 : row.rank;
 
           return {
-            rank: row.rank,
+            rank: displayRank,
             riderId: row.rider_id,
             riderName: row.rider_id == null
               ? null
@@ -2374,7 +2507,7 @@ export class GameRepository {
             points: row.points,
             uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
             gcPreviousRank: isGcClassification ? previousGcRank : undefined,
-            gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - row.rank : null,
+            gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - displayRank : null,
           };
         });
 

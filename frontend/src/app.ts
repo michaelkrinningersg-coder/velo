@@ -23,6 +23,8 @@ import type {
   StageEditorClimb,
   StageEditorDraft,
   StageEditorExistingStageOption,
+  StageEditorStageOverviewRow,
+  StageEditorClimbOverviewRow,
   StageEditorSegment,
   StageEditorMetadata,
   StageEditorWaypoint,
@@ -70,6 +72,18 @@ const state: {
   stageEditorDraft: StageEditorDraft | null;
   stageEditorExistingStages: StageEditorExistingStageOption[];
   stageEditorExistingStagesLoaded: boolean;
+  stageEditorOverviewLoaded: boolean;
+  stageEditorOverviewLoading: boolean;
+  stageEditorStageRows: StageEditorStageOverviewRow[];
+  stageEditorClimbRows: StageEditorClimbOverviewRow[];
+  stageEditorStagesSort: {
+    key: StageEditorStagesSortKey;
+    direction: 'asc' | 'desc';
+  };
+  stageEditorClimbsSort: {
+    key: StageEditorClimbsSortKey;
+    direction: 'asc' | 'desc';
+  };
   realtimeBootstrap: RealtimeSimulationBootstrap | null;
   realtimeError: string | null;
   rosterEditor: RaceRosterEditorPayload | null;
@@ -108,6 +122,18 @@ const state: {
   stageEditorDraft: null,
   stageEditorExistingStages: [],
   stageEditorExistingStagesLoaded: false,
+  stageEditorOverviewLoaded: false,
+  stageEditorOverviewLoading: false,
+  stageEditorStageRows: [],
+  stageEditorClimbRows: [],
+  stageEditorStagesSort: {
+    key: 'stageId',
+    direction: 'asc',
+  },
+  stageEditorClimbsSort: {
+    key: 'placementKm',
+    direction: 'asc',
+  },
   realtimeBootstrap: null,
   realtimeError: null,
   rosterEditor: null,
@@ -122,6 +148,8 @@ const state: {
 let raceSimView: RaceSimView | null = null;
 
 let realtimeCompletionInFlight = false;
+
+let realtimeStageLoadInFlightId: number | null = null;
 
 const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
@@ -574,6 +602,8 @@ type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
 
 type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
 type RaceParticipantsSortKey = 'team' | 'rider' | 'spec1' | 'role' | 'overall' | 'phase' | 'program';
+type StageEditorStagesSortKey = 'stageId' | 'countryCode' | 'raceName' | 'stageNumber' | 'profile' | 'distanceKm' | 'elevationGainMeters' | 'sprintCount' | 'climbCount' | 'profileScore';
+type StageEditorClimbsSortKey = 'placementKm' | 'name' | 'countryCode' | 'raceName' | 'stageNumber' | 'gainMeters' | 'distanceKm' | 'avgGradient' | 'maxGradient' | 'climbScore';
 
 interface TeamTableColumn {
   id: string;
@@ -1620,6 +1650,117 @@ async function loadStageEditorExistingStages(force = false): Promise<void> {
   renderStageEditorExistingStages();
 }
 
+function renderStageEditorStagesOverview(): void {
+  const head = $('stage-editor-stages-head');
+  const body = $('stage-editor-stages-body');
+  const empty = $('stage-editor-stages-empty');
+  const meta = $('stage-editor-stages-meta');
+  const rows = sortStageEditorStageRows(state.stageEditorStageRows);
+
+  head.innerHTML = `<tr>
+    ${renderStageEditorOverviewHeader('Nummer', 'stageId', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Flagge', 'countryCode', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Rennen', 'raceName', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Profil', 'profile', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Länge', 'distanceKm', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Höhenmeter', 'elevationGainMeters', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Sprints', 'sprintCount', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Bergwertungen', 'climbCount', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Profile Score', 'profileScore', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+  </tr>`;
+
+  body.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${row.stageId}</td>
+      <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
+      <td><strong>${esc(row.raceName)}</strong></td>
+      <td>${row.stageNumber}</td>
+      <td>${renderStageProfileBadge(row.profile)}</td>
+      <td>${formatKm(row.distanceKm)}</td>
+      <td>${row.elevationGainMeters.toLocaleString('de-DE')} m</td>
+      <td>${row.sprintCount}</td>
+      <td>${row.climbCount}</td>
+      <td><span class="stage-editor-score-placeholder">${esc(row.profileScore)}</span></td>
+    </tr>`).join('');
+
+  empty.classList.toggle('hidden', rows.length > 0 || state.stageEditorOverviewLoading);
+  meta.textContent = state.stageEditorOverviewLoading
+    ? 'CSV-Etappen werden geladen.'
+    : `${rows.length} Etappen aus den CSV-Daten.`;
+}
+
+function renderStageEditorClimbsOverview(): void {
+  const head = $('stage-editor-climbs-head');
+  const body = $('stage-editor-climbs-body');
+  const empty = $('stage-editor-climbs-empty');
+  const meta = $('stage-editor-climbs-meta');
+  const rows = sortStageEditorClimbRows(state.stageEditorClimbRows);
+
+  head.innerHTML = `<tr>
+    ${renderStageEditorOverviewHeader('Platzierung', 'placementKm', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Name', 'name', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Flagge', 'countryCode', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Rennen', 'raceName', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Höhenmeter', 'gainMeters', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Länge', 'distanceKm', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Ø-Steigung', 'avgGradient', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Steilster Abschnitt', 'maxGradient', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Climb Score', 'climbScore', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+  </tr>`;
+
+  body.innerHTML = rows.map((row) => `
+    <tr>
+      <td>km ${row.placementKm.toFixed(1).replace('.', ',')}</td>
+      <td><strong>${esc(row.name)}</strong></td>
+      <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
+      <td>${esc(row.raceName)}</td>
+      <td>${row.stageNumber}</td>
+      <td>${row.gainMeters.toLocaleString('de-DE')} m</td>
+      <td>${formatKm(row.distanceKm)}</td>
+      <td>${formatGradient(row.avgGradient)}</td>
+      <td>${formatGradient(row.maxGradient)}</td>
+      <td><span class="stage-editor-score-placeholder">${esc(row.climbScore)}</span></td>
+    </tr>`).join('');
+
+  empty.classList.toggle('hidden', rows.length > 0 || state.stageEditorOverviewLoading);
+  meta.textContent = state.stageEditorOverviewLoading
+    ? 'CSV-Anstiege werden geladen.'
+    : `${rows.length} Anstiege aus den CSV-Daten.`;
+}
+
+async function loadStageEditorOverview(force = false): Promise<void> {
+  if (state.stageEditorOverviewLoaded && !force) {
+    renderStageEditorStagesOverview();
+    renderStageEditorClimbsOverview();
+    return;
+  }
+
+  state.stageEditorOverviewLoading = true;
+  renderStageEditorStagesOverview();
+  renderStageEditorClimbsOverview();
+  const res = await api.getStageEditorOverview();
+  state.stageEditorOverviewLoading = false;
+  state.stageEditorOverviewLoaded = true;
+
+  if (!res.success || !res.data) {
+    state.stageEditorOverviewLoaded = false;
+    state.stageEditorStageRows = [];
+    state.stageEditorClimbRows = [];
+    renderStageEditorStagesOverview();
+    renderStageEditorClimbsOverview();
+    $('stage-editor-stages-meta').textContent = `Stages konnten nicht geladen werden: ${res.error ?? 'Unbekannter Fehler'}`;
+    $('stage-editor-climbs-meta').textContent = `Climbs konnten nicht geladen werden: ${res.error ?? 'Unbekannter Fehler'}`;
+    return;
+  }
+
+  state.stageEditorStageRows = res.data.stages;
+  state.stageEditorClimbRows = res.data.climbs;
+  renderStageEditorStagesOverview();
+  renderStageEditorClimbsOverview();
+}
+
 function updateStageEditorSegment(index: number, field: 'segmentLengthKm' | 'segmentGradientPercent', rawValue: string): void {
   if (!state.stageEditorDraft) return;
   const segment = state.stageEditorDraft.segments[index];
@@ -2158,6 +2299,68 @@ function renderRaceParticipantsHeader(label: string, sortKey: RaceParticipantsSo
     </th>`;
 }
 
+function renderStageEditorOverviewHeader<TSortKey extends string>(label: string, sortKey: TSortKey, activeKey: TSortKey, direction: 'asc' | 'desc', table: 'stages' | 'climbs'): string {
+  const activeClass = activeKey === sortKey ? ' stage-editor-overview-sort-active' : '';
+  const indicator = activeKey === sortKey ? (direction === 'asc' ? '↑' : '↓') : '↕';
+  return `
+    <th>
+      <button type="button" class="stage-editor-overview-sort${activeClass}" data-stage-editor-${table}-sort="${sortKey}">
+        <span>${esc(label)}</span>
+        <span class="team-table-sort-indicator${activeKey === sortKey ? ' team-table-sort-indicator-active' : ''}">${indicator}</span>
+      </button>
+    </th>`;
+}
+
+function getDefaultStageEditorStagesSortDirection(sortKey: StageEditorStagesSortKey): 'asc' | 'desc' {
+  return ['distanceKm', 'elevationGainMeters', 'sprintCount', 'climbCount'].includes(sortKey) ? 'desc' : 'asc';
+}
+
+function getDefaultStageEditorClimbsSortDirection(sortKey: StageEditorClimbsSortKey): 'asc' | 'desc' {
+  return ['gainMeters', 'distanceKm', 'avgGradient', 'maxGradient'].includes(sortKey) ? 'desc' : 'asc';
+}
+
+function compareStageEditorStageRows(left: StageEditorStageOverviewRow, right: StageEditorStageOverviewRow): number {
+  switch (state.stageEditorStagesSort.key) {
+    case 'stageId': return left.stageId - right.stageId;
+    case 'countryCode': return compareOptionalStrings(left.countryCode, right.countryCode);
+    case 'raceName': return compareStrings(left.raceName, right.raceName);
+    case 'stageNumber': return left.stageNumber - right.stageNumber;
+    case 'profile': return compareStrings(left.profile, right.profile);
+    case 'distanceKm': return left.distanceKm - right.distanceKm;
+    case 'elevationGainMeters': return left.elevationGainMeters - right.elevationGainMeters;
+    case 'sprintCount': return left.sprintCount - right.sprintCount;
+    case 'climbCount': return left.climbCount - right.climbCount;
+    case 'profileScore': return compareStrings(left.profileScore, right.profileScore);
+    default: return 0;
+  }
+}
+
+function compareStageEditorClimbRows(left: StageEditorClimbOverviewRow, right: StageEditorClimbOverviewRow): number {
+  switch (state.stageEditorClimbsSort.key) {
+    case 'placementKm': return left.placementKm - right.placementKm;
+    case 'name': return compareStrings(left.name, right.name);
+    case 'countryCode': return compareOptionalStrings(left.countryCode, right.countryCode);
+    case 'raceName': return compareStrings(left.raceName, right.raceName);
+    case 'stageNumber': return left.stageNumber - right.stageNumber;
+    case 'gainMeters': return left.gainMeters - right.gainMeters;
+    case 'distanceKm': return left.distanceKm - right.distanceKm;
+    case 'avgGradient': return left.avgGradient - right.avgGradient;
+    case 'maxGradient': return left.maxGradient - right.maxGradient;
+    case 'climbScore': return compareStrings(left.climbScore, right.climbScore);
+    default: return 0;
+  }
+}
+
+function sortStageEditorStageRows(rows: StageEditorStageOverviewRow[]): StageEditorStageOverviewRow[] {
+  const direction = state.stageEditorStagesSort.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => (compareStageEditorStageRows(left, right) || left.stageId - right.stageId) * direction);
+}
+
+function sortStageEditorClimbRows(rows: StageEditorClimbOverviewRow[]): StageEditorClimbOverviewRow[] {
+  const direction = state.stageEditorClimbsSort.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => (compareStageEditorClimbRows(left, right) || left.placementKm - right.placementKm || compareStrings(left.name, right.name)) * direction);
+}
+
 function getDefaultRaceParticipantsSortDirection(sortKey: RaceParticipantsSortKey): 'asc' | 'desc' {
   return sortKey === 'overall' ? 'desc' : 'asc';
 }
@@ -2605,12 +2808,19 @@ function activateView(name: string): void {
   if (name === 'stage-editor') {
     void loadStageEditorExistingStages();
   }
+  if (name === 'stage-editor-stages' || name === 'stage-editor-climbs') {
+    void loadStageEditorOverview();
+  }
   if (name !== 'live-race') {
     raceSimView?.pause();
     return;
   }
 
-  if (state.selectedRealtimeStageId != null && (!state.realtimeBootstrap || state.realtimeBootstrap.stage.id !== state.selectedRealtimeStageId)) {
+  if (
+    state.selectedRealtimeStageId != null
+    && realtimeStageLoadInFlightId !== state.selectedRealtimeStageId
+    && (!state.realtimeBootstrap || state.realtimeBootstrap.stage.id !== state.selectedRealtimeStageId)
+  ) {
     void openRealtimeStage(state.selectedRealtimeStageId, false);
   }
 }
@@ -2851,6 +3061,11 @@ function renderRealtimeRaceView(): void {
 }
 
 async function openRealtimeStage(stageId: number, activateLiveView: boolean): Promise<void> {
+  if (realtimeStageLoadInFlightId === stageId) {
+    return;
+  }
+
+  realtimeStageLoadInFlightId = stageId;
   state.selectedRealtimeStageId = stageId;
   if (activateLiveView) {
     activateView('live-race');
@@ -2874,6 +3089,9 @@ async function openRealtimeStage(stageId: number, activateLiveView: boolean): Pr
     renderRealtimeRaceView();
     alert('Unerwarteter Fehler bei der Live-Simulation: ' + (error as Error).message);
   } finally {
+    if (realtimeStageLoadInFlightId === stageId) {
+      realtimeStageLoadInFlightId = null;
+    }
     hideLoading();
   }
 }
@@ -3102,6 +3320,38 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     if (view === 'results') renderResultsView();
     if (view === 'season-standings') void loadSeasonStandings(true);
   });
+});
+
+$('stage-editor-stages-table').addEventListener('click', (event) => {
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-editor-stages-sort]');
+  if (!sortButton) return;
+
+  const sortKey = sortButton.dataset['stageEditorStagesSort'] as StageEditorStagesSortKey;
+  if (state.stageEditorStagesSort.key === sortKey) {
+    state.stageEditorStagesSort.direction = state.stageEditorStagesSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.stageEditorStagesSort = {
+      key: sortKey,
+      direction: getDefaultStageEditorStagesSortDirection(sortKey),
+    };
+  }
+  renderStageEditorStagesOverview();
+});
+
+$('stage-editor-climbs-table').addEventListener('click', (event) => {
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-editor-climbs-sort]');
+  if (!sortButton) return;
+
+  const sortKey = sortButton.dataset['stageEditorClimbsSort'] as StageEditorClimbsSortKey;
+  if (state.stageEditorClimbsSort.key === sortKey) {
+    state.stageEditorClimbsSort.direction = state.stageEditorClimbsSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.stageEditorClimbsSort = {
+      key: sortKey,
+      direction: getDefaultStageEditorClimbsSortDirection(sortKey),
+    };
+  }
+  renderStageEditorClimbsOverview();
 });
 
 $<HTMLSelectElement>('teams-dropdown').addEventListener('change', (e) => {
