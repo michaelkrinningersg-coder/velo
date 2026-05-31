@@ -155,6 +155,9 @@
           </div>
         </div>
         <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen für die Live-Simulation.</div>
+        <section class="race-sim-controls-header hidden" id="race-sim-controls-header">
+          <div id="race-sim-controls" class="race-sim-controls"></div>
+        </section>
         <div id="race-sim-layout" class="race-sim-shell hidden">
           <section class="race-sim-card">
             <div class="race-sim-card-header">
@@ -165,17 +168,17 @@
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
-              <h3>Time Controls</h3>
-              <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
-            </div>
-            <div id="race-sim-controls" class="race-sim-controls"></div>
-          </section>
-          <section class="race-sim-card">
-            <div class="race-sim-card-header">
               <h3>Höhenprofil</h3>
               <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
             </div>
             <div id="race-sim-profile" class="race-sim-profile"></div>
+          </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Gruppe</h3>
+              <p class="text-muted">Aktuell ausgewählte Renn-Gruppe im Live Race.</p>
+            </div>
+            <div id="race-sim-group-box" class="race-sim-group-box"></div>
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
@@ -514,6 +517,19 @@
         <button class="btn btn-ghost modal-close" id="btn-close-rider-program">✕</button>
       </div>
       <div id="rider-program-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-riderStats" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card rider-stats-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="rider-stats-title">Fahrerstatistik</h2>
+          <p id="rider-stats-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">✕</button>
+      </div>
+      <div id="rider-stats-body" class="dashboard-race-stages-body rider-stats-body"></div>
     </div>
   </div>
 

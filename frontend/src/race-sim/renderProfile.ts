@@ -1,6 +1,7 @@
 import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType, StageProfile } from '../../../shared/types';
 import type { RiderCluster, RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
+import { buildNamedRaceGroups, mergeDisplayedClusters } from './groupClusters';
 import { buildIntermediateSplitLabels, collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
 function esc(value: unknown): string {
@@ -16,10 +17,6 @@ function formatKm(meters: number): string {
   return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
 }
 
-function formatMeters(meters: number): string {
-  return `${Math.round(meters)} m`;
-}
-
 interface ProfileEvent {
   x: number;
   anchorY: number;
@@ -27,11 +24,6 @@ interface ProfileEvent {
   secondaryLabel: string | null;
   distanceLabel: string;
   accentColor: string;
-}
-
-interface NamedCluster {
-  label: string;
-  riderCount: number;
 }
 
 interface TimingRailEntry {
@@ -53,8 +45,6 @@ function isSplitMode(mode: TimingRailMode): mode is `split:${string}` {
 function splitModeLabel(mode: TimingRailMode): string | null {
   return isSplitMode(mode) ? decodeURIComponent(mode.slice('split:'.length)) : null;
 }
-
-const DISPLAY_CLUSTER_MIN_GAP_METERS = 200;
 
 function scaleDistance(distanceMeter: number, stageDistanceMeters: number, width: number, paddingX: number): number {
   if (stageDistanceMeters <= 0) {
@@ -85,9 +75,27 @@ function interpolateElevation(summary: ParsedStageSummary, distanceMeter: number
   return points[points.length - 1].elevation;
 }
 
-function scaleElevation(elevation: number, axisMaxElevation: number, height: number, paddingTop: number, paddingBottom: number): number {
-  const elevationRange = Math.max(1, axisMaxElevation);
-  return height - paddingBottom - (elevation / elevationRange) * (height - paddingTop - paddingBottom);
+function resolveElevationAxis(summary: ParsedStageSummary): { axisMinElevation: number; axisMaxElevation: number } {
+  const elevations = summary.points.map((point) => point.elevation);
+  const minElevation = Math.min(...elevations);
+  const maxElevation = Math.max(...elevations);
+  const elevationRange = Math.max(1, maxElevation - minElevation);
+  const axisPadding = Math.max(40, elevationRange * 0.08);
+  const rawAxisMin = Math.max(0, minElevation - axisPadding);
+  const rawAxisMax = maxElevation + axisPadding;
+  let axisMinElevation = Math.floor(rawAxisMin / 50) * 50;
+  let axisMaxElevation = Math.ceil(rawAxisMax / 50) * 50;
+
+  if (axisMaxElevation <= axisMinElevation) {
+    axisMaxElevation = axisMinElevation + 100;
+  }
+
+  return { axisMinElevation, axisMaxElevation };
+}
+
+function scaleElevation(elevation: number, axisMinElevation: number, axisMaxElevation: number, height: number, paddingTop: number, paddingBottom: number): number {
+  const elevationRange = Math.max(1, axisMaxElevation - axisMinElevation);
+  return height - paddingBottom - ((elevation - axisMinElevation) / elevationRange) * (height - paddingTop - paddingBottom);
 }
 
 function formatElevationLabel(value: number): string {
@@ -133,7 +141,7 @@ function resolveMarkerAccent(category: StageMarkerCategory | null, markerType: S
   }
 }
 
-function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, height: number, paddingTop: number, paddingBottom: number, axisMaxElevation: number): ProfileEvent[] {
+function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, height: number, paddingTop: number, paddingBottom: number, axisMinElevation: number, axisMaxElevation: number): ProfileEvent[] {
   const rawEvents: ProfileEvent[] = [];
   const pendingClimbs: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
   let finishCategory: StageMarkerCategory | null = null;
@@ -173,7 +181,7 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
       }
       rawEvents.push({
         x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
-        anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
+        anchorY: scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
         primaryLabel: categoryLabel ?? 'Berg',
         secondaryLabel: formatElevationLabel(elevation),
         distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
@@ -186,7 +194,7 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
       const accent = resolveMarkerAccent(marker.cat, marker.type);
       rawEvents.push({
         x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
-        anchorY: scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom),
+        anchorY: scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
         primaryLabel: 'Sprint',
         secondaryLabel: formatElevationLabel(elevation),
         distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
@@ -198,7 +206,7 @@ function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: nu
   const finishPoint = summary.points[summary.points.length - 1];
   rawEvents.push({
     x: scaleDistance(finishPoint.kmMark * 1000, stageDistanceMeters, width, paddingX),
-    anchorY: scaleElevation(finishPoint.elevation, axisMaxElevation, height, paddingTop, paddingBottom),
+    anchorY: scaleElevation(finishPoint.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
     primaryLabel: finishCategory ? `${formatProfileCategory(finishCategory) ?? 'Ziel'} · Ziel` : 'Ziel',
     secondaryLabel: formatElevationLabel(finishPoint.elevation),
     distanceLabel: `${finishPoint.kmMark.toFixed(1).replace('.', ',')} km`,
@@ -261,10 +269,10 @@ function renderDistanceTicks(tickMeters: number[], summary: ParsedStageSummary, 
   }).join('');
 }
 
-function renderCluster(cluster: RiderCluster, summary: ParsedStageSummary, stageDistanceMeters: number, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, axisMaxElevation: number): string {
+function renderCluster(cluster: RiderCluster, summary: ParsedStageSummary, stageDistanceMeters: number, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, axisMinElevation: number, axisMaxElevation: number, isSelected: boolean): string {
   const x = scaleDistance(cluster.distanceMeter, stageDistanceMeters, width, paddingX);
   const elevation = interpolateElevation(summary, cluster.distanceMeter);
-  const y = scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom);
+  const y = scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
   const radius = cluster.riderCount === 1 ? 2.2 : Math.min(6.6, 3.4 + cluster.riderCount * 0.28);
   const badge = cluster.riderCount > 1
     ? `<text x="${x.toFixed(1)}" y="${(y + 2.6).toFixed(1)}" class="race-sim-cluster-label">${cluster.riderCount}</text>`
@@ -272,92 +280,9 @@ function renderCluster(cluster: RiderCluster, summary: ParsedStageSummary, stage
 
   return `
     <g class="race-sim-cluster-group">
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" class="race-sim-cluster-dot${cluster.riderCount > 1 ? ' race-sim-cluster-dot-group' : ''}"></circle>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" class="race-sim-cluster-dot${cluster.riderCount > 1 ? ' race-sim-cluster-dot-group' : ''}${isSelected ? ' race-sim-cluster-dot-selected' : ''}"></circle>
       ${badge}
     </g>`;
-}
-
-function mergeDisplayedClusters(clusters: RiderCluster[]): RiderCluster[] {
-  if (clusters.length === 0) {
-    return [];
-  }
-
-  const merged: Array<RiderCluster & { distanceSum: number }> = [];
-
-  for (const cluster of clusters) {
-    const current = merged[merged.length - 1];
-    if (!current || Math.abs(current.distanceMeter - cluster.distanceMeter) >= DISPLAY_CLUSTER_MIN_GAP_METERS) {
-      merged.push({
-        riderIds: [...cluster.riderIds],
-        riderCount: cluster.riderCount,
-        distanceMeter: cluster.distanceMeter,
-        distanceSum: cluster.distanceMeter * cluster.riderCount,
-      });
-      continue;
-    }
-
-    current.riderIds.push(...cluster.riderIds);
-    current.riderCount += cluster.riderCount;
-    current.distanceSum += cluster.distanceMeter * cluster.riderCount;
-    current.distanceMeter = current.distanceSum / current.riderCount;
-  }
-
-  return merged.map(({ distanceSum: _distanceSum, ...cluster }) => cluster);
-}
-
-function buildNamedClusters(clusters: RiderCluster[]): NamedCluster[] {
-  if (clusters.length === 0) {
-    return [];
-  }
-
-  let pelotonIndex = 0;
-  for (let index = 1; index < clusters.length; index += 1) {
-    if (clusters[index].riderCount > clusters[pelotonIndex].riderCount) {
-      pelotonIndex = index;
-    }
-  }
-
-  let escapeCounter = 0;
-  let chaseCounter = 0;
-
-  return clusters.map((cluster, index) => {
-    if (index === pelotonIndex) {
-      return { label: 'P', riderCount: cluster.riderCount };
-    }
-
-    if (index < pelotonIndex) {
-      escapeCounter += 1;
-      return { label: `E${escapeCounter}`, riderCount: cluster.riderCount };
-    }
-
-    chaseCounter += 1;
-    return { label: `A${chaseCounter}`, riderCount: cluster.riderCount };
-  });
-}
-
-function renderClusterRail(clusters: RiderCluster[]): string {
-  const namedClusters = buildNamedClusters(clusters);
-  if (namedClusters.length === 0) {
-    return '<div class="race-sim-cluster-rail-empty">Keine Gruppen</div>';
-  }
-
-  return `
-    <div class="race-sim-cluster-rail-list">
-      ${namedClusters.map((entry, index) => {
-        const gapText = index === 0
-          ? 'Lead'
-          : `+${formatMeters(Math.max(0, clusters[index - 1].distanceMeter - clusters[index].distanceMeter))}`;
-        const isPeloton = entry.label === 'P';
-        return `
-          <div class="race-sim-cluster-rail-row">
-            <div class="race-sim-cluster-rail-gap">${esc(gapText)}</div>
-            <div class="race-sim-cluster-rail-main">
-              <span class="race-sim-cluster-pill${isPeloton ? ' race-sim-cluster-pill-peloton' : ''}">${esc(entry.label)}</span>
-              <span class="race-sim-cluster-rail-size">${isPeloton ? `Peloton · ${entry.riderCount} Fahrer` : `${entry.riderCount} Fahrer`}</span>
-            </div>
-          </div>`;
-      }).join('')}
-    </div>`;
 }
 
 function formatClock(seconds: number): string {
@@ -525,7 +450,7 @@ function renderTimingRail(summary: ParsedStageSummary, snapshot: SimulationSnaps
     </div>`;
 }
 
-function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSummary, stageDistanceMeters: number, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, axisMaxElevation: number, bootstrap: RealtimeSimulationBootstrap): string {
+function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSummary, stageDistanceMeters: number, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, axisMinElevation: number, axisMaxElevation: number, bootstrap: RealtimeSimulationBootstrap): string {
   const riderById = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
   const teamAbbreviationById = new Map((bootstrap.teams ?? []).map((team) => [team.id, team.abbreviation]));
 
@@ -538,7 +463,7 @@ function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSumm
       if (!rider) return '';
       const x = scaleDistance(cluster.distanceMeter, stageDistanceMeters, width, paddingX);
       const elevation = interpolateElevation(summary, cluster.distanceMeter);
-      const y = scaleElevation(elevation, axisMaxElevation, height, paddingTop, paddingBottom);
+      const y = scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
       const teamAbbreviation = rider.activeTeamId != null ? teamAbbreviationById.get(rider.activeTeamId) ?? '' : '';
       const label = `${rider.lastName} (${teamAbbreviation})`;
       const lineTopY = y - 34;
@@ -559,28 +484,26 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
   const paddingTop = compact ? 36 : 168;
   const paddingBottom = compact ? 22 : 101;
   const stageDistanceMeters = summary.distanceKm * 1000;
-  const maxElevation = Math.max(...summary.points.map((point) => point.elevation));
-  const axisScaleFactor = maxElevation >= 500 ? 1.1 : 1.5;
-  const axisMaxElevation = Math.max(500, Math.ceil((maxElevation * axisScaleFactor) / 50) * 50);
+  const { axisMinElevation, axisMaxElevation } = resolveElevationAxis(summary);
   const baselineY = height - paddingBottom;
   const markerGuideTopY = compact ? 10 : 12;
   const points = summary.points.map((point) => {
     const x = scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX);
-    const y = scaleElevation(point.elevation, axisMaxElevation, height, paddingTop, paddingBottom);
+    const y = scaleElevation(point.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
     return { x, y };
   });
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
-  const markerEvents = buildProfileEvents(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMaxElevation)
+  const markerEvents = buildProfileEvents(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation)
     .map((event) => compact
       ? renderCompactProfileEvent(event, markerGuideTopY, baselineY)
       : renderProfileEvent(event, markerGuideTopY, baselineY))
     .join('');
   const tickValues = compact
     ? []
-    : Array.from({ length: 5 }, (_value, index) => (axisMaxElevation / 4) * index);
+    : Array.from({ length: 5 }, (_value, index) => axisMinElevation + (((axisMaxElevation - axisMinElevation) / 4) * index));
   const gridLines = tickValues.map((value) => {
-    const y = scaleElevation(value, axisMaxElevation, height, paddingTop, paddingBottom);
+    const y = scaleElevation(value, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
     return `
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
@@ -632,7 +555,7 @@ export function renderMiniStageProfile(container: HTMLElement, summary: ParsedSt
   container.innerHTML = buildStaticProfileMarkup(summary, stageProfile, label, true);
 }
 
-export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSummary, snapshot: SimulationSnapshot, label: string, bootstrap: RealtimeSimulationBootstrap, timingMode: TimingRailMode = 'finish'): void {
+export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSummary, snapshot: SimulationSnapshot, label: string, bootstrap: RealtimeSimulationBootstrap, timingMode: TimingRailMode = 'finish', selectedGroupLabel: string | null = null): void {
   if (summary.points.length < 2) {
     container.innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
     return;
@@ -643,40 +566,38 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
   const paddingX = 28;
   const paddingTop = 168;
   const paddingBottom = 101;
-  const maxElevation = Math.max(...summary.points.map((point) => point.elevation));
-  const axisScaleFactor = maxElevation >= 500 ? 1.1 : 1.5;
-  const axisMaxElevation = Math.max(500, Math.ceil((maxElevation * axisScaleFactor) / 50) * 50);
+  const { axisMinElevation, axisMaxElevation } = resolveElevationAxis(summary);
   const baselineY = height - paddingBottom;
   const markerGuideTopY = 12;
-  const tickValues = Array.from({ length: 5 }, (_value, index) => (axisMaxElevation / 4) * index);
+  const tickValues = Array.from({ length: 5 }, (_value, index) => axisMinElevation + (((axisMaxElevation - axisMinElevation) / 4) * index));
+  const displayClusters = mergeDisplayedClusters(snapshot.clusters);
+  const namedGroups = buildNamedRaceGroups(displayClusters);
   const distanceTicks = buildDistanceTicks(summary, snapshot.stageDistanceMeters);
   const points = summary.points.map((point) => {
     const x = scaleDistance(point.kmMark * 1000, snapshot.stageDistanceMeters, width, paddingX);
-    const y = scaleElevation(point.elevation, axisMaxElevation, height, paddingTop, paddingBottom);
-    return { x, y, point };
+    const y = scaleElevation(point.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
+    return { x, y };
   });
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
-  const markerEvents = buildProfileEvents(summary, snapshot.stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMaxElevation)
+  const markerEvents = buildProfileEvents(summary, snapshot.stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation)
     .map((event) => renderProfileEvent(event, markerGuideTopY, baselineY))
     .join('');
-  const displayClusters = mergeDisplayedClusters(snapshot.clusters);
   const gridLines = tickValues.map((value) => {
-    const y = scaleElevation(value, axisMaxElevation, height, paddingTop, paddingBottom);
+    const y = scaleElevation(value, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
     return `
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
       <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
       <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label race-sim-elevation-label">${formatElevationLabel(value)}</text>`;
   }).join('');
   const distanceTickMarkup = renderDistanceTicks(distanceTicks, summary, snapshot.stageDistanceMeters, width, paddingX, baselineY);
+  const groupByCluster = new Map(displayClusters.map((cluster, index) => [cluster, namedGroups[index] ?? null]));
   const clusters = displayClusters
-    .map((cluster) => renderCluster(cluster, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMaxElevation))
+    .map((cluster) => renderCluster(cluster, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation, groupByCluster.get(cluster)?.label === selectedGroupLabel))
     .join('');
   const ittRiderLabels = bootstrap.stage.profile === 'ITT'
-    ? renderIttRiderLabels(displayClusters, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMaxElevation, bootstrap)
+    ? renderIttRiderLabels(displayClusters, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation, bootstrap)
     : '';
-  const clusterRail = renderClusterRail(displayClusters);
-
   container.innerHTML = `
     <div class="race-sim-profile-layout${bootstrap.stage.profile === 'ITT' ? ' race-sim-profile-layout-itt' : ''}">
       <div class="race-sim-profile-canvas-wrap">
@@ -690,27 +611,24 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
               <stop offset="0%" stop-color="#fbbf24"></stop>
               <stop offset="100%" stop-color="#f59e0b"></stop>
             </linearGradient>
+            <clipPath id="race-sim-profile-plot-clip">
+              <rect x="${paddingX}" y="0" width="${width - (paddingX * 2)}" height="${height}"></rect>
+            </clipPath>
           </defs>
           <rect x="0" y="0" width="${width}" height="${height}" fill="url(#race-sim-paper)"></rect>
           ${gridLines}
           <line x1="${paddingX}" y1="${baselineY}" x2="${width - paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
           <line x1="${paddingX}" y1="${paddingTop}" x2="${paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
-          <path d="${areaPath}" fill="url(#race-sim-area)"></path>
-          <path d="${linePath}" class="race-sim-profile-line"></path>
-          ${markerEvents}
-          ${clusters}
+          <g clip-path="url(#race-sim-profile-plot-clip)">
+            <path d="${areaPath}" fill="url(#race-sim-area)"></path>
+            <path d="${linePath}" class="race-sim-profile-line"></path>
+            ${markerEvents}
+            ${clusters}
+          </g>
           ${ittRiderLabels}
           ${distanceTickMarkup}
           <text x="${paddingX.toFixed(1)}" y="${(paddingTop - 20).toFixed(1)}" class="race-sim-scale race-sim-scale-title" text-anchor="start">Höhe</text>
         </svg>
       </div>
-      ${bootstrap.stage.profile === 'ITT'
-        ? ''
-        : `<div class="race-sim-side-rails">
-            <aside class="race-sim-cluster-rail" aria-label="Gruppenübersicht">
-              <div class="race-sim-cluster-rail-title">Gruppen</div>
-              ${clusterRail}
-            </aside>
-          </div>`}
     </div>`;
 }

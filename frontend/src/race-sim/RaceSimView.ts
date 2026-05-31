@@ -3,15 +3,18 @@ import { renderRaceSimControls, type TimeControlValue } from './renderControls';
 import type { FavoriteItem } from './stageFavorites';
 import { renderRaceMessages, type RaceSimMessageFilter } from './renderMessages';
 import { renderRaceProfile, type TimingRailMode } from './renderProfile';
-import { renderStageFavorites } from './renderStageFavorites';
+import { renderSelectedRaceGroupBox, renderStageFavorites, type StageOverviewSectionKey } from './renderStageFavorites';
 import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRenderTelemetry } from './renderSidebar';
 import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
+import { buildNamedRaceGroups, mergeDisplayedClusters, type NamedRaceGroup } from './groupClusters';
 import { summarizeStageMarkers } from './stageSummary';
 
 interface RaceSimElements {
   layout: HTMLElement;
   emptyState: HTMLElement;
+  controlsHeader: HTMLElement;
   profile: HTMLElement;
+  groupBox: HTMLElement;
   messages: HTMLElement;
   favorites: HTMLElement;
   sidebar: HTMLElement;
@@ -30,6 +33,8 @@ interface RaceSimViewOptions {
 
 const PROFILE_RENDER_INTERVAL_MS = 250;
 const PROFILE_INTERACTION_HOLD_MS = 1200;
+const OVERVIEW_RENDER_INTERVAL_MS = 250;
+const OVERVIEW_INTERACTION_HOLD_MS = 1200;
 const PERF_SMOOTHING_FACTOR = 0.2;
 
 interface RaceSimPerfTelemetry {
@@ -84,11 +89,21 @@ export class RaceSimView {
 
   private lastProfileRenderTime = Number.NEGATIVE_INFINITY;
 
+  private overviewInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+
+  private lastOverviewRenderTime = Number.NEGATIVE_INFINITY;
+
   private sidebarPaintSequence = 0;
 
   private messageFilter: RaceSimMessageFilter = 'all';
 
   private favorites: FavoriteItem[] = [];
+
+  private selectedGroupLabel: string | null = null;
+
+  private selectedGroupAnchorRiderId: number | null = null;
+
+  private collapsedOverviewSections = new Set<StageOverviewSectionKey>();
 
   private perfTelemetry: RaceSimPerfTelemetry = {
     engineStepMs: 0,
@@ -136,8 +151,33 @@ export class RaceSimView {
       }
 
       const speedButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-speed]');
+      if (speedButton) {
+        const speedValue = Number(speedButton.dataset['raceSimSpeed']) as TimeControlValue;
+        if (!Number.isFinite(speedValue)) return;
+        this.timeMultiplier = speedValue;
+        this.render();
+      }
+    });
 
     this.elements.messages.addEventListener('click', (event) => {
+      const riderGroupButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-rider-id]');
+      if (riderGroupButton && this.detailSnapshot) {
+        const riderId = this.resolveRiderIdFromGroupButton(riderGroupButton);
+        if (riderId != null) {
+          this.selectGroupByRiderId(riderId, this.detailSnapshot);
+        }
+        return;
+      }
+
+      const riderNameGroupButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-rider-name]');
+      if (riderNameGroupButton && this.detailSnapshot) {
+        const riderId = this.resolveRiderIdFromGroupButton(riderNameGroupButton);
+        if (riderId != null) {
+          this.selectGroupByRiderId(riderId, this.detailSnapshot);
+        }
+        return;
+      }
+
       const filterButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-message-filter]');
       if (!filterButton || this.detailSnapshot == null) {
         return;
@@ -149,14 +189,31 @@ export class RaceSimView {
       }
 
       this.messageFilter = nextFilter;
+      this.holdOverviewInteraction();
       renderRaceMessages(this.elements.messages, this.detailSnapshot.messages, this.messageFilter);
     });
-      if (speedButton) {
-        const speedValue = Number(speedButton.dataset['raceSimSpeed']) as TimeControlValue;
-        if (!Number.isFinite(speedValue)) return;
-        this.timeMultiplier = speedValue;
-        this.render();
+
+    this.elements.favorites.addEventListener('click', (event) => {
+      const overviewSummary = (event.target as Element).closest<HTMLElement>('[data-race-sim-overview-summary]');
+      if (overviewSummary) {
+        const sectionKey = overviewSummary.dataset['raceSimOverviewSummary'] as StageOverviewSectionKey | undefined;
+        const detailsElement = overviewSummary.closest<HTMLDetailsElement>('details[data-race-sim-overview-section]');
+        if (sectionKey && detailsElement) {
+          const willOpen = !detailsElement.open;
+          if (willOpen) {
+            this.collapsedOverviewSections.delete(sectionKey);
+          } else {
+            this.collapsedOverviewSections.add(sectionKey);
+          }
+          this.holdOverviewInteraction();
+        }
       }
+
+      this.handleGroupInteraction(event);
+    });
+
+    this.elements.groupBox.addEventListener('click', (event) => {
+      this.handleGroupInteraction(event);
     });
 
     this.elements.profile.addEventListener('click', (event) => {
@@ -169,6 +226,38 @@ export class RaceSimView {
       this.profileInteractionHoldUntilMs = performance.now() + PROFILE_INTERACTION_HOLD_MS;
       this.render();
     });
+  }
+
+  private handleGroupInteraction(event: Event): void {
+    if (!this.detailSnapshot) {
+      return;
+    }
+
+    const riderGroupButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-rider-id]');
+    if (riderGroupButton) {
+      const riderId = this.resolveRiderIdFromGroupButton(riderGroupButton);
+      if (riderId != null) {
+        this.selectGroupByRiderId(riderId, this.detailSnapshot);
+      }
+      return;
+    }
+
+    const groupNavButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-nav]');
+    if (!groupNavButton) {
+      return;
+    }
+
+    const groups = this.buildRaceGroups(this.detailSnapshot);
+    if (groups.length === 0) {
+      return;
+    }
+
+    const currentLabel = this.resolveSelectedGroupLabel(this.detailSnapshot);
+    const currentIndex = Math.max(0, groups.findIndex((group) => group.label === currentLabel));
+    const direction = groupNavButton.dataset['raceSimGroupNav'] === 'prev' ? -1 : 1;
+    const nextIndex = (currentIndex + direction + groups.length) % groups.length;
+    const nextLabel = groups[nextIndex]?.label ?? currentLabel;
+    this.selectGroupByLabel(nextLabel, this.detailSnapshot);
 
     this.elements.profile.addEventListener('pointerdown', (event) => {
       const timingScroll = (event.target as Element).closest<HTMLElement>('.race-sim-timing-scroll');
@@ -229,10 +318,15 @@ export class RaceSimView {
     this.detailSnapshot = this.engine.getSnapshot();
     this.frameSnapshot = this.detailSnapshot;
     this.favorites = this.detailSnapshot.stageFavorites;
+    this.collapsedOverviewSections.clear();
+    const initialGroups = this.buildRaceGroups(this.detailSnapshot);
+    this.selectGroupByLabel(this.resolveInitialGroupLabel(initialGroups), this.detailSnapshot, false);
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
     this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastOverviewRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.overviewInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
     this.resetPerfTelemetry();
     this.render(performance.now(), true);
 
@@ -249,13 +343,20 @@ export class RaceSimView {
     this.bootstrap = null;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
     this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastOverviewRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.overviewInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
     this.resetPerfTelemetry();
     this.favorites = [];
+    this.selectedGroupLabel = null;
+    this.selectedGroupAnchorRiderId = null;
+    this.collapsedOverviewSections.clear();
     this.elements.layout.classList.add('hidden');
+    this.elements.controlsHeader.classList.add('hidden');
     this.elements.emptyState.classList.remove('hidden');
     this.elements.emptyState.textContent = message;
+    this.elements.groupBox.innerHTML = '';
     this.elements.messages.innerHTML = '';
     this.elements.favorites.innerHTML = '';
     this.elements.meta.textContent = '';
@@ -269,12 +370,19 @@ export class RaceSimView {
     this.bootstrap = null;
     this.lastSidebarRenderTime = Number.NEGATIVE_INFINITY;
     this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+    this.lastOverviewRenderTime = Number.NEGATIVE_INFINITY;
     this.timingScrollTop = 0;
     this.profileInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
+    this.overviewInteractionHoldUntilMs = Number.NEGATIVE_INFINITY;
     this.resetPerfTelemetry();
     this.favorites = [];
+    this.selectedGroupLabel = null;
+    this.selectedGroupAnchorRiderId = null;
+    this.collapsedOverviewSections.clear();
     this.elements.layout.classList.add('hidden');
+    this.elements.controlsHeader.classList.add('hidden');
     this.elements.emptyState.classList.add('hidden');
+    this.elements.groupBox.innerHTML = '';
     this.elements.messages.innerHTML = '';
     this.elements.favorites.innerHTML = '';
     this.elements.meta.textContent = '';
@@ -308,6 +416,11 @@ export class RaceSimView {
     this.frameSnapshot = null;
     this.detailSnapshot = null;
     this.bootstrap = null;
+    this.selectedGroupLabel = null;
+    this.selectedGroupAnchorRiderId = null;
+    this.collapsedOverviewSections.clear();
+    this.elements.controlsHeader.classList.add('hidden');
+    this.elements.groupBox.innerHTML = '';
   }
 
   private frame(timestamp: number): void {
@@ -343,6 +456,7 @@ export class RaceSimView {
     }
 
     this.elements.layout.classList.remove('hidden');
+    this.elements.controlsHeader.classList.remove('hidden');
     this.elements.emptyState.classList.add('hidden');
     const ittSuffix = this.bootstrap.stage.profile === 'ITT'
       ? ' · Einzelzeitfahren · Startintervall 02:00'
@@ -368,9 +482,20 @@ export class RaceSimView {
       || this.frameSnapshot.isFinished
       || this.isRunning;
 
-    if (shouldRenderProfile || shouldRenderSidebar) {
+    const shouldRenderOverview = forceSidebar
+      || !this.isRunning
+      || this.frameSnapshot.isFinished
+      || (
+        nowMs >= this.overviewInteractionHoldUntilMs
+        && (nowMs - this.lastOverviewRenderTime) >= OVERVIEW_RENDER_INTERVAL_MS
+      );
+
+    if (shouldRenderProfile || shouldRenderSidebar || shouldRenderOverview) {
       const snapshotBuildStartMs = performance.now();
       this.detailSnapshot = this.engine?.getSnapshot() ?? this.detailSnapshot;
+      if (this.detailSnapshot) {
+        this.selectedGroupLabel = this.resolveSelectedGroupLabel(this.detailSnapshot);
+      }
       this.recordPerfTelemetry('snapshotBuildMs', performance.now() - snapshotBuildStartMs);
     }
 
@@ -380,7 +505,7 @@ export class RaceSimView {
         this.timingScrollTop = currentTimingScroll.scrollTop;
       }
       const profileRenderStartMs = performance.now();
-      renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.detailSnapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`, this.bootstrap, this.timingRailMode);
+      renderRaceProfile(this.elements.profile, this.bootstrap.stageSummary, this.detailSnapshot, `${this.bootstrap.race.name} Etappe ${this.bootstrap.stage.stageNumber}`, this.bootstrap, this.timingRailMode, this.selectedGroupLabel);
       this.recordPerfTelemetry('profileRenderMs', performance.now() - profileRenderStartMs);
       this.lastProfileRenderTime = nowMs;
       const nextTimingScroll = this.elements.profile.querySelector<HTMLElement>('.race-sim-timing-scroll');
@@ -399,9 +524,11 @@ export class RaceSimView {
       this.scheduleSidebarPaintTelemetry(sidebarRenderStartMs, sidebarWriteMs);
     }
 
-    if (this.detailSnapshot) {
+    if (shouldRenderOverview && this.detailSnapshot) {
       renderRaceMessages(this.elements.messages, this.detailSnapshot.messages, this.messageFilter);
-      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications, this.detailSnapshot);
+      renderStageFavorites(this.elements.favorites, this.favorites, this.bootstrap, this.detailSnapshot.markerClassifications, this.detailSnapshot, this.collapsedOverviewSections);
+      renderSelectedRaceGroupBox(this.elements.groupBox, this.bootstrap, this.detailSnapshot, this.selectedGroupLabel);
+      this.lastOverviewRenderTime = nowMs;
     }
 
     renderRaceSimControls(this.elements.controls, {
@@ -411,6 +538,98 @@ export class RaceSimView {
       totalRiders: this.bootstrap.riders.length,
       perf: this.perfTelemetry,
     });
+  }
+
+  private resolveSelectedGroupLabel(snapshot: SimulationSnapshot): string | null {
+    const groups = this.buildRaceGroups(snapshot);
+    if (this.selectedGroupAnchorRiderId != null) {
+      const anchoredGroup = groups.find((group) => group.riderIds.includes(this.selectedGroupAnchorRiderId ?? -1)) ?? null;
+      if (anchoredGroup) {
+        return anchoredGroup.label;
+      }
+    }
+
+    if (this.selectedGroupLabel != null && groups.some((group) => group.label === this.selectedGroupLabel)) {
+      return this.selectedGroupLabel;
+    }
+
+    return this.resolveInitialGroupLabel(groups);
+  }
+
+  private buildRaceGroups(snapshot: SimulationSnapshot): NamedRaceGroup[] {
+    return buildNamedRaceGroups(mergeDisplayedClusters(snapshot.clusters));
+  }
+
+  private resolveInitialGroupLabel(groups: NamedRaceGroup[]): string | null {
+    return groups.find((group) => group.label === 'P')?.label ?? groups[0]?.label ?? null;
+  }
+
+  private resolveBestRiderIdInGroup(group: NamedRaceGroup | null): number | null {
+    if (!group || !this.bootstrap) {
+      return null;
+    }
+
+    const gcByRiderId = new Map(this.bootstrap.gcStandings.map((standing) => [standing.riderId, standing]));
+    return [...group.riderIds].sort((left, right) => (
+      (gcByRiderId.get(left)?.rank ?? Number.MAX_SAFE_INTEGER) - (gcByRiderId.get(right)?.rank ?? Number.MAX_SAFE_INTEGER)
+      || left - right
+    ))[0] ?? null;
+  }
+
+  private selectGroupByLabel(label: string | null, snapshot: SimulationSnapshot, rerender = true): void {
+    const groups = this.buildRaceGroups(snapshot);
+    const selectedGroup = groups.find((group) => group.label === label) ?? groups.find((group) => group.label === 'P') ?? groups[0] ?? null;
+    this.selectedGroupLabel = selectedGroup?.label ?? null;
+    this.selectedGroupAnchorRiderId = this.resolveBestRiderIdInGroup(selectedGroup);
+    if (rerender) {
+      this.profileInteractionHoldUntilMs = performance.now() + PROFILE_INTERACTION_HOLD_MS;
+      this.holdOverviewInteraction();
+      this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+      this.render(performance.now(), true);
+    }
+  }
+
+  private selectGroupByRiderId(riderId: number, snapshot: SimulationSnapshot): void {
+    const groups = this.buildRaceGroups(snapshot);
+    const selectedGroup = groups.find((group) => group.riderIds.includes(riderId)) ?? null;
+    if (!selectedGroup) {
+      return;
+    }
+
+    this.selectedGroupLabel = selectedGroup.label;
+    this.selectedGroupAnchorRiderId = riderId;
+    this.profileInteractionHoldUntilMs = performance.now() + PROFILE_INTERACTION_HOLD_MS;
+    this.holdOverviewInteraction();
+    this.lastProfileRenderTime = Number.NEGATIVE_INFINITY;
+    this.render(performance.now(), true);
+  }
+
+  private holdOverviewInteraction(): void {
+    this.overviewInteractionHoldUntilMs = performance.now() + OVERVIEW_INTERACTION_HOLD_MS;
+    this.lastOverviewRenderTime = Number.NEGATIVE_INFINITY;
+  }
+
+  private resolveRiderIdFromGroupButton(button: HTMLButtonElement): number | null {
+    const riderId = Number(button.dataset['raceSimGroupRiderId']);
+    if (Number.isFinite(riderId)) {
+      return riderId;
+    }
+
+    if (!this.bootstrap) {
+      return null;
+    }
+
+    const riderName = button.dataset['raceSimGroupRiderName'];
+    if (!riderName) {
+      return null;
+    }
+
+    const riderTeamId = button.dataset['raceSimGroupRiderTeamId'] != null ? Number(button.dataset['raceSimGroupRiderTeamId']) : null;
+    const rider = this.bootstrap.riders.find((candidate) => {
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+      return candidateName === riderName && (riderTeamId == null || candidate.activeTeamId === riderTeamId);
+    }) ?? null;
+    return rider?.id ?? null;
   }
 
   private resetPerfTelemetry(): void {

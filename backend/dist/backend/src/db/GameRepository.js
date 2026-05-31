@@ -185,7 +185,10 @@ function resolveStageRaceBaseFatigue(stageNumber, recuperationSkill) {
         return 0;
     }
     const cappedRecuperation = Math.min(85, recuperationSkill);
-    return (stageNumber - 1) * (0.01 + ((85 - cappedRecuperation) * 0.01));
+    const completedStages = stageNumber - 1;
+    const baseFatigueRate = 0.10 + (((85 - cappedRecuperation) / 35) * 0.75);
+    const stageProgressionFatigue = 0.01 * ((stageNumber - 2) * completedStages / 2);
+    return (completedStages * baseFatigueRate) + stageProgressionFatigue;
 }
 function resolveStageRaceFatigueMalus(stageNumber, recuperationSkill, accumulatedRandomFatigue) {
     if (stageNumber == null) {
@@ -739,6 +742,100 @@ class GameRepository {
             }
         })();
     }
+    getFullyClassifiedStageRaceRiderIds(raceId, upToStageNumber) {
+        if (upToStageNumber < 1 || !tableExists(this.db, 'stages') || !tableExists(this.db, 'stage_entries') || !tableExists(this.db, 'races')) {
+            return [];
+        }
+        const raceRow = this.db.prepare('SELECT is_stage_race FROM races WHERE id = ?').get(raceId);
+        if (!raceRow || raceRow.is_stage_race !== 1) {
+            return [];
+        }
+        const expectedStageCount = this.db.prepare(`
+      SELECT COUNT(*) AS stage_count
+      FROM stages
+      WHERE race_id = ?
+        AND stage_number <= ?
+    `).get(raceId, upToStageNumber)?.stage_count ?? 0;
+        if (expectedStageCount < 1) {
+            return [];
+        }
+        const rows = this.db.prepare(`
+      SELECT stage_entries.rider_id AS rider_id
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.race_id = ?
+        AND stages.stage_number <= ?
+      GROUP BY stage_entries.rider_id
+      HAVING COUNT(*) = ?
+        AND SUM(CASE WHEN stage_entries.status = 'finished' THEN 1 ELSE 0 END) = ?
+        AND SUM(CASE WHEN stage_entries.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
+    `).all(raceId, upToStageNumber, expectedStageCount, expectedStageCount);
+        return rows.map((row) => row.rider_id);
+    }
+    markUnavailableStageRaceParticipantsAsDnf() {
+        if (!tableExists(this.db, 'races')
+            || !tableExists(this.db, 'stages')
+            || !tableExists(this.db, 'race_entries')
+            || !tableExists(this.db, 'stage_entries')
+            || !tableExists(this.db, 'rider_daily_state')) {
+            return 0;
+        }
+        const candidates = this.db.prepare(`
+      SELECT
+        target_stage.id AS stage_id,
+        candidate.race_id AS race_id,
+        candidate.team_id AS team_id,
+        candidate.rider_id AS rider_id,
+        candidate.health_status AS health_status
+      FROM (
+        SELECT
+          race_entries.race_id AS race_id,
+          race_entries.team_id AS team_id,
+          race_entries.rider_id AS rider_id,
+          rider_daily_state.health_status AS health_status,
+          MAX(stages.stage_number) AS last_finished_stage_number
+        FROM race_entries
+        JOIN races ON races.id = race_entries.race_id
+        JOIN rider_daily_state ON rider_daily_state.rider_id = race_entries.rider_id
+        JOIN stage_entries ON stage_entries.race_id = race_entries.race_id
+          AND stage_entries.rider_id = race_entries.rider_id
+          AND stage_entries.status = 'finished'
+        JOIN stages ON stages.id = stage_entries.stage_id
+        WHERE races.is_stage_race = 1
+          AND rider_daily_state.unavailable_days_remaining > 0
+          AND rider_daily_state.health_status IN ('ill', 'injured')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM stage_entries AS exited_entries
+            WHERE exited_entries.race_id = race_entries.race_id
+              AND exited_entries.rider_id = race_entries.rider_id
+              AND exited_entries.status IN ('dns', 'dnf')
+          )
+        GROUP BY race_entries.race_id, race_entries.team_id, race_entries.rider_id, rider_daily_state.health_status
+      ) AS candidate
+      JOIN stages AS target_stage
+        ON target_stage.race_id = candidate.race_id
+       AND target_stage.stage_number = candidate.last_finished_stage_number + 1
+    `).all();
+        if (candidates.length === 0) {
+            return 0;
+        }
+        const upsertStageEntry = this.db.prepare(`
+      INSERT INTO stage_entries (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (?, ?, ?, ?, 'dnf', ?)
+      ON CONFLICT(stage_id, rider_id) DO UPDATE SET
+        race_id = excluded.race_id,
+        team_id = excluded.team_id,
+        status = excluded.status,
+        status_reason = excluded.status_reason
+    `);
+        this.db.transaction(() => {
+            for (const candidate of candidates) {
+                upsertStageEntry.run(candidate.stage_id, candidate.race_id, candidate.team_id, candidate.rider_id, candidate.health_status === 'ill' ? 'Krankheit' : 'Verletzung');
+            }
+        })();
+        return candidates.length;
+    }
     attachStageRaceFatigue(raceId, riders, stageNumber) {
         if (riders.length === 0 || stageNumber < 1) {
             return riders;
@@ -1017,6 +1114,248 @@ class GameRepository {
                 const stages = stagesByRaceId.get(row.id) ?? [];
                 return mapRaceWithSummary(row, stages, this.getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
             }),
+        };
+    }
+    getRiderStats(riderId) {
+        const rider = this.getRiderById(riderId);
+        if (!rider) {
+            return null;
+        }
+        if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
+            return this.createEmptyRiderStatsPayload(rider);
+        }
+        const seasonRows = this.db.prepare(`
+      SELECT DISTINCT CAST(substr(stages.date, 1, 4) AS INTEGER) AS season
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.rider_id = ?
+        AND stage_entries.status IN ('finished', 'dnf')
+      ORDER BY season ASC
+    `).all(riderId);
+        for (const row of seasonRows) {
+            if (Number.isFinite(row.season)) {
+                this.syncSeasonPointEventsForSeason(row.season);
+            }
+        }
+        const stageRows = this.db.prepare(`
+      SELECT
+        CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
+        races.id AS race_id,
+        races.name AS race_name,
+        race_categories.name AS race_category_name,
+        races.is_stage_race AS is_stage_race,
+        races.start_date AS start_date,
+        races.end_date AS end_date,
+        stages.id AS stage_id,
+        stages.stage_number AS stage_number,
+        stages.date AS date,
+        stages.profile AS profile,
+        stages.details_csv_file AS details_csv_file,
+        stages.start_elevation AS start_elevation,
+        COALESCE(rider_stage_results.rank, team_stage_results.rank) AS stage_rank,
+        COALESCE(rider_stage_results.time_seconds, team_stage_results.time_seconds) AS stage_time_seconds,
+        rider_stage_results.is_breakaway AS is_breakaway,
+        gc_results.rank AS gc_rank,
+        stage_points.points_awarded AS stage_points,
+        stage_entries.status AS stage_entry_status,
+        stage_entries.status_reason AS stage_entry_status_reason
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      JOIN races ON races.id = stages.race_id
+      JOIN race_categories ON race_categories.id = races.category_id
+      LEFT JOIN results rider_stage_results
+        ON rider_stage_results.stage_id = stages.id
+       AND rider_stage_results.rider_id = stage_entries.rider_id
+       AND rider_stage_results.result_type_id = ${RESULT_TYPE_IDS.stage}
+      LEFT JOIN results team_stage_results
+        ON team_stage_results.stage_id = stages.id
+       AND team_stage_results.team_id = stage_entries.team_id
+       AND team_stage_results.rider_id IS NULL
+       AND team_stage_results.result_type_id = ${RESULT_TYPE_IDS.stage}
+       AND stages.profile = 'TTT'
+      LEFT JOIN results gc_results
+        ON gc_results.stage_id = stages.id
+       AND gc_results.rider_id = stage_entries.rider_id
+       AND gc_results.result_type_id = ?
+      LEFT JOIN season_point_events stage_points
+        ON stage_points.stage_id = stages.id
+       AND stage_points.rider_id = stage_entries.rider_id
+       AND stage_points.award_type = CASE WHEN races.is_stage_race = 1 THEN 'stage_result' ELSE 'one_day_result' END
+      WHERE stage_entries.rider_id = ?
+        AND stage_entries.status IN ('finished', 'dnf')
+        AND (
+          COALESCE(rider_stage_results.rank, team_stage_results.rank) IS NOT NULL
+          OR stage_entries.status = 'dnf'
+        )
+      ORDER BY stages.date ASC, races.id ASC, stages.stage_number ASC
+    `).all(RESULT_TYPE_IDS.gc, riderId);
+        const finalRows = this.db.prepare(`
+      SELECT
+        CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
+        races.id AS race_id,
+        races.name AS race_name,
+        race_categories.name AS race_category_name,
+        races.start_date AS start_date,
+        races.end_date AS end_date,
+        stages.id AS stage_id,
+        stages.stage_number AS stage_number,
+        stages.date AS date,
+        stages.profile AS profile,
+        stages.details_csv_file AS details_csv_file,
+        stages.start_elevation AS start_elevation,
+        results.result_type_id AS result_type_id,
+        results.rank AS result_rank,
+        final_points.points_awarded AS final_points
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      JOIN races ON races.id = stages.race_id
+      JOIN race_categories ON race_categories.id = races.category_id
+      LEFT JOIN season_point_events final_points
+        ON final_points.stage_id = results.stage_id
+       AND final_points.rider_id = results.rider_id
+       AND final_points.award_type = CASE results.result_type_id
+         WHEN ${RESULT_TYPE_IDS.gc} THEN 'gc_final'
+         WHEN ${RESULT_TYPE_IDS.points} THEN 'points_final'
+         WHEN ${RESULT_TYPE_IDS.mountain} THEN 'mountain_final'
+         WHEN ${RESULT_TYPE_IDS.youth} THEN 'youth_final'
+       END
+      WHERE results.rider_id = ?
+        AND races.is_stage_race = 1
+        AND stages.stage_number = races.number_of_stages
+        AND results.result_type_id IN (${RESULT_TYPE_IDS.gc}, ${RESULT_TYPE_IDS.points}, ${RESULT_TYPE_IDS.mountain}, ${RESULT_TYPE_IDS.youth})
+      ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
+    `).all(riderId);
+        const seasons = new Map();
+        const blocks = new Map();
+        const stageSummaryCache = new Map();
+        const ensureSeason = (season) => {
+            const existing = seasons.get(season);
+            if (existing) {
+                return existing;
+            }
+            const created = {
+                season,
+                raceBlocks: [],
+            };
+            seasons.set(season, created);
+            return created;
+        };
+        const ensureRaceBlock = (season, raceId, raceName, raceCategoryName, isStageRace, startDate, endDate) => {
+            const key = `${season}:${raceId}`;
+            const existing = blocks.get(key);
+            if (existing) {
+                return existing;
+            }
+            const seasonBucket = ensureSeason(season);
+            const created = {
+                raceId,
+                raceName,
+                raceCategoryName,
+                isStageRace,
+                startDate,
+                endDate,
+                rows: [],
+            };
+            seasonBucket.raceBlocks.push(created);
+            blocks.set(key, created);
+            return created;
+        };
+        const getStageSummary = (stageId, detailsCsvFile, startElevation) => {
+            const cached = stageSummaryCache.get(stageId);
+            if (cached) {
+                return cached;
+            }
+            const summary = (0, StageParser_1.summarizeStageProfile)(detailsCsvFile, startElevation);
+            const normalized = {
+                distanceKm: summary.distanceKm,
+                elevationGainMeters: summary.elevationGainMeters,
+            };
+            stageSummaryCache.set(stageId, normalized);
+            return normalized;
+        };
+        for (const row of stageRows) {
+            const block = ensureRaceBlock(row.season, row.race_id, row.race_name, row.race_category_name, row.is_stage_race === 1, row.start_date, row.end_date);
+            const summary = getStageSummary(row.stage_id, row.details_csv_file, row.start_elevation);
+            block.rows.push({
+                rowType: 'stage_result',
+                date: row.date,
+                raceId: row.race_id,
+                raceName: row.race_name,
+                raceCategoryName: row.race_category_name,
+                stageId: row.stage_id,
+                stageNumber: row.stage_number,
+                stageName: row.is_stage_race === 1 ? `Etappe ${row.stage_number}` : row.race_name,
+                resultLabel: row.stage_entry_status === 'dnf'
+                    ? (row.stage_entry_status_reason ?? '')
+                    : (row.profile === 'TTT' ? 'Teamzeit' : 'Zielzeit'),
+                resultRank: row.stage_entry_status === 'dnf' ? null : row.stage_rank,
+                gcRank: row.stage_entry_status === 'dnf' ? null : (row.is_stage_race === 1 ? row.gc_rank : null),
+                isBreakaway: row.is_breakaway === 1,
+                finishStatus: row.stage_entry_status === 'dnf'
+                    ? (row.stage_entry_status_reason?.startsWith('OTL ') ? 'otl' : 'dnf')
+                    : 'classified',
+                statusReason: row.stage_entry_status === 'dnf' ? row.stage_entry_status_reason : null,
+                stageTimeSeconds: row.stage_entry_status === 'dnf' ? null : row.stage_time_seconds,
+                profile: row.profile,
+                distanceKm: summary.distanceKm,
+                elevationGainMeters: summary.elevationGainMeters,
+                seasonPoints: row.stage_points ?? 0,
+            });
+        }
+        for (const row of finalRows) {
+            const rowType = this.mapResultTypeIdToRiderStatsRowType(row.result_type_id);
+            if (!rowType) {
+                continue;
+            }
+            const block = ensureRaceBlock(row.season, row.race_id, row.race_name, row.race_category_name, true, row.start_date, row.end_date);
+            const summary = getStageSummary(row.stage_id, row.details_csv_file, row.start_elevation);
+            block.rows.push({
+                rowType,
+                date: row.date,
+                raceId: row.race_id,
+                raceName: row.race_name,
+                raceCategoryName: row.race_category_name,
+                stageId: row.stage_id,
+                stageNumber: row.stage_number,
+                stageName: `Etappe ${row.stage_number}`,
+                resultLabel: this.getRiderStatsFinalLabel(rowType),
+                resultRank: row.result_rank,
+                gcRank: null,
+                isBreakaway: false,
+                finishStatus: 'classified',
+                statusReason: null,
+                stageTimeSeconds: null,
+                profile: row.profile,
+                distanceKm: summary.distanceKm,
+                elevationGainMeters: summary.elevationGainMeters,
+                seasonPoints: row.final_points ?? 0,
+            });
+        }
+        const rowTypeOrder = {
+            stage_result: 0,
+            gc_final: 1,
+            points_final: 2,
+            mountain_final: 3,
+            youth_final: 4,
+        };
+        for (const season of seasons.values()) {
+            season.raceBlocks.sort((left, right) => (left.startDate.localeCompare(right.startDate)
+                || left.raceName.localeCompare(right.raceName, 'de')
+                || left.raceId - right.raceId));
+            for (const block of season.raceBlocks) {
+                block.rows.sort((left, right) => (left.date.localeCompare(right.date)
+                    || (left.stageNumber ?? 999) - (right.stageNumber ?? 999)
+                    || rowTypeOrder[left.rowType] - rowTypeOrder[right.rowType]
+                    || (left.resultRank ?? 999) - (right.resultRank ?? 999)));
+            }
+        }
+        return {
+            riderId: rider.id,
+            riderName: `${rider.firstName} ${rider.lastName}`,
+            teamId: rider.activeTeamId ?? null,
+            teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
+            countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+            seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
         };
     }
     getRaceProgramParticipants(raceId) {
@@ -1776,8 +2115,12 @@ class GameRepository {
             return null;
         const uciPointsByRiderAndAwardType = this.loadStageUciPointsByRiderAndAwardType(stageId);
         const uciPointsByTeamId = this.loadStageUciPointsByTeamId(stageId);
+        const fullyClassifiedRiderIds = meta.is_stage_race === 1
+            ? new Set(this.getFullyClassifiedStageRaceRiderIds(meta.race_id, meta.stage_number))
+            : null;
         const previousGcStandings = meta.stage_number > 1
             ? this.getPreviousGcStandingsForStage(stageId)
+                .filter((standing) => fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(standing.riderId))
             : [];
         const previousGcRanks = previousGcStandings.length > 0
             ? new Map(previousGcStandings.map((standing) => [standing.riderId, standing.rank]))
@@ -1791,17 +2134,26 @@ class GameRepository {
         const classifications = resultTypes
             .map((resultType) => {
             const typeRows = groupedRows.get(resultType.id) ?? [];
-            if (typeRows.length === 0) {
+            const shouldFilterCompletedRiders = fullyClassifiedRiderIds != null
+                && (resultType.id === RESULT_TYPE_IDS.gc
+                    || resultType.id === RESULT_TYPE_IDS.points
+                    || resultType.id === RESULT_TYPE_IDS.mountain
+                    || resultType.id === RESULT_TYPE_IDS.youth);
+            const visibleRows = shouldFilterCompletedRiders
+                ? typeRows.filter((row) => row.rider_id != null && fullyClassifiedRiderIds.has(row.rider_id))
+                : typeRows;
+            if (visibleRows.length === 0) {
                 return null;
             }
-            const leaderTime = typeRows[0]?.time_seconds ?? null;
+            const leaderTime = visibleRows[0]?.time_seconds ?? null;
             const isGcClassification = resultType.id === RESULT_TYPE_IDS.gc;
-            const mappedRows = typeRows.map((row) => {
+            const mappedRows = visibleRows.map((row, index) => {
                 const previousGcRank = isGcClassification && row.rider_id != null
                     ? previousGcRanks.get(row.rider_id) ?? null
                     : null;
+                const displayRank = shouldFilterCompletedRiders ? index + 1 : row.rank;
                 return {
-                    rank: row.rank,
+                    rank: displayRank,
                     riderId: row.rider_id,
                     riderName: row.rider_id == null
                         ? null
@@ -1814,7 +2166,7 @@ class GameRepository {
                     points: row.points,
                     uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
                     gcPreviousRank: isGcClassification ? previousGcRank : undefined,
-                    gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - row.rank : null,
+                    gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - displayRank : null,
                 };
             });
             return {
@@ -2030,6 +2382,44 @@ class GameRepository {
             }
         }
         return stagesByRaceId;
+    }
+    createEmptyRiderStatsPayload(rider) {
+        return {
+            riderId: rider.id,
+            riderName: `${rider.firstName} ${rider.lastName}`,
+            teamId: rider.activeTeamId ?? null,
+            teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
+            countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+            seasons: [],
+        };
+    }
+    mapResultTypeIdToRiderStatsRowType(resultTypeId) {
+        switch (resultTypeId) {
+            case RESULT_TYPE_IDS.gc:
+                return 'gc_final';
+            case RESULT_TYPE_IDS.points:
+                return 'points_final';
+            case RESULT_TYPE_IDS.mountain:
+                return 'mountain_final';
+            case RESULT_TYPE_IDS.youth:
+                return 'youth_final';
+            default:
+                return null;
+        }
+    }
+    getRiderStatsFinalLabel(rowType) {
+        switch (rowType) {
+            case 'gc_final':
+                return 'Gesamtwertung';
+            case 'points_final':
+                return 'Punktewertung';
+            case 'mountain_final':
+                return 'Bergwertung';
+            case 'youth_final':
+                return 'Nachwuchswertung';
+            default:
+                return 'Ergebnis';
+        }
     }
     getUpcomingStageSummary(stages, isStageRace, currentDate) {
         if (stages.length === 0)

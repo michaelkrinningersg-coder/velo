@@ -343,6 +343,13 @@ class StageResultCommitService {
         const previousPoints = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.points, 'points');
         const previousMountain = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.mountain, 'points');
         const previousTeam = this.loadPreviousTeamMetricMap(previousStageId, RESULT_TYPES.team, 'time_seconds');
+        const classificationEligibility = race.isStageRace && stage.stageNumber > 1
+            ? new Set(this.repo.getFullyClassifiedStageRaceRiderIds(race.id, stage.stageNumber - 1))
+            : null;
+        const classificationPerformance = classificationEligibility == null
+            ? performance
+            : performance.filter((entry) => classificationEligibility.has(entry.rider.id));
+        const ridersById = new Map(performance.map((entry) => [entry.rider.id, entry.rider]));
         const stageRows = stage.profile === 'TTT'
             ? [...new Map(rankedPerformance.map((entry) => [entry.team.id, {
                         teamId: entry.team.id,
@@ -364,7 +371,7 @@ class StageResultCommitService {
                 points: race.isStageRace ? entry.points : null,
                 isBreakaway: entry.isBreakaway === true,
             }));
-        const gcRows = normalizeTimeRows([...performance]
+        const gcRows = normalizeTimeRows([...classificationPerformance]
             .map((entry) => ({
             riderId: entry.rider.id,
             teamId: entry.team.id,
@@ -372,7 +379,7 @@ class StageResultCommitService {
         })), !(0, stageResultRules_1.isTimeTrialProfile)(stage.profile))
             .map((entry, index) => ({ ...entry, rank: index + 1, points: null }));
         const pointsRows = race.isStageRace
-            ? [...performance]
+            ? [...classificationPerformance]
                 .map((entry) => ({
                 riderId: entry.rider.id,
                 teamId: entry.team.id,
@@ -382,7 +389,7 @@ class StageResultCommitService {
                 .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }))
             : [];
         const mountainRows = race.isStageRace
-            ? [...performance]
+            ? [...classificationPerformance]
                 .map((entry) => ({
                 riderId: entry.rider.id,
                 teamId: entry.team.id,
@@ -395,7 +402,7 @@ class StageResultCommitService {
         const youthRows = race.isStageRace
             ? gcRows
                 .filter((entry) => {
-                const rider = rankedPerformance.find((candidate) => candidate.rider.id === entry.riderId)?.rider;
+                const rider = ridersById.get(entry.riderId);
                 return rider != null && currentSeason - rider.birthYear <= 25;
             })
                 .map((entry, index) => ({

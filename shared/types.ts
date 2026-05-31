@@ -671,6 +671,7 @@ export interface RealtimeSimulationBootstrap {
   classificationLeaders: RealtimeClassificationLeaders;
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
+  stageScoringRules: StageScoringRule[];
 }
 
 export type SeasonPointAwardType =
@@ -684,6 +685,54 @@ export type SeasonPointAwardType =
   | 'points_final'
   | 'mountain_final'
   | 'youth_final';
+
+export type RiderStatsRowType = 'stage_result' | 'gc_final' | 'points_final' | 'mountain_final' | 'youth_final';
+
+export interface RiderStatsRow {
+  rowType: RiderStatsRowType;
+  date: string;
+  raceId: number;
+  raceName: string;
+  raceCategoryName: string | null;
+  stageId: number | null;
+  stageNumber: number | null;
+  stageName: string | null;
+  resultLabel: string;
+  resultRank: number | null;
+  gcRank: number | null;
+  isBreakaway: boolean;
+  finishStatus: 'classified' | 'otl' | 'dnf';
+  statusReason: string | null;
+  stageTimeSeconds: number | null;
+  profile: StageProfile | null;
+  distanceKm: number | null;
+  elevationGainMeters: number | null;
+  seasonPoints: number;
+}
+
+export interface RiderStatsRaceBlock {
+  raceId: number;
+  raceName: string;
+  raceCategoryName: string | null;
+  isStageRace: boolean;
+  startDate: string;
+  endDate: string;
+  rows: RiderStatsRow[];
+}
+
+export interface RiderStatsSeason {
+  season: number;
+  raceBlocks: RiderStatsRaceBlock[];
+}
+
+export interface RiderStatsPayload {
+  riderId: number;
+  riderName: string;
+  teamId: number | null;
+  teamName: string | null;
+  countryCode: Nationality | null;
+  seasons: RiderStatsSeason[];
+}
 
 export interface SeasonStandingRow {
   rank: number;

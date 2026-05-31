@@ -2,6 +2,7 @@ import type { RealtimeClassificationLeaders, RealtimeClassificationStanding, Rea
 import { isTimeTrialProfile, rankStageResultEntries, resolveStageTimeLimitSeconds, roundStageResultSeconds } from '../../../shared/stageResultRules';
 import type { SimulationSnapshot } from './SimulationEngine';
 import type { FavoriteItem } from './stageFavorites';
+import { buildNamedRaceGroups, mergeDisplayedClusters, resolveDefaultRaceGroupLabel, type NamedRaceGroup } from './groupClusters';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
 interface ScoringEventPointEntry {
@@ -88,6 +89,14 @@ function renderJersey(teamId: number | null | undefined, teamName: string | null
         onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';"
       >
     </span>`;
+}
+
+function renderRiderGroupButton(riderId: number | null | undefined, label: string, className: string): string {
+  if (riderId == null) {
+    return `<span class="${className}" title="${esc(label)}">${esc(label)}</span>`;
+  }
+
+  return `<button type="button" class="${className} race-sim-stage-overview-rider-link" data-race-sim-group-rider-id="${riderId}" title="${esc(label)}">${esc(label)}</button>`;
 }
 
 function formatSkill(value: number): string {
@@ -248,7 +257,7 @@ function renderStageFavoriteGrid(favorites: FavoriteItem[], gcStandings: Realtim
           <strong class="race-sim-favorite-rank">${item.rank}.</strong>
           ${renderJersey(item.teamId, item.teamName)}
           <div class="race-sim-favorite-main">
-            <span class="race-sim-favorite-name" title="${esc(item.displayName)}">${esc(item.displayName)}</span>
+                    ${renderRiderGroupButton(item.riderId, item.displayName, 'race-sim-favorite-name')}
             <span class="race-sim-favorite-role" title="${esc(item.roleLabel)}">${esc(item.roleLabel)}</span>
             ${(() => {
               const standing = item.riderId != null ? gcByRiderId.get(item.riderId) ?? null : null;
@@ -301,7 +310,7 @@ function renderStandingRows(
         <strong class="race-sim-favorite-rank">${standing.rank}.</strong>
         ${renderJersey(team.teamId, team.teamName)}
         <span class="race-sim-classification-main">
-          <span class="race-sim-classification-name" title="${esc(riderName)}">${esc(riderName)}</span>
+          ${renderRiderGroupButton(standing.riderId, riderName, 'race-sim-classification-name')}
           <span class="race-sim-classification-value">${detail(standing)}</span>
         </span>
         ${options.distanceGapsByRiderId ? `<span class="race-sim-classification-distance-gap ${distanceGapClassName}">${esc(formatDistanceGapMeters(distanceGap))}</span>` : ''}
@@ -322,6 +331,19 @@ function renderClassificationBox(
       <h4>${esc(title)}</h4>
       ${renderStandingRows(bootstrap, standings, detail, options)}
     </section>`;
+}
+
+export type StageOverviewSectionKey = 'favorites' | 'gc' | 'points' | 'mountain' | 'youth' | 'group' | 'stageScoring';
+
+function renderCollapsibleOverviewBox(title: string, content: string, className: string, sectionKey: StageOverviewSectionKey, open = true): string {
+  return `
+    <details class="race-sim-overview-details ${className}" data-race-sim-overview-section="${sectionKey}" ${open ? 'open' : ''}>
+      <summary class="race-sim-overview-summary" data-race-sim-overview-summary="${sectionKey}">
+        <span class="race-sim-overview-arrow">›</span>
+        <span>${esc(title)}</span>
+      </summary>
+      ${content}
+    </details>`;
 }
 
 function buildLiveClassificationStandings(
@@ -665,7 +687,7 @@ function renderScoringEventPopover(bootstrap: RealtimeSimulationBootstrap, event
   const maxRows = (bootstrap.stage.profile === 'ITT' || bootstrap.stage.profile === 'TTT') && event.key === 'finish' ? 20 : 15;
   const timingRows = event.timingEntries.length > 0
     ? [...event.timingEntries]
-      .sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || left.riderId - right.riderId)
+      .sort((left, right) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || left.riderId - right.riderId)
       .slice(0, maxRows)
     : event.entries.slice(0, maxRows).map((entry) => ({
       riderId: entry.riderId,
@@ -674,7 +696,7 @@ function renderScoringEventPopover(bootstrap: RealtimeSimulationBootstrap, event
       gapSeconds: entry.gapSeconds ?? 0,
       photoFinishScore: 0,
       pointsAwarded: entry.points,
-    })).sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || left.riderId - right.riderId);
+    })).sort((left, right) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || left.riderId - right.riderId);
 
   if (timingRows.length === 0) {
     return '<div class="race-sim-stage-points-popover-empty">Noch keine Punkte vergeben.</div>';
@@ -688,7 +710,7 @@ function renderScoringEventPopover(bootstrap: RealtimeSimulationBootstrap, event
           <div class="race-sim-stage-points-popover-row">
             <strong>${entry.rank}.</strong>
             ${renderJersey(team.teamId, team.teamName)}
-            <span>${esc(resolveRiderName(bootstrap, entry.riderId))}</span>
+            ${renderRiderGroupButton(entry.riderId, resolveRiderName(bootstrap, entry.riderId), 'race-sim-stage-scoring-name')}
             <strong>${entry.rank === 1 ? esc(formatClock(entry.crossingTimeSeconds)) : esc(formatTimeGap(entry.gapSeconds))}</strong>
             ${pointEntry ? `<strong class="race-sim-stage-points-value-${pointEntry.pointsKind}">${pointEntry.points}</strong>` : '<strong>—</strong>'}
           </div>`;
@@ -700,49 +722,147 @@ function resolveStandingPoints(standings: RealtimeClassificationStanding[] | und
   return standings?.find((standing) => standing.riderId === riderId)?.points ?? 0;
 }
 
-function renderBreakawayBox(bootstrap: RealtimeSimulationBootstrap, snapshot: SimulationSnapshot, events: ScoringEvent[]): string {
-  const breakawayRiders = snapshot.riders.filter((rider) => rider.isBreakaway);
-  if (breakawayRiders.length === 0) {
+function resolveBestStandingRiderInGroup(standings: RealtimeClassificationStanding[], groupRiderIds: Set<number>): number | null {
+  return standings
+    .filter((standing) => groupRiderIds.has(standing.riderId))
+    .sort((left, right) => left.rank - right.rank || left.riderId - right.riderId)[0]?.riderId ?? null;
+}
+
+function replaceOrAppendGroupSpecialRider(displayRiders: SnapshotRider[], rider: SnapshotRider | null, slotIndex: number): void {
+  if (!rider || displayRiders.some((entry) => entry.riderId === rider.riderId)) {
+    return;
+  }
+
+  if (displayRiders.length < 25) {
+    displayRiders.push(rider);
+    return;
+  }
+
+  displayRiders[slotIndex] = rider;
+}
+
+function resolveGroupDisplayRiders(
+  group: NamedRaceGroup,
+  snapshot: SimulationSnapshot,
+  gcByRiderId: Map<number, RealtimeGcStanding>,
+  livePointsStandings: RealtimeClassificationStanding[],
+  liveMountainStandings: RealtimeClassificationStanding[],
+): SnapshotRider[] {
+  const groupRiderIds = new Set(group.riderIds);
+  const riderById = new Map(snapshot.riders.map((rider) => [rider.riderId, rider]));
+  const ordered = group.riderIds
+    .map((riderId) => riderById.get(riderId) ?? null)
+    .filter((rider): rider is SnapshotRider => rider != null)
+    .sort((left, right) => (
+      (gcByRiderId.get(left.riderId)?.rank ?? Number.MAX_SAFE_INTEGER) - (gcByRiderId.get(right.riderId)?.rank ?? Number.MAX_SAFE_INTEGER)
+      || left.riderName.localeCompare(right.riderName, 'de')
+      || left.riderId - right.riderId
+    ));
+
+  const displayRiders = ordered.slice(0, 25);
+  const bestPointsRider = riderById.get(resolveBestStandingRiderInGroup(livePointsStandings, groupRiderIds) ?? -1) ?? null;
+  const bestMountainRider = riderById.get(resolveBestStandingRiderInGroup(liveMountainStandings, groupRiderIds) ?? -1) ?? null;
+  const missingPoints = bestPointsRider != null && !displayRiders.some((rider) => rider.riderId === bestPointsRider.riderId);
+  const missingMountain = bestMountainRider != null && !displayRiders.some((rider) => rider.riderId === bestMountainRider.riderId);
+
+  if (displayRiders.length >= 25 && missingPoints && missingMountain && bestPointsRider.riderId !== bestMountainRider.riderId) {
+    replaceOrAppendGroupSpecialRider(displayRiders, bestPointsRider, 23);
+    replaceOrAppendGroupSpecialRider(displayRiders, bestMountainRider, 24);
+    return displayRiders;
+  }
+
+  replaceOrAppendGroupSpecialRider(displayRiders, bestPointsRider, 24);
+  replaceOrAppendGroupSpecialRider(displayRiders, bestMountainRider, 24);
+  return displayRiders;
+}
+
+function resolveGroupLeaderRoles(riderId: number, leaders: RealtimeClassificationLeaders): Array<'gc' | 'mountain' | 'points' | 'youth'> {
+  const roles: Array<'gc' | 'mountain' | 'points' | 'youth'> = [];
+  if (leaders.gcLeaderRiderId === riderId) roles.push('gc');
+  if (leaders.mountainLeaderRiderId === riderId) roles.push('mountain');
+  if (leaders.pointsLeaderRiderId === riderId) roles.push('points');
+  if (leaders.youthLeaderRiderId === riderId) roles.push('youth');
+  return roles;
+}
+
+function resolveGroupPositionClassName(roles: Array<'gc' | 'mountain' | 'points' | 'youth'>): string {
+  if (roles.includes('gc')) return ' is-gc-leader';
+  if (roles.includes('mountain')) return ' is-mountain-leader';
+  if (roles.includes('points')) return ' is-points-leader';
+  if (roles.includes('youth')) return ' is-youth-leader';
+  return '';
+}
+
+function formatGroupGap(meters: number | null): string {
+  return meters == null ? '—' : `${Math.round(meters)} m`;
+}
+
+function formatSignedGroupGap(meters: number | null, sign: '-' | '+'): string {
+  return meters == null ? '—' : `${sign}${Math.round(meters)} m`;
+}
+
+function formatLeaderGroupGap(group: NamedRaceGroup, snapshot: SimulationSnapshot): string {
+  const groupFrontDistanceMeters = snapshot.riders
+    .filter((rider) => group.riderIds.includes(rider.riderId))
+    .reduce((frontDistanceMeters, rider) => Math.max(frontDistanceMeters, rider.distanceCoveredMeters), 0);
+  const gapToStageLeaderMeters = Math.max(0, snapshot.leaderDistanceMeters - groupFrontDistanceMeters);
+  return gapToStageLeaderMeters > 0 ? `-${Math.round(gapToStageLeaderMeters)} m` : '—';
+}
+
+function renderSelectedGroupBox(
+  bootstrap: RealtimeSimulationBootstrap,
+  snapshot: SimulationSnapshot,
+  groups: NamedRaceGroup[],
+  selectedGroupLabel: string | null,
+  livePointsStandings: RealtimeClassificationStanding[],
+  liveMountainStandings: RealtimeClassificationStanding[],
+  events: ScoringEvent[],
+): string {
+  if (groups.length === 0 || bootstrap.stage.profile === 'ITT' || bootstrap.stage.profile === 'TTT') {
     return '';
   }
 
-  const breakawayGapStatus = snapshot.breakawayGapStatus;
-  const breakawayGapSummary = breakawayGapStatus != null && breakawayGapStatus.gapSeconds != null
-    ? `${formatClockGap(breakawayGapStatus.gapSeconds)} (${formatKmMark(breakawayGapStatus.kmMark)})`
-    : null;
-  const breakawayGapTooltip = breakawayGapStatus != null && breakawayGapStatus.gapSeconds != null
-    ? `Zeitabstand des führenden Ausreißers zum ersten Nicht-Ausreißer: ${formatClockGap(breakawayGapStatus.gapSeconds)} an ${formatKmMark(breakawayGapStatus.kmMark)}`
-    : '';
-
+  const resolvedLabel = resolveDefaultRaceGroupLabel(groups, selectedGroupLabel);
+  const selectedGroup = groups.find((group) => group.label === resolvedLabel) ?? groups[0];
   const gcByRiderId = new Map(bootstrap.gcStandings.map((standing) => [standing.riderId, standing]));
   const stagePointsByRiderId = resolveStagePointTotalsByRiderId(events);
-  const ordered = [...breakawayRiders].sort((left, right) => (
-    (gcByRiderId.get(left.riderId)?.rank ?? Number.MAX_SAFE_INTEGER) - (gcByRiderId.get(right.riderId)?.rank ?? Number.MAX_SAFE_INTEGER)
-    || left.riderName.localeCompare(right.riderName, 'de')
-  ));
+  const displayRiders = resolveGroupDisplayRiders(selectedGroup, snapshot, gcByRiderId, livePointsStandings, liveMountainStandings);
 
   return `
-    <section class="race-sim-classification-box race-sim-classification-box-breakaway">
-      <h4>Ausreißer${breakawayGapSummary != null ? `<span class="race-sim-breakaway-header-gap" title="${esc(breakawayGapTooltip)}">${esc(breakawayGapSummary)}</span>` : ''}</h4>
-      <div class="race-sim-breakaway-grid">
-        ${ordered.map((rider) => {
+    <section class="race-sim-classification-box race-sim-classification-box-group">
+      <h4>
+        <span>Gruppe ${esc(selectedGroup.label)} <span class="race-sim-group-count">(${selectedGroup.riderCount})</span></span>
+        <span class="race-sim-group-nav">
+          <button type="button" class="race-sim-group-nav-btn" data-race-sim-group-nav="prev" aria-label="Vorherige Gruppe">‹</button>
+          <button type="button" class="race-sim-group-nav-btn" data-race-sim-group-nav="next" aria-label="Nächste Gruppe">›</button>
+        </span>
+      </h4>
+      <div class="race-sim-group-gap-row">
+        <span>Vorne ${esc(formatSignedGroupGap(selectedGroup.previousGapMeters, '-'))}</span>
+        <span>Leader ${esc(formatLeaderGroupGap(selectedGroup, snapshot))}</span>
+        <span>Hinten ${esc(formatSignedGroupGap(selectedGroup.nextGapMeters, '+'))}</span>
+      </div>
+      <div class="race-sim-group-grid">
+        ${displayRiders.map((rider, index) => {
           const standing = gcByRiderId.get(rider.riderId) ?? null;
           const team = resolveRiderTeam(bootstrap, rider.riderId);
-          const sprintTotal = resolveStandingPoints(bootstrap.pointsStandings, rider.riderId);
-          const mountainTotal = resolveStandingPoints(bootstrap.mountainStandings, rider.riderId);
           const stageTotals = stagePointsByRiderId.get(rider.riderId) ?? { points: 0, mountain: 0 };
+          const sprintTotal = resolveStandingPoints(livePointsStandings, rider.riderId);
+          const mountainTotal = resolveStandingPoints(liveMountainStandings, rider.riderId);
+          const roles = resolveGroupLeaderRoles(rider.riderId, bootstrap.classificationLeaders);
+          const roleTitle = roles.length > 0 ? roles.map((role) => ({ gc: 'GC-Leader', mountain: 'Bergwertungs-Leader', points: 'Punktewertungs-Leader', youth: 'Nachwuchs-Leader' }[role])).join(', ') : '';
           return `
-            <article class="race-sim-breakaway-row">
-              <strong class="race-sim-favorite-rank">${standing ? standing.rank : '—'}.</strong>
+            <article class="race-sim-group-row">
+              <strong class="race-sim-group-position${resolveGroupPositionClassName(roles)}" title="${esc(roleTitle)}">${index + 1}.</strong>
               ${renderJersey(team.teamId, team.teamName)}
               <span class="race-sim-classification-main">
-                <span class="race-sim-classification-name" title="${esc(rider.riderName)}">${esc(rider.riderName)}</span>
-                <strong class="race-sim-breakaway-gap">${esc(standing ? formatGcGap(standing.gapSeconds) : '—')} · ${esc(rider.gapToLeaderMeters > 0 ? `+${Math.round(rider.gapToLeaderMeters)} m` : '—')}</strong>
+                ${renderRiderGroupButton(rider.riderId, rider.riderName, `race-sim-group-rider-name${rider.isBreakaway ? ' is-breakaway' : ''}`)}
+                <strong class="race-sim-group-detail">GC ${standing ? standing.rank : '—'} · ${esc(standing ? formatGcGap(standing.gapSeconds) : '—')} · ${esc(rider.gapToLeaderMeters > 0 ? `+${Math.round(rider.gapToLeaderMeters)} m` : '—')}</strong>
               </span>
               <span class="race-sim-breakaway-points-panel">
                 <span class="race-sim-breakaway-badges">
-                  <span class="race-sim-stage-points-header-badge is-points">Sprint ${sprintTotal + stageTotals.points}</span>
-                  <span class="race-sim-stage-points-header-badge is-mountain">Berg ${mountainTotal + stageTotals.mountain}</span>
+                  <span class="race-sim-stage-points-header-badge is-points">Sprint ${sprintTotal}</span>
+                  <span class="race-sim-stage-points-header-badge is-mountain">Berg ${mountainTotal}</span>
                 </span>
                 <span class="race-sim-breakaway-stage-gains">
                   <span class="race-sim-breakaway-stage-gain">${stageTotals.points > 0 ? `▲ +${stageTotals.points}` : ' '}</span>
@@ -753,6 +873,20 @@ function renderBreakawayBox(bootstrap: RealtimeSimulationBootstrap, snapshot: Si
         }).join('')}
       </div>
     </section>`;
+}
+
+export function renderSelectedRaceGroupBox(
+  container: HTMLElement,
+  bootstrap: RealtimeSimulationBootstrap,
+  snapshot: SimulationSnapshot,
+  selectedGroupLabel: string | null,
+): void {
+  const scoringEvents = buildScoringEvents(bootstrap, snapshot.markerClassifications, snapshot);
+  const stagePointsByRiderId = resolveStagePointTotalsByRiderId(scoringEvents);
+  const livePointsStandings = buildLiveClassificationStandings(bootstrap, bootstrap.pointsStandings, stagePointsByRiderId, 'points');
+  const liveMountainStandings = buildLiveClassificationStandings(bootstrap, bootstrap.mountainStandings, stagePointsByRiderId, 'mountain');
+  const groups = buildNamedRaceGroups(mergeDisplayedClusters(snapshot.clusters));
+  container.innerHTML = renderSelectedGroupBox(bootstrap, snapshot, groups, selectedGroupLabel, livePointsStandings, liveMountainStandings, scoringEvents);
 }
 
 function renderPointBadges(entries: ScoringEventBadge[]): string {
@@ -833,7 +967,7 @@ function renderStageScoringBox(bootstrap: RealtimeSimulationBootstrap, markerCla
             </span>
             <span class="race-sim-stage-points-leader">
               ${renderJersey(leaderTeam.teamId, leaderTeam.teamName)}
-              <strong>${esc(leaderName)}</strong>
+              ${event.leaderRiderId != null ? renderRiderGroupButton(event.leaderRiderId, leaderName, 'race-sim-stage-scoring-leader-name') : `<strong>${esc(leaderName)}</strong>`}
             </span>
             </summary>
             <div class="race-sim-stage-points-popover">
@@ -851,6 +985,7 @@ export function renderStageFavorites(
   bootstrap: RealtimeSimulationBootstrap,
   markerClassifications: StageMarkerClassification[],
   snapshot: SimulationSnapshot,
+  collapsedSectionKeys: ReadonlySet<StageOverviewSectionKey> = new Set(),
 ): void {
   const scoringEvents = buildScoringEvents(bootstrap, markerClassifications, snapshot);
   const stagePointsByRiderId = resolveStagePointTotalsByRiderId(scoringEvents);
@@ -858,18 +993,15 @@ export function renderStageFavorites(
   const liveMountainStandings = buildLiveClassificationStandings(bootstrap, bootstrap.mountainStandings, stagePointsByRiderId, 'mountain');
   const gcDistanceGapsByRiderId = buildRelativeDistanceGapsByRiderId(snapshot, bootstrap.gcStandings[0]?.riderId ?? null);
   const youthDistanceGapsByRiderId = buildRelativeDistanceGapsByRiderId(snapshot, bootstrap.youthStandings[0]?.riderId ?? null);
+  const isSectionOpen = (sectionKey: StageOverviewSectionKey): boolean => !collapsedSectionKeys.has(sectionKey);
   container.innerHTML = `
-    <section class="race-sim-favorites-section">
-      <h4>Stage Favorites</h4>
-      ${renderStageFavoriteGrid(favorites, bootstrap.gcStandings, bootstrap.classificationLeaders)}
-    </section>
+    ${renderCollapsibleOverviewBox('Stage Favorites', renderStageFavoriteGrid(favorites, bootstrap.gcStandings, bootstrap.classificationLeaders), 'race-sim-favorites-section', 'favorites', isSectionOpen('favorites'))}
     <section class="race-sim-classifications-section">
-      ${renderClassificationBox('GC', 'gc', bootstrap, bootstrap.gcStandings, (standing) => esc(`GC ${standing.rank} · ${formatGcGap(standing.gapSeconds)}`), { limit: 20, distanceGapsByRiderId: gcDistanceGapsByRiderId })}
-      ${renderClassificationBox('Punktewertung', 'points', bootstrap, livePointsStandings, renderLivePointsDetail)}
-      ${renderClassificationBox('Bergwertung', 'mountain', bootstrap, liveMountainStandings, renderLivePointsDetail)}
-      ${renderClassificationBox('Nachwuchsfahrerwertung', 'youth', bootstrap, bootstrap.youthStandings, (standing) => esc(`${standing.rank}. · ${formatGcGap(standing.gapSeconds)}`), { distanceGapsByRiderId: youthDistanceGapsByRiderId, distanceGapClassName: 'is-compact' })}
-      ${renderBreakawayBox(bootstrap, snapshot, scoringEvents)}
+      ${renderCollapsibleOverviewBox('GC', renderClassificationBox('GC', 'gc', bootstrap, bootstrap.gcStandings, (standing) => esc(`GC ${standing.rank} · ${formatGcGap(standing.gapSeconds)}`), { limit: 20, distanceGapsByRiderId: gcDistanceGapsByRiderId }), 'race-sim-overview-classification race-sim-overview-gc', 'gc', isSectionOpen('gc'))}
+      ${renderCollapsibleOverviewBox('Punktewertung', renderClassificationBox('Punktewertung', 'points', bootstrap, livePointsStandings, renderLivePointsDetail), 'race-sim-overview-classification race-sim-overview-points', 'points', isSectionOpen('points'))}
+      ${renderCollapsibleOverviewBox('Bergwertung', renderClassificationBox('Bergwertung', 'mountain', bootstrap, liveMountainStandings, renderLivePointsDetail), 'race-sim-overview-classification race-sim-overview-mountain', 'mountain', isSectionOpen('mountain'))}
+      ${renderCollapsibleOverviewBox('Nachwuchsfahrerwertung', renderClassificationBox('Nachwuchsfahrerwertung', 'youth', bootstrap, bootstrap.youthStandings, (standing) => esc(`${standing.rank}. · ${formatGcGap(standing.gapSeconds)}`), { distanceGapsByRiderId: youthDistanceGapsByRiderId, distanceGapClassName: 'is-compact' }), 'race-sim-overview-classification race-sim-overview-youth', 'youth', isSectionOpen('youth'))}
     </section>
-    ${renderStageScoringBox(bootstrap, markerClassifications, snapshot, scoringEvents)}
+    ${renderCollapsibleOverviewBox('Etappenwertungen', renderStageScoringBox(bootstrap, markerClassifications, snapshot, scoringEvents), 'race-sim-overview-stage-scoring', 'stageScoring', isSectionOpen('stageScoring'))}
   `;
 }

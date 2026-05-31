@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-BypB7aw5.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-vxETzMH-.css">
+  <script type="module" crossorigin src="/assets/index-CH89TWFz.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-9j0hTDiD.css">
 </head>
 <body>
 
@@ -73,6 +73,12 @@
         </button>
         <button class="nav-btn" data-view="stage-editor">
           <span class="nav-icon">🗺</span> Stage Editor
+        </button>
+        <button class="nav-btn" data-view="stage-editor-stages">
+          <span class="nav-icon">▦</span> Stages
+        </button>
+        <button class="nav-btn" data-view="stage-editor-climbs">
+          <span class="nav-icon">△</span> Climbs
         </button>
       </nav>
       <div class="sidebar-meta">
@@ -150,6 +156,9 @@
           </div>
         </div>
         <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen für die Live-Simulation.</div>
+        <section class="race-sim-controls-header hidden" id="race-sim-controls-header">
+          <div id="race-sim-controls" class="race-sim-controls"></div>
+        </section>
         <div id="race-sim-layout" class="race-sim-shell hidden">
           <section class="race-sim-card">
             <div class="race-sim-card-header">
@@ -160,17 +169,17 @@
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
-              <h3>Time Controls</h3>
-              <p class="text-muted">1x bis 500x mit pausierbarer Simulation.</p>
-            </div>
-            <div id="race-sim-controls" class="race-sim-controls"></div>
-          </section>
-          <section class="race-sim-card">
-            <div class="race-sim-card-header">
               <h3>Höhenprofil</h3>
               <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
             </div>
             <div id="race-sim-profile" class="race-sim-profile"></div>
+          </section>
+          <section class="race-sim-card">
+            <div class="race-sim-card-header">
+              <h3>Gruppe</h3>
+              <p class="text-muted">Aktuell ausgewählte Renn-Gruppe im Live Race.</p>
+            </div>
+            <div id="race-sim-group-box" class="race-sim-group-box"></div>
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
@@ -395,6 +404,38 @@
           </section>
         </div>
       </div>
+
+      <div id="view-stage-editor-stages" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Stages</h2>
+            <p id="stage-editor-stages-meta" class="text-muted">CSV-Etappen werden geladen.</p>
+          </div>
+        </div>
+        <div id="stage-editor-stages-empty" class="results-empty hidden">Keine Etappen gefunden.</div>
+        <div class="stage-editor-overview-table-wrap">
+          <table class="data-table stage-editor-overview-table" id="stage-editor-stages-table">
+            <thead id="stage-editor-stages-head"></thead>
+            <tbody id="stage-editor-stages-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-stage-editor-climbs" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Climbs</h2>
+            <p id="stage-editor-climbs-meta" class="text-muted">CSV-Anstiege werden geladen.</p>
+          </div>
+        </div>
+        <div id="stage-editor-climbs-empty" class="results-empty hidden">Keine Anstiege gefunden.</div>
+        <div class="stage-editor-overview-table-wrap">
+          <table class="data-table stage-editor-overview-table" id="stage-editor-climbs-table">
+            <thead id="stage-editor-climbs-head"></thead>
+            <tbody id="stage-editor-climbs-body"></tbody>
+          </table>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -477,6 +518,19 @@
         <button class="btn btn-ghost modal-close" id="btn-close-rider-program">✕</button>
       </div>
       <div id="rider-program-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-riderStats" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card rider-stats-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="rider-stats-title">Fahrerstatistik</h2>
+          <p id="rider-stats-meta" class="text-muted"></p>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">✕</button>
+      </div>
+      <div id="rider-stats-body" class="dashboard-race-stages-body rider-stats-body"></div>
     </div>
   </div>
 

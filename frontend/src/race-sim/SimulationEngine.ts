@@ -11,6 +11,7 @@ import type {
   StageMarkerClassification,
   StageMarkerClassificationEntry,
   StageMarkerType,
+  StageScoringRule,
   StageTerrain,
 } from '../../../shared/types';
 import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadConfig, resolveSkillWeightComponents, resolveSkillWeightSimulationMode, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills } from './skillWeights';
@@ -324,6 +325,22 @@ const CLIMB_TOP_WEIGHTS: Record<Exclude<StageMarkerCategory, 'Sprint'>, MarkerWe
   },
 };
 
+function buildStageScoringWeightMap(rules: StageScoringRule[]): Map<string, MarkerWeightProfile> {
+  const map = new Map<string, MarkerWeightProfile>();
+  for (const rule of rules) {
+    const weights = rule.weights as MarkerWeightProfile;
+    if (rule.appliesTo === 'sprint_intermediate') {
+      map.set('sprint_intermediate', weights);
+    } else if (rule.appliesTo === 'climb_top') {
+      const category = (!rule.markerCategory || rule.markerCategory === 'Sprint') ? 'HC' : rule.markerCategory;
+      map.set(`climb_top|${category}`, weights);
+    } else if (rule.appliesTo === 'finish') {
+      map.set(rule.markerType, weights);
+    }
+  }
+  return map;
+}
+
 type TeamGroupBonusByRiderId = Map<number, number>;
 
 const CLUSTER_DISTANCE_METERS = 20;
@@ -337,10 +354,13 @@ const LATE_STAGE_START_MIN = 0.6;
 const LATE_STAGE_START_MAX = 0.8;
 const TIME_TIE_THRESHOLD_SECONDS = 1;
 const DRAFT_BONUS_SCALE = 2 / 3;
+// Muss der Distanz-Toleranz in compareDraftOrder entsprechen (dort: abs(distanceDelta) >= 0.1).
+// Die Draft-Reihenfolge ist nur bis auf diese Toleranz monoton nach Distanz sortiert.
+const DRAFT_ORDER_DISTANCE_TIE_METERS = 0.1;
 const DRAFT_PACK_SOFT_CAP_START = 10;
 const DRAFT_PACK_HARD_CAP_SIZE = 50;
 const DRAFT_FRONT_NO_BONUS_GROUP_SIZE = 25;
-const INCIDENT_RECOVERY_CATCHUP_BONUS = 5;
+const INCIDENT_RECOVERY_CATCHUP_BONUS = 7;
 const ELEVATION_SPREAD_START_METERS = 500;
 const ELEVATION_SPREAD_STEP_METERS = 100;
 const ELEVATION_SPREAD_STEP_FACTOR = 0.02;
@@ -805,6 +825,35 @@ function resolveLiveWeightProfileValue(rider: RiderState, weights: MarkerWeightP
   }, 0);
 }
 
+function buildLiveWeightProfileBreakdown(rider: RiderState, weights: MarkerWeightProfile): Array<{
+  skillKey: RiderSkillKey;
+  weight: number;
+  effectiveSkill: number;
+  contribution: number;
+}> {
+  const formBonus = resolveConditionFormBonus(rider.rider);
+
+  return Object.entries(weights)
+    .filter((entry): entry is [string, number] => Boolean(entry[1]))
+    .map(([skillKey, weight]) => {
+      const resolvedSkillKey = skillKey as RiderSkillKey;
+      const staminaPenalty = resolvedSkillKey === 'stamina'
+        ? rider.staminaSkillPenalty + rider.incidentStaminaPenalty
+        : 0;
+      const effectiveSkill = Math.max(
+        0,
+        rider.rider.skills[resolvedSkillKey] + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus - staminaPenalty,
+      );
+
+      return {
+        skillKey: resolvedSkillKey,
+        weight,
+        effectiveSkill,
+        contribution: effectiveSkill * weight,
+      };
+    });
+}
+
 function resolveDraftGroupWindow(orderedRiders: RiderState[], riderIndex: number, maxGapMeters: number): { startIndex: number; endIndex: number; size: number; positionInGroup: number } {
   let startIndex = riderIndex;
   while (startIndex > 0) {
@@ -868,7 +917,19 @@ export class SimulationEngine {
 
   private readonly skillWeightConfigMap: Map<string, SkillWeightRule>;
 
+  private readonly stageScoringWeightMap: Map<string, MarkerWeightProfile>;
+
+  private readonly finishWeightProfile: MarkerWeightProfile;
+
   private readonly simulationMode: ReturnType<typeof resolveSkillWeightSimulationMode>;
+
+  private readonly weightedSkillComponentsByTerrain = new Map<StageTerrain, WeightedSkillComponent[]>();
+
+  private readonly skillBreakdownCache = new Map<string, string>();
+
+  private lastTeamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null;
+
+  private readonly draftOrderScratch: RiderState[] = [];
 
   private elapsedSeconds = 0;
 
@@ -902,6 +963,8 @@ export class SimulationEngine {
 
   private nextMessageId = 1;
 
+  private hasLoggedFinishSprintTieBreak = false;
+
   constructor(private readonly bootstrap: RealtimeSimulationBootstrap) {
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
@@ -910,6 +973,8 @@ export class SimulationEngine {
     this.simulationMode = resolveSkillWeightSimulationMode(bootstrap.stage.profile);
     this.skillWeightRuleMap = buildSkillWeightRuleMap(bootstrap.skillWeightRules ?? []);
     this.skillWeightConfigMap = buildSkillWeightConfigMap(bootstrap.skillWeightRules ?? []);
+    this.stageScoringWeightMap = buildStageScoringWeightMap(bootstrap.stageScoringRules ?? []);
+    this.finishWeightProfile = this.resolveFinishWeightProfile();
     this.windZones = createWindZones(this.stageDistanceMeters);
     this.intermediateMarkers = this.buildIntermediateMarkers();
     const configuredStartPercent = bootstrap.stage.finalSpreadStartPercent;
@@ -1242,7 +1307,11 @@ export class SimulationEngine {
   private advanceSubstep(deltaSeconds: number): void {
     const stepStartSeconds = this.elapsedSeconds;
     const stepEndSeconds = stepStartSeconds + deltaSeconds;
-    const currentTeamGroupBonusByRiderId = this.isTimeTrialMode ? null : this.buildTeamGroupBonusByRiderId();
+    // Positionen ändern sich nicht zwischen Substep-Ende und nächstem Substep-Start,
+    // daher kann die am Ende gebaute Bonus-Map als Startwert wiederverwendet werden.
+    const currentTeamGroupBonusByRiderId = this.isTimeTrialMode
+      ? null
+      : (this.lastTeamGroupBonusByRiderId ?? this.buildTeamGroupBonusByRiderId());
 
     this.updateBreakawayPhaseState();
 
@@ -1340,7 +1409,12 @@ export class SimulationEngine {
     if (this.isTeamTimeTrial) {
       this.applyTeamTimeTrialTempo(stepStartSeconds, stepEndSeconds);
     } else if (!this.isTimeTrialMode) {
-      const ordered = [...this.riders].sort(compareDraftOrder);
+      const ordered = this.draftOrderScratch;
+      ordered.length = 0;
+      for (const rider of this.riders) {
+        ordered.push(rider);
+      }
+      ordered.sort(compareDraftOrder);
       for (let index = 0; index < ordered.length; index += 1) {
         const rider = ordered[index];
         if (isRiderInactive(rider)) {
@@ -1362,18 +1436,24 @@ export class SimulationEngine {
         let closestGapMeters = Number.POSITIVE_INFINITY;
         let closestRider: RiderState | null = null;
 
-        for (let candidateIndex = 0; candidateIndex < index; candidateIndex += 1) {
+        // ordered ist nach Distanz absteigend sortiert (bis auf DRAFT_ORDER_DISTANCE_TIE_METERS).
+        // Rückwärts ab dem direkten Vordermann: die Lücke wächst monoton, daher kann abgebrochen
+        // werden, sobald sie sicher außerhalb der Draft-Zone liegt.
+        for (let candidateIndex = index - 1; candidateIndex >= 0; candidateIndex -= 1) {
           const candidate = ordered[candidateIndex];
+          const gapMeters = candidate.distanceCoveredMeters - rider.distanceCoveredMeters;
+          if (gapMeters >= dZero + DRAFT_ORDER_DISTANCE_TIE_METERS) {
+            break;
+          }
           if (!this.canReceiveDraftFromCandidate(rider, candidate) || this.isActiveBreakawayRider(candidate)) {
             continue;
           }
-          const gapMeters = candidate.distanceCoveredMeters - rider.distanceCoveredMeters;
           if (gapMeters <= 0 || gapMeters >= dZero) {
             continue;
           }
 
           ridersInZoneCount += 1;
-          if (gapMeters < closestGapMeters) {
+          if (gapMeters <= closestGapMeters) {
             closestGapMeters = gapMeters;
             closestRider = candidate;
           }
@@ -1467,6 +1547,7 @@ export class SimulationEngine {
     }
 
     const nextTeamGroupBonusByRiderId = this.isTimeTrialMode ? null : this.buildTeamGroupBonusByRiderId();
+    this.lastTeamGroupBonusByRiderId = nextTeamGroupBonusByRiderId;
 
     for (const rider of this.riders) {
       if (isRiderInactive(rider)) {
@@ -1554,6 +1635,8 @@ export class SimulationEngine {
     }
 
     this.elapsedSeconds += deltaSeconds;
+
+    this.logFinishSprintTieBreakIfNeeded();
   }
 
   private applyTeamTimeTrialTempo(stepStartSeconds: number, stepEndSeconds: number): void {
@@ -2777,12 +2860,23 @@ export class SimulationEngine {
     return 1 + ((targetMultiplier - 1) * progress);
   }
 
-  private resolveWeightedSkill(rider: Rider, terrain: StageTerrain, staminaSkillPenalty = 0): { value: number; breakdown: string } {
+  private resolveWeightedSkillComponents(terrain: StageTerrain): WeightedSkillComponent[] {
+    const cached = this.weightedSkillComponentsByTerrain.get(terrain);
+    if (cached) {
+      return cached;
+    }
+
     const components = resolveSkillWeightComponents(
       this.simulationMode,
       terrain,
       this.skillWeightRuleMap,
     ).map((component) => ({ key: component.key, weight: component.weight })) satisfies WeightedSkillComponent[];
+    this.weightedSkillComponentsByTerrain.set(terrain, components);
+    return components;
+  }
+
+  private resolveWeightedSkill(rider: Rider, terrain: StageTerrain, staminaSkillPenalty = 0): { value: number; breakdown: string } {
+    const components = this.resolveWeightedSkillComponents(terrain);
 
     const adjustedSkills = staminaSkillPenalty > 0
       ? {
@@ -2791,15 +2885,32 @@ export class SimulationEngine {
       }
       : rider.skills;
 
+    let totalWeight = 0;
+    let weightedSum = 0;
+    for (const component of components) {
+      totalWeight += component.weight;
+      weightedSum += adjustedSkills[component.key] * component.weight;
+    }
+    const value = totalWeight > 0
+      ? weightedSum / totalWeight
+      : resolveWeightedSkillFromSkills(adjustedSkills, this.simulationMode, terrain, this.skillWeightRuleMap);
+
     return {
-      value: resolveWeightedSkillFromSkills(
-        adjustedSkills,
-        resolveSkillWeightSimulationMode(this.bootstrap.stage.profile),
-        terrain,
-        this.skillWeightRuleMap,
-      ),
-      breakdown: formatSkillBreakdown(rider, components),
+      value,
+      breakdown: this.resolveSkillBreakdown(rider, terrain, components),
     };
+  }
+
+  private resolveSkillBreakdown(rider: Rider, terrain: StageTerrain, components: WeightedSkillComponent[]): string {
+    const cacheKey = `${rider.id}:${terrain}`;
+    const cached = this.skillBreakdownCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const breakdown = formatSkillBreakdown(rider, components);
+    this.skillBreakdownCache.set(cacheKey, breakdown);
+    return breakdown;
   }
 
   private resolvePrimarySkillKey(skillName: TerrainSkillName): RiderSkillKey {
@@ -2886,7 +2997,74 @@ export class SimulationEngine {
 
   private calculatePhotoFinishScore(rider: RiderState): number {
     this.resolveRiderStaminaPenalty(rider);
-    return resolveLiveWeightProfileValue(rider, this.resolveFinishWeightProfile(this.bootstrap.stage.profile));
+    return resolveLiveWeightProfileValue(rider, this.finishWeightProfile);
+  }
+
+  private logFinishSprintTieBreakIfNeeded(): void {
+    if (this.hasLoggedFinishSprintTieBreak || this.isTimeTrialMode || !this.isFinished()) {
+      return;
+    }
+
+    this.hasLoggedFinishSprintTieBreak = true;
+
+    const finishedRiders = this.riders
+      .filter(isClassifiedFinisher)
+      .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0) || right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id);
+
+    if (finishedRiders.length === 0) {
+      return;
+    }
+
+    const firstFinishGroup: RiderState[] = [];
+    let previousTime: number | null = null;
+
+    for (const rider of finishedRiders) {
+      const finishTime = rider.finishTimeSeconds ?? 0;
+      if (firstFinishGroup.length === 0) {
+        firstFinishGroup.push(rider);
+        previousTime = finishTime;
+        continue;
+      }
+
+      if (previousTime != null && finishTime - previousTime <= TIME_TIE_THRESHOLD_SECONDS) {
+        firstFinishGroup.push(rider);
+        previousTime = finishTime;
+        continue;
+      }
+
+      break;
+    }
+
+    const orderedFirstFinishGroup = [...firstFinishGroup]
+      .sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id);
+
+    const leaderFinishTimeSeconds = orderedFirstFinishGroup[0]?.finishTimeSeconds ?? 0;
+    const finishWeights = this.finishWeightProfile;
+    const stageLabel = `Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile}`;
+
+    console.groupCollapsed(
+      `[FinishSprintTieBreak] ${stageLabel} | erste Zielgruppe (${orderedFirstFinishGroup.length} Fahrer) | Zeitfenster <= ${TIME_TIE_THRESHOLD_SECONDS.toFixed(2)} s`,
+    );
+    console.log(
+      `[FinishSprintTieBreak] Sortierung: erst Zielzeit, dann Photo-Finish-Score absteigend, dann Fahrer-ID aufsteigend als letzter Tiebreak.`,
+    );
+
+    orderedFirstFinishGroup.forEach((rider, index) => {
+      const breakdown = buildLiveWeightProfileBreakdown(rider, finishWeights)
+        .map((component) => `${SKILL_SHORT_LABELS[component.skillKey]} ${component.contribution.toFixed(2)} = ${component.effectiveSkill.toFixed(2)} x ${(component.weight * 100).toFixed(0)}%`)
+        .join(' | ');
+      const finishTimeSeconds = rider.finishTimeSeconds ?? 0;
+      const gapToLeaderSeconds = finishTimeSeconds - leaderFinishTimeSeconds;
+      const timeLabel = gapToLeaderSeconds <= 0.0001
+        ? `${finishTimeSeconds.toFixed(2)} s`
+        : `${finishTimeSeconds.toFixed(2)} s (+${gapToLeaderSeconds.toFixed(2)} s)`;
+
+      console.log(
+        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)} | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
+      );
+    });
+
+    console.groupEnd();
   }
 
   private recordIntermediateSplits(
@@ -2938,7 +3116,7 @@ export class SimulationEngine {
     marker: IntermediateMarker,
   ): number {
     if (marker.markerType === 'sprint_intermediate') {
-      return resolveLiveWeightProfileValue(rider, SPRINT_INTERMEDIATE_WEIGHTS);
+      return resolveLiveWeightProfileValue(rider, this.resolveSprintWeightProfile());
     }
 
     const baseScore = resolveLiveWeightProfileValue(rider, this.resolveClimbWeightProfile(marker.markerCategory));
@@ -2946,24 +3124,50 @@ export class SimulationEngine {
     return baseScore + markerTieBreak;
   }
 
-  private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {
-    if (!category || category === 'Sprint') {
-      return CLIMB_TOP_WEIGHTS.HC;
-    }
-
-    return CLIMB_TOP_WEIGHTS[category];
+  private resolveSprintWeightProfile(): MarkerWeightProfile {
+    return this.stageScoringWeightMap.get('sprint_intermediate') ?? SPRINT_INTERMEDIATE_WEIGHTS;
   }
 
-  private resolveFinishWeightProfile(stageProfile: Stage['profile']): MarkerWeightProfile {
-    switch (stageProfile) {
+  private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {
+    const normalized = (!category || category === 'Sprint') ? 'HC' : category;
+    return this.stageScoringWeightMap.get(`climb_top|${normalized}`) ?? CLIMB_TOP_WEIGHTS[normalized];
+  }
+
+  private resolveFinishMarkerType(): 'finish_flat' | 'finish_hill' | 'finish_mountain' {
+    const markers = collectStageBoundaryMarkers(this.bootstrap.stageSummary);
+    for (let index = markers.length - 1; index >= 0; index -= 1) {
+      const type = markers[index].marker.type;
+      if (type === 'finish_flat' || type === 'finish_hill' || type === 'finish_mountain') {
+        return type;
+      }
+    }
+
+    switch (this.bootstrap.stage.profile) {
       case 'Hilly':
       case 'Hilly_Difficult':
       case 'Rolling':
       case 'Cobble_Hill':
-        return FINISH_HILL_WEIGHTS;
+        return 'finish_hill';
       case 'Medium_Mountain':
       case 'Mountain':
       case 'High_Mountain':
+        return 'finish_mountain';
+      default:
+        return 'finish_flat';
+    }
+  }
+
+  private resolveFinishWeightProfile(): MarkerWeightProfile {
+    const finishType = this.resolveFinishMarkerType();
+    const ruleWeights = this.stageScoringWeightMap.get(finishType);
+    if (ruleWeights) {
+      return ruleWeights;
+    }
+
+    switch (finishType) {
+      case 'finish_hill':
+        return FINISH_HILL_WEIGHTS;
+      case 'finish_mountain':
         return FINISH_MOUNTAIN_WEIGHTS;
       default:
         return FINISH_FLAT_WEIGHTS;

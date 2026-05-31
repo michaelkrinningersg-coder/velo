@@ -54,6 +54,19 @@ function renderMessageJerseys(message: RaceSimMessage): string {
   return renderSingleMessageJersey(message.riderTeamId);
 }
 
+function renderMessageTitle(message: RaceSimMessage): string {
+  const title = escapeHtml(message.title);
+  if (message.riderId == null) {
+    return `<strong class="race-sim-message-title">${title}</strong>`;
+  }
+
+  return `<button type="button" class="race-sim-message-title race-sim-message-rider-link" data-race-sim-group-rider-id="${message.riderId}">${title}</button>`;
+}
+
+function renderSecondaryMessageRiderName(riderName: string, riderTeamId: number | null): string {
+  return `<button type="button" class="race-sim-message-inline-name race-sim-message-rider-link" data-race-sim-group-rider-name="${escapeHtml(riderName)}"${riderTeamId != null ? ` data-race-sim-group-rider-team-id="${riderTeamId}"` : ''}>${escapeHtml(riderName)}</button>`;
+}
+
 function matchesMessageFilter(message: RaceSimMessage, filter: RaceSimMessageFilter): boolean {
   if (filter === 'all') {
     return true;
@@ -69,7 +82,7 @@ function matchesMessageFilter(message: RaceSimMessage, filter: RaceSimMessageFil
 function renderMessageDetail(message: RaceSimMessage): string {
   const detailPrefix = message.detail ? escapeHtml(message.detail) : '';
   const reactionMarkup = (message.secondaryRiders ?? [])
-    .map((rider) => `${rider.riderTeamId != null ? renderSingleMessageJersey(rider.riderTeamId, 'race-sim-message-inline-jersey') : ''}<span class="race-sim-message-inline-name">${escapeHtml(rider.riderName)}</span>`)
+    .map((rider) => `${rider.riderTeamId != null ? renderSingleMessageJersey(rider.riderTeamId, 'race-sim-message-inline-jersey') : ''}${renderSecondaryMessageRiderName(rider.riderName, rider.riderTeamId)}`)
     .join(', ');
 
   if (!detailPrefix && reactionMarkup.length === 0) {
@@ -111,7 +124,7 @@ export function renderRaceMessages(container: HTMLElement, messages: RaceSimMess
           <span class="race-sim-message-time">t=${formatElapsedTime(message.elapsedSeconds)}</span>
           ${renderMessageJerseys(message)}
           <span class="race-sim-message-text">
-            <strong class="race-sim-message-title">${escapeHtml(message.title)}</strong>
+            ${renderMessageTitle(message)}
             ${renderMessageDetail(message)}
           </span>
         </article>

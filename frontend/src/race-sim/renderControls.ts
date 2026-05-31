@@ -37,8 +37,8 @@ interface ControlRenderState {
 
 interface ControlElements {
   timeField: HTMLElement | null;
-  leaderField: HTMLElement | null;
   finishedField: HTMLElement | null;
+  distanceField: HTMLElement | null;
   toggleButton: HTMLButtonElement | null;
   speedButtons: HTMLButtonElement[];
 }
@@ -65,35 +65,26 @@ function ensureControlsMarkup(container: HTMLElement): ControlElements {
 
   container.dataset['raceSimMounted'] = 'true';
   container.innerHTML = `
-    <div class="race-sim-control-summary">
-      <div class="race-sim-stat-card">
-        <span class="race-sim-stat-label">Sim-Zeit</span>
-        <strong data-race-sim-field="time">00:00:00</strong>
-      </div>
-      <div class="race-sim-stat-card">
-        <span class="race-sim-stat-label">Leader</span>
-        <strong data-race-sim-field="leader">0,0 km / 0,0 km</strong>
-      </div>
-      <div class="race-sim-stat-card">
-        <span class="race-sim-stat-label">Im Ziel</span>
-        <strong data-race-sim-field="finished">0 / 0</strong>
-      </div>
-    </div>
-    <div class="race-sim-speed-strip">
+    <div class="race-sim-control-header-row">
       <button type="button" class="race-sim-speed-btn race-sim-speed-btn-toggle" data-race-sim-action="toggle">Start</button>
-      ${TIME_CONTROL_VALUES.map((value) => `
-        <button
-          type="button"
-          class="race-sim-speed-btn"
-          data-race-sim-speed="${value}"
-        >${value}x</button>
-      `).join('')}
+      <div class="race-sim-speed-strip">
+        ${TIME_CONTROL_VALUES.map((value) => `
+          <button
+            type="button"
+            class="race-sim-speed-btn"
+            data-race-sim-speed="${value}"
+          >${value}x</button>
+        `).join('')}
+      </div>
+      <strong class="race-sim-control-meta" data-race-sim-field="time">00:00:00</strong>
+      <strong class="race-sim-control-meta" data-race-sim-field="finished">0 / 0 im Ziel</strong>
+      <strong class="race-sim-control-distance" data-race-sim-field="distance">0,0 km / 0,0 km</strong>
     </div>`;
 
   const elements: ControlElements = {
     timeField: container.querySelector<HTMLElement>('[data-race-sim-field="time"]'),
-    leaderField: container.querySelector<HTMLElement>('[data-race-sim-field="leader"]'),
     finishedField: container.querySelector<HTMLElement>('[data-race-sim-field="finished"]'),
+    distanceField: container.querySelector<HTMLElement>('[data-race-sim-field="distance"]'),
     toggleButton: container.querySelector<HTMLButtonElement>('[data-race-sim-action="toggle"]'),
     speedButtons: Array.from(container.querySelectorAll<HTMLButtonElement>('[data-race-sim-speed]')),
   };
@@ -107,11 +98,11 @@ export function renderRaceSimControls(container: HTMLElement, state: ControlRend
   if (elements.timeField) {
     elements.timeField.textContent = formatTime(state.snapshot.elapsedSeconds);
   }
-  if (elements.leaderField) {
-    elements.leaderField.textContent = `${formatKm(state.snapshot.leaderDistanceMeters)} / ${formatKm(state.snapshot.stageDistanceMeters)}`;
-  }
   if (elements.finishedField) {
-    elements.finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.totalRiders}`;
+    elements.finishedField.textContent = `${state.snapshot.finishedRiders} / ${state.totalRiders} im Ziel`;
+  }
+  if (elements.distanceField) {
+    elements.distanceField.textContent = `${formatKm(state.snapshot.leaderDistanceMeters)} / ${formatKm(state.snapshot.stageDistanceMeters)}`;
   }
   if (elements.toggleButton) {
     elements.toggleButton.textContent = state.isRunning ? 'Pause' : state.snapshot.isFinished ? 'Fertig' : 'Start';

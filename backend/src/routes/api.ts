@@ -20,6 +20,7 @@ import {
   RaceRosterEditorPayload,
   RaceRosterSelectionRequest,
   RiderProgramRaceSummary,
+  RiderStatsPayload,
   RealtimeClassificationLeaders,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
@@ -221,6 +222,18 @@ export function createRouter(dbService: DatabaseService): Router {
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
+  router.get('/riders/:id/stats', (req: Request, res: Response) => {
+    const riderId = Number(req.params['id']);
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const payload = new GameRepository(db).getRiderStats(riderId);
+      if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
+      ok<RiderStatsPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   // ---- Races --------------------------------------------
 
   router.get('/races', (_req: Request, res: Response) => {
@@ -326,6 +339,7 @@ export function createRouter(dbService: DatabaseService): Router {
         classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
+        stageScoringRules: repo.getStageScoringRules(),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
@@ -417,6 +431,7 @@ export function createRouter(dbService: DatabaseService): Router {
         classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
         teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
         skillWeightRules: repo.getSkillWeightRules(),
+        stageScoringRules: repo.getStageScoringRules(),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

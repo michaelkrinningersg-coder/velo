@@ -210,6 +210,22 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
+    router.get('/riders/:id/stats', (req, res) => {
+        const riderId = Number(req.params['id']);
+        if (!Number.isFinite(riderId))
+            return fail(res, 400, 'Ungültige Fahrer-ID.');
+        try {
+            const db = dbService.getActiveConnection();
+            getGss().ensureState();
+            const payload = new GameRepository_1.GameRepository(db).getRiderStats(riderId);
+            if (!payload)
+                return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
+            ok(res, payload);
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
     // ---- Races --------------------------------------------
     router.get('/races', (_req, res) => {
         try {
@@ -237,6 +253,14 @@ function createRouter(dbService) {
     router.get('/stage-editor/stages', (_req, res) => {
         try {
             ok(res, routeImporter.listExistingStages());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/stage-editor/overview', (_req, res) => {
+        try {
+            ok(res, routeImporter.listOverview());
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -322,6 +346,7 @@ function createRouter(dbService) {
                 classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
                 teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
                 skillWeightRules: repo.getSkillWeightRules(),
+                stageScoringRules: repo.getStageScoringRules(),
             });
         }
         catch (e) {
@@ -410,6 +435,7 @@ function createRouter(dbService) {
                 classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
                 teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
                 skillWeightRules: repo.getSkillWeightRules(),
+                stageScoringRules: repo.getStageScoringRules(),
             });
         }
         catch (e) {

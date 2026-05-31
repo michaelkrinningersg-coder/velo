@@ -8,15 +8,15 @@ exports.resolveStageTimeLimitSeconds = resolveStageTimeLimitSeconds;
 exports.rankStageResultEntries = rankStageResultEntries;
 exports.TIME_TIE_THRESHOLD_SECONDS = 1;
 exports.TIME_LIMIT_PERCENT_BY_PROFILE = {
-    Flat: 13,
-    Rolling: 15,
-    Hilly: 17,
-    Hilly_Difficult: 19,
-    Medium_Mountain: 21,
-    Mountain: 25,
-    High_Mountain: 30,
+    Flat: 12,
+    Rolling: 14,
+    Hilly: 16,
+    Hilly_Difficult: 17,
+    Medium_Mountain: 18,
+    Mountain: 23,
+    High_Mountain: 25,
     ITT: 30,
-    TTT: 30,
+    TTT: 40,
     Cobble: 18,
     Cobble_Hill: 20,
 };

@@ -1,4 +1,9 @@
 import { api } from './api';
+import {
+  buildRaceCategoryBadgeCssVariables,
+  renderRiderNameLink,
+  resolveRaceCategoryBadgeStyle,
+} from './riderStatsUi';
 import type {
   GameStatus,
   GameState,
@@ -8,6 +13,7 @@ import type {
   PendingStage,
   RaceRosterEditorPayload,
   RealtimeSimulationBootstrap,
+  RiderStatsPayload,
   SeasonStandingCountryRow,
   SavegameMeta,
   SeasonStandingsPayload,
@@ -93,6 +99,8 @@ const state: {
     key: RaceParticipantsSortKey;
     direction: 'asc' | 'desc';
   };
+  riderStatsPayload: RiderStatsPayload | null;
+  riderStatsSelectedRiderId: number | null;
 } = {
   currentSave: null,
   gameState: null,
@@ -143,6 +151,8 @@ const state: {
     key: 'team',
     direction: 'asc',
   },
+  riderStatsPayload: null,
+  riderStatsSelectedRiderId: null,
 };
 
 let raceSimView: RaceSimView | null = null;
@@ -289,14 +299,32 @@ function resolveRiderCountryCode(riderId: number | null | undefined): string | n
     return null;
   }
 
-  const rider = state.riders.find((candidate) => candidate.id === riderId) ?? null;
+  const rider = findRiderById(riderId);
   return rider?.country?.code3 ?? rider?.nationality ?? null;
 }
 
-function renderResultsParticipant(name: string, strong = true, isBreakaway = false): string {
-  const label = strong
-    ? `<strong class="results-participant-label">${esc(name)}</strong>`
-    : `<span class="results-participant-label">${esc(name)}</span>`;
+function findRiderById(riderId: number | null | undefined): Rider | null {
+  if (riderId == null) {
+    return null;
+  }
+
+  return state.riders.find((candidate) => candidate.id === riderId) ?? null;
+}
+
+function renderResultsParticipant(
+  name: string,
+  strong = true,
+  isBreakaway = false,
+  riderId: number | null = null,
+  teamId: number | null = null,
+): string {
+  const label = renderRiderNameLink(name, {
+    riderId,
+    teamId,
+    strong,
+    linkClassName: 'results-rider-link',
+    labelClassName: 'results-participant-label',
+  });
   return `<span class="results-participant${isBreakaway ? ' is-breakaway' : ''}">${label}</span>`;
 }
 
@@ -389,7 +417,7 @@ function renderMarkerClassificationsHtml(classifications: StageMarkerClassificat
         <div class="results-marker-row">
           <div class="results-marker-rank">${entry.rank}.</div>
           <div class="results-marker-jersey">${renderResultsJerseyColumn(rider?.activeTeamId, teamName)}</div>
-          <div class="results-marker-name">${renderResultsParticipant(riderName, false)}</div>
+          <div class="results-marker-name">${renderResultsParticipant(riderName, false, false, rider?.id ?? null, rider?.activeTeamId ?? null)}</div>
           <div class="results-marker-flag">${renderResultsFlagColumn(resolveRiderCountryCode(rider?.id))}</div>
           <div class="results-marker-time">${esc(formatRaceTime(entry.crossingTimeSeconds))}</div>
           <div class="results-marker-gap">${esc(formatRaceGap(entry.gapSeconds))}</div>
@@ -421,7 +449,7 @@ function renderSingleMarkerClassificationHtml(classification: StageMarkerClassif
       <div class="results-marker-row">
         <div class="results-marker-rank">${entry.rank}.</div>
         <div class="results-marker-jersey">${renderResultsJerseyColumn(rider?.activeTeamId, teamName)}</div>
-        <div class="results-marker-name">${renderResultsParticipant(riderName, false)}</div>
+        <div class="results-marker-name">${renderResultsParticipant(riderName, false, false, rider?.id ?? null, rider?.activeTeamId ?? null)}</div>
         <div class="results-marker-flag">${renderResultsFlagColumn(resolveRiderCountryCode(rider?.id))}</div>
         <div class="results-marker-time">${esc(formatRaceTime(entry.crossingTimeSeconds))}</div>
         <div class="results-marker-gap">${esc(formatRaceGap(entry.gapSeconds))}</div>
@@ -479,7 +507,7 @@ function renderSeasonCountryTopRiders(topRiders: SeasonStandingCountryRow['topRi
         <div class="season-standings-country-popover-grid">
           <strong>${rider.rank}</strong>
           <span class="results-flag-col-cell">${renderResultsFlagColumn(rider.countryCode)}</span>
-          <span class="season-standings-country-rider-name">${esc(rider.riderName)}</span>
+          <span class="season-standings-country-rider-name">${renderRiderNameLink(rider.riderName, { riderId: rider.riderId, strong: false })}</span>
           <strong>${rider.points}</strong>
         </div>
       `).join('')}
@@ -523,7 +551,7 @@ function renderSeasonTeamTopRiders(
         <div class="season-standings-country-popover-grid">
           <strong>${rider.rank}</strong>
           <span class="results-flag-col-cell">${renderResultsFlagColumn(rider.countryCode)}</span>
-          <span class="season-standings-country-rider-name">${esc(rider.riderName ?? '—')}</span>
+          <span class="season-standings-country-rider-name">${renderRiderNameLink(rider.riderName ?? '—', { riderId: rider.riderId, teamId: rider.teamId, strong: false })}</span>
           <strong>${rider.points}</strong>
         </div>
       `).join('')}
@@ -544,10 +572,12 @@ function renderSeasonTeamNameCell(
 }
 
 function raceCategoryBadge(race: Race): string {
+  const categoryStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
+  const badgeStyle = buildRaceCategoryBadgeCssVariables(categoryStyle);
   if (race.isStageRace) {
-    return `<span class="badge badge-live">Etappenrennen · ${race.numberOfStages} Etappen</span>`;
+    return `<span class="badge badge-race-category" style="${badgeStyle}">Etappenrennen · ${race.numberOfStages} Etappen</span>`;
   }
-  return '<span class="badge badge-todo">Eintagesrennen</span>';
+  return `<span class="badge badge-race-category" style="${badgeStyle}">Eintagesrennen</span>`;
 }
 
 function getRaceStageDateRange(race: Race): { startDate: string; endDate: string } {
@@ -2504,7 +2534,11 @@ function renderRaceFormSourceList(rider: Rider): string {
 function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
   switch (column.id) {
     case 'name':
-      return `<td class="team-table-name-cell"><strong>${esc(formatRiderName(rider))}</strong>${renderRiderAvailabilityMarker(rider)}</td>`;
+      return `<td class="team-table-name-cell">${renderRiderNameLink(formatRiderName(rider), {
+        riderId: rider.id,
+        teamId: rider.activeTeamId,
+        strong: true,
+      })}${renderRiderAvailabilityMarker(rider)}</td>`;
     case 'country':
       return `<td>${renderTeamCountryCell(rider)}</td>`;
     case 'age':
@@ -2786,6 +2820,222 @@ function showScreen(name: 'menu' | 'game'): void {
 function showModal(name: string): void { $(`modal-${name}`).classList.remove('hidden'); }
 function hideModal(name: string): void { $(`modal-${name}`).classList.add('hidden'); }
 
+function renderRiderStatsCategoryBadge(categoryName: string | null | undefined): string {
+  const categoryStyle = resolveRaceCategoryBadgeStyle(categoryName);
+  const badgeStyle = buildRaceCategoryBadgeCssVariables(categoryStyle);
+  return `<span class="badge badge-race-category rider-stats-category-badge" style="${badgeStyle}">${esc(categoryName ?? 'Unbekannte Kategorie')}</span>`;
+}
+
+function getRiderStatsRowTypeLabel(rowType: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]['rowType']): string {
+  switch (rowType) {
+    case 'gc_final':
+      return 'Gesamtwertung';
+    case 'points_final':
+      return 'Punktewertung';
+    case 'mountain_final':
+      return 'Bergwertung';
+    case 'youth_final':
+      return 'Nachwuchs';
+    default:
+      return 'Etappe';
+  }
+}
+
+function formatRiderStatsRaceBlockMeta(block: RiderStatsPayload['seasons'][number]['raceBlocks'][number]): string {
+  const dateLabel = block.startDate === block.endDate
+    ? formatDate(block.startDate)
+    : `${formatDate(block.startDate)} - ${formatDate(block.endDate)}`;
+  return `${dateLabel} · ${block.isStageRace ? 'Etappenrennen' : 'Eintagesrennen'}`;
+}
+
+function renderRiderStatsRankBadge(label: string, variant: 'place' | 'gc'): string {
+  return `<span class="rider-stats-rank-badge rider-stats-rank-badge-${variant}">${esc(label)}</span>`;
+}
+
+function renderRiderStatsBreakaway(row: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]): string {
+  if (!row.isBreakaway || row.rowType !== 'stage_result' || row.finishStatus !== 'classified') {
+    return '–';
+  }
+
+  return '<span class="rider-stats-breakaway-icon" aria-label="Ausreißer" title="Ausreißer">▼</span>';
+}
+
+function renderRiderStatsPlacement(row: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]): string {
+  if (row.finishStatus === 'otl') {
+    return renderRiderStatsRankBadge('OTL', 'place');
+  }
+  if (row.finishStatus === 'dnf') {
+    return renderRiderStatsRankBadge('DNF', 'place');
+  }
+  if (row.resultRank == null) {
+    return '–';
+  }
+  const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
+  return `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+}
+
+function renderRiderStatsGcPlacement(row: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]): string {
+  if (row.finishStatus !== 'classified' || row.gcRank == null) {
+    return '–';
+  }
+  return renderRiderStatsRankBadge(String(row.gcRank), 'gc');
+}
+
+function formatRiderStatsResultDetail(row: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]): string {
+  if (row.finishStatus === 'otl') {
+    return formatNonFinisherReason(row.statusReason, true);
+  }
+  if (row.finishStatus === 'dnf') {
+    return formatNonFinisherReason(row.statusReason, false);
+  }
+  if (row.stageTimeSeconds != null) {
+    return `${row.resultLabel} · ${formatRaceTime(row.stageTimeSeconds)}`;
+  }
+  return row.resultLabel;
+}
+
+function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | null, isLoading = false): string {
+  const teamName = rider?.activeTeamId != null
+    ? state.teams.find((team) => team.id === rider.activeTeamId)?.name ?? null
+    : null;
+  const countryCode = rider?.country?.code3 ?? rider?.nationality ?? null;
+  const countryFlag = countryCode ? renderFlag(countryCode) : '';
+
+  if (isLoading) {
+    return `
+      <div class="rider-stats-summary">
+        <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(countryCode ?? 'Land offen')}</span></span>
+        <span class="rider-stats-summary-pill">${esc(teamName ?? 'Ohne aktives Team')}</span>
+        <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
+        <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
+      </div>
+      <section class="rider-stats-placeholder">
+        <h3>Historie wird geladen</h3>
+        <p>Die Karriereergebnisse dieses Fahrers werden zusammengestellt.</p>
+      </section>`;
+  }
+
+  if (!payload || payload.seasons.length === 0) {
+    return `
+      <div class="rider-stats-summary">
+        <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(countryCode ?? 'Land offen')}</span></span>
+        <span class="rider-stats-summary-pill">${esc(teamName ?? payload?.teamName ?? 'Ohne aktives Team')}</span>
+        <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
+        <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
+      </div>
+      <section class="rider-stats-placeholder">
+        <h3>Keine Historie vorhanden</h3>
+        <p>Für diesen Fahrer wurden in der aktuellen Karriere noch keine Ergebnisse gefunden.</p>
+      </section>`;
+  }
+
+  return `
+    <div class="rider-stats-summary">
+      <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(payload.countryCode ?? countryCode ?? 'Land offen')}</span></span>
+      <span class="rider-stats-summary-pill">${esc(payload.teamName ?? teamName ?? 'Ohne aktives Team')}</span>
+      <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
+      <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
+    </div>
+    ${payload.seasons.map((season) => `
+      <section class="rider-stats-season">
+        <div class="rider-stats-season-head">
+          <h3>Saison ${season.season}</h3>
+          <span>${season.raceBlocks.length} Rennen</span>
+        </div>
+        <div class="rider-stats-race-list">
+          ${season.raceBlocks.map((block) => `
+            <section class="rider-stats-race-block">
+              <div class="rider-stats-race-head">
+                <div>
+                  <h4>${esc(block.raceName)}</h4>
+                  <p>${esc(formatRiderStatsRaceBlockMeta(block))}</p>
+                </div>
+                ${renderRiderStatsCategoryBadge(block.raceCategoryName)}
+              </div>
+              <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
+                <table class="data-table rider-stats-table">
+                  <thead>
+                    <tr>
+                      <th>Datum</th>
+                      <th>Platz</th>
+                      <th>GC</th>
+                      <th class="rider-stats-breakaway-col">Ausreißer</th>
+                      <th>Klasse</th>
+                      <th>Rennen / Etappe</th>
+                      <th>Profil</th>
+                      <th>Distanz</th>
+                      <th>HM</th>
+                      <th>Ergebnis</th>
+                      <th>Punkte</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${block.rows.map((row) => {
+                      const isFinalRow = row.rowType !== 'stage_result';
+                      const raceStageLabel = isFinalRow
+                        ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
+                        : (row.stageName ? `${row.raceName} · ${row.stageName}` : row.raceName);
+                      return `
+                        <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
+                          <td>${esc(formatDate(row.date))}</td>
+                          <td>${renderRiderStatsPlacement(row)}</td>
+                          <td>${renderRiderStatsGcPlacement(row)}</td>
+                          <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
+                          <td>${isFinalRow ? `<span class="rider-stats-final-type">${esc(getRiderStatsRowTypeLabel(row.rowType))}</span>` : renderRiderStatsCategoryBadge(row.raceCategoryName)}</td>
+                          <td>${esc(raceStageLabel)}</td>
+                          <td>${row.profile ? renderStageProfileBadge(row.profile) : '–'}</td>
+                          <td>${row.distanceKm != null ? esc(formatKm(row.distanceKm)) : '–'}</td>
+                          <td>${row.elevationGainMeters != null ? esc(formatElevationGain(row.elevationGainMeters)) : '–'}</td>
+                          <td>${esc(formatRiderStatsResultDetail(row))}</td>
+                          <td>${row.seasonPoints}</td>
+                        </tr>`;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </section>`).join('')}
+        </div>
+      </section>`).join('')}`;
+}
+
+async function openRiderStats(riderId: number): Promise<void> {
+  const rider = findRiderById(riderId);
+  const teamName = rider?.activeTeamId != null
+    ? state.teams.find((team) => team.id === rider.activeTeamId)?.name ?? null
+    : null;
+
+  state.riderStatsSelectedRiderId = riderId;
+  state.riderStatsPayload = null;
+  $('rider-stats-title').textContent = rider ? formatRiderName(rider) : 'Fahrerstatistik';
+  $('rider-stats-meta').textContent = rider
+    ? `${rider.role?.name ?? 'Fahrer'} · ${teamName ?? 'Team unbekannt'}`
+    : 'Historie wird geladen';
+  $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, null, true);
+  showModal('riderStats');
+
+  const res = await api.getRiderStats(riderId);
+  if (state.riderStatsSelectedRiderId !== riderId) {
+    return;
+  }
+
+  if (!res.success || !res.data) {
+    $('rider-stats-meta').textContent = rider
+      ? `${rider.role?.name ?? 'Fahrer'} · ${teamName ?? 'Team unbekannt'}`
+      : 'Fehler beim Laden';
+    $('rider-stats-body').innerHTML = `
+      <section class="rider-stats-placeholder">
+        <h3>Historie konnte nicht geladen werden</h3>
+        <p>${esc(res.error ?? 'Unbekannter Fehler')}</p>
+      </section>`;
+    return;
+  }
+
+  state.riderStatsPayload = res.data;
+  $('rider-stats-title').textContent = res.data.riderName;
+  $('rider-stats-meta').textContent = `${rider?.role?.name ?? 'Fahrer'} · ${res.data.teamName ?? teamName ?? 'Ohne aktives Team'} · ${res.data.seasons.length} Saisons`;
+  $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, res.data, false);
+}
+
 function showLoading(msg = 'Lade…'): void {
   $('loading-msg').textContent = msg;
   $('loading-overlay').classList.remove('hidden');
@@ -2834,7 +3084,9 @@ function getRaceSimView(): RaceSimView {
     raceSimView = new RaceSimView({
       layout: $('race-sim-layout'),
       emptyState: $('race-sim-empty'),
+      controlsHeader: $('race-sim-controls-header'),
       profile: $('race-sim-profile'),
+      groupBox: $('race-sim-group-box'),
       messages: $('race-sim-messages-body'),
       favorites: $('race-sim-favorites-body'),
       sidebar: $('race-sim-sidebar-body'),
@@ -3216,6 +3468,7 @@ $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
 $('btn-close-race-stages').addEventListener('click', () => hideModal('raceStages'));
 $('btn-close-stage-profile').addEventListener('click', () => hideModal('stageProfile'));
 $('btn-close-rider-program').addEventListener('click', () => hideModal('riderProgram'));
+$('btn-close-rider-stats').addEventListener('click', () => hideModal('riderStats'));
 $('btn-close-race-participants').addEventListener('click', () => hideModal('raceParticipants'));
 $('btn-close-roster-editor').addEventListener('click', () => hideRosterEditor());
 $('btn-cancel-roster-editor').addEventListener('click', () => hideRosterEditor());
@@ -3320,6 +3573,20 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     if (view === 'results') renderResultsView();
     if (view === 'season-standings') void loadSeasonStandings(true);
   });
+});
+
+document.body.addEventListener('click', (event) => {
+  const riderButton = (event.target as Element).closest<HTMLButtonElement>('button.app-rider-link[data-rider-id]');
+  if (!riderButton) {
+    return;
+  }
+
+  const riderId = Number(riderButton.dataset['riderId']);
+  if (!Number.isFinite(riderId)) {
+    return;
+  }
+
+  openRiderStats(riderId);
 });
 
 $('stage-editor-stages-table').addEventListener('click', (event) => {
@@ -3977,7 +4244,7 @@ function renderResultsView(): void {
         <td>${row.stageNumber}</td>
         <td>${renderNonFinisherStatusBadge(row.isOtl)}</td>
         <td class="results-jersey-col-cell">${renderResultsJerseyColumn(row.teamId, row.teamName)}</td>
-        <td>${renderResultsParticipant(row.riderName, true)}</td>
+        <td>${renderResultsParticipant(row.riderName, true, false, row.riderId, row.teamId)}</td>
         <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
         <td>${esc(row.teamName || '—')}</td>
         <td>${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</td>
@@ -3988,7 +4255,7 @@ function renderResultsView(): void {
       const participant = row.riderName ?? row.teamName;
       const teamName = row.riderName ? row.teamName : '—';
       const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
-      const participantCell = renderResultsParticipant(participant, true, row.isBreakaway === true);
+      const participantCell = renderResultsParticipant(participant, true, row.isBreakaway === true, row.riderId, row.teamId);
       const flagCell = renderResultsFlagColumn(resolveRiderCountryCode(row.riderId));
       const showAverageSpeed = selectedClassification.resultTypeId === 1 && row.rank === 1 && row.timeSeconds != null && stageDistanceKm != null;
       const timeCell = row.timeSeconds != null
@@ -4125,7 +4392,7 @@ function renderSeasonStandingsView(): void {
       const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
       const primaryCell = state.selectedSeasonStandingScope === 'teams'
         ? renderSeasonTeamNameCell(row, state.seasonStandings?.riderStandings ?? [])
-        : renderResultsParticipant(primary);
+        : renderResultsParticipant(primary, true, false, row.riderId, row.teamId);
       const flagCell = renderResultsFlagColumn(row.countryCode);
       const secondary = state.selectedSeasonStandingScope === 'teams'
         ? (row.countryName ?? row.countryCode ?? '—')
