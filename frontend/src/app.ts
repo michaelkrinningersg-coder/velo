@@ -14,6 +14,9 @@ import type {
   RaceRosterEditorPayload,
   RealtimeSimulationBootstrap,
   RiderStatsPayload,
+  RiderTeamEditorPayload,
+  RiderTeamEditorRiderRow,
+  RiderTeamEditorTeamSummary,
   SeasonStandingCountryRow,
   SavegameMeta,
   SeasonStandingsPayload,
@@ -77,6 +80,12 @@ const state: {
     direction: 'asc' | 'desc';
   };
   teamDetailPage: TeamDetailPage;
+  riderMenuTableSort: {
+    key: TeamTableSortKey;
+    direction: 'asc' | 'desc';
+  };
+  riderMenuDetailPage: TeamDetailPage;
+  riderMenuPage: number;
   stageEditorDraft: StageEditorDraft | null;
   stageEditorExistingStages: StageEditorExistingStageOption[];
   stageEditorExistingStagesLoaded: boolean;
@@ -104,6 +113,15 @@ const state: {
   riderStatsPayload: RiderStatsPayload | null;
   riderStatsTab: RiderStatsTab;
   riderStatsSelectedRiderId: number | null;
+  riderTeamEditorPayload: RiderTeamEditorPayload | null;
+  riderTeamEditorSelectedTeamKey: string;
+  riderTeamEditorSort: {
+    key: RiderTeamEditorSortKey;
+    direction: 'asc' | 'desc';
+  };
+  riderTeamEditorDirtyRiderIds: number[];
+  riderTeamEditorSaving: boolean;
+  riderTeamEditorExporting: boolean;
 } = {
   currentSave: null,
   gameState: null,
@@ -130,6 +148,12 @@ const state: {
     direction: 'asc',
   },
   teamDetailPage: 'skills',
+  riderMenuTableSort: {
+    key: 'name',
+    direction: 'asc',
+  },
+  riderMenuDetailPage: 'skills',
+  riderMenuPage: 1,
   stageEditorDraft: null,
   stageEditorExistingStages: [],
   stageEditorExistingStagesLoaded: false,
@@ -157,6 +181,15 @@ const state: {
   riderStatsPayload: null,
   riderStatsTab: 'results',
   riderStatsSelectedRiderId: null,
+  riderTeamEditorPayload: null,
+  riderTeamEditorSelectedTeamKey: '',
+  riderTeamEditorSort: {
+    key: 'lastName',
+    direction: 'asc',
+  },
+  riderTeamEditorDirtyRiderIds: [],
+  riderTeamEditorSaving: false,
+  riderTeamEditorExporting: false,
 };
 
 let raceSimView: RaceSimView | null = null;
@@ -632,6 +665,7 @@ const TEAM_SKILL_COLUMNS: Array<{ key: keyof Rider['skills']; label: string }> =
 
 type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
 type RiderStatsTab = 'results' | 'program';
+type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
 type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
 type RaceParticipantsSortKey = 'team' | 'rider' | 'spec1' | 'role' | 'overall' | 'phase' | 'program';
@@ -718,9 +752,14 @@ const TEAM_DETAIL_PAGE_LABELS: Record<TeamDetailPage, string> = {
 };
 
 const TEAM_DETAIL_PAGE_ORDER: TeamDetailPage[] = ['skills', 'form', 'profile', 'preferences'];
+const RIDER_MENU_PAGE_SIZE = 50;
 
 function getActiveTeamTableColumns(): TeamTableColumn[] {
   return [...TEAM_TABLE_COLUMNS, ...TEAM_DETAIL_PAGE_COLUMNS[state.teamDetailPage]];
+}
+
+function getActiveRiderMenuTableColumns(): TeamTableColumn[] {
+  return [...TEAM_TABLE_COLUMNS, ...TEAM_DETAIL_PAGE_COLUMNS[state.riderMenuDetailPage]];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -2464,6 +2503,11 @@ function getSortIndicator(sortKey: TeamTableSortKey): string {
   return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.teamTableSort.direction === 'asc' ? '↑' : '↓'}</span>`;
 }
 
+function getRiderMenuSortIndicator(sortKey: TeamTableSortKey): string {
+  if (state.riderMenuTableSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
+  return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.riderMenuTableSort.direction === 'asc' ? '↑' : '↓'}</span>`;
+}
+
 function getRaceParticipantsSortIndicator(sortKey: RaceParticipantsSortKey): string {
   if (state.raceParticipantsSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
   return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.raceParticipantsSort.direction === 'asc' ? '↑' : '↓'}</span>`;
@@ -2640,6 +2684,27 @@ function renderTeamTableHeader(column: TeamTableColumn): string {
     </th>`;
 }
 
+function renderRiderMenuTableHeader(column: TeamTableColumn): string {
+  if (!column.sortKey) {
+    return `<th class="${column.className ?? ''}"></th>`;
+  }
+
+  const activeClass = state.riderMenuTableSort.key === column.sortKey ? ' team-table-sort-active' : '';
+  return `
+    <th class="${column.className ?? ''}">
+      <button
+        type="button"
+        class="team-table-sort${activeClass}"
+        data-riders-sort="${column.sortKey}"
+        title="${esc(column.title)}"
+        aria-label="${esc(column.title)}"
+      >
+        <span class="team-table-sort-label">${esc(column.label)}</span>
+        ${getRiderMenuSortIndicator(column.sortKey)}
+      </button>
+    </th>`;
+}
+
 function renderTeamDetailPageTabs(): string {
   return `
     <div class="team-detail-page-tabs" role="tablist" aria-label="Fahrer-Detailseite">
@@ -2649,6 +2714,20 @@ function renderTeamDetailPageTabs(): string {
           class="team-detail-page-tab${state.teamDetailPage === page ? ' team-detail-page-tab-active' : ''}"
           data-team-detail-page="${page}"
           aria-selected="${state.teamDetailPage === page ? 'true' : 'false'}"
+        >${esc(TEAM_DETAIL_PAGE_LABELS[page])}</button>
+      `).join('')}
+    </div>`;
+}
+
+function renderRiderMenuDetailPageTabs(): string {
+  return `
+    <div class="team-detail-page-tabs" role="tablist" aria-label="Fahreransicht Detailseite">
+      ${TEAM_DETAIL_PAGE_ORDER.map((page) => `
+        <button
+          type="button"
+          class="team-detail-page-tab${state.riderMenuDetailPage === page ? ' team-detail-page-tab-active' : ''}"
+          data-riders-detail-page="${page}"
+          aria-selected="${state.riderMenuDetailPage === page ? 'true' : 'false'}"
         >${esc(TEAM_DETAIL_PAGE_LABELS[page])}</button>
       `).join('')}
     </div>`;
@@ -2878,6 +2957,96 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
   return sortedRiders;
 }
 
+function sortRiderMenuRiders(riders: Rider[]): Rider[] {
+  const sortedRiders = [...riders];
+  const directionFactor = state.riderMenuTableSort.direction === 'asc' ? 1 : -1;
+
+  sortedRiders.sort((left, right) => {
+    let comparison = 0;
+
+    switch (state.riderMenuTableSort.key) {
+      case 'name':
+        comparison = compareStrings(left.lastName, right.lastName) || compareStrings(left.firstName, right.firstName);
+        break;
+      case 'countryCode':
+        comparison = compareStrings(getRiderCountryCode(left), getRiderCountryCode(right));
+        break;
+      case 'birthYear':
+        comparison = left.birthYear - right.birthYear;
+        break;
+      case 'age':
+        comparison = (left.age ?? 0) - (right.age ?? 0);
+        break;
+      case 'overallRating':
+        comparison = left.overallRating - right.overallRating;
+        break;
+      case 'formBonus':
+        comparison = (left.formBonus ?? 0) - (right.formBonus ?? 0);
+        break;
+      case 'raceFormBonus':
+        comparison = (left.raceFormBonus ?? 0) - (right.raceFormBonus ?? 0);
+        break;
+      case 'longTermFatigueMalus':
+        comparison = (left.longTermFatigueMalus ?? 0) - (right.longTermFatigueMalus ?? 0);
+        break;
+      case 'shortTermFatigueMalus':
+        comparison = (left.shortTermFatigueMalus ?? 0) - (right.shortTermFatigueMalus ?? 0);
+        break;
+      case 'seasonPoints':
+        comparison = (left.seasonPoints ?? 0) - (right.seasonPoints ?? 0);
+        break;
+      case 'seasonRaceDays':
+        comparison = (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0);
+        break;
+      case 'seasonWins':
+        comparison = (left.seasonWins ?? 0) - (right.seasonWins ?? 0);
+        break;
+      case 'contractEndSeason':
+        comparison = (left.contractEndSeason ?? Number.MAX_SAFE_INTEGER) - (right.contractEndSeason ?? Number.MAX_SAFE_INTEGER);
+        break;
+      case 'roleName':
+        comparison = compareStrings(getRiderRoleName(left), getRiderRoleName(right));
+        break;
+      case 'riderType':
+        comparison = compareStrings(left.riderType, right.riderType)
+          || compareStrings(formatRiderName(left), formatRiderName(right));
+        break;
+      case 'skillDevelopment':
+        comparison = (left.skillDevelopment ?? 0) - (right.skillDevelopment ?? 0);
+        break;
+      case 'specialization1':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization1), getSpecializationSortLabel(right.specialization1));
+        break;
+      case 'specialization2':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization2), getSpecializationSortLabel(right.specialization2));
+        break;
+      case 'specialization3':
+        comparison = compareOptionalStrings(getSpecializationSortLabel(left.specialization3), getSpecializationSortLabel(right.specialization3));
+        break;
+      case 'peak1':
+        comparison = compareOptionalStrings(getPeakDate(left, 0), getPeakDate(right, 0));
+        break;
+      case 'peak2':
+        comparison = compareOptionalStrings(getPeakDate(left, 1), getPeakDate(right, 1));
+        break;
+      case 'peak3':
+        comparison = compareOptionalStrings(getPeakDate(left, 2), getPeakDate(right, 2));
+        break;
+      default:
+        comparison = left.skills[state.riderMenuTableSort.key] - right.skills[state.riderMenuTableSort.key];
+        break;
+    }
+
+    if (comparison === 0) {
+      comparison = compareStrings(left.lastName, right.lastName) || compareStrings(left.firstName, right.firstName);
+    }
+
+    return comparison * directionFactor;
+  });
+
+  return sortedRiders;
+}
+
 function renderRacePrefs(raceIds: number[]): string {
   if (raceIds.length === 0) return '–';
   return raceIds.map(raceId => {
@@ -2892,6 +3061,299 @@ function renderPeakDatesSummary(rider: Rider): string {
     return '–';
   }
   return peakDates.join(' · ');
+}
+
+interface RiderTeamEditorColumn {
+  key: RiderTeamEditorSortKey;
+  label: string;
+  title: string;
+  inputType: 'number' | 'text' | 'team' | 'readonly';
+  className?: string;
+}
+
+const RIDER_TEAM_EDITOR_COLUMNS: RiderTeamEditorColumn[] = [
+  { key: 'riderId', label: 'ID', title: 'Fahrer-ID', inputType: 'number', className: 'team-table-col-year' },
+  { key: 'firstName', label: 'Vorname', title: 'Vorname', inputType: 'text', className: 'team-table-col-name' },
+  { key: 'lastName', label: 'Nachname', title: 'Nachname', inputType: 'text', className: 'team-table-col-name' },
+  { key: 'countryId', label: 'Land', title: 'Country-ID', inputType: 'number', className: 'team-table-col-year' },
+  { key: 'birthYear', label: 'Jg', title: 'Geburtsjahr', inputType: 'number', className: 'team-table-col-year' },
+  { key: 'teamName', label: 'Team', title: 'Teamzuordnung', inputType: 'team', className: 'team-table-col-program' },
+  { key: 'overallRating', label: 'Ges', title: 'Gesamtstärke wie im Teams-Menü', inputType: 'readonly', className: 'team-table-col-overall' },
+  { key: 'skillFlat', label: 'Fl', title: 'Flach', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillMountain', label: 'Berg', title: 'Berg', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillMediumMountain', label: 'MB', title: 'Mittlere Berge', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillHill', label: 'Hgl', title: 'Hügel', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillTimeTrial', label: 'ZF', title: 'Zeitfahren', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillPrologue', label: 'Pro', title: 'Prolog', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillCobble', label: 'Pf', title: 'Pflaster', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillSprint', label: 'Spr', title: 'Sprint', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillAcceleration', label: 'Acc', title: 'Antritt', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillDownhill', label: 'Abf', title: 'Abfahrt', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillAttack', label: 'Atk', title: 'Attacke', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillStamina', label: 'Sta', title: 'Stamina', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillResistance', label: 'Res', title: 'Widerstand', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'skillRecuperation', label: 'Rec', title: 'Regeneration', inputType: 'number', className: 'team-table-col-skill' },
+  { key: 'favoriteRaces', label: 'Favs', title: 'Lieblingsrennen', inputType: 'text', className: 'team-table-col-preferences' },
+  { key: 'nonFavoriteRaces', label: 'Nos', title: 'Nicht bevorzugte Rennen', inputType: 'text', className: 'team-table-col-preferences' },
+];
+
+function resolveRiderTeamEditorTeamKey(teamId: number | null): string {
+  return teamId == null ? 'free-agents' : String(teamId);
+}
+
+function getRiderTeamEditorTeamName(teamId: number | null): string {
+  const payload = state.riderTeamEditorPayload;
+  if (!payload) {
+    return teamId == null ? 'Free Agents' : '–';
+  }
+  return payload.teams.find((team) => team.teamId === teamId)?.name ?? (teamId == null ? 'Free Agents' : `Team ${teamId}`);
+}
+
+function calculateEditorOverall(rider: RiderTeamEditorRiderRow): number {
+  const values = [
+    rider.skillFlat,
+    rider.skillMountain,
+    rider.skillMediumMountain,
+    rider.skillHill,
+    rider.skillTimeTrial,
+    rider.skillCobble,
+    rider.skillSprint,
+    rider.skillStamina,
+    rider.skillResistance,
+    rider.skillRecuperation,
+  ];
+  return clamp(values.reduce((sum, value) => sum + value, 0) / values.length, 0, 100);
+}
+
+function getDefaultRiderTeamEditorSortDirection(sortKey: RiderTeamEditorSortKey): 'asc' | 'desc' {
+  return [
+    'riderId',
+    'countryId',
+    'birthYear',
+    'overallRating',
+    'skillFlat',
+    'skillMountain',
+    'skillMediumMountain',
+    'skillHill',
+    'skillTimeTrial',
+    'skillPrologue',
+    'skillCobble',
+    'skillSprint',
+    'skillAcceleration',
+    'skillDownhill',
+    'skillAttack',
+    'skillStamina',
+    'skillResistance',
+    'skillRecuperation',
+  ].includes(sortKey) ? 'desc' : 'asc';
+}
+
+function getRiderTeamEditorSortIndicator(sortKey: RiderTeamEditorSortKey): string {
+  if (state.riderTeamEditorSort.key !== sortKey) return '<span class="team-table-sort-indicator">↕</span>';
+  return `<span class="team-table-sort-indicator team-table-sort-indicator-active">${state.riderTeamEditorSort.direction === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+function renderRiderTeamEditorHeader(column: RiderTeamEditorColumn): string {
+  const activeClass = state.riderTeamEditorSort.key === column.key ? ' team-table-sort-active' : '';
+  return `
+    <th class="${column.className ?? ''}">
+      <button
+        type="button"
+        class="team-table-sort${activeClass}"
+        data-rider-team-editor-sort="${column.key}"
+        title="${esc(column.title)}"
+        aria-label="${esc(column.title)}"
+      >
+        <span class="team-table-sort-label">${esc(column.label)}</span>
+        ${getRiderTeamEditorSortIndicator(column.key)}
+      </button>
+    </th>`;
+}
+
+function compareRiderTeamEditorRows(left: RiderTeamEditorRiderRow, right: RiderTeamEditorRiderRow): number {
+  switch (state.riderTeamEditorSort.key) {
+    case 'riderId': return left.riderId - right.riderId;
+    case 'firstName': return compareStrings(left.firstName, right.firstName);
+    case 'lastName': return compareStrings(left.lastName, right.lastName);
+    case 'countryId': return left.countryId - right.countryId;
+    case 'birthYear': return left.birthYear - right.birthYear;
+    case 'teamName': return compareStrings(getRiderTeamEditorTeamName(left.teamId), getRiderTeamEditorTeamName(right.teamId));
+    case 'overallRating': return left.overallRating - right.overallRating;
+    case 'skillFlat': return left.skillFlat - right.skillFlat;
+    case 'skillMountain': return left.skillMountain - right.skillMountain;
+    case 'skillMediumMountain': return left.skillMediumMountain - right.skillMediumMountain;
+    case 'skillHill': return left.skillHill - right.skillHill;
+    case 'skillTimeTrial': return left.skillTimeTrial - right.skillTimeTrial;
+    case 'skillPrologue': return left.skillPrologue - right.skillPrologue;
+    case 'skillCobble': return left.skillCobble - right.skillCobble;
+    case 'skillSprint': return left.skillSprint - right.skillSprint;
+    case 'skillAcceleration': return left.skillAcceleration - right.skillAcceleration;
+    case 'skillDownhill': return left.skillDownhill - right.skillDownhill;
+    case 'skillAttack': return left.skillAttack - right.skillAttack;
+    case 'skillStamina': return left.skillStamina - right.skillStamina;
+    case 'skillResistance': return left.skillResistance - right.skillResistance;
+    case 'skillRecuperation': return left.skillRecuperation - right.skillRecuperation;
+    case 'favoriteRaces': return compareStrings(left.favoriteRaces, right.favoriteRaces);
+    case 'nonFavoriteRaces': return compareStrings(left.nonFavoriteRaces, right.nonFavoriteRaces);
+    default: return 0;
+  }
+}
+
+function sortRiderTeamEditorRows(rows: RiderTeamEditorRiderRow[]): RiderTeamEditorRiderRow[] {
+  const direction = state.riderTeamEditorSort.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => (
+    (compareRiderTeamEditorRows(left, right)
+      || compareStrings(left.lastName, right.lastName)
+      || compareStrings(left.firstName, right.firstName)
+      || left.riderId - right.riderId) * direction
+  ));
+}
+
+function getFilteredRiderTeamEditorRows(payload: RiderTeamEditorPayload): RiderTeamEditorRiderRow[] {
+  const selectedKey = state.riderTeamEditorSelectedTeamKey;
+  if (!selectedKey) {
+    return [];
+  }
+  const baseRows = payload.riders.filter((rider) => resolveRiderTeamEditorTeamKey(rider.teamId) === selectedKey);
+  return sortRiderTeamEditorRows(baseRows);
+}
+
+function renderRiderTeamEditorTeamOptions(teamId: number | null): string {
+  const payload = state.riderTeamEditorPayload;
+  if (!payload) {
+    return '<option value="free-agents">Free Agents</option>';
+  }
+
+  return payload.teams.map((team) => {
+    const key = resolveRiderTeamEditorTeamKey(team.teamId);
+    return `<option value="${key}"${team.teamId === teamId ? ' selected' : ''}>${esc(team.name)}</option>`;
+  }).join('');
+}
+
+function isDirtyRiderTeamEditorRow(riderId: number): boolean {
+  return state.riderTeamEditorDirtyRiderIds.includes(riderId);
+}
+
+function renderRiderTeamEditorCell(rider: RiderTeamEditorRiderRow, column: RiderTeamEditorColumn): string {
+  const dirtyClass = isDirtyRiderTeamEditorRow(rider.riderId) ? ' rider-team-editor-input-dirty' : '';
+  switch (column.inputType) {
+    case 'readonly':
+      return `<td><span class="skill-value" style="color:${getSkillColor(rider.overallRating)}">${Math.round(rider.overallRating)}</span></td>`;
+    case 'team':
+      return `<td><select class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="teamId" data-rider-team-editor-rider-id="${rider.riderId}">${renderRiderTeamEditorTeamOptions(rider.teamId)}</select></td>`;
+    case 'number': {
+      const value = rider[column.key as keyof RiderTeamEditorRiderRow] as number;
+      return `<td><input type="number" class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="${column.key}" data-rider-team-editor-rider-id="${rider.riderId}" value="${value}"></td>`;
+    }
+    case 'text': {
+      const value = String(rider[column.key as keyof RiderTeamEditorRiderRow] ?? '');
+      return `<td><input type="text" class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="${column.key}" data-rider-team-editor-rider-id="${rider.riderId}" value="${esc(value)}"></td>`;
+    }
+    default:
+      return '<td>–</td>';
+  }
+}
+
+function renderRiderTeamEditorSidebar(payload: RiderTeamEditorPayload): string {
+  const teams = [...payload.teams].sort((left, right) => left.rank - right.rank || compareStrings(left.name, right.name));
+  return `
+    <aside class="rider-team-editor-sidebar">
+      <div class="team-detail-card">
+        <div class="team-detail-header">
+          <h3>Teamübersicht</h3>
+        </div>
+        <div class="rider-team-editor-sidebar-list">
+          <div class="rider-team-editor-sidebar-item rider-team-editor-sidebar-summary">
+            <span>Alle Teams</span>
+            <strong>${payload.riders.length}</strong>
+          </div>
+          ${teams.map((team) => `
+            <button type="button" class="rider-team-editor-sidebar-item${state.riderTeamEditorSelectedTeamKey === resolveRiderTeamEditorTeamKey(team.teamId) ? ' is-active' : ''}" data-rider-team-editor-team-filter="${resolveRiderTeamEditorTeamKey(team.teamId)}">
+              <span class="rider-team-editor-sidebar-main">
+                <span>${esc(team.name)}</span>
+                <span class="text-muted">${esc(team.abbreviation)} · ${esc(team.divisionName)}</span>
+              </span>
+              <span class="rider-team-editor-sidebar-stats">
+                <strong>${team.riderCount}</strong>
+                <span>Ø ${team.averageOverall != null ? team.averageOverall.toFixed(1).replace('.', ',') : '–'} · #${team.rank}</span>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </aside>`;
+}
+
+function renderRiderTeamEditor(): void {
+  const root = $('rider-team-editor-root');
+  const meta = $('rider-team-editor-meta');
+  const payload = state.riderTeamEditorPayload;
+  if (!payload) {
+    root.innerHTML = '<div class="results-empty">Editor wird geladen.</div>';
+    meta.textContent = 'Masterdaten aus riders.csv bearbeiten.';
+    return;
+  }
+
+  const selectedTeam = state.riderTeamEditorSelectedTeamKey
+    ? payload.teams.find((team) => resolveRiderTeamEditorTeamKey(team.teamId) === state.riderTeamEditorSelectedTeamKey) ?? null
+    : null;
+  const rows = getFilteredRiderTeamEditorRows(payload);
+  const dirtyCount = state.riderTeamEditorDirtyRiderIds.length;
+  const selectedTeamText = selectedTeam == null
+    ? 'Kein Team gewählt'
+    : `${selectedTeam.riderCount} Fahrer · Ø ${selectedTeam.averageOverall != null ? selectedTeam.averageOverall.toFixed(1).replace('.', ',') : '–'} · Rang #${selectedTeam.rank}`;
+
+  meta.textContent = selectedTeam == null
+    ? 'Masterdaten aus riders.csv bearbeiten. Fahrer werden erst nach Teamauswahl geladen.'
+    : `${selectedTeam.name} · ${selectedTeamText}`;
+
+  root.innerHTML = `
+    <div class="rider-team-editor-layout">
+      <section class="rider-team-editor-main">
+        <div class="team-detail-card">
+          <div class="rider-team-editor-toolbar">
+            <div class="teams-selector rider-team-editor-selector">
+              <label for="rider-team-editor-team-select">Team auswählen</label>
+              <select id="rider-team-editor-team-select">
+                <option value=""${state.riderTeamEditorSelectedTeamKey === '' ? ' selected' : ''}>– Team auswählen –</option>
+                ${payload.teams.map((team) => `
+                  <option value="${resolveRiderTeamEditorTeamKey(team.teamId)}"${state.riderTeamEditorSelectedTeamKey === resolveRiderTeamEditorTeamKey(team.teamId) ? ' selected' : ''}>${esc(team.name)} (${team.riderCount})</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="team-detail-meta">
+              <span>${selectedTeamText}</span>
+              <span class="text-muted">Sortierung: ${esc(state.riderTeamEditorSort.key === 'teamName' ? 'Team' : RIDER_TEAM_EDITOR_COLUMNS.find((column) => column.key === state.riderTeamEditorSort.key)?.title ?? state.riderTeamEditorSort.key)} ${state.riderTeamEditorSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
+              <span class="text-muted">Ungespeichert: ${dirtyCount}</span>
+            </div>
+            <div class="rider-team-editor-actions">
+              <button type="button" class="btn btn-secondary" data-rider-team-editor-action="reload">Neu laden</button>
+              <button type="button" class="btn btn-secondary" data-rider-team-editor-action="export" ${state.riderTeamEditorExporting ? 'disabled' : ''}>${state.riderTeamEditorExporting ? 'Exportiert…' : 'riders.csv exportieren'}</button>
+              <button type="button" class="btn btn-primary" data-rider-team-editor-action="save" ${dirtyCount === 0 || state.riderTeamEditorSaving ? 'disabled' : ''}>${state.riderTeamEditorSaving ? 'Speichert…' : 'Änderungen speichern'}</button>
+            </div>
+          </div>
+          <div class="team-detail-table-scroll rider-team-editor-table-scroll">
+            <table class="data-table data-table-teams rider-team-editor-table">
+              <thead>
+                <tr>
+                  ${RIDER_TEAM_EDITOR_COLUMNS.map(renderRiderTeamEditorHeader).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length === 0
+                  ? `<tr><td colspan="${RIDER_TEAM_EDITOR_COLUMNS.length}" class="text-muted">${state.riderTeamEditorSelectedTeamKey ? 'Keine Fahrer im aktuellen Team.' : 'Bitte zuerst ein Team im Dropdown auswählen.'}</td></tr>`
+                  : rows.map((rider) => `
+                    <tr class="team-detail-row${isDirtyRiderTeamEditorRow(rider.riderId) ? ' rider-team-editor-row-dirty' : ''}">
+                      ${RIDER_TEAM_EDITOR_COLUMNS.map((column) => renderRiderTeamEditorCell(rider, column)).join('')}
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      ${renderRiderTeamEditorSidebar(payload)}
+    </div>`;
 }
 
 function formatFormDebugValue(value: number | undefined): string {
@@ -4055,7 +4517,10 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const view = btn.dataset['view'] ?? '';
     activateView(view);
+    if (view === 'dashboard') renderDashboard();
     if (view === 'teams') void refreshTeamsViewData(); // immer neu laden bei Nav-Klick
+    if (view === 'riders') void refreshTeamsViewData();
+    if (view === 'rider-team-editor') void loadRiderTeamEditorData();
     if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
     if (view === 'season-standings') void loadSeasonStandings(true);
@@ -4186,6 +4651,124 @@ $('teams-detail').addEventListener('click', (event) => {
     renderTeamDetail(Number.isFinite(selectedTeamId) ? selectedTeamId : null);
     return;
   }
+});
+
+$('riders-detail').addEventListener('click', (event) => {
+  const programButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-program-id]');
+  if (programButton) {
+    const riderId = Number(programButton.dataset['riderProgramId']);
+    if (Number.isFinite(riderId)) {
+      void openRiderProgram(riderId);
+    }
+    return;
+  }
+
+  const pageButton = (event.target as Element).closest<HTMLButtonElement>('button[data-riders-detail-page]');
+  if (pageButton) {
+    const nextPage = pageButton.dataset['ridersDetailPage'] as TeamDetailPage;
+    if (TEAM_DETAIL_PAGE_ORDER.includes(nextPage)) {
+      state.riderMenuDetailPage = nextPage;
+      const visibleSortKeys = new Set(getActiveRiderMenuTableColumns().map((column) => column.sortKey).filter((sortKey): sortKey is TeamTableSortKey => sortKey != null));
+      if (!visibleSortKeys.has(state.riderMenuTableSort.key)) {
+        state.riderMenuTableSort = { key: 'name', direction: 'asc' };
+      }
+      state.riderMenuPage = 1;
+      renderRidersMenu();
+    }
+    return;
+  }
+
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-riders-sort]');
+  if (sortButton) {
+    const sortKey = sortButton.dataset['ridersSort'] as TeamTableSortKey;
+    if (state.riderMenuTableSort.key === sortKey) {
+      state.riderMenuTableSort.direction = state.riderMenuTableSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.riderMenuTableSort = {
+        key: sortKey,
+        direction: getDefaultTeamSortDirection(sortKey),
+      };
+    }
+    state.riderMenuPage = 1;
+    renderRidersMenu();
+    return;
+  }
+
+  const paginationButton = (event.target as Element).closest<HTMLButtonElement>('button[data-riders-page-action]');
+  if (paginationButton) {
+    const action = paginationButton.dataset['ridersPageAction'];
+    const totalPages = Math.max(1, Math.ceil(state.riders.length / RIDER_MENU_PAGE_SIZE));
+    if (action === 'prev') {
+      state.riderMenuPage = Math.max(1, state.riderMenuPage - 1);
+    }
+    if (action === 'next') {
+      state.riderMenuPage = Math.min(totalPages, state.riderMenuPage + 1);
+    }
+    renderRidersMenu();
+    return;
+  }
+});
+
+$('view-rider-team-editor').addEventListener('click', (event) => {
+  const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-team-editor-sort]');
+  if (sortButton) {
+    const sortKey = sortButton.dataset['riderTeamEditorSort'] as RiderTeamEditorSortKey;
+    if (state.riderTeamEditorSort.key === sortKey) {
+      state.riderTeamEditorSort.direction = state.riderTeamEditorSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.riderTeamEditorSort = {
+        key: sortKey,
+        direction: getDefaultRiderTeamEditorSortDirection(sortKey),
+      };
+    }
+    renderRiderTeamEditor();
+    return;
+  }
+
+  const filterButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-team-editor-team-filter]');
+  if (filterButton) {
+    state.riderTeamEditorSelectedTeamKey = filterButton.dataset['riderTeamEditorTeamFilter'] ?? '';
+    renderRiderTeamEditor();
+    return;
+  }
+
+  const actionButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-team-editor-action]');
+  if (actionButton) {
+    const action = actionButton.dataset['riderTeamEditorAction'];
+    if (action === 'reload') {
+      void loadRiderTeamEditorData(true);
+      return;
+    }
+    if (action === 'export') {
+      void exportRiderTeamEditorData();
+      return;
+    }
+    if (action === 'save') {
+      void saveRiderTeamEditorData();
+    }
+  }
+});
+
+$('view-rider-team-editor').addEventListener('change', (event) => {
+  const filterSelect = (event.target as Element).closest<HTMLSelectElement>('#rider-team-editor-team-select');
+  if (filterSelect) {
+    state.riderTeamEditorSelectedTeamKey = filterSelect.value;
+    renderRiderTeamEditor();
+    return;
+  }
+
+  const fieldInput = (event.target as Element).closest<HTMLInputElement | HTMLSelectElement>('[data-rider-team-editor-field][data-rider-team-editor-rider-id]');
+  if (!fieldInput) {
+    return;
+  }
+
+  const riderId = Number(fieldInput.dataset['riderTeamEditorRiderId']);
+  const field = fieldInput.dataset['riderTeamEditorField'] as keyof RiderTeamEditorRiderRow;
+  if (!Number.isFinite(riderId) || !field) {
+    return;
+  }
+
+  updateRiderTeamEditorField(riderId, field, fieldInput.value);
 });
 
 $('rider-stats-body').addEventListener('click', (event) => {
@@ -4484,10 +5067,18 @@ async function loadGameState(): Promise<void> {
   state.gameState = gameStateRes.data ?? null;
   state.gameStatus = gameStatusRes.success ? gameStatusRes.data ?? null : null;
   renderGameState();
-  renderDashboard();
-  renderResultsView();
-  renderRealtimeRaceView();
-  renderSeasonStandingsView();
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+  if (isActiveView('results')) {
+    renderResultsView();
+  }
+  if (isActiveView('live-race')) {
+    renderRealtimeRaceView();
+  }
+  if (isActiveView('season-standings')) {
+    renderSeasonStandingsView();
+  }
   if (state.selectedRaceParticipantsRaceId != null && !$('modal-raceParticipants').classList.contains('hidden')) {
     void refreshRaceProgramParticipants();
   }
@@ -4855,7 +5446,9 @@ async function loadSeasonStandings(silent: boolean): Promise<void> {
   const res = await api.getSeasonStandings();
   if (!res.success) {
     state.seasonStandings = null;
-    renderSeasonStandingsView();
+    if (isActiveView('season-standings')) {
+      renderSeasonStandingsView();
+    }
     if (!silent && res.error) {
       alert('Saisonwertung konnte nicht geladen werden:\n' + res.error);
     }
@@ -4863,7 +5456,9 @@ async function loadSeasonStandings(silent: boolean): Promise<void> {
   }
 
   state.seasonStandings = res.data ?? null;
-  renderSeasonStandingsView();
+  if (isActiveView('season-standings')) {
+    renderSeasonStandingsView();
+  }
 }
 
 function renderSeasonStandingsView(): void {
@@ -4969,8 +5564,12 @@ async function loadRaces(): Promise<void> {
   const res = await api.getRaces();
   if (!res.success) { console.error(res.error); return; }
   state.races = res.data ?? [];
-  renderDashboard();
-  renderResultsView();
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+  if (isActiveView('results')) {
+    renderResultsView();
+  }
 }
 
 function renderDashboardRaces(): void {
@@ -5323,21 +5922,177 @@ async function openDashboardStageProfile(stageId: number, selectedClimb: StageEd
 //  Roster & Teams
 // ============================================================
 
-async function loadRoster(): Promise<void> {
+async function loadRoster(options: { render?: boolean } = {}): Promise<void> {
   const res = await api.getRiders();
   if (!res.success) { console.error(res.error); return; }
   state.riders = res.data ?? [];
-  renderTeams();
-  renderDashboard();
-  renderSeasonStandingsView();
+  if (options.render !== false) {
+    if (isActiveView('teams')) {
+      renderTeams();
+    }
+    if (isActiveView('riders')) {
+      renderRidersMenu();
+    }
+  }
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+  if (isActiveView('season-standings')) {
+    renderSeasonStandingsView();
+  }
 }
 
 async function refreshTeamsViewData(): Promise<void> {
-  await loadTeams();
-  await loadRoster();
+  await loadTeams({ render: false });
+  await loadRoster({ render: false });
+
+  if (isActiveView('teams')) {
+    renderTeams();
+  }
+  if (isActiveView('riders')) {
+    renderRidersMenu();
+  }
 }
 
-async function loadTeams(): Promise<void> {
+function rebuildRiderTeamEditorTeams(payload: RiderTeamEditorPayload): RiderTeamEditorTeamSummary[] {
+  const realTeams = payload.teams.filter((team) => !team.isFreeAgents).map((team) => ({
+    teamId: team.teamId,
+    name: team.name,
+    abbreviation: team.abbreviation,
+    divisionName: team.divisionName,
+    isFreeAgents: false,
+  }));
+
+  const summaries = realTeams.map((team) => {
+    const teamRiders = payload.riders.filter((rider) => rider.teamId === team.teamId);
+    const averageOverall = teamRiders.length === 0
+      ? null
+      : Math.round((teamRiders.reduce((sum, rider) => sum + rider.overallRating, 0) / teamRiders.length) * 100) / 100;
+    return {
+      ...team,
+      riderCount: teamRiders.length,
+      averageOverall,
+      rank: 0,
+    } satisfies RiderTeamEditorTeamSummary;
+  });
+
+  const freeAgents = payload.riders.filter((rider) => rider.teamId == null);
+  summaries.push({
+    teamId: null,
+    name: 'Free Agents',
+    abbreviation: 'FA',
+    divisionName: 'Free Agents',
+    riderCount: freeAgents.length,
+    averageOverall: freeAgents.length === 0 ? null : Math.round((freeAgents.reduce((sum, rider) => sum + rider.overallRating, 0) / freeAgents.length) * 100) / 100,
+    rank: 0,
+    isFreeAgents: true,
+  });
+
+  const ranked = [...summaries].sort((left, right) => {
+    const leftAverage = left.averageOverall ?? -1;
+    const rightAverage = right.averageOverall ?? -1;
+    return rightAverage - leftAverage || right.riderCount - left.riderCount || compareStrings(left.name, right.name);
+  });
+  const rankByKey = new Map(ranked.map((entry, index) => [resolveRiderTeamEditorTeamKey(entry.teamId), index + 1]));
+  return summaries.map((team) => ({
+    ...team,
+    rank: rankByKey.get(resolveRiderTeamEditorTeamKey(team.teamId)) ?? summaries.length,
+  }));
+}
+
+async function loadRiderTeamEditorData(force = false): Promise<void> {
+  if (state.riderTeamEditorPayload && !force) {
+    renderRiderTeamEditor();
+    return;
+  }
+
+  $('rider-team-editor-root').innerHTML = '<div class="results-empty">Editor wird geladen.</div>';
+  const res = await api.getRiderTeamEditor();
+  if (!res.success || !res.data) {
+    $('rider-team-editor-root').innerHTML = `<div class="results-empty">${esc(res.error ?? 'Editor konnte nicht geladen werden.')}</div>`;
+    return;
+  }
+
+  state.riderTeamEditorPayload = res.data;
+  state.riderTeamEditorDirtyRiderIds = [];
+  state.riderTeamEditorSaving = false;
+  state.riderTeamEditorExporting = false;
+  if (state.riderTeamEditorSelectedTeamKey) {
+    const exists = res.data.teams.some((team) => resolveRiderTeamEditorTeamKey(team.teamId) === state.riderTeamEditorSelectedTeamKey);
+    if (!exists) {
+      state.riderTeamEditorSelectedTeamKey = '';
+    }
+  }
+  renderRiderTeamEditor();
+}
+
+function updateRiderTeamEditorField(riderId: number, field: keyof RiderTeamEditorRiderRow, rawValue: string): void {
+  const payload = state.riderTeamEditorPayload;
+  if (!payload) {
+    return;
+  }
+
+  const rider = payload.riders.find((entry) => entry.riderId === riderId);
+  if (!rider) {
+    return;
+  }
+
+  if (field === 'teamId') {
+    rider.teamId = rawValue === 'free-agents' ? null : Number.parseInt(rawValue, 10);
+  } else if (typeof rider[field] === 'number') {
+    (rider[field] as number) = Number.parseInt(rawValue || '0', 10);
+  } else {
+    (rider[field] as string) = rawValue;
+  }
+
+  rider.overallRating = calculateEditorOverall(rider);
+  payload.teams = rebuildRiderTeamEditorTeams(payload);
+  if (!state.riderTeamEditorDirtyRiderIds.includes(riderId)) {
+    state.riderTeamEditorDirtyRiderIds = [...state.riderTeamEditorDirtyRiderIds, riderId];
+  }
+  renderRiderTeamEditor();
+}
+
+async function saveRiderTeamEditorData(): Promise<void> {
+  if (!state.riderTeamEditorPayload || state.riderTeamEditorSaving) {
+    return;
+  }
+
+  state.riderTeamEditorSaving = true;
+  renderRiderTeamEditor();
+  const res = await api.saveRiderTeamEditor({ riders: state.riderTeamEditorPayload.riders });
+  state.riderTeamEditorSaving = false;
+  if (!res.success || !res.data) {
+    alert(`Editor konnte nicht gespeichert werden:\n${res.error ?? 'Unbekannter Fehler'}`);
+    renderRiderTeamEditor();
+    return;
+  }
+
+  state.riderTeamEditorPayload = res.data;
+  state.riderTeamEditorDirtyRiderIds = [];
+  renderRiderTeamEditor();
+}
+
+async function exportRiderTeamEditorData(): Promise<void> {
+  if (!state.riderTeamEditorPayload || state.riderTeamEditorExporting) {
+    return;
+  }
+
+  state.riderTeamEditorExporting = true;
+  renderRiderTeamEditor();
+  const res = await api.exportRiderTeamEditor({ riders: state.riderTeamEditorPayload.riders });
+  state.riderTeamEditorExporting = false;
+  if (!res.success || !res.data) {
+    alert(`riders.csv konnte nicht exportiert werden:\n${res.error ?? 'Unbekannter Fehler'}`);
+    renderRiderTeamEditor();
+    return;
+  }
+
+  downloadTextFile(res.data.fileName, res.data.content);
+  renderRiderTeamEditor();
+}
+
+async function loadTeams(options: { render?: boolean } = {}): Promise<void> {
   const res = await api.getTeams();
   if (!res.success) {
     console.error('loadTeams Fehler:', res.error);
@@ -5345,9 +6100,15 @@ async function loadTeams(): Promise<void> {
     return;
   }
   state.teams = res.data ?? [];
-  renderTeams();
-  renderDashboard();
-  renderResultsView();
+  if (options.render !== false && isActiveView('teams')) {
+    renderTeams();
+  }
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+  if (isActiveView('results')) {
+    renderResultsView();
+  }
 }
 
 function renderTeams(): void {
@@ -5359,6 +6120,50 @@ function renderTeams(): void {
     ).join('');
   const selectedId = currentVal ? Number(currentVal) : null;
   renderTeamDetail(selectedId);
+}
+
+function renderRidersMenu(): void {
+  const detail = $('riders-detail');
+  const activeColumns = getActiveRiderMenuTableColumns();
+  const sortedRiders = sortRiderMenuRiders(state.riders);
+  const totalRiders = sortedRiders.length;
+  const totalPages = Math.max(1, Math.ceil(totalRiders / RIDER_MENU_PAGE_SIZE));
+  state.riderMenuPage = Math.min(totalPages, Math.max(1, state.riderMenuPage));
+  const startIndex = (state.riderMenuPage - 1) * RIDER_MENU_PAGE_SIZE;
+  const endIndex = Math.min(totalRiders, startIndex + RIDER_MENU_PAGE_SIZE);
+  const pageRiders = sortedRiders.slice(startIndex, endIndex);
+
+  detail.innerHTML = `
+    <div class="team-detail-card">
+      <div class="team-detail-header">
+        <h3>Alle Fahrer</h3>
+      </div>
+      <div class="team-detail-meta" style="margin-top:0.75rem">
+        <span>${totalRiders} Fahrer</span>
+        <span class="text-muted">Sortierung: ${esc(getTeamSortLabel(state.riderMenuTableSort.key))} ${state.riderMenuTableSort.direction === 'asc' ? 'aufsteigend' : 'absteigend'}</span>
+      </div>
+      ${renderRiderMenuDetailPageTabs()}
+      <div class="team-detail-table-scroll">
+        <table class="data-table data-table-teams">
+          <thead><tr>
+            ${activeColumns.map(renderRiderMenuTableHeader).join('')}
+          </tr></thead>
+          <tbody>
+            ${pageRiders.length === 0
+              ? `<tr><td colspan="${activeColumns.length}" class="text-muted">Keine Fahrer.</td></tr>`
+              : pageRiders.map((rider) => `
+                <tr class="team-detail-row">
+                  ${activeColumns.map((column) => renderTeamTableCell(rider, column)).join('')}
+                </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="team-detail-meta riders-pagination" style="margin-top:0.75rem">
+        <button type="button" class="btn btn-secondary btn-sm" data-riders-page-action="prev" ${state.riderMenuPage <= 1 ? 'disabled' : ''}>← Zurück</button>
+        <span>Seite ${state.riderMenuPage} / ${totalPages} · Fahrer ${totalRiders === 0 ? 0 : startIndex + 1}-${endIndex} von ${totalRiders}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-riders-page-action="next" ${state.riderMenuPage >= totalPages ? 'disabled' : ''}>Weiter →</button>
+      </div>
+    </div>`;
 }
 
 function renderTeamDetail(teamId: number | null): void {

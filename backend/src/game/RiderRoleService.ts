@@ -54,10 +54,11 @@ interface RoleIdMap {
   sprinter: RoleDefinition;
 }
 
-type WeightedRoleKey = 'captain' | 'coCaptain' | 'eliteHelper' | 'strongHelper' | 'waterCarrier';
+type HelperRoleKey = 'eliteHelper' | 'strongHelper' | 'waterCarrier';
+type NonSprinterRoleKey = 'captain' | 'coCaptain' | 'eliteHelper' | 'strongHelper' | 'waterCarrier';
 
-const WEIGHTED_ROLE_KEYS: WeightedRoleKey[] = ['captain', 'coCaptain', 'eliteHelper', 'strongHelper', 'waterCarrier'];
-const ROLE_DONOR_PRIORITY: WeightedRoleKey[] = ['waterCarrier', 'strongHelper', 'eliteHelper', 'coCaptain'];
+const HELPER_ROLE_KEYS: HelperRoleKey[] = ['eliteHelper', 'strongHelper', 'waterCarrier'];
+const NON_SPRINTER_ROLE_KEYS: NonSprinterRoleKey[] = ['captain', 'coCaptain', 'eliteHelper', 'strongHelper', 'waterCarrier'];
 
 function compareLeadership(left: RiderRoleRow, right: RiderRoleRow): number {
   return right.overall_rating - left.overall_rating
@@ -73,22 +74,6 @@ function compareSprint(left: RiderRoleRow, right: RiderRoleRow): number {
     || right.skill_acceleration - left.skill_acceleration
     || right.overall_rating - left.overall_rating
     || left.id - right.id;
-}
-
-function hasSprintFocus(rider: RiderRoleRow): boolean {
-  const specializations = [
-    rider.rider_type,
-    rider.specialization_1,
-    rider.specialization_2,
-    rider.specialization_3,
-  ];
-  if (specializations.includes('Sprint')) {
-    return true;
-  }
-
-  const sprintBias = rider.skill_sprint + rider.skill_acceleration
-    - Math.max(rider.skill_mountain, rider.skill_hill, rider.skill_time_trial);
-  return rider.skill_sprint >= 68 && sprintBias >= 10;
 }
 
 export class RiderRoleService {
@@ -214,23 +199,31 @@ export class RiderRoleService {
     }
 
     const assignments = new Map<number, number>();
-    const sprinter = this.selectSprinter(roster);
-    if (sprinter != null) {
+
+    const leadershipRoster = [...roster].sort(compareLeadership);
+    const leadershipCounts = this.resolveLeadershipRoleCounts(roster.length, roleIds);
+    let cursor = 0;
+    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, leadershipCounts.captain, roleIds.captain.id);
+    this.assignRoleSlice(assignments, leadershipRoster, cursor, leadershipCounts.coCaptain, roleIds.coCaptain.id);
+
+    const sprintCandidates = roster
+      .filter((rider) => !assignments.has(rider.id) && rider.skill_sprint >= 74)
+      .sort(compareSprint)
+      .slice(0, 3);
+    for (const sprinter of sprintCandidates) {
       assignments.set(sprinter.id, roleIds.sprinter.id);
     }
 
-    const leadershipRoster = roster
-      .filter((rider) => rider.id !== sprinter?.id)
+    const helperRoster = roster
+      .filter((rider) => !assignments.has(rider.id))
       .sort(compareLeadership);
 
-    const roleCounts = this.resolveWeightedRoleCounts(roster.length, sprinter != null, roleIds);
+    const helperCounts = this.resolveHelperRoleCounts(helperRoster.length, roleIds);
 
-    let cursor = 0;
-    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.captain, roleIds.captain.id);
-    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.coCaptain, roleIds.coCaptain.id);
-    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.eliteHelper, roleIds.eliteHelper.id);
-    cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.strongHelper, roleIds.strongHelper.id);
-    this.assignRoleSlice(assignments, leadershipRoster, cursor, roleCounts.waterCarrier, roleIds.waterCarrier.id);
+    cursor = 0;
+    cursor = this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.eliteHelper, roleIds.eliteHelper.id);
+    cursor = this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.strongHelper, roleIds.strongHelper.id);
+    this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.waterCarrier, roleIds.waterCarrier.id);
 
     return roster.map((rider) => ({
       riderId: rider.id,
@@ -238,52 +231,77 @@ export class RiderRoleService {
     }));
   }
 
-  private resolveWeightedRoleCounts(
-    rosterSize: number,
-    reserveSprinter: boolean,
+  private resolveHelperRoleCounts(
+    helperRosterSize: number,
     roleIds: RoleIdMap,
-  ): Record<WeightedRoleKey, number> {
-    const counts: Record<WeightedRoleKey, number> = {
-      captain: 0,
-      coCaptain: 0,
-      eliteHelper: 0,
-      strongHelper: 0,
-      waterCarrier: 0,
-    };
+  ): Record<HelperRoleKey, number> {
+    const counts = this.resolveProportionalCounts(helperRosterSize, HELPER_ROLE_KEYS, roleIds);
+    if (helperRosterSize > 0 && counts.eliteHelper + counts.strongHelper + counts.waterCarrier === 0) {
+      counts.waterCarrier = helperRosterSize;
+    }
+    return counts;
+  }
 
-    const distributedRosterSize = Math.max(0, rosterSize - (reserveSprinter ? 1 : 0));
-    if (distributedRosterSize === 0) {
+  private resolveLeadershipRoleCounts(
+    rosterSize: number,
+    roleIds: RoleIdMap,
+  ): Record<'captain' | 'coCaptain', number> {
+    const proportionalCounts = this.resolveProportionalCounts(rosterSize, NON_SPRINTER_ROLE_KEYS, roleIds);
+    let captain = proportionalCounts.captain;
+    let coCaptain = proportionalCounts.coCaptain;
+
+    if (rosterSize > 0 && captain === 0) {
+      captain = 1;
+    }
+
+    if (captain + coCaptain > rosterSize) {
+      const overflow = captain + coCaptain - rosterSize;
+      const reducedCoCaptain = Math.max(0, coCaptain - overflow);
+      const stillOverflow = overflow - (coCaptain - reducedCoCaptain);
+      coCaptain = reducedCoCaptain;
+      if (stillOverflow > 0) {
+        captain = Math.max(1, captain - stillOverflow);
+      }
+    }
+
+    return { captain, coCaptain };
+  }
+
+  private resolveProportionalCounts<K extends keyof RoleIdMap>(
+    rosterSize: number,
+    roleKeys: readonly K[],
+    roleIds: RoleIdMap,
+  ): Record<K, number> {
+    const counts = Object.fromEntries(roleKeys.map((key) => [key, 0])) as Record<K, number>;
+    if (rosterSize <= 0) {
       return counts;
     }
 
-    const weightedRoles = WEIGHTED_ROLE_KEYS.map((key) => ({
+    const weightedRoles = roleKeys.map((key) => ({
       key,
-      weighting: roleIds[key].weighting,
-      quota: 0,
+      weighting: Math.max(0, roleIds[key].weighting),
       baseCount: 0,
       remainder: 0,
     }));
-    const totalWeight = weightedRoles.reduce((sum, role) => sum + Math.max(0, role.weighting), 0);
+    const totalWeight = weightedRoles.reduce((sum, role) => sum + role.weighting, 0);
 
     if (totalWeight <= 0) {
-      counts.waterCarrier = distributedRosterSize;
       return counts;
     }
 
     let assignedCount = 0;
     for (const role of weightedRoles) {
-      const quota = distributedRosterSize * Math.max(0, role.weighting) / totalWeight;
-      role.quota = quota;
+      const quota = rosterSize * role.weighting / totalWeight;
       role.baseCount = Math.floor(quota);
       role.remainder = quota - role.baseCount;
       counts[role.key] = role.baseCount;
       assignedCount += role.baseCount;
     }
 
-    let remainingCount = distributedRosterSize - assignedCount;
+    let remainingCount = rosterSize - assignedCount;
     const rankedRemainders = [...weightedRoles].sort((left, right) => right.remainder - left.remainder
       || right.weighting - left.weighting
-      || WEIGHTED_ROLE_KEYS.indexOf(left.key) - WEIGHTED_ROLE_KEYS.indexOf(right.key));
+      || roleKeys.indexOf(left.key) - roleKeys.indexOf(right.key));
 
     for (const role of rankedRemainders) {
       if (remainingCount <= 0) {
@@ -291,14 +309,6 @@ export class RiderRoleService {
       }
       counts[role.key] += 1;
       remainingCount -= 1;
-    }
-
-    if (rosterSize > 0 && counts.captain === 0) {
-      const donorRole = ROLE_DONOR_PRIORITY.find((key) => counts[key] > 0);
-      if (donorRole != null) {
-        counts[donorRole] -= 1;
-      }
-      counts.captain += 1;
     }
 
     return counts;
@@ -320,12 +330,4 @@ export class RiderRoleService {
     return cursor;
   }
 
-  private selectSprinter(roster: RiderRoleRow[]): RiderRoleRow | null {
-    if (roster.length < 4) {
-      return null;
-    }
-
-    const candidates = roster.filter(hasSprintFocus).sort(compareSprint);
-    return candidates[0] ?? null;
-  }
 }

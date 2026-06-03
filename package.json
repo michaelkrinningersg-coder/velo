@@ -4,6 +4,7 @@
   "description": "Radsport Director – a data-driven cycling manager game",
   "main": "dist/main/index.js",
   "scripts": {
+    "postinstall": "npm --prefix backend install && npm --prefix frontend install",
     "build": "npm --prefix backend run build && npm --prefix frontend run build",
     "start": "concurrently \"npm --prefix backend run dev\" \"wait-on http://localhost:3101/health && npm --prefix frontend run dev -- --host 0.0.0.0\"",
     "dev": "npm run start",

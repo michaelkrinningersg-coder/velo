@@ -61,6 +61,9 @@
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">◫</span> Teams
         </button>
+        <button class="nav-btn" data-view="riders">
+          <span class="nav-icon">▣</span> Fahrer
+        </button>
         <button class="nav-btn" data-view="live-race">
           <span class="nav-icon">◔</span> Live Race
         </button>
@@ -70,14 +73,17 @@
         <button class="nav-btn" data-view="season-standings">
           <span class="nav-icon">★</span> Season Standings
         </button>
-        <button class="nav-btn" data-view="stage-editor">
-          <span class="nav-icon">🗺</span> Stage Editor
-        </button>
         <button class="nav-btn" data-view="stage-editor-stages">
           <span class="nav-icon">▦</span> Stages
         </button>
         <button class="nav-btn" data-view="stage-editor-climbs">
           <span class="nav-icon">△</span> Climbs
+        </button>
+        <button class="nav-btn" data-view="stage-editor">
+          <span class="nav-icon">🗺</span> Stage Editor
+        </button>
+        <button class="nav-btn" data-view="rider-team-editor">
+          <span class="nav-icon">▥</span> Fahrereditor
         </button>
       </nav>
       <div class="sidebar-meta">
@@ -136,6 +142,22 @@
           </select>
         </div>
         <div id="teams-detail"></div>
+      </div>
+
+      <!-- Riders -->
+      <div id="view-riders" class="view">
+        <div class="view-header"><h2>Fahrer</h2></div>
+        <div id="riders-detail"></div>
+      </div>
+
+      <div id="view-rider-team-editor" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Fahrer & Teams Editor</h2>
+            <p id="rider-team-editor-meta" class="text-muted">Masterdaten aus riders.csv bearbeiten.</p>
+          </div>
+        </div>
+        <div id="rider-team-editor-root"></div>
       </div>
 
       <!-- Live Race -->

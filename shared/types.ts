@@ -99,6 +99,12 @@ export type RiderSeasonFormPhase = 'rise' | 'fall' | 'neutral';
 export interface RaceProgram {
   id: number;
   name: string;
+  peak1Min?: number | null;
+  peak1Max?: number | null;
+  peak2Min?: number | null;
+  peak2Max?: number | null;
+  peak3Min?: number | null;
+  peak3Max?: number | null;
 }
 
 export interface RaceProgramRace {
@@ -955,3 +961,56 @@ export interface StageEditorExportPayload {
   stagesFileName: string;
   stageDetailsFileName: string;
  }
+
+// ------ Rider / Team Editor -------------------------------
+
+export interface RiderTeamEditorRiderRow {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryId: number;
+  birthYear: number;
+  teamId: number | null;
+  skillFlat: number;
+  skillMountain: number;
+  skillMediumMountain: number;
+  skillHill: number;
+  skillTimeTrial: number;
+  skillPrologue: number;
+  skillCobble: number;
+  skillSprint: number;
+  skillAcceleration: number;
+  skillDownhill: number;
+  skillAttack: number;
+  skillStamina: number;
+  skillResistance: number;
+  skillRecuperation: number;
+  favoriteRaces: string;
+  nonFavoriteRaces: string;
+  overallRating: number;
+}
+
+export interface RiderTeamEditorTeamSummary {
+  teamId: number | null;
+  name: string;
+  abbreviation: string;
+  divisionName: string;
+  riderCount: number;
+  averageOverall: number | null;
+  rank: number;
+  isFreeAgents: boolean;
+}
+
+export interface RiderTeamEditorPayload {
+  riders: RiderTeamEditorRiderRow[];
+  teams: RiderTeamEditorTeamSummary[];
+}
+
+export interface RiderTeamEditorSaveRequest {
+  riders: RiderTeamEditorRiderRow[];
+}
+
+export interface RiderTeamEditorExportPayload {
+  fileName: string;
+  content: string;
+}

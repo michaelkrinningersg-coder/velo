@@ -61,6 +61,8 @@ npm install
 npm run start
 ```
 
+`npm install` im Root installiert automatisch auch die Abhängigkeiten in `backend/` und `frontend/`.
+
 Alternativ identisch:
 
 ```bash

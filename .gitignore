@@ -8,3 +8,4 @@ __pycache__/
 radsport_manager.db
 velo.db
 node_modules
+/data/stages

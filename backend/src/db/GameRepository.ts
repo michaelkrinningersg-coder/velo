@@ -172,6 +172,12 @@ interface CareerRaceDaysSeasonRow {
 interface RaceProgramRow {
   id: number;
   name: string;
+  peak1_min: number | null;
+  peak1_max: number | null;
+  peak2_min: number | null;
+  peak2_max: number | null;
+  peak3_min: number | null;
+  peak3_max: number | null;
 }
 
 interface RiderSeasonProgramRow {
@@ -982,6 +988,19 @@ function mapRace(row: RaceRow, stages: Stage[]): Race {
   };
 }
 
+function mapRaceProgram(row: RaceProgramRow): RaceProgram {
+  return {
+    id: row.id,
+    name: row.name,
+    peak1Min: row.peak1_min,
+    peak1Max: row.peak1_max,
+    peak2Min: row.peak2_min,
+    peak2Max: row.peak2_max,
+    peak3Min: row.peak3_min,
+    peak3Max: row.peak3_max,
+  };
+}
+
 function mapRaceWithSummary(row: RaceRow, stages: Stage[], upcomingStage: RaceStageSummary | undefined): Race {
   return {
     ...mapRace(row, stages),
@@ -1629,13 +1648,28 @@ export class GameRepository {
     const programRows = this.db.prepare(`
       SELECT rider_season_programs.rider_id,
              rider_season_programs.program_id,
-             race_programs.name AS program_name
+             race_programs.name AS program_name,
+             race_programs.peak1_min,
+             race_programs.peak1_max,
+             race_programs.peak2_min,
+             race_programs.peak2_max,
+             race_programs.peak3_min,
+             race_programs.peak3_max
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       WHERE rider_season_programs.season = ?
         AND rider_season_programs.rider_id IN (${placeholders})
-    `).all(season, ...riderIds) as RiderSeasonProgramRow[];
-    const programByRiderId = new Map(programRows.map((row) => [row.rider_id, { id: row.program_id, name: row.program_name } satisfies RaceProgram]));
+    `).all(season, ...riderIds) as Array<RiderSeasonProgramRow & RaceProgramRow>;
+    const programByRiderId = new Map(programRows.map((row) => [row.rider_id, {
+      id: row.program_id,
+      name: row.program_name,
+      peak1Min: row.peak1_min,
+      peak1Max: row.peak1_max,
+      peak2Min: row.peak2_min,
+      peak2Max: row.peak2_max,
+      peak3Min: row.peak3_min,
+      peak3Max: row.peak3_max,
+    } satisfies RaceProgram]));
 
     const raceRows = tableExists(this.db, 'race_program_races')
       ? this.db.prepare(`
@@ -1668,13 +1702,20 @@ export class GameRepository {
     }
 
     const rows = this.db.prepare(`
-      SELECT race_programs.id, race_programs.name
+      SELECT race_programs.id,
+             race_programs.name,
+             race_programs.peak1_min,
+             race_programs.peak1_max,
+             race_programs.peak2_min,
+             race_programs.peak2_max,
+             race_programs.peak3_min,
+             race_programs.peak3_max
       FROM race_programs
       JOIN race_program_races ON race_program_races.program_id = race_programs.id
       WHERE race_program_races.race_id = ?
       ORDER BY race_programs.id ASC
     `).all(raceId) as RaceProgramRow[];
-    return rows.map((row) => ({ id: row.id, name: row.name }));
+    return rows.map(mapRaceProgram);
   }
 
   public getRiderProgramRaceSummary(riderId: number): RiderProgramRaceSummary | null {
@@ -1684,7 +1725,14 @@ export class GameRepository {
     }
 
     const programRow = this.db.prepare(`
-      SELECT race_programs.id, race_programs.name
+      SELECT race_programs.id,
+             race_programs.name,
+             race_programs.peak1_min,
+             race_programs.peak1_max,
+             race_programs.peak2_min,
+             race_programs.peak2_max,
+             race_programs.peak3_min,
+             race_programs.peak3_max
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       WHERE rider_season_programs.season = ?
@@ -1703,7 +1751,7 @@ export class GameRepository {
     const stagesByRaceId = this.getStagesByRaceIds(raceRows.map(row => row.id));
     const currentDate = this.getCurrentDate();
     return {
-      program: { id: programRow.id, name: programRow.name },
+      program: mapRaceProgram(programRow),
       races: raceRows.map((row) => {
         const stages = stagesByRaceId.get(row.id) ?? [];
         return mapRaceWithSummary(row, stages, this.getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
@@ -2048,28 +2096,56 @@ export class GameRepository {
     const rows = this.db.prepare(`
       SELECT rider_season_programs.rider_id,
              race_programs.id AS program_id,
-             race_programs.name AS program_name
+             race_programs.name AS program_name,
+             race_programs.peak1_min,
+             race_programs.peak1_max,
+             race_programs.peak2_min,
+             race_programs.peak2_max,
+             race_programs.peak3_min,
+             race_programs.peak3_max
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
       WHERE rider_season_programs.season = ?
         AND race_program_races.race_id = ?
       ORDER BY race_programs.id ASC, rider_season_programs.rider_id ASC
-    `).all(season, raceId) as Array<{ rider_id: number; program_id: number; program_name: string }>;
+    `).all(season, raceId) as Array<{
+      rider_id: number;
+      program_id: number;
+      program_name: string;
+      peak1_min: number | null;
+      peak1_max: number | null;
+      peak2_min: number | null;
+      peak2_max: number | null;
+      peak3_min: number | null;
+      peak3_max: number | null;
+    }>;
     const ridersById = new Map(this.getRiders().map((rider) => [rider.id, rider]));
     const teamsById = new Map(this.getTeams().map((team) => [team.id, team]));
 
-    return rows
-      .map((row) => {
-        const rider = ridersById.get(row.rider_id);
-        if (!rider) return null;
-        return {
-          rider,
-          team: rider.activeTeamId != null ? teamsById.get(rider.activeTeamId) ?? null : null,
-          program: { id: row.program_id, name: row.program_name },
-        } satisfies RaceProgramParticipant;
-      })
-      .filter((entry): entry is RaceProgramParticipant => entry != null)
+    const participants: RaceProgramParticipant[] = [];
+    for (const row of rows) {
+      const rider = ridersById.get(row.rider_id);
+      if (!rider) {
+        continue;
+      }
+      participants.push({
+        rider,
+        team: rider.activeTeamId != null ? teamsById.get(rider.activeTeamId) ?? null : null,
+        program: {
+          id: row.program_id,
+          name: row.program_name,
+          peak1Min: row.peak1_min,
+          peak1Max: row.peak1_max,
+          peak2Min: row.peak2_min,
+          peak2Max: row.peak2_max,
+          peak3Min: row.peak3_min,
+          peak3Max: row.peak3_max,
+        },
+      });
+    }
+
+    return participants
       .filter((entry) => targetDivision == null || entry.team?.division === targetDivision)
       .sort((left, right) => {
         const teamCompare = (left.team?.name ?? '').localeCompare(right.team?.name ?? '', 'de');

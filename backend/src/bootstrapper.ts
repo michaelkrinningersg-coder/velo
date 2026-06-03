@@ -696,13 +696,45 @@ function seedRaces(db: Database.Database): void {
 
 function seedRacePrograms(db: Database.Database): void {
   const rows = readCsv('race_programs.csv');
-  const insert = db.prepare('INSERT INTO race_programs (id, name) VALUES (?, ?)');
+  const insert = db.prepare(`
+    INSERT INTO race_programs (
+      id, name, peak1_min, peak1_max, peak2_min, peak2_max, peak3_min, peak3_max
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `race_programs.csv Zeile ${index + 2}`;
+    const peak1Min = int(req(row, 'peak1_min', ctx), `${ctx} / peak1_min`);
+    const peak1Max = int(req(row, 'peak1_max', ctx), `${ctx} / peak1_max`);
+    const peak2Min = int(req(row, 'peak2_min', ctx), `${ctx} / peak2_min`);
+    const peak2Max = int(req(row, 'peak2_max', ctx), `${ctx} / peak2_max`);
+    const peak3Min = int(req(row, 'peak3_min', ctx), `${ctx} / peak3_min`);
+    const peak3Max = int(req(row, 'peak3_max', ctx), `${ctx} / peak3_max`);
+
+    const peaks = [
+      ['peak1', peak1Min, peak1Max],
+      ['peak2', peak2Min, peak2Max],
+      ['peak3', peak3Min, peak3Max],
+    ] as const;
+
+    for (const [label, minWeek, maxWeek] of peaks) {
+      if (minWeek < 1 || minWeek > 53 || maxWeek < 1 || maxWeek > 53) {
+        throw new Error(`${ctx}: ${label}_min und ${label}_max muessen zwischen 1 und 53 liegen.`);
+      }
+      if (minWeek > maxWeek) {
+        throw new Error(`${ctx}: ${label}_min darf nicht groesser als ${label}_max sein.`);
+      }
+    }
+
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
+      peak1Min,
+      peak1Max,
+      peak2Min,
+      peak2Max,
+      peak3Min,
+      peak3Max,
     );
   }
 

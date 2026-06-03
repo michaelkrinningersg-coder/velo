@@ -103,6 +103,7 @@ export class GameStateService {
     this.ensureRiderFormTables();
     this.ensureRiderDailyStateRows(DEFAULT_START_SEASON);
     const state = this.loadState();
+    new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
       this.syncCurrentFormHistory(state.currentDate);
@@ -151,16 +152,16 @@ export class GameStateService {
 
       const nextDate = addDaysIso(currentRow.current_date, 1);
       const nextSeason = resolveSeason(nextDate, currentRow.season);
-      this.ensureRiderDailyStateTable();
-      this.ensureRiderDailyStateRows(currentRow.season);
-      this.advanceRiderDailyStates(nextDate, nextSeason);
-      new GameRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
       if (nextSeason !== currentRow.season) {
         new ContractService(this.db).checkContractStatuses(nextSeason);
         new RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
         new RiderRoleService(this.db).recalculateAllTeamRoles();
         new RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
       }
+      this.ensureRiderDailyStateTable();
+      this.ensureRiderDailyStateRows(currentRow.season);
+      this.advanceRiderDailyStates(nextDate, nextSeason);
+      new GameRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
       this.db.prepare(
         'UPDATE game_state SET "current_date" = ?, season = ?, is_game_over = ? WHERE id = 1',
       ).run(nextDate, nextSeason, currentRow.is_game_over);
@@ -312,7 +313,7 @@ export class GameStateService {
     `);
 
     for (const rider of missingRows) {
-      insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(resolveSeasonPeakDates([], season)));
+      insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(resolveSeasonPeakDates([], season, this.db, rider.id)));
     }
   }
 
@@ -342,6 +343,8 @@ export class GameStateService {
       const peakDates = resolveSeasonPeakDates(
         row.season !== currentSeason ? [] : parsePeakDates(row.peak_dates_json),
         currentSeason,
+        this.db,
+        row.rider_id,
       );
       const phase = resolvePeakPhase(currentDate, peakDates);
       let formBonus = row.form_bonus;
@@ -406,8 +409,8 @@ export class GameStateService {
     for (const row of rows) {
       const seasonChanged = row.season !== nextSeason;
       const peakDates = seasonChanged
-        ? resolveSeasonPeakDates([], nextSeason)
-        : resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), nextSeason);
+        ? resolveSeasonPeakDates([], nextSeason, this.db, row.rider_id)
+        : resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), nextSeason, this.db, row.rider_id);
       let formBonus = seasonChanged ? SEASON_FORM_MIN_RAW : row.form_bonus;
       let raceFormBonus = seasonChanged ? 0 : row.race_form_bonus;
       let peakSForm = seasonChanged ? 0 : row.peak_s_form;
@@ -848,6 +851,173 @@ function resolveEffectiveSeasonForm(rawSeasonForm: number): number {
   return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, rawSeasonForm)));
 }
 
+type ProgramPeakWindows = {
+  peak1Min: number;
+  peak1Max: number;
+  peak2Min: number;
+  peak2Max: number;
+  peak3Min: number;
+  peak3Max: number;
+};
+
+function isoWeekStartDayNumber(season: number, isoWeek: number): number {
+  const jan4 = new Date(Date.UTC(season, 0, 4));
+  const jan4Weekday = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - jan4Weekday + 1);
+  week1Monday.setUTCDate(week1Monday.getUTCDate() + ((isoWeek - 1) * 7));
+  return Math.floor(week1Monday.getTime() / 86400000);
+}
+
+function resolveIsoWeekDayBounds(season: number, minWeek: number, maxWeek: number): { startDay: number; endDay: number } {
+  const seasonStartDay = isoDateToDayNumber(`${season}-01-01`);
+  const seasonEndDay = isoDateToDayNumber(`${season}-12-31`);
+  const rangeStartDay = isoWeekStartDayNumber(season, minWeek);
+  const rangeEndDay = isoWeekStartDayNumber(season, maxWeek) + 6;
+  return {
+    startDay: Math.max(seasonStartDay, rangeStartDay),
+    endDay: Math.min(seasonEndDay, rangeEndDay),
+  };
+}
+
+function loadProgramPeakWindows(db: Database.Database | undefined, season: number, riderId: number | undefined): ProgramPeakWindows | null {
+  if (!db || riderId == null
+    || !tableExists(db, 'rider_season_programs')
+    || !tableExists(db, 'race_programs')
+    || !columnExists(db, 'race_programs', 'peak1_min')
+    || !columnExists(db, 'race_programs', 'peak1_max')
+    || !columnExists(db, 'race_programs', 'peak2_min')
+    || !columnExists(db, 'race_programs', 'peak2_max')
+    || !columnExists(db, 'race_programs', 'peak3_min')
+    || !columnExists(db, 'race_programs', 'peak3_max')) {
+    return null;
+  }
+
+  const row = db.prepare(`
+    SELECT race_programs.peak1_min,
+           race_programs.peak1_max,
+           race_programs.peak2_min,
+           race_programs.peak2_max,
+           race_programs.peak3_min,
+           race_programs.peak3_max
+    FROM rider_season_programs
+    JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+    WHERE rider_season_programs.season = ?
+      AND rider_season_programs.rider_id = ?
+  `).get(season, riderId) as {
+    peak1_min: number;
+    peak1_max: number;
+    peak2_min: number;
+    peak2_max: number;
+    peak3_min: number;
+    peak3_max: number;
+  } | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    peak1Min: row.peak1_min,
+    peak1Max: row.peak1_max,
+    peak2Min: row.peak2_min,
+    peak2Max: row.peak2_max,
+    peak3Min: row.peak3_min,
+    peak3Max: row.peak3_max,
+  };
+}
+
+function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWindows): string[] {
+  const ranges = [
+    resolveIsoWeekDayBounds(season, windows.peak1Min, windows.peak1Max),
+    resolveIsoWeekDayBounds(season, windows.peak2Min, windows.peak2Max),
+    resolveIsoWeekDayBounds(season, windows.peak3Min, windows.peak3Max),
+  ];
+
+  const randomAttempts = 1000;
+  for (let attempt = 0; attempt < randomAttempts; attempt += 1) {
+    const picked: number[] = [];
+    let valid = true;
+
+    for (const range of ranges) {
+      const candidate = randomInteger(range.startDay, range.endDay);
+      if (picked.some((existing) => Math.abs(existing - candidate) < PEAK_MIN_SPACING_DAYS)) {
+        valid = false;
+        break;
+      }
+      picked.push(candidate);
+    }
+
+    if (valid) {
+      return picked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+    }
+  }
+
+  const picked: number[] = [];
+  for (const range of ranges) {
+    let bestCandidate: number | null = null;
+    let bestDistance = -1;
+    const target = Math.floor((range.startDay + range.endDay) / 2);
+    for (let candidate = range.startDay; candidate <= range.endDay; candidate += 1) {
+      const minDistance = picked.length === 0
+        ? Number.POSITIVE_INFINITY
+        : Math.min(...picked.map((existing) => Math.abs(existing - candidate)));
+      if (picked.length > 0 && minDistance < PEAK_MIN_SPACING_DAYS) {
+        continue;
+      }
+      const score = (minDistance * 10) - Math.abs(candidate - target);
+      if (score > bestDistance) {
+        bestDistance = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestCandidate == null) {
+      break;
+    }
+
+    picked.push(bestCandidate);
+  }
+
+  if (picked.length === 3) {
+    return picked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+  }
+
+  const seasonStartDay = isoDateToDayNumber(`${season}-01-01`);
+  const seasonEndDay = isoDateToDayNumber(`${season}-12-31`);
+  const targetDays = ranges.map((range) => Math.floor((range.startDay + range.endDay) / 2));
+  const fallbackPicked: number[] = [];
+  for (const targetDay of targetDays) {
+    let bestCandidate: number | null = null;
+    let bestDistance = -1;
+    for (let candidate = seasonStartDay; candidate <= seasonEndDay; candidate += 1) {
+      const minDistance = fallbackPicked.length === 0
+        ? Number.POSITIVE_INFINITY
+        : Math.min(...fallbackPicked.map((existing) => Math.abs(existing - candidate)));
+      if (fallbackPicked.length > 0 && minDistance < PEAK_MIN_SPACING_DAYS) {
+        continue;
+      }
+      const score = (minDistance * 10) - Math.abs(candidate - targetDay);
+      if (score > bestDistance) {
+        bestDistance = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestCandidate == null) {
+      return generateSeasonPeakDates(season);
+    }
+    fallbackPicked.push(bestCandidate);
+  }
+
+  return fallbackPicked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+}
+
+function isWithinDayRange(isoDate: string, range: { startDay: number; endDay: number }): boolean {
+  const day = isoDateToDayNumber(isoDate);
+  return day >= range.startDay && day <= range.endDay;
+}
+
 function generateSeasonPeakDates(season: number): string[] {
   const firstPeakWindowStart = isoDateToDayNumber(`${season}-02-15`);
   const lastPeakWindowEnd = isoDateToDayNumber(`${season}-10-05`);
@@ -873,13 +1043,22 @@ function generateSeasonPeakDates(season: number): string[] {
     .map(dayNumberToIsoDate);
 }
 
-function resolveSeasonPeakDates(peakDates: string[], season: number): string[] {
+function resolveSeasonPeakDates(peakDates: string[], season: number, db?: Database.Database, riderId?: number): string[] {
+  const programWindows = loadProgramPeakWindows(db, season, riderId);
+  const programRanges = programWindows == null
+    ? null
+    : [
+      resolveIsoWeekDayBounds(season, programWindows.peak1Min, programWindows.peak1Max),
+      resolveIsoWeekDayBounds(season, programWindows.peak2Min, programWindows.peak2Max),
+      resolveIsoWeekDayBounds(season, programWindows.peak3Min, programWindows.peak3Max),
+    ];
+
   const normalized = [...new Set(peakDates)]
     .filter((peakDate) => peakDate.startsWith(`${season}-`))
     .sort((left, right) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
 
   if (normalized.length !== 3) {
-    return generateSeasonPeakDates(season);
+    return programWindows ? generateProgramSeasonPeakDates(season, programWindows) : generateSeasonPeakDates(season);
   }
 
   const hasValidSpacing = normalized.every((peakDate, index) => {
@@ -891,7 +1070,15 @@ function resolveSeasonPeakDates(peakDates: string[], season: number): string[] {
     return isoDateToDayNumber(peakDate) - isoDateToDayNumber(previousPeak) >= PEAK_MIN_SPACING_DAYS;
   });
 
-  return hasValidSpacing ? normalized : generateSeasonPeakDates(season);
+  const matchesProgramWindows = programRanges == null
+    ? true
+    : normalized.every((peakDate, index) => isWithinDayRange(peakDate, programRanges[index]));
+
+  if (hasValidSpacing && matchesProgramWindows) {
+    return normalized;
+  }
+
+  return programWindows ? generateProgramSeasonPeakDates(season, programWindows) : generateSeasonPeakDates(season);
 }
 
 function dayNumberToIsoDate(dayNumber: number): string {

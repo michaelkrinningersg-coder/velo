@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
+import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
@@ -21,6 +22,9 @@ import {
   RaceRosterSelectionRequest,
   RiderProgramRaceSummary,
   RiderStatsPayload,
+  RiderTeamEditorExportPayload,
+  RiderTeamEditorPayload,
+  RiderTeamEditorSaveRequest,
   RealtimeClassificationLeaders,
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
@@ -116,6 +120,7 @@ function resolveRealtimeTeamStartOrder(repo: GameRepository, race: Race, stageNu
 export function createRouter(dbService: DatabaseService): Router {
   const router = Router();
   const routeImporter = new RouteImporter();
+  const riderTeamEditorService = new RiderTeamEditorService();
 
   // Caches GameStateService per active connection
   let cachedGss: GameStateService | null = null;
@@ -231,6 +236,24 @@ export function createRouter(dbService: DatabaseService): Router {
       const payload = new GameRepository(db).getRiderStats(riderId);
       if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
       ok<RiderStatsPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/rider-team-editor', (_req: Request, res: Response) => {
+    try {
+      ok<RiderTeamEditorPayload>(res, riderTeamEditorService.load());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/rider-team-editor', (req: Request, res: Response) => {
+    try {
+      ok<RiderTeamEditorPayload>(res, riderTeamEditorService.save(req.body as RiderTeamEditorSaveRequest));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/rider-team-editor/export', (req: Request, res: Response) => {
+    try {
+      ok<RiderTeamEditorExportPayload>(res, riderTeamEditorService.export(req.body as RiderTeamEditorSaveRequest));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
