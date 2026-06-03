@@ -6,10 +6,15 @@ const path_1 = require("path");
 const MIN_SEGMENT_KM = 0.2;
 const SPRINT_CUT_KM = 0.3;
 const DOUGLAS_PEUCKER_EPSILON = 9;
-const CLIMB_MIN_GAIN_METERS = 60;
+const IMPORT_ELEVATION_SMOOTHING_RADIUS = 1;
+const CLIMB_MIN_GAIN_METERS = 100;
 const CLIMB_MIN_AVG_GRADIENT = 3;
-const BRIEF_DESCENT_TOLERANCE_METERS = 18;
-const BRIEF_DESCENT_TOLERANCE_KM = 0.6;
+const MEDIUM_MOUNTAIN_MIN_GAIN_METERS = 200;
+const MOUNTAIN_MIN_GAIN_METERS = 600;
+const MOUNTAIN_MIN_TOP_ELEVATION_METERS = 850;
+const CLIMB_BREAK_DESCENT_METERS = 50;
+const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.5;
+const SEGMENT_MIN_HILL_GAIN_METERS = 15;
 const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
 const STAGE_DETAILS_HEADER = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
 function round2(value) {
@@ -251,6 +256,28 @@ function buildProfile(points) {
         return { distanceKm: cumulativeDistanceKm, elevation: point.elevation };
     });
 }
+function smoothElevationProfile(points, radius) {
+    if (points.length <= 2 || radius <= 0) {
+        return [...points];
+    }
+    return points.map((point, index) => {
+        let weightedElevationSum = 0;
+        let totalWeight = 0;
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            const neighborIndex = index + offset;
+            if (neighborIndex < 0 || neighborIndex >= points.length) {
+                continue;
+            }
+            const weight = radius + 1 - Math.abs(offset);
+            weightedElevationSum += points[neighborIndex].elevation * weight;
+            totalWeight += weight;
+        }
+        return {
+            distanceKm: point.distanceKm,
+            elevation: weightedElevationSum / totalWeight,
+        };
+    });
+}
 function perpendicularDistance(point, start, end) {
     const startX = start.distanceKm * 1000;
     const startY = start.elevation;
@@ -328,71 +355,261 @@ function classifyClimb(distanceKm, gainMeters, avgGradient) {
 function detectClimbs(points) {
     const climbs = [];
     let startIndex = null;
-    let gainMeters = 0;
+    let topIndex = null;
     let descentMeters = 0;
-    let descentDistanceKm = 0;
+    const commitClimb = (resolvedTopIndex) => {
+        if (startIndex == null || resolvedTopIndex == null || resolvedTopIndex <= startIndex) {
+            startIndex = null;
+            topIndex = null;
+            descentMeters = 0;
+            return;
+        }
+        const startPoint = points[startIndex];
+        const endPoint = points[resolvedTopIndex];
+        const distanceKm = endPoint.distanceKm - startPoint.distanceKm;
+        const netGainMeters = Math.max(0, endPoint.elevation - startPoint.elevation);
+        const avgGradient = distanceKm > 0 ? netGainMeters / (distanceKm * 10) : 0;
+        if (netGainMeters >= CLIMB_MIN_GAIN_METERS && avgGradient >= CLIMB_MIN_AVG_GRADIENT) {
+            climbs.push({
+                startKm: round2(startPoint.distanceKm),
+                endKm: round2(endPoint.distanceKm),
+                distanceKm: round2(distanceKm),
+                gainMeters: Math.round(netGainMeters),
+                avgGradient: round1(avgGradient),
+                category: classifyClimb(distanceKm, netGainMeters, avgGradient),
+            });
+        }
+        startIndex = null;
+        topIndex = null;
+        descentMeters = 0;
+    };
     for (let index = 1; index < points.length; index += 1) {
         const previous = points[index - 1];
         const current = points[index];
         const deltaElevation = current.elevation - previous.elevation;
-        const deltaDistanceKm = current.distanceKm - previous.distanceKm;
         if (startIndex == null && deltaElevation > 0) {
             startIndex = index - 1;
-            gainMeters = deltaElevation;
+            topIndex = index;
             descentMeters = 0;
-            descentDistanceKm = 0;
             continue;
         }
         if (startIndex == null) {
             continue;
         }
         if (deltaElevation >= 0) {
-            gainMeters += deltaElevation;
+            if (topIndex == null || current.elevation >= points[topIndex].elevation) {
+                topIndex = index;
+            }
             descentMeters = 0;
-            descentDistanceKm = 0;
             continue;
         }
         descentMeters += Math.abs(deltaElevation);
-        descentDistanceKm += deltaDistanceKm;
-        if (descentMeters <= BRIEF_DESCENT_TOLERANCE_METERS && descentDistanceKm <= BRIEF_DESCENT_TOLERANCE_KM) {
+        if (descentMeters >= CLIMB_BREAK_DESCENT_METERS) {
+            commitClimb(topIndex);
+        }
+    }
+    commitClimb(topIndex);
+    return climbs;
+}
+function mergeImportedSegments(segments) {
+    if (segments.length <= 1) {
+        return segments;
+    }
+    let merged = [...segments];
+    while (true) {
+        const candidates = merged
+            .slice(0, -1)
+            .map((left, index) => {
+            const right = merged[index + 1];
+            const gradientDiff = Math.abs(left.gradientPercent - right.gradientPercent);
+            return {
+                index,
+                gradientDiff,
+                priority: Math.max(left.gradientPercent, right.gradientPercent),
+            };
+        })
+            .filter((candidate) => candidate.gradientDiff <= IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF)
+            .sort((left, right) => (right.priority - left.priority
+            || left.gradientDiff - right.gradientDiff
+            || left.index - right.index));
+        if (candidates.length === 0) {
+            return merged;
+        }
+        const selectedIndexes = new Set();
+        for (const candidate of candidates) {
+            if (selectedIndexes.has(candidate.index) || selectedIndexes.has(candidate.index - 1) || selectedIndexes.has(candidate.index + 1)) {
+                continue;
+            }
+            selectedIndexes.add(candidate.index);
+        }
+        if (selectedIndexes.size === 0) {
+            return merged;
+        }
+        const nextMerged = [];
+        for (let index = 0; index < merged.length; index += 1) {
+            if (!selectedIndexes.has(index)) {
+                nextMerged.push(merged[index]);
+                continue;
+            }
+            const left = merged[index];
+            const right = merged[index + 1];
+            const mergedLengthKm = round2(left.lengthKm + right.lengthKm);
+            const weightedGradient = mergedLengthKm > 0
+                ? round3(((left.gradientPercent * left.lengthKm) + (right.gradientPercent * right.lengthKm)) / mergedLengthKm)
+                : 0;
+            nextMerged.push({
+                startElevation: left.startElevation,
+                lengthKm: mergedLengthKm,
+                gradientPercent: weightedGradient,
+                terrain: left.terrain,
+                techLevel: Math.round(((left.techLevel * left.lengthKm) + (right.techLevel * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
+                windExp: Math.round(((left.windExp * left.lengthKm) + (right.windExp * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
+                markers: left.markers,
+                endMarkers: right.endMarkers,
+            });
+            index += 1;
+        }
+        merged = nextMerged;
+    }
+}
+function buildSegmentPositions(segments) {
+    let startKm = 0;
+    return segments.map((segment, index) => {
+        const currentStartKm = startKm;
+        const endKm = round2(currentStartKm + segment.lengthKm);
+        startKm = endKm;
+        return { index, startKm: currentStartKm, endKm };
+    });
+}
+function findNearestSegmentStart(positions, targetKm) {
+    return positions.reduce((best, position) => {
+        if (!best)
+            return position;
+        return Math.abs(position.startKm - targetKm) < Math.abs(best.startKm - targetKm) ? position : best;
+    }, null);
+}
+function findNearestSegmentEnd(positions, targetKm) {
+    return positions.reduce((best, position) => {
+        if (!best)
+            return position;
+        return Math.abs(position.endKm - targetKm) < Math.abs(best.endKm - targetKm) ? position : best;
+    }, null);
+}
+function findClimbForSegment(position, climbs) {
+    const segmentMidKm = (position.startKm + position.endKm) / 2;
+    return climbs.find((climb) => segmentMidKm >= climb.startKm && segmentMidKm <= climb.endKm) ?? null;
+}
+function resolveClimbTopElevation(climb, positions, segments) {
+    const topPosition = findNearestSegmentEnd(positions, climb.endKm);
+    if (!topPosition) {
+        return 0;
+    }
+    const segment = segments[topPosition.index];
+    return Math.round(segment.startElevation + ((segment.lengthKm * 1000) * (segment.gradientPercent / 100)));
+}
+function resolveSegmentGainMeters(segment) {
+    return Math.max(0, (segment.lengthKm * 1000) * (segment.gradientPercent / 100));
+}
+function classifyImportedSegmentTerrain(segment, position, climbs, positions, segments) {
+    if (segment.gradientPercent < -3) {
+        return 'Abfahrt';
+    }
+    if (segment.gradientPercent < 2.5 || resolveSegmentGainMeters(segment) < SEGMENT_MIN_HILL_GAIN_METERS) {
+        return 'Flat';
+    }
+    const climb = findClimbForSegment(position, climbs);
+    if (!climb) {
+        return 'Hill';
+    }
+    const topElevation = resolveClimbTopElevation(climb, positions, segments);
+    if (climb.gainMeters >= MOUNTAIN_MIN_GAIN_METERS && topElevation >= MOUNTAIN_MIN_TOP_ELEVATION_METERS) {
+        return 'Mountain';
+    }
+    if (climb.gainMeters > MEDIUM_MOUNTAIN_MIN_GAIN_METERS) {
+        return 'Medium_Mountain';
+    }
+    return 'Hill';
+}
+function addMarker(markers, marker) {
+    if (markers.some((existing) => existing.type === marker.type && existing.name === marker.name)) {
+        return normalizeMarkers(markers);
+    }
+    return normalizeMarkers([...markers, marker]);
+}
+function addAutomaticClimbMarkers(segments, climbs) {
+    if (segments.length === 0 || climbs.length === 0) {
+        return segments;
+    }
+    const positions = buildSegmentPositions(segments);
+    const decorated = [...segments];
+    for (const [climbIndex, climb] of climbs.entries()) {
+        const climbName = `Anstieg ${climbIndex + 1}`;
+        const startPosition = findNearestSegmentStart(positions, climb.startKm);
+        const endPosition = findNearestSegmentEnd(positions, climb.endKm);
+        if (startPosition) {
+            decorated[startPosition.index] = {
+                ...decorated[startPosition.index],
+                markers: addMarker(decorated[startPosition.index].markers, { type: 'climb_start', name: climbName, cat: null }),
+            };
+        }
+        if (endPosition) {
+            decorated[endPosition.index] = {
+                ...decorated[endPosition.index],
+                endMarkers: addMarker(decorated[endPosition.index].endMarkers, { type: 'climb_top', name: climbName, cat: climb.category }),
+            };
+        }
+    }
+    return decorated;
+}
+function resolveSprintSegmentIndex(segments, positions, climbs, targetKm, usedIndexes) {
+    const totalDistanceKm = positions[positions.length - 1]?.endKm ?? 0;
+    const candidates = positions.filter((position) => {
+        const segment = segments[position.index];
+        return segment.terrain === 'Flat'
+            && findClimbForSegment(position, climbs) == null
+            && position.startKm > 0
+            && position.startKm <= totalDistanceKm - SPRINT_CUT_KM
+            && !usedIndexes.has(position.index);
+    });
+    if (candidates.length === 0) {
+        return null;
+    }
+    const best = candidates.sort((left, right) => (Math.abs(left.startKm - targetKm) - Math.abs(right.startKm - targetKm)
+        || left.startKm - right.startKm))[0];
+    return best?.index ?? null;
+}
+function addAutomaticSprintMarkers(segments, climbs, totalDistanceKm) {
+    if (segments.length === 0 || totalDistanceKm <= 0) {
+        return segments;
+    }
+    const decorated = [...segments];
+    const positions = buildSegmentPositions(decorated);
+    const usedIndexes = new Set();
+    const sprintTargets = [
+        { targetKm: totalDistanceKm / 3, name: 'Sprint 1' },
+        { targetKm: totalDistanceKm * 3 / 5, name: 'Sprint 2' },
+    ];
+    for (const sprint of sprintTargets) {
+        const segmentIndex = resolveSprintSegmentIndex(decorated, positions, climbs, sprint.targetKm, usedIndexes);
+        if (segmentIndex == null) {
             continue;
         }
-        const startPoint = points[startIndex];
-        const endPoint = previous;
-        const distanceKm = endPoint.distanceKm - startPoint.distanceKm;
-        const avgGradient = distanceKm > 0 ? gainMeters / (distanceKm * 10) : 0;
-        if (gainMeters >= CLIMB_MIN_GAIN_METERS && avgGradient >= CLIMB_MIN_AVG_GRADIENT) {
-            climbs.push({
-                startKm: round2(startPoint.distanceKm),
-                endKm: round2(endPoint.distanceKm),
-                distanceKm: round2(distanceKm),
-                gainMeters: Math.round(gainMeters),
-                avgGradient: round1(avgGradient),
-                category: classifyClimb(distanceKm, gainMeters, avgGradient),
-            });
-        }
-        startIndex = null;
-        gainMeters = 0;
-        descentMeters = 0;
-        descentDistanceKm = 0;
+        usedIndexes.add(segmentIndex);
+        decorated[segmentIndex] = {
+            ...decorated[segmentIndex],
+            endMarkers: addMarker(decorated[segmentIndex].endMarkers, { type: 'sprint_intermediate', name: sprint.name, cat: 'Sprint' }),
+        };
     }
-    if (startIndex != null) {
-        const startPoint = points[startIndex];
-        const endPoint = points[points.length - 1];
-        const distanceKm = endPoint.distanceKm - startPoint.distanceKm;
-        const avgGradient = distanceKm > 0 ? gainMeters / (distanceKm * 10) : 0;
-        if (gainMeters >= CLIMB_MIN_GAIN_METERS && avgGradient >= CLIMB_MIN_AVG_GRADIENT) {
-            climbs.push({
-                startKm: round2(startPoint.distanceKm),
-                endKm: round2(endPoint.distanceKm),
-                distanceKm: round2(distanceKm),
-                gainMeters: Math.round(gainMeters),
-                avgGradient: round1(avgGradient),
-                category: classifyClimb(distanceKm, gainMeters, avgGradient),
-            });
-        }
-    }
-    return climbs;
+    return decorated;
+}
+function decorateGpxImportedSegments(segments, climbs, totalDistanceKm) {
+    const positions = buildSegmentPositions(segments);
+    const terrainSegments = segments.map((segment, index) => ({
+        ...segment,
+        terrain: classifyImportedSegmentTerrain(segment, positions[index], climbs, positions, segments),
+    }));
+    const withClimbs = addAutomaticClimbMarkers(terrainSegments, climbs);
+    return addAutomaticSprintMarkers(withClimbs, climbs, totalDistanceKm);
 }
 function countMarkers(segments, markerType) {
     return segments.reduce((count, segment) => count
@@ -580,15 +797,18 @@ function sanitizeSegments(segments) {
     const totalDistanceKm = round2(sanitized.reduce((sum, segment) => sum + segment.lengthKm, 0));
     let segmentStartKm = 0;
     return sanitized.map((segment) => {
+        const segmentEndKm = round2(segmentStartKm + segment.lengthKm);
         const nextSegment = {
             ...segment,
             startElevation: Math.round(segment.startElevation),
         };
         const filteredMarkers = nextSegment.markers.filter((marker) => marker.type !== 'sprint_intermediate' || segmentStartKm <= totalDistanceKm - SPRINT_CUT_KM);
-        segmentStartKm = round2(segmentStartKm + nextSegment.lengthKm);
+        const filteredEndMarkers = nextSegment.endMarkers.filter((marker) => marker.type !== 'sprint_intermediate' || segmentEndKm <= totalDistanceKm - SPRINT_CUT_KM);
+        segmentStartKm = segmentEndKm;
         return {
             ...nextSegment,
             markers: filteredMarkers,
+            endMarkers: filteredEndMarkers,
         };
     });
 }
@@ -790,13 +1010,20 @@ class RouteImporter {
         const parsed = sourceFormat === 'gpx'
             ? parseGpx(request.fileContent)
             : parseTcx(request.fileContent);
-        const profile = buildProfile(parsed.points);
+        const profile = smoothElevationProfile(buildProfile(parsed.points), IMPORT_ELEVATION_SMOOTHING_RADIUS);
         const simplifiedProfile = enforceMinimumSegmentLength(simplifyDouglasPeucker(profile, DOUGLAS_PEUCKER_EPSILON), MIN_SEGMENT_KM);
-        const climbs = detectClimbs(simplifiedProfile);
         const elevationGainMeters = calculateElevationGain(profile);
-        const segments = buildSegments(simplifiedProfile);
-        const waypoints = buildWaypoints(simplifiedProfile);
         const totalDistanceKm = round2(simplifiedProfile[simplifiedProfile.length - 1].distanceKm);
+        const rawSegments = mergeImportedSegments(buildSegments(simplifiedProfile));
+        const rawWaypoints = deriveWaypointsFromSegments(rawSegments);
+        const climbs = detectClimbs(rawWaypoints.map((waypoint) => ({
+            distanceKm: waypoint.kmMark,
+            elevation: waypoint.elevation,
+        })));
+        const segments = sourceFormat === 'gpx'
+            ? decorateGpxImportedSegments(rawSegments, climbs, totalDistanceKm)
+            : rawSegments;
+        const waypoints = deriveWaypointsFromSegments(segments);
         return {
             routeName: parsed.routeName,
             sourceFormat,

@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../shared/skillWeights';
+import { buildRiderLoadSummary } from '../game/RiderLoadModel';
 import { summarizeStageProfile } from '../simulation/StageParser';
 
 const RESULT_TYPE_IDS = {
@@ -147,6 +148,8 @@ interface RiderRow {
   health_status: RiderHealthStatus | null;
   unavailable_until: string | null;
   unavailable_days_remaining: number | null;
+  season_race_days_total: number | null;
+  rolling_30d_race_days: number | null;
   accumulated_random_fatigue: number | null;
   incident_day_form_penalty: number | null;
   incident_micro_form_penalty: number | null;
@@ -159,6 +162,11 @@ interface RiderRow {
 interface RiderSeasonRaceStats {
   raceDays: number;
   wins: number;
+}
+
+interface CareerRaceDaysSeasonRow {
+  season: number;
+  raceDays: number;
 }
 
 interface RaceProgramRow {
@@ -466,6 +474,38 @@ interface RiderStatsFinalDbRow {
   final_points: number | null;
 }
 
+function emptyRiderStatsPointsByTerrain(): RiderStatsPointsByTerrain {
+  return {
+    flat: 0,
+    hilly: 0,
+    mediumMountain: 0,
+    mountain: 0,
+  };
+}
+
+function emptyRiderStatsPointsByRaceFormat(): RiderStatsPointsByRaceFormat {
+  return {
+    stageRace: 0,
+    oneDay: 0,
+  };
+}
+
+function resolveRiderStatsTerrainBucket(profile: Stage['profile']): keyof RiderStatsPointsByTerrain {
+  switch (profile) {
+    case 'Hilly':
+    case 'Hilly_Difficult':
+    case 'Cobble_Hill':
+      return 'hilly';
+    case 'Medium_Mountain':
+      return 'mediumMountain';
+    case 'Mountain':
+    case 'High_Mountain':
+      return 'mountain';
+    default:
+      return 'flat';
+  }
+}
+
 function resolveDataCsvDir(): string {
   const candidates = [
     path.resolve(__dirname, '..', '..', '..', 'data', 'csv'),
@@ -691,6 +731,7 @@ function mapRider(row: RiderRow, currentYear: number, _currentDate: string, seas
   const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
   const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
   const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
+  const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0);
   return {
     id: row.id,
     firstName: row.first_name,
@@ -729,8 +770,14 @@ function mapRider(row: RiderRow, currentYear: number, _currentDate: string, seas
     activeContractId: row.active_contract_id,
     contractEndSeason: row.contract_end_season,
     seasonPoints,
+    seasonRaceDaysTotal: riderLoadSummary.seasonRaceDaysTotal,
+    rolling30dRaceDays: riderLoadSummary.rolling30dRaceDays,
     formBonus: resolveEffectiveSeasonForm(row.form_bonus ?? 0),
     raceFormBonus: totalRaceFormBonus,
+    longTermFatigueMalus: riderLoadSummary.longTermFatigueMalus,
+    shortTermFatigueMalus: riderLoadSummary.shortTermFatigueMalus,
+    totalFatigueLoadMalus: riderLoadSummary.totalFatigueLoadMalus,
+    shortTermFatigueWarning: riderLoadSummary.shortTermFatigueWarning,
     peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
     peakRForm: row.peak_r_form ?? 0,
     activePeakDate: row.active_peak_date,
@@ -1495,7 +1542,9 @@ export class GameRepository {
       ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
       ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
       ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
-      ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining
+      ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+      ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
+      ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days
     `;
     const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
     const freeRaceFormJoin = useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : '';
@@ -1668,8 +1717,30 @@ export class GameRepository {
       return null;
     }
 
+    const currentSeason = this.getCurrentSeason();
+    const currentSeasonStandings = this.getSeasonStandings(currentSeason).riderStandings;
+    const currentSeasonRank = currentSeasonStandings.find((row) => row.riderId === rider.id)?.rank ?? null;
+    this.syncSeasonPointEventsForSeason(currentSeason);
+    const currentSeasonPoints = this.getSeasonPointsByRiderId(currentSeason).get(rider.id) ?? 0;
+    const currentSeasonRaceStats = this.getSeasonRaceStatsByRiderId(currentSeason).get(rider.id) ?? { raceDays: 0, wins: 0 };
+    const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
+    const careerWins = this.getCareerWins(rider.id);
+    const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
+    const programSummary = this.getRiderProgramRaceSummary(rider.id);
+    const pointsByTerrain = emptyRiderStatsPointsByTerrain();
+    const pointsByRaceFormat = emptyRiderStatsPointsByRaceFormat();
+
     if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
-      return this.createEmptyRiderStatsPayload(rider);
+      return this.createEmptyRiderStatsPayload(
+        rider,
+        currentSeasonRank,
+        currentSeasonPoints,
+        currentSeasonRaceStats.raceDays,
+        currentSeasonBreakawayAttempts,
+        careerWins,
+        careerRaceDaysBySeason,
+        programSummary,
+      );
     }
 
     const seasonRows = this.db.prepare(`
@@ -1835,6 +1906,7 @@ export class GameRepository {
     for (const row of stageRows) {
       const block = ensureRaceBlock(row.season, row.race_id, row.race_name, row.race_category_name, row.is_stage_race === 1, row.start_date, row.end_date);
       const summary = getStageSummary(row.stage_id, row.details_csv_file, row.start_elevation);
+      const stagePoints = row.stage_points ?? 0;
       block.rows.push({
         rowType: 'stage_result',
         date: row.date,
@@ -1858,8 +1930,16 @@ export class GameRepository {
         profile: row.profile,
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
-        seasonPoints: row.stage_points ?? 0,
+        seasonPoints: stagePoints,
       } satisfies RiderStatsRow);
+
+      const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
+      pointsByTerrain[terrainBucket] += stagePoints;
+      if (row.is_stage_race === 1) {
+        pointsByRaceFormat.stageRace += stagePoints;
+      } else {
+        pointsByRaceFormat.oneDay += stagePoints;
+      }
     }
 
     for (const row of finalRows) {
@@ -1870,6 +1950,7 @@ export class GameRepository {
 
       const block = ensureRaceBlock(row.season, row.race_id, row.race_name, row.race_category_name, true, row.start_date, row.end_date);
       const summary = getStageSummary(row.stage_id, row.details_csv_file, row.start_elevation);
+      const finalPoints = row.final_points ?? 0;
       block.rows.push({
         rowType,
         date: row.date,
@@ -1889,8 +1970,11 @@ export class GameRepository {
         profile: row.profile,
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
-        seasonPoints: row.final_points ?? 0,
+        seasonPoints: finalPoints,
       } satisfies RiderStatsRow);
+
+      pointsByTerrain[resolveRiderStatsTerrainBucket(row.profile)] += finalPoints;
+      pointsByRaceFormat.stageRace += finalPoints;
     }
 
     const rowTypeOrder: Record<RiderStatsRowType, number> = {
@@ -1923,6 +2007,31 @@ export class GameRepository {
       teamId: rider.activeTeamId ?? null,
       teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
       countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+      roleName: rider.role?.name ?? null,
+      overallRating: rider.overallRating,
+      seasonFormPhase: rider.seasonFormPhase ?? 'neutral',
+      formBonus: rider.formBonus ?? 0,
+      raceFormBonus: rider.raceFormBonus ?? 0,
+      program: programSummary?.program ?? rider.seasonProgram ?? null,
+      programRaces: programSummary?.races ?? [],
+      isUnavailable: rider.isUnavailable === true,
+      healthStatusLabel: rider.healthStatusLabel ?? null,
+      unavailableUntil: rider.unavailableUntil ?? null,
+      unavailableDaysRemaining: rider.unavailableDaysRemaining ?? 0,
+      currentSeasonPoints,
+      currentSeasonRank,
+      currentSeasonRaceDays: currentSeasonRaceStats.raceDays,
+      seasonRaceDaysTotal: rider.seasonRaceDaysTotal ?? 0,
+      rolling30dRaceDays: rider.rolling30dRaceDays ?? 0,
+      longTermFatigueMalus: rider.longTermFatigueMalus ?? 0,
+      shortTermFatigueMalus: rider.shortTermFatigueMalus ?? 0,
+      totalFatigueLoadMalus: rider.totalFatigueLoadMalus ?? 0,
+      shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
+      currentSeasonBreakawayAttempts,
+      careerWins,
+      pointsByTerrain,
+      pointsByRaceFormat,
+      careerRaceDaysBySeason,
       seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
     } satisfies RiderStatsPayload;
   }
@@ -2123,6 +2232,8 @@ export class GameRepository {
              ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
              ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
+             ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
              0 AS accumulated_random_fatigue,
              (
                SELECT c.end_season
@@ -2320,6 +2431,8 @@ export class GameRepository {
              ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
              ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
+             ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
              ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              ${useStageRaceState ? 'COALESCE(race_state.incident_day_form_penalty, 0)' : '0'} AS incident_day_form_penalty,
              ${useStageRaceState ? 'COALESCE(race_state.incident_micro_form_penalty, 0)' : '0'} AS incident_micro_form_penalty,
@@ -2390,6 +2503,8 @@ export class GameRepository {
              ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
              ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
+             ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
              ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              ${useStageRaceState ? 'COALESCE(race_state.incident_day_form_penalty, 0)' : '0'} AS incident_day_form_penalty,
              ${useStageRaceState ? 'COALESCE(race_state.incident_micro_form_penalty, 0)' : '0'} AS incident_micro_form_penalty,
@@ -3052,15 +3167,101 @@ export class GameRepository {
     return stagesByRaceId;
   }
 
-  private createEmptyRiderStatsPayload(rider: Rider): RiderStatsPayload {
+  private createEmptyRiderStatsPayload(
+    rider: Rider,
+    currentSeasonRank: number | null,
+    currentSeasonPoints: number,
+    currentSeasonRaceDays: number,
+    currentSeasonBreakawayAttempts: number,
+    careerWins: number,
+    careerRaceDaysBySeason: CareerRaceDaysSeasonRow[],
+    programSummary: RiderProgramRaceSummary | null,
+  ): RiderStatsPayload {
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
       teamId: rider.activeTeamId ?? null,
       teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
       countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+      roleName: rider.role?.name ?? null,
+      overallRating: rider.overallRating,
+      seasonFormPhase: rider.seasonFormPhase ?? 'neutral',
+      formBonus: rider.formBonus ?? 0,
+      raceFormBonus: rider.raceFormBonus ?? 0,
+      program: programSummary?.program ?? rider.seasonProgram ?? null,
+      programRaces: programSummary?.races ?? [],
+      isUnavailable: rider.isUnavailable === true,
+      healthStatusLabel: rider.healthStatusLabel ?? null,
+      unavailableUntil: rider.unavailableUntil ?? null,
+      unavailableDaysRemaining: rider.unavailableDaysRemaining ?? 0,
+      currentSeasonPoints,
+      currentSeasonRank,
+      currentSeasonRaceDays,
+      seasonRaceDaysTotal: rider.seasonRaceDaysTotal ?? 0,
+      rolling30dRaceDays: rider.rolling30dRaceDays ?? 0,
+      longTermFatigueMalus: rider.longTermFatigueMalus ?? 0,
+      shortTermFatigueMalus: rider.shortTermFatigueMalus ?? 0,
+      totalFatigueLoadMalus: rider.totalFatigueLoadMalus ?? 0,
+      shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
+      currentSeasonBreakawayAttempts,
+      careerWins,
+      pointsByTerrain: emptyRiderStatsPointsByTerrain(),
+      pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
+      careerRaceDaysBySeason,
       seasons: [],
     };
+  }
+
+  private getCareerWins(riderId: number): number {
+    if (!tableExists(this.db, 'results')) {
+      return 0;
+    }
+
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS wins
+      FROM results
+      WHERE result_type_id = ?
+        AND rider_id = ?
+        AND rank = 1
+    `).get(RESULT_TYPE_IDS.stage, riderId) as { wins: number | null } | undefined;
+
+    return row?.wins ?? 0;
+  }
+
+  private getSeasonBreakawayAttempts(season: number, riderId: number): number {
+    if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages') || !columnExists(this.db, 'results', 'is_breakaway')) {
+      return 0;
+    }
+
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS attempts
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      WHERE results.result_type_id = ?
+        AND results.rider_id = ?
+        AND results.is_breakaway = 1
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+    `).get(RESULT_TYPE_IDS.stage, riderId, season) as { attempts: number | null } | undefined;
+
+    return row?.attempts ?? 0;
+  }
+
+  private getCareerRaceDaysBySeason(riderId: number): CareerRaceDaysSeasonRow[] {
+    if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
+      return [];
+    }
+
+    return this.db.prepare(`
+      SELECT
+        CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
+        COUNT(*) AS race_days
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      WHERE results.result_type_id = ?
+        AND results.rider_id = ?
+      GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
+      ORDER BY season DESC
+    `).all(RESULT_TYPE_IDS.stage, riderId) as CareerRaceDaysSeasonRow[];
   }
 
   private mapResultTypeIdToRiderStatsRowType(resultTypeId: number): RiderStatsRowType | null {

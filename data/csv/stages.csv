@@ -19,4 +19,13 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 18,5,3,2026-02-07,Hilly_Difficult,26,volta_valencia_st3.csv,70,85,1,1,1
 19,5,4,2026-02-08,Medium_Mountain,231,volta_valencia_st4.csv,65,80,1.8,1.5,2.5
 20,5,5,2026-02-09,Hilly,84,volta_valencia_st5.csv,60,90,1,2.5,0.5
+21,8,1,2026-02-16,Hilly_Difficult,6,clasica_almeria.csv,65,80,1.5,1,2
+22,9,1,2026-02-16,Hilly,4,figueira_champions_classic.csv,70,90,1.4,1,1.5
+23,10,1,2026-02-17,Rolling,118,uae_tour_1.csv,70,90,1,1,1
+24,10,2,2026-02-18,ITT,1,uae_tour_2.csv,70,90,1,1,1
+25,10,3,2026-02-19,Medium_Mountain,3,uae_tour_3.csv,60,85,2,1,1.5
+26,10,4,2026-02-20,Hilly_Difficult,48,uae_tour_4.csv,80,90,1,1,1.5
+27,10,5,2026-02-21,Flat,4,uae_tour_5.csv,85,95,1,2,0.5
+28,10,6,2026-02-22,Medium_Mountain,285,uae_tour_6.csv,65,80,1.6,1,1
+29,10,7,2026-02-23,Flat,4,uae_tour_7.csv,85,95,0.8,2,0.5
 

@@ -555,7 +555,11 @@ function resolveBaseSkill(rider: Rider, skillName: TerrainSkillName): number {
 }
 
 function resolveConditionFormBonus(rider: Rider): number {
-  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
+  return (rider.formBonus ?? 0)
+    + (rider.raceFormBonus ?? 0)
+    - (rider.fatigueMalus ?? 0)
+    - (rider.longTermFatigueMalus ?? 0)
+    - (rider.shortTermFatigueMalus ?? 0);
 }
 
 function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]): string {
@@ -564,11 +568,31 @@ function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]
   }
 
   const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
-  return components.map((component) => {
+  const parts = components.map((component) => {
     const skillValue = rider.skills[component.key];
     const weightPercent = Math.round((component.weight / totalWeight) * 100);
     return `${SKILL_SHORT_LABELS[component.key]} ${Math.round(skillValue)} (${weightPercent}%)`;
-  }).join(' · ');
+  });
+
+  const seasonForm = rider.formBonus ?? 0;
+  const raceForm = rider.raceFormBonus ?? 0;
+  const fatigue = rider.fatigueMalus ?? 0;
+  const longTermFatigue = rider.longTermFatigueMalus ?? 0;
+  const shortTermFatigue = rider.shortTermFatigueMalus ?? 0;
+
+  parts.push(`S-Form ${seasonForm >= 0 ? '+' : ''}${seasonForm.toFixed(1).replace('.', ',')}`);
+  parts.push(`R-Form ${raceForm >= 0 ? '+' : ''}${raceForm.toFixed(1).replace('.', ',')}`);
+  if (fatigue > 0) {
+    parts.push(`Fatigue -${fatigue.toFixed(1).replace('.', ',')}`);
+  }
+  if (longTermFatigue > 0) {
+    parts.push(`Langzeit -${longTermFatigue.toFixed(1).replace('.', ',')}`);
+  }
+  if (shortTermFatigue > 0) {
+    parts.push(`Akut -${shortTermFatigue.toFixed(1).replace('.', ',')}`);
+  }
+
+  return parts.join(' · ');
 }
 
 function sampleInitialWindSpeedKph(): number {
@@ -2902,7 +2926,7 @@ export class SimulationEngine {
   }
 
   private resolveSkillBreakdown(rider: Rider, terrain: StageTerrain, components: WeightedSkillComponent[]): string {
-    const cacheKey = `${rider.id}:${terrain}`;
+    const cacheKey = `${rider.id}:${terrain}:${rider.formBonus ?? 0}:${rider.raceFormBonus ?? 0}:${rider.fatigueMalus ?? 0}:${rider.longTermFatigueMalus ?? 0}:${rider.shortTermFatigueMalus ?? 0}`;
     const cached = this.skillBreakdownCache.get(cacheKey);
     if (cached !== undefined) {
       return cached;

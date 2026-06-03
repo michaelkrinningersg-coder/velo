@@ -13,7 +13,11 @@ const TECH_PENALTY_FACTOR = 0.0025;
 const WIND_FACTOR = 0.003;
 
 function resolveFormBonus(rider: Rider): number {
-  return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
+  return (rider.formBonus ?? 0)
+    + (rider.raceFormBonus ?? 0)
+    - (rider.fatigueMalus ?? 0)
+    - (rider.longTermFatigueMalus ?? 0)
+    - (rider.shortTermFatigueMalus ?? 0);
 }
 
 export class TimeTrialSimulator {

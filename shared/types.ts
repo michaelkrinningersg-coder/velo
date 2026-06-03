@@ -92,6 +92,8 @@ export interface RiderRaceFormSource {
   type: 'build' | 'free';
 }
 
+export type RiderLoadWarningLevel = 'none' | 'warning' | 'critical';
+
 export type RiderSeasonFormPhase = 'rise' | 'fall' | 'neutral';
 
 export interface RaceProgram {
@@ -127,6 +129,18 @@ export interface RiderSeasonProgram {
 export interface RiderProgramRaceSummary {
   program: RaceProgram;
   races: Race[];
+}
+
+export interface RiderStatsPointsByTerrain {
+  flat: number;
+  hilly: number;
+  mediumMountain: number;
+  mountain: number;
+}
+
+export interface RiderStatsPointsByRaceFormat {
+  stageRace: number;
+  oneDay: number;
 }
 
 export interface RaceProgramParticipant {
@@ -174,9 +188,15 @@ export interface Rider {
   contractEndSeason?: number | null;
   seasonPoints?: number;
   seasonRaceDays?: number;
+  seasonRaceDaysTotal?: number;
+  rolling30dRaceDays?: number;
   seasonWins?: number;
   formBonus?: number;
   raceFormBonus?: number;
+  longTermFatigueMalus?: number;
+  shortTermFatigueMalus?: number;
+  totalFatigueLoadMalus?: number;
+  shortTermFatigueWarning?: RiderLoadWarningLevel;
   peakSForm?: number;
   peakRForm?: number;
   activePeakDate?: string | null;
@@ -731,6 +751,34 @@ export interface RiderStatsPayload {
   teamId: number | null;
   teamName: string | null;
   countryCode: Nationality | null;
+  roleName: string | null;
+  overallRating: number;
+  seasonFormPhase: RiderSeasonFormPhase;
+  formBonus: number;
+  raceFormBonus: number;
+  program: RaceProgram | null;
+  programRaces: Race[];
+  isUnavailable: boolean;
+  healthStatusLabel: string | null;
+  unavailableUntil: string | null;
+  unavailableDaysRemaining: number;
+  currentSeasonPoints: number;
+  currentSeasonRank: number | null;
+  currentSeasonRaceDays: number;
+  seasonRaceDaysTotal: number;
+  rolling30dRaceDays: number;
+  longTermFatigueMalus: number;
+  shortTermFatigueMalus: number;
+  totalFatigueLoadMalus: number;
+  shortTermFatigueWarning: RiderLoadWarningLevel;
+  currentSeasonBreakawayAttempts: number;
+  careerWins: number;
+  pointsByTerrain: RiderStatsPointsByTerrain;
+  pointsByRaceFormat: RiderStatsPointsByRaceFormat;
+  careerRaceDaysBySeason: Array<{
+    season: number;
+    raceDays: number;
+  }>;
   seasons: RiderStatsSeason[];
 }
 
@@ -863,13 +911,19 @@ export interface StageEditorStageOverviewRow {
   elevationGainMeters: number;
   sprintCount: number;
   climbCount: number;
-  profileScore: string;
+  profileScore: number;
 }
 
 export interface StageEditorClimbOverviewRow {
   id: string;
+  stageId: number;
+  raceId: number;
+  climbIndex: number;
+  startKm: number;
+  endKm: number;
   placementKm: number;
   name: string;
+  category: Extract<StageMarkerCategory, 'HC' | '1' | '2' | '3' | '4'> | null;
   countryCode: Nationality | null;
   raceName: string;
   stageNumber: number;
@@ -877,7 +931,7 @@ export interface StageEditorClimbOverviewRow {
   distanceKm: number;
   avgGradient: number;
   maxGradient: number;
-  climbScore: string;
+  climbScore: number;
 }
 
 export interface StageEditorOverviewResponse {

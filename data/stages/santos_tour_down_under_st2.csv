@@ -170,4 +170,4 @@ length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,m
 1.82,-2.100,Abfahrt,5,5,,,,,,
 1.10,-9.100,Abfahrt,5,5,,,,,,
 0.54,-5.900,Abfahrt,5,5,,,,,,
-2.42,8.300,Medium_Mountain,5,5,climb_start,Zielanstieg,null,finish_mountain,Zielanstieg,3
+2.42,8.300,Medium_Mountain,5,5,climb_start,Zielanstieg,,finish_mountain,Zielanstieg,3

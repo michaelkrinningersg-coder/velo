@@ -316,11 +316,27 @@ CREATE TABLE IF NOT EXISTS stages (
   final_spread_difficulty_multiplier REAL NOT NULL DEFAULT 1 CHECK(final_spread_difficulty_multiplier > 0),
   crash_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0),
   mechanical_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0),
+  stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
   UNIQUE(race_id, stage_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_stages_race ON stages(race_id);
 CREATE INDEX IF NOT EXISTS idx_stages_date ON stages(date);
+
+CREATE TABLE IF NOT EXISTS stage_climb_scores (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage_id    INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  climb_index INTEGER NOT NULL CHECK(climb_index > 0),
+  name        TEXT    NOT NULL,
+  category    TEXT    CHECK(category IS NULL OR category IN ('HC', '1', '2', '3', '4')),
+  start_km    REAL    NOT NULL,
+  end_km      REAL    NOT NULL,
+  climb_score INTEGER NOT NULL CHECK(climb_score >= 0),
+  UNIQUE(stage_id, climb_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_climb_scores_stage
+  ON stage_climb_scores(stage_id);
 
 -- ---- Rennteilnehmer -----------------------------------------
 CREATE TABLE IF NOT EXISTS race_entries (

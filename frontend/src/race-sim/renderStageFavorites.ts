@@ -418,7 +418,10 @@ function resolveMountainPointValues(bootstrap: RealtimeSimulationBootstrap, cate
 
 function resolveFinishPointValues(bootstrap: RealtimeSimulationBootstrap): number[] {
   const bonusSystem = bootstrap.race.category?.bonusSystem;
-  if (!bootstrap.race.isStageRace || !bonusSystem || bootstrap.stage.profile === 'TTT') return [];
+  if (!bonusSystem || bootstrap.stage.profile === 'TTT') return [];
+  if (!bootstrap.race.isStageRace) {
+    return parseRankedValues(bonusSystem.pointsOneDay);
+  }
   const usesMountainStagePoints = !['ITT', 'TTT', 'Flat', 'Rolling', 'Hilly'].includes(bootstrap.stage.profile);
   return parseRankedValues(usesMountainStagePoints ? bonusSystem.pointsMountainStage : bonusSystem.pointsSprintFinish);
 }
@@ -679,7 +682,7 @@ function buildScoringEvents(bootstrap: RealtimeSimulationBootstrap, markerClassi
   };
 
   const regularEvents = [...sprints, ...climbs].sort((left, right) => left.kmMark - right.kmMark || left.title.localeCompare(right.title, 'de'));
-  return [...regularEvents, finishEvent].filter((event) => event.entries.length > 0 || event.timingEntries.length > 0 || event.accent !== 'finish' || snapshot.isFinished);
+  return [...regularEvents, finishEvent].filter((event) => event.entries.length > 0 || event.timingEntries.length > 0 || event.accent !== 'finish' || finishMarker != null || snapshot.isFinished);
 }
 
 function renderScoringEventPopover(bootstrap: RealtimeSimulationBootstrap, event: ScoringEvent): string {

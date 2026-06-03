@@ -95,4 +95,4 @@ length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,m
 1.28,2.000,Flat,5,5,,,,,,
 2.03,-3.600,Abfahrt,5,5,,,,,,
 0.84,2.700,Flat,5,5,,,,,,
-1.69,-1.000,Flat,5,5,,,,finish_flat,Ziel,null
+1.69,-1.000,Flat,5,5,,,,finish_flat,Ziel,

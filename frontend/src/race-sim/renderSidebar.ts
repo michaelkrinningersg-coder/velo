@@ -767,10 +767,12 @@ function buildEffectiveSkillLines(rider: RealtimeRiderSnapshot, sourceRider: Rid
   const seasonForm = sourceRider?.formBonus ?? 0;
   const raceForm = sourceRider?.raceFormBonus ?? 0;
   const fatigue = sourceRider?.fatigueMalus ?? 0;
+  const longTermFatigue = sourceRider?.longTermFatigueMalus ?? 0;
+  const shortTermFatigue = sourceRider?.shortTermFatigueMalus ?? 0;
   const teamBonus = rider.teamGroupBonus;
   const scaledMicroForm = Math.max(-2.5, Math.min(2.5, rider.microForm * 2.5));
   const attackBonus = rider.isAttacking ? 10 : 0;
-  const baseWithoutStamina = rider.baseSkill + attackBonus + seasonForm + raceForm + rider.dailyForm + rider.microForm + teamBonus - fatigue;
+  const baseWithoutStamina = rider.baseSkill + attackBonus + seasonForm + raceForm + rider.dailyForm + rider.microForm + teamBonus - fatigue - longTermFatigue - shortTermFatigue;
   const afterStamina = Math.max(0, baseWithoutStamina - rider.staminaPenalty);
   const staminaImpact = baseWithoutStamina - afterStamina;
   const heightImpact = afterStamina - rider.effectiveSkill;
@@ -784,6 +786,8 @@ function buildEffectiveSkillLines(rider: RealtimeRiderSnapshot, sourceRider: Rid
     `+ Zufällige Form ${formatNumber(scaledMicroForm)} (skaliert)`,
     `+ Teambonus ${formatNumber(teamBonus)}`,
     `- Fatigue ${formatNumber(fatigue)}`,
+    `- Langzeit ${formatNumber(longTermFatigue)}`,
+    `- Akut ${formatNumber(shortTermFatigue)}`,
     `- Stamina ${formatNumber(staminaImpact)}`,
     `- HM ${formatNumber(heightImpact)}`,
     `= Effektiv ${formatNumber(rider.effectiveSkill)}`,
@@ -894,6 +898,8 @@ function renderDetailPanel(rider: RealtimeRiderSnapshot, sourceRider: Rider | nu
     { label: 'S-Form', value: formatSigned(sourceRider?.formBonus ?? 0) },
     { label: 'R-Form', value: formatSigned(sourceRider?.raceFormBonus ?? 0) },
     { label: 'Fatigue', value: formatFatigue(sourceRider?.fatigueMalus ?? 0) },
+    { label: 'Langzeit', value: formatFatigue(sourceRider?.longTermFatigueMalus ?? 0) },
+    { label: 'Akut', value: formatFatigue(sourceRider?.shortTermFatigueMalus ?? 0) },
     { label: 'Stamina', value: formatNumber(rider.staminaPenalty) },
     { label: 'HM', value: formatNumber(rider.elevationPenalty) },
     { label: 'T-Form', value: formatSigned(rider.dailyForm) },
@@ -1079,6 +1085,8 @@ function updateSidebarRow(
     rider.dailyForm,
     rider.microForm,
     sourceRider?.fatigueMalus ?? 0,
+    sourceRider?.longTermFatigueMalus ?? 0,
+    sourceRider?.shortTermFatigueMalus ?? 0,
     rider.staminaPenalty,
   ].join('|');
   if (hasChanged(rowCache, 'effectiveSkillTitleKey', effectiveSkillTitleKey)) {

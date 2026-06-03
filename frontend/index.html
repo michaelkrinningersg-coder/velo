@@ -382,10 +382,18 @@
               </div>
               <div class="stage-editor-table-wrap">
                 <table class="data-table stage-editor-table" id="stage-editor-waypoints">
+                  <colgroup>
+                    <col class="stage-editor-col-length" />
+                    <col class="stage-editor-col-gradient" />
+                    <col class="stage-editor-col-terrain" />
+                    <col class="stage-editor-col-tech" />
+                    <col class="stage-editor-col-wind" />
+                    <col class="stage-editor-col-start-markers" />
+                    <col class="stage-editor-col-end-markers" />
+                    <col class="stage-editor-col-actions" />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Start-km</th>
-                      <th>Start-hm</th>
                       <th>Länge</th>
                       <th>Steigung</th>
                       <th>Terrain</th>
@@ -550,6 +558,9 @@
   <div id="loading-overlay" class="loading-overlay hidden">
     <div class="spinner"></div>
     <p id="loading-msg">Lade…</p>
+    <div id="loading-progress" class="loading-progress hidden">
+      <div id="loading-progress-bar" class="loading-progress-bar"></div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

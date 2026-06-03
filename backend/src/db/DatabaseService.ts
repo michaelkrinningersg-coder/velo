@@ -647,6 +647,18 @@ export class DatabaseService {
           ADD COLUMN active_peak_date TEXT
         `).run();
       }
+      if (!columnExists(db, 'rider_daily_state', 'season_race_days_total')) {
+        db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN season_race_days_total INTEGER NOT NULL DEFAULT 0
+        `).run();
+      }
+      if (!columnExists(db, 'rider_daily_state', 'rolling_30d_race_days')) {
+        db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN rolling_30d_race_days INTEGER NOT NULL DEFAULT 0
+        `).run();
+      }
     }
 
     db.prepare(`

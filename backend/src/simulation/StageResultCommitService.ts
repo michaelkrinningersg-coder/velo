@@ -674,7 +674,9 @@ export class StageResultCommitService {
       }
     })();
 
-    new GameStateService(this.db).applyRaceDayFormBonuses(stage.date, completedRiderIds);
+    const gameStateService = new GameStateService(this.db);
+    gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
+    gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
 

@@ -479,7 +479,7 @@ html, body {
   top: calc(100% + .45rem);
   left: 0;
   z-index: 12;
-  min-width: min(32rem, 78vw);
+  min-width: min(52rem, 92vw);
   display: none;
 }
 
@@ -532,6 +532,38 @@ html, body {
 .season-standings-country-popover-empty {
   color: var(--text-500);
   font-size: .78rem;
+}
+
+.stage-editor-score-popover-grid {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 4.5rem;
+  gap: .45rem;
+  align-items: center;
+  padding: .22rem 0;
+  font-size: .76rem;
+}
+
+.stage-editor-score-popover-grid-climb {
+  grid-template-columns: 3rem 4.5rem minmax(0, 3fr) 4.5rem 4.5rem 4.5rem 4.5rem;
+}
+
+.stage-editor-score-popover-grid-compact {
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+}
+
+.stage-editor-score-popover-grid-head {
+  color: var(--text-500);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  margin-bottom: .2rem;
+  padding-bottom: .35rem;
+}
+
+.stage-editor-score-popover-grid-head-compact {
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
 }
 
 .results-marker-classifications {
@@ -1052,6 +1084,11 @@ html, body {
 }
 
 .rider-stats-summary {
+  display: grid;
+  gap: .6rem;
+}
+
+.rider-stats-summary-row {
   display: flex;
   flex-wrap: wrap;
   gap: .6rem;
@@ -1067,6 +1104,60 @@ html, body {
   background: rgba(15, 23, 42, .55);
   color: var(--text-200);
   font-size: .9rem;
+}
+
+.rider-stats-summary-row-secondary {
+  align-items: flex-start;
+}
+
+.rider-stats-summary-group {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+
+.rider-stats-summary-group-label {
+  color: var(--text-400);
+  font-size: .82rem;
+  font-weight: 700;
+  margin-right: .1rem;
+}
+
+.rider-stats-summary-pill-heat {
+  border-color: hsla(var(--rider-stats-pill-hue), 70%, 52%, var(--rider-stats-pill-border-alpha));
+  background: hsla(var(--rider-stats-pill-hue), 70%, 52%, var(--rider-stats-pill-bg-alpha));
+  color: hsl(var(--rider-stats-pill-hue), 90%, 92%);
+}
+
+.rider-stats-summary-pill-warning {
+  border-color: rgba(245, 158, 11, .4);
+  background: rgba(245, 158, 11, .14);
+  color: #fde68a;
+}
+
+.rider-stats-summary-pill-critical {
+  border-color: rgba(239, 68, 68, .45);
+  background: rgba(127, 29, 29, .42);
+  color: #fecaca;
+  box-shadow: 0 0 18px rgba(220, 38, 38, .16);
+}
+
+.rider-stats-summary-pill-team .results-team-jersey,
+.rider-stats-summary-pill .team-form-phase {
+  flex: 0 0 auto;
+}
+
+.rider-stats-summary-pill-team .results-team-jersey-img {
+  transform: scale(1.4);
+}
+
+.rider-stats-tabs {
+  margin-top: .2rem;
+}
+
+.rider-stats-program-table {
+  min-width: 760px;
 }
 
 .rider-stats-placeholder {
@@ -1170,6 +1261,16 @@ html, body {
 .team-form-phase-rise { color: #86efac; background: rgba(34, 197, 94, .12); }
 .team-form-phase-fall { color: #fca5a5; background: rgba(239, 68, 68, .12); }
 .team-form-phase-neutral { color: var(--text-300); background: rgba(148, 163, 184, .1); }
+
+.load-warning {
+  border-bottom: 1px dotted rgba(245, 158, 11, .7);
+}
+
+.load-warning-critical {
+  color: #fecaca;
+  text-shadow: 0 0 10px rgba(220, 38, 38, .32);
+  border-bottom: 1px dotted rgba(239, 68, 68, .75);
+}
 
 .team-program-button {
   max-width: 12rem;
@@ -1367,6 +1468,30 @@ html, body {
 .badge-flat     { background: rgba(34,197,94,.15); color: var(--success); }
 .badge-mountain { background: rgba(239,68,68,.15); color: var(--danger); }
 .badge-hilly    { background: rgba(245,158,11,.15); color: var(--warning); }
+
+.rider-stats-final-type.is-gc {
+  border-color: rgba(250, 204, 21, .42);
+  background: rgba(250, 204, 21, .14);
+  color: #fde68a;
+}
+
+.rider-stats-final-type.is-points {
+  border-color: rgba(34, 197, 94, .4);
+  background: rgba(34, 197, 94, .14);
+  color: #bbf7d0;
+}
+
+.rider-stats-final-type.is-mountain {
+  border-color: rgba(239, 68, 68, .42);
+  background: rgba(239, 68, 68, .14);
+  color: #fecaca;
+}
+
+.rider-stats-final-type.is-youth {
+  border-color: rgba(248, 250, 252, .45);
+  background: rgba(248, 250, 252, .12);
+  color: #f8fafc;
+}
 .badge-classics { background: rgba(100,116,139,.2); color: var(--text-300); }
 .badge-u23      { background: rgba(22,163,74,.15); color: var(--success); }
 .badge-done     { background: rgba(34,197,94,.15); color: var(--success); }
@@ -3588,19 +3713,51 @@ html, body {
 }
 
 .stage-editor-table-wrap {
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   max-height: 62vh;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(148, 163, 184, .14);
 }
 
 .stage-editor-table {
-  min-width: 980px;
+  min-width: 1560px;
+}
+
+.stage-editor-col-length,
+.stage-editor-col-gradient,
+.stage-editor-col-terrain {
+  width: 15rem;
+}
+
+.stage-editor-col-tech,
+.stage-editor-col-wind {
+  width: 9rem;
+}
+
+.stage-editor-col-start-markers,
+.stage-editor-col-end-markers {
+  width: 24rem;
+}
+
+.stage-editor-col-actions {
+  width: 10rem;
 }
 
 .stage-editor-table tbody td {
   padding: .24rem .3rem;
   vertical-align: top;
+}
+
+.stage-editor-cell-length,
+.stage-editor-cell-gradient,
+.stage-editor-cell-terrain,
+.stage-editor-cell-tech,
+.stage-editor-cell-wind,
+.stage-editor-cell-start-markers,
+.stage-editor-cell-end-markers,
+.stage-editor-row-actions {
+  min-width: 0;
 }
 
 .stage-editor-segment-row-invalid {
@@ -3666,15 +3823,41 @@ html, body {
   color: #fff;
 }
 
-.stage-editor-score-placeholder {
+.stage-editor-score-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 3rem;
   min-height: 1.45rem;
-  padding: .15rem .45rem;
+  padding: .15rem .55rem;
   border-radius: var(--radius-sm);
-  background: rgba(148, 163, 184, .14);
-  color: var(--text-300);
+  border: 1px solid hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness), var(--stage-editor-score-border-alpha));
+  background: hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness), var(--stage-editor-score-bg-alpha));
+  color: #f8fafc;
   font-size: .78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-editor-inline-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stage-editor-inline-button:hover {
+  color: var(--text-100);
+}
+
+.stage-editor-score-anchor {
+  vertical-align: middle;
+}
+
+.stage-editor-category-empty {
+  color: var(--text-500);
 }
 
 .stage-editor-input-invalid {
@@ -4056,6 +4239,12 @@ html, body {
   display: block;
 }
 
+.dashboard-stage-profile-climb-highlight {
+  fill: rgba(220, 38, 38, .32);
+  stroke: rgba(153, 27, 27, .7);
+  stroke-width: 1.2;
+}
+
 .dashboard-stage-profile-wrap {
   display: flex;
   align-items: stretch;
@@ -4228,6 +4417,21 @@ html, body {
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-progress {
+  width: 260px;
+  height: 8px;
+  background: var(--bg-600);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.loading-progress-bar {
+  width: 0%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width .12s linear;
+}
 
 /* ---- Scrollbars ------------------------------------------- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

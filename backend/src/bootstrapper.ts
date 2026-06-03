@@ -10,6 +10,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ContractService } from './game/ContractService';
 import { RiderDevelopmentService } from './game/RiderDevelopmentService';
+import { calculateClimbScoresForStage, calculateStageScore, StageScoreSegment } from './simulation/StageScoreCalculator';
+import type { StageMarker, StageMarkerCategory, StageMarkerType } from '../../shared/types';
 
 type CsvRow = Record<string, string>;
 
@@ -58,6 +60,7 @@ function resolveBackendRoot(): string {
 const BACKEND_ROOT = resolveBackendRoot();
 const ASSETS_DIR = path.join(BACKEND_ROOT, 'assets');
 const CSV_DIR = path.join(BACKEND_ROOT, '..', 'data', 'csv');
+const STAGES_DIR = path.join(BACKEND_ROOT, '..', 'data', 'stages');
 const SCHEMA_PATH = path.join(ASSETS_DIR, 'schema.sql');
 const DB_PATH = path.join(ASSETS_DIR, 'world_data.db');
 const DEFAULT_RIDER_TYPE_ID = 1;
@@ -185,6 +188,61 @@ function readCsv(fileName: string): CsvRow[] {
     throw new Error(`CSV nicht gefunden: ${filePath}`);
   }
   return parseCsv(fs.readFileSync(filePath, 'utf8'));
+}
+
+function parseNullableCsvValue(value: string | undefined): string | null {
+  const normalized = (value ?? '').trim();
+  return normalized.length === 0 || normalized.toLowerCase() === 'null' ? null : normalized;
+}
+
+function isValidStageMarkerType(value: string): value is StageMarkerType {
+  return ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(value);
+}
+
+function isValidStageMarkerCategory(value: string): value is StageMarkerCategory {
+  return ['HC', '1', '2', '3', '4', 'Sprint'].includes(value);
+}
+
+function parseStageDetailMarkers(typesValue: string, namesValue: string, categoriesValue: string, ctx: string): StageMarker[] {
+  const types = typesValue.split('|').map((value) => value.trim()).filter((value) => value.length > 0);
+  if (types.length === 0) return [];
+  const names = namesValue.split('|');
+  const categories = categoriesValue.split('|');
+
+  return types.map((type, index) => {
+    if (!isValidStageMarkerType(type)) {
+      throw new Error(`${ctx}: Ungueltiger Marker-Typ ${type}.`);
+    }
+    const rawCategory = parseNullableCsvValue(categories[index]);
+    if (rawCategory != null && !isValidStageMarkerCategory(rawCategory)) {
+      throw new Error(`${ctx}: Ungueltige Marker-Kategorie ${rawCategory}.`);
+    }
+    return {
+      type,
+      name: parseNullableCsvValue(names[index]),
+      cat: rawCategory,
+    };
+  });
+}
+
+function readStageScoreSegments(detailsCsvFile: string, ctx: string): StageScoreSegment[] {
+  const filePath = path.join(STAGES_DIR, detailsCsvFile);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${ctx}: Stage-Detail-CSV nicht gefunden: ${detailsCsvFile}`);
+  }
+
+  return parseCsv(fs.readFileSync(filePath, 'utf8')).map((row, index) => {
+    const rowCtx = `${detailsCsvFile} Zeile ${index + 2}`;
+    const lengthKm = real(req(row, 'length_km', rowCtx), `${rowCtx} / length_km`);
+    const gradientPercent = real(req(row, 'gradient_percent', rowCtx), `${rowCtx} / gradient_percent`);
+    const segment: StageScoreSegment = {
+      lengthKm,
+      gradientPercent,
+      markers: parseStageDetailMarkers(row['marker_type'] ?? '', row['marker_name'] ?? '', row['marker_cat'] ?? '', rowCtx),
+      endMarkers: parseStageDetailMarkers(row['end_marker_type'] ?? '', row['end_marker_name'] ?? '', row['end_marker_cat'] ?? '', rowCtx),
+    };
+    return segment;
+  });
 }
 
 function req(row: CsvRow, key: string, ctx: string): string {
@@ -737,12 +795,20 @@ function seedStages(db: Database.Database): void {
     INSERT INTO stages (
       id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
       final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-      crash_incident_multiplier, mechanical_incident_multiplier
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      crash_incident_multiplier, mechanical_incident_multiplier, stage_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertClimbScore = db.prepare(`
+    INSERT INTO stage_climb_scores (
+      stage_id, climb_index, name, category, start_km, end_km, climb_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `stages.csv Zeile ${index + 2}`;
+    const stageId = int(req(row, 'id', ctx), ctx);
+    const startElevation = int(req(row, 'start_elevation', ctx), ctx);
+    const detailsCsvFile = req(row, 'details_csv_file', ctx);
     const finalSpreadStartPercent = real(row['final_spread_start_percent'] ?? '70', `${ctx} / final_spread_start_percent`);
     if (finalSpreadStartPercent < 0 || finalSpreadStartPercent > 100) {
       throw new Error(`${ctx}: final_spread_start_percent muss zwischen 0 und 100 liegen.`);
@@ -777,20 +843,36 @@ function seedStages(db: Database.Database): void {
       throw new Error(`${ctx}: mechanical_incident_multiplier muss groesser als 0 sein.`);
     }
 
+    const scoreSegments = readStageScoreSegments(detailsCsvFile, ctx);
+    const stageScore = calculateStageScore(scoreSegments, startElevation);
+
     insert.run(
-      int(req(row, 'id', ctx), ctx),
+      stageId,
       int(req(row, 'race_id', ctx), ctx),
       int(req(row, 'stage_number', ctx), ctx),
       req(row, 'date', ctx),
       req(row, 'profile', ctx),
-      int(req(row, 'start_elevation', ctx), ctx),
-      req(row, 'details_csv_file', ctx),
+      startElevation,
+      detailsCsvFile,
       finalSpreadStartPercent,
       finalPushStartPercent,
       finalSpreadDifficultyMultiplier,
       crashIncidentMultiplier,
       mechanicalIncidentMultiplier,
+      stageScore,
     );
+
+    for (const climbScore of calculateClimbScoresForStage(scoreSegments, startElevation)) {
+      insertClimbScore.run(
+        stageId,
+        climbScore.climbIndex,
+        climbScore.name,
+        climbScore.category,
+        climbScore.startKm,
+        climbScore.endKm,
+        climbScore.score,
+      );
+    }
   }
 
   console.log(`  ${rows.length} Etappen eingefuegt.`);

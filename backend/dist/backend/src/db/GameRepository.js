@@ -1121,8 +1121,11 @@ class GameRepository {
         if (!rider) {
             return null;
         }
+        const currentSeason = this.getCurrentSeason();
+        const currentSeasonStandings = this.getSeasonStandings(currentSeason).riderStandings;
+        const currentSeasonRank = currentSeasonStandings.find((row) => row.riderId === rider.id)?.rank ?? null;
         if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
-            return this.createEmptyRiderStatsPayload(rider);
+            return this.createEmptyRiderStatsPayload(rider, currentSeasonRank);
         }
         const seasonRows = this.db.prepare(`
       SELECT DISTINCT CAST(substr(stages.date, 1, 4) AS INTEGER) AS season
@@ -1355,6 +1358,10 @@ class GameRepository {
             teamId: rider.activeTeamId ?? null,
             teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
             countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+            roleName: rider.role?.name ?? null,
+            overallRating: rider.overallRating,
+            currentSeasonPoints: rider.seasonPoints ?? 0,
+            currentSeasonRank,
             seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
         };
     }
@@ -2383,13 +2390,17 @@ class GameRepository {
         }
         return stagesByRaceId;
     }
-    createEmptyRiderStatsPayload(rider) {
+    createEmptyRiderStatsPayload(rider, currentSeasonRank) {
         return {
             riderId: rider.id,
             riderName: `${rider.firstName} ${rider.lastName}`,
             teamId: rider.activeTeamId ?? null,
             teamName: rider.activeTeamId != null ? this.getTeamById(rider.activeTeamId)?.name ?? null : null,
             countryCode: rider.country?.code3 ?? rider.nationality ?? null,
+            roleName: rider.role?.name ?? null,
+            overallRating: rider.overallRating,
+            currentSeasonPoints: rider.seasonPoints ?? 0,
+            currentSeasonRank,
             seasons: [],
         };
     }

@@ -43,6 +43,8 @@ import type {
   StageTerrain,
 } from '../../shared/types';
 import { RaceSimView } from './race-sim/RaceSimView';
+import type { SimulationSnapshot } from './race-sim/SimulationEngine';
+import { runInstantSimulation } from './race-sim/runInstantSimulation';
 import { renderStaticStageProfile } from './race-sim/renderProfile';
 
 // ============================================================
@@ -100,6 +102,7 @@ const state: {
     direction: 'asc' | 'desc';
   };
   riderStatsPayload: RiderStatsPayload | null;
+  riderStatsTab: RiderStatsTab;
   riderStatsSelectedRiderId: number | null;
 } = {
   currentSave: null,
@@ -152,12 +155,15 @@ const state: {
     direction: 'asc',
   },
   riderStatsPayload: null,
+  riderStatsTab: 'results',
   riderStatsSelectedRiderId: null,
 };
 
 let raceSimView: RaceSimView | null = null;
 
 let realtimeCompletionInFlight = false;
+
+let instantStageInFlightId: number | null = null;
 
 let realtimeStageLoadInFlightId: number | null = null;
 
@@ -184,21 +190,17 @@ const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['Sprint', '4', '3', '2',
 const STAGE_EDITOR_MIN_SEGMENT_KM = 0.2;
 const STAGE_EDITOR_SPRINT_CUT_KM = 0.3;
 const STAGE_EDITOR_TABLE_COLUMN_COUNT = 10;
-const STAGE_EDITOR_CLIMB_MIN_GAIN_METERS = 60;
+const STAGE_EDITOR_CLIMB_MIN_GAIN_METERS = 100;
 const STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT = 3;
-const STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_METERS = 18;
-const STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_KM = 0.6;
+const STAGE_EDITOR_CLIMB_BREAK_DESCENT_METERS = 50;
 const STAGE_EDITOR_AUTO_DESCENT_MIN_GRADIENT = -2;
 const STAGE_EDITOR_AUTO_DESCENT_MIN_DISTANCE_KM = 1;
-const STAGE_EDITOR_AUTO_HILL_MIN_DISTANCE_KM = 0.5;
-const STAGE_EDITOR_AUTO_HILL_MIN_GRADIENT = 3;
-const STAGE_EDITOR_AUTO_MEDIUM_MIN_DISTANCE_KM = 2.5;
-const STAGE_EDITOR_AUTO_MEDIUM_MIN_GRADIENT = 3;
-const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_DISTANCE_KM = 6;
-const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GRADIENT = 3.5;
-const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_DISTANCE_KM = 10;
-const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_GRADIENT = 4;
-const STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_TOP_METERS = 2000;
+const STAGE_EDITOR_AUTO_FLAT_MAX_GRADIENT = 2.5;
+const STAGE_EDITOR_AUTO_DESCENT_STRONG_GRADIENT = -3;
+const STAGE_EDITOR_SEGMENT_MIN_HILL_GAIN_METERS = 15;
+const STAGE_EDITOR_AUTO_MEDIUM_MIN_GAIN_METERS = 200;
+const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GAIN_METERS = 600;
+const STAGE_EDITOR_AUTO_MOUNTAIN_MIN_TOP_METERS = 850;
 
 function isFinishMarkerType(markerType: StageMarkerType): markerType is StageFinishMarkerType {
   return ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(markerType);
@@ -629,11 +631,12 @@ const TEAM_SKILL_COLUMNS: Array<{ key: keyof Rider['skills']; label: string }> =
 ];
 
 type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
+type RiderStatsTab = 'results' | 'program';
 
-type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
+type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'formBonus' | 'raceFormBonus' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
 type RaceParticipantsSortKey = 'team' | 'rider' | 'spec1' | 'role' | 'overall' | 'phase' | 'program';
 type StageEditorStagesSortKey = 'stageId' | 'countryCode' | 'raceName' | 'stageNumber' | 'profile' | 'distanceKm' | 'elevationGainMeters' | 'sprintCount' | 'climbCount' | 'profileScore';
-type StageEditorClimbsSortKey = 'placementKm' | 'name' | 'countryCode' | 'raceName' | 'stageNumber' | 'gainMeters' | 'distanceKm' | 'avgGradient' | 'maxGradient' | 'climbScore';
+type StageEditorClimbsSortKey = 'placementKm' | 'name' | 'category' | 'countryCode' | 'raceName' | 'stageNumber' | 'gainMeters' | 'distanceKm' | 'avgGradient' | 'maxGradient' | 'climbScore';
 
 interface TeamTableColumn {
   id: string;
@@ -684,6 +687,8 @@ const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]> = {
     { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
     { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
     { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
+    { id: 'longTermFatigueMalus', label: 'L-Ersch', title: 'Langzeit-Erschöpfung ab dem 50. Saisonrenntag', sortKey: 'longTermFatigueMalus', className: 'team-table-col-points' },
+    { id: 'shortTermFatigueMalus', label: 'Akut', title: 'Akuter Verschleiß im rollenden 30-Tage-Fenster', sortKey: 'shortTermFatigueMalus', className: 'team-table-col-points' },
     { id: 'seasonFormPhase', label: 'Phase', title: 'Formphase', className: 'team-table-col-phase' },
     { id: 'seasonPoints', label: 'Pkt', title: 'Saisonpunkte - kumulierte Punkte der aktuellen Saison', sortKey: 'seasonPoints', className: 'team-table-col-points' },
     { id: 'seasonRaceDays', label: 'Renntage', title: 'Renntage in der laufenden Saison', sortKey: 'seasonRaceDays', className: 'team-table-col-points' },
@@ -779,14 +784,34 @@ function renderSeasonFormValue(value: number | undefined): string {
   return `<span class="${className}">${prefix}${amount.toFixed(1).replace('.', ',')}</span>`;
 }
 
+function renderLoadMalusValue(value: number | undefined, warning: Rider['shortTermFatigueWarning'] = 'none', title?: string): string {
+  const amount = value ?? 0;
+  const classNames = ['race-sim-form-negative'];
+  if (warning === 'warning') {
+    classNames.push('load-warning');
+  }
+  if (warning === 'critical') {
+    classNames.push('load-warning-critical');
+  }
+  const titleAttr = title ? ` title="${esc(title)}"` : '';
+  if (amount === 0) {
+    return `<span class="${classNames.join(' ')}"${titleAttr}>0,0</span>`;
+  }
+  return `<span class="${classNames.join(' ')}"${titleAttr}>-${amount.toFixed(1).replace('.', ',')}</span>`;
+}
+
 function renderSeasonFormPhase(rider: Rider): string {
   const phase = rider.seasonFormPhase ?? 'neutral';
+  return renderSeasonFormPhaseIndicator(phase);
+}
+
+function renderSeasonFormPhaseIndicator(phase: Rider['seasonFormPhase']): string {
   const meta: Record<string, { symbol: string; label: string; className: string }> = {
     rise: { symbol: '↑', label: 'Aufbau', className: 'team-form-phase-rise' },
     fall: { symbol: '↓', label: 'Abbau', className: 'team-form-phase-fall' },
     neutral: { symbol: '●', label: 'Neutral', className: 'team-form-phase-neutral' },
   };
-  const item = meta[phase] ?? meta['neutral'];
+  const item = meta[phase ?? 'neutral'] ?? meta['neutral'];
   return `<span class="team-form-phase ${item.className}" title="${esc(item.label)}">${item.symbol}</span>`;
 }
 
@@ -1284,48 +1309,49 @@ function classifyStageEditorClimb(distanceKm: number, gainMeters: number, avgGra
 function detectStageEditorClimbs(waypoints: StageEditorWaypoint[]): DetectedStageEditorClimb[] {
   const climbs: DetectedStageEditorClimb[] = [];
   let startIndex: number | null = null;
-  let gainMeters = 0;
+  let topIndex: number | null = null;
   let descentMeters = 0;
-  let descentDistanceKm = 0;
 
-  const commitClimb = (topIndex: number): void => {
-    if (startIndex == null) return;
+  const commitClimb = (resolvedTopIndex: number | null): void => {
+    if (startIndex == null || resolvedTopIndex == null || resolvedTopIndex <= startIndex) {
+      startIndex = null;
+      topIndex = null;
+      descentMeters = 0;
+      return;
+    }
 
     const startPoint = waypoints[startIndex];
-    const topPoint = waypoints[topIndex];
+    const topPoint = waypoints[resolvedTopIndex];
     const distanceKm = topPoint.kmMark - startPoint.kmMark;
-    const avgGradient = distanceKm > 0 ? gainMeters / (distanceKm * 10) : 0;
-    if (gainMeters >= STAGE_EDITOR_CLIMB_MIN_GAIN_METERS && avgGradient >= STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT) {
+    const netGainMeters = Math.max(0, topPoint.elevation - startPoint.elevation);
+    const avgGradient = distanceKm > 0 ? netGainMeters / (distanceKm * 10) : 0;
+    if (netGainMeters >= STAGE_EDITOR_CLIMB_MIN_GAIN_METERS && avgGradient >= STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT) {
       climbs.push({
         startKm: roundStageEditorKm(startPoint.kmMark),
         endKm: roundStageEditorKm(topPoint.kmMark),
         distanceKm: roundStageEditorKm(distanceKm),
-        gainMeters: Math.round(gainMeters),
+        gainMeters: Math.round(netGainMeters),
         avgGradient: roundStageEditorOneDecimal(avgGradient),
-        category: classifyStageEditorClimb(distanceKm, gainMeters, avgGradient),
+        category: classifyStageEditorClimb(distanceKm, netGainMeters, avgGradient),
         startIndex,
-        topIndex,
+        topIndex: resolvedTopIndex,
         topElevation: Math.round(topPoint.elevation),
       });
     }
 
     startIndex = null;
-    gainMeters = 0;
+    topIndex = null;
     descentMeters = 0;
-    descentDistanceKm = 0;
   };
 
   for (let index = 1; index < waypoints.length; index += 1) {
     const previous = waypoints[index - 1];
     const current = waypoints[index];
     const deltaElevation = current.elevation - previous.elevation;
-    const deltaDistanceKm = current.kmMark - previous.kmMark;
-
     if (startIndex == null && deltaElevation > 0) {
       startIndex = index - 1;
-      gainMeters = deltaElevation;
+      topIndex = index;
       descentMeters = 0;
-      descentDistanceKm = 0;
       continue;
     }
 
@@ -1334,22 +1360,20 @@ function detectStageEditorClimbs(waypoints: StageEditorWaypoint[]): DetectedStag
     }
 
     if (deltaElevation >= 0) {
-      gainMeters += deltaElevation;
+      if (topIndex == null || current.elevation >= waypoints[topIndex].elevation) {
+        topIndex = index;
+      }
       descentMeters = 0;
-      descentDistanceKm = 0;
       continue;
     }
 
     descentMeters += Math.abs(deltaElevation);
-    descentDistanceKm += deltaDistanceKm;
-    if (descentMeters <= STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_METERS && descentDistanceKm <= STAGE_EDITOR_BRIEF_DESCENT_TOLERANCE_KM) {
-      continue;
+    if (descentMeters >= STAGE_EDITOR_CLIMB_BREAK_DESCENT_METERS) {
+      commitClimb(topIndex);
     }
-
-    commitClimb(index - 1);
   }
 
-  commitClimb(waypoints.length - 1);
+  commitClimb(topIndex);
   return climbs;
 }
 
@@ -1374,23 +1398,26 @@ function isManualStageEditorTerrain(terrain: StageTerrain): boolean {
 }
 
 function classifyAutoClimbTerrain(climb: DetectedStageEditorClimb): StageTerrain | null {
-  if (
-    climb.distanceKm > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_DISTANCE_KM
-    && climb.avgGradient > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_GRADIENT
-    && climb.topElevation > STAGE_EDITOR_AUTO_HIGH_MOUNTAIN_MIN_TOP_METERS
-  ) {
-    return 'High_Mountain';
-  }
-  if (climb.distanceKm > STAGE_EDITOR_AUTO_MOUNTAIN_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GRADIENT) {
+  if (climb.gainMeters >= STAGE_EDITOR_AUTO_MOUNTAIN_MIN_GAIN_METERS && climb.topElevation >= STAGE_EDITOR_AUTO_MOUNTAIN_MIN_TOP_METERS) {
     return 'Mountain';
   }
-  if (climb.distanceKm > STAGE_EDITOR_AUTO_MEDIUM_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_MEDIUM_MIN_GRADIENT) {
+  if (climb.gainMeters > STAGE_EDITOR_AUTO_MEDIUM_MIN_GAIN_METERS) {
     return 'Medium_Mountain';
   }
-  if (climb.distanceKm > STAGE_EDITOR_AUTO_HILL_MIN_DISTANCE_KM && climb.avgGradient > STAGE_EDITOR_AUTO_HILL_MIN_GRADIENT) {
-    return 'Hill';
+  return 'Hill';
+}
+
+function classifyAutoStageEditorBaseTerrain(segment: StageEditorSegment): StageTerrain {
+  if (segment.gradientPercent < STAGE_EDITOR_AUTO_DESCENT_STRONG_GRADIENT) {
+    return 'Abfahrt';
   }
-  return null;
+  if (
+    segment.gradientPercent < STAGE_EDITOR_AUTO_FLAT_MAX_GRADIENT
+    || Math.max(0, (segment.lengthKm * 1000) * (segment.gradientPercent / 100)) < STAGE_EDITOR_SEGMENT_MIN_HILL_GAIN_METERS
+  ) {
+    return 'Flat';
+  }
+  return 'Hill';
 }
 
 function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
@@ -1403,7 +1430,9 @@ function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void {
     return;
   }
 
-  const nextTerrains = draft.segments.map((segment) => (isManualStageEditorTerrain(segment.terrain) ? segment.terrain : 'Flat' as StageTerrain));
+  const nextTerrains = draft.segments.map((segment) => (isManualStageEditorTerrain(segment.terrain)
+    ? segment.terrain
+    : classifyAutoStageEditorBaseTerrain(segment)));
   const climbs = detectStageEditorClimbs(draft.waypoints);
   draft.climbs = climbs.map(({ startIndex: _startIndex, topIndex: _topIndex, topElevation: _topElevation, ...climb }) => climb);
 
@@ -1595,10 +1624,33 @@ function getStageEditorSegmentEndElevation(segment: StageEditorSegment): number 
   return Math.round(segment.startElevation + ((segment.lengthKm * 1000) * (segment.gradientPercent / 100)));
 }
 
+function resolveFirstFreePositiveInteger(values: number[]): number {
+  const used = new Set(values.filter((value) => Number.isInteger(value) && value > 0));
+  let candidate = 1;
+  while (used.has(candidate)) {
+    candidate += 1;
+  }
+  return candidate;
+}
+
+function resolveNextFreeStageEditorStageId(): number {
+  return resolveFirstFreePositiveInteger(state.stageEditorExistingStages.map((stage) => stage.stageId));
+}
+
+function resolveNextFreeStageEditorRaceId(): number {
+  return resolveFirstFreePositiveInteger([
+    ...state.stageEditorExistingStages.map((stage) => stage.raceId),
+    ...state.races.map((race) => race.id),
+  ]);
+}
+
 function setStageEditorDefaults(draft: StageEditorDraft): void {
   const profileSelect = $<HTMLSelectElement>('stage-editor-profile');
   profileSelect.innerHTML = stageProfileOptionsHtml(draft.suggestedProfile);
   profileSelect.value = draft.suggestedProfile;
+
+  $<HTMLInputElement>('stage-editor-stage-id').value = String(resolveNextFreeStageEditorStageId());
+  $<HTMLInputElement>('stage-editor-race-id').value = String(resolveNextFreeStageEditorRaceId());
 
   const detailsFileInput = $<HTMLInputElement>('stage-editor-details-file');
   if (!detailsFileInput.value.trim()) {
@@ -1680,38 +1732,141 @@ async function loadStageEditorExistingStages(force = false): Promise<void> {
   renderStageEditorExistingStages();
 }
 
+function renderStageEditorScoreBadge(score: number, minScore: number, maxScore: number): string {
+  let relativeRatio = 0;
+  if (maxScore > minScore) {
+    relativeRatio = Math.max(0, Math.min(1, (score - minScore) / (maxScore - minScore)));
+  } else if (maxScore > 0) {
+    relativeRatio = 1;
+  }
+
+  const colorFactor = Math.cbrt(relativeRatio);
+  const hue = Math.round(128 - (colorFactor * 128));
+  const lightness = Math.round(38 - (colorFactor * 14));
+  const backgroundAlpha = 0.2 + (colorFactor * 0.18);
+  const borderAlpha = 0.32 + (colorFactor * 0.24);
+  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${backgroundAlpha.toFixed(2)};--stage-editor-score-border-alpha:${borderAlpha.toFixed(2)};`;
+  return `<span class="stage-editor-score-badge" style="${style}">${score}</span>`;
+}
+
+function resolveStageEditorCategoryClassName(category: StageMarkerCategory | null | undefined): string | null {
+  if (category == null || category === 'Sprint') {
+    return null;
+  }
+  if (category === 'HC') {
+    return 'is-hc';
+  }
+  return `is-cat-${category}`;
+}
+
+function renderStageEditorCategoryBadge(category: StageEditorClimbOverviewRow['category']): string {
+  const className = resolveStageEditorCategoryClassName(category);
+  if (!className || category == null) {
+    return '<span class="stage-editor-category-empty" title="Keine Kategorie am Climb-Endmarker gepflegt">–</span>';
+  }
+  return `<span class="race-sim-stage-points-category-badge ${className}">Kat. ${esc(category)}</span>`;
+}
+
+function renderStageEditorProfileOpenButton(content: string, stageId: number, title: string, climbId?: string): string {
+  const climbAttr = climbId ? ` data-stage-profile-open-climb-id="${esc(climbId)}"` : '';
+  return `<button type="button" class="stage-editor-inline-button" data-stage-profile-open-stage-id="${stageId}"${climbAttr} title="${esc(title)}">${content}</button>`;
+}
+
+function renderStageEditorStageScorePopover(row: StageEditorStageOverviewRow): string {
+  const climbs = state.stageEditorClimbRows
+    .filter((climb) => climb.stageId === row.stageId && climb.category != null)
+    .sort((left, right) => left.climbIndex - right.climbIndex || left.endKm - right.endKm);
+
+  if (climbs.length === 0) {
+    return '<div class="season-standings-country-popover-card"><div class="season-standings-country-popover-empty">Keine kategorisierten Anstiege in dieser Etappe.</div></div>';
+  }
+
+  return `
+    <div class="season-standings-country-popover-card">
+      <div class="season-standings-country-popover-head"><strong>Kategorisierte Anstiege</strong></div>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-climb stage-editor-score-popover-grid-head">
+        <span>Nr.</span>
+        <span>Pos.</span>
+        <span>Anstieg</span>
+        <span>Länge</span>
+        <span>Ø</span>
+        <span>Score</span>
+        <span>Kat.</span>
+      </div>
+      ${climbs.map((climb) => `
+        <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-climb">
+          <strong>${climb.climbIndex}.</strong>
+          <span>${climb.placementKm.toFixed(1).replace('.', ',')}</span>
+          <span>${esc(climb.name)}</span>
+          <span>${formatKm(climb.distanceKm)}</span>
+          <span>${formatGradient(climb.avgGradient)}</span>
+          <strong>${climb.climbScore}</strong>
+          <span>${renderStageEditorCategoryBadge(climb.category)}</span>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function renderStageEditorClimbScorePopover(row: StageEditorClimbOverviewRow): string {
+  const stage = state.stageEditorStageRows.find((entry) => entry.stageId === row.stageId);
+  return `
+    <div class="season-standings-country-popover-card">
+      <div class="season-standings-country-popover-head"><strong>Etappenkontext</strong></div>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-head stage-editor-score-popover-grid-head-compact">
+        <span>Etappe</span>
+        <span>Stage Score</span>
+      </div>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>${esc(row.raceName)} · ${row.stageNumber}</span>
+        <strong>${stage?.profileScore ?? 0}</strong>
+      </div>
+    </div>`;
+}
+
+function renderStageEditorScoreControl(score: number, minScore: number, maxScore: number, stageId: number, popoverContent: string, title: string, climbId?: string): string {
+  return `
+    <div class="season-standings-country-anchor stage-editor-score-anchor" tabindex="0">
+      ${renderStageEditorProfileOpenButton(renderStageEditorScoreBadge(score, minScore, maxScore), stageId, title, climbId)}
+      <div class="season-standings-country-popover">
+        ${popoverContent}
+      </div>
+    </div>`;
+}
+
 function renderStageEditorStagesOverview(): void {
   const head = $('stage-editor-stages-head');
   const body = $('stage-editor-stages-body');
   const empty = $('stage-editor-stages-empty');
   const meta = $('stage-editor-stages-meta');
   const rows = sortStageEditorStageRows(state.stageEditorStageRows);
+  const minStageScore = rows.length > 0 ? Math.min(...rows.map((row) => row.profileScore)) : 0;
+  const maxStageScore = Math.max(0, ...state.stageEditorStageRows.map((row) => row.profileScore));
 
   head.innerHTML = `<tr>
     ${renderStageEditorOverviewHeader('Nummer', 'stageId', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Flagge', 'countryCode', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Rennen', 'raceName', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
+    ${renderStageEditorOverviewHeader('Stage Score', 'profileScore', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Profil', 'profile', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Länge', 'distanceKm', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Höhenmeter', 'elevationGainMeters', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Sprints', 'sprintCount', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
     ${renderStageEditorOverviewHeader('Bergwertungen', 'climbCount', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
-    ${renderStageEditorOverviewHeader('Profile Score', 'profileScore', state.stageEditorStagesSort.key, state.stageEditorStagesSort.direction, 'stages')}
   </tr>`;
 
   body.innerHTML = rows.map((row) => `
     <tr>
       <td>${row.stageId}</td>
       <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
-      <td><strong>${esc(row.raceName)}</strong></td>
+      <td>${renderStageEditorProfileOpenButton(`<strong>${esc(row.raceName)}</strong>`, row.stageId, `${row.raceName} · Etappe ${row.stageNumber} öffnen`)}</td>
       <td>${row.stageNumber}</td>
-      <td>${renderStageProfileBadge(row.profile)}</td>
+      <td>${renderStageEditorScoreControl(row.profileScore, minStageScore, maxStageScore, row.stageId, renderStageEditorStageScorePopover(row), `${row.raceName} · Etappe ${row.stageNumber} öffnen`)}</td>
+      <td>${renderStageEditorProfileOpenButton(renderStageProfileBadge(row.profile), row.stageId, `${row.raceName} · Etappe ${row.stageNumber} öffnen`)}</td>
       <td>${formatKm(row.distanceKm)}</td>
       <td>${row.elevationGainMeters.toLocaleString('de-DE')} m</td>
       <td>${row.sprintCount}</td>
       <td>${row.climbCount}</td>
-      <td><span class="stage-editor-score-placeholder">${esc(row.profileScore)}</span></td>
     </tr>`).join('');
 
   empty.classList.toggle('hidden', rows.length > 0 || state.stageEditorOverviewLoading);
@@ -1726,10 +1881,14 @@ function renderStageEditorClimbsOverview(): void {
   const empty = $('stage-editor-climbs-empty');
   const meta = $('stage-editor-climbs-meta');
   const rows = sortStageEditorClimbRows(state.stageEditorClimbRows);
+  const minClimbScore = rows.length > 0 ? Math.min(...rows.map((row) => row.climbScore)) : 0;
+  const maxClimbScore = Math.max(0, ...state.stageEditorClimbRows.map((row) => row.climbScore));
 
   head.innerHTML = `<tr>
     ${renderStageEditorOverviewHeader('Platzierung', 'placementKm', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Name', 'name', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Kat.', 'category', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
+    ${renderStageEditorOverviewHeader('Climb Score', 'climbScore', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Flagge', 'countryCode', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Rennen', 'raceName', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
@@ -1737,21 +1896,21 @@ function renderStageEditorClimbsOverview(): void {
     ${renderStageEditorOverviewHeader('Länge', 'distanceKm', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Ø-Steigung', 'avgGradient', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
     ${renderStageEditorOverviewHeader('Steilster Abschnitt', 'maxGradient', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
-    ${renderStageEditorOverviewHeader('Climb Score', 'climbScore', state.stageEditorClimbsSort.key, state.stageEditorClimbsSort.direction, 'climbs')}
   </tr>`;
 
   body.innerHTML = rows.map((row) => `
     <tr>
       <td>km ${row.placementKm.toFixed(1).replace('.', ',')}</td>
       <td><strong>${esc(row.name)}</strong></td>
+      <td>${renderStageEditorCategoryBadge(row.category)}</td>
+      <td>${renderStageEditorScoreControl(row.climbScore, minClimbScore, maxClimbScore, row.stageId, renderStageEditorClimbScorePopover(row), `${row.raceName} · Etappe ${row.stageNumber} · ${row.name} öffnen`, row.id)}</td>
       <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
-      <td>${esc(row.raceName)}</td>
+      <td>${renderStageEditorProfileOpenButton(esc(row.raceName), row.stageId, `${row.raceName} · Etappe ${row.stageNumber} · ${row.name} öffnen`, row.id)}</td>
       <td>${row.stageNumber}</td>
       <td>${row.gainMeters.toLocaleString('de-DE')} m</td>
       <td>${formatKm(row.distanceKm)}</td>
       <td>${formatGradient(row.avgGradient)}</td>
       <td>${formatGradient(row.maxGradient)}</td>
-      <td><span class="stage-editor-score-placeholder">${esc(row.climbScore)}</span></td>
     </tr>`).join('');
 
   empty.classList.toggle('hidden', rows.length > 0 || state.stageEditorOverviewLoading);
@@ -2015,17 +2174,15 @@ function renderStageEditor(): void {
   chart.innerHTML = renderStageEditorChart(draft);
   tbody.innerHTML = draft.segments.map((segment, index) => `
     <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}">
-      <td><input type="number" step="0.01" min="0" value="${getStageEditorSegmentStartKm(draft, index).toFixed(2)}" readonly></td>
-      <td><input type="number" step="1" value="${segment.startElevation}" data-field="startElevation" class="${index === 0 ? '' : 'stage-editor-input-readonly'}" ${index === 0 ? '' : 'readonly'}></td>
-      <td><input type="number" step="0.01" min="0.2" value="${segment.lengthKm.toFixed(2)}" data-field="segmentLengthKm" class="${stageEditorFieldErrorClass(segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM)}"></td>
-      <td><input type="number" step="0.1" value="${segment.gradientPercent.toFixed(1)}" data-field="segmentGradientPercent"></td>
-      <td><select data-field="terrain">${terrainOptionsHtml(segment.terrain)}</select></td>
-      <td><input type="number" step="1" min="1" max="10" value="${segment.techLevel}" data-field="techLevel" class="${stageEditorFieldErrorClass(segment.techLevel < 1 || segment.techLevel > 10)}"></td>
-      <td><input type="number" step="1" min="1" max="10" value="${segment.windExp}" data-field="windExp" class="${stageEditorFieldErrorClass(segment.windExp < 1 || segment.windExp > 10)}"></td>
-      <td>
+      <td class="stage-editor-cell-length"><input type="number" step="0.01" min="0.2" value="${segment.lengthKm.toFixed(2)}" data-field="segmentLengthKm" class="${stageEditorFieldErrorClass(segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM)}"></td>
+      <td class="stage-editor-cell-gradient"><input type="number" step="0.1" value="${segment.gradientPercent.toFixed(1)}" data-field="segmentGradientPercent"></td>
+      <td class="stage-editor-cell-terrain"><select data-field="terrain">${terrainOptionsHtml(segment.terrain)}</select></td>
+      <td class="stage-editor-cell-tech"><input type="number" step="1" min="1" max="10" value="${segment.techLevel}" data-field="techLevel" class="${stageEditorFieldErrorClass(segment.techLevel < 1 || segment.techLevel > 10)}"></td>
+      <td class="stage-editor-cell-wind"><input type="number" step="1" min="1" max="10" value="${segment.windExp}" data-field="windExp" class="${stageEditorFieldErrorClass(segment.windExp < 1 || segment.windExp > 10)}"></td>
+      <td class="stage-editor-cell-start-markers">
         ${renderSegmentMarkerBlock(segment.markers, index, draft.segments.length, 'start')}
       </td>
-      <td>
+      <td class="stage-editor-cell-end-markers">
         ${renderSegmentMarkerBlock(segment.endMarkers, index, draft.segments.length, 'end')}
       </td>
       <td class="stage-editor-row-actions">
@@ -2360,7 +2517,7 @@ function compareStageEditorStageRows(left: StageEditorStageOverviewRow, right: S
     case 'elevationGainMeters': return left.elevationGainMeters - right.elevationGainMeters;
     case 'sprintCount': return left.sprintCount - right.sprintCount;
     case 'climbCount': return left.climbCount - right.climbCount;
-    case 'profileScore': return compareStrings(left.profileScore, right.profileScore);
+    case 'profileScore': return left.profileScore - right.profileScore;
     default: return 0;
   }
 }
@@ -2369,6 +2526,7 @@ function compareStageEditorClimbRows(left: StageEditorClimbOverviewRow, right: S
   switch (state.stageEditorClimbsSort.key) {
     case 'placementKm': return left.placementKm - right.placementKm;
     case 'name': return compareStrings(left.name, right.name);
+    case 'category': return compareOptionalStrings(left.category, right.category);
     case 'countryCode': return compareOptionalStrings(left.countryCode, right.countryCode);
     case 'raceName': return compareStrings(left.raceName, right.raceName);
     case 'stageNumber': return left.stageNumber - right.stageNumber;
@@ -2376,7 +2534,7 @@ function compareStageEditorClimbRows(left: StageEditorClimbOverviewRow, right: S
     case 'distanceKm': return left.distanceKm - right.distanceKm;
     case 'avgGradient': return left.avgGradient - right.avgGradient;
     case 'maxGradient': return left.maxGradient - right.maxGradient;
-    case 'climbScore': return compareStrings(left.climbScore, right.climbScore);
+    case 'climbScore': return left.climbScore - right.climbScore;
     default: return 0;
   }
 }
@@ -2555,6 +2713,10 @@ function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
       return `<td>${renderSeasonFormValue(rider.formBonus)}</td>`;
     case 'raceFormBonus':
       return `<td>${renderRaceFormBonusValue(rider.raceFormBonus)}</td>`;
+    case 'longTermFatigueMalus':
+      return `<td>${renderLoadMalusValue(rider.longTermFatigueMalus, 'none', `Saisonrenntage: ${rider.seasonRaceDaysTotal ?? 0}`)}</td>`;
+    case 'shortTermFatigueMalus':
+      return `<td>${renderLoadMalusValue(rider.shortTermFatigueMalus, rider.shortTermFatigueWarning ?? 'none', `30-Tage-Renntage: ${rider.rolling30dRaceDays ?? 0}`)}</td>`;
     case 'seasonFormPhase':
       return `<td>${renderSeasonFormPhase(rider)}</td>`;
     case 'raceFormSources':
@@ -2608,6 +2770,8 @@ function getTeamSortLabel(sortKey: TeamTableSortKey): string {
   if (sortKey === 'overallRating') return 'Gesamt';
   if (sortKey === 'formBonus') return 'Saisonform';
   if (sortKey === 'raceFormBonus') return 'Rennbonus';
+  if (sortKey === 'longTermFatigueMalus') return 'Langzeit-Erschöpfung';
+  if (sortKey === 'shortTermFatigueMalus') return 'Akuter Verschleiß';
   if (sortKey === 'seasonPoints') return 'Saisonpunkte';
   if (sortKey === 'seasonRaceDays') return 'Renntage';
   if (sortKey === 'seasonWins') return 'Siege';
@@ -2652,6 +2816,12 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
         break;
       case 'raceFormBonus':
         comparison = (left.raceFormBonus ?? 0) - (right.raceFormBonus ?? 0);
+        break;
+      case 'longTermFatigueMalus':
+        comparison = (left.longTermFatigueMalus ?? 0) - (right.longTermFatigueMalus ?? 0);
+        break;
+      case 'shortTermFatigueMalus':
+        comparison = (left.shortTermFatigueMalus ?? 0) - (right.shortTermFatigueMalus ?? 0);
         break;
       case 'seasonPoints':
         comparison = (left.seasonPoints ?? 0) - (right.seasonPoints ?? 0);
@@ -2826,6 +2996,21 @@ function renderRiderStatsCategoryBadge(categoryName: string | null | undefined):
   return `<span class="badge badge-race-category rider-stats-category-badge" style="${badgeStyle}">${esc(categoryName ?? 'Unbekannte Kategorie')}</span>`;
 }
 
+function resolveRiderStatsFinalTypeClassName(rowType: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]['rowType']): string {
+  switch (rowType) {
+    case 'gc_final':
+      return 'is-gc';
+    case 'points_final':
+      return 'is-points';
+    case 'mountain_final':
+      return 'is-mountain';
+    case 'youth_final':
+      return 'is-youth';
+    default:
+      return '';
+  }
+}
+
 function getRiderStatsRowTypeLabel(rowType: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]['rowType']): string {
   switch (rowType) {
     case 'gc_final':
@@ -2841,11 +3026,254 @@ function getRiderStatsRowTypeLabel(rowType: RiderStatsPayload['seasons'][number]
   }
 }
 
+function renderRiderStatsFinalTypeBadge(rowType: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]['rowType']): string {
+  const className = resolveRiderStatsFinalTypeClassName(rowType);
+  return `<span class="rider-stats-final-type ${className}">${esc(getRiderStatsRowTypeLabel(rowType))}</span>`;
+}
+
 function formatRiderStatsRaceBlockMeta(block: RiderStatsPayload['seasons'][number]['raceBlocks'][number]): string {
   const dateLabel = block.startDate === block.endDate
     ? formatDate(block.startDate)
     : `${formatDate(block.startDate)} - ${formatDate(block.endDate)}`;
   return `${dateLabel} · ${block.isStageRace ? 'Etappenrennen' : 'Eintagesrennen'}`;
+}
+
+function resolveCurrentSeasonRank(riderId: number | null | undefined): number | null {
+  if (riderId == null || state.riders.length === 0) {
+    return null;
+  }
+
+  const orderedRiders = [...state.riders].sort((left, right) => (
+    (right.seasonPoints ?? 0) - (left.seasonPoints ?? 0)
+    || (right.seasonWins ?? 0) - (left.seasonWins ?? 0)
+    || right.overallRating - left.overallRating
+    || `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`, 'de')
+    || left.id - right.id
+  ));
+  const rank = orderedRiders.findIndex((candidate) => candidate.id === riderId);
+  return rank >= 0 ? rank + 1 : null;
+}
+
+function getRiderStatsFinalTypeSortOrder(rowType: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'][number]['rowType']): number {
+  switch (rowType) {
+    case 'gc_final':
+      return 0;
+    case 'points_final':
+      return 1;
+    case 'mountain_final':
+      return 2;
+    case 'youth_final':
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function sortRiderStatsRowsNewestFirst(rows: RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows']): RiderStatsPayload['seasons'][number]['raceBlocks'][number]['rows'] {
+  return [...rows].sort((left, right) => (
+    right.date.localeCompare(left.date)
+    || (right.stageNumber ?? -1) - (left.stageNumber ?? -1)
+    || getRiderStatsFinalTypeSortOrder(left.rowType) - getRiderStatsFinalTypeSortOrder(right.rowType)
+    || (left.resultRank ?? 999) - (right.resultRank ?? 999)
+  ));
+}
+
+function sortRiderStatsRaceBlocksNewestFirst(blocks: RiderStatsPayload['seasons'][number]['raceBlocks']): RiderStatsPayload['seasons'][number]['raceBlocks'] {
+  return [...blocks]
+    .map((block) => ({
+      ...block,
+      rows: sortRiderStatsRowsNewestFirst(block.rows),
+    }))
+    .sort((left, right) => (
+      right.endDate.localeCompare(left.endDate)
+      || right.startDate.localeCompare(left.startDate)
+      || right.raceName.localeCompare(left.raceName, 'de')
+      || right.raceId - left.raceId
+    ));
+}
+
+function formatRiderStatsCareerRaceDaysTooltip(payload: RiderStatsPayload | null): string {
+  const rows = payload?.careerRaceDaysBySeason ?? [];
+  if (rows.length === 0) {
+    return 'Karriere-Renntage\nNoch keine Renntage erfasst';
+  }
+
+  return `Karriere-Renntage\n${rows.map((row) => `${row.season}: ${row.raceDays}`).join('\n')}`;
+}
+
+function formatRiderStatsAvailabilityTitle(
+  isUnavailable: boolean,
+  healthStatusLabel: string | null,
+  unavailableUntil: string | null,
+  unavailableDaysRemaining: number,
+): string | null {
+  if (!isUnavailable) {
+    return null;
+  }
+
+  const label = healthStatusLabel ?? 'Ausfall';
+  const untilText = unavailableUntil ? ` bis ${formatDate(unavailableUntil)}` : '';
+  return `${label}: noch ${unavailableDaysRemaining} Tag${unavailableDaysRemaining === 1 ? '' : 'e'}${untilText}`;
+}
+
+function renderRiderStatsAvailabilityMarker(rider: Rider | null, payload: RiderStatsPayload | null): string {
+  const title = formatRiderStatsAvailabilityTitle(
+    payload?.isUnavailable ?? rider?.isUnavailable === true,
+    payload?.healthStatusLabel ?? rider?.healthStatusLabel ?? null,
+    payload?.unavailableUntil ?? rider?.unavailableUntil ?? null,
+    payload?.unavailableDaysRemaining ?? rider?.unavailableDaysRemaining ?? 0,
+  );
+  if (!title) {
+    return '';
+  }
+
+  return `<span class="rider-availability-marker" title="${esc(title)}" aria-label="${esc(title)}">✚</span>`;
+}
+
+function renderRiderStatsTitle(rider: Rider | null, payload: RiderStatsPayload | null): string {
+  const riderName = payload?.riderName ?? (rider ? formatRiderName(rider) : 'Fahrerstatistik');
+  return `${esc(riderName)}${renderRiderStatsAvailabilityMarker(rider, payload)}`;
+}
+
+function renderRiderStatsHeatPill(label: string, value: number, maxValue: number): string {
+  const ratio = maxValue > 0 ? Math.max(0, Math.min(1, value / maxValue)) : 0.5;
+  const hue = Math.round(6 + (ratio * 118));
+  const borderAlpha = 0.26 + (ratio * 0.18);
+  const bgAlpha = 0.14 + (ratio * 0.12);
+  const style = `--rider-stats-pill-hue:${hue};--rider-stats-pill-border-alpha:${borderAlpha.toFixed(2)};--rider-stats-pill-bg-alpha:${bgAlpha.toFixed(2)};`;
+  return `<span class="rider-stats-summary-pill rider-stats-summary-pill-heat" style="${style}">${esc(label)} ${esc(String(value))}</span>`;
+}
+
+function renderRiderStatsTerrainSources(payload: RiderStatsPayload | null): string {
+  const points = payload?.pointsByTerrain;
+  if (!points) {
+    return '';
+  }
+
+  const maxValue = Math.max(points.flat, points.hilly, points.mediumMountain, points.mountain);
+  return `
+    <div class="rider-stats-summary-group">
+      <span class="rider-stats-summary-group-label">Terrain</span>
+      ${renderRiderStatsHeatPill('Flat', points.flat, maxValue)}
+      ${renderRiderStatsHeatPill('Hilly', points.hilly, maxValue)}
+      ${renderRiderStatsHeatPill('Medium Mountain', points.mediumMountain, maxValue)}
+      ${renderRiderStatsHeatPill('Mountain', points.mountain, maxValue)}
+    </div>`;
+}
+
+function renderRiderStatsRaceFormatSources(payload: RiderStatsPayload | null): string {
+  const points = payload?.pointsByRaceFormat;
+  if (!points) {
+    return '';
+  }
+
+  const maxValue = Math.max(points.stageRace, points.oneDay);
+  return `
+    <div class="rider-stats-summary-group">
+      <span class="rider-stats-summary-group-label">Format</span>
+      ${renderRiderStatsHeatPill('Etappenrennen', points.stageRace, maxValue)}
+      ${renderRiderStatsHeatPill('Eintagesrennen', points.oneDay, maxValue)}
+    </div>`;
+}
+
+function renderRiderStatsTabs(payload: RiderStatsPayload | null): string {
+  const hasProgram = (payload?.programRaces.length ?? 0) > 0;
+  return `
+    <div class="team-detail-page-tabs rider-stats-tabs" role="tablist" aria-label="Riderstats Tabs">
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'results' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="results" aria-selected="${state.riderStatsTab === 'results' ? 'true' : 'false'}">Ergebnisse</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
+    </div>`;
+}
+
+function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): string {
+  const races = payload?.programRaces ?? [];
+  if (!payload?.program) {
+    return `
+      <section class="rider-stats-placeholder">
+        <h3>Kein Programm hinterlegt</h3>
+        <p>Für diesen Fahrer ist aktuell kein Saisonprogramm vorhanden.</p>
+      </section>`;
+  }
+
+  if (races.length === 0) {
+    return `
+      <section class="rider-stats-placeholder">
+        <h3>${esc(payload.program.name)}</h3>
+        <p>Diesem Programm sind aktuell keine Rennen zugeordnet.</p>
+      </section>`;
+  }
+
+  return `
+    <section class="rider-stats-program">
+      <div class="rider-stats-season-head">
+        <h3>${esc(payload.program.name)}</h3>
+        <span>${races.length} Rennen</span>
+      </div>
+      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
+        <table class="data-table rider-stats-table rider-stats-program-table">
+          <thead><tr><th>Datum</th><th>Land</th><th>Rennen</th><th>Rennklasse</th></tr></thead>
+          <tbody>
+            ${races.map((race) => `
+              <tr>
+                <td>${esc(formatRaceDateRange(race))}</td>
+                <td class="results-flag-col-cell">${race.country?.code3 ? renderFlag(race.country.code3) : '–'}</td>
+                <td><strong>${esc(race.name)}</strong></td>
+                <td>${renderRiderStatsCategoryBadge(race.category?.name ?? null)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
+  const resolvedCountryCode = payload?.countryCode ?? countryCode ?? null;
+  const resolvedCountryFlag = resolvedCountryCode ? renderFlag(resolvedCountryCode) : countryFlag;
+  const resolvedRoleName = payload?.roleName ?? rider?.role?.name ?? 'Ohne Rolle';
+  const resolvedOverallRating = payload?.overallRating ?? rider?.overallRating ?? 0;
+  const resolvedTeamId = payload?.teamId ?? rider?.activeTeamId ?? null;
+  const resolvedTeamName = payload?.teamName ?? teamName ?? 'Ohne aktives Team';
+  const resolvedSeasonPhase = payload?.seasonFormPhase ?? rider?.seasonFormPhase ?? 'neutral';
+  const programName = payload?.program?.name ?? rider?.seasonProgram?.name ?? '–';
+  const formBonus = payload?.formBonus ?? rider?.formBonus ?? 0;
+  const raceFormBonus = payload?.raceFormBonus ?? rider?.raceFormBonus ?? 0;
+  const seasonRaceDaysTotal = payload?.seasonRaceDaysTotal ?? rider?.seasonRaceDaysTotal ?? 0;
+  const rolling30dRaceDays = payload?.rolling30dRaceDays ?? rider?.rolling30dRaceDays ?? 0;
+  const longTermFatigueMalus = payload?.longTermFatigueMalus ?? rider?.longTermFatigueMalus ?? 0;
+  const shortTermFatigueMalus = payload?.shortTermFatigueMalus ?? rider?.shortTermFatigueMalus ?? 0;
+  const shortTermFatigueWarning = payload?.shortTermFatigueWarning ?? rider?.shortTermFatigueWarning ?? 'none';
+  const currentSeasonPoints = payload?.currentSeasonPoints ?? rider?.seasonPoints ?? 0;
+  const currentSeasonRank = payload?.currentSeasonRank ?? resolveCurrentSeasonRank(rider?.id ?? payload?.riderId ?? null);
+  const currentSeasonRaceDays = payload?.currentSeasonRaceDays ?? rider?.seasonRaceDays ?? 0;
+  const careerWins = payload?.careerWins ?? rider?.seasonWins ?? 0;
+  const currentSeasonBreakawayAttempts = payload?.currentSeasonBreakawayAttempts ?? 0;
+  return `
+    <div class="rider-stats-summary">
+      <div class="rider-stats-summary-row">
+        <span class="rider-stats-summary-pill">${resolvedCountryFlag}<span>${esc(resolvedCountryCode ?? 'Land offen')}</span></span>
+        <span class="rider-stats-summary-pill rider-stats-summary-pill-team">${renderMiniJersey(resolvedTeamId, resolvedTeamName)}<span>${esc(resolvedTeamName)}</span></span>
+        <span class="rider-stats-summary-pill">${esc(resolvedRoleName)}</span>
+        <span class="rider-stats-summary-pill" title="Formphase">${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)}<span>Form</span></span>
+        <span class="rider-stats-summary-pill">OVR ${Math.round(resolvedOverallRating)}</span>
+        <span class="rider-stats-summary-pill">Saisonpunkte ${esc(String(currentSeasonPoints))}</span>
+        <span class="rider-stats-summary-pill">Saisonplatzierung ${currentSeasonRank != null ? `${esc(String(currentSeasonRank))}.` : '–'}</span>
+        <span class="rider-stats-summary-pill" title="${esc(formatRiderStatsCareerRaceDaysTooltip(payload))}">Renntage ${esc(String(currentSeasonRaceDays))}</span>
+        <span class="rider-stats-summary-pill">Siege ${esc(String(careerWins))}</span>
+        <span class="rider-stats-summary-pill">Ausreißversuche ${esc(String(currentSeasonBreakawayAttempts))}</span>
+      </div>
+      <div class="rider-stats-summary-row rider-stats-summary-row-secondary">
+        <span class="rider-stats-summary-pill">S-Form ${renderSeasonFormValue(formBonus)}</span>
+        <span class="rider-stats-summary-pill">R-Form ${renderRaceFormBonusValue(raceFormBonus)}</span>
+        <span class="rider-stats-summary-pill">S-Tage ${esc(String(seasonRaceDaysTotal))}</span>
+        <span class="rider-stats-summary-pill${shortTermFatigueWarning === 'warning' ? ' rider-stats-summary-pill-warning' : shortTermFatigueWarning === 'critical' ? ' rider-stats-summary-pill-critical' : ''}">${shortTermFatigueWarning === 'critical' ? 'Zusammenbruch' : '30T'} ${esc(String(rolling30dRaceDays))}</span>
+        <span class="rider-stats-summary-pill">Langzeit ${renderLoadMalusValue(longTermFatigueMalus)}</span>
+        <span class="rider-stats-summary-pill${shortTermFatigueWarning === 'warning' ? ' rider-stats-summary-pill-warning' : shortTermFatigueWarning === 'critical' ? ' rider-stats-summary-pill-critical' : ''}">Akut ${renderLoadMalusValue(shortTermFatigueMalus, shortTermFatigueWarning)}</span>
+        <span class="rider-stats-summary-pill">Programm ${esc(programName)}</span>
+        ${renderRiderStatsTerrainSources(payload)}
+        ${renderRiderStatsRaceFormatSources(payload)}
+      </div>
+    </div>`;
 }
 
 function renderRiderStatsRankBadge(label: string, variant: 'place' | 'gc'): string {
@@ -2900,29 +3328,46 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
     : null;
   const countryCode = rider?.country?.code3 ?? rider?.nationality ?? null;
   const countryFlag = countryCode ? renderFlag(countryCode) : '';
+  const seasons = payload == null
+    ? []
+    : [...payload.seasons]
+      .map((season) => ({
+        ...season,
+        raceBlocks: sortRiderStatsRaceBlocksNewestFirst(season.raceBlocks),
+      }))
+      .sort((left, right) => right.season - left.season);
 
   if (isLoading) {
     return `
-      <div class="rider-stats-summary">
-        <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(countryCode ?? 'Land offen')}</span></span>
-        <span class="rider-stats-summary-pill">${esc(teamName ?? 'Ohne aktives Team')}</span>
-        <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
-        <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
-      </div>
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
       <section class="rider-stats-placeholder">
         <h3>Historie wird geladen</h3>
         <p>Die Karriereergebnisse dieses Fahrers werden zusammengestellt.</p>
       </section>`;
   }
 
-  if (!payload || payload.seasons.length === 0) {
+  if (!payload) {
     return `
-      <div class="rider-stats-summary">
-        <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(countryCode ?? 'Land offen')}</span></span>
-        <span class="rider-stats-summary-pill">${esc(teamName ?? payload?.teamName ?? 'Ohne aktives Team')}</span>
-        <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
-        <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
-      </div>
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      <section class="rider-stats-placeholder">
+        <h3>Keine Historie vorhanden</h3>
+        <p>Für diesen Fahrer wurden in der aktuellen Karriere noch keine Ergebnisse gefunden.</p>
+      </section>`;
+  }
+
+  if (state.riderStatsTab === 'program') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsProgramTab(payload)}`;
+  }
+
+  if (payload.seasons.length === 0) {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
       <section class="rider-stats-placeholder">
         <h3>Keine Historie vorhanden</h3>
         <p>Für diesen Fahrer wurden in der aktuellen Karriere noch keine Ergebnisse gefunden.</p>
@@ -2930,13 +3375,9 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
   }
 
   return `
-    <div class="rider-stats-summary">
-      <span class="rider-stats-summary-pill">${countryFlag}<span>${esc(payload.countryCode ?? countryCode ?? 'Land offen')}</span></span>
-      <span class="rider-stats-summary-pill">${esc(payload.teamName ?? teamName ?? 'Ohne aktives Team')}</span>
-      <span class="rider-stats-summary-pill">${esc(rider?.role?.name ?? 'Ohne Rolle')}</span>
-      <span class="rider-stats-summary-pill">OVR ${Math.round(rider?.overallRating ?? 0)}</span>
-    </div>
-    ${payload.seasons.map((season) => `
+    ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+    ${renderRiderStatsTabs(payload)}
+    ${seasons.map((season) => `
       <section class="rider-stats-season">
         <div class="rider-stats-season-head">
           <h3>Saison ${season.season}</h3>
@@ -2981,7 +3422,7 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
                           <td>${renderRiderStatsPlacement(row)}</td>
                           <td>${renderRiderStatsGcPlacement(row)}</td>
                           <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
-                          <td>${isFinalRow ? `<span class="rider-stats-final-type">${esc(getRiderStatsRowTypeLabel(row.rowType))}</span>` : renderRiderStatsCategoryBadge(row.raceCategoryName)}</td>
+                          <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsCategoryBadge(row.raceCategoryName)}</td>
                           <td>${esc(raceStageLabel)}</td>
                           <td>${row.profile ? renderStageProfileBadge(row.profile) : '–'}</td>
                           <td>${row.distanceKm != null ? esc(formatKm(row.distanceKm)) : '–'}</td>
@@ -3006,7 +3447,8 @@ async function openRiderStats(riderId: number): Promise<void> {
 
   state.riderStatsSelectedRiderId = riderId;
   state.riderStatsPayload = null;
-  $('rider-stats-title').textContent = rider ? formatRiderName(rider) : 'Fahrerstatistik';
+  state.riderStatsTab = 'results';
+  $('rider-stats-title').innerHTML = renderRiderStatsTitle(rider, null);
   $('rider-stats-meta').textContent = rider
     ? `${rider.role?.name ?? 'Fahrer'} · ${teamName ?? 'Team unbekannt'}`
     : 'Historie wird geladen';
@@ -3031,16 +3473,28 @@ async function openRiderStats(riderId: number): Promise<void> {
   }
 
   state.riderStatsPayload = res.data;
-  $('rider-stats-title').textContent = res.data.riderName;
+  $('rider-stats-title').innerHTML = renderRiderStatsTitle(rider, res.data);
   $('rider-stats-meta').textContent = `${rider?.role?.name ?? 'Fahrer'} · ${res.data.teamName ?? teamName ?? 'Ohne aktives Team'} · ${res.data.seasons.length} Saisons`;
   $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, res.data, false);
 }
 
 function showLoading(msg = 'Lade…'): void {
   $('loading-msg').textContent = msg;
+  $('loading-progress').classList.add('hidden');
   $('loading-overlay').classList.remove('hidden');
 }
 function hideLoading(): void { $('loading-overlay').classList.add('hidden'); }
+
+function showInstantProgress(progress: number): void {
+  $('loading-progress').classList.remove('hidden');
+  $('loading-overlay').classList.remove('hidden');
+  updateInstantProgress(progress);
+}
+function updateInstantProgress(progress: number): void {
+  const percent = Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  $('loading-msg').textContent = `Instant-Simulation läuft … ${percent}%`;
+  $<HTMLDivElement>('loading-progress-bar').style.width = `${percent}%`;
+}
 
 function showError(elemId: string, msg: string): void {
   const el = $(elemId);
@@ -3094,18 +3548,7 @@ function getRaceSimView(): RaceSimView {
       meta: $('race-sim-stage-meta'),
     }, {
       onFinishRequested: (snapshot, bootstrap) => {
-        const entries = snapshot.riders
-          .map((rider) => ({
-            riderId: rider.riderId,
-            finishTimeSeconds: bootstrap.stage.profile === 'ITT' || bootstrap.stage.profile === 'TTT'
-              ? rider.riderClockSeconds
-              : rider.finishTimeSeconds,
-            finishStatus: rider.finishStatus ?? 'finished',
-            isBreakaway: rider.isBreakaway,
-            statusReason: rider.statusReason ?? null,
-            photoFinishScore: rider.photoFinishScore,
-          } satisfies RealtimeStageCommitEntry))
-          .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
+        const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
         void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents);
       },
     });
@@ -3115,6 +3558,50 @@ function getRaceSimView(): RaceSimView {
 
 function formatPendingStageLabel(raceName: string, stageNumber: number, profile: StageProfile): string {
   return `${raceName} · Etappe ${stageNumber} · ${profile}`;
+}
+
+function buildRealtimeCommitEntries(
+  snapshot: SimulationSnapshot,
+  bootstrap: RealtimeSimulationBootstrap,
+): RealtimeStageCommitEntry[] {
+  return snapshot.riders
+    .map((rider) => ({
+      riderId: rider.riderId,
+      finishTimeSeconds: bootstrap.stage.profile === 'ITT' || bootstrap.stage.profile === 'TTT'
+        ? rider.riderClockSeconds
+        : rider.finishTimeSeconds,
+      finishStatus: rider.finishStatus ?? 'finished',
+      isBreakaway: rider.isBreakaway,
+      statusReason: rider.statusReason ?? null,
+      photoFinishScore: rider.photoFinishScore,
+    } satisfies RealtimeStageCommitEntry))
+    .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
+}
+
+async function openInstantStage(stageId: number): Promise<void> {
+  if (instantStageInFlightId != null || realtimeCompletionInFlight) {
+    return;
+  }
+
+  instantStageInFlightId = stageId;
+  showInstantProgress(0);
+  try {
+    const res = await api.getRealtimeSimulation(stageId);
+    if (!res.success || !res.data) {
+      alert('Instant-Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
+      return;
+    }
+
+    const bootstrap = res.data;
+    const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
+    const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
+    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents);
+  } catch (error) {
+    alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
+  } finally {
+    instantStageInFlightId = null;
+    hideLoading();
+  }
 }
 
 function canEditPendingStage(stage: PendingStage): boolean {
@@ -3605,6 +4092,20 @@ $('stage-editor-stages-table').addEventListener('click', (event) => {
   renderStageEditorStagesOverview();
 });
 
+$('stage-editor-stages-table').addEventListener('click', async (event) => {
+  const profileButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-profile-open-stage-id]');
+  if (!profileButton) {
+    return;
+  }
+
+  const stageId = Number(profileButton.dataset['stageProfileOpenStageId']);
+  if (!Number.isFinite(stageId)) {
+    return;
+  }
+
+  await openDashboardStageProfile(stageId);
+});
+
 $('stage-editor-climbs-table').addEventListener('click', (event) => {
   const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-editor-climbs-sort]');
   if (!sortButton) return;
@@ -3619,6 +4120,24 @@ $('stage-editor-climbs-table').addEventListener('click', (event) => {
     };
   }
   renderStageEditorClimbsOverview();
+});
+
+$('stage-editor-climbs-table').addEventListener('click', async (event) => {
+  const profileButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-profile-open-stage-id]');
+  if (!profileButton) {
+    return;
+  }
+
+  const stageId = Number(profileButton.dataset['stageProfileOpenStageId']);
+  if (!Number.isFinite(stageId)) {
+    return;
+  }
+
+  const climbId = profileButton.dataset['stageProfileOpenClimbId'] ?? null;
+  const selectedClimb = climbId != null
+    ? state.stageEditorClimbRows.find((row) => row.id === climbId) ?? null
+    : null;
+  await openDashboardStageProfile(stageId, selectedClimb);
 });
 
 $<HTMLSelectElement>('teams-dropdown').addEventListener('change', (e) => {
@@ -3669,6 +4188,26 @@ $('teams-detail').addEventListener('click', (event) => {
   }
 });
 
+$('rider-stats-body').addEventListener('click', (event) => {
+  const tabButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-stats-tab]');
+  if (!tabButton) {
+    return;
+  }
+
+  const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
+  if (nextTab !== 'results' && nextTab !== 'program') {
+    return;
+  }
+
+  if (nextTab === 'program' && (state.riderStatsPayload?.programRaces.length ?? 0) === 0) {
+    return;
+  }
+
+  state.riderStatsTab = nextTab;
+  const rider = findRiderById(state.riderStatsSelectedRiderId);
+  $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+});
+
 $('btn-back-menu').addEventListener('click', () => {
   raceSimView?.pause();
   showScreen('menu');
@@ -3689,6 +4228,14 @@ $('pending-stages-list').addEventListener('click', (event) => {
     const stageId = Number(liveButton.dataset['liveStage']);
     if (!Number.isFinite(stageId)) return;
     void openRealtimeStage(stageId, true);
+    return;
+  }
+
+  const instantButton = (event.target as Element).closest<HTMLButtonElement>('button[data-instant-stage]');
+  if (instantButton) {
+    const stageId = Number(instantButton.dataset['instantStage']);
+    if (!Number.isFinite(stageId)) return;
+    void openInstantStage(stageId);
   }
 });
 
@@ -3974,6 +4521,7 @@ function renderGameState(): void {
           <div class="pending-stage-actions">
             ${rosterButton}
             <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
+            <button class="btn btn-secondary btn-sm" data-instant-stage="${pendingStage.stageId}">Instant</button>
           </div>
         </div>`;
     }).join('');
@@ -4741,7 +5289,7 @@ async function refreshRaceProgramParticipants(showLoadingState = false): Promise
   $('race-participants-body').innerHTML = renderRaceParticipantRows(state.raceParticipants);
 }
 
-async function openDashboardStageProfile(stageId: number): Promise<void> {
+async function openDashboardStageProfile(stageId: number, selectedClimb: StageEditorClimbOverviewRow | null = null): Promise<void> {
   const location = findStageById(stageId);
   if (!location) {
     return;
@@ -4755,8 +5303,19 @@ async function openDashboardStageProfile(stageId: number): Promise<void> {
 
   state.selectedDashboardProfileStageId = stageId;
   $('stage-profile-title').textContent = `${location.race.name} · ${getStageDisplayName(location.stage)}`;
-  $('stage-profile-meta').textContent = `${formatDate(location.stage.date)} · ${location.stage.profile} · ${location.stage.distanceKm != null ? formatKm(location.stage.distanceKm) : '–'} · ${location.stage.elevationGainMeters != null ? formatElevationGain(location.stage.elevationGainMeters) : '–'}`;
-  renderStaticStageProfile($('stage-profile-view'), summary, location.stage.profile, buildDashboardStageProfileLabel(location.race, location.stage));
+  const climbMeta = selectedClimb != null
+    ? ` · Anstieg ${selectedClimb.climbIndex}: ${selectedClimb.name}${selectedClimb.category != null ? ` · Kat. ${selectedClimb.category}` : ''} · ${selectedClimb.startKm.toFixed(1).replace('.', ',')}-${selectedClimb.endKm.toFixed(1).replace('.', ',')} km · Climb Score ${selectedClimb.climbScore}`
+    : '';
+  $('stage-profile-meta').textContent = `${formatDate(location.stage.date)} · ${location.stage.profile} · ${location.stage.distanceKm != null ? formatKm(location.stage.distanceKm) : '–'} · ${location.stage.elevationGainMeters != null ? formatElevationGain(location.stage.elevationGainMeters) : '–'}${climbMeta}`;
+  renderStaticStageProfile(
+    $('stage-profile-view'),
+    summary,
+    location.stage.profile,
+    buildDashboardStageProfileLabel(location.race, location.stage),
+    selectedClimb != null
+      ? { selectedClimbRange: { startKm: selectedClimb.startKm, endKm: selectedClimb.endKm } }
+      : undefined,
+  );
   showModal('stageProfile');
 }
 

@@ -32,6 +32,13 @@ interface TimingRailEntry {
   teamAbbreviation: string | null;
 }
 
+interface StaticStageProfileOptions {
+  selectedClimbRange?: {
+    startKm: number;
+    endKm: number;
+  };
+}
+
 export type TimingRailMode = 'finish' | `split:${string}`;
 
 function encodeSplitModeValue(label: string): TimingRailMode {
@@ -477,7 +484,55 @@ function renderIttRiderLabels(clusters: RiderCluster[], summary: ParsedStageSumm
     .join('');
 }
 
-function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean): string {
+function buildClimbHighlightAreaPath(
+  summary: ParsedStageSummary,
+  stageDistanceMeters: number,
+  width: number,
+  paddingX: number,
+  height: number,
+  paddingTop: number,
+  paddingBottom: number,
+  axisMinElevation: number,
+  axisMaxElevation: number,
+  startKm: number,
+  endKm: number,
+): string | null {
+  const boundedStartKm = Math.max(0, Math.min(startKm, summary.distanceKm));
+  const boundedEndKm = Math.max(0, Math.min(endKm, summary.distanceKm));
+  if (boundedEndKm <= boundedStartKm) {
+    return null;
+  }
+
+  const points = [
+    {
+      kmMark: boundedStartKm,
+      elevation: interpolateElevation(summary, boundedStartKm * 1000),
+    },
+    ...summary.points.filter((point) => point.kmMark > boundedStartKm && point.kmMark < boundedEndKm),
+    {
+      kmMark: boundedEndKm,
+      elevation: interpolateElevation(summary, boundedEndKm * 1000),
+    },
+  ];
+
+  if (points.length < 2) {
+    return null;
+  }
+
+  const baselineY = height - paddingBottom;
+  const linePath = points
+    .map((point, index) => {
+      const x = scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX);
+      const y = scaleElevation(point.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const startX = scaleDistance(boundedStartKm * 1000, stageDistanceMeters, width, paddingX);
+  const endX = scaleDistance(boundedEndKm * 1000, stageDistanceMeters, width, paddingX);
+  return `${linePath} L ${endX.toFixed(1)} ${baselineY.toFixed(1)} L ${startX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
+}
+
+function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean, options: StaticStageProfileOptions = {}): string {
   const width = compact ? 312 : 1584;
   const height = compact ? 173 : 634;
   const paddingX = compact ? 12 : 28;
@@ -494,6 +549,21 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
   });
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
+  const climbHighlightPath = options.selectedClimbRange != null
+    ? buildClimbHighlightAreaPath(
+      summary,
+      stageDistanceMeters,
+      width,
+      paddingX,
+      height,
+      paddingTop,
+      paddingBottom,
+      axisMinElevation,
+      axisMaxElevation,
+      options.selectedClimbRange.startKm,
+      options.selectedClimbRange.endKm,
+    )
+    : null;
   const markerEvents = buildProfileEvents(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation)
     .map((event) => compact
       ? renderCompactProfileEvent(event, markerGuideTopY, baselineY)
@@ -530,6 +600,7 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
       <line x1="${paddingX}" y1="${baselineY}" x2="${width - paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
       ${compact ? '' : `<line x1="${paddingX}" y1="${paddingTop}" x2="${paddingX}" y2="${baselineY}" class="race-sim-axis"></line>`}
       <path d="${areaPath}" fill="url(#${compact ? 'dashboard-mini-area' : 'dashboard-large-area'})"></path>
+      ${climbHighlightPath ? `<path d="${climbHighlightPath}" class="dashboard-stage-profile-climb-highlight"></path>` : ''}
       <path d="${linePath}" class="race-sim-profile-line"></path>
       ${markerEvents}
       ${distanceTickMarkup}
@@ -537,13 +608,13 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
     </svg>`;
 }
 
-export function renderStaticStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {
+export function renderStaticStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string, options?: StaticStageProfileOptions): void {
   if (summary.points.length < 2) {
     container.innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
     return;
   }
 
-  container.innerHTML = `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false)}</div>`;
+  container.innerHTML = `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false, options)}</div>`;
 }
 
 export function renderMiniStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {

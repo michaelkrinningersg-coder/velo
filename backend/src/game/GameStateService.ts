@@ -4,6 +4,7 @@ import { GameState, GameStatus, PendingStage } from '../../../shared/types';
 import { GameRepository } from '../db/GameRepository';
 import { refreshRaceEntriesForRaceStart } from '../simulation/RaceRosterService';
 import { ContractService } from './ContractService';
+import { buildRiderLoadSummary } from './RiderLoadModel';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
 import { RiderRoleService } from './RiderRoleService';
@@ -58,11 +59,22 @@ interface RiderDailyStateRow {
   health_status: 'healthy' | 'ill' | 'injured';
   unavailable_until: string | null;
   unavailable_days_remaining: number;
+  season_race_days_total: number;
+  rolling_30d_race_days: number;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
+}
+
+function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
+  if (!tableExists(db, tableName)) {
+    return false;
+  }
+
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === columnName);
 }
 
 export class GameStateService {
@@ -172,6 +184,12 @@ export class GameStateService {
     return () => this.events.off('dayAdvanced', listener);
   }
 
+  public refreshRiderLoadState(currentDate: string, currentSeason: number): void {
+    this.ensureRiderDailyStateTable();
+    this.ensureRiderDailyStateRows(currentSeason);
+    this.syncRiderLoadState(currentDate, currentSeason);
+  }
+
   private ensureStateRow(): void {
     this.db.prepare(`
       CREATE TABLE IF NOT EXISTS game_state (
@@ -201,9 +219,25 @@ export class GameStateService {
         peak_dates_json TEXT NOT NULL DEFAULT '[]',
         health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
         unavailable_until TEXT,
-        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
+        season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0),
+        rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0)
       )
     `).run();
+
+    if (!columnExists(this.db, 'rider_daily_state', 'season_race_days_total')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0)
+      `).run();
+    }
+
+    if (!columnExists(this.db, 'rider_daily_state', 'rolling_30d_race_days')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0)
+      `).run();
+    }
   }
 
   private ensureRiderFormTables(): void {
@@ -273,8 +307,8 @@ export class GameStateService {
 
     const insertState = this.db.prepare(`
       INSERT INTO rider_daily_state (
-        rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining
-      ) VALUES (?, ?, ?, 0, 0, 0, NULL, ?, 'healthy', NULL, 0)
+        rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
+      ) VALUES (?, ?, ?, 0, 0, 0, NULL, ?, 'healthy', NULL, 0, 0, 0)
     `);
 
     for (const rider of missingRows) {
@@ -288,9 +322,10 @@ export class GameStateService {
     }
 
     this.ensureRiderDailyStateRows(currentSeason);
+    this.syncRiderLoadState(currentDate, currentSeason);
 
     const rows = this.db.prepare(`
-      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining
+      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
       FROM rider_daily_state
     `).all() as RiderDailyStateRow[];
     const updateState = this.db.prepare(`
@@ -345,9 +380,10 @@ export class GameStateService {
 
     this.ensureRiderDailyStateRows(nextSeason);
     this.removeExpiredRaceFormEvents(nextDate);
+    this.syncRiderLoadState(nextDate, nextSeason);
 
     const rows = this.db.prepare(`
-      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining
+      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
       FROM rider_daily_state
     `).all() as RiderDailyStateRow[];
     const updateState = this.db.prepare(`
@@ -461,6 +497,49 @@ export class GameStateService {
     }
 
     new RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
+  }
+
+  private syncRiderLoadState(currentDate: string, currentSeason: number): void {
+    if (!tableExists(this.db, 'rider_daily_state') || !tableExists(this.db, 'stage_entries') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'riders')) {
+      return;
+    }
+
+    const rollingWindowStart = addDaysIso(currentDate, -29);
+    const rows = this.db.prepare(`
+      SELECT
+        riders.id AS rider_id,
+        COALESCE(SUM(CASE
+          WHEN stage_entries.status IN ('finished', 'dnf')
+           AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+           AND stages.date <= ?
+          THEN 1 ELSE 0 END), 0) AS season_race_days_total,
+        COALESCE(SUM(CASE
+          WHEN stage_entries.status IN ('finished', 'dnf')
+           AND stages.date >= ?
+           AND stages.date <= ?
+          THEN 1 ELSE 0 END), 0) AS rolling_30d_race_days
+      FROM riders
+      LEFT JOIN stage_entries ON stage_entries.rider_id = riders.id
+      LEFT JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE riders.is_retired = 0
+      GROUP BY riders.id
+    `).all(currentSeason, currentDate, rollingWindowStart, currentDate) as Array<{
+      rider_id: number;
+      season_race_days_total: number;
+      rolling_30d_race_days: number;
+    }>;
+
+    const updateState = this.db.prepare(`
+      UPDATE rider_daily_state
+      SET season_race_days_total = ?,
+          rolling_30d_race_days = ?
+      WHERE rider_id = ?
+    `);
+
+    for (const row of rows) {
+      const summary = buildRiderLoadSummary(row.season_race_days_total, row.rolling_30d_race_days);
+      updateState.run(summary.seasonRaceDaysTotal, summary.rolling30dRaceDays, row.rider_id);
+    }
   }
 
   private prepareRaceEntriesForRaceStarts(currentDate: string): void {
