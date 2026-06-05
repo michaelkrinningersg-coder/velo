@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ContractService } from './game/ContractService';
 import { RiderDevelopmentService } from './game/RiderDevelopmentService';
+import { RiderNewgenService } from './game/RiderNewgenService';
 import { calculateClimbScoresForStage, calculateStageScore, StageScoreSegment } from './simulation/StageScoreCalculator';
 import type { StageMarker, StageMarkerCategory, StageMarkerType } from '../../shared/types';
 
@@ -1284,6 +1285,7 @@ export function bootstrap(force = false): void {
     seedRiders(db);
     const currentSeason = seedGameState(db);
 
+    new RiderNewgenService(db).createYearStartNewgens(currentSeason);
     new RiderDevelopmentService(db).initializeRiders(currentSeason, true);
     seedContracts(db);
     new ContractService(db).checkContractStatuses(currentSeason);

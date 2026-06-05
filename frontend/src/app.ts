@@ -799,13 +799,14 @@ function getSkillColor(value: number): string {
   return interpolateColor(colorStops[colorStops.length - 1].color, colorStops[colorStops.length - 1].color, 1);
 }
 
-function renderSkillValue(value: number): string {
-  return `<span class="skill-value" style="color:${getSkillColor(value)}">${Math.round(value)}</span>`;
+function renderSkillValue(value: number, potential?: number): string {
+  const titleAttr = potential != null ? ` title="Potential: ${potential.toFixed(2).replace('.', ',')}"` : '';
+  return `<span class="skill-value" style="color:${getSkillColor(value)}"${titleAttr}>${Math.round(value)}</span>`;
 }
 
 function renderSkillValueWithDelta(value: number, yearStart?: number, potential?: number): string {
-  if (yearStart == null || potential == null) {
-    return renderSkillValue(value);
+  if (yearStart == null) {
+    return renderSkillValue(value, potential);
   }
   const delta = Math.round((value - yearStart) * 100) / 100;
   const deltaClass = delta > 0 ? 'skill-delta-positive' : delta < 0 ? 'skill-delta-negative' : '';
