@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Velo â€“ Radsport Director</title>
+  <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
   <link rel="stylesheet" href="/src/main.css" />
 </head>
@@ -13,7 +13,7 @@
        SCREENS
   ========================================================= -->
 
-  <!-- ---- HauptmenÃ¼ ----------------------------------------- -->
+  <!-- ---- Hauptmenü ----------------------------------------- -->
   <div id="screen-menu" class="screen active">
     <div class="menu-logo">
       <h1>VELO</h1>
@@ -23,7 +23,7 @@
       <button class="btn btn-primary btn-lg" id="btn-new-career">Neue Karriere</button>
       <button class="btn btn-secondary btn-lg" id="btn-load-career">Karriere laden</button>
     </div>
-    <button class="btn btn-danger btn-sm hidden" id="btn-delete-all-careers">Alle Karrieren lÃ¶schen</button>
+    <button class="btn btn-danger btn-sm hidden" id="btn-delete-all-careers">Alle Karrieren löschen</button>
     <div id="saves-list" class="saves-grid hidden"></div>
   </div>
 
@@ -36,9 +36,9 @@
         <input type="text" id="input-career-name" placeholder="Meine Karriere" maxlength="40" />
       </div>
       <div class="form-group">
-        <label for="input-team-id">Team auswÃ¤hlen</label>
+        <label for="input-team-id">Team auswählen</label>
         <select id="input-team-id">
-          <option value="">â€” Teams werden geladen â€”</option>
+          <option value="">– Teams werden geladen –</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -108,7 +108,7 @@
           <div id="pending-stages-list" class="pending-stage-list hidden"></div>
         </div>
         <div class="game-state-actions">
-          <button class="btn btn-primary" id="btn-advance-day">NÃ¤chster Tag</button>
+          <button class="btn btn-primary" id="btn-advance-day">Nächster Tag</button>
         </div>
       </section>
 
@@ -124,13 +124,13 @@
         </div>
         <section class="dashboard-section">
           <div class="dashboard-section-header">
-            <h3>NÃ¤chste Rennen</h3>
+            <h3>Nächste Rennen</h3>
             <p class="text-muted">Zeitfahren bleiben direkt aus dem Dashboard startbar.</p>
           </div>
           <table class="data-table" id="dashboard-races-table">
             <thead>
               <tr>
-                <th>Datum</th><th>Rennen</th><th>Format</th><th>Land</th><th>Rennklasse</th><th>Teilnehmer</th><th>Distanz</th><th>HÃ¶henmeter</th><th>Status</th>
+                <th>Datum</th><th>Rennen</th><th>Format</th><th>Land</th><th>Rennklasse</th><th>Teilnehmer</th><th>Distanz</th><th>Höhenmeter</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="dashboard-races-tbody"></tbody>
@@ -210,7 +210,7 @@
             </select>
           </div>
         </div>
-        <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen fÃ¼r die Live-Simulation.</div>
+        <div id="race-sim-empty" class="results-empty">Heute gibt es keine offenen Etappen für die Live-Simulation.</div>
         <section class="race-sim-controls-header hidden" id="race-sim-controls-header">
           <div id="race-sim-controls" class="race-sim-controls"></div>
         </section>
@@ -224,7 +224,7 @@
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
-              <h3>HÃ¶henprofil</h3>
+              <h3>Höhenprofil</h3>
               <p class="text-muted">Cluster bilden sich ab weniger als 20 Metern Abstand auf der Strecke.</p>
             </div>
             <div id="race-sim-profile" class="race-sim-profile"></div>
@@ -232,14 +232,14 @@
           <section class="race-sim-card">
             <div class="race-sim-card-header">
               <h3>Gruppe</h3>
-              <p class="text-muted">Aktuell ausgewÃ¤hlte Renn-Gruppe im Live Race.</p>
+              <p class="text-muted">Aktuell ausgewählte Renn-Gruppe im Live Race.</p>
             </div>
             <div id="race-sim-group-box" class="race-sim-group-box"></div>
           </section>
           <section class="race-sim-card">
             <div class="race-sim-card-header">
               <h3>Messages</h3>
-              <p class="text-muted">Incidents, Helfer-Warten und AusfÃ¤lle wÃ¤hrend der Etappe.</p>
+              <p class="text-muted">Incidents, Helfer-Warten und Ausfälle während der Etappe.</p>
             </div>
             <div id="race-sim-messages-body" class="race-sim-messages-body"></div>
           </section>
@@ -261,20 +261,20 @@
         <div class="view-header view-header-stack">
           <div>
             <h2>Results</h2>
-            <p id="results-stage-meta" class="text-muted">Noch keine Etappe ausgewÃ¤hlt.</p>
+            <p id="results-stage-meta" class="text-muted">Noch keine Etappe ausgewählt.</p>
           </div>
         </div>
         <div class="results-toolbar">
           <div class="form-group">
             <label for="results-race-select">Rennen</label>
             <select id="results-race-select">
-              <option value="">â€“ Rennen auswÃ¤hlen â€“</option>
+              <option value="">– Rennen auswählen –</option>
             </select>
           </div>
           <div class="form-group">
             <label for="results-stage-select">Etappe</label>
             <select id="results-stage-select">
-              <option value="">â€“ Etappe auswÃ¤hlen â€“</option>
+              <option value="">– Etappe auswählen –</option>
             </select>
           </div>
         </div>
@@ -289,7 +289,7 @@
               <th>Fahrer / Team</th>
               <th>Team</th>
               <th>Zeit</th>
-              <th>RÃ¼ckstand</th>
+              <th>Rückstand</th>
               <th>Punktewertung</th>
               <th>UCI Punkte</th>
             </tr>
@@ -318,7 +318,7 @@
               <th id="season-standings-flag-header" class="results-flag-col">Flagge</th>
               <th id="season-standings-secondary-header">Team</th>
               <th>Punkte</th>
-              <th>RÃ¼ckstand</th>
+              <th>Rückstand</th>
             </tr>
           </thead>
           <tbody id="season-standings-tbody"></tbody>
@@ -345,19 +345,19 @@
                 <select id="stage-editor-existing-stage"></select>
                 <button class="btn btn-secondary" id="btn-stage-editor-load-existing">Stage laden</button>
               </div>
-              <p id="stage-editor-existing-hint" class="text-muted">CSV-Stages werden beim Ã–ffnen des Editors geladen.</p>
+              <p id="stage-editor-existing-hint" class="text-muted">CSV-Stages werden beim Öffnen des Editors geladen.</p>
             </div>
 
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
                 <h3>Import</h3>
-                <p class="text-muted">Backend-Import mit GlÃ¤ttung, Mindestsegmenten und Climb-Erkennung.</p>
+                <p class="text-muted">Backend-Import mit Glättung, Mindestsegmenten und Climb-Erkennung.</p>
               </div>
               <div class="stage-editor-import-row">
                 <input type="file" id="stage-editor-file" accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml" />
                 <button class="btn btn-primary" id="btn-stage-editor-import">Route importieren</button>
               </div>
-              <p id="stage-editor-file-hint" class="text-muted">Noch keine Datei ausgewÃ¤hlt.</p>
+              <p id="stage-editor-file-hint" class="text-muted">Noch keine Datei ausgewählt.</p>
               <div id="stage-editor-import-summary" class="stage-editor-stats"></div>
               <div id="stage-editor-empty" class="stage-editor-empty">Noch keine Strecke importiert.</div>
               <div id="stage-editor-warnings" class="stage-editor-alerts"></div>
@@ -367,7 +367,7 @@
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
                 <h3>Metadaten & Export</h3>
-                <p class="text-muted">Die Felder definieren exakt die Row fÃ¼r [stages.csv] und den Dateinamen unter [data/stages].</p>
+                <p class="text-muted">Die Felder definieren exakt die Row für [stages.csv] und den Dateinamen unter [data/stages].</p>
               </div>
               <div class="stage-editor-form-grid">
                 <div class="form-group">
@@ -416,7 +416,7 @@
                 </div>
               </div>
               <div class="stage-editor-actions">
-                <p id="stage-editor-export-hint" class="text-muted">Importiere oder lade zuerst eine Strecke. Export erzeugt Downloads und Ã¼berschreibt keine Masterdateien automatisch.</p>
+                <p id="stage-editor-export-hint" class="text-muted">Importiere oder lade zuerst eine Strecke. Export erzeugt Downloads und überschreibt keine Masterdateien automatisch.</p>
                 <button class="btn btn-primary" id="btn-stage-editor-export" disabled>CSV-Export</button>
               </div>
             </div>
@@ -425,7 +425,7 @@
           <section class="stage-editor-panel stage-editor-panel-wide">
             <div class="stage-editor-card">
               <div class="stage-editor-card-header">
-                <h3>HÃ¶henprofil</h3>
+                <h3>Höhenprofil</h3>
                 <p class="text-muted">Marker und Segmentdichte spiegeln direkt die editierbaren Segmentzeilen wider.</p>
               </div>
               <div id="stage-editor-chart" class="stage-editor-chart"></div>
@@ -450,7 +450,7 @@
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>LÃ¤nge</th>
+                      <th>Länge</th>
                       <th>Steigung</th>
                       <th>Terrain</th>
                       <th>Tech</th>
@@ -510,14 +510,14 @@
           <h2 id="tt-result-race-name">Ergebnis</h2>
           <p id="tt-result-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-tt">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-tt">×</button>
       </div>
       <div class="tt-result-wrapper">
         <table class="data-table" id="tt-result-table">
           <thead>
             <tr>
               <th>Platz</th><th>Fahrer</th><th>Nat</th><th>Team</th>
-              <th>ZF-Attr</th><th>Tagesform</th><th>Zeit</th><th>RÃ¼ckstand</th>
+              <th>ZF-Attr</th><th>Tagesform</th><th>Zeit</th><th>Rückstand</th>
             </tr>
           </thead>
           <tbody id="tt-result-tbody"></tbody>
@@ -534,13 +534,13 @@
           <h2 id="roster-editor-title">Starterfeld bearbeiten</h2>
           <p id="roster-editor-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-roster-editor">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-roster-editor">×</button>
       </div>
       <p id="roster-editor-error" class="error-msg hidden"></p>
       <div id="roster-editor-body" class="roster-editor-body"></div>
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btn-cancel-roster-editor">Abbrechen</button>
-        <button class="btn btn-primary" id="btn-apply-roster-editor">Teilnehmer Ã¼bernehmen</button>
+        <button class="btn btn-primary" id="btn-apply-roster-editor">Teilnehmer übernehmen</button>
       </div>
     </div>
   </div>
@@ -552,7 +552,7 @@
           <h2 id="race-stages-title">Etappen</h2>
           <p id="race-stages-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">×</button>
       </div>
       <div id="race-stages-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -565,7 +565,7 @@
           <h2 id="stage-profile-title">Etappenprofil</h2>
           <p id="stage-profile-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">×</button>
       </div>
       <div id="stage-profile-view" class="race-sim-profile dashboard-stage-profile-view"></div>
     </div>
@@ -578,7 +578,7 @@
           <h2 id="rider-program-title">Programm</h2>
           <p id="rider-program-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-rider-program">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-program">×</button>
       </div>
       <div id="rider-program-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -591,7 +591,7 @@
           <h2 id="rider-stats-title">Fahrerstatistik</h2>
           <p id="rider-stats-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">×</button>
       </div>
       <div id="rider-stats-body" class="dashboard-race-stages-body rider-stats-body"></div>
     </div>
@@ -604,7 +604,7 @@
           <h2 id="race-participants-title">Teilnehmer</h2>
           <p id="race-participants-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-race-participants">âœ•</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-participants">×</button>
       </div>
       <div id="race-participants-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -613,7 +613,7 @@
   <!-- ---- Loading Overlay ----------------------------------- -->
   <div id="loading-overlay" class="loading-overlay hidden">
     <div class="spinner"></div>
-    <p id="loading-msg">Ladeâ€¦</p>
+    <p id="loading-msg">Lade...</p>
     <div id="loading-progress" class="loading-progress hidden">
       <div id="loading-progress-bar" class="loading-progress-bar"></div>
     </div>
