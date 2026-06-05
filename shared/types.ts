@@ -179,6 +179,7 @@ export interface Rider {
   skills: RiderSkills;
   potentials: RiderPotentials;
   yearStartSkills?: Record<RiderSkillKey, number>;
+  mentorBoosts?: Partial<Record<RiderSkillKey, number>>;
   riderType: RiderSpecialization;
   specialization1: RiderSpecialization | null;
   specialization2: RiderSpecialization | null;

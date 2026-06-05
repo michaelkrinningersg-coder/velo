@@ -718,7 +718,6 @@ const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]> = {
   ],
   form: [
     { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
-    { id: 'mentorName', label: 'Mentor', title: 'Entwicklungs-Mentor im Team', sortKey: 'mentorName', className: 'team-table-col-mentor' },
     { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
     { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
     { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
@@ -740,8 +739,7 @@ const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]> = {
   ],
   preferences: [
     { id: 'seasonProgram', label: 'Programm', title: 'Saisonprogramm', className: 'team-table-col-program' },
-    { id: 'favoriteRaces', label: 'Favs', title: 'Lieblingsrennen', className: 'team-table-col-preferences' },
-    { id: 'nonFavoriteRaces', label: 'Nos', title: 'Nicht bevorzugte Rennen', className: 'team-table-col-preferences' },
+    { id: 'mentorName', label: 'Mentor', title: 'Entwicklungs-Mentor im Team', sortKey: 'mentorName', className: 'team-table-col-mentor' },
   ],
 };
 
@@ -3882,6 +3880,19 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
               </div>
               <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
                 <table class="data-table rider-stats-table">
+                  <colgroup>
+                    <col style="width: 8%;">
+                    <col style="width: 5%;">
+                    <col style="width: 5%;">
+                    <col style="width: 6%;">
+                    <col style="width: 15%;">
+                    <col style="width: 32%;">
+                    <col style="width: 6%;">
+                    <col style="width: 6%;">
+                    <col style="width: 5%;">
+                    <col style="width: 8%;">
+                    <col style="width: 4%;">
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>Datum</th>
@@ -3891,7 +3902,7 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
                       <th>Klasse</th>
                       <th>Rennen / Etappe</th>
                       <th>Profil</th>
-                      <th>Distanz</th>
+                      <th>km</th>
                       <th>HM</th>
                       <th>Ergebnis</th>
                       <th>Punkte</th>
@@ -3912,8 +3923,8 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsCategoryBadge(row.raceCategoryName)}</td>
                           <td>${esc(raceStageLabel)}</td>
                           <td>${row.profile ? renderStageProfileBadge(row.profile) : '–'}</td>
-                          <td>${row.distanceKm != null ? esc(formatKm(row.distanceKm)) : '–'}</td>
-                          <td>${row.elevationGainMeters != null ? esc(formatElevationGain(row.elevationGainMeters)) : '–'}</td>
+                          <td>${row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–'}</td>
+                          <td>${row.elevationGainMeters != null ? esc(String(row.elevationGainMeters)) : '–'}</td>
                           <td>${esc(formatRiderStatsResultDetail(row))}</td>
                           <td>${row.seasonPoints}</td>
                         </tr>`;

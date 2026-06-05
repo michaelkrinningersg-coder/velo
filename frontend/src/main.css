@@ -1164,6 +1164,10 @@ html, body {
   min-width: 760px;
 }
 
+.rider-stats-program-table th {
+  text-align: left;
+}
+
 .rider-stats-placeholder {
   display: grid;
   gap: .85rem;
