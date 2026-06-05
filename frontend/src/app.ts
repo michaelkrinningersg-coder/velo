@@ -872,7 +872,7 @@ function renderSeasonFormPhaseIndicator(phase: Rider['seasonFormPhase']): string
   const meta: Record<string, { symbol: string; label: string; className: string }> = {
     rise: { symbol: '▲', label: 'Aufbau', className: 'team-form-phase-rise' },
     fall: { symbol: '▼', label: 'Abbau', className: 'team-form-phase-fall' },
-    neutral: { symbol: '▬', label: 'Neutral', className: 'team-form-phase-neutral' },
+    neutral: { symbol: '●', label: 'Neutral', className: 'team-form-phase-neutral' },
   };
   const item = meta[phase ?? 'neutral'] ?? meta['neutral'];
   return `<span class="team-form-phase ${item.className}" title="${esc(item.label)}">${item.symbol}</span>`;
@@ -2517,7 +2517,7 @@ function getSpecializationSortLabel(value: Rider['specialization1']): string | u
 }
 
 function getDefaultTeamSortDirection(sortKey: TeamTableSortKey): 'asc' | 'desc' {
-  return ['birthYear', 'age', 'overallRating', 'formBonus', 'raceFormBonus', 'seasonPoints', 'seasonRaceDays', 'seasonWins', 'skillDevelopment', ...TEAM_SKILL_COLUMNS.map((column) => column.key)].includes(sortKey)
+  return ['birthYear', 'age', 'overallRating', 'potOverall', 'formBonus', 'raceFormBonus', 'seasonPoints', 'seasonRaceDays', 'seasonWins', 'skillDevelopment', ...TEAM_SKILL_COLUMNS.map((column) => column.key)].includes(sortKey)
     ? 'desc'
     : 'asc';
 }
@@ -2808,6 +2808,8 @@ function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
       return `<td>${esc(getRiderRoleName(rider))}</td>`;
     case 'overallRating':
       return `<td>${renderSkillValue(rider.overallRating)}</td>`;
+    case 'potOverall':
+      return `<td>${renderSkillValue(rider.potential)}</td>`;
     case 'birthYear':
       return `<td>${rider.birthYear}</td>`;
     case 'mentorName':
@@ -2923,6 +2925,9 @@ function sortTeamRiders(riders: Rider[]): Rider[] {
       case 'overallRating':
         comparison = left.overallRating - right.overallRating;
         break;
+      case 'potOverall':
+        comparison = (left.potential ?? 0) - (right.potential ?? 0);
+        break;
       case 'formBonus':
         comparison = (left.formBonus ?? 0) - (right.formBonus ?? 0);
         break;
@@ -3012,6 +3017,9 @@ function sortRiderMenuRiders(riders: Rider[]): Rider[] {
         break;
       case 'overallRating':
         comparison = left.overallRating - right.overallRating;
+        break;
+      case 'potOverall':
+        comparison = (left.potential ?? 0) - (right.potential ?? 0);
         break;
       case 'formBonus':
         comparison = (left.formBonus ?? 0) - (right.formBonus ?? 0);
@@ -6518,15 +6526,31 @@ const RIDER_STATS_ICONS = {
 };
 
 function renderRiderOverallRatingBadge(score: number): string {
-  const minScore = 50;
-  const maxScore = 85;
-  const clampedScore = Math.max(minScore, Math.min(maxScore, score));
-  const relativeRatio = (clampedScore - minScore) / (maxScore - minScore);
-  const colorFactor = Math.cbrt(relativeRatio);
-  const hue = Math.round(colorFactor * 128);
-  const lightness = Math.round(38 + (colorFactor * 10));
-  const backgroundAlpha = 0.6 + (colorFactor * 0.4);
-  const borderAlpha = 0.8;
+  const stops = [
+    { score: 50, hue: 0, lightness: 28 }, // dark red
+    { score: 55, hue: 0, lightness: 40 }, // red
+    { score: 65, hue: 30, lightness: 42 }, // orange
+    { score: 75, hue: 60, lightness: 42 }, // yellow
+    { score: 85, hue: 120, lightness: 36 } // green
+  ];
+  
+  let hue = 120;
+  let lightness = 36;
+  
+  const clamped = Math.max(50, Math.min(85, score));
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1];
+    const curr = stops[i];
+    if (clamped <= curr.score) {
+      const ratio = (clamped - prev.score) / (curr.score - prev.score);
+      hue = Math.round(prev.hue + (curr.hue - prev.hue) * ratio);
+      lightness = Math.round(prev.lightness + (curr.lightness - prev.lightness) * ratio);
+      break;
+    }
+  }
+
+  const backgroundAlpha = 0.44;
+  const borderAlpha = 0.72;
   const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${backgroundAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
   return `<span class="stage-editor-score-badge" style="${style}">${score.toFixed(1)}</span>`;
 }
@@ -6574,7 +6598,7 @@ function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload
         <span class="rider-stats-icon-pill" title="Land">${resolvedCountryFlag} <span>${esc(resolvedCountryCode || '-')}</span></span>
         <span class="rider-stats-icon-pill" title="Team">${resolvedTeamId ? renderMiniJersey(resolvedTeamId, resolvedTeamName) : ''} <span>${esc(resolvedTeamName)}</span></span>
         <span class="rider-stats-icon-pill" title="Rolle">${esc(resolvedRoleName)}</span>
-        <span class="rider-stats-icon-pill" title="Formphase"><span class="form-phase-dot form-phase-${resolvedSeasonPhase}"></span> <span>Form</span></span>
+        <span class="rider-stats-icon-pill" title="Formphase">${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)} <span>Form</span></span>
       </div>
       <div class="rider-stats-header-col align-left">
         <span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;" title="Overall-Stärke">${renderRiderOverallRatingBadge(resolvedOverallRating)}</span>
