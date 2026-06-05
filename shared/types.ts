@@ -1,5 +1,5 @@
-// ============================================================
-//  SHARED TYPES – verwendet von Backend und Frontend
+﻿// ============================================================
+//  SHARED TYPES â€“ verwendet von Backend und Frontend
 // ============================================================
 
 // ------ Fahrer -----------------------------------------------
@@ -1015,4 +1015,33 @@ export interface RiderTeamEditorSaveRequest {
 export interface RiderTeamEditorExportPayload {
   fileName: string;
   content: string;
+}
+
+export interface DraftHistoryRow {
+  draftRound: number;
+  pickNumber: number;
+  contractLength: number;
+  overallAtDraft: number;
+  potOverallAtDraft: number;
+  draftValue: number;
+  
+  riderId: number;
+  riderFirstName: string;
+  riderLastName: string;
+  riderBirthYear: number;
+  countryCode: string;
+  countryFlag: string;
+
+  teamId: number;
+  teamName: string;
+  teamJersey: string;
+
+  oldTeamId: number | null;
+  oldTeamName: string | null;
+  oldTeamJersey: string | null;
+}
+
+export interface DraftHistoryPayload {
+  season: number;
+  rows: DraftHistoryRow[];
 }

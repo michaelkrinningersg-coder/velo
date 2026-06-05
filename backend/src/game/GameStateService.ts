@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, PendingStage } from '../../../shared/types';
 import { GameRepository } from '../db/GameRepository';
@@ -8,6 +8,7 @@ import { buildRiderLoadSummary } from './RiderLoadModel';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
 import { RiderRoleService } from './RiderRoleService';
+import { RiderDraftService } from './RiderDraftService';
 import { RiderNewgenService } from './RiderNewgenService';
 
 const DEFAULT_START_DATE = '2026-01-01';
@@ -205,21 +206,23 @@ export class GameStateService {
       const nextSeason = resolveSeason(nextDate, currentRow.season);
       if (nextSeason !== currentRow.season) {
         new ContractService(this.db).checkContractStatuses(nextSeason);
+        new RiderDraftService(this.db).executeDraft(nextSeason);
+        new ContractService(this.db).checkContractStatuses(nextSeason); // activate new draft contracts
         new RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
         new RiderRoleService(this.db).recalculateAllTeamRoles();
         new RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
 
-        // Newgens für die nächste Saison erzeugen
+        // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
         new RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
 
-        // Skill-Development aller aktiven Fahrer neu auswürfeln (±3, max 20, min 1)
+        // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
         this.db.prepare(`
           UPDATE riders
           SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
           WHERE is_retired = 0 AND skill_development > 0
         `).run();
 
-        // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
+        // Snapshot der Fahrer-Werte als Baseline fÃ¼r die Saison in der UI abspeichern
         this.db.prepare(`
           INSERT OR REPLACE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
           SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0

@@ -74,6 +74,8 @@ const state: {
   selectedRealtimeStageId: number | null;
   stageResults: StageResultsPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
+  draftHistory: DraftHistoryPayload | null;
+  draftSelectedSeason: number | null;
   selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
   teamTableSort: {
     key: TeamTableSortKey;
@@ -142,6 +144,8 @@ const state: {
   selectedRealtimeStageId: null,
   stageResults: null,
   seasonStandings: null,
+  draftHistory: null,
+  draftSelectedSeason: null,
   selectedSeasonStandingScope: 'riders',
   teamTableSort: {
     key: 'name',
@@ -4557,6 +4561,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     if (view === 'rider-team-editor') void loadRiderTeamEditorData();
     if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
+      if (view === 'draft') void loadDraftHistory(state.draftSelectedSeason || state.currentSave?.currentSeason || 2026);
     if (view === 'season-standings') void loadSeasonStandings(true);
   });
 });
@@ -5247,6 +5252,149 @@ async function loadStageResults(stageId: number, silentIfMissing: boolean): Prom
     state.selectedResultsSpecialView = null;
   }
   renderResultsView();
+}
+
+async function loadDraftHistory(season: number, silent = false): Promise<void> {
+  const res = await api.getDraftHistory(season);
+  if (!res.success) {
+    state.draftHistory = null;
+    if (isActiveView('draft')) {
+      renderDraftView();
+    }
+    if (!silent && res.error) {
+      alert('Draft Historie konnte nicht geladen werden:\n' + res.error);
+    }
+    return;
+  }
+  state.draftHistory = res.data ?? null;
+  if (isActiveView('draft')) {
+    renderDraftView();
+  }
+}
+
+let currentDraftSort: { key: keyof DraftHistoryRow | 'potOverallAtDraft', asc: boolean } = { key: 'pickNumber', asc: true };
+
+function renderDraftView(): void {
+  const container = draft-table-container;
+  const select = draft-season-select as HTMLSelectElement;
+
+  if (!state.currentSave) {
+    container.innerHTML = '<div class="alert alert-info">Kein Spiel geladen.</div>';
+    return;
+  }
+
+  // Populate season select if empty
+  if (select.options.length === 0) {
+    for (let s = state.currentSave.currentSeason; s >= state.currentSave.startSeason; s--) {
+      const opt = document.createElement('option');
+      opt.value = s.toString();
+      opt.textContent = Saison  + s;
+      select.appendChild(opt);
+    }
+    if (!state.draftSelectedSeason) {
+      state.draftSelectedSeason = state.currentSave.currentSeason;
+    }
+    select.value = state.draftSelectedSeason.toString();
+    select.onchange = (e) => {
+      const target = e.target as HTMLSelectElement;
+      state.draftSelectedSeason = parseInt(target.value, 10);
+      void loadDraftHistory(state.draftSelectedSeason);
+    };
+  }
+
+  if (!state.draftHistory) {
+    container.innerHTML = '<div class="alert alert-info">Lade Draft Historie...</div>';
+    return;
+  }
+
+  if (state.draftHistory.rows.length === 0) {
+    container.innerHTML = '<div class="alert alert-info">Keine Draft-Einträge für diese Saison vorhanden.</div>';
+    return;
+  }
+
+  const sortedRows = [...state.draftHistory.rows].sort((a, b) => {
+    let comparison = 0;
+    const key = currentDraftSort.key;
+    if (key === 'riderLastName') {
+      comparison = a.riderLastName.localeCompare(b.riderLastName);
+    } else if (key === 'teamName') {
+      comparison = a.teamName.localeCompare(b.teamName);
+    } else if (key === 'oldTeamName') {
+      comparison = (a.oldTeamName || '').localeCompare(b.oldTeamName || '');
+    } else if (key === 'countryCode') {
+      comparison = a.countryCode.localeCompare(b.countryCode);
+    } else {
+      comparison = ((a as any)[key] ?? 0) - ((b as any)[key] ?? 0);
+    }
+    return currentDraftSort.asc ? comparison : -comparison;
+  });
+
+  const getSortIcon = (key: string) => {
+    if (currentDraftSort.key !== key) return '<span class="sort-icon-placeholder"></span>';
+    return currentDraftSort.asc ? '<span class="sort-icon asc"></span>' : '<span class="sort-icon desc"></span>';
+  };
+
+  const setSort = (key: any) => {
+    if (currentDraftSort.key === key) {
+      currentDraftSort.asc = !currentDraftSort.asc;
+    } else {
+      currentDraftSort.key = key;
+      currentDraftSort.asc = true;
+    }
+    renderDraftView();
+  };
+
+  (window as any).setDraftSort = setSort;
+
+  let html = 
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th class="sortable text-center" onclick="setDraftSort('pickNumber')">Pick </th>
+          <th class="sortable text-center" onclick="setDraftSort('draftRound')">Runde </th>
+          <th class="sortable" onclick="setDraftSort('teamName')">Neues Team </th>
+          <th class="sortable" onclick="setDraftSort('oldTeamName')">Altes Team </th>
+          <th class="sortable text-center" onclick="setDraftSort('countryCode')">Land </th>
+          <th class="sortable" onclick="setDraftSort('riderLastName')">Fahrer </th>
+          <th class="sortable text-center" onclick="setDraftSort('riderBirthYear')">Alter </th>
+          <th class="sortable text-center" onclick="setDraftSort('contractLength')">Vertrag </th>
+          <th class="sortable text-center" onclick="setDraftSort('overallAtDraft')">Stärke </th>
+          <th class="sortable text-center" onclick="setDraftSort('potOverallAtDraft')">Potenzial </th>
+        </tr>
+      </thead>
+      <tbody>
+  ;
+
+  for (const row of sortedRows) {
+    const age = state.draftHistory.season - row.riderBirthYear;
+    
+    // Altes Team String
+    let oldTeamHtml = '-';
+    if (row.oldTeamName && row.oldTeamJersey) {
+      oldTeamHtml = \<div style="display:flex; align-items:center; gap:0.5rem;"><img src="\" style="height:20px; width:20px; object-fit:contain;" /> \</div>\;
+    }
+
+    // Neues Team String
+    const newTeamHtml = \<div style="display:flex; align-items:center; gap:0.5rem;"><img src="\" style="height:20px; width:20px; object-fit:contain;" /> \</div>\;
+
+    html += 
+      <tr>
+        <td class="text-center">#\</td>
+        <td class="text-center">\</td>
+        <td>\</td>
+        <td>\</td>
+        <td class="text-center"><img src="\" class="country-flag" title="\" /></td>
+        <td>\ \</td>
+        <td class="text-center">\</td>
+        <td class="text-center">\ J.</td>
+        <td class="text-center">\</td>
+        <td class="text-center">\</td>
+      </tr>
+    ;
+  }
+
+  html += </tbody></table>;
+  container.innerHTML = html;
 }
 
 function renderResultsView(): void {

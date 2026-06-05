@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
 import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
@@ -29,6 +29,7 @@ import {
   RealtimeStageCommitRequest,
   RealtimeSimulationBootstrap,
   SeasonStandingsPayload,
+  DraftHistoryPayload,
   StageEditorDraft,
   StageEditorExistingStageListResponse,
   StageEditorExistingStageLoadResponse,
@@ -153,7 +154,7 @@ export function createRouter(dbService: DatabaseService): Router {
     catch (e) { fail(res, 400, (e as Error).message); }
   });
 
-  // Gibt alle wählbaren (nicht-U23) Teams aus der Master-DB zurück
+  // Gibt alle wÃ¤hlbaren (nicht-U23) Teams aus der Master-DB zurÃ¼ck
   router.get('/teams/available', (_req: Request, res: Response) => {
     let masterDb: ReturnType<typeof dbService.getMasterConnection> | null = null;
     try {
@@ -193,7 +194,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/teams/:id', (req: Request, res: Response) => {
     const id = Number(req.params['id']);
-    if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Team-ID.');
+    if (!Number.isFinite(id)) return fail(res, 400, 'UngÃ¼ltige Team-ID.');
     try {
       const db   = dbService.getActiveConnection();
       getGss().ensureState();
@@ -217,7 +218,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/riders/:id/program-races', (req: Request, res: Response) => {
     const riderId = Number(req.params['id']);
-    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'UngÃ¼ltige Fahrer-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -229,7 +230,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/riders/:id/stats', (req: Request, res: Response) => {
     const riderId = Number(req.params['id']);
-    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'UngÃ¼ltige Fahrer-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -268,7 +269,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/races/:id/program-participants', (req: Request, res: Response) => {
     const raceId = Number(req.params['id']);
-    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'UngÃ¼ltige Rennen-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -292,7 +293,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/stage-editor/stages/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isInteger(stageId) || stageId <= 0) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isInteger(stageId) || stageId <= 0) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
     try {
       ok<StageEditorExistingStageLoadResponse>(res, routeImporter.loadExistingStage(stageId));
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -324,7 +325,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/simulation/realtime/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
@@ -346,7 +347,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const riders = ensureRaceEntries(db, repo, race, stage);
       if (riders.length === 0) {
-        return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
+        return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste bestimmt werden.');
       }
 
       ok<RealtimeSimulationBootstrap>(res, {
@@ -369,7 +370,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/stages/:stageId/summary', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const db = dbService.getActiveConnection();
@@ -385,12 +386,12 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/simulation/roster/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
       if (!pendingStageIds.has(stageId)) {
-        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht fÃ¼r das Starterfeld freigegeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -411,17 +412,17 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.post('/simulation/roster/:stageId/apply', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
       if (!pendingStageIds.has(stageId)) {
-        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht fÃ¼r das Starterfeld freigegeben.');
       }
 
       const payload = req.body as RaceRosterSelectionRequest;
       if (!payload || !Array.isArray(payload.riderIds)) {
-        return fail(res, 400, 'Es wurden keine Teilnehmer übergeben.');
+        return fail(res, 400, 'Es wurden keine Teilnehmer Ã¼bergeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -438,7 +439,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const riders = applyRaceRosterSelection(db, repo, race, stage, payload.riderIds);
       if (riders.length === 0) {
-        return fail(res, 400, 'Für diese Etappe konnte keine Startliste gespeichert werden.');
+        return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste gespeichert werden.');
       }
 
       const ALL_SKILL_KEYS: import('../../../shared/types').RiderSkillKey[] = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
@@ -490,7 +491,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.post('/simulation/realtime/:stageId/complete', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
@@ -500,7 +501,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const payload = req.body as RealtimeStageCommitRequest;
       if (!payload || !Array.isArray(payload.entries) || payload.entries.length === 0) {
-        return fail(res, 400, 'Es wurden keine Live-Ergebnisse übergeben.');
+        return fail(res, 400, 'Es wurden keine Live-Ergebnisse Ã¼bergeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -510,12 +511,12 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/results/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
 
     try {
       const db = dbService.getActiveConnection();
       const payload = new GameRepository(db).getStageResults(stageId);
-      if (!payload) return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
+      if (!payload) return fail(res, 404, `Keine Ergebnisse fÃ¼r Stage ${stageId} gefunden.`);
       ok<StageResultsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
@@ -530,6 +531,51 @@ export function createRouter(dbService: DatabaseService): Router {
   router.post('/state/advance', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().advanceDay()); }
     catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  
+  router.get('/draft/:season', (req: Request, res: Response) => {
+    const season = parseInt(req.params.season, 10);
+    const repo = new GameRepository(db);
+
+    const rows = db.prepare(
+      SELECT 
+        d.draft_round AS draftRound,
+        d.pick_number AS pickNumber,
+        d.contract_length AS contractLength,
+        d.overall_at_draft AS overallAtDraft,
+        d.pot_overall_at_draft AS potOverallAtDraft,
+        d.draft_value AS draftValue,
+        
+        r.id AS riderId,
+        r.first_name AS riderFirstName,
+        r.last_name AS riderLastName,
+        r.birth_year AS riderBirthYear,
+        
+        c.code AS countryCode,
+        c.flag_svg AS countryFlag,
+        
+        t.id AS teamId,
+        t.name AS teamName,
+        t.jersey_svg AS teamJersey,
+        
+        ot.id AS oldTeamId,
+        ot.name AS oldTeamName,
+        ot.jersey_svg AS oldTeamJersey
+        
+      FROM draft_history d
+      JOIN riders r ON d.rider_id = r.id
+      JOIN sta_country c ON r.country_id = c.id
+      JOIN teams t ON d.team_id = t.id
+      LEFT JOIN teams ot ON d.old_team_id = ot.id
+      WHERE d.season = ?
+      ORDER BY d.pick_number ASC
+    ).all(season) as any[];
+
+    ok<DraftHistoryPayload>(res, {
+      season,
+      rows
+    });
   });
 
   return router;

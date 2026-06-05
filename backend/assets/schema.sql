@@ -1,6 +1,6 @@
--- ============================================================
---  VELO – Master-Datenbankschema (world_data.db)
---  Wird bei Spielstart als schreibgeschützte Vorlage genutzt.
+﻿-- ============================================================
+--  VELO â€“ Master-Datenbankschema (world_data.db)
+--  Wird bei Spielstart als schreibgeschÃ¼tzte Vorlage genutzt.
 --  Beim Erstellen einer neuen Karriere wird diese Datei in den
 --  savegames-Ordner kopiert und dort weiterentwickelt.
 -- ============================================================
@@ -8,7 +8,7 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
--- ---- Karriere-Metadaten (nur in Savegame-Kopien befüllt) ----
+-- ---- Karriere-Metadaten (nur in Savegame-Kopien befÃ¼llt) ----
 CREATE TABLE IF NOT EXISTS career_meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS riders (
 CREATE INDEX IF NOT EXISTS idx_riders_active_team ON riders(active_team_id);
 CREATE INDEX IF NOT EXISTS idx_riders_type ON riders(rider_type_id);
 
--- ---- Verträge -----------------------------------------------
+-- ---- VertrÃ¤ge -----------------------------------------------
 CREATE TABLE IF NOT EXISTS contracts (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   rider_id        INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
@@ -427,7 +427,7 @@ CREATE TABLE IF NOT EXISTS stage_marker_results (
 CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
   ON stage_marker_results(stage_id, marker_key, rank);
 
--- ---- Skill-Baseline pro Saison (für Delta-Anzeige) ---------
+-- ---- Skill-Baseline pro Saison (fÃ¼r Delta-Anzeige) ---------
 CREATE TABLE IF NOT EXISTS rider_skill_yearly_baseline (
   rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
   season INTEGER NOT NULL,
@@ -440,9 +440,9 @@ CREATE INDEX IF NOT EXISTS idx_rider_skill_yearly_baseline_lookup
   ON rider_skill_yearly_baseline(season, rider_id);
 
 -- ---- Newgen: Startwert-Presets (Skills) --------------------
--- Definiert pro Profil-Typ (Sprint, Berg, …) und Sub-Variante
--- (z. B. „Reiner Sprinter", „Pflaster-Sprinter") die Min/Max-
--- Bereiche, aus denen die Startskills neuer Fahrer gewürfelt
+-- Definiert pro Profil-Typ (Sprint, Berg, â€¦) und Sub-Variante
+-- (z. B. â€žReiner Sprinter", â€žPflaster-Sprinter") die Min/Max-
+-- Bereiche, aus denen die Startskills neuer Fahrer gewÃ¼rfelt
 -- werden. `weight` steuert die Wahrscheinlichkeit der Variante.
 CREATE TABLE IF NOT EXISTS newgen_start_presets (
   preset_id              INTEGER PRIMARY KEY,
@@ -485,7 +485,7 @@ CREATE INDEX IF NOT EXISTS idx_newgen_start_presets_type
   ON newgen_start_presets(type_key);
 
 -- ---- Newgen: Potential-Presets ----------------------------
--- Analog zu den Startwert-Presets, aber für die Potentiale.
+-- Analog zu den Startwert-Presets, aber fÃ¼r die Potentiale.
 -- Die Potentiale bilden den Wachstumsspielraum bis zum
 -- peak_age.
 CREATE TABLE IF NOT EXISTS newgen_potential_presets (
@@ -665,4 +665,18 @@ CREATE TABLE IF NOT EXISTS season_stats (
   top3          INTEGER NOT NULL DEFAULT 0,
   top10         INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (rider_id, season)
+);
+
+CREATE TABLE IF NOT EXISTS draft_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  season INTEGER NOT NULL,
+  draft_round INTEGER NOT NULL,
+  pick_number INTEGER NOT NULL,
+  team_id INTEGER NOT NULL REFERENCES teams(id),
+  rider_id INTEGER NOT NULL REFERENCES riders(id),
+  old_team_id INTEGER REFERENCES teams(id),
+  contract_length INTEGER NOT NULL,
+  overall_at_draft REAL NOT NULL,
+  pot_overall_at_draft REAL NOT NULL,
+  draft_value REAL NOT NULL
 );

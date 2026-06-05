@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ApiResponse,
   ParsedStageSummary,
   SavegameMeta,
@@ -27,6 +27,7 @@ import type {
   StageEditorOverviewResponse,
   SeasonStandingsPayload,
   StageResultsPayload,
+  DraftHistoryPayload,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
