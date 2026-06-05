@@ -4586,3 +4586,45 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg-600); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.rider-stats-header-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.rider-stats-header-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rider-stats-header-col.align-right {
+  align-items: flex-end;
+}
+
+.rider-stats-header-col.align-left {
+  align-items: flex-start;
+}
+
+.rider-stats-icon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-200);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.rider-stats-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-400);
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
