@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
 import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
@@ -536,72 +536,78 @@ export function createRouter(dbService: DatabaseService): Router {
 
   
   router.get('/draft/:season', (req: Request, res: Response) => {
-    const season = parseInt(req.params.season, 10);
-    const repo = new GameRepository(db);
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+      const repo = new GameRepository(db);
 
-    const rows = db.prepare(
-      SELECT 
-        d.draft_round AS draftRound,
-        d.pick_number AS pickNumber,
-        d.contract_length AS contractLength,
-        d.overall_at_draft AS overallAtDraft,
-        d.pot_overall_at_draft AS potOverallAtDraft,
-        d.draft_value AS draftValue,
-        
-        r.id AS riderId,
-        r.first_name AS riderFirstName,
-        r.last_name AS riderLastName,
-        r.birth_year AS riderBirthYear,
-        
-        c.code AS countryCode,
-        c.flag_svg AS countryFlag,
-        
-        t.id AS teamId,
-        t.name AS teamName,
-        t.jersey_svg AS teamJersey,
-        
-        ot.id AS oldTeamId,
-        ot.name AS oldTeamName,
-        ot.jersey_svg AS oldTeamJersey
-        
-      FROM draft_history d
-      JOIN riders r ON d.rider_id = r.id
-      JOIN sta_country c ON r.country_id = c.id
-      JOIN teams t ON d.team_id = t.id
-      LEFT JOIN teams ot ON d.old_team_id = ot.id
-      WHERE d.season = ?
-      ORDER BY d.pick_number ASC
-    ).all(season) as any[];
+      const rows = db.prepare(`
+        SELECT 
+          d.draft_round AS draftRound,
+          d.pick_number AS pickNumber,
+          d.contract_length AS contractLength,
+          d.overall_at_draft AS overallAtDraft,
+          d.pot_overall_at_draft AS potOverallAtDraft,
+          d.draft_value AS draftValue,
+          
+          r.id AS riderId,
+          r.first_name AS riderFirstName,
+          r.last_name AS riderLastName,
+          r.birth_year AS riderBirthYear,
+          
+          c.code AS countryCode,
+          c.flag_svg AS countryFlag,
+          
+          t.id AS teamId,
+          t.name AS teamName,
+          t.jersey_svg AS teamJersey,
+          
+          ot.id AS oldTeamId,
+          ot.name AS oldTeamName,
+          ot.jersey_svg AS oldTeamJersey
+          
+        FROM draft_history d
+        JOIN riders r ON d.rider_id = r.id
+        JOIN sta_country c ON r.country_id = c.id
+        JOIN teams t ON d.team_id = t.id
+        LEFT JOIN teams ot ON d.old_team_id = ot.id
+        WHERE d.season = ?
+        ORDER BY d.pick_number ASC
+      `).all(season) as any[];
 
-    ok<DraftHistoryPayload>(res, {
-      season,
-      rows
-    });
+      ok<DraftHistoryPayload>(res, {
+        season,
+        rows
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   
   router.get('/injuries', (_req: Request, res: Response) => {
-    const rows = db.prepare(
-      SELECT
-        r.id AS riderId,
-        r.first_name AS riderFirstName,
-        r.last_name AS riderLastName,
-        c.code AS countryCode,
-        c.flag_svg AS countryFlag,
-        t.abbreviation AS teamAbbreviation,
-        t.jersey_svg AS teamJersey,
-        rds.health_status AS healthStatus,
-        rds.unavailable_days_remaining AS unavailableDays
-      FROM rider_daily_state rds
-      JOIN riders r ON rds.rider_id = r.id
-      JOIN sta_country c ON r.country_id = c.id
-      LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
-      LEFT JOIN teams t ON cnt.team_id = t.id
-      WHERE rds.health_status IN ('ill', 'injured')
-      ORDER BY rds.unavailable_days_remaining DESC
-    ).all() as any[];
+    try {
+      const db = dbService.getActiveConnection();
+      const rows = db.prepare(`
+        SELECT
+          r.id AS riderId,
+          r.first_name AS riderFirstName,
+          r.last_name AS riderLastName,
+          c.code AS countryCode,
+          c.flag_svg AS countryFlag,
+          t.abbreviation AS teamAbbreviation,
+          t.jersey_svg AS teamJersey,
+          rds.health_status AS healthStatus,
+          rds.unavailable_days_remaining AS unavailableDays
+        FROM rider_daily_state rds
+        JOIN riders r ON rds.rider_id = r.id
+        JOIN sta_country c ON r.country_id = c.id
+        LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
+        LEFT JOIN teams t ON cnt.team_id = t.id
+        WHERE rds.health_status IN ('ill', 'injured')
+        ORDER BY rds.unavailable_days_remaining DESC
+      `).all() as any[];
 
-    ok<InjuryRow[]>(res, rows);
+      ok<InjuryRow[]>(res, rows);
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   return router;
