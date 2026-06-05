@@ -13,7 +13,11 @@ const NOISE_RANGE = 0.015;
 const TECH_PENALTY_FACTOR = 0.0025;
 const WIND_FACTOR = 0.003;
 function resolveFormBonus(rider) {
-    return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - (rider.fatigueMalus ?? 0);
+    return (rider.formBonus ?? 0)
+        + (rider.raceFormBonus ?? 0)
+        - (rider.fatigueMalus ?? 0)
+        - (rider.longTermFatigueMalus ?? 0)
+        - (rider.shortTermFatigueMalus ?? 0);
 }
 class TimeTrialSimulator {
     static sampleDayFormFactor() {

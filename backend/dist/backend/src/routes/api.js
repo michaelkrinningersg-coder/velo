@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createRouter = createRouter;
 const express_1 = require("express");
+const RiderTeamEditorService_1 = require("../editor/RiderTeamEditorService");
 const GameRepository_1 = require("../db/GameRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
@@ -79,6 +80,7 @@ function resolveRealtimeTeamStartOrder(repo, race, stageNumber, riders) {
 function createRouter(dbService) {
     const router = (0, express_1.Router)();
     const routeImporter = new RouteImporter_1.RouteImporter();
+    const riderTeamEditorService = new RiderTeamEditorService_1.RiderTeamEditorService();
     // Caches GameStateService per active connection
     let cachedGss = null;
     let cachedDb = null;
@@ -221,6 +223,30 @@ function createRouter(dbService) {
             if (!payload)
                 return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
             ok(res, payload);
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/rider-team-editor', (_req, res) => {
+        try {
+            ok(res, riderTeamEditorService.load());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/rider-team-editor', (req, res) => {
+        try {
+            ok(res, riderTeamEditorService.save(req.body));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/rider-team-editor/export', (req, res) => {
+        try {
+            ok(res, riderTeamEditorService.export(req.body));
         }
         catch (e) {
             fail(res, 400, e.message);

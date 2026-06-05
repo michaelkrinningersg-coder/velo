@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RouteImporter = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
+const StageScoreCalculator_1 = require("./StageScoreCalculator");
 const MIN_SEGMENT_KM = 0.2;
 const SPRINT_CUT_KM = 0.3;
 const DOUGLAS_PEUCKER_EPSILON = 9;
@@ -35,6 +36,11 @@ function markerSortValue(type) {
 function isFinishMarkerType(type) {
     return ['finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(type);
 }
+function isMountainClassificationMarker(marker) {
+    return marker.type === 'climb_top'
+        || marker.type === 'finish_hill'
+        || marker.type === 'finish_mountain';
+}
 function normalizeMarkers(markers) {
     return [...markers]
         .map((marker) => ({
@@ -52,7 +58,14 @@ function ensureMarker(markers, type, fallbackName) {
 function ensureFinishMarker(markers, fallbackName) {
     const existingFinish = markers.find((marker) => isFinishMarkerType(marker.type));
     const filtered = markers.filter((marker) => !isFinishMarkerType(marker.type));
-    return normalizeMarkers([...filtered, { type: existingFinish?.type ?? 'finish_flat', name: existingFinish?.name ?? fallbackName, cat: null }]);
+    return normalizeMarkers([
+        ...filtered,
+        {
+            type: existingFinish?.type ?? 'finish_flat',
+            name: existingFinish?.name ?? fallbackName,
+            cat: existingFinish?.cat ?? null,
+        },
+    ]);
 }
 function joinMarkerValues(markers, key) {
     return markers.map((marker) => {
@@ -340,6 +353,34 @@ function calculateElevationGain(points) {
     }
     return Math.round(gain);
 }
+function calculateClimbOverviewMetrics(segments, climb) {
+    let currentKm = 0;
+    let distanceKm = 0;
+    let netGainMeters = 0;
+    let maxGradient = 0;
+    for (const segment of segments) {
+        const segmentStartKm = currentKm;
+        const segmentEndKm = currentKm + segment.lengthKm;
+        currentKm = segmentEndKm;
+        const clippedStartKm = Math.max(climb.startKm, segmentStartKm);
+        const clippedEndKm = Math.min(climb.endKm, segmentEndKm);
+        const clippedLengthKm = clippedEndKm - clippedStartKm;
+        if (clippedLengthKm <= 0) {
+            continue;
+        }
+        distanceKm += clippedLengthKm;
+        const clippedGainMeters = (clippedLengthKm * 1000) * (segment.gradientPercent / 100);
+        netGainMeters += clippedGainMeters;
+        maxGradient = Math.max(maxGradient, segment.gradientPercent);
+    }
+    const avgGradient = distanceKm > 0 ? netGainMeters / (distanceKm * 10) : 0;
+    return {
+        gainMeters: Math.round(Math.max(0, netGainMeters)),
+        distanceKm: round2(distanceKm),
+        avgGradient: round1(avgGradient),
+        maxGradient: round1(maxGradient),
+    };
+}
 function classifyClimb(distanceKm, gainMeters, avgGradient) {
     const score = distanceKm * avgGradient * 8 + gainMeters / 12;
     if (score >= 95)
@@ -622,13 +663,13 @@ function buildPositionedClimbMarkers(segments) {
     for (const segment of segments) {
         const endKm = round2(startKm + segment.lengthKm);
         for (const marker of segment.markers) {
-            if (marker.type === 'climb_top') {
-                markers.push({ kmMark: round2(startKm), name: marker.name });
+            if (isMountainClassificationMarker(marker)) {
+                markers.push({ kmMark: round2(startKm), name: marker.name, category: marker.cat != null && marker.cat !== 'Sprint' ? marker.cat : null });
             }
         }
         for (const marker of segment.endMarkers) {
-            if (marker.type === 'climb_top') {
-                markers.push({ kmMark: endKm, name: marker.name });
+            if (isMountainClassificationMarker(marker)) {
+                markers.push({ kmMark: endKm, name: marker.name, category: marker.cat != null && marker.cat !== 'Sprint' ? marker.cat : null });
             }
         }
         startKm = endKm;
@@ -913,6 +954,8 @@ class RouteImporter {
             let elevationGainMeters = 0;
             let sprintCount = 0;
             let climbCount = 0;
+            let stageScore = 0;
+            let climbScores = [];
             try {
                 segments = this.loadStageDetailSegments(stage);
                 const waypoints = deriveWaypointsFromSegments(segments);
@@ -923,13 +966,17 @@ class RouteImporter {
                 totalDistanceKm = round2(segments.reduce((sum, segment) => sum + segment.lengthKm, 0));
                 elevationGainMeters = calculateElevationGain(profilePoints);
                 sprintCount = countMarkers(segments, 'sprint_intermediate');
-                climbCount = countMarkers(segments, 'climb_top');
+                stageScore = (0, StageScoreCalculator_1.calculateStageScore)(segments, stage.startElevation);
+                climbScores = (0, StageScoreCalculator_1.calculateClimbScoresForStage)(segments, stage.startElevation);
+                climbCount = climbScores.length;
             }
             catch {
                 totalDistanceKm = 0;
                 elevationGainMeters = 0;
                 sprintCount = 0;
                 climbCount = 0;
+                stageScore = 0;
+                climbScores = [];
             }
             stageRows.push({
                 stageId: stage.stageId,
@@ -942,26 +989,28 @@ class RouteImporter {
                 elevationGainMeters,
                 sprintCount,
                 climbCount,
-                profileScore: 'Platzhalter',
+                profileScore: stageScore,
             });
-            if (segments.length === 0 || profilePoints.length < 2) {
+            if (segments.length === 0) {
                 continue;
             }
-            const climbMarkers = buildPositionedClimbMarkers(segments);
-            detectClimbs(profilePoints).forEach((climb, index) => {
-                const marker = findClosestClimbMarker(climbMarkers, climb.endKm);
+            climbScores.forEach((climb) => {
+                const metrics = calculateClimbOverviewMetrics(segments, climb);
                 climbRows.push({
-                    id: `${stage.stageId}-${index + 1}`,
+                    id: `${stage.stageId}-${climb.climbIndex}`,
+                    stageId: stage.stageId,
+                    raceId: stage.raceId,
+                    climbIndex: climb.climbIndex,
+                    startKm: climb.startKm,
+                    endKm: climb.endKm,
                     placementKm: climb.endKm,
-                    name: marker?.name ?? `Climb ${index + 1}`,
+                    name: climb.name,
+                    category: climb.category,
                     countryCode: stage.countryCode ?? null,
                     raceName: stage.raceName ?? `Race ${stage.raceId}`,
                     stageNumber: stage.stageNumber,
-                    gainMeters: climb.gainMeters,
-                    distanceKm: climb.distanceKm,
-                    avgGradient: climb.avgGradient,
-                    maxGradient: resolveMaxGradient(segments, climb.startKm, climb.endKm, climb.avgGradient),
-                    climbScore: 'Platzhalter',
+                    ...metrics,
+                    climbScore: climb.score,
                 });
             });
         }

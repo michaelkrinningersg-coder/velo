@@ -54,6 +54,7 @@ export interface RiderDevelopmentDailyContext {
   healthStatus: 'healthy' | 'ill' | 'injured';
   unavailableDaysRemaining: number;
   formPhase: RiderDevelopmentFormPhase;
+  isInRaceToday: boolean;
 }
 
 interface DailyDevelopmentRow extends RiderDevelopmentRow {
@@ -77,7 +78,12 @@ interface DailyDevelopmentRow extends RiderDevelopmentRow {
   pot_bike_handling: number;
 }
 
-type DevelopmentBlockedReason = 'healthy' | 'retired' | 'ill' | 'injured' | 'unavailable' | 'form_decline' | 'offseason' | 'peak_age_reached' | 'no_headroom';
+type DevelopmentBlockedReason = 'healthy' | 'retired' | 'ill' | 'injured' | 'unavailable' | 'in_race' | 'form_decline' | 'offseason' | 'peak_age_reached' | 'no_headroom';
+
+function isNovember(currentDate: string): boolean {
+  // Nur 11-01 bis 11-30 (User-Klärung G1)
+  return currentDate.slice(5, 10) >= '11-01' && currentDate.slice(5, 10) <= '11-30';
+}
 
 function tableExists(db: Database.Database, tableName: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
@@ -383,12 +389,12 @@ export class RiderDevelopmentService {
       const context = contextByRiderId.get(row.id);
       const currentSkills = buildCurrentSkillsFromDailyRow(row);
       const potentialSkills = buildPotentialsFromDailyRow(row);
-      const blockedReason = resolveDevelopmentBlockReason(row, context, currentDate, age);
+      const block = resolveDevelopmentBlockReason(row, context, currentDate, age);
       const deltas: Partial<Record<RiderSkillKey, number>> = {};
       let growthTotal = 0;
       let declineTotal = 0;
 
-      if (blockedReason === 'healthy') {
+      if (block.canGrow) {
         const ageFactor = resolveAgeGrowthFactor(age, row.peak_age);
         const developmentFactor = resolveSkillDevelopmentFactor(row.skill_development);
         for (const [skillKey] of RIDER_SKILL_COLUMNS) {
@@ -408,7 +414,7 @@ export class RiderDevelopmentService {
         }
       }
 
-      if (row.is_retired !== 1 && age >= row.decline_age) {
+      if (block.canDecline && row.is_retired !== 1 && age >= row.decline_age) {
         const yearsAfterDecline = Math.max(0, age - row.decline_age + 1);
         const ageDeclineFactor = Math.min(2.4, 0.35 + yearsAfterDecline * 0.22);
         for (const [skillKey] of RIDER_SKILL_COLUMNS) {

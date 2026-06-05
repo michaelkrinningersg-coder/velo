@@ -1098,6 +1098,147 @@ function cleanupDatabaseFiles(): void {
   }
 }
 
+// ---- Newgen: Reihenfolge der Skill-/Pot-Min-Max-Spalten -----
+// Definiert die Reihenfolge, in der die min/max-Spalten aus den CSVs
+// in die SQL-INSERT-Statements uebernommen werden. Die hier genannten
+// Schluessel muessen mit den Spaltennamen in schema.sql uebereinstimmen.
+const NEWGEN_SKILL_FIELDS = [
+  'flat',
+  'mountain',
+  'medium_mountain',
+  'hill',
+  'time_trial',
+  'prologue',
+  'cobble',
+  'sprint',
+  'acceleration',
+  'downhill',
+  'attack',
+  'stamina',
+  'resistance',
+  'recuperation',
+  'bike_handling',
+] as const;
+
+function newgenInsertColumns(prefix: string, suffix: string): string {
+  return NEWGEN_SKILL_FIELDS
+    .map((field) => `${prefix}${field}${suffix}`)
+    .join(', ');
+}
+
+function seedNewgenStartPresets(db: Database.Database): void {
+  const rows = readCsv('newgen_start_presets.csv');
+  const insertColumns = [
+    'preset_id',
+    'type_key',
+    'display_name',
+    'weight',
+    newgenInsertColumns('min_', ''),
+    newgenInsertColumns('max_', ''),
+  ].join(', ');
+  const placeholders = new Array(insertColumns.split(',').length).fill('?').join(', ');
+  const insert = db.prepare(`INSERT INTO newgen_start_presets (${insertColumns}) VALUES (${placeholders})`);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `newgen_start_presets.csv Zeile ${index + 2}`;
+    const minValues = NEWGEN_SKILL_FIELDS.map((field) =>
+      real(req(row, `min_${field}`, `${ctx} / min_${field}`), `${ctx} / min_${field}`),
+    );
+    const maxValues = NEWGEN_SKILL_FIELDS.map((field) => {
+      const value = real(req(row, `max_${field}`, `${ctx} / max_${field}`), `${ctx} / max_${field}`);
+      if (value < minValues[NEWGEN_SKILL_FIELDS.indexOf(field)]) {
+        throw new Error(`${ctx}: max_${field} (${value}) ist kleiner als min_${field} (${minValues[NEWGEN_SKILL_FIELDS.indexOf(field)]}).`);
+      }
+      return value;
+    });
+
+    insert.run(
+      int(req(row, 'preset_id', ctx), ctx),
+      req(row, 'type_key', ctx),
+      req(row, 'display_name', ctx),
+      int(req(row, 'weight', ctx), ctx),
+      ...minValues,
+      ...maxValues,
+    );
+  }
+
+  console.log(`  ${rows.length} Newgen-Startwert-Presets eingefuegt.`);
+}
+
+function seedNewgenPotentialPresets(db: Database.Database): void {
+  const rows = readCsv('newgen_potential_presets.csv');
+  const insertColumns = [
+    'preset_id',
+    'display_name',
+    'weight',
+    newgenInsertColumns('min_pot_', ''),
+    newgenInsertColumns('max_pot_', ''),
+  ].join(', ');
+  const placeholders = new Array(insertColumns.split(',').length).fill('?').join(', ');
+  const insert = db.prepare(`INSERT INTO newgen_potential_presets (${insertColumns}) VALUES (${placeholders})`);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `newgen_potential_presets.csv Zeile ${index + 2}`;
+    const minValues = NEWGEN_SKILL_FIELDS.map((field) =>
+      real(req(row, `min_pot_${field}`, `${ctx} / min_pot_${field}`), `${ctx} / min_pot_${field}`),
+    );
+    const maxValues = NEWGEN_SKILL_FIELDS.map((field, fieldIndex) => {
+      const value = real(req(row, `max_pot_${field}`, `${ctx} / max_pot_${field}`), `${ctx} / max_pot_${field}`);
+      if (value < minValues[fieldIndex]) {
+        throw new Error(`${ctx}: max_pot_${field} (${value}) ist kleiner als min_pot_${field} (${minValues[fieldIndex]}).`);
+      }
+      return value;
+    });
+
+    insert.run(
+      int(req(row, 'preset_id', ctx), ctx),
+      req(row, 'display_name', ctx),
+      int(req(row, 'weight', ctx), ctx),
+      ...minValues,
+      ...maxValues,
+    );
+  }
+
+  console.log(`  ${rows.length} Newgen-Potential-Presets eingefuegt.`);
+}
+
+function seedRiderNames(db: Database.Database): void {
+  const rows = readCsv('rider_names.csv');
+  const insert = db.prepare(`
+    INSERT INTO rider_names (country_id, type, value, weight)
+    VALUES (?, ?, ?, ?)
+  `);
+  const hasCountry = db.prepare('SELECT 1 FROM sta_country WHERE id = ?');
+  const seenKeys = new Set<string>();
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `rider_names.csv Zeile ${index + 2}`;
+    const countryId = int(req(row, 'country_id', ctx), ctx);
+    const type = req(row, 'type', ctx);
+    if (type !== 'first' && type !== 'last') {
+      throw new Error(`${ctx}: type muss 'first' oder 'last' sein, erhalten "${type}".`);
+    }
+    const value = req(row, 'value', ctx);
+    if (!hasCountry.get(countryId)) {
+      throw new Error(`${ctx}: country_id ${countryId} existiert nicht in sta_country.`);
+    }
+    const key = `${countryId}|${type}|${value}`;
+    if (seenKeys.has(key)) {
+      throw new Error(`${ctx}: doppelter Eintrag fuer Schluessel ${key}.`);
+    }
+    seenKeys.add(key);
+
+    insert.run(
+      countryId,
+      type,
+      value,
+      int(req(row, 'weight', ctx), ctx),
+    );
+  }
+
+  console.log(`  ${rows.length} Namenseintraege fuer ${seenKeys.size / 1} Zeilen eingefuegt.`);
+}
+
 export function bootstrap(force = false): void {
   if (!force && fs.existsSync(DB_PATH)) {
     console.log('Bootstrap: world_data.db bereits vorhanden, uebersprungen.');
@@ -1126,6 +1267,9 @@ export function bootstrap(force = false): void {
     seedTypeRider(db);
     seedStaRole(db);
     seedResultTypes(db);
+    seedNewgenStartPresets(db);
+    seedNewgenPotentialPresets(db);
+    seedRiderNames(db);
     const divisionIdByName = seedDivisionTeams(db);
     seedTeams(db, divisionIdByName);
     seedRaceCategoriesBonus(db);

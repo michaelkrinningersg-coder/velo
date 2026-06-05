@@ -493,7 +493,9 @@ class StageResultCommitService {
                 this.applySevereCrashInjury(stage.date, riderId);
             }
         })();
-        new GameStateService_1.GameStateService(this.db).applyRaceDayFormBonuses(stage.date, completedRiderIds);
+        const gameStateService = new GameStateService_1.GameStateService(this.db);
+        gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
+        gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
         return {
             raceId: race.id,
