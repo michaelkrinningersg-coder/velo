@@ -2187,15 +2187,15 @@ export class GameRepository {
 
     const rows = this.db.prepare(`
       SELECT
-        results.rider_id AS rider_id,
-        COUNT(*) AS race_days,
+        stage_entries.rider_id AS rider_id,
+        COUNT(stage_entries.id) AS race_days,
         SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
-      FROM results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ?
-        AND results.rider_id IS NOT NULL
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      LEFT JOIN results ON results.stage_id = stages.id AND results.rider_id = stage_entries.rider_id AND results.result_type_id = ?
+      WHERE stage_entries.status != 'dns'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-      GROUP BY results.rider_id
+      GROUP BY stage_entries.rider_id
     `).all(RESULT_TYPE_IDS.stage, season) as Array<{ rider_id: number; race_days: number; wins: number | null }>;
 
     for (const row of rows) {
@@ -3354,13 +3354,13 @@ export class GameRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS race_days
-      FROM results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ?
-        AND results.rider_id = ?
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.status != 'dns'
+        AND stage_entries.rider_id = ?
       GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
       ORDER BY season DESC
-    `).all(RESULT_TYPE_IDS.stage, riderId) as CareerRaceDaysSeasonRow[];
+    `).all(riderId) as CareerRaceDaysSeasonRow[];
   }
 
   private mapResultTypeIdToRiderStatsRowType(resultTypeId: number): RiderStatsRowType | null {

@@ -4628,3 +4628,5 @@ html, body {
   fill: currentColor;
 }
 
+
+.rider-stats-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

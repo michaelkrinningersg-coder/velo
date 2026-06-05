@@ -555,16 +555,13 @@ export function createRouter(dbService: DatabaseService): Router {
           r.last_name AS riderLastName,
           r.birth_year AS riderBirthYear,
           
-          c.code AS countryCode,
-          c.flag_svg AS countryFlag,
+          c.code_3 AS countryCode,
           
           t.id AS teamId,
           t.name AS teamName,
-          t.jersey_svg AS teamJersey,
           
           ot.id AS oldTeamId,
-          ot.name AS oldTeamName,
-          ot.jersey_svg AS oldTeamJersey
+          ot.name AS oldTeamName
           
         FROM draft_history d
         JOIN riders r ON d.rider_id = r.id
@@ -591,10 +588,9 @@ export function createRouter(dbService: DatabaseService): Router {
           r.id AS riderId,
           r.first_name AS riderFirstName,
           r.last_name AS riderLastName,
-          c.code AS countryCode,
-          c.flag_svg AS countryFlag,
+          c.code_3 AS countryCode,
           t.abbreviation AS teamAbbreviation,
-          t.jersey_svg AS teamJersey,
+          t.id AS teamId,
           rds.health_status AS healthStatus,
           rds.unavailable_days_remaining AS unavailableDays
         FROM rider_daily_state rds
