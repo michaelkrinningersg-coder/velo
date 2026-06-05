@@ -68,6 +68,7 @@ html, body {
 
 .skill-delta-positive { color: #16a34a; font-size: 0.7em; margin-left: 4px; }
 .skill-delta-negative { color: #dc2626; font-size: 0.7em; margin-left: 4px; }
+.skill-delta-neutral { color: #9ca3af; font-size: 0.7em; margin-left: 4px; }
 
 /* ---- Screens ---------------------------------------------- */
 .screen { position: fixed; inset: 0; }

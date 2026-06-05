@@ -801,7 +801,7 @@ function getSkillColor(value: number): string {
 
 function renderSkillValue(value: number, potential?: number): string {
   const titleAttr = potential != null ? ` title="Potential: ${potential.toFixed(2).replace('.', ',')}"` : '';
-  return `<span class="skill-value" style="color:${getSkillColor(value)}"${titleAttr}>${Math.round(value)}</span>`;
+  return `<span class="skill-value" style="color:${getSkillColor(value)}"${titleAttr}>${value.toFixed(2).replace('.', ',')}</span>`;
 }
 
 function renderSkillValueWithDelta(value: number, yearStart?: number, potential?: number): string {
@@ -809,11 +809,11 @@ function renderSkillValueWithDelta(value: number, yearStart?: number, potential?
     return renderSkillValue(value, potential);
   }
   const delta = Math.round((value - yearStart) * 100) / 100;
-  const deltaClass = delta > 0 ? 'skill-delta-positive' : delta < 0 ? 'skill-delta-negative' : '';
-  const deltaText = delta === 0 ? '' :
-    `<span class="skill-delta ${deltaClass}">${delta > 0 ? '+' : ''}${delta.toFixed(2).replace('.', ',')}</span>`;
+  const deltaClass = delta > 0 ? 'skill-delta-positive' : delta < 0 ? 'skill-delta-negative' : 'skill-delta-neutral';
+  const sign = delta > 0 ? '+' : '';
+  const deltaText = `<span class="skill-delta ${deltaClass}">${sign}${delta.toFixed(2).replace('.', ',')}</span>`;
   return `
-    <span class="skill-value" style="color:${getSkillColor(value)}" title="Potential: ${potential.toFixed(2).replace('.', ',')}">${Math.round(value)}</span>
+    <span class="skill-value" style="color:${getSkillColor(value)}" title="Potential: ${potential.toFixed(2).replace('.', ',')}">${value.toFixed(2).replace('.', ',')}</span>
     ${deltaText}
   `;
 }
