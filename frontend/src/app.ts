@@ -3844,7 +3844,7 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
               <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
                 <table class="data-table rider-stats-table">
                   <colgroup>
-                    <col style="width: 8%;">
+                    <col style="width: 16%;">
                     <col style="width: 5%;">
                     <col style="width: 5%;">
                     <col style="width: 3%;">
@@ -6601,6 +6601,8 @@ function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload
     </div>
   `;
 }
+
+
 
 
 
