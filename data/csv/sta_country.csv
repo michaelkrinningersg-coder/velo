@@ -81,7 +81,7 @@ id,name,code_3,continent,regen_rating,number_regen_min,number_regen_max
 81,Syria,SYR,Asia,18,0,0
 82,Thailand,THA,Asia,40,0,1
 83,Mongolia,MNG,Asia,22,0,0
-84,Taiwan,TWN,Asia,42,1,0
+84,Taiwan,TWN,Asia,42,0,0
 85,Indonesia,IDN,Asia,37,0,0
 86,India,IND,Asia,36,0,0
 87,Pakistan,PAK,Asia,30,0,0
