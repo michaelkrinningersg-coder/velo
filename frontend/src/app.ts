@@ -4517,8 +4517,8 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     const view = btn.dataset['view'] ?? '';
     activateView(view);
     if (view === 'dashboard') renderDashboard();
-    if (view === 'teams') void refüreshTeamsViewData(); // immer neu laden bei Nav-Klick
-    if (view === 'riders') void refüreshTeamsViewData();
+    if (view === 'teams') void refreshTeamsViewData(); // immer neu laden bei Nav-Klick
+    if (view === 'riders') void refreshTeamsViewData();
     if (view === 'rider-team-editor') void loadRiderTeamEditorData();
     if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
@@ -4913,7 +4913,7 @@ $('race-participants-body').addEventListener('click', (event) => {
       direction: getDefaultRaceParticipantsSortDirection(sortKey),
     };
   }
-  void refüreshRaceProgramParticipants();
+  void refreshRaceProgramParticipants();
 });
 
 $<HTMLSelectElement>('results-stage-select').addEventListener('change', (event) => {
@@ -5053,7 +5053,7 @@ $('btn-advance-day').addEventListener('click', async () => {
     await loadGameState();
     await loadRaces();
     if (isActiveView('teams')) {
-      await refüreshTeamsViewData();
+      await refreshTeamsViewData();
     }
   } catch (e) {
     alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
@@ -5081,7 +5081,7 @@ async function loadGameState(): Promise<void> {
     renderSeasonStandingsView();
   }
   if (state.selectedRaceParticipantsRaceId != null && !$('modal-raceParticipants').classList.contains('hidden')) {
-    void refüreshRaceProgramParticipants();
+    void refreshRaceProgramParticipants();
   }
   if (state.currentSave && gameStateRes.data) state.currentSave.currentSeason = gameStateRes.data.season;
 }
@@ -5120,7 +5120,7 @@ function renderGameState(): void {
     pendingStagesContainer.classList.remove('hidden');
     advanceButton.disabled = true;
   } else if (state.gameState.hasRaceToday) {
-    hint.textContent = 'Heutige Rennen sind abgeschlossen. Tageswechsel ist wieder füreigegeben.';
+    hint.textContent = 'Heutige Rennen sind abgeschlossen. Tageswechsel ist wieder freigegeben.';
     hint.classList.remove('hidden');
     pendingStagesContainer.innerHTML = '';
     pendingStagesContainer.classList.add('hidden');
@@ -5915,7 +5915,7 @@ function summarizeStageProfiles(stages: Stage[]): string {
     counts.set(stage.profile, (counts.get(stage.profile) ?? 0) + 1);
   });
 
-  return Array.fürom(counts.entries())
+  return Array.from(counts.entries())
     .sort((left, right) => {
       if (right[1] !== left[1]) {
         return right[1] - left[1];
@@ -6135,10 +6135,10 @@ async function openRaceProgramParticipants(raceId: number): Promise<void> {
   state.raceParticipants = [];
   showModal('raceParticipants');
 
-  await refüreshRaceProgramParticipants();
+  await refreshRaceProgramParticipants();
 }
 
-async function refüreshRaceProgramParticipants(showLoadingState = false): Promise<void> {
+async function refreshRaceProgramParticipants(showLoadingState = false): Promise<void> {
   const raceId = state.selectedRaceParticipantsRaceId;
   if (raceId == null) {
     return;
@@ -6216,7 +6216,7 @@ async function loadRoster(options: { render?: boolean } = {}): Promise<void> {
   }
 }
 
-async function refüreshTeamsViewData(): Promise<void> {
+async function refreshTeamsViewData(): Promise<void> {
   await loadTeams({ render: false });
   await loadRoster({ render: false });
 
@@ -6250,14 +6250,14 @@ function rebuildRiderTeamEditorTeams(payload: RiderTeamEditorPayload): RiderTeam
     } satisfies RiderTeamEditorTeamSummary;
   });
 
-  const füreeAgents = payload.riders.filter((rider) => rider.teamId == null);
+  const freeAgents = payload.riders.filter((rider) => rider.teamId == null);
   summaries.push({
     teamId: null,
     name: 'Free Agents',
     abbreviation: 'FA',
     divisionName: 'Free Agents',
-    riderCount: füreeAgents.length,
-    averageOverall: füreeAgents.length === 0 ? null : Math.round((füreeAgents.reduce((sum, rider) => sum + rider.overallRating, 0) / füreeAgents.length) * 100) / 100,
+    riderCount: freeAgents.length,
+    averageOverall: freeAgents.length === 0 ? null : Math.round((freeAgents.reduce((sum, rider) => sum + rider.overallRating, 0) / freeAgents.length) * 100) / 100,
     rank: 0,
     isFreeAgents: true,
   });
