@@ -1,4 +1,4 @@
-﻿import Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { GameRepository } from '../db/GameRepository';
 
 export class RiderDraftService {
@@ -19,7 +19,7 @@ export class RiderDraftService {
     if (rankedTeamIds.length === 0) return;
 
     // 2. Rider ab 36 in Rente schicken (die noch keinen neuen Vertrag haben)
-    this.db.prepare(
+    this.db.prepare(`
       UPDATE riders
       SET is_retired = 1
       WHERE is_retired = 0
@@ -27,11 +27,11 @@ export class RiderDraftService {
         AND id NOT IN (
           SELECT rider_id FROM contracts WHERE status IN ('active', 'future')
         )
-    ).run(season);
+    `).run(season);
 
     // 3. Alle Free Agents sammeln (ohne active/future vertrag) und nicht retired
     // Wir ermitteln gleichzeitig das "alte" Team (falls es einen abgelaufenen Vertrag im Vorjahr gab)
-    const freeAgentsRaw = this.db.prepare(
+    const freeAgentsRaw = this.db.prepare(`
       SELECT 
         r.id, 
         r.first_name, 
@@ -50,7 +50,7 @@ export class RiderDraftService {
         AND r.id NOT IN (
           SELECT rider_id FROM contracts WHERE status IN ('active', 'future')
         )
-    ).all(season - 1) as Array<{
+    `).all(season - 1) as Array<{
       id: number;
       birth_year: number;
       overall_rating: number;
@@ -73,10 +73,10 @@ export class RiderDraftService {
     // 4. Team Kadergrößen ermitteln
     const teamCountsMap = new Map<number, number>();
     for (const teamId of rankedTeamIds) {
-      const count = (this.db.prepare(
+      const count = (this.db.prepare(`
         SELECT COUNT(*) as c FROM contracts 
         WHERE team_id = ? AND status IN ('active', 'future')
-      ).get(teamId) as { c: number }).c;
+      `).get(teamId) as { c: number }).c;
       teamCountsMap.set(teamId, count);
     }
 
@@ -106,18 +106,18 @@ export class RiderDraftService {
     let draftRound = 1;
     let pickNumber = 1;
     
-    const insertContract = this.db.prepare(
+    const insertContract = this.db.prepare(`
       INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
       VALUES (?, ?, ?, ?, 'active')
-    );
+    `);
 
-    const insertHistory = this.db.prepare(
+    const insertHistory = this.db.prepare(`
       INSERT INTO draft_history (
         season, draft_round, pick_number, team_id, rider_id, 
         old_team_id, contract_length, overall_at_draft, 
         pot_overall_at_draft, draft_value
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    );
+    `);
 
     let sequenceIndex = 0;
     
