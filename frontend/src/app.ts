@@ -6556,8 +6556,8 @@ function renderRiderOverallRatingBadge(score: number): string {
   const lightness = Math.round(38 + (colorFactor * 10));
   const backgroundAlpha = 0.6 + (colorFactor * 0.4);
   const borderAlpha = 0.8;
-  const style = \--stage-editor-score-hue:\;--stage-editor-score-lightness:\%;--stage-editor-score-bg-alpha:\;--stage-editor-score-border-alpha:\;\;
-  return \<span class="stage-editor-score-badge" style="\">\</span>\;
+  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${backgroundAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
+  return `<span class="stage-editor-score-badge" style="${style}">${score.toFixed(1)}</span>`;
 }
 
 function renderRiderStatsIconHeatPill(icon: string, title: string, value: number, maxValue: number): string {
@@ -6565,8 +6565,8 @@ function renderRiderStatsIconHeatPill(icon: string, title: string, value: number
   const hue = Math.round(6 + (ratio * 118));
   const borderAlpha = 0.26 + (ratio * 0.18);
   const bgAlpha = 0.14 + (ratio * 0.12);
-  const style = \--rider-stats-pill-hue:\;--rider-stats-pill-border-alpha:\;--rider-stats-pill-bg-alpha:\;\;
-  return \<span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="\" title="\">\ \</span>\;
+  const style = `--rider-stats-pill-hue:${hue};--rider-stats-pill-border-alpha:${borderAlpha};--rider-stats-pill-bg-alpha:${bgAlpha};`;
+  return `<span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="${style}" title="${esc(title)}">${icon} ${value}</span>`;
 }
 
 function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
@@ -6597,49 +6597,50 @@ function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload
   const formatPoints = payload?.pointsByRaceFormat ?? { stageRace: 0, oneDay: 0 };
   const maxFormat = Math.max(formatPoints.stageRace, formatPoints.oneDay);
 
-  return \
+  return `
     <div class="rider-stats-header-grid">
       <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" title="Land">\<span>\</span></span>
-        <span class="rider-stats-icon-pill" title="Team">\<span>\</span></span>
-        <span class="rider-stats-icon-pill" title="Rolle">\</span>
-        <span class="rider-stats-icon-pill" title="Formphase">\<span>Form</span></span>
+        <span class="rider-stats-icon-pill" title="Land">${resolvedCountryFlag} <span>${esc(resolvedCountryCode || '-')}</span></span>
+        <span class="rider-stats-icon-pill" title="Team">${resolvedTeamId ? renderJersey(resolvedTeamId) : ''} <span>${esc(resolvedTeamName)}</span></span>
+        <span class="rider-stats-icon-pill" title="Rolle">${esc(resolvedRoleName)}</span>
+        <span class="rider-stats-icon-pill" title="Formphase"><span class="form-phase-dot form-phase-${resolvedSeasonPhase}"></span> <span>Form</span></span>
       </div>
       <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;" title="Overall-StÃƒÂ¤rke">\</span>
-        <span class="rider-stats-icon-pill" title="Season-Form">\\</span>
-        <span class="rider-stats-icon-pill" title="Rennform">\\</span>
-        <span class="rider-stats-icon-pill" title="Programm">\</span>
+        <span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;" title="Overall-Stärke">${renderRiderOverallRatingBadge(resolvedOverallRating)}</span>
+        <span class="rider-stats-icon-pill" title="Season-Form">${formBonus >= 0 ? '+' : ''}${formBonus}</span>
+        <span class="rider-stats-icon-pill" title="Rennform">${raceFormBonus >= 0 ? '+' : ''}${raceFormBonus}</span>
+        <span class="rider-stats-icon-pill" title="Programm">${esc(programName)}</span>
       </div>
       <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" title="Saisonrenntage">\\</span>
-        <span class="rider-stats-icon-pill\" title="30-Tage Renntage">\\</span>
-        <span class="rider-stats-icon-pill" title="Langzeit-Fatigue">\\</span>
-        <span class="rider-stats-icon-pill\" title="Kurzzeitfatigue">\\</span>
+        <span class="rider-stats-icon-pill" title="Saisonrenntage">${seasonRaceDaysTotal}</span>
+        <span class="rider-stats-icon-pill ${rolling30dRaceDays > 14 ? 'text-warning' : ''}" title="30-Tage Renntage">${rolling30dRaceDays}</span>
+        <span class="rider-stats-icon-pill" title="Langzeit-Fatigue">${longTermFatigueMalus}</span>
+        <span class="rider-stats-icon-pill ${shortTermFatigueWarning !== 'none' ? 'text-error' : ''}" title="Kurzzeitfatigue">${shortTermFatigueMalus}</span>
       </div>
       <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" title="Saisonpunkte">\\</span>
-        <span class="rider-stats-icon-pill" title="Saisonplatzierung">\\</span>
-        <span class="rider-stats-icon-pill" title="Renntage">\\</span>
-        <span class="rider-stats-icon-pill" title="Siege">\\</span>
+        <span class="rider-stats-icon-pill" title="Saisonpunkte">${currentSeasonPoints}</span>
+        <span class="rider-stats-icon-pill" title="Saisonplatzierung">${currentSeasonRank ? '#' + currentSeasonRank : '-'}</span>
+        <span class="rider-stats-icon-pill" title="Renntage">${currentSeasonRaceDays}</span>
+        <span class="rider-stats-icon-pill" title="Siege">${careerWins}</span>
       </div>
-        <div class="rider-stats-header-col align-left">
-          <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:124;--rider-stats-pill-border-alpha:0.44;--rider-stats-pill-bg-alpha:0.26; font-weight: 500;" title="Spezialisierung 1">${rider?.specialization1 ? esc(getRiderSpecializationLabel(rider.specialization1)) : '-'}</span>
-          <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:41;--rider-stats-pill-border-alpha:0.31;--rider-stats-pill-bg-alpha:0.18; font-weight: 500;" title="Spezialisierung 2">${rider?.specialization2 ? esc(getRiderSpecializationLabel(rider.specialization2)) : '-'}</span>
-          <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:6;--rider-stats-pill-border-alpha:0.26;--rider-stats-pill-bg-alpha:0.14; font-weight: 500;" title="Spezialisierung 3">${rider?.specialization3 ? esc(getRiderSpecializationLabel(rider.specialization3)) : '-'}</span>
-          <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
-        </div>
       <div class="rider-stats-header-col align-left">
-        \
-        \
-        <span class="rider-stats-icon-pill" title="AusreiÃƒÅ¸versuche">\\</span>
+        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:124;--rider-stats-pill-border-alpha:0.44;--rider-stats-pill-bg-alpha:0.26; font-weight: 500;" title="Spezialisierung 1">${rider?.specialization1 ? esc(getRiderSpecializationLabel(rider.specialization1)) : '-'}</span>
+        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:41;--rider-stats-pill-border-alpha:0.31;--rider-stats-pill-bg-alpha:0.18; font-weight: 500;" title="Spezialisierung 2">${rider?.specialization2 ? esc(getRiderSpecializationLabel(rider.specialization2)) : '-'}</span>
+        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:6;--rider-stats-pill-border-alpha:0.26;--rider-stats-pill-bg-alpha:0.14; font-weight: 500;" title="Spezialisierung 3">${rider?.specialization3 ? esc(getRiderSpecializationLabel(rider.specialization3)) : '-'}</span>
         <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
       </div>
       <div class="rider-stats-header-col align-left">
-        \
-        \
-        \
-        \
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.stageRace, 'Rundfahrten Punkte', formatPoints.stageRace, maxFormat)}
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.oneDay, 'Eintagesrennen Punkte', formatPoints.oneDay, maxFormat)}
+        <span class="rider-stats-icon-pill" title="Ausreißversuche">${RIDER_STATS_ICONS.breakaway} ${currentSeasonBreakawayAttempts}</span>
+        <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
       </div>
-    </div>\;
+      <div class="rider-stats-header-col align-left">
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.flat, 'Flach-Punkte', terrainPoints.flat, maxTerrain)}
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.hilly, 'Hügel-Punkte', terrainPoints.hilly, maxTerrain)}
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.mediumMountain, 'Mittelgebirge-Punkte', terrainPoints.mediumMountain, maxTerrain)}
+        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.mountain, 'Hochgebirge-Punkte', terrainPoints.mountain, maxTerrain)}
+      </div>
+    </div>
+  `;
 }
