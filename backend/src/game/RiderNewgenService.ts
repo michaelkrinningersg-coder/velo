@@ -1,4 +1,4 @@
-﻿import { Database } from 'better-sqlite3';
+import { Database } from 'better-sqlite3';
 
 export class RiderNewgenService {
   constructor(private db: Database) {}
@@ -30,7 +30,7 @@ export class RiderNewgenService {
       // Gesamte Start-Gewichtung vorberechnen
       const totalStartWeight = startPresets.reduce((sum, p) => sum + (p.weight || 1), 0);
 
-      const typeRows = this.db.prepare(SELECT id, type_key FROM type_rider).all() as any[];
+      const typeRows = this.db.prepare(`SELECT id, type_key FROM type_rider`).all() as any[];
         const typeMap = new Map<string, number>();
         for (const t of typeRows) typeMap.set(t.type_key, t.id);
 

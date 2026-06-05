@@ -28,6 +28,7 @@
   SeasonStandingsPayload,
   StageResultsPayload,
   DraftHistoryPayload,
+  InjuryRow,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {

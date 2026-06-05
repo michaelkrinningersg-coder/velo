@@ -75,6 +75,7 @@ const state: {
   stageResults: StageResultsPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
   draftHistory: DraftHistoryPayload | null;
+  injuries: InjuryRow[] | null;
   draftSelectedSeason: number | null;
   selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
   teamTableSort: {
@@ -145,6 +146,7 @@ const state: {
   stageResults: null,
   seasonStandings: null,
   draftHistory: null,
+  injuries: null,
   draftSelectedSeason: null,
   selectedSeasonStandingScope: 'riders',
   teamTableSort: {
@@ -4562,6 +4564,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     if (view === 'live-race') renderRealtimeRaceView();
     if (view === 'results') renderResultsView();
       if (view === 'draft') void loadDraftHistory(state.draftSelectedSeason || state.currentSave?.currentSeason || 2026);
+      if (view === 'injuries') void loadInjuries();
     if (view === 'season-standings') void loadSeasonStandings(true);
   });
 });
@@ -5261,6 +5264,9 @@ async function loadDraftHistory(season: number, silent = false): Promise<void> {
     if (isActiveView('draft')) {
       renderDraftView();
     }
+    if (isActiveView('injuries')) {
+      renderInjuriesView();
+    }
     if (!silent && res.error) {
       alert('Draft Historie konnte nicht geladen werden:\n' + res.error);
     }
@@ -5388,6 +5394,119 @@ function renderDraftView(): void {
         <td class="text-center">\</td>
         <td class="text-center">\ J.</td>
         <td class="text-center">\</td>
+        <td class="text-center">\</td>
+      </tr>
+    ;
+  }
+
+  html += </tbody></table>;
+  container.innerHTML = html;
+}
+
+async function loadInjuries(silent = false): Promise<void> {
+  const res = await api.getInjuries();
+  if (!res.success) {
+    state.injuries = null;
+    if (isActiveView('injuries')) {
+      renderInjuriesView();
+    }
+    if (!silent && res.error) {
+      alert('Verletzungen konnten nicht geladen werden:\n' + res.error);
+    }
+    return;
+  }
+  state.injuries = res.data ?? [];
+  if (isActiveView('injuries')) {
+    renderInjuriesView();
+  }
+}
+
+let currentInjuriesSort: { key: keyof InjuryRow, asc: boolean } = { key: 'unavailableDays', asc: false };
+
+function renderInjuriesView(): void {
+  const container = injuries-table-container;
+
+  if (!state.injuries) {
+    container.innerHTML = '<div class="alert alert-info">Lade Daten...</div>';
+    return;
+  }
+
+  injuries-meta.textContent = state.injuries.length + ' Ausfälle';
+
+  if (state.injuries.length === 0) {
+    container.innerHTML = '<div class="alert alert-info">Aktuell gibt es keine kranken oder verletzten Fahrer.</div>';
+    return;
+  }
+
+  const sortedRows = [...state.injuries].sort((a, b) => {
+    let comparison = 0;
+    const key = currentInjuriesSort.key;
+    if (key === 'riderLastName') {
+      comparison = a.riderLastName.localeCompare(b.riderLastName);
+    } else if (key === 'teamAbbreviation') {
+      comparison = (a.teamAbbreviation || '').localeCompare(b.teamAbbreviation || '');
+    } else if (key === 'countryCode') {
+      comparison = a.countryCode.localeCompare(b.countryCode);
+    } else if (key === 'healthStatus') {
+      comparison = a.healthStatus.localeCompare(b.healthStatus);
+    } else {
+      comparison = ((a as any)[key] ?? 0) - ((b as any)[key] ?? 0);
+    }
+    return currentInjuriesSort.asc ? comparison : -comparison;
+  });
+
+  const getSortIcon = (key: string) => {
+    if (currentInjuriesSort.key !== key) return '<span class="sort-icon-placeholder"></span>';
+    return currentInjuriesSort.asc ? '<span class="sort-icon asc"></span>' : '<span class="sort-icon desc"></span>';
+  };
+
+  const setSort = (key: any) => {
+    if (currentInjuriesSort.key === key) {
+      currentInjuriesSort.asc = !currentInjuriesSort.asc;
+    } else {
+      currentInjuriesSort.key = key;
+      currentInjuriesSort.asc = false;
+    }
+    renderInjuriesView();
+  };
+
+  (window as any).setInjuriesSort = setSort;
+
+  let html = 
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th class="text-center">#</th>
+          <th class="sortable text-center" onclick="setInjuriesSort('countryCode')">Land </th>
+          <th class="sortable" onclick="setInjuriesSort('riderLastName')">Fahrer </th>
+          <th class="sortable text-center" onclick="setInjuriesSort('teamAbbreviation')">Team </th>
+          <th class="sortable text-center" onclick="setInjuriesSort('unavailableDays')">Ausfallzeit </th>
+          <th class="sortable text-center" onclick="setInjuriesSort('healthStatus')">Typ </th>
+        </tr>
+      </thead>
+      <tbody>
+  ;
+
+  let idx = 1;
+  for (const row of sortedRows) {
+    let teamHtml = '-';
+    if (row.teamAbbreviation && row.teamJersey) {
+      teamHtml = \<div style="display:flex; align-items:center; justify-content:center; gap:0.5rem;"><img src="\" style="height:20px; width:20px; object-fit:contain;" /> \</div>\;
+    } else if (row.teamAbbreviation) {
+      teamHtml = esc(row.teamAbbreviation);
+    }
+
+    const typeHtml = row.healthStatus === 'injured' 
+      ? '<span class="badge badge-error">Verletzung 🤕</span>' 
+      : '<span class="badge badge-warning">Krankheit 🤒</span>';
+
+    html += 
+      <tr>
+        <td class="text-center">\</td>
+        <td class="text-center"><img src="\" class="country-flag" title="\" /></td>
+        <td>\ \</td>
+        <td class="text-center">\</td>
+        <td class="text-center"><strong>\ Tage</strong></td>
         <td class="text-center">\</td>
       </tr>
     ;

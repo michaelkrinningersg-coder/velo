@@ -1045,3 +1045,14 @@ export interface DraftHistoryPayload {
   season: number;
   rows: DraftHistoryRow[];
 }
+export interface InjuryRow {
+  riderId: number;
+  riderFirstName: string;
+  riderLastName: string;
+  countryCode: string;
+  countryFlag: string;
+  teamAbbreviation: string | null;
+  teamJersey: string | null;
+  healthStatus: 'ill' | 'injured';
+  unavailableDays: number;
+}

@@ -30,6 +30,7 @@ import {
   RealtimeSimulationBootstrap,
   SeasonStandingsPayload,
   DraftHistoryPayload,
+  InjuryRow,
   StageEditorDraft,
   StageEditorExistingStageListResponse,
   StageEditorExistingStageLoadResponse,
@@ -576,6 +577,31 @@ export function createRouter(dbService: DatabaseService): Router {
       season,
       rows
     });
+  });
+
+  
+  router.get('/injuries', (_req: Request, res: Response) => {
+    const rows = db.prepare(
+      SELECT
+        r.id AS riderId,
+        r.first_name AS riderFirstName,
+        r.last_name AS riderLastName,
+        c.code AS countryCode,
+        c.flag_svg AS countryFlag,
+        t.abbreviation AS teamAbbreviation,
+        t.jersey_svg AS teamJersey,
+        rds.health_status AS healthStatus,
+        rds.unavailable_days_remaining AS unavailableDays
+      FROM rider_daily_state rds
+      JOIN riders r ON rds.rider_id = r.id
+      JOIN sta_country c ON r.country_id = c.id
+      LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
+      LEFT JOIN teams t ON cnt.team_id = t.id
+      WHERE rds.health_status IN ('ill', 'injured')
+      ORDER BY rds.unavailable_days_remaining DESC
+    ).all() as any[];
+
+    ok<InjuryRow[]>(res, rows);
   });
 
   return router;
