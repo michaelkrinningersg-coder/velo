@@ -1,4 +1,4 @@
-﻿import { api } from './api';
+import { api } from './api';
 import {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
@@ -5499,7 +5499,7 @@ function renderInjuriesView(): void {
     }
 
     const typeHtml = row.healthStatus === 'injured' 
-      ? '<span class="badge badge-error">Verletzung 🥙</span>' 
+      ? '<span class="badge badge-error">Verletzung 🤕</span>' 
       : '<span class="badge badge-warning">Krankheit 🤒</span>';
 
     html += `
@@ -5517,6 +5517,9 @@ function renderInjuriesView(): void {
   html += `</tbody></table>`;
   container.innerHTML = html;
 }
+
+function renderResultsView(): void {
+  const raceSelect = $<HTMLSelectElement>('results-race-select');
   const stageSelect = $<HTMLSelectElement>('results-stage-select');
   const tabs = $('results-type-tabs');
   const markerTabs = $('results-marker-tabs');
