@@ -1,11 +1,11 @@
-import { Database } from 'better-sqlite3';
+﻿import { Database } from 'better-sqlite3';
 
 export class RiderNewgenService {
   constructor(private db: Database) {}
 
   public createYearStartNewgens(season: number) {
     this.db.transaction(() => {
-      // 1. Länder mit aktiven Regen-Raten (Limits) abrufen
+      // 1. LÃ¤nder mit aktiven Regen-Raten (Limits) abrufen
       const countries = this.db.prepare(`
         SELECT id, number_regen_min, number_regen_max
         FROM sta_country
@@ -17,7 +17,7 @@ export class RiderNewgenService {
       const potPresets = this.db.prepare(`SELECT * FROM newgen_potential_presets`).all() as any[];
 
       if (startPresets.length === 0 || potPresets.length === 0) {
-        console.warn('Keine Newgen-Presets in der Datenbank gefunden. Überspringe Newgen-Generierung.');
+        console.warn('Keine Newgen-Presets in der Datenbank gefunden. Ãœberspringe Newgen-Generierung.');
         return;
       }
 
@@ -30,7 +30,11 @@ export class RiderNewgenService {
       // Gesamte Start-Gewichtung vorberechnen
       const totalStartWeight = startPresets.reduce((sum, p) => sum + (p.weight || 1), 0);
 
-      let newgenCount = 0;
+      const typeRows = this.db.prepare(SELECT id, type_key FROM type_rider).all() as any[];
+        const typeMap = new Map<string, number>();
+        for (const t of typeRows) typeMap.set(t.type_key, t.id);
+
+        let newgenCount = 0;
 
       // Dynamisches Insert-Statement vorbereiten
       const skillColumns = skillKeys.map(k => `skill_${k}`).join(', ');
@@ -40,12 +44,12 @@ export class RiderNewgenService {
       const insertRider = this.db.prepare(`
         INSERT INTO riders (
           first_name, last_name, country_id, birth_year,
-          is_retired, skill_development,
+          is_retired, skill_development, rider_type_id,
           ${skillColumns},
           ${potColumns}
         ) VALUES (
           ?, ?, ?, ?,
-          0, ?,
+          0, ?, ?,
           ${valuePlaceholders},
           ${valuePlaceholders}
         )
@@ -55,7 +59,7 @@ export class RiderNewgenService {
         const numToGenerate = this.getRandomInt(country.number_regen_min, country.number_regen_max);
         if (numToGenerate <= 0) continue;
 
-        // Namen für das aktuelle Land abrufen
+        // Namen fÃ¼r das aktuelle Land abrufen
         const firstNames = this.db.prepare(`
           SELECT value, weight
           FROM rider_names
@@ -72,7 +76,7 @@ export class RiderNewgenService {
         const fallbackLastNames = lastNames.length > 0 ? lastNames : [{ value: 'Gen' }];
 
         for (let i = 0; i < numToGenerate; i++) {
-          // Start-Werte auswürfeln
+          // Start-Werte auswÃ¼rfeln
           const startPreset = this.pickWeighted(startPresets, totalStartWeight);
           const startValues: Record<string, number> = {};
 
@@ -96,12 +100,12 @@ export class RiderNewgenService {
 
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {
-            // Potenzial muss zwingend über oder gleich dem Startwert liegen
+            // Potenzial muss zwingend Ã¼ber oder gleich dem Startwert liegen
             const minPot = Math.max(startValues[key] + 1, potPreset[`min_${key}`]);
             const maxPot = Math.max(minPot, potPreset[`max_${key}`]);
             potValues[key] = this.getRandomInt(minPot, maxPot);
             
-            // Max-Cap bei 85 gemäß Plan
+            // Max-Cap bei 85 gemÃ¤ÃŸ Plan
             potValues[key] = Math.min(85, potValues[key]);
           }
 
@@ -130,7 +134,8 @@ export class RiderNewgenService {
             lastNameObj.value,
             country.id,
             birthYear,
-            skillDev
+            skillDev,
+            typeMap.get(startPreset.type_key) || 1
           ];
 
           for (const key of skillKeys) insertParams.push(startValues[key]);
@@ -141,7 +146,7 @@ export class RiderNewgenService {
         }
       }
 
-      console.log(`[RiderNewgenService] ${newgenCount} neue Newgen-Fahrer für Saison ${season} generiert.`);
+      console.log(`[RiderNewgenService] ${newgenCount} neue Newgen-Fahrer fÃ¼r Saison ${season} generiert.`);
     })();
   }
 

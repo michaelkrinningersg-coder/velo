@@ -6351,6 +6351,12 @@ function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload
         <span class="rider-stats-icon-pill" title="Renntage">\\</span>
         <span class="rider-stats-icon-pill" title="Siege">\\</span>
       </div>
+        <div class="rider-stats-header-col align-left">
+          <span class="rider-stats-icon-pill" title="Spezialisierung 1">${rider?.specialization1 ? esc(getRiderSpecializationLabel(rider.specialization1)) : '-'}</span>
+          <span class="rider-stats-icon-pill" title="Spezialisierung 2">${rider?.specialization2 ? esc(getRiderSpecializationLabel(rider.specialization2)) : '-'}</span>
+          <span class="rider-stats-icon-pill" title="Spezialisierung 3">${rider?.specialization3 ? esc(getRiderSpecializationLabel(rider.specialization3)) : '-'}</span>
+          <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
+        </div>
       <div class="rider-stats-header-col align-left">
         \
         \
