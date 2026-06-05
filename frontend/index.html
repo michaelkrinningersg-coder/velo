@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
@@ -56,40 +56,46 @@
       <div class="sidebar-logo">VELO</div>
       <nav class="sidebar-nav">
         <button class="nav-btn active" data-view="dashboard">
-          <span class="nav-icon">âŒ‚</span> Dashboard
+          <span class="nav-icon">⌂</span> Dashboard
         </button>
         <button class="nav-btn" data-view="teams">
-          <span class="nav-icon">â—«</span> Teams
+          <span class="nav-icon">◫</span> Teams
         </button>
         <button class="nav-btn" data-view="riders">
-          <span class="nav-icon">â–£</span> Fahrer
+          <span class="nav-icon">▣</span> Fahrer
         </button>
         <button class="nav-btn" data-view="live-race">
-          <span class="nav-icon">â—”</span> Live Race
+          <span class="nav-icon">◔</span> Live Race
         </button>
         <button class="nav-btn" data-view="results">
-          <span class="nav-icon">â–¤</span> Results
+          <span class="nav-icon">▤</span> Results
         </button>
         <button class="nav-btn" data-view="season-standings">
-          <span class="nav-icon">â˜…</span> Season Standings
+          <span class="nav-icon">★</span> Season Standings
+        </button>
+        <button class="nav-btn" data-view="draft">
+          <span class="nav-icon">♺</span> Draft
+        </button>
+        <button class="nav-btn" data-view="injuries">
+          <span class="nav-icon">✚</span> Verletzungen
         </button>
         <button class="nav-btn" data-view="stage-editor-stages">
-          <span class="nav-icon">â–¦</span> Stages
+          <span class="nav-icon">▦</span> Stages
         </button>
         <button class="nav-btn" data-view="stage-editor-climbs">
-          <span class="nav-icon">â–³</span> Climbs
+          <span class="nav-icon">△</span> Climbs
         </button>
         <button class="nav-btn" data-view="stage-editor">
-          <span class="nav-icon">ðŸ—º</span> Stage Editor
+          <span class="nav-icon">🗺</span> Stage Editor
         </button>
         <button class="nav-btn" data-view="rider-team-editor">
-          <span class="nav-icon">â–¥</span> Fahrereditor
+          <span class="nav-icon">▥</span> Fahrereditor
         </button>
       </nav>
       <div class="sidebar-meta">
         <div id="meta-career"></div>
         <div id="meta-season"></div>
-        <button class="btn btn-sm btn-ghost" id="btn-back-menu">â† HauptmenÃ¼</button>
+        <button class="btn btn-sm btn-ghost" id="btn-back-menu">← Hauptmenü</button>
       </div>
     </aside>
 
@@ -136,12 +142,40 @@
       <div id="view-teams" class="view">
         <div class="view-header"><h2>Teams</h2></div>
         <div class="teams-selector">
-          <label for="teams-dropdown">Team auswÃ¤hlen</label>
+          <label for="teams-dropdown">Team auswählen</label>
           <select id="teams-dropdown">
-            <option value="">â€“ Team auswÃ¤hlen â€“</option>
+            <option value="">– Team auswählen –</option>
           </select>
         </div>
         <div id="teams-detail"></div>
+      </div>
+
+      <!-- Draft -->
+      <div id="view-draft" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Draft Historie</h2>
+            <p id="draft-meta" class="text-muted">Ergebnisse des Jahreswechsel-Drafts.</p>
+          </div>
+        </div>
+        <div class="results-toolbar">
+          <div class="form-group">
+            <label for="draft-season-select">Saison</label>
+            <select id="draft-season-select"></select>
+          </div>
+        </div>
+        <div id="draft-table-container"></div>
+      </div>
+
+      <!-- Verletzungen -->
+      <div id="view-injuries" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Verletzungen & Krankheiten</h2>
+            <p id="injuries-meta" class="text-muted">Lade Daten...</p>
+          </div>
+        </div>
+        <div id="injuries-table-container"></div>
       </div>
 
       <!-- Riders -->
