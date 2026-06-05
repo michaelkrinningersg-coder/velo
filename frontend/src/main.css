@@ -999,6 +999,13 @@ html, body {
 
 .rider-stats-table {
   min-width: 1100px;
+  table-layout: fixed;
+}
+
+.rider-stats-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rider-stats-table thead th {

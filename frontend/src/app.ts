@@ -1,4 +1,4 @@
-﻿import { api } from './api';
+import { api } from './api';
 import {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
@@ -3131,7 +3131,7 @@ const RIDER_TEAM_EDITOR_COLUMNS: RiderTeamEditorColumn[] = [
 ];
 
 function resolveRiderTeamEditorTeamKey(teamId: number | null): string {
-  return teamId == null ? 'füree-agents' : String(teamId);
+  return teamId == null ? 'free-agents' : String(teamId);
 }
 
 function getRiderTeamEditorTeamName(teamId: number | null): string {
@@ -3254,7 +3254,7 @@ function getFilteredRiderTeamEditorRows(payload: RiderTeamEditorPayload): RiderT
 function renderRiderTeamEditorTeamOptions(teamId: number | null): string {
   const payload = state.riderTeamEditorPayload;
   if (!payload) {
-    return '<option value="füree-agents">Free Agents</option>';
+    return '<option value="free-agents">Free Agents</option>';
   }
 
   return payload.teams.map((team) => {
@@ -5475,6 +5475,20 @@ function renderInjuriesView(): void {
   container.innerHTML = html;
 }
 
+function resolveParticipantCountryCode(row: { riderId?: number | null; teamId?: number | null }): string | null {
+  if (row.riderId != null) {
+    const rider = findRiderById(row.riderId);
+    if (rider?.country?.code3) return rider.country.code3;
+    if (rider?.nationality) return rider.nationality;
+  }
+  if (row.teamId != null) {
+    const team = state.teams.find((t) => t.id === row.teamId);
+    if (team?.countryCode) return team.countryCode;
+    if (team?.country?.code3) return team.country.code3;
+  }
+  return null;
+}
+
 function renderResultsView(): void {
   const raceSelect = $<HTMLSelectElement>('results-race-select');
   const stageSelect = $<HTMLSelectElement>('results-stage-select');
@@ -6298,7 +6312,7 @@ function updateRiderTeamEditorField(riderId: number, field: keyof RiderTeamEdito
   }
 
   if (field === 'teamId') {
-    rider.teamId = rawValue === 'füree-agents' ? null : Number.parseInt(rawValue, 10);
+    rider.teamId = rawValue === 'free-agents' ? null : Number.parseInt(rawValue, 10);
   } else if (typeof rider[field] === 'number') {
     (rider[field] as number) = Number.parseInt(rawValue || '0', 10);
   } else {
@@ -6601,6 +6615,8 @@ function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload
     </div>
   `;
 }
+
+
 
 
 
