@@ -56,13 +56,20 @@ export class RiderNewgenService {
         if (numToGenerate <= 0) continue;
 
         // Namen für das aktuelle Land abrufen
-        const names = this.db.prepare(`
-          SELECT first_name, last_name
+        const firstNames = this.db.prepare(`
+          SELECT value, weight
           FROM rider_names
-          WHERE country_id = ?
+          WHERE country_id = ? AND type = 'first'
         `).all(country.id) as any[];
 
-        const fallbackNames = names.length > 0 ? names : [{ first_name: 'New', last_name: 'Gen' }];
+        const lastNames = this.db.prepare(`
+          SELECT value, weight
+          FROM rider_names
+          WHERE country_id = ? AND type = 'last'
+        `).all(country.id) as any[];
+
+        const fallbackFirstNames = firstNames.length > 0 ? firstNames : [{ value: 'New' }];
+        const fallbackLastNames = lastNames.length > 0 ? lastNames : [{ value: 'Gen' }];
 
         for (let i = 0; i < numToGenerate; i++) {
           // Start-Werte auswürfeln
@@ -99,13 +106,28 @@ export class RiderNewgenService {
           }
 
           // Namen, Alter und Skill-Development setzen
-          const randomNameObj = fallbackNames[Math.floor(Math.random() * fallbackNames.length)];
+          let firstNameObj, lastNameObj;
+          
+          if (fallbackFirstNames[0].value === 'New') {
+            firstNameObj = fallbackFirstNames[0];
+          } else {
+            const totalFirstWeight = fallbackFirstNames.reduce((sum, n) => sum + (n.weight || 1), 0);
+            firstNameObj = this.pickWeighted(fallbackFirstNames, totalFirstWeight);
+          }
+
+          if (fallbackLastNames[0].value === 'Gen') {
+            lastNameObj = fallbackLastNames[0];
+          } else {
+            const totalLastWeight = fallbackLastNames.reduce((sum, n) => sum + (n.weight || 1), 0);
+            lastNameObj = this.pickWeighted(fallbackLastNames, totalLastWeight);
+          }
+
           const birthYear = season - 16;
           const skillDev = this.getRandomInt(1, 20);
 
           const insertParams = [
-            randomNameObj.first_name,
-            randomNameObj.last_name,
+            firstNameObj.value,
+            lastNameObj.value,
             country.id,
             birthYear,
             skillDev
