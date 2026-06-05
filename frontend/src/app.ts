@@ -1,4 +1,4 @@
-﻿import { api } from './api';
+import { api } from './api';
 import {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
@@ -3890,7 +3890,9 @@ function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPayload | 
                     <col style="width: 8%;">
                     <col style="width: 5%;">
                     <col style="width: 5%;">
-                    <col style="width: 3%;">`n                    <col style="width: 15%;">`n                    <col style="width: 35%;">
+                    <col style="width: 3%;">
+                    <col style="width: 15%;">
+                    <col style="width: 35%;">
                     <col style="width: 6%;">
                     <col style="width: 6%;">
                     <col style="width: 5%;">
