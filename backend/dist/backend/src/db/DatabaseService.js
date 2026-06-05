@@ -796,6 +796,7 @@ class DatabaseService {
         this.activeConnection = new better_sqlite3_1.default(savePath);
         this.activeSaveName = filename;
         this.activeConnection.pragma('journal_mode = WAL');
+        this.activeConnection.pragma('synchronous = NORMAL');
         this.activeConnection.pragma('foreign_keys = ON');
         this.applyLatestSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
@@ -807,10 +808,45 @@ class DatabaseService {
         this.ensureRiderFormSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
+        this.ensureDayChangeIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
         new RiderProgramService_1.RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
         new ContractService_1.ContractService(this.activeConnection).checkContractStatuses(gameState.season);
         return this.activeConnection;
+    }
+    /**
+     * Idempotent index creation for the hot path of the day-change transaction.
+     * These cover the new CTE-based `syncRiderLoadState` aggregation and the
+     * bulk program-window lookup in `GameStateService`. Skipped when the
+     * underlying tables don't exist (e.g. fresh master DB).
+     */
+    ensureDayChangeIndexes(db) {
+        const createIfTable = (table, sql) => {
+            if (!tableExists(db, table))
+                return;
+            try {
+                db.exec(sql);
+            }
+            catch {
+                // Ignore - the index might already exist with a different definition.
+            }
+        };
+        createIfTable('stage_entries', `
+      CREATE INDEX IF NOT EXISTS idx_stage_entries_rider_status
+        ON stage_entries(rider_id, status, stage_id);
+    `);
+        createIfTable('stages', `
+      CREATE INDEX IF NOT EXISTS idx_stages_date_id
+        ON stages(date, id);
+    `);
+        createIfTable('riders', `
+      CREATE INDEX IF NOT EXISTS idx_riders_active
+        ON riders(is_retired, id) WHERE is_retired = 0;
+    `);
+        createIfTable('rider_season_programs', `
+      CREATE INDEX IF NOT EXISTS idx_rider_season_programs_season_rider
+        ON rider_season_programs(season, rider_id);
+    `);
     }
     getActiveConnection() {
         if (!this.activeConnection) {

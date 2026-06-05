@@ -22,6 +22,10 @@ const RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
+function isNovember(currentDate) {
+    // Nur 11-01 bis 11-30 (User-Klärung G1)
+    return currentDate.slice(5, 10) >= '11-01' && currentDate.slice(5, 10) <= '11-30';
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -300,11 +304,11 @@ class RiderDevelopmentService {
             const context = contextByRiderId.get(row.id);
             const currentSkills = buildCurrentSkillsFromDailyRow(row);
             const potentialSkills = buildPotentialsFromDailyRow(row);
-            const blockedReason = resolveDevelopmentBlockReason(row, context, currentDate, age);
+            const block = resolveDevelopmentBlockReason(row, context, currentDate, age);
             const deltas = {};
             let growthTotal = 0;
             let declineTotal = 0;
-            if (blockedReason === 'healthy') {
+            if (block.canGrow) {
                 const ageFactor = resolveAgeGrowthFactor(age, row.peak_age);
                 const developmentFactor = resolveSkillDevelopmentFactor(row.skill_development);
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
@@ -323,7 +327,7 @@ class RiderDevelopmentService {
                     }
                 }
             }
-            if (row.is_retired !== 1 && age >= row.decline_age) {
+            if (block.canDecline && row.is_retired !== 1 && age >= row.decline_age) {
                 const yearsAfterDecline = Math.max(0, age - row.decline_age + 1);
                 const ageDeclineFactor = Math.min(2.4, 0.35 + yearsAfterDecline * 0.22);
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
