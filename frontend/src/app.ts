@@ -3718,54 +3718,7 @@ function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): string {
     </section>`;
 }
 
-function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
-  const resolvedCountryCode = payload?.countryCode ?? countryCode ?? null;
-  const resolvedCountryFlag = resolvedCountryCode ? renderFlag(resolvedCountryCode) : countryFlag;
-  const resolvedRoleName = payload?.roleName ?? rider?.role?.name ?? 'Ohne Rolle';
-  const resolvedOverallRating = payload?.overallRating ?? rider?.overallRating ?? 0;
-  const resolvedTeamId = payload?.teamId ?? rider?.activeTeamId ?? null;
-  const resolvedTeamName = payload?.teamName ?? teamName ?? 'Ohne aktives Team';
-  const resolvedSeasonPhase = payload?.seasonFormPhase ?? rider?.seasonFormPhase ?? 'neutral';
-  const programName = payload?.program?.name ?? rider?.seasonProgram?.name ?? 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“';
-  const formBonus = payload?.formBonus ?? rider?.formBonus ?? 0;
-  const raceFormBonus = payload?.raceFormBonus ?? rider?.raceFormBonus ?? 0;
-  const seasonRaceDaysTotal = payload?.seasonRaceDaysTotal ?? rider?.seasonRaceDaysTotal ?? 0;
-  const rolling30dRaceDays = payload?.rolling30dRaceDays ?? rider?.rolling30dRaceDays ?? 0;
-  const longTermFatigueMalus = payload?.longTermFatigueMalus ?? rider?.longTermFatigueMalus ?? 0;
-  const shortTermFatigueMalus = payload?.shortTermFatigueMalus ?? rider?.shortTermFatigueMalus ?? 0;
-  const shortTermFatigueWarning = payload?.shortTermFatigueWarning ?? rider?.shortTermFatigueWarning ?? 'none';
-  const currentSeasonPoints = payload?.currentSeasonPoints ?? rider?.seasonPoints ?? 0;
-  const currentSeasonRank = payload?.currentSeasonRank ?? resolveCurrentSeasonRank(rider?.id ?? payload?.riderId ?? null);
-  const currentSeasonRaceDays = payload?.currentSeasonRaceDays ?? rider?.seasonRaceDays ?? 0;
-  const careerWins = payload?.careerWins ?? rider?.seasonWins ?? 0;
-  const currentSeasonBreakawayAttempts = payload?.currentSeasonBreakawayAttempts ?? 0;
-  return `
-    <div class="rider-stats-summary">
-      <div class="rider-stats-summary-row">
-        <span class="rider-stats-summary-pill">${resolvedCountryFlag}<span>${esc(resolvedCountryCode ?? 'Land offen')}</span></span>
-        <span class="rider-stats-summary-pill rider-stats-summary-pill-team">${renderMiniJersey(resolvedTeamId, resolvedTeamName)}<span>${esc(resolvedTeamName)}</span></span>
-        <span class="rider-stats-summary-pill">${esc(resolvedRoleName)}</span>
-        <span class="rider-stats-summary-pill" title="Formphase">${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)}<span>Form</span></span>
-        <span class="rider-stats-summary-pill">OVR ${Math.round(resolvedOverallRating)}</span>
-        <span class="rider-stats-summary-pill">Saisonpunkte ${esc(String(currentSeasonPoints))}</span>
-        <span class="rider-stats-summary-pill">Saisonplatzierung ${currentSeasonRank != null ? `${esc(String(currentSeasonRank))}.` : 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“'}</span>
-        <span class="rider-stats-summary-pill" title="${esc(formatRiderStatsCareerRaceDaysTooltip(payload))}">Renntage ${esc(String(currentSeasonRaceDays))}</span>
-        <span class="rider-stats-summary-pill">Siege ${esc(String(careerWins))}</span>
-        <span class="rider-stats-summary-pill">AusreiÃƒÆ’Ã…Â¸versuche ${esc(String(currentSeasonBreakawayAttempts))}</span>
-      </div>
-      <div class="rider-stats-summary-row rider-stats-summary-row-secondary">
-        <span class="rider-stats-summary-pill">S-Form ${renderSeasonFormValue(formBonus)}</span>
-        <span class="rider-stats-summary-pill">R-Form ${renderRaceFormBonusValue(raceFormBonus)}</span>
-        <span class="rider-stats-summary-pill">S-Tage ${esc(String(seasonRaceDaysTotal))}</span>
-        <span class="rider-stats-summary-pill${shortTermFatigueWarning === 'warning' ? ' rider-stats-summary-pill-warning' : shortTermFatigueWarning === 'critical' ? ' rider-stats-summary-pill-critical' : ''}">${shortTermFatigueWarning === 'critical' ? 'Zusammenbruch' : '30T'} ${esc(String(rolling30dRaceDays))}</span>
-        <span class="rider-stats-summary-pill">Langzeit ${renderLoadMalusValue(longTermFatigueMalus)}</span>
-        <span class="rider-stats-summary-pill${shortTermFatigueWarning === 'warning' ? ' rider-stats-summary-pill-warning' : shortTermFatigueWarning === 'critical' ? ' rider-stats-summary-pill-critical' : ''}">Akut ${renderLoadMalusValue(shortTermFatigueMalus, shortTermFatigueWarning)}</span>
-        <span class="rider-stats-summary-pill">Programm ${esc(programName)}</span>
-        ${renderRiderStatsTerrainSources(payload)}
-        ${renderRiderStatsRaceFormatSources(payload)}
-      </div>
-    </div>`;
-}
+
 
 function renderRiderStatsRankBadge(label: string, variant: 'place' | 'gc'): string {
   return `<span class="rider-stats-rank-badge rider-stats-rank-badge-${variant}">${esc(label)}</span>`;
