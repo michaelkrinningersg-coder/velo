@@ -2188,7 +2188,7 @@ export class GameRepository {
     const rows = this.db.prepare(`
       SELECT
         stage_entries.rider_id AS rider_id,
-        COUNT(stage_entries.id) AS race_days,
+        COUNT(*) AS race_days,
         SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
