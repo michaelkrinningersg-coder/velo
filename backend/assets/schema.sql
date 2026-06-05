@@ -427,6 +427,118 @@ CREATE TABLE IF NOT EXISTS stage_marker_results (
 CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
   ON stage_marker_results(stage_id, marker_key, rank);
 
+-- ---- Skill-Baseline pro Saison (für Delta-Anzeige) ---------
+CREATE TABLE IF NOT EXISTS rider_skill_yearly_baseline (
+  rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  season INTEGER NOT NULL,
+  skill_key TEXT NOT NULL,
+  baseline_value REAL NOT NULL,
+  PRIMARY KEY (rider_id, season, skill_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_skill_yearly_baseline_lookup
+  ON rider_skill_yearly_baseline(season, rider_id);
+
+-- ---- Newgen: Startwert-Presets (Skills) --------------------
+-- Definiert pro Profil-Typ (Sprint, Berg, …) und Sub-Variante
+-- (z. B. „Reiner Sprinter", „Pflaster-Sprinter") die Min/Max-
+-- Bereiche, aus denen die Startskills neuer Fahrer gewürfelt
+-- werden. `weight` steuert die Wahrscheinlichkeit der Variante.
+CREATE TABLE IF NOT EXISTS newgen_start_presets (
+  preset_id              INTEGER PRIMARY KEY,
+  type_key               TEXT    NOT NULL,
+  display_name           TEXT    NOT NULL,
+  weight                 INTEGER NOT NULL CHECK(weight > 0),
+  min_flat               REAL    NOT NULL CHECK(min_flat BETWEEN 0 AND 85),
+  max_flat               REAL    NOT NULL CHECK(max_flat BETWEEN min_flat AND 85),
+  min_mountain           REAL    NOT NULL CHECK(min_mountain BETWEEN 0 AND 85),
+  max_mountain           REAL    NOT NULL CHECK(max_mountain BETWEEN min_mountain AND 85),
+  min_medium_mountain    REAL    NOT NULL CHECK(min_medium_mountain BETWEEN 0 AND 85),
+  max_medium_mountain    REAL    NOT NULL CHECK(max_medium_mountain BETWEEN min_medium_mountain AND 85),
+  min_hill               REAL    NOT NULL CHECK(min_hill BETWEEN 0 AND 85),
+  max_hill               REAL    NOT NULL CHECK(max_hill BETWEEN min_hill AND 85),
+  min_time_trial         REAL    NOT NULL CHECK(min_time_trial BETWEEN 0 AND 85),
+  max_time_trial         REAL    NOT NULL CHECK(max_time_trial BETWEEN min_time_trial AND 85),
+  min_prologue           REAL    NOT NULL CHECK(min_prologue BETWEEN 0 AND 85),
+  max_prologue           REAL    NOT NULL CHECK(max_prologue BETWEEN min_prologue AND 85),
+  min_cobble             REAL    NOT NULL CHECK(min_cobble BETWEEN 0 AND 85),
+  max_cobble             REAL    NOT NULL CHECK(max_cobble BETWEEN min_cobble AND 85),
+  min_sprint             REAL    NOT NULL CHECK(min_sprint BETWEEN 0 AND 85),
+  max_sprint             REAL    NOT NULL CHECK(max_sprint BETWEEN min_sprint AND 85),
+  min_acceleration       REAL    NOT NULL CHECK(min_acceleration BETWEEN 0 AND 85),
+  max_acceleration       REAL    NOT NULL CHECK(max_acceleration BETWEEN min_acceleration AND 85),
+  min_downhill           REAL    NOT NULL CHECK(min_downhill BETWEEN 0 AND 85),
+  max_downhill           REAL    NOT NULL CHECK(max_downhill BETWEEN min_downhill AND 85),
+  min_attack             REAL    NOT NULL CHECK(min_attack BETWEEN 0 AND 85),
+  max_attack             REAL    NOT NULL CHECK(max_attack BETWEEN min_attack AND 85),
+  min_stamina            REAL    NOT NULL CHECK(min_stamina BETWEEN 0 AND 85),
+  max_stamina            REAL    NOT NULL CHECK(max_stamina BETWEEN min_stamina AND 85),
+  min_resistance         REAL    NOT NULL CHECK(min_resistance BETWEEN 0 AND 85),
+  max_resistance         REAL    NOT NULL CHECK(max_resistance BETWEEN min_resistance AND 85),
+  min_recuperation       REAL    NOT NULL CHECK(min_recuperation BETWEEN 0 AND 85),
+  max_recuperation       REAL    NOT NULL CHECK(max_recuperation BETWEEN min_recuperation AND 85),
+  min_bike_handling      REAL    NOT NULL CHECK(min_bike_handling BETWEEN 0 AND 85),
+  max_bike_handling      REAL    NOT NULL CHECK(max_bike_handling BETWEEN min_bike_handling AND 85)
+);
+
+CREATE INDEX IF NOT EXISTS idx_newgen_start_presets_type
+  ON newgen_start_presets(type_key);
+
+-- ---- Newgen: Potential-Presets ----------------------------
+-- Analog zu den Startwert-Presets, aber für die Potentiale.
+-- Die Potentiale bilden den Wachstumsspielraum bis zum
+-- peak_age.
+CREATE TABLE IF NOT EXISTS newgen_potential_presets (
+  preset_id              INTEGER PRIMARY KEY,
+  display_name           TEXT    NOT NULL,
+  weight                 INTEGER NOT NULL CHECK(weight > 0),
+  min_pot_flat               REAL    NOT NULL CHECK(min_pot_flat BETWEEN 0 AND 85),
+  max_pot_flat               REAL    NOT NULL CHECK(max_pot_flat BETWEEN min_pot_flat AND 85),
+  min_pot_mountain           REAL    NOT NULL CHECK(min_pot_mountain BETWEEN 0 AND 85),
+  max_pot_mountain           REAL    NOT NULL CHECK(max_pot_mountain BETWEEN min_pot_mountain AND 85),
+  min_pot_medium_mountain    REAL    NOT NULL CHECK(min_pot_medium_mountain BETWEEN 0 AND 85),
+  max_pot_medium_mountain    REAL    NOT NULL CHECK(max_pot_medium_mountain BETWEEN min_pot_medium_mountain AND 85),
+  min_pot_hill               REAL    NOT NULL CHECK(min_pot_hill BETWEEN 0 AND 85),
+  max_pot_hill               REAL    NOT NULL CHECK(max_pot_hill BETWEEN min_pot_hill AND 85),
+  min_pot_time_trial         REAL    NOT NULL CHECK(min_pot_time_trial BETWEEN 0 AND 85),
+  max_pot_time_trial         REAL    NOT NULL CHECK(max_pot_time_trial BETWEEN min_pot_time_trial AND 85),
+  min_pot_prologue           REAL    NOT NULL CHECK(min_pot_prologue BETWEEN 0 AND 85),
+  max_pot_prologue           REAL    NOT NULL CHECK(max_pot_prologue BETWEEN min_pot_prologue AND 85),
+  min_pot_cobble             REAL    NOT NULL CHECK(min_pot_cobble BETWEEN 0 AND 85),
+  max_pot_cobble             REAL    NOT NULL CHECK(max_pot_cobble BETWEEN min_pot_cobble AND 85),
+  min_pot_sprint             REAL    NOT NULL CHECK(min_pot_sprint BETWEEN 0 AND 85),
+  max_pot_sprint             REAL    NOT NULL CHECK(max_pot_sprint BETWEEN min_pot_sprint AND 85),
+  min_pot_acceleration       REAL    NOT NULL CHECK(min_pot_acceleration BETWEEN 0 AND 85),
+  max_pot_acceleration       REAL    NOT NULL CHECK(max_pot_acceleration BETWEEN min_pot_acceleration AND 85),
+  min_pot_downhill           REAL    NOT NULL CHECK(min_pot_downhill BETWEEN 0 AND 85),
+  max_pot_downhill           REAL    NOT NULL CHECK(max_pot_downhill BETWEEN min_pot_downhill AND 85),
+  min_pot_attack             REAL    NOT NULL CHECK(min_pot_attack BETWEEN 0 AND 85),
+  max_pot_attack             REAL    NOT NULL CHECK(max_pot_attack BETWEEN min_pot_attack AND 85),
+  min_pot_stamina            REAL    NOT NULL CHECK(min_pot_stamina BETWEEN 0 AND 85),
+  max_pot_stamina            REAL    NOT NULL CHECK(max_pot_stamina BETWEEN min_pot_stamina AND 85),
+  min_pot_resistance         REAL    NOT NULL CHECK(min_pot_resistance BETWEEN 0 AND 85),
+  max_pot_resistance         REAL    NOT NULL CHECK(max_pot_resistance BETWEEN min_pot_resistance AND 85),
+  min_pot_recuperation       REAL    NOT NULL CHECK(min_pot_recuperation BETWEEN 0 AND 85),
+  max_pot_recuperation       REAL    NOT NULL CHECK(max_pot_recuperation BETWEEN min_pot_recuperation AND 85),
+  min_pot_bike_handling      REAL    NOT NULL CHECK(min_pot_bike_handling BETWEEN 0 AND 85),
+  max_pot_bike_handling      REAL    NOT NULL CHECK(max_pot_bike_handling BETWEEN min_pot_bike_handling AND 85)
+);
+
+-- ---- Newgen: Namens-Pool ----------------------------------
+-- Pro Land (country_id) und Name-Typ (`first` / `last`) eine
+-- Liste gewichteter Vornamen bzw. Nachnamen, aus denen bei der
+-- Neugenerierung von Fahrern gezogen wird.
+CREATE TABLE IF NOT EXISTS rider_names (
+  country_id INTEGER NOT NULL REFERENCES sta_country(id) ON DELETE CASCADE,
+  type       TEXT    NOT NULL CHECK(type IN ('first', 'last')),
+  value      TEXT    NOT NULL,
+  weight     INTEGER NOT NULL CHECK(weight > 0),
+  PRIMARY KEY (country_id, type, value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_names_lookup
+  ON rider_names(country_id, type, weight DESC);
+
 -- ---- Taeglicher Fahrerzustand -------------------------------
 CREATE TABLE IF NOT EXISTS rider_daily_state (
   rider_id                INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,

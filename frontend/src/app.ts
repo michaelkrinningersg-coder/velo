@@ -718,6 +718,7 @@ const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]> = {
   ],
   form: [
     { id: 'birthYear', label: 'Jg', title: 'Geburtsjahr', sortKey: 'birthYear', className: 'team-table-col-year' },
+    { id: 'mentorName', label: 'Mentor', title: 'Entwicklungs-Mentor im Team', sortKey: 'mentorName', className: 'team-table-col-mentor' },
     { id: 'contractEndSeason', label: 'V-Ende', title: 'Vertragsende - Ende des aktiven Vertrags', sortKey: 'contractEndSeason', className: 'team-table-col-contract' },
     { id: 'formBonus', label: 'S-Form', title: 'Saisonformbonus', sortKey: 'formBonus', className: 'team-table-col-points' },
     { id: 'raceFormBonus', label: 'R-Form', title: 'Rennbonus aus saisonalem Formfenster', sortKey: 'raceFormBonus', className: 'team-table-col-points' },
@@ -800,6 +801,20 @@ function getSkillColor(value: number): string {
 
 function renderSkillValue(value: number): string {
   return `<span class="skill-value" style="color:${getSkillColor(value)}">${Math.round(value)}</span>`;
+}
+
+function renderSkillValueWithDelta(value: number, yearStart?: number, potential?: number): string {
+  if (yearStart == null || potential == null) {
+    return renderSkillValue(value);
+  }
+  const delta = Math.round((value - yearStart) * 100) / 100;
+  const deltaClass = delta > 0 ? 'skill-delta-positive' : delta < 0 ? 'skill-delta-negative' : '';
+  const deltaText = delta === 0 ? '' :
+    `<span class="skill-delta ${deltaClass}">${delta > 0 ? '+' : ''}${delta.toFixed(2).replace('.', ',')}</span>`;
+  return `
+    <span class="skill-value" style="color:${getSkillColor(value)}" title="Potential: ${potential.toFixed(2).replace('.', ',')}">${Math.round(value)}</span>
+    ${deltaText}
+  `;
 }
 
 function renderRaceFormBonusValue(value: number | undefined): string {
@@ -2786,6 +2801,15 @@ function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
       return `<td>${renderSkillValue(rider.overallRating)}</td>`;
     case 'birthYear':
       return `<td>${rider.birthYear}</td>`;
+    case 'mentorName':
+      if ((rider.age ?? 0) <= 22) {
+        const top3Specs = [rider.specialization1Id, rider.specialization2Id, rider.specialization3Id].filter((s) => s != null);
+        const mentors = state.riders.filter((r) => r.activeTeamId === rider.activeTeamId && (r.age ?? 0) > 32 && r.overallRating >= 73 && r.specialization1Id != null && top3Specs.includes(r.specialization1Id));
+        if (mentors.length > 0) {
+          return `<td class="team-table-wrap-cell">${esc(mentors.map(m => formatRiderName(m)).join(', '))}</td>`;
+        }
+      }
+      return `<td>–</td>`;
     case 'contractEndSeason':
       return `<td>${rider.contractEndSeason ?? '–'}</td>`;
     case 'formBonus':
@@ -2835,7 +2859,7 @@ function renderTeamTableCell(rider: Rider, column: TeamTableColumn): string {
     default:
       if (column.id in rider.skills) {
         const skillKey = column.id as keyof Rider['skills'];
-        return `<td>${renderSkillValue(rider.skills[skillKey])}</td>`;
+        return `<td>${renderSkillValueWithDelta(rider.skills[skillKey], rider.yearStartSkills?.[skillKey], rider.potentials[skillKey])}</td>`;
       }
       return '<td>–</td>';
   }

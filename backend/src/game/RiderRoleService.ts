@@ -140,17 +140,17 @@ export class RiderRoleService {
       ridersByTeamId.set(row.active_team_id, roster);
     }
 
-    const resetAllRoles = this.db.prepare('UPDATE riders SET role_id = NULL');
-    const resetInactive = this.db.prepare(`
+    // Single UPDATE clears role_id for everyone, including retired/free-agent rows.
+    // This replaces the previous `resetAllRoles` + `resetInactive` two-pass approach.
+    const resetAllRoles = this.db.prepare(`
       UPDATE riders
       SET role_id = NULL
-      WHERE active_team_id IS NULL OR is_retired = 1
+      WHERE is_retired = 1 OR active_team_id IS NULL
     `);
     const updateRole = this.db.prepare('UPDATE riders SET role_id = ? WHERE id = ?');
 
     this.db.transaction(() => {
       resetAllRoles.run();
-      resetInactive.run();
 
       for (const roster of ridersByTeamId.values()) {
         const assignments = this.assignRolesForRoster(roster, roleIds);

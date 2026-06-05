@@ -48,6 +48,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const ContractService_1 = require("./game/ContractService");
 const RiderDevelopmentService_1 = require("./game/RiderDevelopmentService");
+const StageScoreCalculator_1 = require("./simulation/StageScoreCalculator");
 function resolveBackendRoot() {
     const candidates = [
         path.resolve(__dirname, '..', '..'),
@@ -65,6 +66,7 @@ function resolveBackendRoot() {
 const BACKEND_ROOT = resolveBackendRoot();
 const ASSETS_DIR = path.join(BACKEND_ROOT, 'assets');
 const CSV_DIR = path.join(BACKEND_ROOT, '..', 'data', 'csv');
+const STAGES_DIR = path.join(BACKEND_ROOT, '..', 'data', 'stages');
 const SCHEMA_PATH = path.join(ASSETS_DIR, 'schema.sql');
 const DB_PATH = path.join(ASSETS_DIR, 'world_data.db');
 const DEFAULT_RIDER_TYPE_ID = 1;
@@ -179,6 +181,55 @@ function readCsv(fileName) {
         throw new Error(`CSV nicht gefunden: ${filePath}`);
     }
     return parseCsv(fs.readFileSync(filePath, 'utf8'));
+}
+function parseNullableCsvValue(value) {
+    const normalized = (value ?? '').trim();
+    return normalized.length === 0 || normalized.toLowerCase() === 'null' ? null : normalized;
+}
+function isValidStageMarkerType(value) {
+    return ['start', 'climb_start', 'climb_top', 'sprint_intermediate', 'finish_flat', 'finish_TT', 'finish_hill', 'finish_mountain'].includes(value);
+}
+function isValidStageMarkerCategory(value) {
+    return ['HC', '1', '2', '3', '4', 'Sprint'].includes(value);
+}
+function parseStageDetailMarkers(typesValue, namesValue, categoriesValue, ctx) {
+    const types = typesValue.split('|').map((value) => value.trim()).filter((value) => value.length > 0);
+    if (types.length === 0)
+        return [];
+    const names = namesValue.split('|');
+    const categories = categoriesValue.split('|');
+    return types.map((type, index) => {
+        if (!isValidStageMarkerType(type)) {
+            throw new Error(`${ctx}: Ungueltiger Marker-Typ ${type}.`);
+        }
+        const rawCategory = parseNullableCsvValue(categories[index]);
+        if (rawCategory != null && !isValidStageMarkerCategory(rawCategory)) {
+            throw new Error(`${ctx}: Ungueltige Marker-Kategorie ${rawCategory}.`);
+        }
+        return {
+            type,
+            name: parseNullableCsvValue(names[index]),
+            cat: rawCategory,
+        };
+    });
+}
+function readStageScoreSegments(detailsCsvFile, ctx) {
+    const filePath = path.join(STAGES_DIR, detailsCsvFile);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`${ctx}: Stage-Detail-CSV nicht gefunden: ${detailsCsvFile}`);
+    }
+    return parseCsv(fs.readFileSync(filePath, 'utf8')).map((row, index) => {
+        const rowCtx = `${detailsCsvFile} Zeile ${index + 2}`;
+        const lengthKm = real(req(row, 'length_km', rowCtx), `${rowCtx} / length_km`);
+        const gradientPercent = real(req(row, 'gradient_percent', rowCtx), `${rowCtx} / gradient_percent`);
+        const segment = {
+            lengthKm,
+            gradientPercent,
+            markers: parseStageDetailMarkers(row['marker_type'] ?? '', row['marker_name'] ?? '', row['marker_cat'] ?? '', rowCtx),
+            endMarkers: parseStageDetailMarkers(row['end_marker_type'] ?? '', row['end_marker_name'] ?? '', row['end_marker_cat'] ?? '', rowCtx),
+        };
+        return segment;
+    });
 }
 function req(row, key, ctx) {
     const value = row[key]?.trim();
@@ -474,10 +525,33 @@ function seedRaces(db) {
 }
 function seedRacePrograms(db) {
     const rows = readCsv('race_programs.csv');
-    const insert = db.prepare('INSERT INTO race_programs (id, name) VALUES (?, ?)');
+    const insert = db.prepare(`
+    INSERT INTO race_programs (
+      id, name, peak1_min, peak1_max, peak2_min, peak2_max, peak3_min, peak3_max
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
     for (const [index, row] of rows.entries()) {
         const ctx = `race_programs.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx));
+        const peak1Min = int(req(row, 'peak1_min', ctx), `${ctx} / peak1_min`);
+        const peak1Max = int(req(row, 'peak1_max', ctx), `${ctx} / peak1_max`);
+        const peak2Min = int(req(row, 'peak2_min', ctx), `${ctx} / peak2_min`);
+        const peak2Max = int(req(row, 'peak2_max', ctx), `${ctx} / peak2_max`);
+        const peak3Min = int(req(row, 'peak3_min', ctx), `${ctx} / peak3_min`);
+        const peak3Max = int(req(row, 'peak3_max', ctx), `${ctx} / peak3_max`);
+        const peaks = [
+            ['peak1', peak1Min, peak1Max],
+            ['peak2', peak2Min, peak2Max],
+            ['peak3', peak3Min, peak3Max],
+        ];
+        for (const [label, minWeek, maxWeek] of peaks) {
+            if (minWeek < 1 || minWeek > 53 || maxWeek < 1 || maxWeek > 53) {
+                throw new Error(`${ctx}: ${label}_min und ${label}_max muessen zwischen 1 und 53 liegen.`);
+            }
+            if (minWeek > maxWeek) {
+                throw new Error(`${ctx}: ${label}_min darf nicht groesser als ${label}_max sein.`);
+            }
+        }
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), peak1Min, peak1Max, peak2Min, peak2Max, peak3Min, peak3Max);
     }
     console.log(`  ${rows.length} Rennprogramme eingefuegt.`);
 }
@@ -557,11 +631,19 @@ function seedStages(db) {
     INSERT INTO stages (
       id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
       final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-      crash_incident_multiplier, mechanical_incident_multiplier
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      crash_incident_multiplier, mechanical_incident_multiplier, stage_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+    const insertClimbScore = db.prepare(`
+    INSERT INTO stage_climb_scores (
+      stage_id, climb_index, name, category, start_km, end_km, climb_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `stages.csv Zeile ${index + 2}`;
+        const stageId = int(req(row, 'id', ctx), ctx);
+        const startElevation = int(req(row, 'start_elevation', ctx), ctx);
+        const detailsCsvFile = req(row, 'details_csv_file', ctx);
         const finalSpreadStartPercent = real(row['final_spread_start_percent'] ?? '70', `${ctx} / final_spread_start_percent`);
         if (finalSpreadStartPercent < 0 || finalSpreadStartPercent > 100) {
             throw new Error(`${ctx}: final_spread_start_percent muss zwischen 0 und 100 liegen.`);
@@ -582,7 +664,12 @@ function seedStages(db) {
         if (mechanicalIncidentMultiplier <= 0) {
             throw new Error(`${ctx}: mechanical_incident_multiplier muss groesser als 0 sein.`);
         }
-        insert.run(int(req(row, 'id', ctx), ctx), int(req(row, 'race_id', ctx), ctx), int(req(row, 'stage_number', ctx), ctx), req(row, 'date', ctx), req(row, 'profile', ctx), int(req(row, 'start_elevation', ctx), ctx), req(row, 'details_csv_file', ctx), finalSpreadStartPercent, finalPushStartPercent, finalSpreadDifficultyMultiplier, crashIncidentMultiplier, mechanicalIncidentMultiplier);
+        const scoreSegments = readStageScoreSegments(detailsCsvFile, ctx);
+        const stageScore = (0, StageScoreCalculator_1.calculateStageScore)(scoreSegments, startElevation);
+        insert.run(stageId, int(req(row, 'race_id', ctx), ctx), int(req(row, 'stage_number', ctx), ctx), req(row, 'date', ctx), req(row, 'profile', ctx), startElevation, detailsCsvFile, finalSpreadStartPercent, finalPushStartPercent, finalSpreadDifficultyMultiplier, crashIncidentMultiplier, mechanicalIncidentMultiplier, stageScore);
+        for (const climbScore of (0, StageScoreCalculator_1.calculateClimbScoresForStage)(scoreSegments, startElevation)) {
+            insertClimbScore.run(stageId, climbScore.climbIndex, climbScore.name, climbScore.category, climbScore.startKm, climbScore.endKm, climbScore.score);
+        }
     }
     console.log(`  ${rows.length} Etappen eingefuegt.`);
 }

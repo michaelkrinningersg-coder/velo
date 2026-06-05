@@ -737,7 +737,7 @@ function mapRider(row: RiderRow, currentYear: number, _currentDate: string, seas
   const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
   const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
   const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
-  const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0);
+  const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
   return {
     id: row.id,
     firstName: row.first_name,
@@ -1628,14 +1628,37 @@ export class GameRepository {
     const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
     const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
     const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
+    const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), season);
     const riders = rows.map((row) => ({
       ...mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+      yearStartSkills: yearStartSkillsByRiderId.get(row.id),
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
       seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
       seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
     }));
     const ridersWithPrograms = this.attachProgramData(riders, season);
     return includeFormDebug ? this.attachFormDebugData(ridersWithPrograms, season, currentDate) : ridersWithPrograms;
+  }
+
+  private loadYearlyBaselinesByRiderId(riderIds: number[], season: number): Map<number, Record<RiderSkillKey, number>> {
+    if (riderIds.length === 0 || !tableExists(this.db, 'rider_skill_yearly_baseline')) {
+      return new Map();
+    }
+    const placeholders = riderIds.map(() => '?').join(', ');
+    const rows = this.db.prepare(`
+      SELECT rider_id, skill_key, baseline_value
+      FROM rider_skill_yearly_baseline
+      WHERE season = ? AND rider_id IN (${placeholders})
+    `).all(season, ...riderIds) as Array<{ rider_id: number; skill_key: string; baseline_value: number }>;
+
+    const map = new Map<number, Record<RiderSkillKey, number>>();
+    for (const row of rows) {
+      if (!map.has(row.rider_id)) {
+        map.set(row.rider_id, {} as Record<RiderSkillKey, number>);
+      }
+      map.get(row.rider_id)![row.skill_key as RiderSkillKey] = row.baseline_value;
+    }
+    return map;
   }
 
   private attachProgramData(riders: Rider[], season: number): Rider[] {

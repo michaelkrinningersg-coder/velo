@@ -247,6 +247,7 @@ export function precalculateStageBreakaway(
   const { min: minBreakawaySize, max: maxBreakawaySize } = resolveBreakawaySizeBounds(race, stage, riderCount);
   const desiredBreakawaySize = randomInteger(minBreakawaySize, maxBreakawaySize);
   const isEarlyStageRace = race.isStageRace && stage.stageNumber <= 10;
+  const isOneDayRace = !race.isStageRace;
   const gcLeaderTeamId = resolveGcLeaderTeamId(riders, gcStandings);
   const topFavoriteTeamIds = isEarlyStageRace ? getTopFavoriteTeamIds(stageFavorites, riders, 5) : new Set<number>();
   const teamHasCaptainInRace = isEarlyStageRace ? buildTeamHasCaptainInRace(riders) : new Map<number, boolean>();
@@ -273,6 +274,10 @@ export function precalculateStageBreakaway(
     }
 
     const roleName = resolveRiderRoleName(rider);
+    if (isOneDayRace && (roleName === 'kapitaen' || roleName === 'co-kapitaen')) {
+      return false;
+    }
+
     if (isEarlyStageRace && roleName === 'kapitaen') {
       return false;
     }

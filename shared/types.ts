@@ -178,6 +178,7 @@ export interface Rider {
   overallRating: number;
   skills: RiderSkills;
   potentials: RiderPotentials;
+  yearStartSkills?: Record<RiderSkillKey, number>;
   riderType: RiderSpecialization;
   specialization1: RiderSpecialization | null;
   specialization2: RiderSpecialization | null;

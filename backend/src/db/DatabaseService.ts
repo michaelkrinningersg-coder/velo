@@ -979,6 +979,7 @@ export class DatabaseService {
     this.activeConnection = new Database(savePath);
     this.activeSaveName = filename;
     this.activeConnection.pragma('journal_mode = WAL');
+    this.activeConnection.pragma('synchronous = NORMAL');
     this.activeConnection.pragma('foreign_keys = ON');
     this.applyLatestSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
@@ -990,10 +991,45 @@ export class DatabaseService {
     this.ensureRiderFormSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
+    this.ensureDayChangeIndexes(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
     return this.activeConnection;
+  }
+
+  /**
+   * Idempotent index creation for the hot path of the day-change transaction.
+   * These cover the new CTE-based `syncRiderLoadState` aggregation and the
+   * bulk program-window lookup in `GameStateService`. Skipped when the
+   * underlying tables don't exist (e.g. fresh master DB).
+   */
+  private ensureDayChangeIndexes(db: Database.Database): void {
+    const createIfTable = (table: string, sql: string): void => {
+      if (!tableExists(db, table)) return;
+      try {
+        db.exec(sql);
+      } catch {
+        // Ignore - the index might already exist with a different definition.
+      }
+    };
+
+    createIfTable('stage_entries', `
+      CREATE INDEX IF NOT EXISTS idx_stage_entries_rider_status
+        ON stage_entries(rider_id, status, stage_id);
+    `);
+    createIfTable('stages', `
+      CREATE INDEX IF NOT EXISTS idx_stages_date_id
+        ON stages(date, id);
+    `);
+    createIfTable('riders', `
+      CREATE INDEX IF NOT EXISTS idx_riders_active
+        ON riders(is_retired, id) WHERE is_retired = 0;
+    `);
+    createIfTable('rider_season_programs', `
+      CREATE INDEX IF NOT EXISTS idx_rider_season_programs_season_rider
+        ON rider_season_programs(season, rider_id);
+    `);
   }
 
   public getActiveConnection(): Database.Database {
