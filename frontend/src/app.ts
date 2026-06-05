@@ -870,9 +870,9 @@ function renderSeasonFormPhase(rider: Rider): string {
 
 function renderSeasonFormPhaseIndicator(phase: Rider['seasonFormPhase']): string {
   const meta: Record<string, { symbol: string; label: string; className: string }> = {
-    rise: { symbol: 'â†±', label: 'Aufbau', className: 'team-form-phase-rise' },
-    fall: { symbol: 'â†²', label: 'Abbau', className: 'team-form-phase-fall' },
-    neutral: { symbol: 'â†”', label: 'Neutral', className: 'team-form-phase-neutral' },
+    rise: { symbol: '▲', label: 'Aufbau', className: 'team-form-phase-rise' },
+    fall: { symbol: '▼', label: 'Abbau', className: 'team-form-phase-fall' },
+    neutral: { symbol: '▬', label: 'Neutral', className: 'team-form-phase-neutral' },
   };
   const item = meta[phase ?? 'neutral'] ?? meta['neutral'];
   return `<span class="team-form-phase ${item.className}" title="${esc(item.label)}">${item.symbol}</span>`;

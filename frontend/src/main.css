@@ -4637,3 +4637,20 @@ html, body {
 
 
 .rider-stats-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.form-phase-dot {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.form-phase-rise {
+  background-color: #4ade80;
+}
+.form-phase-fall {
+  background-color: #f87171;
+}
+.form-phase-neutral {
+  background-color: #94a3b8;
+}
