@@ -103,8 +103,8 @@ export class RiderNewgenService {
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {
             // Potenzial muss zwingend Ã¼ber oder gleich dem Startwert liegen
-            const minPot = Math.max(startValues[key] + 1, potPreset[`min_${key}`]);
-            const maxPot = Math.max(minPot, potPreset[`max_${key}`]);
+            const minPot = Math.max(startValues[key] + 1, potPreset[`min_pot_${key}`] || startValues[key] + 1);
+            const maxPot = Math.max(minPot, potPreset[`max_pot_${key}`] || minPot);
             potValues[key] = this.getRandomInt(minPot, maxPot);
             
             // Max-Cap bei 85 gemÃ¤ÃŸ Plan
