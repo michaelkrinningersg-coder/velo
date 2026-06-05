@@ -1,0 +1,28 @@
+$file = 'frontend/src/app.ts'
+$text = [IO.File]::ReadAllText($file, [Text.Encoding]::UTF8)
+
+$replacements = @{}
+$replacements.Add("ÃƒÂ¤", "�")
+$replacements.Add("ÃƒÂ¶", "�")
+$replacements.Add("ÃƒÂ¼", "�")
+$replacements.Add("Ãƒâ€ž", "�")
+$replacements.Add("Ãƒâ€�", "�")
+$replacements.Add("ÃƒÅ“", "�")
+$replacements.Add("ÃƒÅ¸", "�")
+$replacements.Add("Ã¢â‚¬â€œ", "�")
+$replacements.Add("Ã¢â‚¬â€� ", "-")
+$replacements.Add("Ã‚Â·", "�")
+$replacements.Add("Ã¢â€� Â� ", "?")
+$replacements.Add("Ã¢â€“Â²", "?")
+$replacements.Add("Ã¢â€“Â¼", "?")
+$replacements.Add("Ã¢â€ â€˜", "?")
+$replacements.Add("Ã¢â€ â€œ", "?")
+$replacements.Add("Ãƒâ€� ", "�")
+
+$matchCount = 0
+foreach ($bad in $replacements.Keys) {
+    $good = $replacements[$bad]
+    $text = $text.Replace($bad, $good)
+}
+
+[IO.File]::WriteAllText($file, $text, [Text.Encoding]::UTF8)

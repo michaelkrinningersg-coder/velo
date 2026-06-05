@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ApiResponse,
   ParsedStageSummary,
   SavegameMeta,
@@ -86,4 +86,6 @@ export const api = {
   loadStageEditorStage:  (stageId: number) => call<StageEditorExistingStageLoadResponse>('GET', `/api/stage-editor/stages/${stageId}`),
   importStageRoute:    (payload: StageEditorImportRequest) => call<StageEditorDraft>('POST', '/api/stage-editor/import', payload),
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
+  getInjuries:         () => call<InjuryRow[]>('GET', '/api/injuries'),
+  getDraftHistory:     (season: number) => call<DraftHistoryRow[]>('GET', `/api/draft/${season}`),
 };
