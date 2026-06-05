@@ -84,23 +84,23 @@ export class RiderDraftService {
     const maxRosterSize = 30;
     
     // Draft Sequenzen (0-basiert, bezogen auf das Array rankedTeamIds)
+    // Runde 1-15 (danach im Loop)
     const draftSequenceChunks = [
-      [0, 4],
-      [0, 4],
-      [5, 9],
-      [0, 4],
-      [5, 9],
-      [10, 14],
-      [0, 19],
-      [0, 24]
-    ];
-    
-    const draftLoopChunks = [
-      [0, 4],
-      [0, 9],
-      [0, 14],
-      [0, 19],
-      [0, 24]
+      [0, 4],   // Runde 1: Plätze 1-5
+      [0, 4],   // Runde 2: Plätze 1-5
+      [5, 9],   // Runde 3: Plätze 6-10
+      [0, 4],   // Runde 4: Plätze 1-5
+      [5, 9],   // Runde 5: Plätze 6-10
+      [10, 14], // Runde 6: Plätze 11-15
+      [0, 4],   // Runde 7: Plätze 1-5
+      [5, 9],   // Runde 8: Plätze 6-10
+      [10, 14], // Runde 9: Plätze 11-15
+      [15, 19], // Runde 10: Plätze 16-20
+      [0, 4],   // Runde 11: Plätze 1-5
+      [5, 9],   // Runde 12: Plätze 6-10
+      [10, 14], // Runde 13: Plätze 11-15
+      [15, 19], // Runde 14: Plätze 16-20
+      [20, 24]  // Runde 15: Plätze 21-25
     ];
 
     let draftRound = 1;
@@ -122,19 +122,14 @@ export class RiderDraftService {
     let sequenceIndex = 0;
     
     while (freeAgents.length > 0) {
-      // Bestimme den aktuellen Chunk
-      let currentChunk: number[];
-      if (sequenceIndex < draftSequenceChunks.length) {
-        currentChunk = draftSequenceChunks[sequenceIndex];
-      } else {
-        const loopIndex = (sequenceIndex - draftSequenceChunks.length) % draftLoopChunks.length;
-        currentChunk = draftLoopChunks[loopIndex];
-      }
+      // Bestimme den aktuellen Chunk (looped alle 15 Runden)
+      const currentChunk = draftSequenceChunks[sequenceIndex % draftSequenceChunks.length];
       
       const startRank = currentChunk[0];
       const endRank = currentChunk[1];
       
       let pickMadeInChunk = false;
+      let allTeamsFull = true;
       
       // Jeder Team im Chunk darf genau 1 mal ziehen
       for (let i = startRank; i <= endRank; i++) {
@@ -145,6 +140,8 @@ export class RiderDraftService {
         if (currentCount >= maxRosterSize) {
           continue; // Team voll
         }
+        
+        allTeamsFull = false; // Mindestens ein Team hat noch Platz
         
         // Bester verfügbarer Free Agent
         if (freeAgents.length === 0) break;
@@ -171,9 +168,17 @@ export class RiderDraftService {
         pickMadeInChunk = true;
       }
       
-      if (!pickMadeInChunk) {
-        // Niemand hat mehr gepickt (alle Teams voll), wir brechen den gesamten Draft ab
-        break;
+      // Prüfen ob wirklich alle Teams voll sind (nicht nur in diesem Chunk)
+      let globalAllFull = true;
+      for (const tId of rankedTeamIds) {
+        if ((teamCountsMap.get(tId) || 0) < maxRosterSize) {
+          globalAllFull = false;
+          break;
+        }
+      }
+      
+      if (globalAllFull) {
+        break; // Alle Teams der Liga sind voll
       }
       
       draftRound++;

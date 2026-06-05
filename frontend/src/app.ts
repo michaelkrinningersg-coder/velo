@@ -5907,6 +5907,9 @@ function renderDashboardRaces(): void {
       : (race.upcomingStage?.elevationGainMeters ?? null);
     const distance = totalDistanceKm != null ? String(totalDistanceKm.toFixed(1)).replace('.', ',') : '-';
     const elevation = totalElevationGain != null ? String(Math.round(totalElevationGain)) : '-';
+    return `
+      <tr>
+        <td>${formatDate(race.startDate)}</td>
         <td>
           <button type="button" class="dashboard-race-link" data-dashboard-race-id="${race.id}">
             <strong>${esc(race.name)}</strong>
