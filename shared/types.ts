@@ -1,5 +1,5 @@
 ﻿// ============================================================
-//  SHARED TYPES â€“ verwendet von Backend und Frontend
+//  SHARED TYPES – verwendet von Backend und Frontend
 // ============================================================
 
 // ------ Fahrer -----------------------------------------------
@@ -1053,6 +1053,7 @@ export interface InjuryRow {
   countryFlag: string;
   teamAbbreviation: string | null;
   teamJersey: string | null;
+  teamId: number | null;
   healthStatus: 'ill' | 'injured';
   unavailableDays: number;
 }

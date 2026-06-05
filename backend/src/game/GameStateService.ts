@@ -212,17 +212,17 @@ export class GameStateService {
         new RiderRoleService(this.db).recalculateAllTeamRoles();
         new RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
 
-        // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
+        // Newgens für die nächste Saison erzeugen
         new RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
 
-        // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
+        // Skill-Development aller aktiven Fahrer neu auswürfeln (±3, max 20, min 1)
         this.db.prepare(`
           UPDATE riders
           SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
           WHERE is_retired = 0 AND skill_development > 0
         `).run();
 
-        // Snapshot der Fahrer-Werte als Baseline fÃ¼r die Saison in der UI abspeichern
+        // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
         this.db.prepare(`
           INSERT OR REPLACE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
           SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0

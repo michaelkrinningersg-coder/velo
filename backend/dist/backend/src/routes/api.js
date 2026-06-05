@@ -448,6 +448,29 @@ function createRouter(dbService) {
             if (riders.length === 0) {
                 return fail(res, 400, 'Für diese Etappe konnte keine Startliste gespeichert werden.');
             }
+            const ALL_SKILL_KEYS = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
+            for (const rider of riders) {
+                if (rider.age && rider.age <= 22) {
+                    const mentors = riders.filter(m => m.id !== rider.id &&
+                        m.activeTeamId === rider.activeTeamId &&
+                        m.age && m.age > 32 &&
+                        m.overallRating >= 73 &&
+                        (m.riderType === rider.riderType ||
+                            (rider.specialization1 && m.riderType === rider.specialization1) ||
+                            (rider.specialization2 && m.riderType === rider.specialization2) ||
+                            (rider.specialization3 && m.riderType === rider.specialization3)));
+                    if (mentors.length > 0) {
+                        rider.mentorBoosts = {};
+                        for (let i = 0; i < mentors.length; i++) {
+                            const shuffled = [...ALL_SKILL_KEYS].sort(() => 0.5 - Math.random());
+                            for (let j = 0; j < 3; j++) {
+                                const key = shuffled[j];
+                                rider.mentorBoosts[key] = (rider.mentorBoosts[key] || 0) + 1;
+                            }
+                        }
+                    }
+                }
+            }
             ok(res, {
                 race,
                 stage,
@@ -515,6 +538,77 @@ function createRouter(dbService) {
     router.post('/state/advance', (_req, res) => {
         try {
             ok(res, getGss().advanceDay());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/draft/:season', (req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            const season = parseInt(req.params.season, 10);
+            const repo = new GameRepository_1.GameRepository(db);
+            const rows = db.prepare(`
+        SELECT 
+          d.draft_round AS draftRound,
+          d.pick_number AS pickNumber,
+          d.contract_length AS contractLength,
+          d.overall_at_draft AS overallAtDraft,
+          d.pot_overall_at_draft AS potOverallAtDraft,
+          d.draft_value AS draftValue,
+          
+          r.id AS riderId,
+          r.first_name AS riderFirstName,
+          r.last_name AS riderLastName,
+          r.birth_year AS riderBirthYear,
+          
+          c.code_3 AS countryCode,
+          
+          t.id AS teamId,
+          t.name AS teamName,
+          
+          ot.id AS oldTeamId,
+          ot.name AS oldTeamName
+          
+        FROM draft_history d
+        JOIN riders r ON d.rider_id = r.id
+        JOIN sta_country c ON r.country_id = c.id
+        JOIN teams t ON d.team_id = t.id
+        LEFT JOIN teams ot ON d.old_team_id = ot.id
+        WHERE d.season = ?
+        ORDER BY d.pick_number ASC
+      `).all(season);
+            ok(res, {
+                season,
+                rows
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/injuries', (_req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            const rows = db.prepare(`
+        SELECT
+          r.id AS riderId,
+          r.first_name AS riderFirstName,
+          r.last_name AS riderLastName,
+          c.code_3 AS countryCode,
+          t.abbreviation AS teamAbbreviation,
+          t.id AS teamId,
+          rds.health_status AS healthStatus,
+          rds.unavailable_days_remaining AS unavailableDays
+        FROM rider_daily_state rds
+        JOIN riders r ON rds.rider_id = r.id
+        JOIN sta_country c ON r.country_id = c.id
+        LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
+        LEFT JOIN teams t ON cnt.team_id = t.id
+        WHERE rds.health_status IN ('ill', 'injured')
+        ORDER BY rds.unavailable_days_remaining DESC
+      `).all();
+            ok(res, rows);
         }
         catch (e) {
             fail(res, 400, e.message);

@@ -155,7 +155,7 @@ export function createRouter(dbService: DatabaseService): Router {
     catch (e) { fail(res, 400, (e as Error).message); }
   });
 
-  // Gibt alle wÃ¤hlbaren (nicht-U23) Teams aus der Master-DB zurÃ¼ck
+  // Gibt alle wählbaren (nicht-U23) Teams aus der Master-DB zurück
   router.get('/teams/available', (_req: Request, res: Response) => {
     let masterDb: ReturnType<typeof dbService.getMasterConnection> | null = null;
     try {
@@ -195,7 +195,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/teams/:id', (req: Request, res: Response) => {
     const id = Number(req.params['id']);
-    if (!Number.isFinite(id)) return fail(res, 400, 'UngÃ¼ltige Team-ID.');
+    if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Team-ID.');
     try {
       const db   = dbService.getActiveConnection();
       getGss().ensureState();
@@ -219,7 +219,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/riders/:id/program-races', (req: Request, res: Response) => {
     const riderId = Number(req.params['id']);
-    if (!Number.isFinite(riderId)) return fail(res, 400, 'UngÃ¼ltige Fahrer-ID.');
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -231,7 +231,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/riders/:id/stats', (req: Request, res: Response) => {
     const riderId = Number(req.params['id']);
-    if (!Number.isFinite(riderId)) return fail(res, 400, 'UngÃ¼ltige Fahrer-ID.');
+    if (!Number.isFinite(riderId)) return fail(res, 400, 'Ungültige Fahrer-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -270,7 +270,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/races/:id/program-participants', (req: Request, res: Response) => {
     const raceId = Number(req.params['id']);
-    if (!Number.isFinite(raceId)) return fail(res, 400, 'UngÃ¼ltige Rennen-ID.');
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
@@ -294,7 +294,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/stage-editor/stages/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isInteger(stageId) || stageId <= 0) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isInteger(stageId) || stageId <= 0) return fail(res, 400, 'Ungültige Stage-ID.');
     try {
       ok<StageEditorExistingStageLoadResponse>(res, routeImporter.loadExistingStage(stageId));
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -326,7 +326,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/simulation/realtime/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
@@ -348,7 +348,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const riders = ensureRaceEntries(db, repo, race, stage);
       if (riders.length === 0) {
-        return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste bestimmt werden.');
+        return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
 
       ok<RealtimeSimulationBootstrap>(res, {
@@ -371,7 +371,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/stages/:stageId/summary', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const db = dbService.getActiveConnection();
@@ -387,12 +387,12 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/simulation/roster/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
       if (!pendingStageIds.has(stageId)) {
-        return fail(res, 400, 'Diese Etappe ist aktuell nicht fÃ¼r das Starterfeld freigegeben.');
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -413,17 +413,17 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.post('/simulation/roster/:stageId/apply', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
       if (!pendingStageIds.has(stageId)) {
-        return fail(res, 400, 'Diese Etappe ist aktuell nicht fÃ¼r das Starterfeld freigegeben.');
+        return fail(res, 400, 'Diese Etappe ist aktuell nicht für das Starterfeld freigegeben.');
       }
 
       const payload = req.body as RaceRosterSelectionRequest;
       if (!payload || !Array.isArray(payload.riderIds)) {
-        return fail(res, 400, 'Es wurden keine Teilnehmer Ã¼bergeben.');
+        return fail(res, 400, 'Es wurden keine Teilnehmer übergeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -440,7 +440,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const riders = applyRaceRosterSelection(db, repo, race, stage, payload.riderIds);
       if (riders.length === 0) {
-        return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste gespeichert werden.');
+        return fail(res, 400, 'Für diese Etappe konnte keine Startliste gespeichert werden.');
       }
 
       const ALL_SKILL_KEYS: import('../../../shared/types').RiderSkillKey[] = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
@@ -492,7 +492,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.post('/simulation/realtime/:stageId/complete', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
@@ -502,7 +502,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const payload = req.body as RealtimeStageCommitRequest;
       if (!payload || !Array.isArray(payload.entries) || payload.entries.length === 0) {
-        return fail(res, 400, 'Es wurden keine Live-Ergebnisse Ã¼bergeben.');
+        return fail(res, 400, 'Es wurden keine Live-Ergebnisse übergeben.');
       }
 
       const db = dbService.getActiveConnection();
@@ -512,12 +512,12 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/results/:stageId', (req: Request, res: Response) => {
     const stageId = Number(req.params['stageId']);
-    if (!Number.isFinite(stageId)) return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+    if (!Number.isFinite(stageId)) return fail(res, 400, 'Ungültige Stage-ID.');
 
     try {
       const db = dbService.getActiveConnection();
       const payload = new GameRepository(db).getStageResults(stageId);
-      if (!payload) return fail(res, 404, `Keine Ergebnisse fÃ¼r Stage ${stageId} gefunden.`);
+      if (!payload) return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
       ok<StageResultsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

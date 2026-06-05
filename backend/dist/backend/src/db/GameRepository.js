@@ -318,7 +318,7 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
     const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
     const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
     const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
-    const riderLoadSummary = (0, RiderLoadModel_1.buildRiderLoadSummary)(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0);
+    const riderLoadSummary = (0, RiderLoadModel_1.buildRiderLoadSummary)(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
     return {
         id: row.id,
         firstName: row.first_name,
@@ -1075,14 +1075,35 @@ class GameRepository {
         const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
         const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
         const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
+        const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), season);
         const riders = rows.map((row) => ({
             ...mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+            yearStartSkills: yearStartSkillsByRiderId.get(row.id),
             raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
             seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
             seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
         }));
         const ridersWithPrograms = this.attachProgramData(riders, season);
         return includeFormDebug ? this.attachFormDebugData(ridersWithPrograms, season, currentDate) : ridersWithPrograms;
+    }
+    loadYearlyBaselinesByRiderId(riderIds, season) {
+        if (riderIds.length === 0 || !tableExists(this.db, 'rider_skill_yearly_baseline')) {
+            return new Map();
+        }
+        const placeholders = riderIds.map(() => '?').join(', ');
+        const rows = this.db.prepare(`
+      SELECT rider_id, skill_key, baseline_value
+      FROM rider_skill_yearly_baseline
+      WHERE season = ? AND rider_id IN (${placeholders})
+    `).all(season, ...riderIds);
+        const map = new Map();
+        for (const row of rows) {
+            if (!map.has(row.rider_id)) {
+                map.set(row.rider_id, {});
+            }
+            map.get(row.rider_id)[row.skill_key] = row.baseline_value;
+        }
+        return map;
     }
     attachProgramData(riders, season) {
         if (riders.length === 0 || !tableExists(this.db, 'rider_season_programs') || !tableExists(this.db, 'race_programs')) {
@@ -1553,15 +1574,16 @@ class GameRepository {
         }
         const rows = this.db.prepare(`
       SELECT
-        results.rider_id AS rider_id,
-        COUNT(*) AS race_days,
+        stage_entries.rider_id AS rider_id,
+        COUNT(stage_entries.id) AS race_days,
         SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
-      FROM results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ?
-        AND results.rider_id IS NOT NULL
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      LEFT JOIN results ON results.stage_id = stages.id AND results.rider_id = stage_entries.rider_id AND results.result_type_id = ?
+      WHERE stage_entries.status != 'dns'
+        AND stages.profile != 'TTT'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-      GROUP BY results.rider_id
+      GROUP BY stage_entries.rider_id
     `).all(RESULT_TYPE_IDS.stage, season);
         for (const row of rows) {
             statsByRiderId.set(row.rider_id, {
@@ -2605,13 +2627,14 @@ class GameRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS race_days
-      FROM results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ?
-        AND results.rider_id = ?
+      FROM stage_entries
+      JOIN stages ON stages.id = stage_entries.stage_id
+      WHERE stage_entries.status != 'dns'
+        AND stages.profile != 'TTT'
+        AND stage_entries.rider_id = ?
       GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
       ORDER BY season DESC
-    `).all(RESULT_TYPE_IDS.stage, riderId);
+    `).all(riderId);
     }
     mapResultTypeIdToRiderStatsRowType(resultTypeId) {
         switch (resultTypeId) {

@@ -5,7 +5,7 @@ export class RiderNewgenService {
 
   public createYearStartNewgens(season: number) {
     this.db.transaction(() => {
-      // 1. LÃ¤nder mit aktiven Regen-Raten (Limits) abrufen
+      // 1. Länder mit aktiven Regen-Raten (Limits) abrufen
       const countries = this.db.prepare(`
         SELECT id, number_regen_min, number_regen_max
         FROM sta_country
@@ -17,7 +17,7 @@ export class RiderNewgenService {
       const potPresets = this.db.prepare(`SELECT * FROM newgen_potential_presets`).all() as any[];
 
       if (startPresets.length === 0 || potPresets.length === 0) {
-        console.warn('Keine Newgen-Presets in der Datenbank gefunden. Ãœberspringe Newgen-Generierung.');
+        console.warn('Keine Newgen-Presets in der Datenbank gefunden. Überspringe Newgen-Generierung.');
         return;
       }
 
@@ -61,7 +61,7 @@ export class RiderNewgenService {
         const numToGenerate = this.getRandomInt(country.number_regen_min, country.number_regen_max);
         if (numToGenerate <= 0) continue;
 
-        // Namen fÃ¼r das aktuelle Land abrufen
+        // Namen für das aktuelle Land abrufen
         const firstNames = this.db.prepare(`
           SELECT value, weight
           FROM rider_names
@@ -78,7 +78,7 @@ export class RiderNewgenService {
         const fallbackLastNames = lastNames.length > 0 ? lastNames : [{ value: 'Gen' }];
 
         for (let i = 0; i < numToGenerate; i++) {
-          // Start-Werte auswÃ¼rfeln
+          // Start-Werte auswürfeln
           const startPreset = this.pickWeighted(startPresets, totalStartWeight);
           const startValues: Record<string, number> = {};
 
@@ -102,12 +102,12 @@ export class RiderNewgenService {
 
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {
-            // Potenzial muss zwingend Ã¼ber oder gleich dem Startwert liegen
+            // Potenzial muss zwingend über oder gleich dem Startwert liegen
             const minPot = Math.max(startValues[key] + 1, potPreset[`min_pot_${key}`] || startValues[key] + 1);
             const maxPot = Math.max(minPot, potPreset[`max_pot_${key}`] || minPot);
             potValues[key] = this.getRandomInt(minPot, maxPot);
             
-            // Max-Cap bei 85 gemÃ¤ÃŸ Plan
+            // Max-Cap bei 85 gemäß Plan
             potValues[key] = Math.min(85, potValues[key]);
           }
 
@@ -161,7 +161,7 @@ export class RiderNewgenService {
         }
       }
 
-      console.log(`[RiderNewgenService] ${newgenCount} neue Newgen-Fahrer fÃ¼r Saison ${season} generiert.`);
+      console.log(`[RiderNewgenService] ${newgenCount} neue Newgen-Fahrer für Saison ${season} generiert.`);
     })();
   }
 

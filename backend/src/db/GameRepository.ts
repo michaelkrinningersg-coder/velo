@@ -2194,6 +2194,7 @@ export class GameRepository {
       JOIN stages ON stages.id = stage_entries.stage_id
       LEFT JOIN results ON results.stage_id = stages.id AND results.rider_id = stage_entries.rider_id AND results.result_type_id = ?
       WHERE stage_entries.status != 'dns'
+        AND stages.profile != 'TTT'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
       GROUP BY stage_entries.rider_id
     `).all(RESULT_TYPE_IDS.stage, season) as Array<{ rider_id: number; race_days: number; wins: number | null }>;
@@ -3357,6 +3358,7 @@ export class GameRepository {
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       WHERE stage_entries.status != 'dns'
+        AND stages.profile != 'TTT'
         AND stage_entries.rider_id = ?
       GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
       ORDER BY season DESC
