@@ -45,11 +45,13 @@ export class RiderNewgenService {
         INSERT INTO riders (
           first_name, last_name, country_id, birth_year,
           is_retired, skill_development, rider_type_id,
+          overall_rating, pot_overall,
           ${skillColumns},
           ${potColumns}
         ) VALUES (
           ?, ?, ?, ?,
           0, ?, ?,
+          ?, ?,
           ${valuePlaceholders},
           ${valuePlaceholders}
         )
@@ -129,13 +131,26 @@ export class RiderNewgenService {
           const birthYear = season - 16;
           const skillDev = this.getRandomInt(1, 20);
 
+          const calcOverall = (vals: Record<string, number>) => {
+            const sum = (vals['flat'] || 50) + (vals['mountain'] || 50) + (vals['medium_mountain'] || 50) +
+                        (vals['hill'] || 50) + (vals['time_trial'] || 50) + (vals['cobble'] || 50) +
+                        (vals['sprint'] || 50) + (vals['stamina'] || 50) + (vals['resistance'] || 50) +
+                        (vals['recuperation'] || 50);
+            return sum / 10;
+          };
+
+          const overallRating = calcOverall(startValues);
+          const potOverall = calcOverall(potValues);
+
           const insertParams = [
             firstNameObj.value,
             lastNameObj.value,
             country.id,
             birthYear,
             skillDev,
-            typeMap.get(startPreset.type_key) || 1
+            typeMap.get(startPreset.type_key) || 1,
+            overallRating,
+            potOverall
           ];
 
           for (const key of skillKeys) insertParams.push(startValues[key]);
