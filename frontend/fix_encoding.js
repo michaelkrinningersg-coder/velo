@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const files = ['src/app.ts', 'index.html'];
@@ -33,7 +33,7 @@ for (const file of files) {
         let fileReplacements = 0;
         
         for (const [bad, good] of Object.entries(replacements)) {
-            const regex = new RegExp(bad.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&'), 'g');
+            const regex = new RegExp(bad.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
             const matches = content.match(regex);
             if (matches) {
                 fileReplacements += matches.length;
@@ -44,13 +44,13 @@ for (const file of files) {
         
         if (fileReplacements > 0) {
             fs.writeFileSync(filePath, content, 'utf8');
-            console.log(+ Fixed \ strings in \);
+            console.log(`+ Fixed ${fileReplacements} strings in ${file}`);
         } else {
-            console.log(- No strings to fix in \);
+            console.log(`- No strings to fix in ${file}`);
         }
     } else {
-        console.log(- File not found: \);
+        console.log(`- File not found: ${file}`);
     }
 }
 
-console.log(Total replacements: \);
+console.log(`Total replacements: ${totalReplacements}`);
