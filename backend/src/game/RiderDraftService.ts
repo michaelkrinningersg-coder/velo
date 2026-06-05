@@ -13,7 +13,7 @@ export class RiderDraftService {
     
     // 1. Teams nach Vorjahres-Standings holen (bestes Team auf Platz 1)
     const standings = repo.getSeasonStandings(season - 1);
-    const rankedTeamIds = standings.teamStandings.map(t => t.teamId);
+    const rankedTeamIds = standings.teamStandings.map(t => t.teamId).filter((id): id is number => id !== null);
     
     // Falls keine Teams da sind, abbrechen
     if (rankedTeamIds.length === 0) return;
