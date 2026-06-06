@@ -32,7 +32,7 @@ export async function loadDraftHistory(season: number, silent = false): Promise<
     }
     return;
   }
-  state.draftHistory = res.data ? { season, rows: res.data } : null;
+  state.draftHistory = res.data ?? null;
   if (isActiveView('draft')) {
     renderDraftView();
   }

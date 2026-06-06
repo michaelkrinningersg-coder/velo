@@ -88,5 +88,5 @@ export const api = {
   importStageRoute:    (payload: StageEditorImportRequest) => call<StageEditorDraft>('POST', '/api/stage-editor/import', payload),
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
   getInjuries:         () => call<InjuryRow[]>('GET', '/api/injuries'),
-  getDraftHistory:     (season: number) => call<DraftHistoryRow[]>('GET', `/api/draft/${season}`),
+  getDraftHistory:     (season: number) => call<DraftHistoryPayload>('GET', `/api/draft/${season}`),
 };

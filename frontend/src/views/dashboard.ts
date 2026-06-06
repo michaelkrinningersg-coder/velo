@@ -652,4 +652,26 @@ export function initDashboardListeners(): void {
     }
     void refreshRaceProgramParticipants();
   });
+
+  $('btn-advance-day').addEventListener('click', async () => {
+    showLoading('Tag wird fortgeschrieben...');
+    try {
+      const res = await api.advanceDay();
+      if (!res.success) {
+        alert('Tageswechsel fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
+        return;
+      }
+      if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
+      await loadGameState();
+      await loadRaces();
+      if (isActiveView('teams')) {
+        const { refreshTeamsViewData } = await import('./teams');
+        await refreshTeamsViewData();
+      }
+    } catch (e) {
+      alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
+    } finally {
+      hideLoading();
+    }
+  });
 }
