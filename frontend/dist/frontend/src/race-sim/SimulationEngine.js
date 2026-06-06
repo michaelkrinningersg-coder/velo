@@ -313,7 +313,17 @@ function formatSkillBreakdown(rider, components) {
     if (shortTermFatigue > 0) {
         parts.push(`Akut -${shortTermFatigue.toFixed(1).replace('.', ',')}`);
     }
-    return parts.join(' · ');
+    let mentorBoostSum = 0;
+    if (rider.mentorBoosts) {
+        for (const component of components) {
+            mentorBoostSum += (rider.mentorBoosts[component.key] || 0) * (component.weight / totalWeight);
+        }
+    }
+    if (mentorBoostSum > 0) {
+        parts.push(`Mentor +${mentorBoostSum.toFixed(1).replace('.', ',')}`);
+    }
+    return parts.join(' • ');
+    ;
 }
 function sampleInitialWindSpeedKph() {
     const roll = Math.random();
@@ -2180,12 +2190,19 @@ export class SimulationEngine {
     }
     resolveWeightedSkill(rider, terrain, staminaSkillPenalty = 0) {
         const components = this.resolveWeightedSkillComponents(terrain);
-        const adjustedSkills = staminaSkillPenalty > 0
-            ? {
-                ...rider.skills,
-                stamina: Math.max(0, rider.skills.stamina - staminaSkillPenalty),
-            }
+        const adjustedSkills = staminaSkillPenalty > 0 || rider.mentorBoosts
+            ? { ...rider.skills }
             : rider.skills;
+        if (staminaSkillPenalty > 0) {
+            adjustedSkills.stamina = Math.max(0, adjustedSkills.stamina - staminaSkillPenalty);
+        }
+        if (rider.mentorBoosts) {
+            for (const [key, val] of Object.entries(rider.mentorBoosts)) {
+                if (typeof val === 'number') {
+                    adjustedSkills[key] += val;
+                }
+            }
+        }
         let totalWeight = 0;
         let weightedSum = 0;
         for (const component of components) {

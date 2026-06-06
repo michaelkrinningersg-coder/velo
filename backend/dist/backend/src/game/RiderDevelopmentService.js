@@ -22,6 +22,10 @@ const RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
+function isNovember(currentDate) {
+    // Nur 11-01 bis 11-30 (User-Klärung G1)
+    return currentDate.slice(5, 10) >= '11-01' && currentDate.slice(5, 10) <= '11-30';
+}
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
     return row != null;
@@ -181,25 +185,46 @@ function buildPotentialsFromDailyRow(row) {
     };
 }
 function isOffseasonDevelopmentBlocked(currentDate) {
-    const monthDay = currentDate.slice(5, 10);
-    return monthDay >= '11-01' && monthDay <= '12-31';
+    return isNovember(currentDate);
 }
 function resolveDevelopmentBlockReason(row, context, currentDate, age) {
     if (row.is_retired === 1)
-        return 'retired';
-    if (context?.healthStatus === 'ill')
-        return 'ill';
-    if (context?.healthStatus === 'injured')
-        return 'injured';
-    if ((context?.unavailableDaysRemaining ?? 0) > 0)
-        return 'unavailable';
-    if (context?.formPhase === 'decline')
-        return 'form_decline';
-    if (isOffseasonDevelopmentBlocked(currentDate))
-        return 'offseason';
-    if (age >= row.peak_age)
-        return 'peak_age_reached';
-    return 'healthy';
+        return { canGrow: false, canDecline: false, reason: 'retired' };
+    let canGrow = true;
+    let canDecline = true;
+    let reason = 'healthy';
+    if (context?.healthStatus === 'ill' || context?.healthStatus === 'injured') {
+        canGrow = false;
+        reason = context.healthStatus;
+    }
+    if ((context?.unavailableDaysRemaining ?? 0) > 0) {
+        canGrow = false;
+        reason = 'unavailable';
+    }
+    if (context?.isInRaceToday) {
+        if (age > 22) {
+            canGrow = false;
+            reason = 'in_race';
+        }
+        canDecline = false;
+    }
+    if (context?.formPhase === 'decline') {
+        canGrow = false;
+        reason = 'form_decline';
+    }
+    if (context?.formPhase === 'build') {
+        canDecline = false;
+    }
+    if (isOffseasonDevelopmentBlocked(currentDate)) {
+        canGrow = false;
+        reason = 'offseason';
+    }
+    if (age >= row.peak_age) {
+        canGrow = false;
+        if (reason === 'healthy')
+            reason = 'peak_age_reached';
+    }
+    return { canGrow, canDecline, reason };
 }
 function resolveAgeGrowthFactor(age, peakAge) {
     if (age >= peakAge)
@@ -265,7 +290,7 @@ class RiderDevelopmentService {
         const contextByRiderId = new Map(contexts.map((context) => [context.riderId, context]));
         const rows = this.db.prepare(`
       SELECT riders.id, riders.birth_year, riders.skill_development, riders.peak_age, riders.decline_age, riders.retirement_age,
-             riders.is_retired, type_rider.type_key AS rider_type,
+             riders.is_retired, type_rider.type_key AS rider_type, riders.active_team_id, riders.specialization_1_id, riders.specialization_2_id, riders.specialization_3_id, riders.overall_rating,
              riders.skill_flat, riders.skill_mountain, riders.skill_medium_mountain, riders.skill_hill, riders.skill_time_trial,
              riders.skill_prologue, riders.skill_cobble, riders.skill_sprint, riders.skill_acceleration, riders.skill_downhill,
              riders.skill_attack, riders.skill_stamina, riders.skill_resistance, riders.skill_recuperation, riders.skill_bike_handling,
@@ -275,6 +300,15 @@ class RiderDevelopmentService {
       FROM riders
       JOIN type_rider ON type_rider.id = riders.rider_type_id
     `).all();
+        const mentorsByTeam = new Map();
+        for (const row of rows) {
+            const age = season - row.birth_year;
+            if (age > 32 && row.overall_rating >= 73 && row.active_team_id != null && row.specialization_1_id != null) {
+                if (!mentorsByTeam.has(row.active_team_id))
+                    mentorsByTeam.set(row.active_team_id, []);
+                mentorsByTeam.get(row.active_team_id).push({ spec1: row.specialization_1_id });
+            }
+        }
         const update = this.db.prepare(`
       UPDATE riders
       SET overall_rating = ?,
@@ -295,25 +329,46 @@ class RiderDevelopmentService {
           skill_bike_handling = ?
       WHERE id = ?
     `);
+        const insertPeakAward = this.db.prepare(`
+      INSERT OR IGNORE INTO rider_peak_awards (rider_id, season, peak_date)
+      VALUES (?, ?, ?)
+    `);
         for (const row of rows) {
             const age = season - row.birth_year;
             const context = contextByRiderId.get(row.id);
             const currentSkills = buildCurrentSkillsFromDailyRow(row);
             const potentialSkills = buildPotentialsFromDailyRow(row);
-            const blockedReason = resolveDevelopmentBlockReason(row, context, currentDate, age);
+            const block = resolveDevelopmentBlockReason(row, context, currentDate, age);
             const deltas = {};
             let growthTotal = 0;
             let declineTotal = 0;
-            if (blockedReason === 'healthy') {
+            if (block.canGrow) {
                 const ageFactor = resolveAgeGrowthFactor(age, row.peak_age);
-                const developmentFactor = resolveSkillDevelopmentFactor(row.skill_development);
+                let mentorBoost = 0;
+                if (age <= 22 && row.active_team_id != null) {
+                    const teamMentors = mentorsByTeam.get(row.active_team_id) ?? [];
+                    const top3Specs = [row.specialization_1_id, row.specialization_2_id, row.specialization_3_id].filter(Boolean);
+                    if (teamMentors.some(m => top3Specs.includes(m.spec1))) {
+                        mentorBoost = 3;
+                    }
+                }
+                const developmentFactor = resolveSkillDevelopmentFactor(Math.min(20, row.skill_development + mentorBoost));
+                const u23RaceMultiplier = (age <= 22 && context?.isInRaceToday) ? 1.5 : 1;
+                let peakBoostMultiplier = 0;
+                if (age <= 22 && context?.isInRaceToday && context?.isPeakStartDay && context?.peakDate) {
+                    const info = insertPeakAward.run(row.id, season, context.peakDate);
+                    if (info.changes > 0) {
+                        peakBoostMultiplier = 30;
+                    }
+                }
+                const localDayMultiplier = boundedDayMultiplier + peakBoostMultiplier;
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
                     if (skillKey === 'bikeHandling')
                         continue;
                     const headroom = Math.max(0, potentialSkills[skillKey] - currentSkills[skillKey]);
                     if (headroom <= 0.01)
                         continue;
-                    const dailyGrowth = Math.min(DAILY_GROWTH_CAP * boundedDayMultiplier, headroom * 0.0023 * ageFactor * developmentFactor * resolveSkillFocusFactor(row.rider_type, skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25));
+                    const dailyGrowth = Math.min(DAILY_GROWTH_CAP * localDayMultiplier * (age <= 22 ? 1.5 : 1), headroom * 0.0023 * ageFactor * developmentFactor * resolveSkillFocusFactor(row.rider_type, skillKey) * localDayMultiplier * randomNoise(0.75, 1.25) * u23RaceMultiplier);
                     if (dailyGrowth <= 0)
                         continue;
                     const applied = clamp(Math.min(potentialSkills[skillKey], currentSkills[skillKey] + dailyGrowth)) - currentSkills[skillKey];
@@ -323,7 +378,7 @@ class RiderDevelopmentService {
                     }
                 }
             }
-            if (row.is_retired !== 1 && age >= row.decline_age) {
+            if (block.canDecline && row.is_retired !== 1 && age >= row.decline_age) {
                 const yearsAfterDecline = Math.max(0, age - row.decline_age + 1);
                 const ageDeclineFactor = Math.min(2.4, 0.35 + yearsAfterDecline * 0.22);
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {

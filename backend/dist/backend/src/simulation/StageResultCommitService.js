@@ -497,6 +497,7 @@ class StageResultCommitService {
         gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
         gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
+        this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
         return {
             raceId: race.id,
             raceName: race.name,
@@ -611,6 +612,70 @@ class StageResultCommitService {
         }
         catch (error) {
             throw new Error(`Ergebnis konnte nicht gespeichert werden (type=${resultTypeId}, stage=${stageId}, rank=${row.rank}, rider=${row.riderId ?? 'null'}, team=${row.teamId ?? 'null'}): ${error.message}`);
+        }
+    }
+    evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById) {
+        const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2;
+        const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
+        const currentSeason = this.repo.getCurrentSeason();
+        const breakthroughRiderIds = new Set();
+        for (const row of stageRows) {
+            if (row.rank === 1 && row.riderId)
+                breakthroughRiderIds.add(row.riderId);
+        }
+        if (isCategory1Or2) {
+            for (const row of stageRows) {
+                if (row.rank <= 3 && row.riderId)
+                    breakthroughRiderIds.add(row.riderId);
+            }
+        }
+        if (race.isStageRace && isFinalStage) {
+            for (const row of gcRows) {
+                if (row.rank <= 5 && row.riderId)
+                    breakthroughRiderIds.add(row.riderId);
+            }
+            for (const row of pointsRows) {
+                if (row.rank === 1 && row.riderId)
+                    breakthroughRiderIds.add(row.riderId);
+            }
+            for (const row of mountainRows) {
+                if (row.rank === 1 && row.riderId)
+                    breakthroughRiderIds.add(row.riderId);
+            }
+            for (const row of youthRows) {
+                if (row.rank === 1 && row.riderId)
+                    breakthroughRiderIds.add(row.riderId);
+            }
+        }
+        if (breakthroughRiderIds.size === 0)
+            return;
+        const validU23RiderIds = Array.from(breakthroughRiderIds).filter((riderId) => {
+            const rider = ridersById.get(riderId);
+            return rider && (currentSeason - rider.birthYear) <= 22;
+        });
+        if (validU23RiderIds.length === 0)
+            return;
+        const potColumns = [
+            'pot_flat', 'pot_mountain', 'pot_medium_mountain', 'pot_hill', 'pot_time_trial',
+            'pot_prologue', 'pot_cobble', 'pot_sprint', 'pot_acceleration', 'pot_downhill',
+            'pot_attack', 'pot_stamina', 'pot_resistance', 'pot_recuperation', 'pot_bike_handling'
+        ];
+        for (const riderId of validU23RiderIds) {
+            const riderPotentials = this.db.prepare(`
+        SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
+               pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
+               pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
+        FROM riders WHERE id = ?
+      `).get(riderId);
+            if (!riderPotentials)
+                continue;
+            const validColumns = potColumns.filter(col => riderPotentials[col] < 85);
+            if (validColumns.length === 0)
+                continue;
+            const selectedColumn = validColumns[Math.floor(Math.random() * validColumns.length)];
+            this.db.prepare(`
+        UPDATE riders SET ${selectedColumn} = ${selectedColumn} + 1 WHERE id = ?
+      `).run(riderId);
         }
     }
 }

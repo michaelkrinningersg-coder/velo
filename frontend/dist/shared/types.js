@@ -1,4 +1,4 @@
 // ============================================================
-//  SHARED TYPES – verwendet von Backend und Frontend
+//  SHARED TYPES â€“ verwendet von Backend und Frontend
 // ============================================================
 export {};

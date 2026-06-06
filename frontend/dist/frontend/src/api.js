@@ -52,4 +52,6 @@ export const api = {
     loadStageEditorStage: (stageId) => call('GET', `/api/stage-editor/stages/${stageId}`),
     importStageRoute: (payload) => call('POST', '/api/stage-editor/import', payload),
     exportStageRoute: (payload) => call('POST', '/api/stage-editor/export', payload),
+    getInjuries: () => call('GET', '/api/injuries'),
+    getDraftHistory: (season) => call('GET', `/api/draft/${season}`),
 };

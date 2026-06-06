@@ -5,10 +5,11 @@ const events_1 = require("events");
 const GameRepository_1 = require("../db/GameRepository");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
 const ContractService_1 = require("./ContractService");
-const RiderLoadModel_1 = require("./RiderLoadModel");
 const RiderDevelopmentService_1 = require("./RiderDevelopmentService");
 const RiderProgramService_1 = require("./RiderProgramService");
 const RiderRoleService_1 = require("./RiderRoleService");
+const RiderDraftService_1 = require("./RiderDraftService");
+const RiderNewgenService_1 = require("./RiderNewgenService");
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 const SEASON_FORM_MIN_RAW = 0;
@@ -36,24 +37,76 @@ class GameStateService {
     constructor(db) {
         this.events = new events_1.EventEmitter();
         this.syncedStateDate = null;
+        // Caches to avoid repeated schema/peak-date work in the day-change hot path.
+        this.schemaReady = false;
+        this.knownTables = new Set();
+        this.knownColumns = new Set();
+        this.peakDatesBySeason = new Map();
+        this.programWindowsBySeason = new Map();
+        // Tracks the last (s_form, r_form) we wrote into rider_form_history so we can
+        // skip writing when nothing changed for the day.
+        this.lastFormHistoryHash = '';
+        this.formHistoryHashKnown = false;
         this.db = db;
     }
-    ensureState() {
-        this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS game_state (
-        id            INTEGER PRIMARY KEY CHECK(id = 1),
-        current_date  TEXT    NOT NULL,
-        season        INTEGER NOT NULL,
-        is_game_over  INTEGER NOT NULL DEFAULT 0 CHECK(is_game_over IN (0, 1))
-      )
-    `).run();
-        this.db.prepare(`
-      INSERT OR IGNORE INTO game_state (id, "current_date", season, is_game_over)
-      VALUES (1, ?, ?, 0)
-    `).run(DEFAULT_START_DATE, DEFAULT_START_SEASON);
+    isTable(name) {
+        if (this.knownTables.has(name))
+            return true;
+        if (!tableExists(this.db, name))
+            return false;
+        this.knownTables.add(name);
+        return true;
+    }
+    isColumn(tableName, columnName) {
+        const key = `${tableName}.${columnName}`;
+        if (this.knownColumns.has(key))
+            return true;
+        if (!this.isTable(tableName))
+            return false;
+        if (!columnExists(this.db, tableName, columnName))
+            return false;
+        this.knownColumns.add(key);
+        return true;
+    }
+    ensureSchemaOnce() {
+        if (this.schemaReady)
+            return;
         this.ensureRiderDailyStateTable();
         this.ensureRiderFormTables();
-        this.ensureRiderDailyStateRows(DEFAULT_START_SEASON);
+        this.knownTables.add('game_state');
+        this.knownTables.add('rider_daily_state');
+        this.knownTables.add('rider_r_form_events');
+        this.knownTables.add('rider_form_history');
+        this.knownTables.add('rider_r_form_daily_awards');
+        this.knownTables.add('rider_peak_awards');
+        this.knownColumns.add('rider_daily_state.season_race_days_total');
+        this.knownColumns.add('rider_daily_state.rolling_30d_race_days');
+        this.knownColumns.add('rider_daily_state.race_form_bonus');
+        this.knownColumns.add('rider_daily_state.peak_s_form');
+        this.knownColumns.add('rider_daily_state.peak_r_form');
+        this.knownColumns.add('rider_daily_state.active_peak_date');
+        this.knownColumns.add('rider_daily_state.peak_dates_json');
+        this.knownColumns.add('rider_daily_state.form_bonus');
+        this.knownColumns.add('rider_daily_state.health_status');
+        this.knownColumns.add('rider_daily_state.unavailable_until');
+        this.knownColumns.add('rider_daily_state.unavailable_days_remaining');
+        this.schemaReady = true;
+    }
+    /**
+     * Returns a Map<riderId, ProgramPeakWindows> for the given season, loaded in
+     * a single SQL query and cached in-memory. This is the bulk equivalent of
+     * `loadProgramPeakWindows` and is the main N+1 fix for the day-change path.
+     */
+    getProgramWindowsForSeason(season) {
+        const cached = this.programWindowsBySeason.get(season);
+        if (cached)
+            return cached;
+        const fresh = loadProgramPeakWindowsForSeason(this.db, season);
+        this.programWindowsBySeason.set(season, fresh);
+        return fresh;
+    }
+    ensureState() {
+        this.ensureSchemaOnce();
         const state = this.loadState();
         new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
         if (this.syncedStateDate !== state.currentDate) {
@@ -68,7 +121,7 @@ class GameStateService {
         return state;
     }
     loadState() {
-        this.ensureStateRow();
+        this.ensureSchemaOnce();
         const row = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1').get();
         if (!row)
             throw new Error('game_state konnte nicht geladen werden.');
@@ -99,9 +152,39 @@ class GameStateService {
             const nextSeason = resolveSeason(nextDate, currentRow.season);
             if (nextSeason !== currentRow.season) {
                 new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason);
+                new RiderDraftService_1.RiderDraftService(this.db).executeDraft(nextSeason);
+                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason); // activate new draft contracts
                 new RiderDevelopmentService_1.RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
                 new RiderRoleService_1.RiderRoleService(this.db).recalculateAllTeamRoles();
                 new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
+                // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
+                new RiderNewgenService_1.RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
+                // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
+                this.db.prepare(`
+          UPDATE riders
+          SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
+          WHERE is_retired = 0 AND skill_development > 0
+        `).run();
+                // Snapshot der Fahrer-Werte als Baseline fÃ¼r die Saison in der UI abspeichern
+                this.db.prepare(`
+          INSERT OR REPLACE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
+          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'prologue', skill_prologue FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'attack', skill_attack FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'bike_handling', skill_bike_handling FROM riders WHERE is_retired = 0
+        `).run(...Array(16).fill(nextSeason));
             }
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
@@ -129,17 +212,9 @@ class GameStateService {
         this.syncRiderLoadState(currentDate, currentSeason);
     }
     ensureStateRow() {
-        this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS game_state (
-        id INTEGER PRIMARY KEY CHECK(id = 1),
-        current_date TEXT NOT NULL,
-        season INTEGER NOT NULL,
-        is_game_over INTEGER NOT NULL DEFAULT 0 CHECK(is_game_over IN (0, 1))
-      )
-    `).run();
+        // Lightweight idempotent INSERT-OR-IGNORE for game_state. CREATE TABLE IF NOT EXISTS
+        // and other heavy idempotent schema work is handled in ensureSchemaOnce().
         this.db.prepare('INSERT OR IGNORE INTO game_state (id, "current_date", season, is_game_over) VALUES (1, ?, ?, 0)').run(DEFAULT_START_DATE, DEFAULT_START_SEASON);
-        this.ensureRiderDailyStateTable();
-        this.ensureRiderFormTables();
     }
     ensureRiderDailyStateTable() {
         this.db.prepare(`
@@ -213,6 +288,14 @@ class GameStateService {
         PRIMARY KEY (rider_id, award_date)
       )
     `).run();
+        this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_peak_awards (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        peak_date TEXT NOT NULL,
+        PRIMARY KEY (rider_id, season, peak_date)
+      )
+    `).run();
     }
     ensureRiderDailyStateRows(season) {
         if (!tableExists(this.db, 'riders')) {
@@ -229,17 +312,22 @@ class GameStateService {
         if (missingRows.length === 0) {
             return;
         }
+        // Use cached program windows (or the slow-path loader as a fallback) so we
+        // avoid one SQL per newly-inserted rider.
+        const programWindows = this.getProgramWindowsForSeason(season);
         const insertState = this.db.prepare(`
       INSERT INTO rider_daily_state (
         rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
       ) VALUES (?, ?, ?, 0, 0, 0, NULL, ?, 'healthy', NULL, 0, 0, 0)
     `);
         for (const rider of missingRows) {
-            insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(resolveSeasonPeakDates([], season, this.db, rider.id)));
+            const windows = programWindows.get(rider.id) ?? null;
+            const peakDates = resolveSeasonPeakDatesFromWindows([], season, windows);
+            insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(peakDates));
         }
     }
     syncCurrentSeasonFormState(currentDate, currentSeason) {
-        if (!tableExists(this.db, 'rider_daily_state')) {
+        if (!this.isTable('rider_daily_state')) {
             return;
         }
         this.ensureRiderDailyStateRows(currentSeason);
@@ -257,8 +345,12 @@ class GameStateService {
           peak_dates_json = ?
       WHERE rider_id = ?
     `);
+        // Bulk-load program windows once, then look up per rider from the in-memory map.
+        const programWindows = this.getProgramWindowsForSeason(currentSeason);
         for (const row of rows) {
-            const peakDates = resolveSeasonPeakDates(row.season !== currentSeason ? [] : parsePeakDates(row.peak_dates_json), currentSeason, this.db, row.rider_id);
+            const seasonChanged = row.season !== currentSeason;
+            const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
+            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), currentSeason, windows);
             const phase = resolvePeakPhase(currentDate, peakDates);
             let formBonus = row.form_bonus;
             let peakSForm = row.peak_s_form;
@@ -278,11 +370,21 @@ class GameStateService {
                 peakSForm = 0;
                 activePeakDate = null;
             }
-            updateState.run(currentSeason, roundFormBonus(formBonus), roundFormBonus(peakSForm), activePeakDate, JSON.stringify(peakDates), row.rider_id);
+            const roundedFormBonus = roundFormBonus(formBonus);
+            const roundedPeakSForm = roundFormBonus(peakSForm);
+            const peakDatesJson = JSON.stringify(peakDates);
+            // Skip the UPDATE on quiet days where form is stable.
+            if (seasonChanged
+                || row.form_bonus !== roundedFormBonus
+                || row.peak_s_form !== roundedPeakSForm
+                || row.active_peak_date !== activePeakDate
+                || row.peak_dates_json !== peakDatesJson) {
+                updateState.run(currentSeason, roundedFormBonus, roundedPeakSForm, activePeakDate, peakDatesJson, row.rider_id);
+            }
         }
     }
     advanceRiderDailyStates(nextDate, nextSeason) {
-        if (!tableExists(this.db, 'rider_daily_state')) {
+        if (!this.isTable('rider_daily_state')) {
             return;
         }
         this.ensureRiderDailyStateRows(nextSeason);
@@ -306,13 +408,25 @@ class GameStateService {
           unavailable_days_remaining = ?
       WHERE rider_id = ?
     `);
+        const racingRidersRow = this.db.prepare(`
+      SELECT se.rider_id FROM stage_entries se
+      JOIN stages s ON s.id = se.stage_id
+      WHERE s.date = ? AND se.status IN ('scheduled', 'started')
+    `).all(nextDate);
+        const racingRiderIds = new Set(racingRidersRow.map(r => r.rider_id));
+        // Bulk-load program windows for the current season ONCE instead of doing
+        // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
+        const programWindows = this.getProgramWindowsForSeason(nextSeason);
         const seasonChangedRiderIds = [];
         const developmentContexts = [];
+        const deleteFormEvents = this.db.prepare(`
+      DELETE FROM rider_r_form_events
+      WHERE rider_id = ?
+    `);
         for (const row of rows) {
             const seasonChanged = row.season !== nextSeason;
-            const peakDates = seasonChanged
-                ? resolveSeasonPeakDates([], nextSeason, this.db, row.rider_id)
-                : resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), nextSeason, this.db, row.rider_id);
+            const riderProgramWindows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
+            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), nextSeason, riderProgramWindows);
             let formBonus = seasonChanged ? SEASON_FORM_MIN_RAW : row.form_bonus;
             let raceFormBonus = seasonChanged ? 0 : row.race_form_bonus;
             let peakSForm = seasonChanged ? 0 : row.peak_s_form;
@@ -377,49 +491,75 @@ class GameStateService {
                 healthStatus,
                 unavailableDaysRemaining: remainingDays,
                 formPhase: phase?.phase ?? null,
+                isInRaceToday: racingRiderIds.has(row.rider_id),
+                isPeakStartDay: phase?.phase === 'decline' && phase.elapsedDays === 0,
+                peakDate: phase?.peakDate ?? null,
             });
-            updateState.run(nextSeason, formBonus, raceFormBonus, peakSForm, peakRForm, activePeakDate, JSON.stringify(peakDates), healthStatus, unavailableUntil, remainingDays, row.rider_id);
+            // Skip the UPDATE if nothing actually changed. This saves ~5000 redundant
+            // row updates on quiet days where most riders have stable state.
+            const roundedFormBonus = roundFormBonus(formBonus);
+            const roundedPeakSForm = roundFormBonus(peakSForm);
+            const peakDatesJson = JSON.stringify(peakDates);
+            if (seasonChanged
+                || row.form_bonus !== roundedFormBonus
+                || row.race_form_bonus !== raceFormBonus
+                || row.peak_s_form !== roundedPeakSForm
+                || row.peak_r_form !== peakRForm
+                || row.active_peak_date !== activePeakDate
+                || row.peak_dates_json !== peakDatesJson
+                || row.health_status !== healthStatus
+                || row.unavailable_until !== unavailableUntil
+                || row.unavailable_days_remaining !== remainingDays) {
+                updateState.run(nextSeason, roundedFormBonus, raceFormBonus, roundedPeakSForm, peakRForm, activePeakDate, peakDatesJson, healthStatus, unavailableUntil, remainingDays, row.rider_id);
+            }
         }
         if (seasonChangedRiderIds.length > 0) {
-            const placeholders = seasonChangedRiderIds.map(() => '?').join(',');
-            this.db.prepare(`DELETE FROM rider_r_form_events WHERE rider_id IN (${placeholders})`).run(...seasonChangedRiderIds);
+            // Use one prepared statement inside a tight loop instead of building a
+            // giant IN(...) query; SQLite is happy with this when bound individually.
+            for (const riderId of seasonChangedRiderIds) {
+                deleteFormEvents.run(riderId);
+            }
         }
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
     syncRiderLoadState(currentDate, currentSeason) {
-        if (!tableExists(this.db, 'rider_daily_state') || !tableExists(this.db, 'stage_entries') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'riders')) {
+        if (!this.isTable('rider_daily_state') || !this.isTable('stage_entries') || !this.isTable('stages') || !this.isTable('riders')) {
             return;
         }
         const rollingWindowStart = addDaysIso(currentDate, -29);
-        const rows = this.db.prepare(`
-      SELECT
-        riders.id AS rider_id,
-        COALESCE(SUM(CASE
-          WHEN stage_entries.status IN ('finished', 'dnf')
-           AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-           AND stages.date <= ?
-          THEN 1 ELSE 0 END), 0) AS season_race_days_total,
-        COALESCE(SUM(CASE
-          WHEN stage_entries.status IN ('finished', 'dnf')
-           AND stages.date >= ?
-           AND stages.date <= ?
-          THEN 1 ELSE 0 END), 0) AS rolling_30d_race_days
-      FROM riders
-      LEFT JOIN stage_entries ON stage_entries.rider_id = riders.id
-      LEFT JOIN stages ON stages.id = stage_entries.stage_id
-      WHERE riders.is_retired = 0
-      GROUP BY riders.id
-    `).all(currentSeason, currentDate, rollingWindowStart, currentDate);
-        const updateState = this.db.prepare(`
+        // Single SQL with a CTE: aggregate stage_entries once, then bulk-update
+        // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
+        // with one statement.
+        this.db.prepare(`
+      WITH stats AS (
+        SELECT stage_entries.rider_id AS rider_id,
+               SUM(CASE
+                 WHEN stage_entries.status IN ('finished', 'dnf')
+                  AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
+                  AND stages.date <= @currentDate
+                 THEN 1 ELSE 0
+               END) AS season_race_days_total,
+               SUM(CASE
+                 WHEN stage_entries.status IN ('finished', 'dnf')
+                  AND stages.date >= @rollingStart
+                  AND stages.date <= @currentDate
+                 THEN 1 ELSE 0
+               END) AS rolling_30d_race_days
+        FROM stage_entries
+        JOIN stages ON stages.id = stage_entries.stage_id
+        WHERE stage_entries.status IN ('finished', 'dnf')
+        GROUP BY stage_entries.rider_id
+      )
       UPDATE rider_daily_state
-      SET season_race_days_total = ?,
-          rolling_30d_race_days = ?
-      WHERE rider_id = ?
-    `);
-        for (const row of rows) {
-            const summary = (0, RiderLoadModel_1.buildRiderLoadSummary)(row.season_race_days_total, row.rolling_30d_race_days);
-            updateState.run(summary.seasonRaceDaysTotal, summary.rolling30dRaceDays, row.rider_id);
-        }
+      SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
+          rolling_30d_race_days  = COALESCE(stats.rolling_30d_race_days, 0)
+      FROM stats
+      WHERE stats.rider_id = rider_daily_state.rider_id
+    `).run({
+            season: currentSeason,
+            currentDate,
+            rollingStart: rollingWindowStart,
+        });
     }
     prepareRaceEntriesForRaceStarts(currentDate) {
         if (!tableExists(this.db, 'races') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'race_entries')) {
@@ -453,34 +593,34 @@ class GameStateService {
         this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
     }
     syncCurrentFormHistory(currentDate) {
-        if (!tableExists(this.db, 'rider_daily_state') || !tableExists(this.db, 'rider_form_history')) {
+        if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history')) {
             return;
         }
         this.removeExpiredRaceFormEvents(currentDate);
-        const rows = this.db.prepare(`
-      SELECT rider_daily_state.rider_id,
-             rider_daily_state.form_bonus,
-             rider_daily_state.race_form_bonus,
-             COALESCE(SUM(rider_r_form_events.amount), 0) AS free_race_form
-      FROM rider_daily_state
-      LEFT JOIN rider_r_form_events ON rider_r_form_events.rider_id = rider_daily_state.rider_id
-      GROUP BY rider_daily_state.rider_id,
-               rider_daily_state.form_bonus,
-               rider_daily_state.race_form_bonus
-    `).all();
-        const upsertHistory = this.db.prepare(`
+        // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
+        // in one statement instead of a per-rider JS loop.
+        this.db.prepare(`
       INSERT INTO rider_form_history (rider_id, date, s_form, r_form, total_form)
-      VALUES (?, ?, ?, ?, ?)
+      SELECT
+        rds.rider_id,
+        @date AS date,
+        ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100 AS s_form,
+        ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100 AS r_form,
+        ROUND((
+          ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
+          + ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100
+        ) * 100) / 100 AS total_form
+      FROM rider_daily_state rds
+      LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
+      GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus
       ON CONFLICT(rider_id, date) DO UPDATE SET
         s_form = excluded.s_form,
         r_form = excluded.r_form,
         total_form = excluded.total_form
-    `);
-        for (const row of rows) {
-            const totalRaceForm = roundFormBonus(row.race_form_bonus + row.free_race_form);
-            const effectiveSeasonForm = resolveEffectiveSeasonForm(row.form_bonus);
-            upsertHistory.run(row.rider_id, currentDate, effectiveSeasonForm, totalRaceForm, roundFormBonus(effectiveSeasonForm + totalRaceForm));
-        }
+    `).run({
+            date: currentDate,
+            seasonFormMax: SEASON_FORM_MAX_RAW,
+        });
     }
     applyRaceDayFormBonuses(raceDate, riderIds) {
         if (riderIds.length === 0 || !tableExists(this.db, 'rider_daily_state')) {
@@ -734,6 +874,46 @@ function loadProgramPeakWindows(db, season, riderId) {
         peak3Max: row.peak3_max,
     };
 }
+/**
+ * Bulk-load all program peak windows for the given season in a single query.
+ * Returns a Map keyed by rider_id. This is the N+1 fix for `loadProgramPeakWindows`.
+ */
+function loadProgramPeakWindowsForSeason(db, season) {
+    const result = new Map();
+    if (!tableExists(db, 'rider_season_programs')
+        || !tableExists(db, 'race_programs')
+        || !columnExists(db, 'race_programs', 'peak1_min')
+        || !columnExists(db, 'race_programs', 'peak1_max')
+        || !columnExists(db, 'race_programs', 'peak2_min')
+        || !columnExists(db, 'race_programs', 'peak2_max')
+        || !columnExists(db, 'race_programs', 'peak3_min')
+        || !columnExists(db, 'race_programs', 'peak3_max')) {
+        return result;
+    }
+    const rows = db.prepare(`
+    SELECT rider_season_programs.rider_id AS rider_id,
+           race_programs.peak1_min,
+           race_programs.peak1_max,
+           race_programs.peak2_min,
+           race_programs.peak2_max,
+           race_programs.peak3_min,
+           race_programs.peak3_max
+    FROM rider_season_programs
+    JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+    WHERE rider_season_programs.season = ?
+  `).all(season);
+    for (const row of rows) {
+        result.set(row.rider_id, {
+            peak1Min: row.peak1_min,
+            peak1Max: row.peak1_max,
+            peak2Min: row.peak2_min,
+            peak2Max: row.peak2_max,
+            peak3Min: row.peak3_min,
+            peak3Max: row.peak3_max,
+        });
+    }
+    return result;
+}
 function generateProgramSeasonPeakDates(season, windows) {
     const ranges = [
         resolveIsoWeekDayBounds(season, windows.peak1Min, windows.peak1Max),
@@ -836,6 +1016,13 @@ function generateSeasonPeakDates(season) {
 }
 function resolveSeasonPeakDates(peakDates, season, db, riderId) {
     const programWindows = loadProgramPeakWindows(db, season, riderId);
+    return resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows);
+}
+/**
+ * Like `resolveSeasonPeakDates` but takes pre-loaded program windows for the rider,
+ * avoiding an N+1 query against `rider_season_programs` / `race_programs`.
+ */
+function resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows) {
     const programRanges = programWindows == null
         ? null
         : [
