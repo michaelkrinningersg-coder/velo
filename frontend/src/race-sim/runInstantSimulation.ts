@@ -1,4 +1,4 @@
-import type { RealtimeSimulationBootstrap } from '../../shared/types';
+import type { RealtimeSimulationBootstrap } from '../../../shared/types';
 import { SimulationEngine } from './SimulationEngine';
 import type { SimulationSnapshot } from './SimulationEngine';
 

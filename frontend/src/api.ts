@@ -28,6 +28,7 @@ import type {
   SeasonStandingsPayload,
   StageResultsPayload,
   DraftHistoryPayload,
+  DraftHistoryRow,
   InjuryRow,
 } from '../../shared/types';
 

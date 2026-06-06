@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-CH89TWFz.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-9j0hTDiD.css">
+  <script type="module" crossorigin src="/assets/index-DAF2iQkM.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CV4DbNmB.css">
 </head>
 <body>
 
@@ -39,7 +39,7 @@
       <div class="form-group">
         <label for="input-team-id">Team auswählen</label>
         <select id="input-team-id">
-          <option value="">— Teams werden geladen —</option>
+          <option value="">– Teams werden geladen –</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -62,6 +62,9 @@
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">◫</span> Teams
         </button>
+        <button class="nav-btn" data-view="riders">
+          <span class="nav-icon">▣</span> Fahrer
+        </button>
         <button class="nav-btn" data-view="live-race">
           <span class="nav-icon">◔</span> Live Race
         </button>
@@ -71,14 +74,23 @@
         <button class="nav-btn" data-view="season-standings">
           <span class="nav-icon">★</span> Season Standings
         </button>
-        <button class="nav-btn" data-view="stage-editor">
-          <span class="nav-icon">🗺</span> Stage Editor
+        <button class="nav-btn" data-view="draft">
+          <span class="nav-icon">♺</span> Draft
+        </button>
+        <button class="nav-btn" data-view="injuries">
+          <span class="nav-icon">✚</span> Verletzungen
         </button>
         <button class="nav-btn" data-view="stage-editor-stages">
           <span class="nav-icon">▦</span> Stages
         </button>
         <button class="nav-btn" data-view="stage-editor-climbs">
           <span class="nav-icon">△</span> Climbs
+        </button>
+        <button class="nav-btn" data-view="stage-editor">
+          <span class="nav-icon">🗺</span> Stage Editor
+        </button>
+        <button class="nav-btn" data-view="rider-team-editor">
+          <span class="nav-icon">▥</span> Fahrereditor
         </button>
       </nav>
       <div class="sidebar-meta">
@@ -139,6 +151,50 @@
         <div id="teams-detail"></div>
       </div>
 
+      <!-- Draft -->
+      <div id="view-draft" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Draft Historie</h2>
+            <p id="draft-meta" class="text-muted">Ergebnisse des Jahreswechsel-Drafts.</p>
+          </div>
+        </div>
+        <div class="results-toolbar">
+          <div class="form-group">
+            <label for="draft-season-select">Saison</label>
+            <select id="draft-season-select"></select>
+          </div>
+        </div>
+        <div id="draft-table-container"></div>
+      </div>
+
+      <!-- Verletzungen -->
+      <div id="view-injuries" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Verletzungen & Krankheiten</h2>
+            <p id="injuries-meta" class="text-muted">Lade Daten...</p>
+          </div>
+        </div>
+        <div id="injuries-table-container"></div>
+      </div>
+
+      <!-- Riders -->
+      <div id="view-riders" class="view">
+        <div class="view-header"><h2>Fahrer</h2></div>
+        <div id="riders-detail"></div>
+      </div>
+
+      <div id="view-rider-team-editor" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Fahrer & Teams Editor</h2>
+            <p id="rider-team-editor-meta" class="text-muted">Masterdaten aus riders.csv bearbeiten.</p>
+          </div>
+        </div>
+        <div id="rider-team-editor-root"></div>
+      </div>
+
       <!-- Live Race -->
       <div id="view-live-race" class="view">
         <div class="view-header view-header-stack">
@@ -151,7 +207,7 @@
           <div class="form-group">
             <label for="race-sim-stage-select">Offene Etappe</label>
             <select id="race-sim-stage-select">
-              <option value="">– Keine offenen Etappen –</option>
+              <option value="">â€“ Keine offenen Etappen â€“</option>
             </select>
           </div>
         </div>
@@ -383,10 +439,18 @@
               </div>
               <div class="stage-editor-table-wrap">
                 <table class="data-table stage-editor-table" id="stage-editor-waypoints">
+                  <colgroup>
+                    <col class="stage-editor-col-length" />
+                    <col class="stage-editor-col-gradient" />
+                    <col class="stage-editor-col-terrain" />
+                    <col class="stage-editor-col-tech" />
+                    <col class="stage-editor-col-wind" />
+                    <col class="stage-editor-col-start-markers" />
+                    <col class="stage-editor-col-end-markers" />
+                    <col class="stage-editor-col-actions" />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Start-km</th>
-                      <th>Start-hm</th>
                       <th>Länge</th>
                       <th>Steigung</th>
                       <th>Terrain</th>
@@ -447,7 +511,7 @@
           <h2 id="tt-result-race-name">Ergebnis</h2>
           <p id="tt-result-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-tt">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-tt">×</button>
       </div>
       <div class="tt-result-wrapper">
         <table class="data-table" id="tt-result-table">
@@ -471,7 +535,7 @@
           <h2 id="roster-editor-title">Starterfeld bearbeiten</h2>
           <p id="roster-editor-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-roster-editor">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-roster-editor">×</button>
       </div>
       <p id="roster-editor-error" class="error-msg hidden"></p>
       <div id="roster-editor-body" class="roster-editor-body"></div>
@@ -489,7 +553,7 @@
           <h2 id="race-stages-title">Etappen</h2>
           <p id="race-stages-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-stages">×</button>
       </div>
       <div id="race-stages-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -502,7 +566,7 @@
           <h2 id="stage-profile-title">Etappenprofil</h2>
           <p id="stage-profile-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-stage-profile">×</button>
       </div>
       <div id="stage-profile-view" class="race-sim-profile dashboard-stage-profile-view"></div>
     </div>
@@ -515,7 +579,7 @@
           <h2 id="rider-program-title">Programm</h2>
           <p id="rider-program-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-rider-program">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-program">×</button>
       </div>
       <div id="rider-program-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -528,7 +592,7 @@
           <h2 id="rider-stats-title">Fahrerstatistik</h2>
           <p id="rider-stats-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">×</button>
       </div>
       <div id="rider-stats-body" class="dashboard-race-stages-body rider-stats-body"></div>
     </div>
@@ -541,7 +605,7 @@
           <h2 id="race-participants-title">Teilnehmer</h2>
           <p id="race-participants-meta" class="text-muted"></p>
         </div>
-        <button class="btn btn-ghost modal-close" id="btn-close-race-participants">✕</button>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-participants">×</button>
       </div>
       <div id="race-participants-body" class="dashboard-race-stages-body"></div>
     </div>
@@ -550,7 +614,10 @@
   <!-- ---- Loading Overlay ----------------------------------- -->
   <div id="loading-overlay" class="loading-overlay hidden">
     <div class="spinner"></div>
-    <p id="loading-msg">Lade…</p>
+    <p id="loading-msg">Lade...</p>
+    <div id="loading-progress" class="loading-progress hidden">
+      <div id="loading-progress-bar" class="loading-progress-bar"></div>
+    </div>
   </div>
 
 </body>
