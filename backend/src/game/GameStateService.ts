@@ -1,7 +1,12 @@
-﻿import Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, PendingStage } from '../../../shared/types';
-import { GameRepository } from '../db/GameRepository';
+import { GameStateRepository } from "../db/repositories/GameStateRepository";
+import { RaceRepository } from "../db/repositories/RaceRepository";
+import { ResultRepository } from "../db/repositories/ResultRepository";
+import { RiderRepository } from "../db/repositories/RiderRepository";
+import { TeamRepository } from "../db/repositories/TeamRepository";
+
 import { refreshRaceEntriesForRaceStart } from '../simulation/RaceRosterService';
 import { ContractService } from './ContractService';
 import { buildRiderLoadSummary } from './RiderLoadModel';
@@ -76,7 +81,7 @@ function columnExists(db: Database.Database, tableName: string, columnName: stri
   }
 
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return rows.some((row) => row.name === columnName);
+  return rows.some((row: any) => row.name === columnName);
 }
 
 export class GameStateService {
@@ -160,7 +165,29 @@ export class GameStateService {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
       this.syncCurrentFormHistory(state.currentDate);
       this.syncedStateDate = state.currentDate;
-    }
+      }
+
+      // Lazily populate rider_skill_yearly_baseline for current season if missing
+      const baselineCount = (this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season) as any).c;
+      if (baselineCount === 0) {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
+          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
+        `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+      }
+
     this.db.prepare(`
       INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -246,7 +273,7 @@ export class GameStateService {
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);
       this.advanceRiderDailyStates(nextDate, nextSeason);
-      new GameRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
+      new GameStateRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
       this.db.prepare(
         'UPDATE game_state SET "current_date" = ?, season = ?, is_game_over = ? WHERE id = 1',
       ).run(nextDate, nextSeason, currentRow.is_game_over);
@@ -516,7 +543,7 @@ export class GameStateService {
       JOIN stages s ON s.id = se.stage_id
       WHERE s.date = ? AND se.status IN ('scheduled', 'started')
     `).all(nextDate) as Array<{ rider_id: number }>;
-    const racingRiderIds = new Set(racingRidersRow.map(r => r.rider_id));
+    const racingRiderIds = new Set(racingRidersRow.map((r: any) => r.rider_id));
 
     // Bulk-load program windows for the current season ONCE instead of doing
     // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
@@ -710,14 +737,29 @@ export class GameStateService {
       return;
     }
 
-    const repo = new GameRepository(this.db);
+    const raceRepo = new RaceRepository(this.db); const riderRepo = new RiderRepository(this.db); const teamRepo = new TeamRepository(this.db);
+    const gsRepo = new GameStateRepository(this.db);
     for (const row of rows) {
-      const race = repo.getRaceById(row.race_id);
-      const stage = repo.getStageById(row.stage_id);
+      const race = raceRepo.getRaceById(row.race_id);
+      const stage = raceRepo.getStageById(row.stage_id);
       if (!race || !stage) {
         continue;
       }
-      refreshRaceEntriesForRaceStart(this.db, repo, race, stage);
+      // Build a composite repo that satisfies RaceRosterService's duck-typed `repo` parameter.
+      const compositeRepo = {
+        getCurrentSeason: () => gsRepo.getCurrentSeason(),
+        getCurrentDate: () => gsRepo.getCurrentDate(),
+        getRiders: (teamId?: number) => (riderRepo as any).getRiders(teamId),
+        getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
+        getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
+        getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),
+        getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
+        ensureStageEntries: (s: any) => gsRepo.ensureStageEntries(s),
+        prepareStageRaceFatigue: (raceId: number, stageNumber: number, riderIds: number[]) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
+        attachStageRaceFatigue: (raceId: number, riders: any[], stageNumber: number) => (raceRepo as any).attachStageRaceFatigue(raceId, riders, stageNumber),
+        clearStageEntries: (stageId: number) => (gsRepo as any).clearStageEntries(stageId),
+      };
+      refreshRaceEntriesForRaceStart(this.db, compositeRepo, race, stage);
     }
   }
 
@@ -886,7 +928,7 @@ export class GameStateService {
           ORDER BY races.id ASC, stages.stage_number ASC
         `).all(currentDate) as PendingStageRow[];
 
-    return rows.map((row) => ({
+    return rows.map((row: any) => ({
       stageId: row.stage_id,
       raceId: row.race_id,
       raceName: row.race_name,
@@ -932,7 +974,7 @@ function formatDateForUi(isoDate: string): string {
 function parsePeakDates(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
+    return Array.isArray(parsed) ? parsed.filter((entry: any): entry is string => typeof entry === 'string') : [];
   } catch {
     return [];
   }
@@ -1136,7 +1178,7 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
 
     for (const range of ranges) {
       const candidate = randomInteger(range.startDay, range.endDay);
-      if (picked.some((existing) => Math.abs(existing - candidate) < PEAK_MIN_SPACING_DAYS)) {
+      if (picked.some((existing: any) => Math.abs(existing - candidate) < PEAK_MIN_SPACING_DAYS)) {
         valid = false;
         break;
       }
@@ -1144,7 +1186,7 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
     }
 
     if (valid) {
-      return picked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+      return picked.sort((left: any, right: any) => left - right).map(dayNumberToIsoDate);
     }
   }
 
@@ -1156,7 +1198,7 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
     for (let candidate = range.startDay; candidate <= range.endDay; candidate += 1) {
       const minDistance = picked.length === 0
         ? Number.POSITIVE_INFINITY
-        : Math.min(...picked.map((existing) => Math.abs(existing - candidate)));
+        : Math.min(...picked.map((existing: any) => Math.abs(existing - candidate)));
       if (picked.length > 0 && minDistance < PEAK_MIN_SPACING_DAYS) {
         continue;
       }
@@ -1175,12 +1217,12 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
   }
 
   if (picked.length === 3) {
-    return picked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+    return picked.sort((left: any, right: any) => left - right).map(dayNumberToIsoDate);
   }
 
   const seasonStartDay = isoDateToDayNumber(`${season}-01-01`);
   const seasonEndDay = isoDateToDayNumber(`${season}-12-31`);
-  const targetDays = ranges.map((range) => Math.floor((range.startDay + range.endDay) / 2));
+  const targetDays = ranges.map((range: any) => Math.floor((range.startDay + range.endDay) / 2));
   const fallbackPicked: number[] = [];
   for (const targetDay of targetDays) {
     let bestCandidate: number | null = null;
@@ -1188,7 +1230,7 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
     for (let candidate = seasonStartDay; candidate <= seasonEndDay; candidate += 1) {
       const minDistance = fallbackPicked.length === 0
         ? Number.POSITIVE_INFINITY
-        : Math.min(...fallbackPicked.map((existing) => Math.abs(existing - candidate)));
+        : Math.min(...fallbackPicked.map((existing: any) => Math.abs(existing - candidate)));
       if (fallbackPicked.length > 0 && minDistance < PEAK_MIN_SPACING_DAYS) {
         continue;
       }
@@ -1205,7 +1247,7 @@ function generateProgramSeasonPeakDates(season: number, windows: ProgramPeakWind
     fallbackPicked.push(bestCandidate);
   }
 
-  return fallbackPicked.sort((left, right) => left - right).map(dayNumberToIsoDate);
+  return fallbackPicked.sort((left: any, right: any) => left - right).map(dayNumberToIsoDate);
 }
 
 function isWithinDayRange(isoDate: string, range: { startDay: number; endDay: number }): boolean {
@@ -1221,7 +1263,7 @@ function generateSeasonPeakDates(season: number): string[] {
 
   while (peakDays.length < 3 && attempts < 500) {
     const candidate = firstPeakWindowStart + Math.floor(Math.random() * (lastPeakWindowEnd - firstPeakWindowStart + 1));
-    if (peakDays.every((existing) => Math.abs(existing - candidate) >= PEAK_MIN_SPACING_DAYS)) {
+    if (peakDays.every((existing: any) => Math.abs(existing - candidate) >= PEAK_MIN_SPACING_DAYS)) {
       peakDays.push(candidate);
     }
     attempts += 1;
@@ -1233,7 +1275,7 @@ function generateSeasonPeakDates(season: number): string[] {
   }
 
   return peakDays
-    .sort((left, right) => left - right)
+    .sort((left: any, right: any) => left - right)
     .slice(0, 3)
     .map(dayNumberToIsoDate);
 }
@@ -1261,14 +1303,14 @@ function resolveSeasonPeakDatesFromWindows(
     ];
 
   const normalized = [...new Set(peakDates)]
-    .filter((peakDate) => peakDate.startsWith(`${season}-`))
-    .sort((left, right) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
+    .filter((peakDate: any) => peakDate.startsWith(`${season}-`))
+    .sort((left: any, right: any) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
 
   if (normalized.length !== 3) {
     return programWindows ? generateProgramSeasonPeakDates(season, programWindows) : generateSeasonPeakDates(season);
   }
 
-  const hasValidSpacing = normalized.every((peakDate, index) => {
+  const hasValidSpacing = normalized.every((peakDate: any, index: any) => {
     if (index === 0) {
       return true;
     }
@@ -1279,7 +1321,7 @@ function resolveSeasonPeakDatesFromWindows(
 
   const matchesProgramWindows = programRanges == null
     ? true
-    : normalized.every((peakDate, index) => isWithinDayRange(peakDate, programRanges[index]));
+    : normalized.every((peakDate: any, index: any) => isWithinDayRange(peakDate, programRanges[index]));
 
   if (hasValidSpacing && matchesProgramWindows) {
     return normalized;

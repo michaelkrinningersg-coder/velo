@@ -1,5 +1,10 @@
 import Database from 'better-sqlite3';
-import { GameRepository } from '../db/GameRepository';
+import { GameStateRepository } from "../db/repositories/GameStateRepository";
+import { RaceRepository } from "../db/repositories/RaceRepository";
+import { ResultRepository } from "../db/repositories/ResultRepository";
+import { RiderRepository } from "../db/repositories/RiderRepository";
+import { TeamRepository } from "../db/repositories/TeamRepository";
+
 
 export class RiderDraftService {
   private readonly db: Database.Database;
@@ -9,11 +14,11 @@ export class RiderDraftService {
   }
 
   public executeDraft(season: number): void {
-    const repo = new GameRepository(this.db);
+    const resultRepo = new ResultRepository(this.db);
     
     // 1. Teams nach Vorjahres-Standings holen (bestes Team auf Platz 1)
-    const standings = repo.getSeasonStandings(season - 1);
-    const rankedTeamIds = standings.teamStandings.map(t => t.teamId).filter((id): id is number => id !== null);
+    const standings = resultRepo.getSeasonStandings(season - 1);
+    const rankedTeamIds = standings.teamStandings.map((t: any) => t.teamId).filter((id: any): id is number => id !== null);
     
     // Falls keine Teams da sind, abbrechen
     if (rankedTeamIds.length === 0) return;
@@ -61,14 +66,14 @@ export class RiderDraftService {
     if (freeAgentsRaw.length === 0) return;
 
     // Draft Value berechnen und sortieren (beste zuerst)
-    const freeAgents = freeAgentsRaw.map(r => {
+    const freeAgents = freeAgentsRaw.map((r: any) => {
       const age = season - r.birth_year;
       let draftValue = r.overall_rating;
       if (age < 25) {
         draftValue = (r.overall_rating * 0.75) + (r.pot_overall * 0.25);
       }
       return { ...r, draftValue };
-    }).sort((a, b) => b.draftValue - a.draftValue);
+    }).sort((a: any, b: any) => b.draftValue - a.draftValue);
 
     // 4. Team Kadergrößen ermitteln
     const teamCountsMap = new Map<number, number>();

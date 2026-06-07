@@ -471,7 +471,7 @@ export function renderTeamTableCell(rider: Rider, column: TeamTableColumn): stri
     case 'overallRating':
       return `<td><span style="font-weight:bold">${rider.overallRating}</span></td>`;
     case 'potOverall':
-      return `<td>${rider.potential != null ? rider.potential.toFixed(1).replace('.', ',') : '–'}</td>`;
+      return `<td>${rider.potential != null ? rider.potential.toFixed(2) : '-'}</td>`;
     case 'birthYear':
       return `<td>${rider.birthYear}</td>`;
     case 'contractEndSeason':
@@ -514,15 +514,25 @@ export function renderTeamTableCell(rider: Rider, column: TeamTableColumn): stri
     case 'seasonProgram':
       return `<td>${renderRiderProgramButton(rider)}</td>`;
     case 'mentorName':
-      return `<td>${(rider as any).mentorName ? esc((rider as any).mentorName) : '–'}</td>`;
+      if (rider.mentorName) {
+        return `<td><div style="display:flex;align-items:center;justify-content:flex-start;gap:0.4rem;">${renderFlag(rider.mentorCountryCode ?? 'UNK')} <span>${esc(rider.mentorName)} (${rider.mentorAge ?? '?'})</span></div></td>`;
+      }
+      return `<td>–</td>`;
     case 'favoriteRaces':
       return `<td class="team-table-wrap-cell">${renderRacePrefs(rider.favoriteRaces ?? [])}</td>`;
     case 'nonFavoriteRaces':
       return `<td class="team-table-wrap-cell">${renderRacePrefs(rider.nonFavoriteRaces ?? [])}</td>`;
     default: {
-      const skillKey = column.sortKey;
-      if (skillKey && skillKey in rider.skills) {
-        return `<td>${renderSkillValue(rider.skills[skillKey as keyof Rider['skills']], rider.potentials?.[skillKey as keyof Rider['skills']])}</td>`;
+      if (column.id.startsWith('skill-')) {
+        const skillKey = column.sortKey;
+        if (skillKey && skillKey in rider.skills) {
+          return `<td>${renderSkillValueWithDelta(
+            rider.skills[skillKey as keyof Rider['skills']],
+            rider.yearStartSkills?.[skillKey as keyof Rider['skills']],
+            rider.potentials?.[skillKey as keyof Rider['skills']]
+          )}</td>`;
+        }
+        return '<td>-</td>';
       }
       return '<td>–</td>';
     }

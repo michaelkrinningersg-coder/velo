@@ -66,9 +66,32 @@ html, body {
   letter-spacing: .01em;
 }
 
-.skill-delta-positive { color: #16a34a; font-size: 0.7em; margin-left: 4px; }
-.skill-delta-negative { color: #dc2626; font-size: 0.7em; margin-left: 4px; }
-.skill-delta-neutral { color: #9ca3af; font-size: 0.7em; margin-left: 4px; }
+.skill-with-delta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.skill-delta {
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.skill-delta-positive {
+  color: #22c55e;
+}
+
+.skill-delta-negative {
+  color: #ef4444;
+}
+
+.skill-delta-neutral {
+  color: var(--text-500);
+}
+
+.skill-delta-positive { color: #16a34a; }
+.skill-delta-negative { color: #dc2626; }
+.skill-delta-neutral { color: #9ca3af; }
 
 /* ---- Screens ---------------------------------------------- */
 .screen { position: fixed; inset: 0; }
@@ -538,6 +561,28 @@ html, body {
   font-size: .78rem;
 }
 
+.stage-editor-score-popover {
+  min-width: min(28rem, 92vw) !important;
+}
+
+.stage-editor-score-popover-card {
+  padding: .7rem .85rem;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(15, 23, 42, .98) 0%, rgba(2, 6, 23, .98) 100%);
+  box-shadow: var(--shadow);
+}
+
+.stage-editor-score-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  margin-bottom: .55rem;
+  color: var(--text-100);
+  font-size: .78rem;
+}
+
 .stage-editor-score-popover-grid {
   display: grid;
   grid-template-columns: 3rem minmax(0, 1fr) 4.5rem;
@@ -549,6 +594,10 @@ html, body {
 
 .stage-editor-score-popover-grid-climb {
   grid-template-columns: 3rem 4.5rem minmax(0, 3fr) 4.5rem 4.5rem 4.5rem 4.5rem;
+}
+
+.stage-editor-score-popover-grid-climbs {
+  grid-template-columns: 2.2rem minmax(0, 1fr) 3.8rem 3.8rem 3rem;
 }
 
 .stage-editor-score-popover-grid-compact {
@@ -1006,6 +1055,11 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
+}
+
+.rider-stats-table td:first-child {
+  text-align: left;
 }
 
 .rider-stats-table thead th {
@@ -1309,7 +1363,7 @@ html, body {
 }
 
 .team-table-col-skill {
-  width: 8.4rem;
+  width: 5.6rem;
 }
 
 .team-table-wrap-cell {
@@ -3986,12 +4040,57 @@ html, body {
   min-height: 1.45rem;
   padding: .15rem .55rem;
   border-radius: var(--radius-sm);
-  border: 1px solid hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness), var(--stage-editor-score-border-alpha));
-  background: hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness), var(--stage-editor-score-bg-alpha));
+  border: 1px solid hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness, 54%), var(--stage-editor-score-border-alpha));
+  background: hsla(var(--stage-editor-score-hue), 78%, var(--stage-editor-score-lightness, 54%), var(--stage-editor-score-bg-alpha));
   color: #f8fafc;
   font-size: .78rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.stage-editor-climb-category-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: .18rem .5rem;
+  border-radius: var(--radius-sm);
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .02em;
+  border: 1px solid transparent;
+  background: rgba(100, 116, 139, .18);
+  color: #94a3b8;
+}
+
+.stage-editor-climb-category-badge.is-hc {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, .18);
+  color: #facc15;
+}
+
+.stage-editor-climb-category-badge.is-cat-1 {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, .18);
+  color: #f97316;
+}
+
+.stage-editor-climb-category-badge.is-cat-2 {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, .18);
+  color: #fca5a5;
+}
+
+.stage-editor-climb-category-badge.is-cat-3 {
+  border-color: #991b1b;
+  background: rgba(153, 27, 27, .18);
+  color: #fca5a5;
+}
+
+.stage-editor-climb-category-badge.is-cat-4 {
+  border-color: #7f1d1d;
+  background: rgba(127, 29, 29, .15);
+  color: #fca5a5;
 }
 
 .stage-editor-inline-button {
@@ -4596,8 +4695,8 @@ html, body {
 
 .rider-stats-header-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1rem;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.9rem;
   margin-bottom: 1rem;
 }
 
@@ -4643,4 +4742,22 @@ html, body {
   height: 1.15rem;
   font-size: 0.65rem;
   border-width: 1px;
+}
+
+
+.rider-stats-icon-pill-fixed-width {
+  display: flex;
+  justify-content: space-between;
+  width: 5.5rem;
+  box-sizing: border-box;
+}
+
+.rider-stats-icon-pill-fixed-width svg, .rider-stats-icon-pill-fixed-width .rider-stats-breakaway-icon {
+  flex-shrink: 0;
+}
+
+.rider-stats-icon-pill-fixed-width .rider-stats-icon-pill-value {
+  flex-grow: 1;
+  text-align: right;
+  display: inline-block;
 }

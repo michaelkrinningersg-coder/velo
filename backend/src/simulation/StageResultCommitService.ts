@@ -1,5 +1,10 @@
 import Database from 'better-sqlite3';
-import { GameRepository } from '../db/GameRepository';
+import { GameStateRepository } from "../db/repositories/GameStateRepository";
+import { RaceRepository } from "../db/repositories/RaceRepository";
+import { ResultRepository } from "../db/repositories/ResultRepository";
+import { RiderRepository } from "../db/repositories/RiderRepository";
+import { TeamRepository } from "../db/repositories/TeamRepository";
+
 import { GameStateService } from '../game/GameStateService';
 import type {
   PrecalculatedRaceIncident,
@@ -92,8 +97,8 @@ function parseRankedValues(serialized: string | undefined): number[] {
   if (!serialized) return [];
   return serialized
     .split('|')
-    .map((value) => Number.parseInt(value.trim(), 10))
-    .filter((value) => Number.isFinite(value));
+    .map((value: any) => Number.parseInt(value.trim(), 10))
+    .filter((value: any) => Number.isFinite(value));
 }
 
 function randomInteger(min: number, max: number): number {
@@ -101,7 +106,7 @@ function randomInteger(min: number, max: number): number {
 }
 
 function addDaysIso(isoDate: string, days: number): string {
-  const [year, month, day] = isoDate.split('-').map((value) => Number(value));
+  const [year, month, day] = isoDate.split('-').map((value: any) => Number(value));
   const date = new Date(Date.UTC(year, Math.max(0, month - 1), day));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
@@ -112,7 +117,7 @@ function rankPerformanceEntries(entries: PerformanceEntry[], profile: Stage['pro
 }
 
 function resolveTimeLimitSeconds(stage: Stage, performance: PerformanceEntry[]): number | null {
-  return resolveStageTimeLimitSeconds(stage.profile, performance.map((entry) => entry.stageTimeSeconds));
+  return resolveStageTimeLimitSeconds(stage.profile, performance.map((entry: any) => entry.stageTimeSeconds));
 }
 
 function splitOtlPerformance(stage: Stage, performance: PerformanceEntry[]): { classifiedPerformance: PerformanceEntry[]; otlEntries: OtlEntry[] } {
@@ -140,9 +145,9 @@ function splitOtlPerformance(stage: Stage, performance: PerformanceEntry[]): { c
 }
 
 function filterMarkerClassificationsForClassifiedRiders(classifications: StageMarkerClassification[], classifiedRiderIds: Set<number>): StageMarkerClassification[] {
-  return classifications.map((classification) => ({
+  return classifications.map((classification: any) => ({
     ...classification,
-    entries: classification.entries.filter((entry) => classifiedRiderIds.has(entry.riderId)),
+    entries: classification.entries.filter((entry: any) => classifiedRiderIds.has(entry.riderId)),
   }));
 }
 
@@ -151,7 +156,7 @@ function normalizeRoadStageTimeGroups(entries: PerformanceEntry[], profile: Stag
     return;
   }
 
-  const sortedByTime = [...entries].sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+  const sortedByTime = [...entries].sort((left: any, right: any) => left.stageTimeSeconds - right.stageTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
   let groupTime: number | null = null;
   let previousTime: number | null = null;
 
@@ -167,10 +172,10 @@ function normalizeRoadStageTimeGroups(entries: PerformanceEntry[], profile: Stag
 
 function normalizeTimeRows<T extends { timeSeconds: number; riderId: number }>(rows: T[], applyTimeTieGroups: boolean): T[] {
   if (!applyTimeTieGroups) {
-    return [...rows].sort((left, right) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
+    return [...rows].sort((left: any, right: any) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
   }
 
-  const sortedByTime = [...rows].sort((left, right) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
+  const sortedByTime = [...rows].sort((left: any, right: any) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
   const normalized: T[] = [];
   let groupTime: number | null = null;
   let previousTime: number | null = null;
@@ -183,15 +188,15 @@ function normalizeTimeRows<T extends { timeSeconds: number; riderId: number }>(r
     previousTime = row.timeSeconds;
   }
 
-  return normalized.sort((left, right) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
+  return normalized.sort((left: any, right: any) => left.timeSeconds - right.timeSeconds || left.riderId - right.riderId);
 }
 
 function normalizeMarkerEntries(entries: StageMarkerClassification['entries'], applyTimeTieGroups: boolean): StageMarkerClassification['entries'] {
   if (!applyTimeTieGroups) {
-    return [...entries].sort((left, right) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+    return [...entries].sort((left: any, right: any) => left.rank - right.rank || left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
   }
 
-  const sortedByTime = [...entries].sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+  const sortedByTime = [...entries].sort((left: any, right: any) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
   const leaderTime = sortedByTime[0]?.crossingTimeSeconds ?? 0;
   const ranked: StageMarkerClassification['entries'] = [];
   let group: StageMarkerClassification['entries'] = [];
@@ -200,7 +205,7 @@ function normalizeMarkerEntries(entries: StageMarkerClassification['entries'], a
 
   const flushGroup = (): void => {
     const gapSeconds = Math.max(0, groupLeaderTime - leaderTime);
-    const orderedGroup = group.sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+    const orderedGroup = group.sort((left: any, right: any) => right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
     for (const entry of orderedGroup) {
       ranked.push({
         ...entry,
@@ -238,7 +243,7 @@ function normalizeMarkerEntries(entries: StageMarkerClassification['entries'], a
 }
 
 function normalizeMarkerClassifications(classifications: StageMarkerClassification[], applyTimeTieGroups: boolean): StageMarkerClassification[] {
-  return classifications.map((classification) => ({
+  return classifications.map((classification: any) => ({
     ...classification,
     entries: normalizeMarkerEntries(classification.entries, applyTimeTieGroups),
   }));
@@ -249,11 +254,38 @@ function usesMountainStageSprintFinishPoints(profile: Stage['profile']): boolean
 }
 
 export class StageResultCommitService {
-  private readonly repo: GameRepository;
+  private readonly repo: any;
 
   constructor(db: Database.Database) {
     this.db = db;
-    this.repo = new GameRepository(db);
+    const raceRepo = new RaceRepository(db);
+    const teamRepo = new TeamRepository(db);
+    const gsRepo = new GameStateRepository(db);
+    const riderRepo = new RiderRepository(db);
+    this.repo = {
+      // RaceRepository methods
+      getStageById: (id: number) => raceRepo.getStageById(id),
+      getRaceById: (id: number) => raceRepo.getRaceById(id),
+      getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
+      getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),
+      getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
+      // TeamRepository methods
+      getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
+      // RiderRepository methods
+      getRiders: (teamId?: number) => (riderRepo as any).getRiders(teamId),
+      // GameStateRepository methods
+      getCurrentSeason: () => gsRepo.getCurrentSeason(),
+      getCurrentDate: () => gsRepo.getCurrentDate(),
+      getFullyClassifiedStageRaceRiderIds: (raceId: number, upTo: number) => gsRepo.getFullyClassifiedStageRaceRiderIds(raceId, upTo),
+      applyIncidentRaceState: (raceId: number, incidents: any[]) => gsRepo.applyIncidentRaceState(raceId, incidents),
+      markStageEntriesFinished: (stageId: number, riderIds: number[]) => gsRepo.markStageEntriesFinished(stageId, riderIds),
+      updateStageEntryStatus: (stageId: number, riderId: number, status: any, reason: any) => gsRepo.updateStageEntryStatus(stageId, riderId, status, reason),
+      syncSeasonPointEventsForSeason: (season?: number) => gsRepo.syncSeasonPointEventsForSeason(season),
+      ensureStageEntries: (stage: any) => gsRepo.ensureStageEntries(stage),
+      prepareStageRaceFatigue: (raceId: number, stageNumber: number, riderIds: number[]) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
+      attachStageRaceFatigue: (raceId: number, riders: any[], stageNumber: number) => (raceRepo as any).attachStageRaceFatigue(raceId, riders, stageNumber),
+      clearStageEntries: (stageId: number) => (gsRepo as any).clearStageEntries(stageId),
+    };
   }
 
   private readonly db: Database.Database;
@@ -265,10 +297,10 @@ export class StageResultCommitService {
     incidents: PrecalculatedRaceIncident[] = [],
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
-    const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
+    const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
     const sanitizedEntries = [...entries]
-      .filter((entry) => Number.isFinite(entry.riderId))
-      .map((entry) => ({
+      .filter((entry: any) => Number.isFinite(entry.riderId))
+      .map((entry: any) => ({
         riderId: entry.riderId,
         finishStatus: entry.finishStatus,
         isBreakaway: entry.isBreakaway === true,
@@ -278,7 +310,7 @@ export class StageResultCommitService {
           : null,
         photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
       }))
-      .sort((left, right) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
+      .sort((left: any, right: any) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
     if (sanitizedEntries.length !== riders.length) {
       throw new Error('Die Live-Simulation muss genau einen Zielstatus für jeden Starter übergeben.');
@@ -295,10 +327,10 @@ export class StageResultCommitService {
       seenRiderIds.add(entry.riderId);
     }
 
-    const finishedEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'finished');
-    const dnfEntries = sanitizedEntries.filter((entry) => entry.finishStatus === 'dnf');
+    const finishedEntries = sanitizedEntries.filter((entry: any) => entry.finishStatus === 'finished');
+    const dnfEntries = sanitizedEntries.filter((entry: any) => entry.finishStatus === 'dnf');
 
-    const performance = finishedEntries.map((entry) => {
+    const performance = finishedEntries.map((entry: any) => {
       const rider = rosterById.get(entry.riderId);
       if (!rider) {
         throw new Error(`Live-Ergebnis für unbekannten Fahrer ${entry.riderId} erhalten.`);
@@ -330,7 +362,7 @@ export class StageResultCommitService {
     }
 
     const { classifiedPerformance, otlEntries } = splitOtlPerformance(stage, performance);
-    const classifiedRiderIds = new Set(classifiedPerformance.map((entry) => entry.rider.id));
+    const classifiedRiderIds = new Set(classifiedPerformance.map((entry: any) => entry.rider.id));
     const normalizedMarkerClassifications = filterMarkerClassificationsForClassifiedRiders(
       normalizeMarkerClassifications(markerClassifications, !isTimeTrialProfile(stage.profile)),
       classifiedRiderIds,
@@ -372,8 +404,8 @@ export class StageResultCommitService {
       throw new Error('Für dieses Rennen konnten keine Fahrer für die Startliste bestimmt werden.');
     }
 
-    const teamsById = new Map(this.repo.getTeams().map((team) => [team.id, team]));
-    const missingTeam = riders.find((rider) => rider.activeTeamId == null || !teamsById.has(rider.activeTeamId));
+    const teamsById = new Map<number, Team>(this.repo.getTeams().map((team: any) => [team.id, team]));
+    const missingTeam = riders.find((rider: any) => rider.activeTeamId == null || !teamsById.has(rider.activeTeamId));
     if (missingTeam) {
       throw new Error(`Team für Fahrer ${missingTeam.firstName} ${missingTeam.lastName} konnte nicht aufgelöst werden.`);
     }
@@ -403,13 +435,13 @@ export class StageResultCommitService {
       : [];
     const sorted = rankPerformanceEntries(performance, stage.profile);
 
-    finishPointValues.forEach((points, index) => {
+    finishPointValues.forEach((points: any, index: any) => {
       const entry = sorted[index];
       if (!entry) return;
       entry.points += points;
     });
 
-    finishBonusValues.forEach((bonusSeconds, index) => {
+    finishBonusValues.forEach((bonusSeconds: any, index: any) => {
       const entry = sorted[index];
       if (!entry) return;
       entry.gcBonusSeconds += bonusSeconds;
@@ -427,9 +459,9 @@ export class StageResultCommitService {
     }
 
     if (!race.isStageRace || !race.category?.bonusSystem) {
-      return markerClassifications.map((classification) => ({
+      return markerClassifications.map((classification: any) => ({
         ...classification,
-        entries: classification.entries.map((entry) => ({
+        entries: classification.entries.map((entry: any) => ({
           ...entry,
           pointsAwarded: entry.pointsAwarded ?? 0,
         })),
@@ -446,10 +478,10 @@ export class StageResultCommitService {
       '4': parseRankedValues(race.category.bonusSystem.pointsMountainCat4),
     } satisfies Record<Exclude<StageMarkerCategory, 'Sprint'>, number[]>;
 
-    const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
+    const performanceByRiderId = new Map(performance.map((entry: any) => [entry.rider.id, entry]));
 
-    return markerClassifications.map((classification) => {
-      const awardedEntries = classification.entries.map((markerEntry, index) => {
+    return markerClassifications.map((classification: any) => {
+      const awardedEntries = classification.entries.map((markerEntry: any, index: any) => {
         let pointsAwarded = 0;
         const performanceEntry = performanceByRiderId.get(markerEntry.riderId) ?? null;
 
@@ -504,25 +536,25 @@ export class StageResultCommitService {
       : null;
     const classificationPerformance = classificationEligibility == null
       ? performance
-      : performance.filter((entry) => classificationEligibility.has(entry.rider.id));
-    const ridersById = new Map(performance.map((entry) => [entry.rider.id, entry.rider]));
+      : performance.filter((entry: any) => classificationEligibility.has(entry.rider.id));
+    const ridersById = new Map(performance.map((entry: any) => [entry.rider.id, entry.rider]));
 
     const stageRows = stage.profile === 'TTT'
       ? [...new Map(
-          rankedPerformance.map((entry) => [entry.team.id, {
+          rankedPerformance.map((entry: any) => [entry.team.id, {
             teamId: entry.team.id,
             timeSeconds: entry.stageTimeSeconds,
           }]),
         ).values()]
-          .sort((left, right) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
-          .map((entry, index) => ({
+          .sort((left: any, right: any) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
+          .map((entry: any, index: any) => ({
             rank: index + 1,
             riderId: null,
             teamId: entry.teamId,
             timeSeconds: entry.timeSeconds,
             points: null,
           }))
-      : rankedPerformance.map((entry, index) => ({
+      : rankedPerformance.map((entry: any, index: any) => ({
           rank: index + 1,
           riderId: entry.rider.id,
           teamId: entry.team.id,
@@ -532,43 +564,43 @@ export class StageResultCommitService {
         }));
 
     const gcRows = normalizeTimeRows([...classificationPerformance]
-      .map((entry) => ({
+      .map((entry: any) => ({
         riderId: entry.rider.id,
         teamId: entry.team.id,
         timeSeconds: (previousGc.get(entry.rider.id) ?? 0) + entry.stageTimeSeconds - entry.gcBonusSeconds,
       })), !isTimeTrialProfile(stage.profile))
-      .map((entry, index) => ({ ...entry, rank: index + 1, points: null as number | null }));
+      .map((entry: any, index: any) => ({ ...entry, rank: index + 1, points: null as number | null }));
 
     const pointsRows = race.isStageRace
       ? [...classificationPerformance]
-          .map((entry) => ({
+          .map((entry: any) => ({
             riderId: entry.rider.id,
             teamId: entry.team.id,
             points: (previousPoints.get(entry.rider.id) ?? 0) + entry.points,
           }))
-          .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
-          .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
+          .sort((left: any, right: any) => right.points - left.points || left.riderId - right.riderId)
+          .map((entry: any, index: any) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
       : [];
 
     const mountainRows = race.isStageRace
       ? [...classificationPerformance]
-          .map((entry) => ({
+          .map((entry: any) => ({
             riderId: entry.rider.id,
             teamId: entry.team.id,
             points: (previousMountain.get(entry.rider.id) ?? 0) + entry.mountainPoints,
           }))
-          .sort((left, right) => right.points - left.points || left.riderId - right.riderId)
-          .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
+          .sort((left: any, right: any) => right.points - left.points || left.riderId - right.riderId)
+          .map((entry: any, index: any) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
       : [];
 
     const currentSeason = this.repo.getCurrentSeason();
     const youthRows = race.isStageRace
       ? gcRows
-          .filter((entry) => {
+          .filter((entry: any) => {
             const rider = ridersById.get(entry.riderId);
             return rider != null && currentSeason - rider.birthYear <= 25;
           })
-          .map((entry, index) => ({
+          .map((entry: any, index: any) => ({
             rank: index + 1,
             riderId: entry.riderId,
             teamId: entry.teamId,
@@ -577,24 +609,24 @@ export class StageResultCommitService {
           }))
       : [];
 
-    const teamIds = [...new Set(rankedPerformance.map((entry) => entry.team.id))];
+    const teamIds = [...new Set(rankedPerformance.map((entry: any) => entry.team.id))];
     const stageTeamTimes = new Map<number, number>();
     for (const teamId of teamIds) {
       const teamEntries = rankedPerformance
-        .filter((entry) => entry.team.id === teamId)
-        .sort((left, right) => left.stageTimeSeconds - right.stageTimeSeconds)
+        .filter((entry: any) => entry.team.id === teamId)
+        .sort((left: any, right: any) => left.stageTimeSeconds - right.stageTimeSeconds)
         .slice(0, 3);
       if (teamEntries.length < 3) continue;
-      stageTeamTimes.set(teamId, teamEntries.reduce((sum, entry) => sum + entry.stageTimeSeconds, 0));
+      stageTeamTimes.set(teamId, teamEntries.reduce((sum: any, entry: any) => sum + entry.stageTimeSeconds, 0));
     }
 
     const teamRows = [...stageTeamTimes.entries()]
-      .map(([teamId, stageTime]) => ({
+      .map(([teamId, stageTime]: any) => ({
         teamId,
         timeSeconds: (previousTeam.get(teamId) ?? 0) + stageTime,
       }))
-      .sort((left, right) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
-      .map((entry, index) => ({
+      .sort((left: any, right: any) => left.timeSeconds - right.timeSeconds || left.teamId - right.teamId)
+      .map((entry: any, index: any) => ({
         rank: index + 1,
         teamId: entry.teamId,
         timeSeconds: entry.timeSeconds,
@@ -612,9 +644,9 @@ export class StageResultCommitService {
         rider_id, team_id, rank, crossing_time_seconds, gap_seconds, points_awarded, photo_finish_score
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const performanceByRiderId = new Map(performance.map((entry) => [entry.rider.id, entry]));
-    const completedRiderIds = performance.map((entry) => entry.rider.id);
-    const severeCrashRiderIds = new Set(incidents.filter((incident) => incident.type === 'crash' && incident.severity === 'severe').map((incident) => incident.riderId));
+    const performanceByRiderId = new Map(performance.map((entry: any) => [entry.rider.id, entry]));
+    const completedRiderIds = performance.map((entry: any) => entry.rider.id);
+    const severeCrashRiderIds = new Set(incidents.filter((incident: any) => incident.type === 'crash' && incident.severity === 'severe').map((incident: any) => incident.riderId));
 
     this.db.transaction(() => {
       this.repo.applyIncidentRaceState(race.id, incidents);
@@ -681,6 +713,7 @@ export class StageResultCommitService {
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
 
     this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
+    this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);
 
     return {
       raceId: race.id,
@@ -764,7 +797,7 @@ export class StageResultCommitService {
   }
 
   private loadPreviousRiderMetricMap(previousStageId: number | null, resultTypeId: number, column: 'time_seconds' | 'points'): Map<number, number> {
-    if (previousStageId == null) return new Map();
+    if (previousStageId == null) return new Map<number, any>();
     const rows = this.db.prepare(`
       SELECT rider_id, team_id, time_seconds, points
       FROM results
@@ -781,7 +814,7 @@ export class StageResultCommitService {
   }
 
   private loadPreviousTeamMetricMap(previousStageId: number | null, resultTypeId: number, column: 'time_seconds' | 'points'): Map<number, number> {
-    if (previousStageId == null) return new Map();
+    if (previousStageId == null) return new Map<number, any>();
     const rows = this.db.prepare(`
       SELECT team_id, time_seconds, points
       FROM results
@@ -820,6 +853,83 @@ export class StageResultCommitService {
       throw new Error(
         `Ergebnis konnte nicht gespeichert werden (type=${resultTypeId}, stage=${stageId}, rank=${row.rank}, rider=${row.riderId ?? 'null'}, team=${row.teamId ?? 'null'}): ${(error as Error).message}`,
       );
+    }
+  }
+
+  private evaluateRacePreferences(
+    race: Race,
+    stage: Stage,
+    stageRows: any[],
+    gcRows: any[],
+    dnfEntries: Array<{ riderId: number; statusReason: string | null }>,
+    ridersById: Map<number, Rider>
+  ): void {
+    const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
+    const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
+    const nameLow = race.name.toLowerCase();
+    const isMonument = nameLow.includes('monument') || nameLow.includes('san remo') || nameLow.includes('sanremo') || nameLow.includes('roubaix') || nameLow.includes('vlaanderen') || nameLow.includes('flandern') || nameLow.includes('liège') || nameLow.includes('liege') || nameLow.includes('lombardia');
+
+    const winRiderIds = new Set<number>();
+    const dnfRiderIds = new Set<number>();
+
+    if (isFinalStage) {
+      const targetRows = race.isStageRace ? gcRows : stageRows;
+      for (const row of targetRows) {
+        if (row.rank === 1 && row.riderId) {
+          winRiderIds.add(row.riderId);
+        }
+        if ((isCat1Or2 || isMonument) && row.rank <= 3 && row.riderId) {
+          winRiderIds.add(row.riderId);
+        }
+      }
+    }
+
+    for (const entry of dnfEntries) {
+      if (entry.statusReason === 'crash' && entry.riderId) {
+        dnfRiderIds.add(entry.riderId);
+      }
+    }
+
+    const ridersToUpdate = new Set([...winRiderIds, ...dnfRiderIds]);
+    if (ridersToUpdate.size === 0) return;
+
+    for (const riderId of ridersToUpdate) {
+      const rider = ridersById.get(riderId);
+      if (!rider) continue;
+      
+      let favs = [...(rider.favoriteRaces ?? [])];
+      let nonFavs = [...(rider.nonFavoriteRaces ?? [])];
+      let changed = false;
+
+      if (dnfRiderIds.has(riderId)) {
+        if (favs.includes(race.id)) {
+          favs = favs.filter(id => id !== race.id);
+          changed = true;
+        }
+        if (!nonFavs.includes(race.id)) {
+          nonFavs.push(race.id);
+          changed = true;
+        }
+      } else if (winRiderIds.has(riderId)) {
+        if (nonFavs.includes(race.id)) {
+          nonFavs = nonFavs.filter(id => id !== race.id);
+          changed = true;
+        }
+        if (!favs.includes(race.id)) {
+          favs.push(race.id);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        rider.favoriteRaces = favs;
+        rider.nonFavoriteRaces = nonFavs;
+        this.db.prepare(`
+          UPDATE riders
+          SET favorite_races = ?, non_favorite_races = ?
+          WHERE id = ?
+        `).run(favs.join(','), nonFavs.join(','), riderId);
+      }
     }
   }
 
@@ -865,7 +975,7 @@ export class StageResultCommitService {
 
     if (breakthroughRiderIds.size === 0) return;
 
-    const validU23RiderIds = Array.from(breakthroughRiderIds).filter((riderId) => {
+    const validU23RiderIds = Array.from(breakthroughRiderIds).filter((riderId: any) => {
       const rider = ridersById.get(riderId);
       return rider && (currentSeason - rider.birthYear) <= 22;
     });
@@ -888,7 +998,7 @@ export class StageResultCommitService {
 
       if (!riderPotentials) continue;
 
-      const validColumns = potColumns.filter(col => riderPotentials[col] < 85);
+      const validColumns = potColumns.filter((col: any) => riderPotentials[col] < 85);
       if (validColumns.length === 0) continue;
 
       const selectedColumn = validColumns[Math.floor(Math.random() * validColumns.length)];

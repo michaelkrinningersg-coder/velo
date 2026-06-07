@@ -652,8 +652,8 @@ export function getSkillColor(value: number): string {
 }
 
 export function renderSkillValue(value: number, potential?: number): string {
-  const titleAttr = potential != null ? ` title="Potential: ${potential.toFixed(2).replace('.', ',')}"` : '';
-  return `<span class="skill-value" style="color:${getSkillColor(value)}"${titleAttr}>${value.toFixed(2).replace('.', ',')}</span>`;
+  const titleAttr = potential != null ? ` title="Potential: ${potential.toFixed(2)}"` : '';
+  return `<span class="skill-value" style="color:${getSkillColor(value)}"${titleAttr}>${value.toFixed(2)}</span>`;
 }
 
 export function renderSkillValueWithDelta(value: number, yearStart?: number, potential?: number): string {
@@ -663,10 +663,12 @@ export function renderSkillValueWithDelta(value: number, yearStart?: number, pot
   const delta = Math.round((value - yearStart) * 100) / 100;
   const deltaClass = delta > 0 ? 'skill-delta-positive' : delta < 0 ? 'skill-delta-negative' : 'skill-delta-neutral';
   const sign = delta > 0 ? '+' : '';
-  const deltaText = `<span class="skill-delta ${deltaClass}">${sign}${delta.toFixed(2).replace('.', ',')}</span>`;
+  const deltaText = `<span class="skill-delta ${deltaClass}">${sign}${delta.toFixed(2)}</span>`;
   return `
-    <span class="skill-value" style="color:${getSkillColor(value)}" title="Potential: ${potential != null ? potential.toFixed(2).replace('.', ',') : ''}">${value.toFixed(2).replace('.', ',')}</span>
-    ${deltaText}
+    <div class="skill-with-delta">
+      <span class="skill-value" style="color:${getSkillColor(value)}" title="Potential: ${potential != null ? potential.toFixed(2) : ''}">${value.toFixed(2)}</span>
+      ${deltaText}
+    </div>
   `;
 }
 
@@ -745,8 +747,8 @@ export function renderRiderAvailabilityMarker(rider: Rider): string {
   const label = rider.healthStatus === 'injured' ? 'Verletzung' : 'Krankheit';
   const remainingDays = rider.unavailableDaysRemaining ?? 0;
   const untilText = rider.unavailableUntil ? ` bis ${formatDate(rider.unavailableUntil)}` : '';
-  const title = `${label}: noch ${remainingDays} Tag${remainingDays === 1 ? '' : 'e'}${untilText}`;
-  return `<span class="rider-availability-marker" title="${esc(title)}" aria-label="${esc(title)}">✂</span>`;
+  const titleText = `${label}: noch ${remainingDays} Tag${remainingDays === 1 ? '' : 'e'}${untilText}`;
+  return `<span class="rider-availability-marker" title="${esc(titleText)}" aria-label="${esc(titleText)}"><svg class="rider-stats-icon" viewBox="0 0 24 24" style="fill:#ef4444; width:1em; height:1em; vertical-align:middle;"><path d="M12 21L2 3h20L12 21z"/></svg></span>`;
 }
 
 export function getRiderRoleName(rider: Rider): string {

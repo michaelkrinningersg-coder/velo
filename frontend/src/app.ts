@@ -48,6 +48,7 @@ import {
 } from './views/injuries';
 import {
   loadSeasonStandings,
+  initSeasonStandingsListeners,
 } from './views/seasonStandings';
 import {
   initializeStageEditorForm,
@@ -98,6 +99,7 @@ function initAppListeners(): void {
       if (view === 'draft') void loadDraftHistory(state.draftSelectedSeason || state.currentSave?.currentSeason || 2026);
       if (view === 'injuries') void loadInjuries();
       if (view === 'season-standings') void loadSeasonStandings(true);
+      if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
     });
   });
 
@@ -145,6 +147,7 @@ function initAppListeners(): void {
   initResultsListeners();
   initStageEditorListeners();
   initRiderStatsListeners();
+  initSeasonStandingsListeners();
 }
 
 // ============================================================

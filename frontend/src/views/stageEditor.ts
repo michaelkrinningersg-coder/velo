@@ -939,17 +939,38 @@ export function renderStageEditorScoreBadge(score: number, minScore: number, max
   const stoppedValue = Math.max(minScore, Math.min(maxScore, score));
   const ratio = (stoppedValue - minScore) / Math.max(1, maxScore - minScore);
   const hue = Math.round(124 - (ratio * 118));
+  const lightness = 54;
   const bgAlpha = 0.14 + (ratio * 0.12);
   const borderAlpha = 0.26 + (ratio * 0.18);
-  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-bg-alpha:${bgAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
+  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${bgAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
+  return `<span class="stage-editor-score-badge" style="${style}">${Math.round(score)}</span>`;
+}
+
+export function renderClimbScoreBadge(score: number): string {
+  // Non-linear scale: 0-100 strong gradient, 100-250 medium, 250+ slow, dark red >= 300
+  let ratio: number;
+  if (score <= 100) {
+    ratio = (score / 100) * 0.45; // 0..0.45
+  } else if (score <= 250) {
+    ratio = 0.45 + ((score - 100) / 150) * 0.35; // 0.45..0.80
+  } else {
+    ratio = 0.80 + (Math.min(score - 250, 100) / 100) * 0.20; // 0.80..1.0
+  }
+  // hue: 122 (green) -> 50 (yellow) -> 28 (orange) -> 0 (red/dark-red)
+  const hue = Math.round(122 - (ratio * 122));
+  // lightness: green is 40%, dark red at 300+ is 18%
+  const lightness = Math.round(40 - (ratio * 22));
+  const bgAlpha = 0.18 + (ratio * 0.30);
+  const borderAlpha = 0.30 + (ratio * 0.40);
+  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${bgAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
   return `<span class="stage-editor-score-badge" style="${style}">${Math.round(score)}</span>`;
 }
 
 export function renderStageEditorCategoryBadge(category: StageEditorClimbOverviewRow['category']): string {
-  if (category == null) return '';
-  const isHc = category === 'HC';
-  const displayValue = isHc ? 'HC' : String(category);
-  return `<span class="badge ${isHc ? 'badge-gc' : 'badge-done'}" style="margin-left: 0.1rem; vertical-align: middle;">${displayValue}</span>`;
+  if (category == null) return '<span class="stage-editor-category-empty">—</span>';
+  const catClass = category === 'HC' ? 'is-hc' : `is-cat-${category}`;
+  const displayValue = category === 'HC' ? 'HC' : String(category);
+  return `<span class="stage-editor-climb-category-badge ${catClass}">${displayValue}</span>`;
 }
 
 export function renderStageEditorProfileOpenButton(content: string, stageId: number, title: string, climbId?: string): string {
@@ -958,64 +979,97 @@ export function renderStageEditorProfileOpenButton(content: string, stageId: num
 }
 
 export function renderStageEditorStageScorePopover(row: any): string {
+  const fmtKm = (v: number | undefined) => v != null ? `${v.toFixed(1).replace('.', ',')} km` : '—';
+  const fmtM = (v: number | undefined) => v != null ? `${Math.round(v).toLocaleString('de-DE')} m` : '—';
+  const score = row.profileScore ?? row.score;
+
+  // Collect climbs for this stage from global state
+  const stageClimbs = [...(state.stageEditorClimbRows ?? [])]
+    .filter((c) => c.stageId === row.stageId)
+    .sort((a, b) => a.climbIndex - b.climbIndex);
+
+  const climbsHtml = stageClimbs.length === 0
+    ? `<div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact"><span class="text-muted" style="grid-column:1/-1">Keine Bergwertungen</span></div>`
+    : `
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-climbs stage-editor-score-popover-grid-head">
+        <span>Nr.</span>
+        <span>Name</span>
+        <span class="text-right">Score</span>
+        <span class="text-right">Länge</span>
+        <span class="text-right">Ø %</span>
+      </div>
+      ${stageClimbs.map((climb) => `
+        <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-climbs">
+          <span class="text-muted">${climb.climbIndex}</span>
+          <span>${esc(climb.name)}</span>
+          <span class="text-right">${renderClimbScoreBadge(climb.climbScore)}</span>
+          <strong class="text-right">${fmtKm(climb.distanceKm)}</strong>
+          <strong class="text-right">${climb.avgGradient.toFixed(1).replace('.', ',')} %</strong>
+        </div>`).join('')}`;
+
   return `
     <div class="stage-editor-score-popover-card">
       <div class="stage-editor-score-popover-head">
-        <strong>Stage Score Details</strong>
+        <strong>Stage Score</strong>
+        ${renderStageEditorScoreBadge(score, 0, 100)}
       </div>
-      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-head">
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact stage-editor-score-popover-grid-head stage-editor-score-popover-grid-head-compact">
         <span>Kriterium</span>
-        <span>Modifikator</span>
-        <span>Punkte</span>
+        <span class="text-right">Wert</span>
       </div>
-      <div class="stage-editor-score-popover-grid">
-        <span>Länge</span>
-        <span class="text-right">x ${row.lengthFactor.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.lengthScorePoints)}</strong>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>Distanz</span>
+        <strong class="text-right">${fmtKm(row.distanceKm)}</strong>
       </div>
-      <div class="stage-editor-score-popover-grid">
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
         <span>Höhenmeter</span>
-        <span class="text-right">x ${row.elevationFactor.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.elevationScorePoints)}</strong>
+        <strong class="text-right">${fmtM(row.elevationGainMeters)}</strong>
       </div>
-      <div class="stage-editor-score-popover-grid">
-        <span>Steilheit</span>
-        <span class="text-right">x ${row.gradientFactor.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.gradientScorePoints)}</strong>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>Profil</span>
+        <strong class="text-right">${row.profile ?? '—'}</strong>
       </div>
-      <div class="stage-editor-score-popover-grid">
-        <span>Technik</span>
-        <span class="text-right">x ${row.techFactor.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.techScorePoints)}</strong>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>Sprints</span>
+        <strong class="text-right">${row.sprintCount ?? '—'}</strong>
       </div>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact" style="margin-bottom:0.5rem">
+        <span>Anstiege</span>
+        <strong class="text-right">${row.climbCount ?? '—'}</strong>
+      </div>
+      ${climbsHtml}
     </div>`;
 }
 
 export function renderStageEditorClimbScorePopover(row: any): string {
+  const fmtKm = (v: number | undefined) => v != null ? `${v.toFixed(1).replace('.', ',')} km` : '—';
+  const fmtM = (v: number | undefined) => v != null ? `${Math.round(v).toLocaleString('de-DE')} m` : '—';
+  const fmtPct = (v: number | undefined) => v != null ? `${v.toFixed(1).replace('.', ',')} %` : '—';
   return `
     <div class="stage-editor-score-popover-card">
       <div class="stage-editor-score-popover-head">
-        <strong>Climb Score Details</strong>
+        <strong>${row.name ?? 'Climb Score'}</strong>
+        ${renderClimbScoreBadge(row.climbScore ?? 0)}
       </div>
-      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-head">
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact stage-editor-score-popover-grid-head stage-editor-score-popover-grid-head-compact">
         <span>Kriterium</span>
-        <span>Faktor</span>
-        <span>Punkte</span>
+        <span class="text-right">Wert</span>
       </div>
-      <div class="stage-editor-score-popover-grid">
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
         <span>Länge</span>
-        <span class="text-right">x ${row.distanceKm.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.lengthScorePoints)}</strong>
+        <strong class="text-right">${fmtKm(row.distanceKm)}</strong>
       </div>
-      <div class="stage-editor-score-popover-grid">
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
         <span>Höhenmeter</span>
-        <span class="text-right">x ${row.gainMeters}</span>
-        <strong>${Math.round(row.gainScorePoints)}</strong>
+        <strong class="text-right">${fmtM(row.gainMeters)}</strong>
       </div>
-      <div class="stage-editor-score-popover-grid">
-        <span>Steigung</span>
-        <span class="text-right">x ${row.avgGradient.toFixed(1).replace('.', ',')}</span>
-        <strong>${Math.round(row.gradientScorePoints)}</strong>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>Ø Steigung</span>
+        <strong class="text-right">${fmtPct(row.avgGradient)}</strong>
+      </div>
+      <div class="stage-editor-score-popover-grid stage-editor-score-popover-grid-compact">
+        <span>Max Steigung</span>
+        <strong class="text-right">${fmtPct(row.maxGradient)}</strong>
       </div>
     </div>`;
 }
@@ -1028,8 +1082,10 @@ export function renderStageEditorScoreControl(
   popoverContent: string,
   title: string,
   climbId?: string,
+  customBadgeHtml?: string,
 ): string {
-  const openButton = renderStageEditorProfileOpenButton(renderStageEditorScoreBadge(score, minScore, maxScore), stageId, title, climbId);
+  const badgeHtml = customBadgeHtml ?? renderStageEditorScoreBadge(score, minScore, maxScore);
+  const openButton = renderStageEditorProfileOpenButton(badgeHtml, stageId, title, climbId);
   return `
     <div class="season-standings-country-anchor stage-editor-score-anchor" tabindex="0">
       ${openButton}
@@ -1038,6 +1094,7 @@ export function renderStageEditorScoreControl(
       </div>
     </div>`;
 }
+
 
 export function renderStageEditorOverviewHeader<TSortKey extends string>(label: string, sortKey: TSortKey, activeKey: TSortKey, direction: 'asc' | 'desc', table: 'stages' | 'climbs'): string {
   const activeClass = activeKey === sortKey ? ' stage-editor-overview-sort-active' : '';
@@ -1055,8 +1112,26 @@ export function renderStageEditorStagesOverview(): void {
   const view = $('stage-editor-stages-table');
   const empty = $('stage-editor-stages-empty');
   const meta = $('stage-editor-stages-meta');
+  const thead = view.querySelector('thead');
   const tbody = view.querySelector('tbody');
   if (!tbody) return;
+
+  const sk = state.stageEditorStagesSort.key;
+  const sd = state.stageEditorStagesSort.direction;
+  if (thead) {
+    thead.innerHTML = `<tr>
+      ${renderStageEditorOverviewHeader('ID', 'stageId', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Land', 'countryCode', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Rennen', 'raceName', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Score', 'profileScore', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Profil', 'profile', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Distanz', 'distanceKm', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Höhenmeter', 'elevationGainMeters', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Sprints', 'sprintCount', sk, sd, 'stages')}
+      ${renderStageEditorOverviewHeader('Climbs', 'climbCount', sk, sd, 'stages')}
+    </tr>`;
+  }
 
   const rows = sortStageEditorStageRows(state.stageEditorStageRows);
   tbody.innerHTML = rows.map((row) => `
@@ -1083,8 +1158,27 @@ export function renderStageEditorClimbsOverview(): void {
   const view = $('stage-editor-climbs-table');
   const empty = $('stage-editor-climbs-empty');
   const meta = $('stage-editor-climbs-meta');
+  const thead = view.querySelector('thead');
   const tbody = view.querySelector('tbody');
   if (!tbody) return;
+
+  const ck = state.stageEditorClimbsSort.key;
+  const cd = state.stageEditorClimbsSort.direction;
+  if (thead) {
+    thead.innerHTML = `<tr>
+      ${renderStageEditorOverviewHeader('km', 'placementKm', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Name', 'name', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Kat.', 'category', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Score', 'climbScore', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Land', 'countryCode', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Rennen', 'raceName', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Höhenmeter', 'gainMeters', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Distanz', 'distanceKm', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Ø Steigung', 'avgGradient', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Max Steigung', 'maxGradient', ck, cd, 'climbs')}
+    </tr>`;
+  }
 
   const rows = sortStageEditorClimbRows(state.stageEditorClimbRows);
   tbody.innerHTML = rows.map((row) => `
@@ -1092,7 +1186,7 @@ export function renderStageEditorClimbsOverview(): void {
       <td>${row.placementKm.toFixed(1).replace('.', ',')} km</td>
       <td><strong>${esc(row.name)}</strong></td>
       <td>${renderStageEditorCategoryBadge(row.category)}</td>
-      <td>${renderStageEditorScoreControl(row.climbScore, 0, 100, row.stageId, renderStageEditorClimbScorePopover(row), buildDashboardStageProfileLabel({ name: row.raceName } as any, { stageNumber: row.stageNumber, profile: 'Mountain' as any } as any), row.id)}</td>
+      <td>${renderStageEditorScoreControl(row.climbScore, 0, 350, row.stageId, renderStageEditorClimbScorePopover(row), buildDashboardStageProfileLabel({ name: row.raceName } as any, { stageNumber: row.stageNumber, profile: 'Mountain' as any } as any), row.id, renderClimbScoreBadge(row.climbScore))}</td>
       <td>${renderFlag(row.countryCode || '')}</td>
       <td><strong>${esc(row.raceName)}</strong></td>
       <td><strong>${esc(getStageDisplayName({ stageNumber: row.stageNumber } as any))}</strong></td>

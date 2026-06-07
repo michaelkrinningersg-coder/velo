@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  SHARED TYPES â€“ verwendet von Backend und Frontend
 // ============================================================
 
@@ -180,6 +180,10 @@ export interface Rider {
   potentials: RiderPotentials;
   yearStartSkills?: Record<RiderSkillKey, number>;
   mentorBoosts?: Partial<Record<RiderSkillKey, number>>;
+  racePreferenceBoosts?: Partial<Record<RiderSkillKey, number>>;
+  mentorName?: string;
+  mentorCountryCode?: string;
+  mentorAge?: number;
   riderType: RiderSpecialization;
   specialization1: RiderSpecialization | null;
   specialization2: RiderSpecialization | null;
@@ -738,13 +742,27 @@ export interface RiderStatsRow {
   seasonPoints: number;
 }
 
+export interface RiderStatsPointsByTerrain {
+  flat: number;
+  hilly: number;
+  mediumMountain: number;
+  mountain: number;
+  timetrial: number;
+  cobble: number;
+}
+
+export interface RiderStatsPointsByRaceFormat {
+  stageRace: number;
+  oneDay: number;
+}
+
 export interface RiderStatsRaceBlock {
   raceId: number;
   raceName: string;
-  raceCategoryName: string | null;
-  isStageRace: boolean;
+  raceCategoryName?: string | null;
   startDate: string;
   endDate: string;
+  isStageRace: boolean;
   rows: RiderStatsRow[];
 }
 
@@ -756,10 +774,13 @@ export interface RiderStatsSeason {
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
+  age?: number;
   teamId: number | null;
   teamName: string | null;
   countryCode: Nationality | null;
   roleName: string | null;
+  mentorName?: string | null;
+  mentoredRiderNames?: string[];
   overallRating: number;
   seasonFormPhase: RiderSeasonFormPhase;
   formBonus: number;
@@ -1053,6 +1074,19 @@ export interface InjuryRow {
   countryFlag: string;
   teamAbbreviation: string | null;
   teamJersey: string | null;
+  teamId: number | null;
+  teamDivisionTier: number | null;
   healthStatus: 'ill' | 'injured';
   unavailableDays: number;
+  overallRating: number;
+  age: number;
+  fitDate?: string;
+  missedRaces?: {
+    id: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+    categoryName: string;
+    countryCode: string;
+  }[];
 }

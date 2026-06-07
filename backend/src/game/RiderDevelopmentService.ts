@@ -409,7 +409,7 @@ export class RiderDevelopmentService {
     const mentorsByTeam = new Map<number, Array<{ spec1: number }>>();
     for (const row of rows) {
       const age = season - row.birth_year;
-      if (age > 32 && row.overall_rating >= 73 && row.active_team_id != null && row.specialization_1_id != null) {
+      if (age >= 31 && row.overall_rating >= 73 && row.active_team_id != null && row.specialization_1_id != null) {
         if (!mentorsByTeam.has(row.active_team_id)) mentorsByTeam.set(row.active_team_id, []);
         mentorsByTeam.get(row.active_team_id)!.push({ spec1: row.specialization_1_id });
       }
@@ -454,7 +454,7 @@ export class RiderDevelopmentService {
       if (block.canGrow) {
         const ageFactor = resolveAgeGrowthFactor(age, row.peak_age);
         let mentorBoost = 0;
-        if (age <= 22 && row.active_team_id != null) {
+        if (age <= 23 && row.active_team_id != null) {
           const teamMentors = mentorsByTeam.get(row.active_team_id) ?? [];
           const top3Specs = [row.specialization_1_id, row.specialization_2_id, row.specialization_3_id].filter(Boolean);
           if (teamMentors.some(m => top3Specs.includes(m.spec1))) {

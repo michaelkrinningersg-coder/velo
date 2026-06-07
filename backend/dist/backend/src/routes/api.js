@@ -359,6 +359,29 @@ function createRouter(dbService) {
             if (riders.length === 0) {
                 return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste bestimmt werden.');
             }
+            const ALL_SKILL_KEYS = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
+            for (const rider of riders) {
+                if (rider.age && rider.age <= 23) {
+                    const mentors = riders.filter(m => m.id !== rider.id &&
+                        m.activeTeamId === rider.activeTeamId &&
+                        m.age && m.age >= 31 &&
+                        m.overallRating >= 73 &&
+                        (m.riderType === rider.riderType ||
+                            (rider.specialization1 && m.riderType === rider.specialization1) ||
+                            (rider.specialization2 && m.riderType === rider.specialization2) ||
+                            (rider.specialization3 && m.riderType === rider.specialization3)));
+                    if (mentors.length > 0) {
+                        rider.mentorBoosts = {};
+                        for (let i = 0; i < mentors.length; i++) {
+                            const shuffled = [...ALL_SKILL_KEYS].sort(() => 0.5 - Math.random());
+                            for (let j = 0; j < 3; j++) {
+                                const key = shuffled[j];
+                                rider.mentorBoosts[key] = (rider.mentorBoosts[key] || 0) + 1;
+                            }
+                        }
+                    }
+                }
+            }
             ok(res, {
                 race,
                 stage,
@@ -450,10 +473,10 @@ function createRouter(dbService) {
             }
             const ALL_SKILL_KEYS = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
             for (const rider of riders) {
-                if (rider.age && rider.age <= 22) {
+                if (rider.age && rider.age <= 23) {
                     const mentors = riders.filter(m => m.id !== rider.id &&
                         m.activeTeamId === rider.activeTeamId &&
-                        m.age && m.age > 32 &&
+                        m.age && m.age >= 31 &&
                         m.overallRating >= 73 &&
                         (m.riderType === rider.riderType ||
                             (rider.specialization1 && m.riderType === rider.specialization1) ||

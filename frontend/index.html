@@ -587,9 +587,12 @@
   <div id="modal-riderStats" class="modal hidden">
     <div class="modal-card modal-card-xl dashboard-race-modal-card rider-stats-modal-card">
       <div class="modal-header">
-        <div>
-          <h2 id="rider-stats-title">Fahrerstatistik</h2>
-          <p id="rider-stats-meta" class="text-muted"></p>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+          <div>
+            <h2 id="rider-stats-title" style="margin-bottom: 0.2rem;">Fahrerstatistik</h2>
+            <p id="rider-stats-meta" class="text-muted" style="margin-top: 0;"></p>
+          </div>
+          <div id="rider-stats-jersey"></div>
         </div>
         <button class="btn btn-ghost modal-close" id="btn-close-rider-stats">×</button>
       </div>

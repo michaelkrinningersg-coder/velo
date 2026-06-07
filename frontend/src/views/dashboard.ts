@@ -50,6 +50,13 @@ export function raceCategoryBadge(race: Race): string {
   return `<span class="badge badge-race-category" style="${badgeStyle}">Eintagesrennen</span>`;
 }
 
+export function raceCategoryNameBadge(race: Race): string {
+  const categoryStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
+  const badgeStyle = buildRaceCategoryBadgeCssVariables(categoryStyle);
+  const name = race.category?.name ?? `Kategorie ${race.categoryId}`;
+  return `<span class="badge badge-race-category" style="${badgeStyle}">${esc(name)}</span>`;
+}
+
 export function getRaceStageDateRange(race: Race): { startDate: string; endDate: string } {
   const stages = race.stages ?? [];
   if (stages.length === 0) {
@@ -200,7 +207,7 @@ export function renderDashboardRaces(): void {
           </button>
         </td>
         <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
-        <td>${esc(categoryName)}</td>
+        <td>${raceCategoryNameBadge(race)}</td>
         <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
         <td>${distance}</td>
         <td>${elevation}</td>
@@ -378,7 +385,7 @@ export function renderProgramRaceRows(payload: RiderProgramRaceSummary): string 
               <td>${formatRaceDateRange(race)}</td>
               <td><span class="dashboard-race-country">${race.country?.code3 ? renderFlag(race.country.code3) : ''}<span>${esc(race.country?.name ?? `Land ${race.countryId}`)}</span></span></td>
               <td><strong>${esc(race.name)}</strong></td>
-              <td>${esc(race.category?.name ?? `Kategorie ${race.categoryId}`)}</td>
+              <td>${raceCategoryNameBadge(race)}</td>
               <td>${raceCategoryBadge(race)}</td>
             </tr>
           `).join('')}

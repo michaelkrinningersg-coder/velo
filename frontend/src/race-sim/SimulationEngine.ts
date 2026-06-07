@@ -696,7 +696,88 @@ function isClassifiedFinisher(rider: Pick<RiderState, 'finishStatus' | 'finishTi
   return rider.finishStatus !== 'dnf' && rider.finishTimeSeconds != null;
 }
 
-function normalizeMarkerClassificationEntries(entries: MarkerCrossing[], applyTimeTieGroups: boolean): StageMarkerClassificationEntry[] {
+type TieBreakContext = 'finish_flat' | 'finish_hill' | 'finish_mountain' | 'climb_top' | 'sprint_intermediate';
+
+/**
+ * Berechnet einen Bonus/Malus auf den photoFinishScore basierend auf Fahrertyp und Wertungskontext.
+ *
+ * Regeln:
+ * - Zwischensprint (sprint_intermediate):
+ *     Spec1=Berg: -3 | Spec2=Berg: -2 | Spec1=Sprint: +1 | Spec2=Sprint: +0.5
+ * - Finish Flat (finish_flat):
+ *     Spec1=Sprint: +1 (immer) | Spec2=Sprint: +0.5 (immer)
+ *     Spec1=Berg: -3 (nur bei Etappentyp Flat/Rolling) | Spec2=Berg: -2 (nur bei Etappentyp Flat/Rolling)
+ * - Bergwertung (climb_top):
+ *     Spec1=Sprint: -3 | Spec2=Sprint: -1.5 | Spec1/2=Attacker: +1.5
+ * - Sonstige Finish-Typen (finish_hill, finish_mountain): kein Adjustment
+ */
+function resolveSpecializationTieBreakAdjustment(
+  entry: MarkerCrossing | RiderState,
+  context: TieBreakContext,
+  isClimberMalusStage: boolean = false,
+): number {
+  const rider = 'rider' in entry ? entry.rider : null;
+  const spec1 = rider?.specialization1 ?? null;
+  const spec2 = rider?.specialization2 ?? null;
+  let adjustment = 0;
+
+  if (context === 'sprint_intermediate') {
+    if (spec1 === 'Berg') adjustment -= 3;
+    else if (spec2 === 'Berg') adjustment -= 2;
+    if (spec1 === 'Sprint') adjustment += 1;
+    else if (spec2 === 'Sprint') adjustment += 0.5;
+
+  } else if (context === 'finish_flat') {
+    // Sprinter-Bonus gilt immer bei finish_flat
+    if (spec1 === 'Sprint') adjustment += 1;
+    else if (spec2 === 'Sprint') adjustment += 0.5;
+    // Bergfahrer-Malus nur bei Flat/Rolling-Etappe
+    if (isClimberMalusStage) {
+      if (spec1 === 'Berg') adjustment -= 3;
+      else if (spec2 === 'Berg') adjustment -= 2;
+    }
+
+  } else if (context === 'climb_top') {
+    if (spec1 === 'Sprint') adjustment -= 3;
+    else if (spec2 === 'Sprint') adjustment -= 1.5;
+    if (spec1 === 'Attacker' || spec2 === 'Attacker') adjustment += 1.5;
+  }
+
+  return adjustment;
+}
+
+/**
+ * Variante für MarkerCrossing-Einträge (kein direkter Rider-Zugriff), nutzt riderStateById.
+ */
+function resolveMarkerCrossingTieBreakAdjustment(
+  entry: MarkerCrossing,
+  context: TieBreakContext,
+  riderStateById: Map<number, RiderState>,
+  isClimberMalusStage: boolean = false,
+): number {
+  const riderState = riderStateById.get(entry.riderId);
+  if (!riderState) return 0;
+  return resolveSpecializationTieBreakAdjustment(riderState, context, isClimberMalusStage);
+}
+
+function normalizeMarkerClassificationEntries(
+  entries: MarkerCrossing[],
+  applyTimeTieGroups: boolean,
+  markerType: StageMarkerType | null = null,
+  riderStateById: Map<number, RiderState> | null = null,
+  isClimberMalusStage: boolean = false,
+): StageMarkerClassificationEntry[] {
+  const tieContext: TieBreakContext | null = markerType === 'sprint_intermediate'
+    ? 'sprint_intermediate'
+    : markerType === 'climb_top'
+      ? 'climb_top'
+      : null;
+
+  const effectiveScore = (entry: MarkerCrossing): number => {
+    if (!tieContext || !riderStateById) return entry.photoFinishScore;
+    return entry.photoFinishScore + resolveMarkerCrossingTieBreakAdjustment(entry, tieContext, riderStateById, isClimberMalusStage);
+  };
+
   if (!applyTimeTieGroups) {
     const sorted = [...entries].sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
     const leaderTime = sorted[0]?.crossingTimeSeconds ?? 0;
@@ -718,7 +799,7 @@ function normalizeMarkerClassificationEntries(entries: MarkerCrossing[], applyTi
 
   const flushGroup = (): void => {
     const gapSeconds = Math.max(0, groupLeaderTime - leaderTime);
-    const orderedGroup = group.sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.riderId - right.riderId);
+    const orderedGroup = group.sort((left, right) => effectiveScore(right) - effectiveScore(left) || left.riderId - right.riderId);
     for (const entry of orderedGroup) {
       ranked.push({
         riderId: entry.riderId,
@@ -757,7 +838,7 @@ function normalizeMarkerClassificationEntries(entries: MarkerCrossing[], applyTi
   return ranked;
 }
 
-function orderRoadRiders(riders: RiderState[]): RiderState[] {
+function orderRoadRiders(riders: RiderState[], finishContext: TieBreakContext, isClimberMalusStage: boolean): RiderState[] {
   const finishedRiders = riders
     .filter(isClassifiedFinisher)
     .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0) || right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id);
@@ -771,8 +852,11 @@ function orderRoadRiders(riders: RiderState[]): RiderState[] {
   let group: RiderState[] = [];
   let previousTime: number | null = null;
 
+  const effectiveScore = (r: RiderState): number =>
+    r.photoFinishScore + resolveSpecializationTieBreakAdjustment(r, finishContext, isClimberMalusStage);
+
   const flushGroup = (): void => {
-    rankedFinished.push(...group.sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id));
+    rankedFinished.push(...group.sort((left, right) => effectiveScore(right) - effectiveScore(left) || left.rider.id - right.rider.id));
   };
 
   for (const rider of finishedRiders) {
@@ -1288,12 +1372,19 @@ export class SimulationEngine {
   }
 
   private buildMarkerClassifications(ordered: RiderState[]): StageMarkerClassification[] {
+    const riderStateById = new Map(ordered.map((r) => [r.rider.id, r]));
     return this.intermediateMarkers.map((marker) => {
       const markerEntries = ordered
         .map((rider) => rider.markerCrossings[marker.key] ?? null)
         .filter((entry): entry is MarkerCrossing => entry != null);
 
-      const entries = normalizeMarkerClassificationEntries(markerEntries, !this.isTimeTrialMode);
+      const entries = normalizeMarkerClassificationEntries(
+        markerEntries,
+        !this.isTimeTrialMode,
+        marker.markerType,
+        riderStateById,
+        this.isClimberMalusStage(),
+      );
 
       return {
         markerKey: marker.key,
@@ -1307,8 +1398,20 @@ export class SimulationEngine {
   }
 
   private getOrderedRiders(): RiderState[] {
-    const ordered = this.isTimeTrialMode ? [...this.riders].sort(compareRiders) : orderRoadRiders(this.riders);
+    const ordered = this.isTimeTrialMode
+      ? [...this.riders].sort(compareRiders)
+      : orderRoadRiders(this.riders, this.resolveFinishMarkerType(), this.isClimberMalusStage());
     return ordered;
+  }
+
+  /**
+   * Gibt true zurück, wenn die Etappe vom Typ Flat oder Rolling ist (kein ITT/TTT).
+   * Nur dann gilt der Bergfahrer-Malus beim Finish-Tie-Break.
+   */
+  private isClimberMalusStage(): boolean {
+    if (this.isTimeTrialMode) return false;
+    const profile = this.bootstrap.stage.profile;
+    return profile === 'Flat' || profile === 'Rolling';
   }
 
   private buildFrameSnapshot(ordered: RiderState[]): SimulationFrameSnapshot {
@@ -3076,8 +3179,13 @@ export class SimulationEngine {
       break;
     }
 
+    const finishContext = this.resolveFinishMarkerType();
+    const climberMalusStage = this.isClimberMalusStage();
+    const effectiveScore = (r: RiderState): number =>
+      r.photoFinishScore + resolveSpecializationTieBreakAdjustment(r, finishContext, climberMalusStage);
+
     const orderedFirstFinishGroup = [...firstFinishGroup]
-      .sort((left, right) => right.photoFinishScore - left.photoFinishScore || left.rider.id - right.rider.id);
+      .sort((left, right) => effectiveScore(right) - effectiveScore(left) || left.rider.id - right.rider.id);
 
     const leaderFinishTimeSeconds = orderedFirstFinishGroup[0]?.finishTimeSeconds ?? 0;
     const finishWeights = this.finishWeightProfile;
@@ -3087,7 +3195,10 @@ export class SimulationEngine {
       `[FinishSprintTieBreak] ${stageLabel} | erste Zielgruppe (${orderedFirstFinishGroup.length} Fahrer) | Zeitfenster <= ${TIME_TIE_THRESHOLD_SECONDS.toFixed(2)} s`,
     );
     console.log(
-      `[FinishSprintTieBreak] Sortierung: erst Zielzeit, dann Photo-Finish-Score absteigend, dann Fahrer-ID aufsteigend als letzter Tiebreak.`,
+      `[FinishSprintTieBreak] Sortierung: erst Zielzeit, dann Score (photoFinish + SpecAdjustment) absteigend, dann Fahrer-ID.`,
+    );
+    console.log(
+      `[FinishSprintTieBreak] Kontext: ${finishContext}${climberMalusStage ? ' | Bergfahrer-Malus aktiv' : ''}`,
     );
 
     orderedFirstFinishGroup.forEach((rider, index) => {
@@ -3099,9 +3210,11 @@ export class SimulationEngine {
       const timeLabel = gapToLeaderSeconds <= 0.0001
         ? `${finishTimeSeconds.toFixed(2)} s`
         : `${finishTimeSeconds.toFixed(2)} s (+${gapToLeaderSeconds.toFixed(2)} s)`;
+      const specAdj = resolveSpecializationTieBreakAdjustment(rider, finishContext, climberMalusStage);
+      const specAdjLabel = specAdj !== 0 ? ` | SpecAdj ${specAdj > 0 ? '+' : ''}${specAdj.toFixed(1)}` : '';
 
       console.log(
-        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)} | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
+        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)}${specAdjLabel} (effektiv ${effectiveScore(rider).toFixed(2)}) | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
       );
     });
 

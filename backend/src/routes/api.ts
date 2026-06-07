@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
 import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
+import { RiderRepository } from '../db/repositories/RiderRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
@@ -51,7 +52,7 @@ function fail(res: Response, status: number, message: string): void {
   res.status(status).json(body);
 }
 
-function resolveRealtimeTeamStartOrder(repo: GameRepository, race: Race, stageNumber: number, riders: Rider[]): number[] {
+function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: number, riders: Rider[]): number[] {
   const participatingTeams = new Map<number, Team>();
   for (const team of repo.getTeams()) {
     if (riders.some((rider) => rider.activeTeamId === team.id)) {
@@ -100,8 +101,8 @@ function resolveRealtimeTeamStartOrder(repo: GameRepository, race: Race, stageNu
 
   const seasonTeamPoints = new Map(
     repo.getSeasonStandings().teamStandings
-      .filter((row) => row.teamId != null && participatingTeamIds.has(row.teamId))
-      .map((row) => [row.teamId as number, row.points] as const),
+      .filter((row: any) => row.teamId != null && participatingTeamIds.has(row.teamId))
+      .map((row: any) => [row.teamId as number, row.points] as const),
   );
 
   return [...participatingTeams.values()]
@@ -114,9 +115,9 @@ function resolveRealtimeTeamStartOrder(repo: GameRepository, race: Race, stageNu
       }
       if (leftPoints === 0) return -1;
       if (rightPoints === 0) return 1;
-      return leftPoints - rightPoints || left.name.localeCompare(right.name, 'de');
+      return (leftPoints as number) - (rightPoints as number) || left.name.localeCompare(right.name, 'de');
     })
-    .map((team) => team.id);
+    .map((team: any) => team.id);
 }
 
 export function createRouter(dbService: DatabaseService): Router {
@@ -161,7 +162,7 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       masterDb = dbService.getMasterConnection();
       const rows = new GameRepository(masterDb).getTeams();
-      const selectable = rows.filter(t => t.division !== 'U23');
+      const selectable = rows.filter((t: any) => t.division !== 'U23');
       ok<Team[]>(res, selectable);
     } catch (e) { fail(res, 500, (e as Error).message); }
     finally { masterDb?.close(); }
@@ -199,10 +200,12 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       const db   = dbService.getActiveConnection();
       getGss().ensureState();
-      const repo = new GameRepository(db);
-      const team = repo.getTeamById(id);
+      // Use TeamRepository to get the team
+      const { TeamRepository } = require('../db/repositories/TeamRepository');
+      const teamRepo = new TeamRepository(db);
+      const team = teamRepo.getTeamById(id);
       if (!team) return fail(res, 404, `Team ${id} nicht gefunden.`);
-      ok<Team & { riders: Rider[] }>(res, { ...team, riders: repo.getRiders(id, true) });
+      ok<Team & { riders: Rider[] }>(res, { ...team, riders: new RiderRepository(db).getRiders(id, true) });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -213,7 +216,7 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
-      ok<Rider[]>(res, new GameRepository(db).getRiders(teamId));
+      ok<Rider[]>(res, new RiderRepository(db).getRiders(teamId));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -223,7 +226,7 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
-      const payload = new GameRepository(db).getRiderProgramRaceSummary(riderId);
+      const payload = new RiderRepository(db).getRiderProgramRaceSummary(riderId);
       if (!payload) return fail(res, 404, `Kein Programm fuer Fahrer ${riderId} gefunden.`);
       ok<RiderProgramRaceSummary>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -235,7 +238,7 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
-      const payload = new GameRepository(db).getRiderStats(riderId);
+      const payload = new RiderRepository(db).getRiderStats(riderId);
       if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
       ok<RiderStatsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
@@ -355,7 +358,7 @@ export function createRouter(dbService: DatabaseService): Router {
         race,
         stage,
         riders,
-        teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
+        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
         pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
@@ -476,7 +479,7 @@ export function createRouter(dbService: DatabaseService): Router {
         race,
         stage,
         riders,
-        teams: repo.getTeams().filter((team) => riders.some((rider) => rider.activeTeamId === team.id)),
+        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
         stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
         gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
         pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
@@ -581,9 +584,14 @@ export function createRouter(dbService: DatabaseService): Router {
 
   
   router.get('/injuries', (_req: Request, res: Response) => {
-    try {
-      const db = dbService.getActiveConnection();
-      const rows = db.prepare(`
+      try {
+        const db = dbService.getActiveConnection();
+        
+        const stateRow = db.prepare(`SELECT season, "current_date" AS current_date FROM game_state WHERE id = 1`).get() as { season: number, current_date: string } | undefined;
+        const season = stateRow?.season ?? new Date().getFullYear();
+        const currentDate = stateRow?.current_date ?? new Date().toISOString().split('T')[0];
+
+        const rows = db.prepare(`
         SELECT
           r.id AS riderId,
           r.first_name AS riderFirstName,
@@ -591,16 +599,58 @@ export function createRouter(dbService: DatabaseService): Router {
           c.code_3 AS countryCode,
           t.abbreviation AS teamAbbreviation,
           t.id AS teamId,
+          dt.tier AS teamDivisionTier,
+          r.overall_rating AS overallRating,
+          CAST(strftime('%Y', 'now') - r.birth_year AS INTEGER) AS age,
           rds.health_status AS healthStatus,
-          rds.unavailable_days_remaining AS unavailableDays
+          rds.unavailable_days_remaining AS unavailableDays,
+          rds.unavailable_until AS fitDate
         FROM rider_daily_state rds
         JOIN riders r ON rds.rider_id = r.id
         JOIN sta_country c ON r.country_id = c.id
         LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
         LEFT JOIN teams t ON cnt.team_id = t.id
+        LEFT JOIN division_teams dt ON dt.id = t.division_id
         WHERE rds.health_status IN ('ill', 'injured')
         ORDER BY rds.unavailable_days_remaining DESC
       `).all() as any[];
+
+      if (rows.length > 0) {
+        const riderIds = rows.map((r: any) => r.riderId);
+        const placeholders = riderIds.map(() => '?').join(', ');
+        
+        const missedRacesRows = db.prepare(`
+          SELECT
+            rsp.rider_id,
+            r.name,
+            r.start_date AS startDate,
+            r.is_stage_race AS isStageRace,
+            c.name AS categoryName,
+            co.code_3 AS countryCode
+          FROM rider_season_programs rsp
+          JOIN race_program_races rpr ON rsp.program_id = rpr.program_id
+          JOIN races r ON rpr.race_id = r.id
+          LEFT JOIN race_categories c ON r.category_id = c.id
+          LEFT JOIN sta_country co ON r.country_id = co.id
+          WHERE rsp.season = ?
+            AND r.start_date >= ?
+            AND rsp.rider_id IN (${placeholders})
+          ORDER BY r.start_date ASC
+        `).all(season, currentDate, ...riderIds) as any[];
+
+        for (const row of rows) {
+          if (!row.fitDate) continue;
+          row.missedRaces = missedRacesRows
+            .filter((m: any) => m.rider_id === row.riderId && m.startDate <= row.fitDate)
+            .map((m: any) => ({
+              name: m.name,
+              startDate: m.startDate,
+              isStageRace: m.isStageRace === 1,
+              categoryName: m.categoryName,
+              countryCode: m.countryCode,
+            }));
+        }
+      }
 
       ok<InjuryRow[]>(res, rows);
     } catch (e) { fail(res, 400, (e as Error).message); }

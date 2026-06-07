@@ -1,5 +1,10 @@
 import Database from 'better-sqlite3';
-import { GameRepository } from '../db/GameRepository';
+import { GameStateRepository } from "../db/repositories/GameStateRepository";
+import { RaceRepository } from "../db/repositories/RaceRepository";
+import { ResultRepository } from "../db/repositories/ResultRepository";
+import { RiderRepository } from "../db/repositories/RiderRepository";
+import { TeamRepository } from "../db/repositories/TeamRepository";
+
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
@@ -92,8 +97,8 @@ function canCustomizeRoster(race: Race, stage: Stage): boolean {
   return race.id > 0 && stage.id > 0;
 }
 
-function getPlayerTeam(repo: GameRepository): Team {
-  const playerTeam = repo.getTeams().find((team) => team.isPlayerTeam);
+function getPlayerTeam(repo: any): Team {
+  const playerTeam = repo.getTeams().find((team: any) => team.isPlayerTeam);
   if (!playerTeam) {
     throw new Error('Es konnte kein Spielerteam gefunden werden.');
   }
@@ -113,7 +118,7 @@ function groupRidersByTeam(riders: Rider[]): Map<number, Rider[]> {
   return ridersByTeamId;
 }
 
-function buildRiderLockMap(db: Database.Database, repo: GameRepository, race: Race, riders = repo.getRiders()): Map<number, RiderLockReason> {
+function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders = repo.getRiders()): Map<number, RiderLockReason> {
   const currentDate = repo.getCurrentDate();
   const locks = new Map<number, RiderLockReason>();
 
@@ -169,7 +174,7 @@ function buildRiderLockMap(db: Database.Database, repo: GameRepository, race: Ra
 }
 
 function getEligibleRiders(roster: Rider[], riderLocks: Map<number, RiderLockReason>): Rider[] {
-  return roster.filter((rider) => !riderLocks.has(rider.id));
+  return roster.filter((rider: any) => !riderLocks.has(rider.id));
 }
 
 function isCobbleStage(stage: Stage): boolean {
@@ -178,9 +183,9 @@ function isCobbleStage(stage: Stage): boolean {
 
 function resolveRoleRequirements(): RoleRequirement[] {
   return Object.entries(DEFAULT_ROLE_REQUIREMENTS)
-    .map(([roleId, count]) => ({ roleId: Number(roleId), count }))
-    .filter((requirement) => Number.isFinite(requirement.roleId) && requirement.count > 0)
-    .sort((left, right) => left.roleId - right.roleId);
+    .map(([roleId, count]: any) => ({ roleId: Number(roleId), count }))
+    .filter((requirement: any) => Number.isFinite(requirement.roleId) && requirement.count > 0)
+    .sort((left: any, right: any) => left.roleId - right.roleId);
 }
 
 function resolveRoleName(roleNameById: Map<number, string>, roleId: number | null): string {
@@ -198,16 +203,16 @@ function orderCandidatesForStage(candidates: Rider[], stage: Stage, seed: number
     return shuffled;
   }
 
-  const cobbleReady = shuffled.filter((rider) => rider.skills.cobble >= COBBLE_SELECTION_MIN_SKILL);
+  const cobbleReady = shuffled.filter((rider: any) => rider.skills.cobble >= COBBLE_SELECTION_MIN_SKILL);
   const fallback = shuffled
-    .filter((rider) => rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL)
-    .sort((left, right) => right.skills.cobble - left.skills.cobble || left.id - right.id);
+    .filter((rider: any) => rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL)
+    .sort((left: any, right: any) => right.skills.cobble - left.skills.cobble || left.id - right.id);
   return [...cobbleReady, ...fallback];
 }
 
 function logAutomaticRosterSelection(team: Team, race: Race, stage: Stage, entries: SelectedRosterEntry[]): void {
   console.log(`[RaceRoster] ${race.name} | ${formatStageDebugLabel(stage)} | ${team.name} | ${entries.length} Fahrer automatisch ausgewaehlt`);
-  entries.forEach((entry, index) => {
+  entries.forEach((entry: any, index: any) => {
     const riderRoleId = entry.rider.roleId ?? null;
     const riderRoleName = entry.rider.role?.name ?? `Rolle ${riderRoleId ?? 'unbekannt'}`;
     const targetRoleLabel = entry.targetRoleId == null ? 'Restplatz' : `Sollrolle ${entry.targetRoleId}`;
@@ -228,16 +233,16 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
 
   const roleRequirements = resolveRoleRequirements();
   const roleNameById = new Map<number, string>();
-  eligibleRoster.forEach((rider) => {
+  eligibleRoster.forEach((rider: any) => {
     if (rider.roleId != null && rider.role?.name) {
       roleNameById.set(rider.roleId, rider.role.name);
     }
   });
   const roleIdsAscending = Array.from(new Set([
-    ...roleRequirements.map((requirement) => requirement.roleId),
-    ...eligibleRoster.map((rider) => rider.roleId).filter((roleId): roleId is number => roleId != null),
-  ])).sort((left, right) => left - right);
-  const roleIdsDescending = [...roleIdsAscending].sort((left, right) => right - left);
+    ...roleRequirements.map((requirement: any) => requirement.roleId),
+    ...eligibleRoster.map((rider: any) => rider.roleId).filter((roleId: any): roleId is number => roleId != null),
+  ])).sort((left: any, right: any) => left - right);
+  const roleIdsDescending = [...roleIdsAscending].sort((left: any, right: any) => right - left);
   const selectedIds = new Set<number>();
   const selected: SelectedRosterEntry[] = [];
   let seedOffset = 0;
@@ -253,7 +258,7 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
     }
 
     const orderedCandidates = orderCandidatesForStage(
-      eligibleRoster.filter((rider) => !selectedIds.has(rider.id) && rider.roleId === roleId),
+      eligibleRoster.filter((rider: any) => !selectedIds.has(rider.id) && rider.roleId === roleId),
       stage,
       raceId * 1000 + team.id * 100 + seedOffset,
       phase === 'fill',
@@ -316,7 +321,7 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
 
   if (selected.length < requestedCount) {
     const remaining = orderCandidatesForStage(
-      eligibleRoster.filter((rider) => !selectedIds.has(rider.id)),
+      eligibleRoster.filter((rider: any) => !selectedIds.has(rider.id)),
       stage,
       raceId * 1000 + team.id * 100 + 997,
       true,
@@ -333,36 +338,36 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
   return selected;
 }
 
-function resolveParticipatingTeams(repo: GameRepository, race: Race, riderLocks: Map<number, RiderLockReason>, ridersByTeamId: Map<number, Rider[]>): Team[] {
+function resolveParticipatingTeams(repo: any, race: Race, riderLocks: Map<number, RiderLockReason>, ridersByTeamId: Map<number, Rider[]>): Team[] {
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
-    const existingTeamIds = new Set(existingEntries.map((rider) => rider.activeTeamId).filter((teamId): teamId is number => teamId != null));
-    return repo.getTeams().filter((team) => existingTeamIds.has(team.id));
+    const existingTeamIds = new Set(existingEntries.map((rider: any) => rider.activeTeamId).filter((teamId: any): teamId is number => teamId != null));
+    return repo.getTeams().filter((team: any) => existingTeamIds.has(team.id));
   }
 
   const riderLimit = race.category?.numberOfRiders ?? 0;
   return repo.getTeams()
-    .filter((team) => team.division === targetDivision)
-    .filter((team) => getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks).length >= riderLimit)
+    .filter((team: any) => team.division === targetDivision)
+    .filter((team: any) => getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks).length >= riderLimit)
     .slice(0, race.category?.numberOfTeams ?? 0);
 }
 
-function buildLegacyRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage, enableDebug = false): Rider[] {
+function buildLegacyRaceRoster(db: Database.Database, repo: any, race: Race, stage: Stage, enableDebug = false): Rider[] {
   const riders = repo.getRiders();
   const ridersByTeamId = groupRidersByTeam(riders);
   const riderLocks = buildRiderLockMap(db, repo, race, riders);
   const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks, ridersByTeamId);
 
   return eligibleTeams
-    .flatMap((team) => {
+    .flatMap((team: any) => {
       const selectedEntries = selectRaceRoster(team, getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks), race.category?.numberOfRiders ?? 0, race.id, race, stage);
       if (enableDebug) {
         logAutomaticRosterSelection(team, race, stage, selectedEntries);
       }
-      return selectedEntries.map((entry) => entry.rider);
+      return selectedEntries.map((entry: any) => entry.rider);
     })
-    .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
+    .sort((left: any, right: any) => right.overallRating - left.overallRating || left.id - right.id);
 }
 
 function resolveProgramPhasePriority(rider: Rider): number {
@@ -376,7 +381,7 @@ function isNeutralPhase(rider: Rider): boolean {
 }
 
 function orderProgramCandidates(candidates: Rider[]): Rider[] {
-  return [...candidates].sort((left, right) => {
+  return [...candidates].sort((left: any, right: any) => {
     const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
     if (phaseCompare !== 0) return phaseCompare;
     return right.overallRating - left.overallRating || left.id - right.id;
@@ -409,7 +414,7 @@ function canFillRosterSlot(db: Database.Database, rider: Rider, season: number, 
 }
 
 function resolveSpecialFillIndex(rider: Rider): number {
-  return SPECIAL_FILL_SEQUENCE.findIndex((entry) => {
+  return SPECIAL_FILL_SEQUENCE.findIndex((entry: any) => {
     if (rider.roleId !== entry.roleId) return false;
     if (entry.phase === 'rise') return rider.seasonFormPhase === 'rise';
     return isNeutralPhase(rider);
@@ -419,13 +424,13 @@ function resolveSpecialFillIndex(rider: Rider): number {
 function orderFillCandidates(candidates: Rider[], race: Race): Rider[] {
   if (SPECIAL_FILL_CATEGORIES.has(race.categoryId)) {
     return [...candidates]
-      .map((rider) => ({ rider, index: resolveSpecialFillIndex(rider) }))
-      .filter((entry) => entry.index >= 0)
-      .sort((left, right) => left.index - right.index || right.rider.overallRating - left.rider.overallRating || left.rider.id - right.rider.id)
-      .map((entry) => entry.rider);
+      .map((rider: any) => ({ rider, index: resolveSpecialFillIndex(rider) }))
+      .filter((entry: any) => entry.index >= 0)
+      .sort((left: any, right: any) => left.index - right.index || right.rider.overallRating - left.rider.overallRating || left.rider.id - right.rider.id)
+      .map((entry: any) => entry.rider);
   }
 
-  return [...candidates].sort((left, right) => {
+  return [...candidates].sort((left: any, right: any) => {
     const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
     if (phaseCompare !== 0) return phaseCompare;
     const roleCompare = (GENERIC_FILL_ROLE_PRIORITY.get(left.roleId ?? 0) ?? 99) - (GENERIC_FILL_ROLE_PRIORITY.get(right.roleId ?? 0) ?? 99);
@@ -445,7 +450,7 @@ function hashString(value: string): number {
   return hash >>> 0;
 }
 
-function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage, enableDebug = false): Rider[] {
+function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: Stage, enableDebug = false): Rider[] {
   const season = repo.getCurrentSeason();
   const racePrograms = repo.getRaceProgramsForRace(race.id);
   if (racePrograms.length === 0) {
@@ -453,26 +458,26 @@ function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race
   }
 
   const riders = repo.getRiders();
-  const programIds = new Set(racePrograms.map((program) => program.id));
+  const programIds = new Set(racePrograms.map((program: any) => program.id));
   const riderLocks = buildRiderLockMap(db, repo, race, riders);
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
   const riderLimit = race.category?.numberOfRiders ?? 0;
   const teamLimit = race.category?.numberOfTeams ?? 0;
   const ridersByTeamId = groupRidersByTeam(riders);
   const selectedTeams = repo.getTeams()
-    .filter((team) => team.division === targetDivision)
-    .filter((team) => (ridersByTeamId.get(team.id) ?? []).some((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
+    .filter((team: any) => team.division === targetDivision)
+    .filter((team: any) => (ridersByTeamId.get(team.id) ?? []).some((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
     .slice(0, teamLimit);
 
-  const selected = selectedTeams.flatMap((team) => {
+  const selected = selectedTeams.flatMap((team: any) => {
     const roster = getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks);
-    const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
+    const programCandidates = orderProgramCandidates(roster.filter((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
     const teamSelection = programCandidates.slice(0, riderLimit);
-    const selectedIds = new Set(teamSelection.map((rider) => rider.id));
+    const selectedIds = new Set(teamSelection.map((rider: any) => rider.id));
 
     if (teamSelection.length < riderLimit) {
       const fillCandidates = orderFillCandidates(
-        roster.filter((rider) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)),
+        roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)),
         race,
       );
       for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
@@ -484,8 +489,8 @@ function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race
     if (enableDebug) {
       const underfilled = teamSelection.length < riderLimit ? ` | unterbesetzt ${teamSelection.length}/${riderLimit}` : '';
       console.log(`[RaceRoster] ${race.name} | ${formatStageDebugLabel(stage)} | ${team.name} | ${teamSelection.length} Programmfahrer/Fuellfahrer ausgewaehlt${underfilled}`);
-      teamSelection.forEach((rider, index) => {
-        const source = programCandidates.some((candidate) => candidate.id === rider.id) ? 'Programm' : 'Fuellung';
+      teamSelection.forEach((rider: any, index: any) => {
+        const source = programCandidates.some((candidate: any) => candidate.id === rider.id) ? 'Programm' : 'Fuellung';
         console.log(`  ${index + 1}. ${rider.firstName} ${rider.lastName} | ${source} | Phase=${rider.seasonFormPhase ?? 'neutral'} | Rolle=${rider.role?.name ?? rider.roleId ?? 'unbekannt'} | Renntage=${rider.seasonRaceDays ?? 0}`);
       });
     }
@@ -493,14 +498,14 @@ function buildRaceRoster(db: Database.Database, repo: GameRepository, race: Race
     return teamSelection;
   });
 
-  return selected.sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
+  return selected.sort((left: any, right: any) => right.overallRating - left.overallRating || left.id - right.id);
 }
 
-export function previewRaceRoster(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): Rider[] {
+export function previewRaceRoster(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
     if (race.isStageRace) {
-      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider) => rider.id));
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider: any) => rider.id));
     }
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);
@@ -508,20 +513,20 @@ export function previewRaceRoster(db: Database.Database, repo: GameRepository, r
 
   const selected = buildRaceRoster(db, repo, race, stage);
   if (race.isStageRace) {
-    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider: any) => rider.id));
     return repo.attachStageRaceFatigue(race.id, selected, stage.stageNumber);
   }
   return selected;
 }
 
-export function previewRaceRosterEditor(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): RaceRosterEditorPayload {
+export function previewRaceRosterEditor(db: Database.Database, repo: any, race: Race, stage: Stage): RaceRosterEditorPayload {
   const riderLocks = buildRiderLockMap(db, repo, race);
-  const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider) => rider.id));
+  const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider: any) => rider.id));
   const playerTeam = getPlayerTeam(repo);
   const teams = [{
     team: playerTeam,
     riderLimit: race.category?.numberOfRiders ?? 0,
-    riders: repo.getRiders(playerTeam.id).map((rider) => {
+    riders: repo.getRiders(playerTeam.id).map((rider: any) => {
       const lockReason = riderLocks.get(rider.id) ?? null;
       return {
         rider,
@@ -539,20 +544,20 @@ export function previewRaceRosterEditor(db: Database.Database, repo: GameReposit
   };
 }
 
-export function applyRaceRosterSelection(db: Database.Database, repo: GameRepository, race: Race, stage: Stage, riderIds: number[]): Rider[] {
+export function applyRaceRosterSelection(db: Database.Database, repo: any, race: Race, stage: Stage, riderIds: number[]): Rider[] {
   if (!canCustomizeRoster(race, stage)) {
     throw new Error('Das Starterfeld kann für dieses Rennen jetzt nicht mehr bearbeitet werden.');
   }
 
   const riderLocks = buildRiderLockMap(db, repo, race);
-  const selectedRiderIds = new Set(riderIds.filter((riderId) => Number.isInteger(riderId)));
+  const selectedRiderIds = new Set(riderIds.filter((riderId: any) => Number.isInteger(riderId)));
   const playerTeam = getPlayerTeam(repo);
   const riderLimit = race.category?.numberOfRiders ?? 0;
   const playerRoster = repo.getRiders(playerTeam.id);
-  const rosterById = new Map(playerRoster.map((rider) => [rider.id, rider]));
+  const rosterById = new Map(playerRoster.map((rider: any) => [rider.id, rider]));
   const validatedSelections = [...selectedRiderIds]
-    .map((riderId) => rosterById.get(riderId) ?? null)
-    .filter((rider): rider is Rider => rider != null);
+    .map((riderId: any) => rosterById.get(riderId) ?? null)
+    .filter((rider: any): rider is Rider => rider != null);
 
   if (validatedSelections.length !== riderLimit) {
     throw new Error(`${playerTeam.name} muss genau ${riderLimit} Fahrer fuer das Starterfeld stellen.`);
@@ -565,13 +570,13 @@ export function applyRaceRosterSelection(db: Database.Database, repo: GameReposi
     }
   }
 
-  const participatingRiderIds = new Set(validatedSelections.map((rider) => rider.id));
-  const unknownSelection = [...selectedRiderIds].find((riderId) => !participatingRiderIds.has(riderId));
+  const participatingRiderIds = new Set(validatedSelections.map((rider: any) => rider.id));
+  const unknownSelection = [...selectedRiderIds].find((riderId: any) => !participatingRiderIds.has(riderId));
   if (unknownSelection != null) {
     throw new Error('Die Auswahl enthält Fahrer ausserhalb deines Teams.');
   }
 
-  const autoEntries = previewRaceRoster(db, repo, race, stage).filter((rider) => rider.activeTeamId !== playerTeam.id);
+  const autoEntries = previewRaceRoster(db, repo, race, stage).filter((rider: any) => rider.activeTeamId !== playerTeam.id);
   const finalSelections = [...autoEntries, ...validatedSelections];
 
   const deleteEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
@@ -592,11 +597,11 @@ export function applyRaceRosterSelection(db: Database.Database, repo: GameReposi
   return repo.getStageRiders(stage.id);
 }
 
-export function ensureRaceEntries(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): Rider[] {
+export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
     if (race.isStageRace) {
-      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider) => rider.id));
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider: any) => rider.id));
     }
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);
@@ -615,14 +620,14 @@ export function ensureRaceEntries(db: Database.Database, repo: GameRepository, r
   })();
 
   if (race.isStageRace) {
-    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider: any) => rider.id));
   }
 
   repo.ensureStageEntries(stage);
   return repo.getStageRiders(stage.id);
 }
 
-export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: GameRepository, race: Race, stage: Stage): Rider[] {
+export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   const selected = buildRaceRoster(db, repo, race, stage);
   const deleteRaceEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
@@ -640,7 +645,7 @@ export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: Game
   })();
 
   if (race.isStageRace) {
-    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider) => rider.id));
+    repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider: any) => rider.id));
   }
 
   repo.ensureStageEntries(stage);
