@@ -1,0 +1,13 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+3.05,-0.200,Flat,5,5,start,Start,null,,,
+1.11,1.800,Flat,5,5,,,,,,
+0.33,-4.500,Flat,5,5,,,,sprint_intermediate,Intermediate 1,null
+1.37,1.200,Flat,5,5,,,,,,
+1.10,5.400,Hill,5,5,,,,,,
+2.21,2.700,Hill,5,5,,,,,,
+0.63,-2.400,Abfahrt,5,5,,,,,,
+0.62,-9.000,Abfahrt,5,5,,,,,,
+1.26,-2.500,Abfahrt,5,5,,,,sprint_intermediate,Intermediate 2,null
+2.52,-0.600,Flat,5,5,,,,,,
+1.83,-1.900,Flat,5,5,,,,,,
+1.19,0.100,Flat,5,5,,,,finish_TT,Ziel,null
