@@ -673,6 +673,14 @@ export class GameStateService {
       for (const riderId of seasonChangedRiderIds) {
         deleteFormEvents.run(riderId);
       }
+      
+      if (this.isTable('rider_form_history')) {
+        this.db.prepare('DELETE FROM rider_form_history').run();
+      }
+    }
+
+    if (new Date(nextDate).getDay() === 1) {
+      this.syncWeeklyFormHistory(nextDate);
     }
 
     new RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
@@ -771,12 +779,10 @@ export class GameStateService {
     this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
   }
 
-  private syncCurrentFormHistory(currentDate: string): void {
-    if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history')) {
+  private syncWeeklyFormHistory(currentDate: string): void {
+    if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
       return;
     }
-
-    this.removeExpiredRaceFormEvents(currentDate);
 
     // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
     // in one statement instead of a per-rider JS loop.
@@ -792,7 +798,9 @@ export class GameStateService {
           + ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100
         ) * 100) / 100 AS total_form
       FROM rider_daily_state rds
+      JOIN riders ON riders.id = rds.rider_id
       LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
+      WHERE riders.active_team_id IS NOT NULL AND riders.is_retired = 0
       GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus
       ON CONFLICT(rider_id, date) DO UPDATE SET
         s_form = excluded.s_form,
@@ -860,8 +868,6 @@ export class GameStateService {
           insertAward.run(riderId, raceDate, 'free');
         }
       }
-
-      this.syncCurrentFormHistory(raceDate);
     })();
   }
 

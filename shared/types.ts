@@ -774,6 +774,13 @@ export interface RiderStatsSeason {
   raceBlocks: RiderStatsRaceBlock[];
 }
 
+export interface RiderFormHistoryEntry {
+  date: string;
+  sForm: number;
+  rForm: number;
+  totalForm: number;
+}
+
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
@@ -812,6 +819,8 @@ export interface RiderStatsPayload {
     raceDays: number;
   }>;
   seasons: RiderStatsSeason[];
+  peakDates?: string[];
+  formHistory?: RiderFormHistoryEntry[];
 }
 
 export interface SeasonStandingRow {

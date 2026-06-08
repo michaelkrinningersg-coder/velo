@@ -431,7 +431,107 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
     <div class="team-detail-page-tabs rider-stats-tabs" role="tablist" aria-label="Riderstats Tabs">
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'results' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="results" aria-selected="${state.riderStatsTab === 'results' ? 'true' : 'false'}">Ergebnisse</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'form' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="form" aria-selected="${state.riderStatsTab === 'form' ? 'true' : 'false'}">Form</button>
     </div>`;
+}
+
+export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): string {
+  if (!payload || !payload.formHistory || payload.formHistory.length === 0) {
+    return `
+      <section class="rider-stats-placeholder">
+        <h3>Keine Formdaten vorhanden</h3>
+        <p>Für diesen Fahrer wurden in der aktuellen Saison noch keine Formdaten aufgezeichnet.</p>
+      </section>`;
+  }
+
+  const history = payload.formHistory;
+  const currentYear = new Date(history[history.length - 1].date).getUTCFullYear();
+  const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
+  const msPerDay = 86400000;
+  
+  const chartW = 500;
+  const chartH = 120;
+  const padL = 30;
+  const padT = 20;
+
+  const pts = history.map((entry) => {
+    const entryDate = new Date(entry.date).getTime();
+    const dayOfYear = (entryDate - yearStart) / msPerDay;
+    const x = padL + (dayOfYear / 365) * chartW;
+    const y = padT + chartH - (Math.min(12, Math.max(0, entry.totalForm)) / 12) * chartH;
+    return { x, y, form: entry.totalForm, date: entry.date };
+  });
+
+  let pathData = '';
+  let pointsHtml = '';
+  let fillPath = '';
+
+  if (pts.length > 0) {
+    pathData = `M ${pts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+    pointsHtml = pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="var(--accent-primary)" stroke-width="2"><title>${p.date}: ${p.form}</title></circle>`).join('');
+    fillPath = `${pathData} L ${pts[pts.length - 1].x},${padT + chartH} L ${pts[0].x},${padT + chartH} Z`;
+  }
+
+  const phaseColors: Record<string, string> = {
+    build: 'rgba(16, 185, 129, 0.3)',
+    peak: 'rgba(16, 185, 129, 0.3)',
+    decline: 'rgba(239, 68, 68, 0.3)',
+    neutral: 'rgba(245, 158, 11, 0.3)',
+  };
+  const fillColor = phaseColors[payload.seasonFormPhase] ?? phaseColors.neutral;
+
+  let gridHtml = '';
+  for (let i = 0; i <= 12; i += 2) {
+    const y = padT + chartH - (i / 12) * chartH;
+    gridHtml += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border-primary)" stroke-dasharray="2,2" />`;
+    gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="var(--text-secondary)" font-size="10" text-anchor="end">${i}</text>`;
+  }
+
+  let xAxisHtml = '';
+  for (let week = 0; week <= 52; week += 5) {
+    const x = padL + (week / 52) * chartW;
+    xAxisHtml += `<text x="${x}" y="${padT + chartH + 15}" fill="var(--text-secondary)" font-size="10" text-anchor="middle">W${week}</text>`;
+  }
+
+  let peaksHtml = '';
+  let phaseBackgroundsHtml = '';
+  if (payload.peakDates) {
+    for (const pDate of payload.peakDates) {
+      const pTime = new Date(pDate).getTime();
+      const pDay = (pTime - yearStart) / msPerDay;
+      const x = padL + (pDay / 365) * chartW;
+      peaksHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="#ffffff" stroke-width="2"><title>Peak: ${pDate}</title></line>`;
+      
+      // Build phase (14 days before peak)
+      const buildStartDay = pDay - 14;
+      const buildX = padL + (buildStartDay / 365) * chartW;
+      const buildW = (14 / 365) * chartW;
+      phaseBackgroundsHtml += `<rect x="${buildX}" y="${padT}" width="${buildW}" height="${chartH}" fill="rgba(16, 185, 129, 0.1)" />`;
+
+      // Decline phase (28 days after peak)
+      const declineW = (28 / 365) * chartW;
+      phaseBackgroundsHtml += `<rect x="${x}" y="${padT}" width="${declineW}" height="${chartH}" fill="rgba(239, 68, 68, 0.1)" />`;
+    }
+  }
+
+  return `
+    <section class="rider-stats-form-tab">
+      <div class="rider-stats-season-head">
+        <h3>Formverlauf (Saison ${currentYear})</h3>
+      </div>
+      <div class="rider-stats-chart-wrapper" style="margin-top: 1rem; overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
+        <svg width="100%" height="200" viewBox="0 0 540 180" style="min-width: 500px;">
+          ${phaseBackgroundsHtml}
+          ${gridHtml}
+          ${xAxisHtml}
+          ${peaksHtml}
+          ${fillPath ? `<path d="${fillPath}" fill="${fillColor}" />` : ''}
+          ${pathData ? `<path d="${pathData}" fill="none" stroke="var(--accent-primary)" stroke-width="2" />` : ''}
+          ${pointsHtml}
+        </svg>
+      </div>
+    </section>
+  `;
 }
 
 export function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): string {
@@ -565,6 +665,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
       ${renderRiderStatsTabs(payload)}
       ${renderRiderStatsProgramTab(payload)}`;
+  }
+
+  if (state.riderStatsTab === 'form') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsFormTab(payload)}`;
   }
 
   if (payload.seasons.length === 0) {

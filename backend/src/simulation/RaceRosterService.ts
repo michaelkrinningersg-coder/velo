@@ -41,7 +41,7 @@ const SPECIAL_FILL_SEQUENCE = [
   { roleId: 5, phase: 'neutral' },
 ] as const;
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -60,7 +60,20 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'already-raced-today': 'Heute bereits in einem anderen Rennen gestartet.',
   'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
   unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
+  'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
 };
+
+function isWinterBreak(dateString: string): boolean {
+  const match = dateString.match(/^\d{4}-(\d{2})-(\d{2})/);
+  if (!match) return false;
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+
+  if (month === 10 && day >= 15) return true;
+  if (month === 11 || month === 12 || month === 1) return true;
+  if (month === 2 && day <= 15) return true;
+  return false;
+}
 
 function createDeterministicRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -125,6 +138,18 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
   for (const rider of riders) {
     if (rider.isUnavailable) {
       locks.set(rider.id, 'unavailable');
+    }
+  }
+
+  if (isWinterBreak(currentDate)) {
+    const ridersByTeamId = groupRidersByTeam(riders);
+    for (const teamRiders of ridersByTeamId.values()) {
+      const topTwo = [...teamRiders].sort((a: any, b: any) => b.overallRating - a.overallRating).slice(0, 2);
+      for (const rider of topTwo) {
+        if (!locks.has(rider.id)) {
+          locks.set(rider.id, 'winter-break');
+        }
+      }
     }
   }
 
