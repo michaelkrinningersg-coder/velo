@@ -1579,8 +1579,27 @@ class GameRepository {
                 },
             });
         }
-        return participants
-            .filter((entry) => targetDivision == null || entry.team?.division === targetDivision)
+        const winterBreakEnd = `${season}-02-15`;
+        const raceStartDate = race?.startDate ?? '';
+        let filtered = participants.filter((entry) => targetDivision == null || entry.team?.division === targetDivision);
+        // During winter break (race before Feb 15): exclude the top 2 riders per team
+        if (raceStartDate < winterBreakEnd) {
+            const teamEntryMap = new Map();
+            for (const entry of filtered) {
+                if (entry.team == null) continue;
+                if (!teamEntryMap.has(entry.team.id)) teamEntryMap.set(entry.team.id, []);
+                teamEntryMap.get(entry.team.id).push(entry);
+            }
+            const top2RiderIds = new Set();
+            for (const teamEntries of teamEntryMap.values()) {
+                const sorted = [...teamEntries].sort((a, b) => b.rider.overallRating - a.rider.overallRating);
+                for (const entry of sorted.slice(0, 2)) {
+                    top2RiderIds.add(entry.rider.id);
+                }
+            }
+            filtered = filtered.filter((entry) => !top2RiderIds.has(entry.rider.id));
+        }
+        return filtered
             .sort((left, right) => {
             const teamCompare = (left.team?.name ?? '').localeCompare(right.team?.name ?? '', 'de');
             if (teamCompare !== 0)

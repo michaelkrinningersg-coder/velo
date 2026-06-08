@@ -480,7 +480,22 @@ export class GameStateService {
       if (phase?.phase === 'build') {
         activePeakDate = null;
         peakSForm = 0;
-        // Do not override formBonus, it builds incrementally.
+        // S-Form only accumulates via daily advances (syncRiderDailyStates).
+        // Prevent retroactive form from the previous year: if the build window
+        // started before Jan 1 of this season, the max legitimate form is
+        // (days since Jan 1) * RISE_STEP. If the DB value exceeds this (e.g.
+        // from an older run), reset it to 0 so it builds up correctly.
+        const peakDayForBuild = isoDateToDayNumber(phase.peakDate);
+        const buildWindowStart = peakDayForBuild - SEASON_FORM_RISE_DAYS;
+        const seasonStartDay = isoDateToDayNumber(`${currentSeason}-01-01`);
+        if (buildWindowStart < seasonStartDay || seasonChanged) {
+          const currentDayNum = isoDateToDayNumber(currentDate);
+          const daysSinceSeasonStart = Math.max(0, currentDayNum - seasonStartDay);
+          const maxLegitForm = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, daysSinceSeasonStart * SEASON_FORM_RISE_STEP_RAW));
+          if (formBonus > maxLegitForm) {
+            formBonus = SEASON_FORM_MIN_RAW;
+          }
+        }
       } else if (phase?.phase === 'decline') {
         peakSForm = row.active_peak_date === phase.peakDate ? row.peak_s_form : row.form_bonus;
         formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
@@ -616,8 +631,17 @@ export class GameStateService {
         activePeakDate = null;
         peakSForm = 0;
         peakRForm = 0;
-        if (healthStatus === 'healthy') {
+        // Only accumulate form after Jan 1 of the current season.
+        // If the build window starts in the previous year, riders begin at 0 on Jan 1.
+        const peakDayForBuild2 = isoDateToDayNumber(phase.peakDate);
+        const buildWindowStartDay = peakDayForBuild2 - SEASON_FORM_RISE_DAYS;
+        const seasonStart2Day = isoDateToDayNumber(`${nextSeason}-01-01`);
+        const nextDayNum = isoDateToDayNumber(nextDate);
+        const effectiveBuildStart = Math.max(buildWindowStartDay, seasonStart2Day);
+        if (nextDayNum >= effectiveBuildStart && healthStatus === 'healthy') {
           formBonus = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, formBonus + SEASON_FORM_RISE_STEP_RAW));
+        } else if (nextDayNum < effectiveBuildStart) {
+          formBonus = SEASON_FORM_MIN_RAW;
         }
       } else {
         activePeakDate = null;

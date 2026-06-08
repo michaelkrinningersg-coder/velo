@@ -54,9 +54,9 @@ interface SegmentPosition {
   endKm: number;
 }
 
-const MIN_SEGMENT_KM = 0.3;
+const MIN_SEGMENT_KM = 0.35;
 const SPRINT_CUT_KM = 0.3;
-const DOUGLAS_PEUCKER_EPSILON = 7;
+const DOUGLAS_PEUCKER_EPSILON = 8;
 const IMPORT_ELEVATION_SMOOTHING_RADIUS = 1;
 const CLIMB_MIN_GAIN_METERS = 100;
 const CLIMB_MIN_AVG_GRADIENT = 3;
@@ -64,7 +64,7 @@ const MEDIUM_MOUNTAIN_MIN_GAIN_METERS = 200;
 const MOUNTAIN_MIN_GAIN_METERS = 600;
 const MOUNTAIN_MIN_TOP_ELEVATION_METERS = 850;
 const CLIMB_BREAK_DESCENT_METERS = 50;
-const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.5;
+const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.7;
 const SEGMENT_MIN_HILL_GAIN_METERS = 15;
 const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
 const STAGE_DETAILS_HEADER = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';

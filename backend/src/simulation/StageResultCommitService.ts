@@ -583,6 +583,14 @@ export class StageResultCommitService {
           .map((entry: any, index: any) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
       : [];
 
+    // For mountain classification tie-breaking: when points are equal, use stage
+    // finish rank (crossing order). This is especially important at mountain finishes
+    // where the finish line IS the mountain top.
+    const stageRankByRiderId = new Map(
+      stageRows
+        .filter((r: any) => r.riderId != null)
+        .map((r: any) => [r.riderId as number, r.rank as number]),
+    );
     const mountainRows = race.isStageRace
       ? [...classificationPerformance]
           .map((entry: any) => ({
@@ -590,7 +598,10 @@ export class StageResultCommitService {
             teamId: entry.team.id,
             points: (previousMountain.get(entry.rider.id) ?? 0) + entry.mountainPoints,
           }))
-          .sort((left: any, right: any) => right.points - left.points || left.riderId - right.riderId)
+          .sort((left: any, right: any) =>
+            right.points - left.points
+            || (stageRankByRiderId.get(left.riderId) ?? 9999) - (stageRankByRiderId.get(right.riderId) ?? 9999)
+            || left.riderId - right.riderId)
           .map((entry: any, index: any) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
       : [];
 

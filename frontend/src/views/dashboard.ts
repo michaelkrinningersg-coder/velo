@@ -159,6 +159,38 @@ export async function loadRaces(): Promise<void> {
   if (isActiveView('dashboard')) {
     renderDashboard();
   }
+  void logParticipantCountsOnce();
+}
+
+async function logParticipantCountsOnce(): Promise<void> {
+  const season = state.gameState?.season;
+  if (!season || state.races.length === 0) return;
+
+  const storageKey = `participantCountsLogged_${season}`;
+  if (localStorage.getItem(storageKey)) return;
+
+  // Fetch participant counts for all upcoming races in parallel (batched to avoid overloading)
+  const upcomingRaces = state.races.slice(0, 30);
+  const results = await Promise.all(
+    upcomingRaces.map(async (race) => {
+      const res = await api.getRaceProgramParticipants(race.id);
+      return { race, count: res.success ? (res.data?.length ?? 0) : -1 };
+    }),
+  );
+
+  // Only log if we got any non-zero participants (i.e., programs are rolled)
+  const hasParticipants = results.some((r) => r.count > 0);
+  if (!hasParticipants) return;
+
+  console.group(`[Velo] Teilnehmeranzahl Saison ${season}`);
+  for (const { race, count } of results) {
+    if (count >= 0) {
+      console.log(`${race.name} (${race.startDate}): ${count} Programmfahrer`);
+    }
+  }
+  console.groupEnd();
+
+  localStorage.setItem(storageKey, '1');
 }
 
 export function renderDashboardRaces(): void {
