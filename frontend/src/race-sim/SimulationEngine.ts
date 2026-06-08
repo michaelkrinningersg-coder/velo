@@ -774,8 +774,7 @@ function normalizeMarkerClassificationEntries(
       : null;
 
   const effectiveScore = (entry: MarkerCrossing): number => {
-    if (!tieContext || !riderStateById) return entry.photoFinishScore;
-    return entry.photoFinishScore + resolveMarkerCrossingTieBreakAdjustment(entry, tieContext, riderStateById, isClimberMalusStage);
+    return entry.photoFinishScore;
   };
 
   if (!applyTimeTieGroups) {
@@ -853,7 +852,7 @@ function orderRoadRiders(riders: RiderState[], finishContext: TieBreakContext, i
   let previousTime: number | null = null;
 
   const effectiveScore = (r: RiderState): number =>
-    r.photoFinishScore + resolveSpecializationTieBreakAdjustment(r, finishContext, isClimberMalusStage);
+    r.photoFinishScore;
 
   const flushGroup = (): void => {
     rankedFinished.push(...group.sort((left, right) => effectiveScore(right) - effectiveScore(left) || left.rider.id - right.rider.id));
@@ -1730,6 +1729,7 @@ export class SimulationEngine {
         this.recordBreakawayFallbackCheckpointCrossings(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
         rider.finishTimeSeconds = activeStepStartSeconds + finishSeconds;
         rider.currentSpeedMps = 0;
+        rider.photoFinishScore += resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
       } else {
         rider.distanceCoveredMeters = targetDistance;
         this.recordIntermediateSplits(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
@@ -3182,7 +3182,7 @@ export class SimulationEngine {
     const finishContext = this.resolveFinishMarkerType();
     const climberMalusStage = this.isClimberMalusStage();
     const effectiveScore = (r: RiderState): number =>
-      r.photoFinishScore + resolveSpecializationTieBreakAdjustment(r, finishContext, climberMalusStage);
+      r.photoFinishScore;
 
     const orderedFirstFinishGroup = [...firstFinishGroup]
       .sort((left, right) => effectiveScore(right) - effectiveScore(left) || left.rider.id - right.rider.id);
@@ -3246,7 +3246,15 @@ export class SimulationEngine {
       const crossingTimeSeconds = Math.max(0, this.isTimeTrialMode
         ? stepStartSeconds + secondsToMarker - rider.startOffsetSeconds
         : stepStartSeconds + secondsToMarker);
-      const photoFinishScore = this.resolveMarkerCrossingScore(rider, marker);
+      let photoFinishScore = this.resolveMarkerCrossingScore(rider, marker);
+      const tieContext: TieBreakContext | null = marker.markerType === 'sprint_intermediate'
+        ? 'sprint_intermediate'
+        : marker.markerType === 'climb_top'
+          ? 'climb_top'
+          : null;
+      if (tieContext) {
+        photoFinishScore += resolveSpecializationTieBreakAdjustment(rider, tieContext, this.isClimberMalusStage());
+      }
       rider.lastSplitLabel = marker.label;
       rider.lastSplitTimeSeconds = crossingTimeSeconds;
       rider.splitTimes[marker.key] = crossingTimeSeconds;

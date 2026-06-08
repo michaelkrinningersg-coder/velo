@@ -369,6 +369,8 @@ export class StageResultCommitService {
     );
     const awardedMarkerClassifications = this.applyMarkerClassificationAwards(race, stage, classifiedPerformance, normalizedMarkerClassifications);
 
+    normalizeRoadStageTimeGroups(classifiedPerformance, stage.profile);
+
     this.applyFinishLineAwards(race, stage, classifiedPerformance, {
       awardPoints: stage.profile !== 'TTT',
       awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
@@ -523,7 +525,6 @@ export class StageResultCommitService {
     dnfEntries: Array<{ riderId: number; statusReason: string | null }> = [],
     incidents: PrecalculatedRaceIncident[] = [],
   ): StageResultCommitResponse {
-    normalizeRoadStageTimeGroups(performance, stage.profile);
     const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
 
     const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
