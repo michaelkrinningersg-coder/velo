@@ -54,9 +54,9 @@ interface SegmentPosition {
   endKm: number;
 }
 
-const MIN_SEGMENT_KM = 0.2;
+const MIN_SEGMENT_KM = 0.3;
 const SPRINT_CUT_KM = 0.3;
-const DOUGLAS_PEUCKER_EPSILON = 6;
+const DOUGLAS_PEUCKER_EPSILON = 7;
 const IMPORT_ELEVATION_SMOOTHING_RADIUS = 1;
 const CLIMB_MIN_GAIN_METERS = 100;
 const CLIMB_MIN_AVG_GRADIENT = 3;
@@ -455,29 +455,29 @@ function enforceMaximumSegmentLength(points: ProfilePoint[]): ProfilePoint[] {
   if (points.length <= 1) return points;
 
   const result: ProfilePoint[] = [points[0]];
-  
+
   for (let index = 1; index < points.length; index += 1) {
     const previous = result[result.length - 1];
     const current = points[index];
-    
+
     const distanceKm = current.distanceKm - previous.distanceKm;
     if (distanceKm <= 0) {
       result.push(current);
       continue;
     }
-    
+
     const gradientPercent = ((current.elevation - previous.elevation) / (distanceKm * 1000)) * 100;
-    
+
     let maxLen = 30;
     if (gradientPercent > 5 || gradientPercent < -5) {
       maxLen = 3;
     }
-    
+
     if (distanceKm > maxLen) {
       const splits = Math.ceil(distanceKm / maxLen);
       const splitDist = distanceKm / splits;
       const splitElev = (current.elevation - previous.elevation) / splits;
-      
+
       for (let s = 1; s < splits; s += 1) {
         result.push({
           distanceKm: previous.distanceKm + splitDist * s,
@@ -485,10 +485,10 @@ function enforceMaximumSegmentLength(points: ProfilePoint[]): ProfilePoint[] {
         });
       }
     }
-    
+
     result.push(current);
   }
-  
+
   return result;
 }
 

@@ -480,10 +480,10 @@ export class GameStateService {
       if (phase?.phase === 'build') {
         activePeakDate = null;
         peakSForm = 0;
-        formBonus = resolveBuildValue(phase.elapsedDays);
+        // Do not override formBonus, it builds incrementally.
       } else if (phase?.phase === 'decline') {
-        formBonus = resolveDeclineValue(SEASON_FORM_MAX_RAW, phase.elapsedDays);
-        peakSForm = SEASON_FORM_MAX_RAW;
+        peakSForm = row.active_peak_date === phase.peakDate ? row.peak_s_form : row.form_bonus;
+        formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
         activePeakDate = phase.peakDate;
       } else {
         formBonus = 0;
@@ -601,9 +601,8 @@ export class GameStateService {
       const phase = resolvePeakPhase(nextDate, peakDates);
       if (phase?.phase === 'decline' && phase.elapsedDays === 0) {
         activePeakDate = phase.peakDate;
-        peakSForm = SEASON_FORM_MAX_RAW;
+        peakSForm = formBonus;
         peakRForm = roundFormBonus(Math.max(0, raceFormBonus));
-        formBonus = SEASON_FORM_MAX_RAW;
       } else if (phase?.phase === 'decline') {
         activePeakDate = phase.peakDate;
         formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);

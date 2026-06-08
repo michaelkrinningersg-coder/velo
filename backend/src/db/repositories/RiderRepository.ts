@@ -635,7 +635,7 @@ export class RiderRepository {
       SELECT
         stage_entries.rider_id AS rider_id,
         COUNT(DISTINCT stage_entries.stage_id) AS race_days,
-        SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
+        COUNT(DISTINCT CASE WHEN results.rank = 1 THEN results.stage_id ELSE NULL END) AS wins
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
