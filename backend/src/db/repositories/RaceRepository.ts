@@ -101,26 +101,28 @@ export class RaceRepository {
     }
 
     if (race && isWinterBreak(race.startDate)) {
-      const ridersByTeamId = new Map<number, Rider[]>();
-      for (const rider of ridersById.values()) {
-        if (rider.activeTeamId == null) continue;
-        const teamRiders = ridersByTeamId.get(rider.activeTeamId) ?? [];
-        teamRiders.push(rider);
-        ridersByTeamId.set(rider.activeTeamId, teamRiders);
-      }
+      return [];
+    }
 
-      const winterLockedRiderIds = new Set<number>();
-      for (const teamRiders of ridersByTeamId.values()) {
-        const topTwo = [...teamRiders].sort((a, b) => b.overallRating - a.overallRating).slice(0, 2);
-        for (const rider of topTwo) {
-          winterLockedRiderIds.add(rider.id);
-        }
-      }
+    const ridersByTeamId = new Map<number, Rider[]>();
+    for (const rider of ridersById.values()) {
+      if (rider.activeTeamId == null) continue;
+      const teamRiders = ridersByTeamId.get(rider.activeTeamId) ?? [];
+      teamRiders.push(rider);
+      ridersByTeamId.set(rider.activeTeamId, teamRiders);
+    }
 
-      for (let i = participants.length - 1; i >= 0; i--) {
-        if (winterLockedRiderIds.has(participants[i].rider.id)) {
-          participants.splice(i, 1);
-        }
+    const winterLockedRiderIds = new Set<number>();
+    for (const teamRiders of ridersByTeamId.values()) {
+      const topTwo = [...teamRiders].sort((a, b) => b.overallRating - a.overallRating).slice(0, 2);
+      for (const rider of topTwo) {
+        winterLockedRiderIds.add(rider.id);
+      }
+    }
+
+    for (let i = participants.length - 1; i >= 0; i--) {
+      if (winterLockedRiderIds.has(participants[i].rider.id)) {
+        participants.splice(i, 1);
       }
     }
 

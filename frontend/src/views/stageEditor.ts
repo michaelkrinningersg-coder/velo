@@ -58,7 +58,7 @@ export const STAGE_MARKER_TYPES: StageMarkerType[] = ['start', 'climb_start', 'c
 export const STAGE_MARKER_CATEGORIES: StageMarkerCategory[] = ['Sprint', '4', '3', '2', '1', 'HC'];
 export const STAGE_EDITOR_MIN_SEGMENT_KM = 0.2;
 export const STAGE_EDITOR_SPRINT_CUT_KM = 0.3;
-export const STAGE_EDITOR_TABLE_COLUMN_COUNT = 10;
+export const STAGE_EDITOR_TABLE_COLUMN_COUNT = 7;
 export const STAGE_EDITOR_CLIMB_MIN_GAIN_METERS = 100;
 export const STAGE_EDITOR_CLIMB_MIN_AVG_GRADIENT = 3;
 export const STAGE_EDITOR_CLIMB_BREAK_DESCENT_METERS = 50;
@@ -533,7 +533,7 @@ export function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void 
     return;
   }
 
-  const nextTerrains = draft.segments.map((segment) => (isManualStageEditorTerrain(segment.terrain)
+  const nextTerrains = draft.segments.map((segment) => (segment.manualTerrain || isManualStageEditorTerrain(segment.terrain)
     ? segment.terrain
     : classifyAutoStageEditorBaseTerrain(segment)));
   const climbs = detectStageEditorClimbs(draft.waypoints);
@@ -543,7 +543,7 @@ export function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void 
     const climbTerrain = classifyAutoClimbTerrain(climb);
     if (!climbTerrain) return;
     for (let index = climb.startIndex; index < climb.topIndex; index += 1) {
-      if (!isManualStageEditorTerrain(nextTerrains[index])) {
+      if (!(draft.segments[index].manualTerrain || isManualStageEditorTerrain(nextTerrains[index]))) {
         nextTerrains[index] = climbTerrain;
       }
     }
@@ -559,7 +559,7 @@ export function applyAutomaticStageEditorTerrain(draft: StageEditorDraft): void 
     }
 
     for (let index = descentStartIndex; index < endExclusive; index += 1) {
-      if (!isManualStageEditorTerrain(nextTerrains[index]) && nextTerrains[index] === 'Flat') {
+      if (!(draft.segments[index].manualTerrain || isManualStageEditorTerrain(nextTerrains[index])) && nextTerrains[index] === 'Flat') {
         nextTerrains[index] = 'Abfahrt';
       }
     }
@@ -647,7 +647,7 @@ export function ensureStageEditorBoundaryMarkers(draft: StageEditorDraft): void 
 
 export function renderSegmentMarkerRows(markers: StageMarker[], segmentIndex: number, totalSegments: number, scope: 'start' | 'end'): string {
   if (markers.length === 0) {
-    return '<div class="stage-editor-marker-empty">Keine Marker</div>';
+    return '';
   }
 
   return `<div class="stage-editor-marker-list">${markers.map((marker, markerIndex) => {
@@ -667,14 +667,9 @@ export function renderSegmentMarkerRows(markers: StageMarker[], segmentIndex: nu
 }
 
 export function renderSegmentMarkerBlock(markers: StageMarker[], segmentIndex: number, totalSegments: number, scope: 'start' | 'end'): string {
-  const title = scope === 'start' ? 'Startmarker' : 'Endmarker';
   const addLabel = scope === 'start' ? 'Start / Berg+' : 'Sprint / Berg / Ziel+';
   return `
     <div class="stage-editor-marker-block">
-      <div class="stage-editor-marker-block-head">
-        <strong>${title}</strong>
-        <span>${esc(describeMarkerScope(scope, segmentIndex, totalSegments))}</span>
-      </div>
       ${renderSegmentMarkerRows(markers, segmentIndex, totalSegments, scope)}
       <button type="button" class="btn btn-secondary btn-xs stage-editor-marker-add" data-segment-action="add-marker" data-marker-scope="${scope}" data-segment-index="${segmentIndex}">${addLabel}</button>
     </div>`;
@@ -1400,12 +1395,11 @@ export function renderStageEditor(): void {
 
   chart.innerHTML = renderStageEditorChart(draft);
   tbody.innerHTML = draft.segments.map((segment, index) => `
-    <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}">
+    <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}" style="height: 3.5rem;">
+      <td class="stage-editor-cell-nr text-muted" style="text-align:center; font-weight:700;">${index + 1}</td>
       <td class="stage-editor-cell-length"><input type="number" step="0.01" min="0.2" value="${segment.lengthKm.toFixed(2)}" data-field="segmentLengthKm" class="${stageEditorFieldErrorClass(segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM)}"></td>
       <td class="stage-editor-cell-gradient"><input type="number" step="0.1" value="${segment.gradientPercent.toFixed(1)}" data-field="segmentGradientPercent"></td>
       <td class="stage-editor-cell-terrain"><select data-field="terrain">${terrainOptionsHtml(segment.terrain)}</select></td>
-      <td class="stage-editor-cell-tech"><input type="number" step="1" min="1" max="10" value="${segment.techLevel}" data-field="techLevel" class="${stageEditorFieldErrorClass(segment.techLevel < 1 || segment.techLevel > 10)}"></td>
-      <td class="stage-editor-cell-wind"><input type="number" step="1" min="1" max="10" value="${segment.windExp}" data-field="windExp" class="${stageEditorFieldErrorClass(segment.windExp < 1 || segment.windExp > 10)}"></td>
       <td class="stage-editor-cell-start-markers">
         ${renderSegmentMarkerBlock(segment.markers, index, draft.segments.length, 'start')}
       </td>
@@ -1413,11 +1407,13 @@ export function renderStageEditor(): void {
         ${renderSegmentMarkerBlock(segment.endMarkers, index, draft.segments.length, 'end')}
       </td>
       <td class="stage-editor-row-actions">
-        <div class="text-muted">${getStageEditorSegmentEndElevation(segment)} m</div>
-        ${renderStageEditorSegmentIssues(draft, index)}
-        <button type="button" class="btn btn-secondary btn-xs" data-segment-action="insert" data-segment-index="${index}">+</button>
-        ${index === draft.segments.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-segment-action="append" data-segment-index="${index}">+ Ende</button>` : ''}
-        ${draft.segments.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" data-segment-action="delete" data-segment-index="${index}">✕</button>` : ''}
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <div class="text-muted" style="min-width:3.5rem;">${getStageEditorSegmentEndElevation(segment)} m</div>
+          ${renderStageEditorSegmentIssues(draft, index)}
+          <button type="button" class="btn btn-secondary btn-xs" data-segment-action="insert" data-segment-index="${index}">+</button>
+          ${index === draft.segments.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-segment-action="append" data-segment-index="${index}">+ Ende</button>` : ''}
+          ${draft.segments.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" data-segment-action="delete" data-segment-index="${index}">✕</button>` : ''}
+        </div>
       </td>
     </tr>`).join('');
 
@@ -1544,6 +1540,7 @@ export function updateStageEditorWaypoint(index: number, field: 'startElevation'
     segment.gradientPercent = Number.parseFloat(rawValue || '0');
   } else if (field === 'terrain') {
     segment.terrain = rawValue as StageTerrain;
+    segment.manualTerrain = true;
   } else if (field === 'techLevel') {
     segment.techLevel = Math.max(1, Math.min(10, Number.parseInt(rawValue || '5', 10)));
   } else if (field === 'windExp') {

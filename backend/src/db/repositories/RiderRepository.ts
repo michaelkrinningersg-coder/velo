@@ -638,10 +638,11 @@ export class RiderRepository {
         SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
+      JOIN races ON races.id = stages.race_id
       LEFT JOIN results ON results.stage_id = stages.id AND (
         (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id) OR
         (results.result_type_id = ? AND results.rider_id IS NULL AND results.team_id = stage_entries.team_id) OR
-        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id)
+        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages)
       )
       WHERE stage_entries.status != 'dns'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
@@ -969,8 +970,13 @@ export class RiderRepository {
           
         UNION ALL
         
-        SELECT rank FROM results
-        WHERE result_type_id = ? AND rider_id = ?
+        SELECT results.rank FROM results
+        JOIN stages ON stages.id = results.stage_id
+        JOIN races ON races.id = stages.race_id
+        WHERE results.result_type_id = ? 
+          AND results.rider_id = ?
+          AND races.is_stage_race = 1 
+          AND stages.stage_number = races.number_of_stages
       )
     `).get(RESULT_TYPE_IDS.stage, riderId, RESULT_TYPE_IDS.stage, riderId, RESULT_TYPE_IDS.gc, riderId) as { wins: number | null } | undefined;
 

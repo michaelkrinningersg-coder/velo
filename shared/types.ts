@@ -877,6 +877,7 @@ export interface StageEditorSegment {
   lengthKm: number;
   gradientPercent: number;
   terrain: StageTerrain;
+  manualTerrain?: boolean;
   techLevel: number;
   windExp: number;
   markers: StageMarker[];

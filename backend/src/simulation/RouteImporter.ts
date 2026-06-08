@@ -56,7 +56,7 @@ interface SegmentPosition {
 
 const MIN_SEGMENT_KM = 0.2;
 const SPRINT_CUT_KM = 0.3;
-const DOUGLAS_PEUCKER_EPSILON = 9;
+const DOUGLAS_PEUCKER_EPSILON = 6;
 const IMPORT_ELEVATION_SMOOTHING_RADIUS = 1;
 const CLIMB_MIN_GAIN_METERS = 100;
 const CLIMB_MIN_AVG_GRADIENT = 3;
@@ -449,6 +449,47 @@ function enforceMinimumSegmentLength(points: ProfilePoint[], minSegmentKm: numbe
   }
 
   return kept;
+}
+
+function enforceMaximumSegmentLength(points: ProfilePoint[]): ProfilePoint[] {
+  if (points.length <= 1) return points;
+
+  const result: ProfilePoint[] = [points[0]];
+  
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = result[result.length - 1];
+    const current = points[index];
+    
+    const distanceKm = current.distanceKm - previous.distanceKm;
+    if (distanceKm <= 0) {
+      result.push(current);
+      continue;
+    }
+    
+    const gradientPercent = ((current.elevation - previous.elevation) / (distanceKm * 1000)) * 100;
+    
+    let maxLen = 30;
+    if (gradientPercent > 5 || gradientPercent < -5) {
+      maxLen = 3;
+    }
+    
+    if (distanceKm > maxLen) {
+      const splits = Math.ceil(distanceKm / maxLen);
+      const splitDist = distanceKm / splits;
+      const splitElev = (current.elevation - previous.elevation) / splits;
+      
+      for (let s = 1; s < splits; s += 1) {
+        result.push({
+          distanceKm: previous.distanceKm + splitDist * s,
+          elevation: previous.elevation + splitElev * s,
+        });
+      }
+    }
+    
+    result.push(current);
+  }
+  
+  return result;
 }
 
 function calculateElevationGain(points: ProfilePoint[]): number {
@@ -1231,10 +1272,10 @@ export class RouteImporter {
       buildProfile(parsed.points),
       IMPORT_ELEVATION_SMOOTHING_RADIUS,
     );
-    const simplifiedProfile = enforceMinimumSegmentLength(
+    const simplifiedProfile = enforceMaximumSegmentLength(enforceMinimumSegmentLength(
       simplifyDouglasPeucker(profile, DOUGLAS_PEUCKER_EPSILON),
       MIN_SEGMENT_KM,
-    );
+    ));
     const elevationGainMeters = calculateElevationGain(profile);
     const totalDistanceKm = round2(simplifiedProfile[simplifiedProfile.length - 1].distanceKm);
     const rawSegments = mergeImportedSegments(buildSegments(simplifiedProfile));

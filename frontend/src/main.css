@@ -3933,15 +3933,17 @@ html, body {
   min-width: 1560px;
 }
 
-.stage-editor-col-length,
-.stage-editor-col-gradient,
-.stage-editor-col-terrain {
-  width: 15rem;
+.stage-editor-col-nr {
+  width: 3rem;
 }
 
-.stage-editor-col-tech,
-.stage-editor-col-wind {
-  width: 9rem;
+.stage-editor-col-length,
+.stage-editor-col-gradient {
+  width: 7.5rem;
+}
+
+.stage-editor-col-terrain {
+  width: 15rem;
 }
 
 .stage-editor-col-start-markers,
