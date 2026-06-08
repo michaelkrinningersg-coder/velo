@@ -452,8 +452,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   
-  const chartW = 500;
-  const chartH = 120;
+  const chartW = 1000;
+  const chartH = 240;
   const padL = 30;
   const padT = 20;
 
@@ -487,13 +487,14 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   for (let i = 0; i <= 12; i += 2) {
     const y = padT + chartH - (i / 12) * chartH;
     gridHtml += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border-primary)" stroke-dasharray="2,2" />`;
-    gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="var(--text-secondary)" font-size="10" text-anchor="end">${i}</text>`;
+    gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="#ffffff" font-size="10" text-anchor="end">${i}</text>`;
   }
 
   let xAxisHtml = '';
   for (let week = 0; week <= 52; week += 5) {
     const x = padL + (week / 52) * chartW;
-    xAxisHtml += `<text x="${x}" y="${padT + chartH + 15}" fill="var(--text-secondary)" font-size="10" text-anchor="middle">W${week}</text>`;
+    gridHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="var(--border-primary)" stroke-dasharray="2,2" />`;
+    xAxisHtml += `<text x="${x}" y="${padT + chartH + 15}" fill="#ffffff" font-size="10" text-anchor="middle">W${week}</text>`;
   }
 
   let peaksHtml = '';
@@ -505,17 +506,22 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       const x = padL + (pDay / 365) * chartW;
       peaksHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="#ffffff" stroke-width="2"><title>Peak: ${pDate}</title></line>`;
       
-      // Build phase (14 days before peak)
-      const buildStartDay = pDay - 14;
+      // Build phase (42 days before peak)
+      const buildStartDay = pDay - 42;
       const buildX = padL + (buildStartDay / 365) * chartW;
-      const buildW = (14 / 365) * chartW;
+      const buildW = (42 / 365) * chartW;
       phaseBackgroundsHtml += `<rect x="${buildX}" y="${padT}" width="${buildW}" height="${chartH}" fill="rgba(16, 185, 129, 0.1)" />`;
 
-      // Decline phase (28 days after peak)
-      const declineW = (28 / 365) * chartW;
+      // Decline phase (14 days after peak)
+      const declineW = (14 / 365) * chartW;
       phaseBackgroundsHtml += `<rect x="${x}" y="${padT}" width="${declineW}" height="${chartH}" fill="rgba(239, 68, 68, 0.1)" />`;
     }
   }
+
+  const currentTime = new Date(currentDateStr).getTime();
+  const currentDay = (currentTime - yearStart) / msPerDay;
+  const currentX = padL + (currentDay / 365) * chartW;
+  peaksHtml += `<line x1="${currentX}" y1="${padT}" x2="${currentX}" y2="${padT + chartH}" stroke="#ef4444" stroke-width="3"><title>Heute: ${currentDateStr}</title></line>`;
 
   return `
     <section class="rider-stats-form-tab">
@@ -523,7 +529,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
         <h3>Formverlauf (Saison ${currentYear})</h3>
       </div>
       <div class="rider-stats-chart-wrapper" style="margin-top: 1rem; overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-        <svg width="100%" height="200" viewBox="0 0 540 180" style="min-width: 500px;">
+        <svg width="100%" height="300" viewBox="0 0 1050 280" style="min-width: 1000px;">
           ${phaseBackgroundsHtml}
           ${gridHtml}
           ${xAxisHtml}

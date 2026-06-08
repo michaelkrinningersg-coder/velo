@@ -2424,7 +2424,6 @@ export class SimulationEngine {
       rider.draftPackFactor = 0;
       rider.currentSpeedMps = 0;
       rider.isAttacking = false;
-      rider.isBreakaway = false;
       return;
     }
 
