@@ -816,7 +816,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form') {
       return;
     }
 

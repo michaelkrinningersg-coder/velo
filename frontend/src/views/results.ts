@@ -18,8 +18,7 @@ import {
   renderResultsParticipant,
   renderNonFinisherStatusBadge,
   formatNonFinisherReason,
-  renderGcRankDelta,
-  resolveGcRankDelta,
+  renderRankDelta,
   formatMarkerLabel,
   FLAG_CODE_BY_CODE3,
   GC_RESULT_TYPE_ID,
@@ -171,7 +170,10 @@ export function renderResultsView(): void {
   const isGcClassification = selectedClassification?.resultTypeId === GC_RESULT_TYPE_ID;
   const isPointsLikeClassification = selectedClassification?.resultTypeId === POINTS_RESULT_TYPE_ID
     || selectedClassification?.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
-  const previousGcRanks = new Map((state.stageResults.previousGcStandings ?? []).map((standing) => [standing.riderId, standing.rank] as const));
+  const isYouthClassification = selectedClassification?.resultTypeId === 5;
+  const isTeamClassification = selectedClassification?.resultTypeId === 6;
+  const showTrendColumn = isGcClassification || isPointsLikeClassification || isYouthClassification || isTeamClassification;
+
   const resultTypeButtons = state.stageResults.classifications.map((classification) => `
     <button
       type="button"
@@ -247,9 +249,10 @@ export function renderResultsView(): void {
         <th>Punktewertung</th>
         <th>UCI Punkte</th>
       `
-      : isPointsLikeClassification
+      : isPointsLikeClassification || isYouthClassification
         ? `
           <th>Platz</th>
+          <th>Trend</th>
           <th class="results-jersey-col">Trikot</th>
           <th>Fahrer / Team</th>
           <th class="results-flag-col">Flagge</th>
@@ -257,8 +260,20 @@ export function renderResultsView(): void {
           <th>Punkte</th>
           <th>UCI Punkte</th>
         `
+      : isTeamClassification
+        ? `
+          <th>Platz</th>
+          <th>Trend</th>
+          <th class="results-jersey-col">Trikot</th>
+          <th>Team</th>
+          <th class="results-flag-col">Flagge</th>
+          <th>Zeit</th>
+          <th>Rückstand</th>
+          <th>UCI Punkte</th>
+        `
       : `
         <th>Platz</th>
+        ${showTrendColumn ? '<th>Trend</th>' : ''}
         <th class="results-jersey-col">Trikot</th>
         <th>Fahrer / Team</th>
         <th class="results-flag-col">Flagge</th>
@@ -293,14 +308,14 @@ export function renderResultsView(): void {
       const timeCell = row.timeSeconds != null
         ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
         : '–';
-      const gcDelta = resolveGcRankDelta(row, previousGcRanks);
-      const gcDeltaCell = isGcClassification
-        ? `<td class="results-gc-delta-cell">${renderGcRankDelta(gcDelta.previousRank, gcDelta.delta)}</td>`
+      const trendCell = showTrendColumn
+        ? `<td class="results-gc-delta-cell">${renderRankDelta(row.previousRank, row.rankDelta)}</td>`
         : '';
-      if (isPointsLikeClassification) {
+      if (isPointsLikeClassification || isYouthClassification) {
         return `
           <tr>
             <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+            ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
             <td>${participantCell}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
@@ -309,10 +324,23 @@ export function renderResultsView(): void {
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
       }
+      if (isTeamClassification) {
+        return `
+          <tr>
+            <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+            ${trendCell}
+            <td class="results-jersey-col-cell">${jerseyCell}</td>
+            <td>${esc(row.teamName)}</td>
+            <td class="results-flag-col-cell">${flagCell}</td>
+            <td>${timeCell}</td>
+            <td>${esc(formatRaceGap(row.gapSeconds))}</td>
+            <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
+          </tr>`;
+      }
       return `
         <tr>
           <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
-          ${gcDeltaCell}
+          ${trendCell}
           <td class="results-jersey-col-cell">${jerseyCell}</td>
           <td>${participantCell}</td>
           <td class="results-flag-col-cell">${flagCell}</td>

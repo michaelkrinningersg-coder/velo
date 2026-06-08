@@ -6,6 +6,7 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
+import { isWinterBreak } from '../db/mappers';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
   1: 'WorldTour',
@@ -63,17 +64,6 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
 };
 
-function isWinterBreak(dateString: string): boolean {
-  const match = dateString.match(/^\d{4}-(\d{2})-(\d{2})/);
-  if (!match) return false;
-  const month = parseInt(match[1], 10);
-  const day = parseInt(match[2], 10);
-
-  if (month === 10 && day >= 15) return true;
-  if (month === 11 || month === 12 || month === 1) return true;
-  if (month === 2 && day <= 15) return true;
-  return false;
-}
 
 function createDeterministicRandom(seed: number): () => number {
   let state = seed >>> 0;

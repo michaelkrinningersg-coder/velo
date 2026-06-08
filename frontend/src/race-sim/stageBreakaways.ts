@@ -286,6 +286,15 @@ export function precalculateStageBreakaway(
       return false;
     }
 
+    if (roleName === 'sprinter') {
+      if (race.isStageRace && stage.stageNumber <= 5) {
+        return false;
+      }
+      if (!race.isStageRace && ['Flat', 'Rolling', 'Hilly'].includes(stage.profile)) {
+        return false;
+      }
+    }
+
     return true;
   });
   if (eligibleRiders.length === 0) {

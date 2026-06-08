@@ -2402,7 +2402,7 @@ export class SimulationEngine {
   private syncRiderTelemetry(rider: RiderState, teamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null): void {
     const segment = this.currentSegment(rider);
     const windZone = this.currentWindZone(rider);
-    if (!segment || !windZone) {
+    if (isRiderInactive(rider) || !segment || !windZone) {
       rider.segmentStartKm = this.bootstrap.stageSummary.distanceKm;
       rider.segmentEndKm = this.bootstrap.stageSummary.distanceKm;
       rider.segmentStartElevation = 0;

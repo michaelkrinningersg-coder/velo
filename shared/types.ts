@@ -558,8 +558,8 @@ export interface RaceClassificationRow {
   gapSeconds: number | null;
   points: number | null;
   uciPoints: number | null;
-  gcPreviousRank?: number | null;
-  gcRankDelta?: number | null;
+  previousRank?: number | null;
+  rankDelta?: number | null;
 }
 
 export type StageResultRow = RaceClassificationRow;
@@ -650,7 +650,8 @@ export interface RealtimeGcStanding {
 }
 
 export interface RealtimeClassificationStanding {
-  riderId: number;
+  riderId: number | null;
+  teamId?: number | null;
   rank: number;
   points: number | null;
   timeSeconds: number | null;

@@ -386,7 +386,7 @@ export function formatNonFinisherReason(reason: string | null | undefined, isOtl
   return reason;
 }
 
-export function renderGcRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
+export function renderRankDelta(previousRank: number | null | undefined, delta: number | null | undefined): string {
   if (previousRank == null || delta == null || delta === 0) {
     return '<span class="results-gc-delta results-gc-delta-neutral">●</span>';
   }
@@ -396,25 +396,6 @@ export function renderGcRankDelta(previousRank: number | null | undefined, delta
   }
 
   return `<span class="results-gc-delta results-gc-delta-down"><span class="results-gc-delta-symbol">▼</span><span>${Math.abs(delta)}</span></span>`;
-}
-
-export function resolveGcRankDelta(
-  row: StageResultsPayload['classifications'][number]['rows'][number],
-  previousGcRanks: Map<number, number>,
-): { previousRank: number | null; delta: number | null } {
-  if (row.riderId == null) {
-    return { previousRank: null, delta: null };
-  }
-
-  const previousRank = previousGcRanks.get(row.riderId) ?? row.gcPreviousRank ?? null;
-  if (previousRank == null) {
-    return { previousRank: null, delta: null };
-  }
-
-  return {
-    previousRank,
-    delta: previousRank - row.rank,
-  };
 }
 
 export function formatMarkerLabel(markerType: StageMarkerType, label: string): string {

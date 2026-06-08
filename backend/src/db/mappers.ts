@@ -603,6 +603,18 @@ export function isoDateToDayNumber(isoDate: string): number {
   return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
 }
 
+export function isWinterBreak(dateString: string): boolean {
+  const match = dateString.match(/^\d{4}-(\d{2})-(\d{2})/);
+  if (!match) return false;
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+
+  if (month === 10 && day >= 15) return true;
+  if (month === 11 || month === 12 || month === 1) return true;
+  if (month === 2 && day <= 15) return true;
+  return false;
+}
+
 export function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
