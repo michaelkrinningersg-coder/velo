@@ -436,7 +436,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
 }
 
 export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): string {
-  if (!payload || !payload.formHistory || payload.formHistory.length === 0) {
+  if (!payload) {
     return `
       <section class="rider-stats-placeholder">
         <h3>Keine Formdaten vorhanden</h3>
@@ -444,8 +444,11 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       </section>`;
   }
 
-  const history = payload.formHistory;
-  const currentYear = new Date(history[history.length - 1].date).getUTCFullYear();
+  const history = payload.formHistory ?? [];
+  const currentDateStr = state.gameState?.currentDate ?? new Date().toISOString();
+  const currentYear = history.length > 0 
+    ? new Date(history[history.length - 1].date).getUTCFullYear()
+    : new Date(currentDateStr).getUTCFullYear();
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   

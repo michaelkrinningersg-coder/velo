@@ -3,6 +3,7 @@ import { DatabaseService } from '../db/DatabaseService';
 import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
 import { RiderRepository } from '../db/repositories/RiderRepository';
+import { ResultRepository } from '../db/repositories/ResultRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
@@ -519,8 +520,8 @@ export function createRouter(dbService: DatabaseService): Router {
 
     try {
       const db = dbService.getActiveConnection();
-      const payload = new GameRepository(db).getStageResults(stageId);
-      if (!payload) return fail(res, 404, `Keine Ergebnisse fÃ¼r Stage ${stageId} gefunden.`);
+      const payload = new ResultRepository(db).getStageResults(stageId);
+      if (!payload) return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
       ok<StageResultsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
