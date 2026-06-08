@@ -163,9 +163,11 @@ export class GameStateService {
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
-      this.syncCurrentFormHistory(state.currentDate);
-      this.syncedStateDate = state.currentDate;
+      if (new Date(state.currentDate).getDay() === 1) {
+        this.syncWeeklyFormHistory(state.currentDate);
       }
+      this.syncedStateDate = state.currentDate;
+    }
 
       // Lazily populate rider_skill_yearly_baseline for current season if missing
       const baselineCount = (this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season) as any).c;
