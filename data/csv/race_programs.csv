@@ -1,4 +1,4 @@
-id,name,p1_min,p1_max,p2_min,p2_max,p3_min,p3_max
+id,name,peak1_min,peak1_max,peak2_min,peak2_max,peak3_min,peak3_max
 1,Giro_Tour_A,18,22,27,31,36,40
 2,Giro_Tour_B,17,21,25,29,7,11
 3,Giro_Tour_C,12,16,19,23,28,32
