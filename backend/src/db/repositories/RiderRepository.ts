@@ -616,7 +616,7 @@ export class RiderRepository {
       careerRaceDaysBySeason,
       seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
       peakDates: tableExists(this.db, 'rider_daily_state') 
-        ? parsePeakDates(this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id)?.['peak_dates_json'])
+        ? parsePeakDates((this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id) as { peak_dates_json: string } | undefined)?.peak_dates_json)
         : [],
       formHistory: tableExists(this.db, 'rider_form_history') 
         ? (this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id) as Array<{ date: string; sForm: number; rForm: number; totalForm: number }>)
