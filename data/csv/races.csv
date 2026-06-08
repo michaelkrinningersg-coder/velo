@@ -8,3 +8,8 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 9,Figueira Champions Classic,29,7,0,1,2026-02-16,2026-02-16,61
 10,UAE Tour,105,3,1,7,2026-02-17,2026-02-23,70
 11,Tour of Oman,105,4,1,5,2026-02-07,2026-02-11,60
+12,Vuelta a Andalucia,8,4,1,5,2026-02-19,2026-02-23,62
+13,Faun-Ardeche,7,1,2026-03-01,2026-03-01,60
+14,Faun Drome,7,1,2026-03-02,2026-03-02,60
+
+

@@ -197,7 +197,7 @@ export function renderDashboardRaces(): void {
   const tbody = $('dashboard-races-tbody');
   const visibleRaces = state.races
     .filter(race => !state.gameState || race.endDate >= state.gameState.currentDate)
-    .slice(0, 8);
+    .slice(0, 20);
 
   if (visibleRaces.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Keine kommenden Rennen.</td></tr>';

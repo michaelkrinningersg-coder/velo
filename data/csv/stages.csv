@@ -33,3 +33,11 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 32,11,3,2026-02-09,Hilly_Difficult,48,oman_3.csv,80,90,1,1,1.5
 33,11,4,2026-02-10,Flat,19,oman_4.csv,70,90,1,1,1
 34,11,5,2026-02-11,Medium_Mountain,285,oman_5.csv,65,80,1.6,1,1
+35,12,1,2026-02-19,Hilly_Difficult,425,vuelta_andalucia_st1.csv,70,80,1.8,2,1
+36,12,2,2026-02-20,Hilly_Difficult,590,vuelta_andalucia_st2.csv,60,70,1.8,2,1
+37,12,3,2026-02-21,Flat,424,vuelta_andalucia_st3.csv,80,90,1,2.4,1.5
+38,12,4,2026-02-22,Rolling,130,vuelta_andalucia_st4.csv,80,90,1,2,1
+39,12,5,2026-02-23,Hilly_Difficult,65,vuelta_andalucia_st5.csv,50,65,2,2,1
+40,13,1,2026-03-01,Medium_Mountain,113,faun_ardeche.csv,70,75,1.5,2,1
+41,14,1,2026-03-02,Hilly_Difficult,87,faun_drome.csv,60,70,2.5,2,1
+
