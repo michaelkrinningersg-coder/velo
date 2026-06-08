@@ -653,15 +653,25 @@ export function resolveEffectiveRecuperationSkill(recuperationSkill: number, sta
   return Math.max(0, recuperationSkill - stageRaceRecuperationPenalty);
 }
 
-export function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number } | null {
+export function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number; actualBuildStartDay?: number } | null {
   const currentDay = isoDateToDayNumber(currentDate);
-  for (const peakDate of peakDates) {
+  const sortedPeaks = [...peakDates].sort((a, b) => isoDateToDayNumber(a) - isoDateToDayNumber(b));
+
+  for (let i = 0; i < sortedPeaks.length; i++) {
+    const peakDate = sortedPeaks[i];
     const peakDay = isoDateToDayNumber(peakDate);
+    const prevPeakDay = i > 0 ? isoDateToDayNumber(sortedPeaks[i - 1]) : Number.NEGATIVE_INFINITY;
+
     if (currentDay >= peakDay && currentDay < peakDay + SEASON_FORM_FALL_DAYS) {
       return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
     }
-    if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
-      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
+
+    const idealBuildStart = peakDay - SEASON_FORM_RISE_DAYS;
+    const prevDeclineEnd = prevPeakDay + SEASON_FORM_FALL_DAYS;
+    const actualBuildStartDay = Math.max(idealBuildStart, prevDeclineEnd);
+
+    if (currentDay >= actualBuildStartDay && currentDay < peakDay) {
+      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay, actualBuildStartDay };
     }
   }
 
@@ -688,7 +698,10 @@ export function resolveProjectionPoint(date: string, peakDates: string[]): { sFo
   }
 
   if (phase.phase === 'build') {
-    const sFormRaw = roundToTwoDecimals(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, (SEASON_FORM_RISE_DAYS - phase.elapsedDays + 1) * SEASON_FORM_RISE_STEP_RAW)));
+    const currentDay = isoDateToDayNumber(date);
+    const actualBuildStartDay = phase.actualBuildStartDay ?? (isoDateToDayNumber(phase.peakDate) - SEASON_FORM_RISE_DAYS);
+    const daysSinceBuildStarted = currentDay - actualBuildStartDay + 1;
+    const sFormRaw = roundToTwoDecimals(Math.min(SEASON_FORM_MAX_RAW, Math.max(0, daysSinceBuildStarted * SEASON_FORM_RISE_STEP_RAW)));
     const sForm = resolveEffectiveSeasonForm(sFormRaw);
     return { sForm, rForm: 0 };
   }

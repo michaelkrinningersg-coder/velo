@@ -500,16 +500,22 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   let peaksHtml = '';
   let phaseBackgroundsHtml = '';
   if (payload.peakDates) {
-    for (const pDate of payload.peakDates) {
+    const sortedPeaks = [...payload.peakDates].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    for (let i = 0; i < sortedPeaks.length; i++) {
+      const pDate = sortedPeaks[i];
       const pTime = new Date(pDate).getTime();
       const pDay = (pTime - yearStart) / msPerDay;
       const x = padL + (pDay / 365) * chartW;
       peaksHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="#ffffff" stroke-width="2"><title>Peak: ${pDate}</title></line>`;
       
-      // Build phase (42 days before peak)
-      const buildStartDay = pDay - 42;
-      const buildX = padL + (buildStartDay / 365) * chartW;
-      const buildW = (42 / 365) * chartW;
+      const prevPDay = i > 0 ? (new Date(sortedPeaks[i - 1]).getTime() - yearStart) / msPerDay : Number.NEGATIVE_INFINITY;
+      const idealBuildStartDay = pDay - 42;
+      const prevDeclineEnd = prevPDay + 14;
+      const actualBuildStartDay = Math.max(idealBuildStartDay, prevDeclineEnd);
+      const actualBuildDays = pDay - actualBuildStartDay;
+
+      const buildX = padL + (actualBuildStartDay / 365) * chartW;
+      const buildW = (actualBuildDays / 365) * chartW;
       phaseBackgroundsHtml += `<rect x="${buildX}" y="${padT}" width="${buildW}" height="${chartH}" fill="rgba(16, 185, 129, 0.1)" />`;
 
       // Decline phase (14 days after peak)

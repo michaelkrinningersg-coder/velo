@@ -249,7 +249,7 @@ export function renderResultsView(): void {
         <th>Punktewertung</th>
         <th>UCI Punkte</th>
       `
-      : isPointsLikeClassification || isYouthClassification
+      : isPointsLikeClassification
         ? `
           <th>Platz</th>
           <th>Trend</th>
@@ -311,7 +311,7 @@ export function renderResultsView(): void {
       const trendCell = showTrendColumn
         ? `<td class="results-gc-delta-cell">${renderRankDelta(row.previousRank, row.rankDelta)}</td>`
         : '';
-      if (isPointsLikeClassification || isYouthClassification) {
+      if (isPointsLikeClassification) {
         return `
           <tr>
             <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
