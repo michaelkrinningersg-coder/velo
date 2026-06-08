@@ -15,7 +15,7 @@ import type {
   StageTerrain,
 } from '../../../shared/types';
 import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadConfig, resolveSkillWeightComponents, resolveSkillWeightSimulationMode, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills } from './skillWeights';
-import { precalculateRaceIncidents } from './incidents';
+import { precalculateRaceIncidents, buildDynamicCrashIncident } from './incidents';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
@@ -705,7 +705,8 @@ type TieBreakContext = 'finish_flat' | 'finish_hill' | 'finish_mountain' | 'clim
  * - Zwischensprint (sprint_intermediate):
  *     Spec1=Berg: -3 | Spec2=Berg: -2 | Spec1=Sprint: +1 | Spec2=Sprint: +0.5
  * - Finish Flat (finish_flat):
- *     Spec1=Sprint: +1 (immer) | Spec2=Sprint: +0.5 (immer)
+ *     Spec1=Sprint: +2 (immer) | Spec2=Sprint: +1 (immer)
+ *     Spec1/2=Sprint: +1 (zusätzlich bei Etappentyp Flat/Rolling)
  *     Spec1=Berg: -3 (nur bei Etappentyp Flat/Rolling) | Spec2=Berg: -2 (nur bei Etappentyp Flat/Rolling)
  * - Bergwertung (climb_top):
  *     Spec1=Sprint: -3 | Spec2=Sprint: -1.5 | Spec1/2=Attacker: +1.5
@@ -715,6 +716,7 @@ function resolveSpecializationTieBreakAdjustment(
   entry: MarkerCrossing | RiderState,
   context: TieBreakContext,
   isClimberMalusStage: boolean = false,
+  markerCategory: StageMarkerCategory | null = null,
 ): number {
   const rider = 'rider' in entry ? entry.rider : null;
   const spec1 = rider?.specialization1 ?? null;
@@ -729,18 +731,38 @@ function resolveSpecializationTieBreakAdjustment(
 
   } else if (context === 'finish_flat') {
     // Sprinter-Bonus gilt immer bei finish_flat
-    if (spec1 === 'Sprint') adjustment += 1;
-    else if (spec2 === 'Sprint') adjustment += 0.5;
-    // Bergfahrer-Malus nur bei Flat/Rolling-Etappe
+    if (spec1 === 'Sprint') adjustment += 2;
+    else if (spec2 === 'Sprint') adjustment += 1;
+    // Bergfahrer-Malus und zusätzlicher Sprinter-Bonus nur bei Flat/Rolling-Etappe
     if (isClimberMalusStage) {
+      if (spec1 === 'Sprint' || spec2 === 'Sprint') adjustment += 1;
       if (spec1 === 'Berg') adjustment -= 3;
       else if (spec2 === 'Berg') adjustment -= 2;
     }
 
   } else if (context === 'climb_top') {
-    if (spec1 === 'Sprint') adjustment -= 3;
-    else if (spec2 === 'Sprint') adjustment -= 1.5;
-    if (spec1 === 'Attacker' || spec2 === 'Attacker') adjustment += 1.5;
+    const role = rider?.role?.name;
+    
+    if (markerCategory === '4') {
+      if (spec1 === 'Sprint') adjustment -= 3;
+      else if (spec2 === 'Sprint') adjustment -= 1.5;
+
+      if (role === 'Edelhelfer' || role === 'Starke Helfer') adjustment += 2;
+      if (role === 'Wassertraeger') adjustment += 1;
+      if (role === 'Co-Kapitaen') adjustment -= 1;
+      if (role === 'Kapitaen') adjustment -= 3;
+    } else {
+      if (spec1 === 'Sprint') adjustment -= 3;
+      else if (spec2 === 'Sprint') adjustment -= 1.5;
+
+      if (role === 'Edelhelfer') adjustment += 3;
+      if (role === 'Starke Helfer') adjustment += 1.5;
+      if (role === 'Wassertraeger') adjustment += 0.5;
+      if (role === 'Co-Kapitaen') adjustment -= 1;
+      if (role === 'Kapitaen') adjustment -= 2;
+    }
+
+    if (spec1 === 'Attacker' || spec2 === 'Attacker') adjustment += 3;
   }
 
   return adjustment;
@@ -754,10 +776,11 @@ function resolveMarkerCrossingTieBreakAdjustment(
   context: TieBreakContext,
   riderStateById: Map<number, RiderState>,
   isClimberMalusStage: boolean = false,
+  markerCategory: StageMarkerCategory | null = null,
 ): number {
   const riderState = riderStateById.get(entry.riderId);
   if (!riderState) return 0;
-  return resolveSpecializationTieBreakAdjustment(riderState, context, isClimberMalusStage);
+  return resolveSpecializationTieBreakAdjustment(riderState, context, isClimberMalusStage, markerCategory);
 }
 
 function normalizeMarkerClassificationEntries(
@@ -1115,6 +1138,13 @@ export class SimulationEngine {
         waitDurationSeconds: incident.waitDurationSeconds,
         supportRiderIds: incident.supportRiderIds,
       })));
+
+      const massCrashTriggers = precalculatedIncidents.filter(i => i.isMassCrashTrigger);
+      if (massCrashTriggers.length > 0) {
+        massCrashTriggers.forEach(trigger => {
+          console.log(`[RaceIncidents] Massensturz vor der Etappe ausgewuerfelt! Auslöser: Fahrer ${trigger.riderId} bei Km ${trigger.triggerDistanceKm}. Potenziell betroffene Fahrer (${trigger.massCrashPotentialRiderIds?.length}):`, trigger.massCrashPotentialRiderIds);
+        });
+      }
     }
     const baseRiderStates: RiderState[] = bootstrap.riders.map((rider) => {
       const riderState: RiderState = {
@@ -3253,7 +3283,7 @@ export class SimulationEngine {
           ? 'climb_top'
           : null;
       if (tieContext) {
-        photoFinishScore += resolveSpecializationTieBreakAdjustment(rider, tieContext, this.isClimberMalusStage());
+        photoFinishScore += resolveSpecializationTieBreakAdjustment(rider, tieContext, this.isClimberMalusStage(), marker.markerCategory);
       }
       rider.lastSplitLabel = marker.label;
       rider.lastSplitTimeSeconds = crossingTimeSeconds;
@@ -3365,7 +3395,7 @@ export class SimulationEngine {
     rider.dailyForm += incident.dayFormPenalty;
     rider.incidentStaminaPenalty += incident.staminaPenalty;
     rider.statusReason = incident.type === 'crash'
-      ? `crash:${incident.severity ?? 'unknown'}`
+      ? `crash:${incident.severity ?? 'unknown'}${incident.hasAdditionalMechanical ? '+mechanical' : ''}`
       : 'mechanical';
     if (rider.dailyFormCap != null) {
       rider.dailyForm = Math.min(rider.dailyForm, rider.dailyFormCap);
@@ -3405,6 +3435,28 @@ export class SimulationEngine {
         supportRider.waitForCaptainRecovery = true;
         supportRider.waitLogged = false;
       }
+    }
+
+    if (incident.isMassCrashTrigger && incident.massCrashPotentialRiderIds) {
+      const actuallyCrashedRiders: number[] = [];
+      for (const victimId of incident.massCrashPotentialRiderIds) {
+        const victimState = this.riders.find(r => r.rider.id === victimId);
+        if (!victimState || isRiderInactive(victimState)) continue;
+        
+        const distanceDiff = Math.abs(victimState.distanceCoveredMeters - rider.distanceCoveredMeters);
+        if (distanceDiff <= 50) {
+          actuallyCrashedRiders.push(victimId);
+          const victimIncident = buildDynamicCrashIncident(
+            victimState.rider, 
+            this.bootstrap.riders, 
+            incident.triggerDistanceKm, 
+            this.bootstrap.stageSummary.distanceKm
+          );
+          
+          this.applyIncident(victimState, victimIncident, eventTimeSeconds);
+        }
+      }
+      console.log(`[RaceIncidents] Massensturz ausgelöst durch Fahrer ${rider.rider.id} bei Km ${incident.triggerDistanceKm}. Tatsächlich verwickelte Fahrer (${actuallyCrashedRiders.length}):`, actuallyCrashedRiders);
     }
 
     this.pushMessage({

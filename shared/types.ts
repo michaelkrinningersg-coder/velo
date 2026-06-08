@@ -628,6 +628,9 @@ export interface PrecalculatedRaceIncident {
   recoveryPenaltyStages: number[];
   raceRecuperationPenalty: number;
   supportRiderIds: number[];
+  isMassCrashTrigger?: boolean;
+  massCrashPotentialRiderIds?: number[];
+  hasAdditionalMechanical?: boolean;
 }
 
 export interface RealtimeStageCommitEntry {

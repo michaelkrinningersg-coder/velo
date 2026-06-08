@@ -109,10 +109,62 @@ export function precalculateRaceIncidents(riders: Rider[], stage: Stage, stageLe
         ? 'crash'
         : 'mechanical';
 
-    incidents.push(buildIncident(rider, riders, stageLengthKm, incidentType));
+    const incident = buildIncident(rider, riders, stageLengthKm, incidentType);
+
+    if (incidentType === 'crash' && Math.random() < 0.01) {
+      incident.isMassCrashTrigger = true;
+      const numAffected = Math.floor(randomBetween(2, 26)); // 2 to 25
+      const potentialVictims = riders.filter(r => r.id !== rider.id);
+      const shuffled = [...potentialVictims].sort(() => 0.5 - Math.random());
+      incident.massCrashPotentialRiderIds = shuffled.slice(0, numAffected).map(r => r.id);
+
+      if (Math.random() < 0.20) {
+        incident.hasAdditionalMechanical = true;
+        incident.waitDurationSeconds += Math.round(randomBetween(10, 45));
+      }
+    }
+
+    incidents.push(incident);
   }
 
   return incidents;
+}
+
+export function buildDynamicCrashIncident(
+  rider: Rider,
+  riders: Rider[],
+  triggerDistanceKm: number,
+  stageLengthKm: number
+): PrecalculatedRaceIncident {
+  const severity = resolveCrashSeverity();
+  const triggerDistanceMeters = Math.round(triggerDistanceKm * 1000);
+  const triggerDistancePercent = clamp((triggerDistanceKm / Math.max(0.1, stageLengthKm)) * 100, 0, 100);
+  const isEarlyIncident = triggerDistancePercent <= EARLY_INCIDENT_THRESHOLD_PERCENT;
+
+  let waitDurationSeconds = Math.round(randomBetween(10, 60));
+  let hasAdditionalMechanical = false;
+  if (Math.random() < 0.20) {
+    hasAdditionalMechanical = true;
+    waitDurationSeconds += Math.round(randomBetween(10, 45));
+  }
+
+  return {
+    riderId: rider.id,
+    type: 'crash',
+    severity,
+    triggerDistanceKm,
+    triggerDistanceMeters,
+    triggerDistancePercent,
+    waitDurationSeconds,
+    recoverySeconds: isEarlyIncident ? EARLY_RECOVERY_SECONDS : LATE_RECOVERY_SECONDS,
+    recoveryFormBonus: isEarlyIncident ? EARLY_RECOVERY_FORM_BONUS : LATE_RECOVERY_FORM_BONUS,
+    dayFormPenalty: BASE_DAY_FORM_PENALTY,
+    staminaPenalty: BASE_STAMINA_PENALTY,
+    recoveryPenaltyStages: severity === 'light' ? [10, 5, 2] : [],
+    raceRecuperationPenalty: severity === 'medium' ? 15 : 0,
+    supportRiderIds: resolveSupportRiderIds(rider, riders),
+    hasAdditionalMechanical
+  };
 }
 
 export function precalculate_race_incidents(rider_list: Rider[], stage_length: number, stage_profile: StageProfile): PrecalculatedRaceIncident[] {
