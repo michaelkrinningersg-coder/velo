@@ -509,9 +509,9 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       peaksHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="#ffffff" stroke-width="2"><title>Peak: ${pDate}</title></line>`;
       
       const prevPDay = i > 0 ? (new Date(sortedPeaks[i - 1]).getTime() - yearStart) / msPerDay : Number.NEGATIVE_INFINITY;
-      const idealBuildStartDay = pDay - 42;
+      const idealBuildStartDay = pDay - 56;
       const prevDeclineEnd = prevPDay + 14;
-      const actualBuildStartDay = Math.max(idealBuildStartDay, prevDeclineEnd);
+      const actualBuildStartDay = Math.max(0, Math.max(idealBuildStartDay, prevDeclineEnd));
       const actualBuildDays = pDay - actualBuildStartDay;
 
       const buildX = padL + (actualBuildStartDay / 365) * chartW;

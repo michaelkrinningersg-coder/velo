@@ -20,10 +20,12 @@ const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 const SEASON_FORM_MIN_RAW = 0;
 const SEASON_FORM_MAX_RAW = 6;
-const SEASON_FORM_RISE_DAYS = 42;
+const SEASON_FORM_RISE_DAYS = 56;
 const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
 const SEASON_FORM_FALL_DAYS = 14;
 const RACE_FORM_BUILD_STEP = 0.25;
+const RACE_FORM_FREE_STEP = 0.15;
+const BUILD_R_FORM_EXPIRY_DAYS = 40;
 const FREE_R_FORM_EXPIRY_DAYS = 20;
 const PEAK_MIN_SPACING_DAYS = 28;
 const ILLNESS_CHANCE = 0.0025;
@@ -794,11 +796,10 @@ export class GameStateService {
         rds.rider_id,
         @date AS date,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100 AS s_form,
-        ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100 AS r_form,
-        ROUND((
-          ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
-          + ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100
-        ) * 100) / 100 AS total_form
+        MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
+        ROUND((rds.form_bonus + rds.peak_s_form) * 100) / 100 
+          + MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
+          AS total_form
       FROM rider_daily_state rds
       JOIN riders ON riders.id = rds.rider_id
       LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
@@ -859,14 +860,25 @@ export class GameStateService {
 
         const peakDates = resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), row.season);
         const phase = resolvePeakPhase(raceDate, peakDates);
+        
+        let expiresOnIso = addDaysIso(raceDate, phase?.phase === 'build' ? BUILD_R_FORM_EXPIRY_DAYS : FREE_R_FORM_EXPIRY_DAYS);
+        
+        if (phase) {
+          const peakPlus14 = addDaysIso(phase.peakDate, 14);
+          if (isoDateToDayNumber(peakPlus14) < isoDateToDayNumber(expiresOnIso)) {
+            expiresOnIso = peakPlus14;
+          }
+        }
+
         if (phase?.phase === 'build') {
-          updateRaceForm.run(roundFormBonus(row.race_form_bonus + RACE_FORM_BUILD_STEP), riderId);
+          // Instead of updating the legacy column, insert a trackable event
+          insertFreeRaceForm.run(riderId, raceDate, expiresOnIso, RACE_FORM_BUILD_STEP);
           insertAward.run(riderId, raceDate, 'build');
           continue;
         }
 
         if (phase == null) {
-          insertFreeRaceForm.run(riderId, raceDate, addDaysIso(raceDate, FREE_R_FORM_EXPIRY_DAYS), 0.05);
+          insertFreeRaceForm.run(riderId, raceDate, expiresOnIso, RACE_FORM_FREE_STEP);
           insertAward.run(riderId, raceDate, 'free');
         }
       }

@@ -59,7 +59,7 @@ export const RIDER_SKILL_COLUMNS = [
   ['bikeHandling', 'bike_handling'],
 ] as const satisfies ReadonlyArray<readonly [RiderSkillKey, string]>;
 
-export const SEASON_FORM_RISE_DAYS = 42;
+export const SEASON_FORM_RISE_DAYS = 56;
 export const SEASON_FORM_FALL_DAYS = 14;
 export const SEASON_FORM_MAX_RAW = 6;
 export const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
@@ -666,7 +666,9 @@ export function resolvePeakPhase(currentDate: string, peakDates: string[]): { ph
       return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
     }
 
-    const idealBuildStart = peakDay - SEASON_FORM_RISE_DAYS;
+    const seasonYear = peakDate.slice(0, 4);
+    const seasonStartDay = isoDateToDayNumber(`${seasonYear}-01-01`);
+    const idealBuildStart = Math.max(seasonStartDay, peakDay - SEASON_FORM_RISE_DAYS);
     const prevDeclineEnd = prevPeakDay + SEASON_FORM_FALL_DAYS;
     const actualBuildStartDay = Math.max(idealBuildStart, prevDeclineEnd);
 
@@ -768,7 +770,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
   const peakDates = parsePeakDates(row.peak_dates_json);
   const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
   const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
-  const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
+  const totalRaceFormBonus = Math.min(5.0, roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0)));
   const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
   return {
     id: row.id,
