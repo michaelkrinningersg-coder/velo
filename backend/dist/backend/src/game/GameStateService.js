@@ -2,7 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameStateService = void 0;
 const events_1 = require("events");
-const GameRepository_1 = require("../db/GameRepository");
+const GameStateRepository_1 = require("../db/repositories/GameStateRepository");
+const RaceRepository_1 = require("../db/repositories/RaceRepository");
+const RiderRepository_1 = require("../db/repositories/RiderRepository");
+const TeamRepository_1 = require("../db/repositories/TeamRepository");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
 const ContractService_1 = require("./ContractService");
 const RiderDevelopmentService_1 = require("./RiderDevelopmentService");
@@ -114,6 +117,26 @@ class GameStateService {
             this.syncCurrentFormHistory(state.currentDate);
             this.syncedStateDate = state.currentDate;
         }
+        // Lazily populate rider_skill_yearly_baseline for current season if missing
+        const baselineCount = this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season).c;
+        if (baselineCount === 0) {
+            this.db.prepare(`
+          INSERT OR IGNORE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
+          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
+          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
+        `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+        }
         this.db.prepare(`
       INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -189,7 +212,7 @@ class GameStateService {
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
             this.advanceRiderDailyStates(nextDate, nextSeason);
-            new GameRepository_1.GameRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
+            new GameStateRepository_1.GameStateRepository(this.db).markUnavailableStageRaceParticipantsAsDnf();
             this.db.prepare('UPDATE game_state SET "current_date" = ?, season = ?, is_game_over = ? WHERE id = 1').run(nextDate, nextSeason, currentRow.is_game_over);
             this.db.prepare(`
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
@@ -413,7 +436,7 @@ class GameStateService {
       JOIN stages s ON s.id = se.stage_id
       WHERE s.date = ? AND se.status IN ('scheduled', 'started')
     `).all(nextDate);
-        const racingRiderIds = new Set(racingRidersRow.map(r => r.rider_id));
+        const racingRiderIds = new Set(racingRidersRow.map((r) => r.rider_id));
         // Bulk-load program windows for the current season ONCE instead of doing
         // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
         const programWindows = this.getProgramWindowsForSeason(nextSeason);
@@ -576,14 +599,31 @@ class GameStateService {
         if (rows.length === 0) {
             return;
         }
-        const repo = new GameRepository_1.GameRepository(this.db);
+        const raceRepo = new RaceRepository_1.RaceRepository(this.db);
+        const riderRepo = new RiderRepository_1.RiderRepository(this.db);
+        const teamRepo = new TeamRepository_1.TeamRepository(this.db);
+        const gsRepo = new GameStateRepository_1.GameStateRepository(this.db);
         for (const row of rows) {
-            const race = repo.getRaceById(row.race_id);
-            const stage = repo.getStageById(row.stage_id);
+            const race = raceRepo.getRaceById(row.race_id);
+            const stage = raceRepo.getStageById(row.stage_id);
             if (!race || !stage) {
                 continue;
             }
-            (0, RaceRosterService_1.refreshRaceEntriesForRaceStart)(this.db, repo, race, stage);
+            // Build a composite repo that satisfies RaceRosterService's duck-typed `repo` parameter.
+            const compositeRepo = {
+                getCurrentSeason: () => gsRepo.getCurrentSeason(),
+                getCurrentDate: () => gsRepo.getCurrentDate(),
+                getRiders: (teamId) => riderRepo.getRiders(teamId),
+                getTeams: (teamId) => teamRepo.getTeams(teamId),
+                getRaceRiders: (raceId) => raceRepo.getRaceRiders(raceId),
+                getRaceProgramsForRace: (raceId) => raceRepo.getRaceProgramsForRace(raceId),
+                getStageRiders: (stageId) => raceRepo.getStageRiders(stageId),
+                ensureStageEntries: (s) => gsRepo.ensureStageEntries(s),
+                prepareStageRaceFatigue: (raceId, stageNumber, riderIds) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
+                attachStageRaceFatigue: (raceId, riders, stageNumber) => raceRepo.attachStageRaceFatigue(raceId, riders, stageNumber),
+                clearStageEntries: (stageId) => gsRepo.clearStageEntries(stageId),
+            };
+            (0, RaceRosterService_1.refreshRaceEntriesForRaceStart)(this.db, compositeRepo, race, stage);
         }
     }
     removeExpiredRaceFormEvents(currentDate) {

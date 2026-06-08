@@ -1,7 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StageResultCommitService = void 0;
-const GameRepository_1 = require("../db/GameRepository");
+const GameStateRepository_1 = require("../db/repositories/GameStateRepository");
+const RaceRepository_1 = require("../db/repositories/RaceRepository");
+const RiderRepository_1 = require("../db/repositories/RiderRepository");
+const TeamRepository_1 = require("../db/repositories/TeamRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const stageResultRules_1 = require("../../../shared/stageResultRules");
 const RaceRosterService_1 = require("./RaceRosterService");
@@ -162,7 +165,34 @@ function usesMountainStageSprintFinishPoints(profile) {
 class StageResultCommitService {
     constructor(db) {
         this.db = db;
-        this.repo = new GameRepository_1.GameRepository(db);
+        const raceRepo = new RaceRepository_1.RaceRepository(db);
+        const teamRepo = new TeamRepository_1.TeamRepository(db);
+        const gsRepo = new GameStateRepository_1.GameStateRepository(db);
+        const riderRepo = new RiderRepository_1.RiderRepository(db);
+        this.repo = {
+            // RaceRepository methods
+            getStageById: (id) => raceRepo.getStageById(id),
+            getRaceById: (id) => raceRepo.getRaceById(id),
+            getRaceRiders: (raceId) => raceRepo.getRaceRiders(raceId),
+            getRaceProgramsForRace: (raceId) => raceRepo.getRaceProgramsForRace(raceId),
+            getStageRiders: (stageId) => raceRepo.getStageRiders(stageId),
+            // TeamRepository methods
+            getTeams: (teamId) => teamRepo.getTeams(teamId),
+            // RiderRepository methods
+            getRiders: (teamId) => riderRepo.getRiders(teamId),
+            // GameStateRepository methods
+            getCurrentSeason: () => gsRepo.getCurrentSeason(),
+            getCurrentDate: () => gsRepo.getCurrentDate(),
+            getFullyClassifiedStageRaceRiderIds: (raceId, upTo) => gsRepo.getFullyClassifiedStageRaceRiderIds(raceId, upTo),
+            applyIncidentRaceState: (raceId, incidents) => gsRepo.applyIncidentRaceState(raceId, incidents),
+            markStageEntriesFinished: (stageId, riderIds) => gsRepo.markStageEntriesFinished(stageId, riderIds),
+            updateStageEntryStatus: (stageId, riderId, status, reason) => gsRepo.updateStageEntryStatus(stageId, riderId, status, reason),
+            syncSeasonPointEventsForSeason: (season) => gsRepo.syncSeasonPointEventsForSeason(season),
+            ensureStageEntries: (stage) => gsRepo.ensureStageEntries(stage),
+            prepareStageRaceFatigue: (raceId, stageNumber, riderIds) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
+            attachStageRaceFatigue: (raceId, riders, stageNumber) => raceRepo.attachStageRaceFatigue(raceId, riders, stageNumber),
+            clearStageEntries: (stageId) => gsRepo.clearStageEntries(stageId),
+        };
     }
     commitRealtimeStage(stageId, entries, markerClassifications = [], incidents = []) {
         const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
@@ -498,6 +528,7 @@ class StageResultCommitService {
         gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
         this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
         this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
+        this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);
         return {
             raceId: race.id,
             raceName: race.name,
@@ -614,6 +645,70 @@ class StageResultCommitService {
             throw new Error(`Ergebnis konnte nicht gespeichert werden (type=${resultTypeId}, stage=${stageId}, rank=${row.rank}, rider=${row.riderId ?? 'null'}, team=${row.teamId ?? 'null'}): ${error.message}`);
         }
     }
+    evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById) {
+        const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
+        const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
+        const nameLow = race.name.toLowerCase();
+        const isMonument = nameLow.includes('monument') || nameLow.includes('san remo') || nameLow.includes('sanremo') || nameLow.includes('roubaix') || nameLow.includes('vlaanderen') || nameLow.includes('flandern') || nameLow.includes('liège') || nameLow.includes('liege') || nameLow.includes('lombardia');
+        const winRiderIds = new Set();
+        const dnfRiderIds = new Set();
+        if (isFinalStage) {
+            const targetRows = race.isStageRace ? gcRows : stageRows;
+            for (const row of targetRows) {
+                if (row.rank === 1 && row.riderId) {
+                    winRiderIds.add(row.riderId);
+                }
+                if ((isCat1Or2 || isMonument) && row.rank <= 3 && row.riderId) {
+                    winRiderIds.add(row.riderId);
+                }
+            }
+        }
+        for (const entry of dnfEntries) {
+            if (entry.statusReason === 'crash' && entry.riderId) {
+                dnfRiderIds.add(entry.riderId);
+            }
+        }
+        const ridersToUpdate = new Set([...winRiderIds, ...dnfRiderIds]);
+        if (ridersToUpdate.size === 0)
+            return;
+        for (const riderId of ridersToUpdate) {
+            const rider = ridersById.get(riderId);
+            if (!rider)
+                continue;
+            let favs = [...(rider.favoriteRaces ?? [])];
+            let nonFavs = [...(rider.nonFavoriteRaces ?? [])];
+            let changed = false;
+            if (dnfRiderIds.has(riderId)) {
+                if (favs.includes(race.id)) {
+                    favs = favs.filter(id => id !== race.id);
+                    changed = true;
+                }
+                if (!nonFavs.includes(race.id)) {
+                    nonFavs.push(race.id);
+                    changed = true;
+                }
+            }
+            else if (winRiderIds.has(riderId)) {
+                if (nonFavs.includes(race.id)) {
+                    nonFavs = nonFavs.filter(id => id !== race.id);
+                    changed = true;
+                }
+                if (!favs.includes(race.id)) {
+                    favs.push(race.id);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                rider.favoriteRaces = favs;
+                rider.nonFavoriteRaces = nonFavs;
+                this.db.prepare(`
+          UPDATE riders
+          SET favorite_races = ?, non_favorite_races = ?
+          WHERE id = ?
+        `).run(favs.join(','), nonFavs.join(','), riderId);
+            }
+        }
+    }
     evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById) {
         const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2;
         const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
@@ -669,7 +764,7 @@ class StageResultCommitService {
       `).get(riderId);
             if (!riderPotentials)
                 continue;
-            const validColumns = potColumns.filter(col => riderPotentials[col] < 85);
+            const validColumns = potColumns.filter((col) => riderPotentials[col] < 85);
             if (validColumns.length === 0)
                 continue;
             const selectedColumn = validColumns[Math.floor(Math.random() * validColumns.length)];

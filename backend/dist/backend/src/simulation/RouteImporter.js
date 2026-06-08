@@ -453,65 +453,48 @@ function detectClimbs(points) {
     return climbs;
 }
 function mergeImportedSegments(segments) {
-    if (segments.length <= 1) {
+    if (segments.length <= 1)
         return segments;
-    }
     let merged = [...segments];
-    while (true) {
-        const candidates = merged
-            .slice(0, -1)
-            .map((left, index) => {
-            const right = merged[index + 1];
-            const gradientDiff = Math.abs(left.gradientPercent - right.gradientPercent);
-            return {
-                index,
-                gradientDiff,
-                priority: Math.max(left.gradientPercent, right.gradientPercent),
-            };
-        })
-            .filter((candidate) => candidate.gradientDiff <= IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF)
-            .sort((left, right) => (right.priority - left.priority
-            || left.gradientDiff - right.gradientDiff
-            || left.index - right.index));
-        if (candidates.length === 0) {
-            return merged;
-        }
-        const selectedIndexes = new Set();
-        for (const candidate of candidates) {
-            if (selectedIndexes.has(candidate.index) || selectedIndexes.has(candidate.index - 1) || selectedIndexes.has(candidate.index + 1)) {
-                continue;
-            }
-            selectedIndexes.add(candidate.index);
-        }
-        if (selectedIndexes.size === 0) {
-            return merged;
-        }
+    let changed = true;
+    while (changed) {
+        changed = false;
         const nextMerged = [];
-        for (let index = 0; index < merged.length; index += 1) {
-            if (!selectedIndexes.has(index)) {
-                nextMerged.push(merged[index]);
-                continue;
+        let i = 0;
+        while (i < merged.length) {
+            if (i === merged.length - 1) {
+                nextMerged.push(merged[i]);
+                break;
             }
-            const left = merged[index];
-            const right = merged[index + 1];
-            const mergedLengthKm = round2(left.lengthKm + right.lengthKm);
-            const weightedGradient = mergedLengthKm > 0
-                ? round3(((left.gradientPercent * left.lengthKm) + (right.gradientPercent * right.lengthKm)) / mergedLengthKm)
-                : 0;
-            nextMerged.push({
-                startElevation: left.startElevation,
-                lengthKm: mergedLengthKm,
-                gradientPercent: weightedGradient,
-                terrain: left.terrain,
-                techLevel: Math.round(((left.techLevel * left.lengthKm) + (right.techLevel * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
-                windExp: Math.round(((left.windExp * left.lengthKm) + (right.windExp * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
-                markers: left.markers,
-                endMarkers: right.endMarkers,
-            });
-            index += 1;
+            const left = merged[i];
+            const right = merged[i + 1];
+            const gradientDiff = Math.abs(left.gradientPercent - right.gradientPercent);
+            if (gradientDiff <= IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF) {
+                const mergedLengthKm = round2(left.lengthKm + right.lengthKm);
+                const weightedGradient = mergedLengthKm > 0
+                    ? round3(((left.gradientPercent * left.lengthKm) + (right.gradientPercent * right.lengthKm)) / mergedLengthKm)
+                    : 0;
+                nextMerged.push({
+                    startElevation: left.startElevation,
+                    lengthKm: mergedLengthKm,
+                    gradientPercent: weightedGradient,
+                    terrain: left.terrain,
+                    techLevel: Math.round(((left.techLevel * left.lengthKm) + (right.techLevel * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
+                    windExp: Math.round(((left.windExp * left.lengthKm) + (right.windExp * right.lengthKm)) / (left.lengthKm + right.lengthKm)),
+                    markers: left.markers,
+                    endMarkers: right.endMarkers,
+                });
+                i += 2;
+                changed = true;
+            }
+            else {
+                nextMerged.push(left);
+                i += 1;
+            }
         }
         merged = nextMerged;
     }
+    return merged;
 }
 function buildSegmentPositions(segments) {
     let startKm = 0;

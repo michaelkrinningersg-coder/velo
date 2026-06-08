@@ -4,6 +4,7 @@ exports.createRouter = createRouter;
 const express_1 = require("express");
 const RiderTeamEditorService_1 = require("../editor/RiderTeamEditorService");
 const GameRepository_1 = require("../db/GameRepository");
+const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
@@ -124,7 +125,7 @@ function createRouter(dbService) {
         try {
             masterDb = dbService.getMasterConnection();
             const rows = new GameRepository_1.GameRepository(masterDb).getTeams();
-            const selectable = rows.filter(t => t.division !== 'U23');
+            const selectable = rows.filter((t) => t.division !== 'U23');
             ok(res, selectable);
         }
         catch (e) {
@@ -174,11 +175,13 @@ function createRouter(dbService) {
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            const repo = new GameRepository_1.GameRepository(db);
-            const team = repo.getTeamById(id);
+            // Use TeamRepository to get the team
+            const { TeamRepository } = require('../db/repositories/TeamRepository');
+            const teamRepo = new TeamRepository(db);
+            const team = teamRepo.getTeamById(id);
             if (!team)
                 return fail(res, 404, `Team ${id} nicht gefunden.`);
-            ok(res, { ...team, riders: repo.getRiders(id, true) });
+            ok(res, { ...team, riders: new RiderRepository_1.RiderRepository(db).getRiders(id, true) });
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -190,7 +193,7 @@ function createRouter(dbService) {
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            ok(res, new GameRepository_1.GameRepository(db).getRiders(teamId));
+            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId));
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -203,7 +206,7 @@ function createRouter(dbService) {
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            const payload = new GameRepository_1.GameRepository(db).getRiderProgramRaceSummary(riderId);
+            const payload = new RiderRepository_1.RiderRepository(db).getRiderProgramRaceSummary(riderId);
             if (!payload)
                 return fail(res, 404, `Kein Programm fuer Fahrer ${riderId} gefunden.`);
             ok(res, payload);
@@ -219,7 +222,7 @@ function createRouter(dbService) {
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            const payload = new GameRepository_1.GameRepository(db).getRiderStats(riderId);
+            const payload = new RiderRepository_1.RiderRepository(db).getRiderStats(riderId);
             if (!payload)
                 return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
             ok(res, payload);
@@ -359,29 +362,6 @@ function createRouter(dbService) {
             if (riders.length === 0) {
                 return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste bestimmt werden.');
             }
-            const ALL_SKILL_KEYS = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
-            for (const rider of riders) {
-                if (rider.age && rider.age <= 23) {
-                    const mentors = riders.filter(m => m.id !== rider.id &&
-                        m.activeTeamId === rider.activeTeamId &&
-                        m.age && m.age >= 31 &&
-                        m.overallRating >= 73 &&
-                        (m.riderType === rider.riderType ||
-                            (rider.specialization1 && m.riderType === rider.specialization1) ||
-                            (rider.specialization2 && m.riderType === rider.specialization2) ||
-                            (rider.specialization3 && m.riderType === rider.specialization3)));
-                    if (mentors.length > 0) {
-                        rider.mentorBoosts = {};
-                        for (let i = 0; i < mentors.length; i++) {
-                            const shuffled = [...ALL_SKILL_KEYS].sort(() => 0.5 - Math.random());
-                            for (let j = 0; j < 3; j++) {
-                                const key = shuffled[j];
-                                rider.mentorBoosts[key] = (rider.mentorBoosts[key] || 0) + 1;
-                            }
-                        }
-                    }
-                }
-            }
             ok(res, {
                 race,
                 stage,
@@ -473,10 +453,10 @@ function createRouter(dbService) {
             }
             const ALL_SKILL_KEYS = ['flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation'];
             for (const rider of riders) {
-                if (rider.age && rider.age <= 23) {
+                if (rider.age && rider.age <= 22) {
                     const mentors = riders.filter(m => m.id !== rider.id &&
                         m.activeTeamId === rider.activeTeamId &&
-                        m.age && m.age >= 31 &&
+                        m.age && m.age > 32 &&
                         m.overallRating >= 73 &&
                         (m.riderType === rider.riderType ||
                             (rider.specialization1 && m.riderType === rider.specialization1) ||
@@ -613,6 +593,9 @@ function createRouter(dbService) {
     router.get('/injuries', (_req, res) => {
         try {
             const db = dbService.getActiveConnection();
+            const stateRow = db.prepare(`SELECT season, "current_date" AS current_date FROM game_state WHERE id = 1`).get();
+            const season = stateRow?.season ?? new Date().getFullYear();
+            const currentDate = stateRow?.current_date ?? new Date().toISOString().split('T')[0];
             const rows = db.prepare(`
         SELECT
           r.id AS riderId,
@@ -621,16 +604,56 @@ function createRouter(dbService) {
           c.code_3 AS countryCode,
           t.abbreviation AS teamAbbreviation,
           t.id AS teamId,
+          dt.tier AS teamDivisionTier,
+          r.overall_rating AS overallRating,
+          CAST(strftime('%Y', 'now') - r.birth_year AS INTEGER) AS age,
           rds.health_status AS healthStatus,
-          rds.unavailable_days_remaining AS unavailableDays
+          rds.unavailable_days_remaining AS unavailableDays,
+          rds.unavailable_until AS fitDate
         FROM rider_daily_state rds
         JOIN riders r ON rds.rider_id = r.id
         JOIN sta_country c ON r.country_id = c.id
         LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
         LEFT JOIN teams t ON cnt.team_id = t.id
+        LEFT JOIN division_teams dt ON dt.id = t.division_id
         WHERE rds.health_status IN ('ill', 'injured')
         ORDER BY rds.unavailable_days_remaining DESC
       `).all();
+            if (rows.length > 0) {
+                const riderIds = rows.map((r) => r.riderId);
+                const placeholders = riderIds.map(() => '?').join(', ');
+                const missedRacesRows = db.prepare(`
+          SELECT
+            rsp.rider_id,
+            r.name,
+            r.start_date AS startDate,
+            r.is_stage_race AS isStageRace,
+            c.name AS categoryName,
+            co.code_3 AS countryCode
+          FROM rider_season_programs rsp
+          JOIN race_program_races rpr ON rsp.program_id = rpr.program_id
+          JOIN races r ON rpr.race_id = r.id
+          LEFT JOIN race_categories c ON r.category_id = c.id
+          LEFT JOIN sta_country co ON r.country_id = co.id
+          WHERE rsp.season = ?
+            AND r.start_date >= ?
+            AND rsp.rider_id IN (${placeholders})
+          ORDER BY r.start_date ASC
+        `).all(season, currentDate, ...riderIds);
+                for (const row of rows) {
+                    if (!row.fitDate)
+                        continue;
+                    row.missedRaces = missedRacesRows
+                        .filter((m) => m.rider_id === row.riderId && m.startDate <= row.fitDate)
+                        .map((m) => ({
+                        name: m.name,
+                        startDate: m.startDate,
+                        isStageRace: m.isStageRace === 1,
+                        categoryName: m.categoryName,
+                        countryCode: m.countryCode,
+                    }));
+                }
+            }
             ok(res, rows);
         }
         catch (e) {

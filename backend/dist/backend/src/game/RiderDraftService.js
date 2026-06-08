@@ -1,16 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RiderDraftService = void 0;
-const GameRepository_1 = require("../db/GameRepository");
+const ResultRepository_1 = require("../db/repositories/ResultRepository");
 class RiderDraftService {
     constructor(db) {
         this.db = db;
     }
     executeDraft(season) {
-        const repo = new GameRepository_1.GameRepository(this.db);
+        const resultRepo = new ResultRepository_1.ResultRepository(this.db);
         // 1. Teams nach Vorjahres-Standings holen (bestes Team auf Platz 1)
-        const standings = repo.getSeasonStandings(season - 1);
-        const rankedTeamIds = standings.teamStandings.map(t => t.teamId).filter((id) => id !== null);
+        const standings = resultRepo.getSeasonStandings(season - 1);
+        const rankedTeamIds = standings.teamStandings.map((t) => t.teamId).filter((id) => id !== null);
         // Falls keine Teams da sind, abbrechen
         if (rankedTeamIds.length === 0)
             return;
@@ -49,7 +49,7 @@ class RiderDraftService {
         if (freeAgentsRaw.length === 0)
             return;
         // Draft Value berechnen und sortieren (beste zuerst)
-        const freeAgents = freeAgentsRaw.map(r => {
+        const freeAgents = freeAgentsRaw.map((r) => {
             const age = season - r.birth_year;
             let draftValue = r.overall_rating;
             if (age < 25) {
