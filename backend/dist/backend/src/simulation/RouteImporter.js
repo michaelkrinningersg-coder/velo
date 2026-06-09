@@ -4,9 +4,9 @@ exports.RouteImporter = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
 const StageScoreCalculator_1 = require("./StageScoreCalculator");
-const MIN_SEGMENT_KM = 0.2;
+const MIN_SEGMENT_KM = 0.35;
 const SPRINT_CUT_KM = 0.3;
-const DOUGLAS_PEUCKER_EPSILON = 9;
+const DOUGLAS_PEUCKER_EPSILON = 8;
 const IMPORT_ELEVATION_SMOOTHING_RADIUS = 1;
 const CLIMB_MIN_GAIN_METERS = 100;
 const CLIMB_MIN_AVG_GRADIENT = 3;
@@ -14,7 +14,7 @@ const MEDIUM_MOUNTAIN_MIN_GAIN_METERS = 200;
 const MOUNTAIN_MIN_GAIN_METERS = 600;
 const MOUNTAIN_MIN_TOP_ELEVATION_METERS = 850;
 const CLIMB_BREAK_DESCENT_METERS = 50;
-const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.5;
+const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.7;
 const SEGMENT_MIN_HILL_GAIN_METERS = 15;
 const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
 const STAGE_DETAILS_HEADER = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
@@ -345,6 +345,38 @@ function enforceMinimumSegmentLength(points, minSegmentKm) {
         }
     }
     return kept;
+}
+function enforceMaximumSegmentLength(points) {
+    if (points.length <= 1)
+        return points;
+    const result = [points[0]];
+    for (let index = 1; index < points.length; index += 1) {
+        const previous = result[result.length - 1];
+        const current = points[index];
+        const distanceKm = current.distanceKm - previous.distanceKm;
+        if (distanceKm <= 0) {
+            result.push(current);
+            continue;
+        }
+        const gradientPercent = ((current.elevation - previous.elevation) / (distanceKm * 1000)) * 100;
+        let maxLen = 30;
+        if (gradientPercent > 5 || gradientPercent < -5) {
+            maxLen = 3;
+        }
+        if (distanceKm > maxLen) {
+            const splits = Math.ceil(distanceKm / maxLen);
+            const splitDist = distanceKm / splits;
+            const splitElev = (current.elevation - previous.elevation) / splits;
+            for (let s = 1; s < splits; s += 1) {
+                result.push({
+                    distanceKm: previous.distanceKm + splitDist * s,
+                    elevation: previous.elevation + splitElev * s,
+                });
+            }
+        }
+        result.push(current);
+    }
+    return result;
 }
 function calculateElevationGain(points) {
     let gain = 0;
@@ -1043,7 +1075,7 @@ class RouteImporter {
             ? parseGpx(request.fileContent)
             : parseTcx(request.fileContent);
         const profile = smoothElevationProfile(buildProfile(parsed.points), IMPORT_ELEVATION_SMOOTHING_RADIUS);
-        const simplifiedProfile = enforceMinimumSegmentLength(simplifyDouglasPeucker(profile, DOUGLAS_PEUCKER_EPSILON), MIN_SEGMENT_KM);
+        const simplifiedProfile = enforceMaximumSegmentLength(enforceMinimumSegmentLength(simplifyDouglasPeucker(profile, DOUGLAS_PEUCKER_EPSILON), MIN_SEGMENT_KM));
         const elevationGainMeters = calculateElevationGain(profile);
         const totalDistanceKm = round2(simplifiedProfile[simplifiedProfile.length - 1].distanceKm);
         const rawSegments = mergeImportedSegments(buildSegments(simplifiedProfile));

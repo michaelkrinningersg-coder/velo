@@ -75,7 +75,12 @@ function getTopGcIds(gcStandings: RealtimeGcStanding[], limit: number): Set<numb
 }
 
 function getTopClassificationIds(standings: RealtimeClassificationStanding[], limit: number): Set<number> {
-  return new Set(standings.slice(0, limit).map((standing) => standing.riderId));
+  return new Set(
+    standings
+      .slice(0, limit)
+      .map((standing) => standing.riderId)
+      .filter((id): id is number => id != null),
+  );
 }
 
 function getTopClassificationIdsWithExclusions(
@@ -85,9 +90,9 @@ function getTopClassificationIdsWithExclusions(
 ): Set<number> {
   return new Set(
     standings
-      .filter((standing) => !excludedIds.has(standing.riderId))
-      .slice(0, limit)
-      .map((standing) => standing.riderId),
+      .map((standing) => standing.riderId)
+      .filter((id): id is number => id != null && !excludedIds.has(id))
+      .slice(0, limit),
   );
 }
 

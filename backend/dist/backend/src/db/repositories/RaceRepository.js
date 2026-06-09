@@ -76,6 +76,52 @@ class RaceRepository {
                 },
             });
         }
+        if (race && (0, mappers_1.isWinterBreak)(race.startDate)) {
+            return [];
+        }
+        const ridersByTeamId = new Map();
+        for (const rider of ridersById.values()) {
+            if (rider.activeTeamId == null)
+                continue;
+            const teamRiders = ridersByTeamId.get(rider.activeTeamId) ?? [];
+            teamRiders.push(rider);
+            ridersByTeamId.set(rider.activeTeamId, teamRiders);
+        }
+        const winterLockedRiderIds = new Set();
+        for (const teamRiders of ridersByTeamId.values()) {
+            const topTwo = [...teamRiders].sort((a, b) => b.overallRating - a.overallRating).slice(0, 2);
+            for (const rider of topTwo) {
+                winterLockedRiderIds.add(rider.id);
+            }
+        }
+        const excludedRiderIds = new Set();
+        if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+            for (const teamRiders of ridersByTeamId.values()) {
+                // Find best Co-Captain (roleId === 2)
+                const coCaptains = teamRiders.filter((r) => r.roleId === 2);
+                if (coCaptains.length > 0) {
+                    coCaptains.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+                    excludedRiderIds.add(coCaptains[0].id);
+                }
+                // Find best Sprinter (roleId === 6)
+                const sprinters = teamRiders.filter((r) => r.roleId === 6);
+                if (sprinters.length > 0) {
+                    sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+                    excludedRiderIds.add(sprinters[0].id);
+                }
+                // Lock all Captains (roleId === 1)
+                const captains = teamRiders.filter((r) => r.roleId === 1);
+                for (const cap of captains) {
+                    excludedRiderIds.add(cap.id);
+                }
+            }
+        }
+        for (let i = participants.length - 1; i >= 0; i--) {
+            const riderId = participants[i].rider.id;
+            if (winterLockedRiderIds.has(riderId) || excludedRiderIds.has(riderId)) {
+                participants.splice(i, 1);
+            }
+        }
         return participants
             .filter((entry) => targetDivision == null || entry.team?.division === targetDivision)
             .sort((left, right) => {

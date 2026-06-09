@@ -5,6 +5,9 @@ const mappers_1 = require("../mappers");
 const GameStateRepository_1 = require("./GameStateRepository");
 const RaceRepository_1 = require("./RaceRepository");
 class ResultRepository {
+    static clearInMemoryStageEvents() {
+        ResultRepository.inMemoryStageEvents.clear();
+    }
     constructor(db) {
         this.db = db;
     }
@@ -187,9 +190,24 @@ class ResultRepository {
             ? this.getPreviousGcStandingsForStage(stageId)
                 .filter((standing) => fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(standing.riderId))
             : [];
-        const previousGcRanks = previousGcStandings.length > 0
-            ? new Map(previousGcStandings.map((standing) => [standing.riderId, standing.rank]))
-            : new Map();
+        const previousRanksByType = new Map();
+        if (meta.stage_number > 1) {
+            for (const rt of resultTypes) {
+                if (rt.id === mappers_1.RESULT_TYPE_IDS.stage)
+                    continue;
+                const standings = this.getPreviousClassificationStandings(meta.race_id, meta.stage_number, rt.id);
+                const rankMap = new Map();
+                for (const s of standings) {
+                    if (rt.id === mappers_1.RESULT_TYPE_IDS.team && s.teamId != null) {
+                        rankMap.set(`team_${s.teamId}`, s.rank);
+                    }
+                    else if (s.riderId != null && (fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(s.riderId))) {
+                        rankMap.set(`rider_${s.riderId}`, s.rank);
+                    }
+                }
+                previousRanksByType.set(rt.id, rankMap);
+            }
+        }
         const groupedRows = new Map();
         for (const row of rows) {
             const bucket = groupedRows.get(row.result_type_id) ?? [];
@@ -213,8 +231,9 @@ class ResultRepository {
             const leaderTime = visibleRows[0]?.time_seconds ?? null;
             const isGcClassification = resultType.id === mappers_1.RESULT_TYPE_IDS.gc;
             const mappedRows = visibleRows.map((row, index) => {
-                const previousGcRank = isGcClassification && row.rider_id != null
-                    ? previousGcRanks.get(row.rider_id) ?? null
+                const rankMap = previousRanksByType.get(resultType.id);
+                const previousRank = rankMap
+                    ? (row.rider_id != null ? rankMap.get(`rider_${row.rider_id}`) : (row.team_id != null ? rankMap.get(`team_${row.team_id}`) : null)) ?? null
                     : null;
                 const displayRank = shouldFilterCompletedRiders ? index + 1 : row.rank;
                 return {
@@ -230,8 +249,8 @@ class ResultRepository {
                     gapSeconds: leaderTime != null && row.time_seconds != null ? row.time_seconds - leaderTime : null,
                     points: row.points,
                     uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
-                    gcPreviousRank: isGcClassification ? previousGcRank : undefined,
-                    gcRankDelta: isGcClassification && previousGcRank != null ? previousGcRank - displayRank : null,
+                    previousRank: previousRank,
+                    rankDelta: previousRank != null ? previousRank - displayRank : null,
                 };
             });
             return {
@@ -258,6 +277,7 @@ class ResultRepository {
                 ? this.loadStageMarkerClassifications(stageId)
                 : [],
             nonFinishers: this.loadStageNonFinishers(meta.race_id, meta.stage_number),
+            events: ResultRepository.inMemoryStageEvents.get(stageId) ?? [],
         };
     }
     loadStageNonFinishers(raceId, upToStageNumber) {
@@ -528,16 +548,17 @@ class ResultRepository {
             return [];
         }
         const rows = this.db.prepare(`
-      SELECT rider_id, rank, time_seconds, points
+      SELECT rider_id, team_id, rank, time_seconds, points
       FROM results
       WHERE stage_id = ?
         AND result_type_id = ?
-        AND rider_id IS NOT NULL
+        AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
       ORDER BY rank ASC
     `).all(previousStage.stage_id, resultTypeId);
         const leaderTime = rows.find((row) => row.time_seconds != null)?.time_seconds ?? null;
         return rows.map((row) => ({
             riderId: row.rider_id,
+            teamId: row.team_id,
             rank: row.rank,
             points: row.points,
             timeSeconds: row.time_seconds,
@@ -546,3 +567,4 @@ class ResultRepository {
     }
 }
 exports.ResultRepository = ResultRepository;
+ResultRepository.inMemoryStageEvents = new Map();

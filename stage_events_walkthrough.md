@@ -51,12 +51,23 @@ In [backend/src/db/repositories/ResultRepository.ts](file:///c:/Users/mkrinninge
 ### 6. Frontend View & Styling
 In [frontend/src/views/results.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/results.ts) & [frontend/src/main.css](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/main.css):
 - Rendered the **Ereignisse** tab right next to OTL/DNF.
-- Designed a 3-column table: **km Marke**, **Fahrer**, and **Ereignis**.
-- Integrated flags, team jerseys, and participant links into the *Fahrer* column.
-- Rendered colored indicator badges/icons:
+- Designed a 3-column table with fixed widths: **km Marke** (100px), **Fahrer** (240px), and **Ereignis** (auto) to prevent layout shifting.
+- Set `table-layout: fixed` on the results table dynamically when the Events tab is open.
+- Enforced a single-line, no-wrap styling for the **Fahrer** column (jersey, rider name link, and country flag are displayed inline without wrapping).
+- Sorted events chronologically by km mark. For events at km 0, sorted them by type priority:
+  1. Superform (`▲ Guten Tag`)
+  2. Supermalus (`▼ Schlechten Tag`)
+  3. Form Peak (`★ Formhöhepunkt`)
+  4. DNS (`nicht am Start`)
+  And then alphabetically by rider name within each type.
+- Formatted rider names in the **Ereignis** column to include their pre-stage GC ranking in parentheses, e.g., `Quentin Pacher (67.)`.
+- Implemented and mapped colored indicator badges:
   - Superform: `▲ Guten Tag` (green badge)
-  - Supermalus: `▼ Schlechten Tag` (red badge)
-  - Form Peak: `★ Formhöhepunkt` (golden badge)
+  - Supermalus: `▼ Schlechten Tag` (red/coral badge)
+  - Form Peak: `★ Formhöhepunkt` (orange badge)
   - DNS: `DNS` (red badge)
-  - Incident: `Sturz` / `Defekt` (red/orange badges)
-  - Attacks/Counter-Attacks: `Attacke` / `Konter` (purple/indigo badges)
+  - DNF & Mass Crashes: `DNF` / `Massensturz` (red badges)
+  - Fluchtgruppe: `Fluchtgruppe` (purple/indigo badge for attacks, counter-attacks, and breakaway phase endings)
+  - Defekt: `Defekt` (orange badge)
+  - Sturz: `Sturz` (red badge)
+

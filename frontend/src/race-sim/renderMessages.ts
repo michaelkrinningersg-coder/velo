@@ -1,4 +1,4 @@
-import type { RaceSimMessage } from './SimulationEngine';
+import type { RaceSimMessage } from '../../../shared/types';
 
 export type RaceSimMessageFilter = 'all' | 'attack' | 'crash' | 'mechanical' | 'breakaway';
 

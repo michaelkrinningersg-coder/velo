@@ -847,6 +847,11 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_rider_season_programs_season_rider
         ON rider_season_programs(season, rider_id);
     `);
+        createIfTable('results', `
+      CREATE INDEX IF NOT EXISTS idx_results_rider_type
+        ON results(rider_id, result_type_id)
+        WHERE rider_id IS NOT NULL;
+    `);
     }
     getActiveConnection() {
         if (!this.activeConnection) {

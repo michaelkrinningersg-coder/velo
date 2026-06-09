@@ -5,6 +5,7 @@ exports.previewRaceRosterEditor = previewRaceRosterEditor;
 exports.applyRaceRosterSelection = applyRaceRosterSelection;
 exports.ensureRaceEntries = ensureRaceEntries;
 exports.refreshRaceEntriesForRaceStart = refreshRaceEntriesForRaceStart;
+const mappers_1 = require("../db/mappers");
 const DIVISION_BY_TIER = {
     1: 'WorldTour',
     2: 'ProTour',
@@ -41,6 +42,8 @@ const RIDER_LOCK_MESSAGES = {
     'already-raced-today': 'Heute bereits in einem anderen Rennen gestartet.',
     'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
     unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
+    'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
+    'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
 };
 function createDeterministicRandom(seed) {
     let state = seed >>> 0;
@@ -94,6 +97,47 @@ function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
     for (const rider of riders) {
         if (rider.isUnavailable) {
             locks.set(rider.id, 'unavailable');
+        }
+    }
+    if ((0, mappers_1.isWinterBreak)(currentDate)) {
+        const ridersByTeamId = groupRidersByTeam(riders);
+        for (const teamRiders of ridersByTeamId.values()) {
+            const topTwo = [...teamRiders].sort((a, b) => b.overallRating - a.overallRating).slice(0, 2);
+            for (const rider of topTwo) {
+                if (!locks.has(rider.id)) {
+                    locks.set(rider.id, 'winter-break');
+                }
+            }
+        }
+    }
+    if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+        const ridersByTeamId = groupRidersByTeam(riders);
+        for (const teamRiders of ridersByTeamId.values()) {
+            // Find the best Co-Captain (roleId === 2)
+            const coCaptains = teamRiders.filter((r) => r.roleId === 2);
+            if (coCaptains.length > 0) {
+                coCaptains.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+                const bestCoCap = coCaptains[0];
+                if (!locks.has(bestCoCap.id)) {
+                    locks.set(bestCoCap.id, 'low-category-exclusion');
+                }
+            }
+            // Find the best Sprinter (roleId === 6)
+            const sprinters = teamRiders.filter((r) => r.roleId === 6);
+            if (sprinters.length > 0) {
+                sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+                const bestSprinter = sprinters[0];
+                if (!locks.has(bestSprinter.id)) {
+                    locks.set(bestSprinter.id, 'low-category-exclusion');
+                }
+            }
+            // Lock all Captains (roleId === 1)
+            const captains = teamRiders.filter((r) => r.roleId === 1);
+            for (const cap of captains) {
+                if (!locks.has(cap.id)) {
+                    locks.set(cap.id, 'low-category-exclusion');
+                }
+            }
         }
     }
     const sameDayRows = db.prepare(`

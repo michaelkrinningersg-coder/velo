@@ -47,6 +47,7 @@ exports.parsePeakDates = parsePeakDates;
 exports.usesMountainStagePoints = usesMountainStagePoints;
 exports.resolveStageResultPointValues = resolveStageResultPointValues;
 exports.isoDateToDayNumber = isoDateToDayNumber;
+exports.isWinterBreak = isWinterBreak;
 exports.randomBetween = randomBetween;
 exports.roundToTwoDecimals = roundToTwoDecimals;
 exports.addDaysIso = addDaysIso;
@@ -129,7 +130,7 @@ exports.RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
-exports.SEASON_FORM_RISE_DAYS = 42;
+exports.SEASON_FORM_RISE_DAYS = 56;
 exports.SEASON_FORM_FALL_DAYS = 14;
 exports.SEASON_FORM_MAX_RAW = 6;
 exports.SEASON_FORM_RISE_STEP_RAW = exports.SEASON_FORM_MAX_RAW / exports.SEASON_FORM_RISE_DAYS;
@@ -247,6 +248,20 @@ function resolveStageResultPointValues(stage) {
 function isoDateToDayNumber(isoDate) {
     return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
 }
+function isWinterBreak(dateString) {
+    const match = dateString.match(/^\d{4}-(\d{2})-(\d{2})/);
+    if (!match)
+        return false;
+    const month = parseInt(match[1], 10);
+    const day = parseInt(match[2], 10);
+    if (month === 10 && day >= 15)
+        return true;
+    if (month === 11 || month === 12 || month === 1)
+        return true;
+    if (month === 2 && day <= 15)
+        return true;
+    return false;
+}
 function randomBetween(min, max) {
     return min + Math.random() * (max - min);
 }
@@ -279,13 +294,21 @@ function resolveEffectiveRecuperationSkill(recuperationSkill, stageRaceRecuperat
 }
 function resolvePeakPhase(currentDate, peakDates) {
     const currentDay = isoDateToDayNumber(currentDate);
-    for (const peakDate of peakDates) {
+    const sortedPeaks = [...peakDates].sort((a, b) => isoDateToDayNumber(a) - isoDateToDayNumber(b));
+    for (let i = 0; i < sortedPeaks.length; i++) {
+        const peakDate = sortedPeaks[i];
         const peakDay = isoDateToDayNumber(peakDate);
+        const prevPeakDay = i > 0 ? isoDateToDayNumber(sortedPeaks[i - 1]) : Number.NEGATIVE_INFINITY;
         if (currentDay >= peakDay && currentDay < peakDay + exports.SEASON_FORM_FALL_DAYS) {
             return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
         }
-        if (currentDay >= peakDay - exports.SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
-            return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
+        const seasonYear = peakDate.slice(0, 4);
+        const seasonStartDay = isoDateToDayNumber(`${seasonYear}-01-01`);
+        const idealBuildStart = Math.max(seasonStartDay, peakDay - exports.SEASON_FORM_RISE_DAYS);
+        const prevDeclineEnd = prevPeakDay + exports.SEASON_FORM_FALL_DAYS;
+        const actualBuildStartDay = Math.max(idealBuildStart, prevDeclineEnd);
+        if (currentDay >= actualBuildStartDay && currentDay < peakDay) {
+            return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay, actualBuildStartDay };
         }
     }
     return null;
@@ -306,7 +329,10 @@ function resolveProjectionPoint(date, peakDates) {
         return { sForm: 0, rForm: 0 };
     }
     if (phase.phase === 'build') {
-        const sFormRaw = roundToTwoDecimals(Math.min(exports.SEASON_FORM_MAX_RAW, Math.max(0, (exports.SEASON_FORM_RISE_DAYS - phase.elapsedDays + 1) * exports.SEASON_FORM_RISE_STEP_RAW)));
+        const currentDay = isoDateToDayNumber(date);
+        const actualBuildStartDay = phase.actualBuildStartDay ?? (isoDateToDayNumber(phase.peakDate) - exports.SEASON_FORM_RISE_DAYS);
+        const daysSinceBuildStarted = currentDay - actualBuildStartDay + 1;
+        const sFormRaw = roundToTwoDecimals(Math.min(exports.SEASON_FORM_MAX_RAW, Math.max(0, daysSinceBuildStarted * exports.SEASON_FORM_RISE_STEP_RAW)));
         const sForm = resolveEffectiveSeasonForm(sFormRaw);
         return { sForm, rForm: 0 };
     }
@@ -365,7 +391,7 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
     const peakDates = parsePeakDates(row.peak_dates_json);
     const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
     const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
-    const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
+    const totalRaceFormBonus = Math.min(5.0, roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0)));
     const riderLoadSummary = (0, RiderLoadModel_1.buildRiderLoadSummary)(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
     return {
         id: row.id,

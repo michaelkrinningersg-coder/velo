@@ -298,9 +298,10 @@ function renderStandingRows(
   }
 
   return `<div class="race-sim-classification-grid">${visibleStandings.map((standing) => {
-    const team = resolveRiderTeam(bootstrap, standing.riderId);
-    const riderName = resolveRiderName(bootstrap, standing.riderId);
-    const distanceGap = options.distanceGapsByRiderId?.get(standing.riderId) ?? null;
+    const riderId = standing.riderId ?? 0;
+    const team = resolveRiderTeam(bootstrap, riderId);
+    const riderName = resolveRiderName(bootstrap, riderId);
+    const distanceGap = options.distanceGapsByRiderId?.get(riderId) ?? null;
     const distanceGapClassName = [
       options.distanceGapClassName ?? '',
       resolveDistanceGapToneClassName(distanceGap),
@@ -727,7 +728,7 @@ function resolveStandingPoints(standings: RealtimeClassificationStanding[] | und
 
 function resolveBestStandingRiderInGroup(standings: RealtimeClassificationStanding[], groupRiderIds: Set<number>): number | null {
   return standings
-    .filter((standing) => groupRiderIds.has(standing.riderId))
+    .filter((standing): standing is typeof standing & { riderId: number } => standing.riderId != null && groupRiderIds.has(standing.riderId))
     .sort((left, right) => left.rank - right.rank || left.riderId - right.riderId)[0]?.riderId ?? null;
 }
 

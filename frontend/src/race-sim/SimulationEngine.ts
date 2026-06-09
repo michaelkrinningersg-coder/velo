@@ -1296,7 +1296,7 @@ export class SimulationEngine {
           riderName: r.riderName,
           type: 'support_resume',
           tone: 'neutral',
-          title: `${r.riderName} hat heute einen guten Tag`,
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute einen guten Tag`,
           detail: 'Superform aktiv.',
         });
       }
@@ -1307,7 +1307,7 @@ export class SimulationEngine {
           riderName: r.riderName,
           type: 'support_wait',
           tone: 'danger',
-          title: `${r.riderName} hat heute einen schlechten Tag`,
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute einen schlechten Tag`,
           detail: 'Supermalus aktiv.',
         });
       }
@@ -1318,7 +1318,7 @@ export class SimulationEngine {
           riderName: r.riderName,
           type: 'support_resume',
           tone: 'neutral',
-          title: `${r.riderName} hat heute seinen Formhöhepunkt`,
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute seinen Formhöhepunkt`,
           detail: 'Formhöhepunkt erreicht.',
         });
       }
@@ -1428,7 +1428,10 @@ export class SimulationEngine {
       }
     }
     if (kmMark == null) {
-      kmMark = Number((this.leaderDistanceMeters / 1000.0).toFixed(2));
+      const leaderDistance = this.riders
+        .filter((r) => r.finishStatus !== 'dnf')
+        .reduce((maxDist, r) => Math.max(maxDist, r.distanceCoveredMeters), 0);
+      kmMark = Number((leaderDistance / 1000.0).toFixed(2));
     }
 
     const newMessage: RaceSimMessage = {
@@ -2840,7 +2843,7 @@ export class SimulationEngine {
         riderName: counterRider.riderName,
         type: 'counter_attack',
         tone: 'warning',
-        title: `${counterRider.riderName} kontert (Reaktion auf ${rider.riderName})`,
+        title: `${counterRider.riderName} kontert (Reaktion auf ${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)})`,
         detail: `Konterattacke bei ${(nextAttack.triggerDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
       });
     }
@@ -3540,8 +3543,19 @@ export class SimulationEngine {
           ? `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} stürzt`
           : `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} hat einen Defekt`),
       detail: incident.type === 'crash'
-        ? `km ${incident.triggerDistanceKm.toFixed(2)} · ${incident.severity ?? 'unbekannt'} · Wartezeit ${incident.waitDurationSeconds}s`
-        : `km ${incident.triggerDistanceKm.toFixed(2)} · Wartezeit ${incident.waitDurationSeconds}s`,
+        ? (() => {
+            let severityLabel = 'Low';
+            let consequenceLabel = 'Regenerationsmalus auf den nächsten Etappen (-10, -5, -2 Form)';
+            if (incident.severity === 'medium') {
+              severityLabel = 'Middle';
+              consequenceLabel = 'Frischeverlust (-15 Frische) und verringerte Tagesform für den Rest der Etappe';
+            } else if (incident.severity === 'severe') {
+              severityLabel = 'High';
+              consequenceLabel = 'Fahrer musste die Etappe beenden (DNF)';
+            }
+            return `Auswirkung: ${severityLabel} · Folge: ${consequenceLabel} · Wartezeit: ${incident.waitDurationSeconds}s`;
+          })()
+        : `Wartezeit: ${incident.waitDurationSeconds}s`,
     });
 
     if (incident.type === 'crash' && incident.severity === 'severe') {
@@ -3552,8 +3566,8 @@ export class SimulationEngine {
         type: 'dnf',
         tone: 'danger',
         title: isMassCrash
-          ? `Massensturz (Folge): ${rider.riderName} ist ausgeschieden`
-          : `${rider.riderName} ist ausgeschieden`,
+          ? `Massensturz (Folge): ${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist ausgeschieden`
+          : `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist ausgeschieden`,
         detail: `Schwerer Sturz bei km ${incident.triggerDistanceKm.toFixed(2)}.`,
       });
     }
@@ -3597,7 +3611,7 @@ export class SimulationEngine {
           riderName: rider.riderName,
           type: 'support_wait',
           tone: 'neutral',
-          title: `${rider.riderName} wartet auf ${captain.riderName}`,
+          title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} wartet auf ${this.formatRiderWithPreStageGc(captain.rider.id, captain.riderName)}`,
           detail: 'Helfer nimmt Tempo raus, bis der Kapitän wieder anschließt.',
         });
         console.log('[RaceIncidents] Helfer wartet', {
@@ -3616,8 +3630,8 @@ export class SimulationEngine {
         riderName: rider.riderName,
         type: 'support_resume',
         tone: 'neutral',
-        title: `${rider.riderName} ist wieder beim Kapitän`,
-        detail: `${captain.riderName} hat den Helfer wieder erreicht.`,
+        title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist wieder beim Kapitän`,
+        detail: `${this.formatRiderWithPreStageGc(captain.rider.id, captain.riderName)} hat den Helfer wieder erreicht.`,
       });
     }
 

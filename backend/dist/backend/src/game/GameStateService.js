@@ -4,6 +4,7 @@ exports.GameStateService = void 0;
 const events_1 = require("events");
 const GameStateRepository_1 = require("../db/repositories/GameStateRepository");
 const RaceRepository_1 = require("../db/repositories/RaceRepository");
+const ResultRepository_1 = require("../db/repositories/ResultRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const TeamRepository_1 = require("../db/repositories/TeamRepository");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
@@ -17,12 +18,14 @@ const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 const SEASON_FORM_MIN_RAW = 0;
 const SEASON_FORM_MAX_RAW = 6;
-const SEASON_FORM_RISE_DAYS = 42;
+const SEASON_FORM_RISE_DAYS = 56;
 const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
 const SEASON_FORM_FALL_DAYS = 14;
 const RACE_FORM_BUILD_STEP = 0.25;
+const RACE_FORM_FREE_STEP = 0.15;
+const BUILD_R_FORM_EXPIRY_DAYS = 40;
 const FREE_R_FORM_EXPIRY_DAYS = 20;
-const PEAK_MIN_SPACING_DAYS = 56;
+const PEAK_MIN_SPACING_DAYS = 28;
 const ILLNESS_CHANCE = 0.0025;
 const INJURY_CHANCE = 0.002;
 function tableExists(db, tableName) {
@@ -114,7 +117,9 @@ class GameStateService {
         new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
         if (this.syncedStateDate !== state.currentDate) {
             this.syncCurrentSeasonFormState(state.currentDate, state.season);
-            this.syncCurrentFormHistory(state.currentDate);
+            if (new Date(state.currentDate).getDay() === 1) {
+                this.syncWeeklyFormHistory(state.currentDate);
+            }
             this.syncedStateDate = state.currentDate;
         }
         // Lazily populate rider_skill_yearly_baseline for current season if missing
@@ -162,6 +167,7 @@ class GameStateService {
         };
     }
     advanceDay() {
+        ResultRepository_1.ResultRepository.clearInMemoryStageEvents();
         const nextState = this.db.transaction(() => {
             this.ensureStateRow();
             const currentRow = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1').get();
@@ -381,11 +387,26 @@ class GameStateService {
             if (phase?.phase === 'build') {
                 activePeakDate = null;
                 peakSForm = 0;
-                formBonus = resolveBuildValue(phase.elapsedDays);
+                // S-Form only accumulates via daily advances (syncRiderDailyStates).
+                // Prevent retroactive form from the previous year: if the build window
+                // started before Jan 1 of this season, the max legitimate form is
+                // (days since Jan 1) * RISE_STEP. If the DB value exceeds this (e.g.
+                // from an older run), reset it to 0 so it builds up correctly.
+                const peakDayForBuild = isoDateToDayNumber(phase.peakDate);
+                const buildWindowStart = peakDayForBuild - SEASON_FORM_RISE_DAYS;
+                const seasonStartDay = isoDateToDayNumber(`${currentSeason}-01-01`);
+                if (buildWindowStart < seasonStartDay || seasonChanged) {
+                    const currentDayNum = isoDateToDayNumber(currentDate);
+                    const daysSinceSeasonStart = Math.max(0, currentDayNum - seasonStartDay);
+                    const maxLegitForm = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, daysSinceSeasonStart * SEASON_FORM_RISE_STEP_RAW));
+                    if (formBonus > maxLegitForm) {
+                        formBonus = SEASON_FORM_MIN_RAW;
+                    }
+                }
             }
             else if (phase?.phase === 'decline') {
-                formBonus = resolveDeclineValue(SEASON_FORM_MAX_RAW, phase.elapsedDays);
-                peakSForm = SEASON_FORM_MAX_RAW;
+                peakSForm = row.active_peak_date === phase.peakDate ? row.peak_s_form : row.form_bonus;
+                formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
                 activePeakDate = phase.peakDate;
             }
             else {
@@ -480,9 +501,8 @@ class GameStateService {
             const phase = resolvePeakPhase(nextDate, peakDates);
             if (phase?.phase === 'decline' && phase.elapsedDays === 0) {
                 activePeakDate = phase.peakDate;
-                peakSForm = SEASON_FORM_MAX_RAW;
+                peakSForm = formBonus;
                 peakRForm = roundFormBonus(Math.max(0, raceFormBonus));
-                formBonus = SEASON_FORM_MAX_RAW;
             }
             else if (phase?.phase === 'decline') {
                 activePeakDate = phase.peakDate;
@@ -498,8 +518,18 @@ class GameStateService {
                 activePeakDate = null;
                 peakSForm = 0;
                 peakRForm = 0;
-                if (healthStatus === 'healthy') {
+                // Only accumulate form after Jan 1 of the current season.
+                // If the build window starts in the previous year, riders begin at 0 on Jan 1.
+                const peakDayForBuild2 = isoDateToDayNumber(phase.peakDate);
+                const buildWindowStartDay = peakDayForBuild2 - SEASON_FORM_RISE_DAYS;
+                const seasonStart2Day = isoDateToDayNumber(`${nextSeason}-01-01`);
+                const nextDayNum = isoDateToDayNumber(nextDate);
+                const effectiveBuildStart = Math.max(buildWindowStartDay, seasonStart2Day);
+                if (nextDayNum >= effectiveBuildStart && healthStatus === 'healthy') {
                     formBonus = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, formBonus + SEASON_FORM_RISE_STEP_RAW));
+                }
+                else if (nextDayNum < effectiveBuildStart) {
+                    formBonus = SEASON_FORM_MIN_RAW;
                 }
             }
             else {
@@ -542,6 +572,12 @@ class GameStateService {
             for (const riderId of seasonChangedRiderIds) {
                 deleteFormEvents.run(riderId);
             }
+            if (this.isTable('rider_form_history')) {
+                this.db.prepare('DELETE FROM rider_form_history').run();
+            }
+        }
+        if (new Date(nextDate).getDay() === 1) {
+            this.syncWeeklyFormHistory(nextDate);
         }
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
@@ -632,11 +668,10 @@ class GameStateService {
         }
         this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
     }
-    syncCurrentFormHistory(currentDate) {
-        if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history')) {
+    syncWeeklyFormHistory(currentDate) {
+        if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
             return;
         }
-        this.removeExpiredRaceFormEvents(currentDate);
         // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
         // in one statement instead of a per-rider JS loop.
         this.db.prepare(`
@@ -645,13 +680,14 @@ class GameStateService {
         rds.rider_id,
         @date AS date,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100 AS s_form,
-        ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100 AS r_form,
-        ROUND((
-          ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
-          + ROUND((rds.race_form_bonus + COALESCE(SUM(rfe.amount), 0)) * 100) / 100
-        ) * 100) / 100 AS total_form
+        MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
+        ROUND((rds.form_bonus + rds.peak_s_form) * 100) / 100 
+          + MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
+          AS total_form
       FROM rider_daily_state rds
+      JOIN riders ON riders.id = rds.rider_id
       LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
+      WHERE riders.active_team_id IS NOT NULL AND riders.is_retired = 0
       GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus
       ON CONFLICT(rider_id, date) DO UPDATE SET
         s_form = excluded.s_form,
@@ -703,17 +739,24 @@ class GameStateService {
                 }
                 const peakDates = resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), row.season);
                 const phase = resolvePeakPhase(raceDate, peakDates);
+                let expiresOnIso = addDaysIso(raceDate, phase?.phase === 'build' ? BUILD_R_FORM_EXPIRY_DAYS : FREE_R_FORM_EXPIRY_DAYS);
+                if (phase) {
+                    const peakPlus14 = addDaysIso(phase.peakDate, 14);
+                    if (isoDateToDayNumber(peakPlus14) < isoDateToDayNumber(expiresOnIso)) {
+                        expiresOnIso = peakPlus14;
+                    }
+                }
                 if (phase?.phase === 'build') {
-                    updateRaceForm.run(roundFormBonus(row.race_form_bonus + RACE_FORM_BUILD_STEP), riderId);
+                    // Instead of updating the legacy column, insert a trackable event
+                    insertFreeRaceForm.run(riderId, raceDate, expiresOnIso, RACE_FORM_BUILD_STEP);
                     insertAward.run(riderId, raceDate, 'build');
                     continue;
                 }
                 if (phase == null) {
-                    insertFreeRaceForm.run(riderId, raceDate, addDaysIso(raceDate, FREE_R_FORM_EXPIRY_DAYS), 0.05);
+                    insertFreeRaceForm.run(riderId, raceDate, expiresOnIso, RACE_FORM_FREE_STEP);
                     insertAward.run(riderId, raceDate, 'free');
                 }
             }
-            this.syncCurrentFormHistory(raceDate);
         })();
     }
     runDailyChecks(currentDate) {

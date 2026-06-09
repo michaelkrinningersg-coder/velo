@@ -306,7 +306,8 @@ class RiderRepository {
         gc_results.rank AS gc_rank,
         stage_points.points_awarded AS stage_points,
         stage_entries.status AS stage_entry_status,
-        stage_entries.status_reason AS stage_entry_status_reason
+        stage_entries.status_reason AS stage_entry_status_reason,
+        stages.stage_score AS stage_score
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
@@ -353,7 +354,8 @@ class RiderRepository {
         stages.start_elevation AS start_elevation,
         results.result_type_id AS result_type_id,
         results.rank AS result_rank,
-        final_points.points_awarded AS final_points
+        final_points.points_awarded AS final_points,
+        stages.stage_score AS stage_score
       FROM results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
@@ -449,6 +451,7 @@ class RiderRepository {
                 distanceKm: summary.distanceKm,
                 elevationGainMeters: summary.elevationGainMeters,
                 seasonPoints: stagePoints,
+                stageScore: row.stage_score ?? 0,
             });
             const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
             pointsByTerrain[terrainBucket] += stagePoints;
@@ -487,6 +490,7 @@ class RiderRepository {
                 distanceKm: summary.distanceKm,
                 elevationGainMeters: summary.elevationGainMeters,
                 seasonPoints: finalPoints,
+                stageScore: row.stage_score ?? 0,
             });
             pointsByTerrain[(0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile)] += finalPoints;
             pointsByRaceFormat.stageRace += finalPoints;
@@ -544,6 +548,12 @@ class RiderRepository {
             pointsByRaceFormat,
             careerRaceDaysBySeason,
             seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
+            peakDates: (0, mappers_1.tableExists)(this.db, 'rider_daily_state')
+                ? (0, mappers_1.parsePeakDates)(this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id)?.peak_dates_json)
+                : [],
+            formHistory: (0, mappers_1.tableExists)(this.db, 'rider_form_history')
+                ? this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id)
+                : [],
         };
     }
     getSeasonRaceStatsByRiderId(season) {
@@ -555,13 +565,14 @@ class RiderRepository {
       SELECT
         stage_entries.rider_id AS rider_id,
         COUNT(DISTINCT stage_entries.stage_id) AS race_days,
-        SUM(CASE WHEN results.rank = 1 THEN 1 ELSE 0 END) AS wins
+        COUNT(DISTINCT CASE WHEN results.rank = 1 THEN results.stage_id ELSE NULL END) AS wins
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
+      JOIN races ON races.id = stages.race_id
       LEFT JOIN results ON results.stage_id = stages.id AND (
         (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id) OR
         (results.result_type_id = ? AND results.rider_id IS NULL AND results.team_id = stage_entries.team_id) OR
-        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id)
+        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages)
       )
       WHERE stage_entries.status != 'dns'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
@@ -835,8 +846,13 @@ class RiderRepository {
           
         UNION ALL
         
-        SELECT rank FROM results
-        WHERE result_type_id = ? AND rider_id = ?
+        SELECT results.rank FROM results
+        JOIN stages ON stages.id = results.stage_id
+        JOIN races ON races.id = stages.race_id
+        WHERE results.result_type_id = ? 
+          AND results.rider_id = ?
+          AND races.is_stage_race = 1 
+          AND stages.stage_number = races.number_of_stages
       )
     `).get(mappers_1.RESULT_TYPE_IDS.stage, riderId, mappers_1.RESULT_TYPE_IDS.stage, riderId, mappers_1.RESULT_TYPE_IDS.gc, riderId);
         return row?.wins ?? 0;

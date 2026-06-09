@@ -108,6 +108,23 @@ export async function loadStageResults(stageId: number, silentIfMissing: boolean
   renderResultsView();
 }
 
+function getKmZeroEventPriority(row: { title?: string | null }): number {
+  const title = row.title || '';
+  if (title.includes('guten Tag')) {
+    return 1; // Superform
+  }
+  if (title.includes('schlechten Tag')) {
+    return 2; // Supermalus
+  }
+  if (title.includes('Formhöhepunkt') || title.includes('Formhoehepunkt')) {
+    return 3; // Form Peak
+  }
+  if (title.includes('nicht am Start')) {
+    return 4; // DNS
+  }
+  return 5;
+}
+
 export function renderResultsView(): void {
   const raceSelect = $<HTMLSelectElement>('results-race-select');
   const stageSelect = $<HTMLSelectElement>('results-stage-select');
@@ -119,6 +136,13 @@ export function renderResultsView(): void {
   const headerRow = table.querySelector('thead tr');
   const tbody = $('results-tbody');
   const markerClassifications = $('results-marker-classifications');
+
+  // Clean up colgroup and table layout from previous renders
+  const existingColgroup = table.querySelector('colgroup');
+  if (existingColgroup) {
+    existingColgroup.remove();
+  }
+  table.style.tableLayout = '';
 
   if (state.stageResults) {
     state.selectedResultsRaceId = state.stageResults.raceId;
@@ -145,6 +169,18 @@ export function renderResultsView(): void {
   const showEvents = state.selectedResultsSpecialView === 'events';
   if (selectedClassification && !showNonFinishers && !showEvents) {
     state.selectedResultTypeId = selectedClassification.resultTypeId;
+  }
+
+  // Inject colgroup and table-layout if Events view is active
+  if (showEvents) {
+    table.style.tableLayout = 'fixed';
+    const colgroup = document.createElement('colgroup');
+    colgroup.innerHTML = `
+      <col style="width: 100px;">
+      <col style="width: 240px;">
+      <col style="width: auto;">
+    `;
+    table.insertBefore(colgroup, table.firstChild);
   }
 
   if (!state.stageResults || (!selectedClassification && !showNonFinishers && !showEvents)) {
@@ -313,12 +349,28 @@ export function renderResultsView(): void {
       </tr>
     `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
     : showEvents
-    ? [...(state.stageResults.events ?? [])].sort((a, b) => (a.kmMark ?? 0) - (b.kmMark ?? 0)).map((row) => {
+    ? [...(state.stageResults.events ?? [])].sort((a, b) => {
+      const kmA = a.kmMark ?? 0;
+      const kmB = b.kmMark ?? 0;
+      if (Math.abs(kmA - kmB) > 0.0001) {
+        return kmA - kmB;
+      }
+      if (kmA === 0) {
+        const prioA = getKmZeroEventPriority(a);
+        const prioB = getKmZeroEventPriority(b);
+        if (prioA !== prioB) {
+          return prioA - prioB;
+        }
+      }
+      const nameA = a.riderName ?? '';
+      const nameB = b.riderName ?? '';
+      return nameA.localeCompare(nameB, 'de');
+    }).map((row) => {
       const kmFormatted = row.kmMark != null ? `${row.kmMark.toFixed(1).replace('.', ',')} km` : '0,0 km';
       const teamName = row.riderTeamId != null ? (state.teams.find((t) => t.id === row.riderTeamId)?.name ?? null) : null;
       const jerseyHtml = row.riderTeamId != null ? renderResultsJerseyColumn(row.riderTeamId, teamName) : '';
       const flagHtml = row.riderId != null ? renderResultsFlagColumn(resolveRiderCountryCode(row.riderId)) : '';
-      const riderHtml = row.riderId != null ? renderResultsParticipant(row.riderName, true, false, row.riderId, row.riderTeamId) : esc(row.riderName || '–');
+      const riderHtml = row.riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, row.riderId, row.riderTeamId) : esc(row.riderName || '–');
 
       let badgeHtml = '';
       if (row.title && row.title.includes('guten Tag')) {
@@ -333,13 +385,15 @@ export function renderResultsView(): void {
         badgeHtml = `<span class="event-badge event-badge-masscrash">Massensturz</span>`;
       } else if (row.type === 'dnf') {
         badgeHtml = `<span class="event-badge event-badge-dnf">DNF</span>`;
-      } else if (row.type === 'attack') {
-        badgeHtml = `<span class="event-badge event-badge-attack">Attacke</span>`;
-      } else if (row.type === 'counter_attack') {
-        badgeHtml = `<span class="event-badge event-badge-counter">Konter</span>`;
+      } else if (row.type === 'attack' || row.type === 'counter_attack' || (row.title && row.title.toLowerCase().includes('ausreißer'))) {
+        badgeHtml = `<span class="event-badge event-badge-breakaway">Fluchtgruppe</span>`;
       } else if (row.type === 'incident') {
         const isDefect = row.title && (row.title.toLowerCase().includes('defekt') || row.title.toLowerCase().includes('panne') || row.title.toLowerCase().includes('technisch'));
-        badgeHtml = `<span class="event-badge event-badge-incident">${isDefect ? 'Defekt' : 'Sturz'}</span>`;
+        if (isDefect) {
+          badgeHtml = `<span class="event-badge event-badge-defect">Defekt</span>`;
+        } else {
+          badgeHtml = `<span class="event-badge event-badge-crash">Sturz</span>`;
+        }
       }
 
       return `

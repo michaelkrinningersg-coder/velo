@@ -416,8 +416,13 @@ export class StageResultCommitService {
       team_id: number;
     }>;
 
+    const previousGcStandings = new ResultRepository(this.db).getPreviousGcStandings(race.id, stage.stageNumber);
+    const previousGcMap = new Map<number, number>(previousGcStandings.map(s => [s.riderId, s.rank]));
+
     return dnsRows.map((row, index) => {
       const riderName = `${row.first_name} ${row.last_name}`;
+      const gcRank = previousGcMap.get(row.id);
+      const riderNameFormatted = gcRank != null ? `${riderName} (${gcRank}.)` : riderName;
       const reason = row.health_status === 'ill' ? 'Krankheitsbedingt' : 'Verletzungsbedingt';
       return {
         id: -1000 - index,
@@ -427,7 +432,7 @@ export class StageResultCommitService {
         riderTeamId: row.team_id,
         type: 'dnf' as const,
         tone: 'danger' as const,
-        title: `${riderName} nicht am Start`,
+        title: `${riderNameFormatted} nicht am Start`,
         detail: `${reason} nicht am Start der Etappe.`,
         kmMark: 0,
       };

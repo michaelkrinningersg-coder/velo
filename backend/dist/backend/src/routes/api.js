@@ -5,6 +5,7 @@ const express_1 = require("express");
 const RiderTeamEditorService_1 = require("../editor/RiderTeamEditorService");
 const GameRepository_1 = require("../db/GameRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
+const ResultRepository_1 = require("../db/repositories/ResultRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
@@ -508,7 +509,7 @@ function createRouter(dbService) {
                 return fail(res, 400, 'Es wurden keine Live-Ergebnisse Ã¼bergeben.');
             }
             const db = dbService.getActiveConnection();
-            ok(res, new StageResultCommitService_1.StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? []));
+            ok(res, new StageResultCommitService_1.StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? [], payload.events ?? []));
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -520,9 +521,9 @@ function createRouter(dbService) {
             return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
         try {
             const db = dbService.getActiveConnection();
-            const payload = new GameRepository_1.GameRepository(db).getStageResults(stageId);
+            const payload = new ResultRepository_1.ResultRepository(db).getStageResults(stageId);
             if (!payload)
-                return fail(res, 404, `Keine Ergebnisse fÃ¼r Stage ${stageId} gefunden.`);
+                return fail(res, 404, `Keine Ergebnisse für Stage ${stageId} gefunden.`);
             ok(res, payload);
         }
         catch (e) {
