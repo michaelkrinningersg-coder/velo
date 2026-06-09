@@ -762,6 +762,7 @@ export interface RiderStatsRow {
   distanceKm: number | null;
   elevationGainMeters: number | null;
   seasonPoints: number;
+  stageScore: number;
 }
 
 export interface RiderStatsPointsByTerrain {

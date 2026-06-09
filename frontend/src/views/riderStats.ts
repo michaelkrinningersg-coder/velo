@@ -18,6 +18,7 @@ import {
 import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge } from './dashboard';
 import type { Rider, RiderStatsPayload } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
+import { renderStageEditorScoreBadge } from './stageEditor';
 
 export const RIDER_STATS_ICONS = {
   seasonPoints: '<svg class="rider-stats-icon" viewBox="0 0 24 24" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
@@ -430,6 +431,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
   return `
     <div class="team-detail-page-tabs rider-stats-tabs" role="tablist" aria-label="Riderstats Tabs">
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'results' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="results" aria-selected="${state.riderStatsTab === 'results' ? 'true' : 'false'}">Ergebnisse</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'topResults' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="topResults" aria-selected="${state.riderStatsTab === 'topResults' ? 'true' : 'false'}">Top - Results</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'form' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="form" aria-selected="${state.riderStatsTab === 'form' ? 'true' : 'false'}">Form</button>
     </div>`;
@@ -689,6 +691,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsFormTab(payload)}`;
   }
 
+  if (state.riderStatsTab === 'topResults') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsTopResultsTab(payload)}`;
+  }
+
   if (payload.seasons.length === 0) {
     return `
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
@@ -786,6 +795,9 @@ export async function openRiderStats(riderId: number): Promise<void> {
   state.riderStatsSelectedRiderId = riderId;
   state.riderStatsPayload = null;
   state.riderStatsTab = 'results';
+  state.riderStatsTopResultsFilterCategory = null;
+  state.riderStatsTopResultsFilterSeason = null;
+  state.riderStatsTopResultsPage = 1;
   $('rider-stats-title').innerHTML = renderRiderStatsTitle(rider, null);
   $('rider-stats-jersey').innerHTML = '';
   const ageLabel = rider?.age ? ` · Alter ${rider.age}` : '';
@@ -827,11 +839,21 @@ export function initRiderStatsListeners(): void {
   $('rider-stats-body').addEventListener('click', (event) => {
     const tabButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-stats-tab]');
     if (!tabButton) {
+      // Handle pagination click
+      const pageButton = (event.target as Element).closest<HTMLButtonElement>('button[data-top-results-page]');
+      if (pageButton) {
+        const newPage = Number(pageButton.dataset['topResultsPage']);
+        if (!isNaN(newPage) && newPage >= 1) {
+          state.riderStatsTopResultsPage = newPage;
+          const rider = findRiderById(state.riderStatsSelectedRiderId);
+          $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+        }
+      }
       return;
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults') {
       return;
     }
 
@@ -843,4 +865,164 @@ export function initRiderStatsListeners(): void {
     const rider = findRiderById(state.riderStatsSelectedRiderId);
     $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
   });
+
+  $('rider-stats-body').addEventListener('change', (event) => {
+    const target = event.target as HTMLSelectElement;
+    if (target.id === 'rider-stats-filter-category') {
+      state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
+      state.riderStatsTopResultsPage = 1;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.id === 'rider-stats-filter-season') {
+      state.riderStatsTopResultsFilterSeason = target.value === 'all' ? null : Number(target.value);
+      state.riderStatsTopResultsPage = 1;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    }
+  });
+}
+
+export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): string {
+  const allRows: any[] = [];
+  for (const s of payload.seasons) {
+    for (const block of s.raceBlocks) {
+      for (const row of block.rows) {
+        allRows.push({
+          ...row,
+          season: s.season,
+          isStageRace: block.isStageRace,
+        });
+      }
+    }
+  }
+
+  const categories = Array.from(new Set(allRows.map(r => r.raceCategoryName).filter(Boolean))) as string[];
+  categories.sort((a, b) => a.localeCompare(b, 'de'));
+
+  const seasonsList = Array.from(new Set(allRows.map(r => r.season))).sort((a, b) => b - a);
+
+  let filteredRows = allRows;
+  if (state.riderStatsTopResultsFilterCategory) {
+    filteredRows = filteredRows.filter(r => r.raceCategoryName === state.riderStatsTopResultsFilterCategory);
+  }
+  if (state.riderStatsTopResultsFilterSeason != null) {
+    filteredRows = filteredRows.filter(r => r.season === state.riderStatsTopResultsFilterSeason);
+  }
+
+  filteredRows.sort((a, b) => b.seasonPoints - a.seasonPoints);
+
+  const itemsPerPage = 20;
+  const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
+  if (state.riderStatsTopResultsPage > totalPages) {
+    state.riderStatsTopResultsPage = totalPages;
+  }
+  const startIndex = (state.riderStatsTopResultsPage - 1) * itemsPerPage;
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
+
+  const filtersHtml = `
+    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
+      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
+        <label for="rider-stats-filter-category" style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap;">Rennklasse:</label>
+        <select id="rider-stats-filter-category" class="form-control" style="width: auto; display: inline-block;">
+          <option value="all">Alle Rennklassen</option>
+          ${categories.map(cat => `<option value="${esc(cat)}" ${state.riderStatsTopResultsFilterCategory === cat ? 'selected' : ''}>${esc(cat)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
+        <label for="rider-stats-filter-season" style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap;">Saison:</label>
+        <select id="rider-stats-filter-season" class="form-control" style="width: auto; display: inline-block;">
+          <option value="all">All Time</option>
+          ${seasonsList.map(yr => `<option value="${yr}" ${state.riderStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  `;
+
+  const tableRowsHtml = paginatedRows.length === 0
+    ? `<tr><td colspan="7" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+    : paginatedRows.map(row => {
+        const isFinalRow = row.rowType !== 'stage_result';
+        const raceStageLabel = isFinalRow
+          ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
+          : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
+
+        let placementHtml = '';
+        if (row.finishStatus === 'otl') {
+          placementHtml = renderRiderStatsRankBadge('OTL', 'place');
+        } else if (row.finishStatus === 'dnf') {
+          placementHtml = renderRiderStatsRankBadge('DNF', 'place');
+        } else if (row.resultRank == null) {
+          placementHtml = '–';
+        } else if (isFinalRow) {
+          const className = resolveRiderStatsFinalTypeClassName(row.rowType);
+          placementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
+        } else {
+          const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
+          placementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+        }
+
+        const profileBadgeHtml = row.profile ? renderStageProfileBadge(row.profile) : '–';
+        const stageScoreBadgeHtml = row.stageScore != null ? renderStageEditorScoreBadge(row.stageScore, 0, 1000) : '–';
+        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null);
+
+        return `
+          <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
+            <td>${placementHtml}</td>
+            <td><strong>${esc(raceStageLabel)}</strong></td>
+            <td>${profileBadgeHtml}</td>
+            <td>${stageScoreBadgeHtml}</td>
+            <td>${categoryBadgeHtml}</td>
+            <td>Saison ${row.season}</td>
+            <td><strong>${row.seasonPoints}</strong></td>
+          </tr>
+        `;
+      }).join('');
+
+  const paginationHtml = totalPages > 1
+    ? `
+      <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 0.25rem; margin-top: 1rem; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage - 1}" ${state.riderStatsTopResultsPage === 1 ? 'disabled' : ''}>&laquo; Zurück</button>
+        ${Array.from({ length: totalPages }).map((_, idx) => {
+          const pageNum = idx + 1;
+          const isActive = state.riderStatsTopResultsPage === pageNum;
+          return `<button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}" data-top-results-page="${pageNum}">${pageNum}</button>`;
+        }).join('')}
+        <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage + 1}" ${state.riderStatsTopResultsPage === totalPages ? 'disabled' : ''}>Weiter &raquo;</button>
+      </div>
+    `
+    : '';
+
+  return `
+    <section class="rider-stats-top-results" style="margin-top: 1.5rem;">
+      ${filtersHtml}
+      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
+        <table class="data-table rider-stats-table">
+          <colgroup>
+            <col style="width: 10%;">
+            <col style="width: 32%;">
+            <col style="width: 14%;">
+            <col style="width: 12%;">
+            <col style="width: 16%;">
+            <col style="width: 8%;">
+            <col style="width: 8%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Platz</th>
+              <th>Rennen</th>
+              <th>Profil</th>
+              <th>Score</th>
+              <th>Klasse</th>
+              <th>Saison</th>
+              <th>Punkte</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+      </div>
+      ${paginationHtml}
+    </section>
+  `;
 }

@@ -358,7 +358,8 @@ export class RiderRepository {
         gc_results.rank AS gc_rank,
         stage_points.points_awarded AS stage_points,
         stage_entries.status AS stage_entry_status,
-        stage_entries.status_reason AS stage_entry_status_reason
+        stage_entries.status_reason AS stage_entry_status_reason,
+        stages.stage_score AS stage_score
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
@@ -406,7 +407,8 @@ export class RiderRepository {
         stages.start_elevation AS start_elevation,
         results.result_type_id AS result_type_id,
         results.rank AS result_rank,
-        final_points.points_awarded AS final_points
+        final_points.points_awarded AS final_points,
+        stages.stage_score AS stage_score
       FROM results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
@@ -510,6 +512,7 @@ export class RiderRepository {
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
         seasonPoints: stagePoints,
+        stageScore: row.stage_score ?? 0,
       } satisfies RiderStatsRow);
 
       const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
@@ -550,6 +553,7 @@ export class RiderRepository {
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
         seasonPoints: finalPoints,
+        stageScore: row.stage_score ?? 0,
       } satisfies RiderStatsRow);
 
       pointsByTerrain[resolveRiderStatsTerrainBucket(row.profile)] += finalPoints;

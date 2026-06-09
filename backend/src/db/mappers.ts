@@ -460,6 +460,7 @@ export interface RiderStatsStageDbRow {
   stage_points: number | null;
   stage_entry_status: 'finished' | 'dnf';
   stage_entry_status_reason: string | null;
+  stage_score: number;
 }
 
 export interface RiderStatsFinalDbRow {
@@ -478,6 +479,7 @@ export interface RiderStatsFinalDbRow {
   result_type_id: number;
   result_rank: number;
   final_points: number | null;
+  stage_score: number;
 }
 
 export function emptyRiderStatsPointsByTerrain(): RiderStatsPointsByTerrain {

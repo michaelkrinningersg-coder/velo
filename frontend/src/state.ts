@@ -53,7 +53,7 @@ import type {
 import { RaceSimView } from './race-sim/RaceSimView';
 
 export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
-export type RiderStatsTab = 'results' | 'program' | 'form';
+export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults';
 export type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
 export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonFormPhase' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
@@ -135,6 +135,9 @@ export const state: {
   riderStatsPayload: RiderStatsPayload | null;
   riderStatsTab: RiderStatsTab;
   riderStatsSelectedRiderId: number | null;
+  riderStatsTopResultsFilterCategory: string | null;
+  riderStatsTopResultsFilterSeason: number | null;
+  riderStatsTopResultsPage: number;
   riderTeamEditorPayload: RiderTeamEditorPayload | null;
   riderTeamEditorSelectedTeamKey: string;
   riderTeamEditorSort: {
@@ -206,6 +209,9 @@ export const state: {
   riderStatsPayload: null,
   riderStatsTab: 'results',
   riderStatsSelectedRiderId: null,
+  riderStatsTopResultsFilterCategory: null,
+  riderStatsTopResultsFilterSeason: null,
+  riderStatsTopResultsPage: 1,
   riderTeamEditorPayload: null,
   riderTeamEditorSelectedTeamKey: '',
   riderTeamEditorSort: {
