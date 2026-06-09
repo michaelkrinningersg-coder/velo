@@ -120,8 +120,34 @@ export class RaceRepository {
       }
     }
 
+    const excludedRiderIds = new Set<number>();
+    if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+      for (const teamRiders of ridersByTeamId.values()) {
+        // Find best Co-Captain (roleId === 2)
+        const coCaptains = teamRiders.filter((r) => r.roleId === 2);
+        if (coCaptains.length > 0) {
+          coCaptains.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+          excludedRiderIds.add(coCaptains[0].id);
+        }
+
+        // Find best Sprinter (roleId === 6)
+        const sprinters = teamRiders.filter((r) => r.roleId === 6);
+        if (sprinters.length > 0) {
+          sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+          excludedRiderIds.add(sprinters[0].id);
+        }
+
+        // Lock all Captains (roleId === 1)
+        const captains = teamRiders.filter((r) => r.roleId === 1);
+        for (const cap of captains) {
+          excludedRiderIds.add(cap.id);
+        }
+      }
+    }
+
     for (let i = participants.length - 1; i >= 0; i--) {
-      if (winterLockedRiderIds.has(participants[i].rider.id)) {
+      const riderId = participants[i].rider.id;
+      if (winterLockedRiderIds.has(riderId) || excludedRiderIds.has(riderId)) {
         participants.splice(i, 1);
       }
     }

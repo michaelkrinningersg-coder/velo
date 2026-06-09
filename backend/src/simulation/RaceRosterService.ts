@@ -42,7 +42,7 @@ const SPECIAL_FILL_SEQUENCE = [
   { roleId: 5, phase: 'neutral' },
 ] as const;
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -62,6 +62,7 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
   unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
   'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
+  'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
 };
 
 
@@ -138,6 +139,39 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
       for (const rider of topTwo) {
         if (!locks.has(rider.id)) {
           locks.set(rider.id, 'winter-break');
+        }
+      }
+    }
+  }
+
+  if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+    const ridersByTeamId = groupRidersByTeam(riders);
+    for (const teamRiders of ridersByTeamId.values()) {
+      // Find the best Co-Captain (roleId === 2)
+      const coCaptains = teamRiders.filter((r) => r.roleId === 2);
+      if (coCaptains.length > 0) {
+        coCaptains.sort((a: any, b: any) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+        const bestCoCap = coCaptains[0];
+        if (!locks.has(bestCoCap.id)) {
+          locks.set(bestCoCap.id, 'low-category-exclusion');
+        }
+      }
+
+      // Find the best Sprinter (roleId === 6)
+      const sprinters = teamRiders.filter((r) => r.roleId === 6);
+      if (sprinters.length > 0) {
+        sprinters.sort((a: any, b: any) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+        const bestSprinter = sprinters[0];
+        if (!locks.has(bestSprinter.id)) {
+          locks.set(bestSprinter.id, 'low-category-exclusion');
+        }
+      }
+
+      // Lock all Captains (roleId === 1)
+      const captains = teamRiders.filter((r) => r.roleId === 1);
+      for (const cap of captains) {
+        if (!locks.has(cap.id)) {
+          locks.set(cap.id, 'low-category-exclusion');
         }
       }
     }
