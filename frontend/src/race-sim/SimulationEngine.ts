@@ -1023,6 +1023,7 @@ function isFrontOfLargeDraftGroup(groupSize: number, positionInGroup: number): b
 
 export class SimulationEngine {
   private readonly stageDistanceMeters: number;
+  private readonly maxSubstepSeconds: number;
 
   private readonly isIndividualTimeTrial: boolean;
 
@@ -1097,7 +1098,11 @@ export class SimulationEngine {
 
   private hasLoggedFinishSprintTieBreak = false;
 
-  constructor(private readonly bootstrap: RealtimeSimulationBootstrap) {
+  constructor(
+    private readonly bootstrap: RealtimeSimulationBootstrap,
+    options?: { maxSubstepSeconds?: number },
+  ) {
+    this.maxSubstepSeconds = options?.maxSubstepSeconds ?? 1;
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.isTeamTimeTrial = bootstrap.stage.profile === 'TTT';
@@ -1332,7 +1337,7 @@ export class SimulationEngine {
 
     let remainingSeconds = deltaSeconds;
     while (remainingSeconds > 0 && !this.isFinished()) {
-      const substepSeconds = Math.min(remainingSeconds, MAX_SUBSTEP_SECONDS);
+      const substepSeconds = Math.min(remainingSeconds, this.maxSubstepSeconds);
       this.advanceSubstep(substepSeconds);
       remainingSeconds -= substepSeconds;
     }
