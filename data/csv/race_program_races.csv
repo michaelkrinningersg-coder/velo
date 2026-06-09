@@ -1,4 +1,4 @@
-id_unique,program_id,race_id
+id,program_id,race_id
 1,2,1
 2,2,2
 3,2,4
