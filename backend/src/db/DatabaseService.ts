@@ -442,6 +442,7 @@ export class DatabaseService {
       ['final_spread_difficulty_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(final_spread_difficulty_multiplier > 0)'],
       ['crash_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0)'],
       ['mechanical_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0)'],
+      ['stage_score', 'INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000)'],
     ] as const;
 
     for (const [columnName, columnDefinition] of missingColumns) {
@@ -474,7 +475,8 @@ export class DatabaseService {
                ${columnExists(masterDb, 'stages', 'final_push_start_percent') ? 'final_push_start_percent' : '90 AS final_push_start_percent'},
                ${columnExists(masterDb, 'stages', 'final_spread_difficulty_multiplier') ? 'final_spread_difficulty_multiplier' : '1 AS final_spread_difficulty_multiplier'},
                ${columnExists(masterDb, 'stages', 'crash_incident_multiplier') ? 'crash_incident_multiplier' : '1 AS crash_incident_multiplier'},
-               ${columnExists(masterDb, 'stages', 'mechanical_incident_multiplier') ? 'mechanical_incident_multiplier' : '1 AS mechanical_incident_multiplier'}
+               ${columnExists(masterDb, 'stages', 'mechanical_incident_multiplier') ? 'mechanical_incident_multiplier' : '1 AS mechanical_incident_multiplier'},
+               ${columnExists(masterDb, 'stages', 'stage_score') ? 'stage_score' : '0 AS stage_score'}
         FROM stages
       `).all() as Array<{
         id: number;
@@ -483,6 +485,7 @@ export class DatabaseService {
         final_spread_difficulty_multiplier: number;
         crash_incident_multiplier: number;
         mechanical_incident_multiplier: number;
+        stage_score: number;
       }>;
 
       const update = db.prepare(`
@@ -491,7 +494,8 @@ export class DatabaseService {
             final_push_start_percent = ?,
             final_spread_difficulty_multiplier = ?,
             crash_incident_multiplier = ?,
-            mechanical_incident_multiplier = ?
+            mechanical_incident_multiplier = ?,
+            stage_score = ?
         WHERE id = ?
       `);
 
@@ -503,6 +507,7 @@ export class DatabaseService {
             row.final_spread_difficulty_multiplier ?? 1,
             row.crash_incident_multiplier ?? 1,
             row.mechanical_incident_multiplier ?? 1,
+            row.stage_score ?? 0,
             row.id,
           );
         }
@@ -1046,6 +1051,7 @@ export class DatabaseService {
     this.ensureResultsSchema(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
+    this.ensureStageSpreadData(this.activeConnection);
 
     return this.activeConnection;
   }

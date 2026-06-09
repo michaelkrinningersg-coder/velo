@@ -882,6 +882,19 @@ export function initRiderStatsListeners(): void {
   });
 }
 
+function getCategoryPriority(categoryName: string | null | undefined): number {
+  const norm = (categoryName ?? '').toLowerCase();
+  if (norm.includes('grand tour')) return 0;
+  if (norm.includes('monument')) return 1;
+  if (norm.includes('stage race high')) return 2;
+  if (norm.includes('one day high')) return 3;
+  if (norm.includes('stage race middle')) return 4;
+  if (norm.includes('one day middle')) return 5;
+  if (norm.includes('stage race low')) return 6;
+  if (norm.includes('one day low')) return 7;
+  return 8;
+}
+
 export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): string {
   const allRows: any[] = [];
   for (const s of payload.seasons) {
@@ -903,13 +916,51 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 
   let filteredRows = allRows;
   if (state.riderStatsTopResultsFilterCategory) {
-    filteredRows = filteredRows.filter(r => r.raceCategoryName === state.riderStatsTopResultsFilterCategory);
+    const filterVal = state.riderStatsTopResultsFilterCategory;
+    if (filterVal.endsWith('-etappen')) {
+      const catName = filterVal.substring(0, filterVal.length - '-etappen'.length);
+      filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType === 'stage_result');
+    } else if (filterVal.endsWith('-gc')) {
+      const catName = filterVal.substring(0, filterVal.length - '-gc'.length);
+      filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType !== 'stage_result');
+    } else {
+      filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
+    }
   }
   if (state.riderStatsTopResultsFilterSeason != null) {
     filteredRows = filteredRows.filter(r => r.season === state.riderStatsTopResultsFilterSeason);
   }
 
-  filteredRows.sort((a, b) => b.seasonPoints - a.seasonPoints);
+  filteredRows.sort((a, b) => {
+    if (b.seasonPoints !== a.seasonPoints) {
+      return b.seasonPoints - a.seasonPoints;
+    }
+
+    const aIsFinal = a.rowType !== 'stage_result';
+    const bIsFinal = b.rowType !== 'stage_result';
+    const rankA = a.resultRank ?? 9999;
+    const rankB = b.resultRank ?? 9999;
+
+    if (!state.riderStatsTopResultsFilterCategory) {
+      const prioA = getCategoryPriority(a.raceCategoryName);
+      const prioB = getCategoryPriority(b.raceCategoryName);
+      if (prioA !== prioB) {
+        return prioA - prioB;
+      }
+      if (aIsFinal !== bIsFinal) {
+        return aIsFinal ? -1 : 1;
+      }
+      return rankA - rankB;
+    } else {
+      if (rankA !== rankB) {
+        return rankA - rankB;
+      }
+      if (aIsFinal !== bIsFinal) {
+        return aIsFinal ? -1 : 1;
+      }
+      return 0;
+    }
+  });
 
   const itemsPerPage = 20;
   const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
@@ -919,13 +970,27 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   const startIndex = (state.riderStatsTopResultsPage - 1) * itemsPerPage;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
 
+  const categoryOptionsHtml = categories.map(cat => {
+    const isStage = cat.toLowerCase().includes('stage race') || cat.toLowerCase().includes('grand tour');
+    if (isStage) {
+      const valEtappen = `${cat}-etappen`;
+      const valGc = `${cat}-gc`;
+      return `
+        <option value="${esc(valEtappen)}" ${state.riderStatsTopResultsFilterCategory === valEtappen ? 'selected' : ''}>${esc(cat)} - Etappen</option>
+        <option value="${esc(valGc)}" ${state.riderStatsTopResultsFilterCategory === valGc ? 'selected' : ''}>${esc(cat)} - GC</option>
+      `;
+    } else {
+      return `<option value="${esc(cat)}" ${state.riderStatsTopResultsFilterCategory === cat ? 'selected' : ''}>${esc(cat)}</option>`;
+    }
+  }).join('');
+
   const filtersHtml = `
     <div class="rider-stats-top-results-filters" style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
         <label for="rider-stats-filter-category" style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap;">Rennklasse:</label>
         <select id="rider-stats-filter-category" class="form-control" style="width: auto; display: inline-block;">
           <option value="all">Alle Rennklassen</option>
-          ${categories.map(cat => `<option value="${esc(cat)}" ${state.riderStatsTopResultsFilterCategory === cat ? 'selected' : ''}>${esc(cat)}</option>`).join('')}
+          ${categoryOptionsHtml}
         </select>
       </div>
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
@@ -939,35 +1004,38 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   `;
 
   const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="7" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+    ? `<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
           ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
           : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
 
-        let placementHtml = '';
+        let stagePlacementHtml = '–';
+        let gcPlacementHtml = '–';
+
         if (row.finishStatus === 'otl') {
-          placementHtml = renderRiderStatsRankBadge('OTL', 'place');
+          stagePlacementHtml = renderRiderStatsRankBadge('OTL', 'place');
         } else if (row.finishStatus === 'dnf') {
-          placementHtml = renderRiderStatsRankBadge('DNF', 'place');
+          stagePlacementHtml = renderRiderStatsRankBadge('DNF', 'place');
         } else if (row.resultRank == null) {
-          placementHtml = '–';
+          // Keep -
         } else if (isFinalRow) {
           const className = resolveRiderStatsFinalTypeClassName(row.rowType);
-          placementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
+          gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
         } else {
           const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
-          placementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+          stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
         }
 
         const profileBadgeHtml = row.profile ? renderStageProfileBadge(row.profile) : '–';
-        const stageScoreBadgeHtml = row.stageScore != null ? renderStageEditorScoreBadge(row.stageScore, 0, 1000) : '–';
+        const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
         const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null);
 
         return `
           <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
-            <td>${placementHtml}</td>
+            <td>${stagePlacementHtml}</td>
+            <td>${gcPlacementHtml}</td>
             <td><strong>${esc(raceStageLabel)}</strong></td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
@@ -998,17 +1066,19 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
         <table class="data-table rider-stats-table">
           <colgroup>
-            <col style="width: 10%;">
-            <col style="width: 32%;">
-            <col style="width: 14%;">
+            <col style="width: 8%;">
             <col style="width: 12%;">
-            <col style="width: 16%;">
-            <col style="width: 8%;">
-            <col style="width: 8%;">
+            <col style="width: 32%;">
+            <col style="width: 12%;">
+            <col style="width: 10%;">
+            <col style="width: 14%;">
+            <col style="width: 6%;">
+            <col style="width: 6%;">
           </colgroup>
           <thead>
             <tr>
               <th>Platz</th>
+              <th>GC / Wertung</th>
               <th>Rennen</th>
               <th>Profil</th>
               <th>Score</th>
