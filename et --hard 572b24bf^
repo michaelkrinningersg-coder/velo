@@ -1,0 +1,91 @@
+[33m8536580[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Merge branch 'main' of https://github.com/michaelkrinningersg-coder/velo
+[33ma9f8051[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Delete .continue/agents/new-config.yaml
+[33m4cb341e[m feat: remove deprecated configuration file for agents
+[33m572b24b[m feat: update configuration format and add new model definitions
+[33m7ea82ce[m feat: add race program mappings and Vuelta Andalucia stage 4 data
+[33m927c839[m feat: add race definitions and program mappings for the 2026 season schedule
+[33mcb44fa6[m feat: add initial dataset for 2026 race calendar in races.csv
+[33mb6e1f98[m feat: initialize racing calendar data and implement dashboard view logic
+[33m00cd49c[m feat: add Oman stage 1-5 route data files
+[33m3401551[m feat: add race, stage metadata and stage profile data for Volta ao Algarve
+[33m528f76f[m feat: add dashboard view with race management and daily game state monitoring
+[33m787a319[m feat: introduce rider development system with new race program CSV and backend repository support
+[33mfa6254e[m fix: update column headers in race programs CSV for consistency:program
+[33mfd6b135[m feat: implement rider development system with new repositories and stage editor UI
+[33mc46f313[m feat: implement rider statistics view and service logic for game state tracking
+[33m672b377[m feat: implement backend database mappers and game state service with rider statistics and race program views
+[33mcf6616d[m feat: implement rider statistics view rendering utilities and simulation engine foundations
+[33m34703a2[m feat: implement API route and frontend view for rider statistics
+[33maea759d[m feat: implement race roster management and simulation infrastructure with supporting data repositories
+[33me2620e8[m feat: create RiderRepository to handle rider data retrieval and relational mapping
+[33meadc497[m feat: add GameStateService to handle daily simulation logic and schema management
+[33mc8383c4[m feat: implement rider development system with core entity types and backend management services
+[33m7f728ff[m feat: implement race incident simulation system including crashes, mechanicals, and mass crash handling
+[33mf552135[m feat: implement StageResultCommitService and SimulationEngine for race result processing and simulation management
+[33m8692fea[m feat: implement StageResultCommitService and SimulationEngine for race stage results and simulation processing
+[33m5dc4a4b[m NPM
+[33m5558a04[m gameplay-readme.md
+[33me790545[m Kleine Änderungen Bugfixing
+[33m3a7279c[m[33m ([m[1;31morigin/feature/encoding-sql-stats-fixes[m[33m)[m AdvanceDayfix
+[33m1c1744e[m Refactoring
+[33mac0288f[m Draft etc
+[33m71d22b3[m Implement form phase dot-in-circle, scale overall badge color, and render potOverall in skills table
+[33mac4f388[m Fix form neutral phase indicator symbol and add CSS for form-phase-dot
+[33m3fa3ef7[m Fix SQL column error in GameRepository (use COUNT(*) instead of stage_entries.id)
+[33m0abb710[m Fix mangled function and variable names (restoring fr in from, free, freigegeben, refresh)
+[33m8e172c9[m Kurze Beschreibung, was wir gemacht haben
+[33m907015a[m Kurze Beschreibung, was wir gemacht haben
+[33maad3175[m Kurze Beschreibung, was wir gemacht haben
+[33m1d2266b[m Kurze Beschreibung, was wir gemacht haben
+[33ma875f70[m Kurze Beschreibung, was wir gemacht haben
+[33m1ca982a[m Kurze Beschreibung, was wir gemacht haben
+[33mad016a6[m Kurze Beschreibung, was wir gemacht haben
+[33m527df08[m Kurze Beschreibung, was wir gemacht haben
+[33mbbeeb82[m Kurze Beschreibung, was wir gemacht haben
+[33m874226f[m Kurze Beschreibung, was wir gemacht haben
+[33m10c8d68[m Kurze Beschreibung, was wir gemacht haben
+[33ma426b54[m Kurze Beschreibung, was wir gemacht haben
+[33m759e595[m Kurze Beschreibung, was wir gemacht haben
+[33mfff0e6b[m fix: remove literal \  characters in frontend template
+[33m2c7dce6[m fix: use correct column names min_pot_* and max_pot_* for potential presets
+[33m1cb2c7e[m fix: insert overall_rating and pot_overall for newgen riders
+[33m590c263[m fix: restore missing backticks in api.ts routes
+[33m8b4eecc[m fix: resolve TypeScript type error for teamId in RiderDraftService
+[33m4bf7264[m fix: restore missing backticks in RiderDraftService.ts SQL statements
+[33m5050ae4[m fix: backticks syntax error and add injuries view
+[33m2000d2f[m feat: implement weighted end-of-year draft system
+[33m585190e[m style: apply green/orange/red heat styling to specializations
+[33mec4f432[m feat: add specializations column to RiderStatsView header
+[33m82d8642[m Kurze Beschreibung, was wir gemacht haben
+[33m1238cf7[m feat: complete UI redesign of RiderStatsView header and format dashboard numbers
+[33m2e9c329[m[33m ([m[1;31morigin/feature/u23-rider-development[m[33m)[m Implement mentor race boost and update UI for stats and team view
+[33m97da42e[m Format skill values and deltas to two decimal places
+[33m371c86d[m Add potential hover in team menu and generate newgens at game start
+[33m35a4911[m Deduplicate rider_names.csv
+[33m97f5f14[m Fix TWN sta_country constraint violation
+[33me11c01e[m Implement U23 rider development, mentor system and newgen presets
+[33me7ab099[m[33m ([m[1;31morigin/feature/rider-development-verification[m[33m)[m Editoren
+[33mb7c5aa0[m climb score
+[33mda58c12[m Polishing
+[33mf18ae7c[m Breakawaay tuning
+[33mad1d740[m Polishing
+[33m0cb8ea5[m Änderungen Rennprogramme
+[33mdf5edd8[m Attack
+[33m1b3aebe[m Big changes
+[33m0260974[m Polish
+[33m28f4399[m Simulation+Resultänderungen
+[33m5884215[m Jersey
+[33m0954626[m Jerseys
+[33md8b0141[m Pr
+[33mce1dc2f[m Leaderbord
+[33mb7305e7[m Live Race
+[33mdb2dbe8[m lIVE sIMU
+[33m7e4dffe[m Riders und Countries
+[33m3713e07[m Quick Sim
+[33m3c8e608[m Add quick simulation, results, and season standings
+[33me154bdc[m Add stage editor and upcoming stage dashboard metrics
+[33me034a02[m dynamic rider development and 2026 team data
+[33m4878e01[m Add contract seeding and refine team management UI
+[33m077c476[m feat: add country master data, team roster updates, and frontend UI
+[33mcc8114b[m feat: Divisions-Tabelle mit Foreign Key, CSV-Sync und UI-Update
+[33mee7cfb8[m Create README.md
