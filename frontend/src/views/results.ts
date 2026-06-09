@@ -36,6 +36,7 @@ import type {
 
 export const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 export const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
+export const RESULTS_EVENTS_KEY = '__events__';
 
 export function isMountainClassificationMarkerType(markerType: string, markerCategory: string | null | undefined): boolean {
   if (markerType === 'climb_top' || markerType === 'finish_hill' || markerType === 'finish_mountain') {
@@ -141,11 +142,12 @@ export function renderResultsView(): void {
     (classification) => classification.resultTypeId === state.selectedResultTypeId,
   ) ?? state.stageResults?.classifications[0] ?? null;
   const showNonFinishers = state.selectedResultsSpecialView === 'nonFinishers';
-  if (selectedClassification && !showNonFinishers) {
+  const showEvents = state.selectedResultsSpecialView === 'events';
+  if (selectedClassification && !showNonFinishers && !showEvents) {
     state.selectedResultTypeId = selectedClassification.resultTypeId;
   }
 
-  if (!state.stageResults || (!selectedClassification && !showNonFinishers)) {
+  if (!state.stageResults || (!selectedClassification && !showNonFinishers && !showEvents)) {
     const selectedStage = findStageById(state.selectedResultsStageId);
     meta.textContent = selectedStage
       ? `${selectedStage.race.name} · ${selectedStage.stage.profile} · ${formatDate(selectedStage.stage.date)}`
@@ -177,7 +179,7 @@ export function renderResultsView(): void {
   const resultTypeButtons = state.stageResults.classifications.map((classification) => `
     <button
       type="button"
-      class="results-type-btn${!showNonFinishers && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
+      class="results-type-btn${!showNonFinishers && !showEvents && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
       data-result-type-id="${classification.resultTypeId}"
     >${esc(classification.resultTypeName)}</button>
   `);
@@ -188,16 +190,23 @@ export function renderResultsView(): void {
       data-results-special-view="${RESULTS_NON_FINISHERS_KEY}"
     >OTL/DNF</button>
   `;
+  const eventsButton = `
+    <button
+      type="button"
+      class="results-type-btn${showEvents ? ' active' : ''}"
+      data-results-special-view="${RESULTS_EVENTS_KEY}"
+    >Ereignisse</button>
+  `;
   const teamButtonIndex = state.stageResults.classifications.findIndex((classification) => classification.resultTypeName.toLocaleLowerCase('de').includes('team'));
   if (teamButtonIndex >= 0) {
-    resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton);
+    resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton, eventsButton);
   } else {
-    resultTypeButtons.push(nonFinishersButton);
+    resultTypeButtons.push(nonFinishersButton, eventsButton);
   }
   tabs.innerHTML = resultTypeButtons.join('');
 
   const stageMarkerClassifications = sortStageMarkerClassifications(state.stageResults.markerClassifications ?? []);
-  const showMarkerTabs = !showNonFinishers && selectedClassification?.resultTypeId === 1 && stageMarkerClassifications.length > 0;
+  const showMarkerTabs = !showNonFinishers && !showEvents && selectedClassification?.resultTypeId === 1 && stageMarkerClassifications.length > 0;
   const selectedStageSubViewKey = showMarkerTabs
     ? (state.selectedResultsMarkerKey ?? RESULTS_STAGE_OVERVIEW_KEY)
     : null;
@@ -223,7 +232,7 @@ export function renderResultsView(): void {
     : '';
   markerTabs.classList.toggle('hidden', !showMarkerTabs);
 
-  const showStageOverviewTable = showNonFinishers || !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
+  const showStageOverviewTable = showNonFinishers || showEvents || !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
 
   if (headerRow && showStageOverviewTable) {
     headerRow.innerHTML = showNonFinishers
@@ -235,6 +244,12 @@ export function renderResultsView(): void {
         <th class="results-flag-col">Flagge</th>
         <th>Team</th>
         <th>Grund</th>
+      `
+      : showEvents
+      ? `
+        <th>km Marke</th>
+        <th>Fahrer</th>
+        <th>Ereignis</th>
       `
       : isGcClassification
       ? `
@@ -297,6 +312,57 @@ export function renderResultsView(): void {
         <td>${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</td>
       </tr>
     `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
+    : showEvents
+    ? [...(state.stageResults.events ?? [])].sort((a, b) => (a.kmMark ?? 0) - (b.kmMark ?? 0)).map((row) => {
+      const kmFormatted = row.kmMark != null ? `${row.kmMark.toFixed(1).replace('.', ',')} km` : '0,0 km';
+      const teamName = row.riderTeamId != null ? (state.teams.find((t) => t.id === row.riderTeamId)?.name ?? null) : null;
+      const jerseyHtml = row.riderTeamId != null ? renderResultsJerseyColumn(row.riderTeamId, teamName) : '';
+      const flagHtml = row.riderId != null ? renderResultsFlagColumn(resolveRiderCountryCode(row.riderId)) : '';
+      const riderHtml = row.riderId != null ? renderResultsParticipant(row.riderName, true, false, row.riderId, row.riderTeamId) : esc(row.riderName || '–');
+
+      let badgeHtml = '';
+      if (row.title && row.title.includes('guten Tag')) {
+        badgeHtml = `<span class="event-badge event-badge-superform"><span class="event-icon">▲</span> Guten Tag</span>`;
+      } else if (row.title && row.title.includes('schlechten Tag')) {
+        badgeHtml = `<span class="event-badge event-badge-supermalus"><span class="event-icon">▼</span> Schlechten Tag</span>`;
+      } else if (row.title && (row.title.includes('Formhöhepunkt') || row.title.includes('Formhoehepunkt'))) {
+        badgeHtml = `<span class="event-badge event-badge-peak"><span class="event-icon">★</span> Formhöhepunkt</span>`;
+      } else if (row.title && row.title.includes('nicht am Start')) {
+        badgeHtml = `<span class="event-badge event-badge-dns">DNS</span>`;
+      } else if (row.title && row.title.includes('Massensturz')) {
+        badgeHtml = `<span class="event-badge event-badge-masscrash">Massensturz</span>`;
+      } else if (row.type === 'dnf') {
+        badgeHtml = `<span class="event-badge event-badge-dnf">DNF</span>`;
+      } else if (row.type === 'attack') {
+        badgeHtml = `<span class="event-badge event-badge-attack">Attacke</span>`;
+      } else if (row.type === 'counter_attack') {
+        badgeHtml = `<span class="event-badge event-badge-counter">Konter</span>`;
+      } else if (row.type === 'incident') {
+        const isDefect = row.title && (row.title.toLowerCase().includes('defekt') || row.title.toLowerCase().includes('panne') || row.title.toLowerCase().includes('technisch'));
+        badgeHtml = `<span class="event-badge event-badge-incident">${isDefect ? 'Defekt' : 'Sturz'}</span>`;
+      }
+
+      return `
+        <tr>
+          <td>${kmFormatted}</td>
+          <td>
+            <div class="event-rider-info">
+              ${jerseyHtml}
+              ${riderHtml}
+              ${flagHtml}
+            </div>
+          </td>
+          <td>
+            <div class="event-content">
+              <div class="event-title-wrapper">
+                <span class="event-title">${esc(row.title || '')}</span>
+                ${badgeHtml}
+              </div>
+              ${row.detail ? `<div class="event-detail">${esc(row.detail)}</div>` : ''}
+            </div>
+          </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="3" class="results-empty-cell">Keine Ereignisse für diese Etappe.</td></tr>'
     : showStageOverviewTable && selectedClassification
     ? selectedClassification.rows.map((row) => {
       const participant = row.riderName ?? row.teamName;
@@ -353,7 +419,7 @@ export function renderResultsView(): void {
     }).join('')
     : '';
 
-  empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers);
+  empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers || showEvents);
   table.classList.toggle('hidden', !showStageOverviewTable);
 
   if (selectedMarkerClassification) {
@@ -433,6 +499,9 @@ export function initResultsListeners(): void {
       const special = specialButton.dataset['resultsSpecialView'];
       if (special === RESULTS_NON_FINISHERS_KEY) {
         state.selectedResultsSpecialView = 'nonFinishers';
+        renderResultsView();
+      } else if (special === RESULTS_EVENTS_KEY) {
+        state.selectedResultsSpecialView = 'events';
         renderResultsView();
       }
     }

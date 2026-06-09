@@ -84,7 +84,7 @@ export const state: {
   selectedResultsStageId: number | null;
   selectedResultTypeId: number;
   selectedResultsMarkerKey: string | null;
-  selectedResultsSpecialView: 'nonFinishers' | null;
+  selectedResultsSpecialView: 'nonFinishers' | 'events' | null;
   selectedDashboardRaceId: number | null;
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;

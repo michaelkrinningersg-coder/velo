@@ -221,6 +221,7 @@ export class GameStateService {
   }
 
   public advanceDay(): GameState {
+    ResultRepository.clearInMemoryStageEvents();
     const nextState = this.db.transaction(() => {
       this.ensureStateRow();
       const currentRow = this.db.prepare(

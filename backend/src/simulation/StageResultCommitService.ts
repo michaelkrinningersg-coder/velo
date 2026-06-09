@@ -17,6 +17,7 @@ import type {
   StageMarkerCategory,
   StageMarkerClassification,
   Team,
+  RaceSimMessage,
 } from '../../../shared/types';
 import {
   TIME_TIE_THRESHOLD_SECONDS,
@@ -295,6 +296,7 @@ export class StageResultCommitService {
     entries: RealtimeStageCommitEntry[],
     markerClassifications: StageMarkerClassification[] = [],
     incidents: PrecalculatedRaceIncident[] = [],
+    events: RaceSimMessage[] = [],
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
@@ -376,7 +378,60 @@ export class StageResultCommitService {
       awardTimeBonuses: stage.profile !== 'ITT' && stage.profile !== 'TTT',
     });
 
+    const dnsEvents = this.loadDnsEvents(race, stage);
+    const combinedEvents = [...dnsEvents, ...events];
+    ResultRepository.inMemoryStageEvents.set(stageId, combinedEvents);
+
     return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents);
+  }
+
+  private loadDnsEvents(race: Race, stage: Stage): RaceSimMessage[] {
+    const tableExists = (db: Database.Database, name: string): boolean => {
+      const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      return !!row;
+    };
+    if (!tableExists(this.db, 'rider_daily_state')) {
+      return [];
+    }
+    const dnsRows = this.db.prepare(`
+      SELECT r.id, r.first_name, r.last_name, rds.health_status, re.team_id
+      FROM race_entries re
+      JOIN riders r ON r.id = re.rider_id
+      JOIN rider_daily_state rds ON rds.rider_id = re.rider_id
+      WHERE re.race_id = ?
+        AND rds.unavailable_days_remaining > 0
+        AND re.rider_id NOT IN (
+          SELECT DISTINCT se.rider_id
+          FROM stage_entries se
+          JOIN stages s ON s.id = se.stage_id
+          WHERE se.race_id = ?
+            AND s.stage_number < ?
+            AND se.status IN ('dns', 'dnf')
+        )
+    `).all(race.id, race.id, stage.stageNumber) as Array<{
+      id: number;
+      first_name: string;
+      last_name: string;
+      health_status: string;
+      team_id: number;
+    }>;
+
+    return dnsRows.map((row, index) => {
+      const riderName = `${row.first_name} ${row.last_name}`;
+      const reason = row.health_status === 'ill' ? 'Krankheitsbedingt' : 'Verletzungsbedingt';
+      return {
+        id: -1000 - index,
+        elapsedSeconds: 0,
+        riderId: row.id,
+        riderName: riderName,
+        riderTeamId: row.team_id,
+        type: 'dnf' as const,
+        tone: 'danger' as const,
+        title: `${riderName} nicht am Start`,
+        detail: `${reason} nicht am Start der Etappe.`,
+        kmMark: 0,
+      };
+    });
   }
 
   private loadStageContext(stageId: number): {

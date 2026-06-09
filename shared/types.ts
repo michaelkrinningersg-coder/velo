@@ -500,6 +500,22 @@ export interface TimeTrialResult {
   entries: TimeTrialEntry[];
 }
 
+export interface RaceSimMessage {
+  id: number;
+  elapsedSeconds: number;
+  riderId: number | null;
+  riderName: string | null;
+  riderTeamId: number | null;
+  secondaryRiders?: Array<{ riderName: string; riderTeamId: number | null }>;
+  type: 'incident' | 'support_wait' | 'support_resume' | 'dnf' | 'attack' | 'counter_attack';
+  tone: 'neutral' | 'warning' | 'danger';
+  title: string;
+  detail: string;
+  kmMark?: number | null;
+  isMassCrash?: boolean;
+  isMassCrashTrigger?: boolean;
+}
+
 // ------ Savegame / Karriere ----------------------------------
 
 export interface SavegameMeta {
@@ -595,6 +611,7 @@ export interface StageResultsPayload {
   previousGcStandings?: RealtimeGcStanding[];
   markerClassifications?: StageMarkerClassification[];
   nonFinishers?: StageNonFinisherRow[];
+  events?: RaceSimMessage[];
 }
 
 export interface StageResultCommitResponse {
@@ -669,6 +686,7 @@ export interface RealtimeStageCommitRequest {
   entries: RealtimeStageCommitEntry[];
   markerClassifications?: StageMarkerClassification[];
   incidents?: PrecalculatedRaceIncident[];
+  events?: RaceSimMessage[];
 }
 
 export interface RaceRosterSelectionRequest {

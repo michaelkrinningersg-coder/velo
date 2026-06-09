@@ -13,6 +13,7 @@ import type {
   StageMarkerType,
   StageScoringRule,
   StageTerrain,
+  RaceSimMessage,
 } from '../../../shared/types';
 import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadConfig, resolveSkillWeightComponents, resolveSkillWeightSimulationMode, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills } from './skillWeights';
 import { precalculateRaceIncidents, buildDynamicCrashIncident } from './incidents';
@@ -95,18 +96,7 @@ export interface BreakawayGapStatusSnapshot {
   kmMark: number | null;
 }
 
-export interface RaceSimMessage {
-  id: number;
-  elapsedSeconds: number;
-  riderId: number | null;
-  riderName: string | null;
-  riderTeamId: number | null;
-  secondaryRiders?: Array<{ riderName: string; riderTeamId: number | null }>;
-  type: 'incident' | 'support_wait' | 'support_resume' | 'dnf' | 'attack' | 'counter_attack';
-  tone: 'neutral' | 'warning' | 'danger';
-  title: string;
-  detail: string;
-}
+
 
 export interface SimulationSnapshot {
   elapsedSeconds: number;
@@ -136,6 +126,7 @@ export interface SimulationSnapshot extends SimulationFrameSnapshot {
   stageFavorites: FavoriteItem[];
   breakawayPhaseActive: boolean;
   breakawayGapStatus: BreakawayGapStatusSnapshot | null;
+  allEvents?: RaceSimMessage[];
 }
 
 interface MarkerCrossing {
@@ -1100,6 +1091,7 @@ export class SimulationEngine {
   private breakawayPhaseEnded = false;
 
   private readonly messages: RaceSimMessage[] = [];
+  private readonly allEvents: RaceSimMessage[] = [];
 
   private nextMessageId = 1;
 
@@ -1294,6 +1286,43 @@ export class SimulationEngine {
     }));
 
     this.riders.forEach((rider) => this.syncRiderTelemetry(rider));
+
+    // Log special form states & form peaks at stage start (km 0)
+    for (const r of this.riders) {
+      if (r.rider.hasSuperform) {
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_resume',
+          tone: 'neutral',
+          title: `${r.riderName} hat heute einen guten Tag`,
+          detail: 'Superform aktiv.',
+        });
+      }
+      if (r.rider.hasSupermalus) {
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_wait',
+          tone: 'danger',
+          title: `${r.riderName} hat heute einen schlechten Tag`,
+          detail: 'Supermalus aktiv.',
+        });
+      }
+      if (r.rider.activePeakDate === this.bootstrap.stage.date) {
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_resume',
+          tone: 'neutral',
+          title: `${r.riderName} hat heute seinen Formhöhepunkt`,
+          detail: 'Formhöhepunkt erreicht.',
+        });
+      }
+    }
   }
 
   public step(deltaSeconds: number): SimulationFrameSnapshot {
@@ -1368,6 +1397,7 @@ export class SimulationEngine {
       markerClassifications: this.buildMarkerClassifications(ordered),
       incidents: this.riders.flatMap((rider) => rider.appliedIncident ? [rider.appliedIncident] : []),
       messages: [...this.messages],
+      allEvents: [...this.allEvents],
       stageFavorites: this.stageFavorites,
       breakawayPhaseActive: this.isBreakawayGroupPhaseActive(),
       breakawayGapStatus: this.breakawayGapStatus == null ? null : { ...this.breakawayGapStatus },
@@ -1389,15 +1419,31 @@ export class SimulationEngine {
       ?? (message.riderId != null
         ? this.riders.find((candidate) => candidate.rider.id === message.riderId)?.rider.activeTeamId ?? null
         : null);
-    this.messages.unshift({
+
+    let kmMark: number | null = null;
+    if (message.riderId != null) {
+      const rider = this.riders.find((r) => r.rider.id === message.riderId);
+      if (rider) {
+        kmMark = Number((rider.distanceCoveredMeters / 1000.0).toFixed(2));
+      }
+    }
+    if (kmMark == null) {
+      kmMark = Number((this.leaderDistanceMeters / 1000.0).toFixed(2));
+    }
+
+    const newMessage: RaceSimMessage = {
       id: this.nextMessageId,
       ...message,
       riderTeamId,
-    });
+      kmMark,
+    };
+
+    this.messages.unshift(newMessage);
     this.nextMessageId += 1;
     if (this.messages.length > 60) {
       this.messages.length = 60;
     }
+    this.allEvents.push(newMessage);
   }
 
   private buildMarkerClassifications(ordered: RiderState[]): StageMarkerClassification[] {
@@ -2543,15 +2589,17 @@ export class SimulationEngine {
 
     if (!this.breakawayPhaseActive && breakawayRiders.some((rider) => rider.distanceCoveredMeters >= breakawayPlan.triggerDistanceMeters)) {
       this.breakawayPhaseActive = true;
-      this.pushMessage({
-        elapsedSeconds: this.elapsedSeconds,
-        riderId: null,
-        riderName: null,
-        type: 'attack',
-        tone: 'warning',
-        title: 'Ausreißergruppe löst sich',
-        detail: `Die gemeinsame Bewegung endet ab ${(breakawayPlan.groupPhaseEndDistanceMeters / 1000).toFixed(1).replace('.', ',')} km, der Ausreißermalus greift ab ${(breakawayPlan.phaseEndDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
-      });
+      for (const r of breakawayRiders) {
+        this.pushMessage({
+          elapsedSeconds: this.elapsedSeconds,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'attack',
+          tone: 'warning',
+          title: `Ausreißversuch: ${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)}`,
+          detail: `Fahrer ist Teil der Ausreißergruppe. Die gemeinsame Bewegung endet ab ${(breakawayPlan.groupPhaseEndDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
+        });
+      }
     }
 
     let hasChanges = false;
@@ -2772,16 +2820,30 @@ export class SimulationEngine {
       });
     }
 
+    // Push attack message for the main attacker
     this.pushMessage({
       elapsedSeconds: startedAtElapsedSeconds,
       riderId: rider.rider.id,
       riderName: rider.riderName,
-      secondaryRiders: counterRiders,
-      type: counterRiders.length > 0 ? 'counter_attack' : 'attack',
+      type: 'attack',
       tone: 'warning',
       title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} attackiert`,
       detail: `Attacke ${nextAttack.attackNumber} bei ${(nextAttack.triggerDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
     });
+
+    // Push counter_attack messages for each counter-attacker
+    for (const counterRider of counterRiders) {
+      const cRiderState = this.riders.find(r => r.riderName === counterRider.riderName);
+      this.pushMessage({
+        elapsedSeconds: startedAtElapsedSeconds,
+        riderId: cRiderState?.rider.id ?? null,
+        riderName: counterRider.riderName,
+        type: 'counter_attack',
+        tone: 'warning',
+        title: `${counterRider.riderName} kontert (Reaktion auf ${rider.riderName})`,
+        detail: `Konterattacke bei ${(nextAttack.triggerDistanceMeters / 1000).toFixed(1).replace('.', ',')} km.`,
+      });
+    }
   }
 
   private buildClusters(ordered: RiderState[]): RiderCluster[] {
@@ -3385,7 +3447,12 @@ export class SimulationEngine {
     return Math.max(0, this.elapsedSeconds - rider.startOffsetSeconds);
   }
 
-  private applyIncident(rider: RiderState, incident: PrecalculatedRaceIncident, eventTimeSeconds: number): void {
+  private applyIncident(
+    rider: RiderState,
+    incident: PrecalculatedRaceIncident,
+    eventTimeSeconds: number,
+    isMassCrash = false
+  ): void {
     rider.pendingIncident = null;
     rider.appliedIncident = incident;
     rider.incidentDelaySecondsRemaining = incident.waitDurationSeconds;
@@ -3437,6 +3504,7 @@ export class SimulationEngine {
     }
 
     if (incident.isMassCrashTrigger && incident.massCrashPotentialRiderIds) {
+      isMassCrash = true;
       const actuallyCrashedRiders: number[] = [];
       for (const victimId of incident.massCrashPotentialRiderIds) {
         const victimState = this.riders.find(r => r.rider.id === victimId);
@@ -3452,7 +3520,7 @@ export class SimulationEngine {
             this.bootstrap.stageSummary.distanceKm
           );
           
-          this.applyIncident(victimState, victimIncident, eventTimeSeconds);
+          this.applyIncident(victimState, victimIncident, eventTimeSeconds, true);
         }
       }
       console.log(`[RaceIncidents] Massensturz ausgelöst durch Fahrer ${rider.rider.id} bei Km ${incident.triggerDistanceKm}. Tatsächlich verwickelte Fahrer (${actuallyCrashedRiders.length}):`, actuallyCrashedRiders);
@@ -3464,9 +3532,13 @@ export class SimulationEngine {
       riderName: rider.riderName,
       type: 'incident',
       tone: incident.type === 'crash' ? 'danger' : 'warning',
-      title: incident.type === 'crash'
-        ? `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} stürzt`
-        : `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} hat einen Defekt`,
+      title: isMassCrash
+        ? (incident.isMassCrashTrigger
+          ? `Massensturz (Auslöser): ${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} stürzt`
+          : `Massensturz (involviert): ${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} stürzt`)
+        : (incident.type === 'crash'
+          ? `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} stürzt`
+          : `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} hat einen Defekt`),
       detail: incident.type === 'crash'
         ? `km ${incident.triggerDistanceKm.toFixed(2)} · ${incident.severity ?? 'unbekannt'} · Wartezeit ${incident.waitDurationSeconds}s`
         : `km ${incident.triggerDistanceKm.toFixed(2)} · Wartezeit ${incident.waitDurationSeconds}s`,
@@ -3479,7 +3551,9 @@ export class SimulationEngine {
         riderName: rider.riderName,
         type: 'dnf',
         tone: 'danger',
-        title: `${rider.riderName} ist ausgeschieden`,
+        title: isMassCrash
+          ? `Massensturz (Folge): ${rider.riderName} ist ausgeschieden`
+          : `${rider.riderName} ist ausgeschieden`,
         detail: `Schwerer Sturz bei km ${incident.triggerDistanceKm.toFixed(2)}.`,
       });
     }

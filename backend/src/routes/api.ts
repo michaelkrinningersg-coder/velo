@@ -510,7 +510,13 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
-      ok<StageResultCommitResponse>(res, new StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? []));
+      ok<StageResultCommitResponse>(res, new StageResultCommitService(db).commitRealtimeStage(
+        stageId,
+        payload.entries,
+        payload.markerClassifications ?? [],
+        payload.incidents ?? [],
+        payload.events ?? []
+      ));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

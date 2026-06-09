@@ -31,6 +31,7 @@ import type {
   StageMarkerClassification,
   PrecalculatedRaceIncident,
   StageProfile,
+  RaceSimMessage,
 } from '../../../shared/types';
 import { runInstantSimulation } from '../race-sim/runInstantSimulation';
 import { SimulationSnapshot } from '../race-sim/SimulationEngine';
@@ -80,7 +81,7 @@ export async function openInstantStage(stageId: number): Promise<void> {
     const bootstrap = res.data;
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
-    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents);
+    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents);
   } catch (error) {
     alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
   } finally {
@@ -211,7 +212,7 @@ function loadRaceSimViewInstance(): RaceSimView {
     }, {
       onFinishRequested: (snapshot, bootstrap) => {
         const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
-        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents);
+        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents);
       },
     });
     setRaceSimView(view);
@@ -354,6 +355,7 @@ export async function completeRealtimeStage(
   entries: RealtimeStageCommitEntry[],
   markerClassifications: StageMarkerClassification[],
   incidents: PrecalculatedRaceIncident[],
+  events?: RaceSimMessage[],
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -362,7 +364,7 @@ export async function completeRealtimeStage(
   setRealtimeCompletionInFlight(true);
   showLoading('Live-Ergebnis wird gespeichert...');
   try {
-    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications, incidents });
+    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications, incidents, events });
     if (!res.success) {
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;
