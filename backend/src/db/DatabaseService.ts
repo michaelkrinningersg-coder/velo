@@ -1026,9 +1026,14 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_riders_active
         ON riders(is_retired, id) WHERE is_retired = 0;
     `);
-    createIfTable('rider_season_programs', `
+            createIfTable('rider_season_programs', `
       CREATE INDEX IF NOT EXISTS idx_rider_season_programs_season_rider
         ON rider_season_programs(season, rider_id);
+    `);
+    createIfTable('results', `
+      CREATE INDEX IF NOT EXISTS idx_results_rider_type
+        ON results(rider_id, result_type_id)
+        WHERE rider_id IS NOT NULL;
     `);
   }
 

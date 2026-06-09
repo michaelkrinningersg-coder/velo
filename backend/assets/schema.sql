@@ -598,6 +598,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_results_stage_team_type
 CREATE INDEX IF NOT EXISTS idx_results_stage_type_rank
   ON results(stage_id, result_type_id, rank);
 
+-- Optimiert Queries, die nach rider_id (ggf. + result_type_id) filtern
+-- (z. B. Karrierestatistik, Saison-Klassements, Fahrer-Historie).
+-- Linke-Spalte als Praefix, daher greift er auch bei reinen
+-- `WHERE rider_id = ?` Queries.
+CREATE INDEX IF NOT EXISTS idx_results_rider_type
+  ON results(rider_id, result_type_id)
+  WHERE rider_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS rider_stage_race_state (
   race_id                         INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
   rider_id                        INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
