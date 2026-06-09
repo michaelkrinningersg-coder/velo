@@ -56,7 +56,7 @@ export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
 export type RiderStatsTab = 'results' | 'program' | 'form';
 export type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
-export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
+export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonFormPhase' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
 export type RaceParticipantsSortKey = 'team' | 'rider' | 'spec1' | 'role' | 'overall' | 'phase' | 'program';
 export type StageEditorStagesSortKey = 'stageId' | 'countryCode' | 'raceName' | 'stageNumber' | 'profile' | 'distanceKm' | 'elevationGainMeters' | 'sprintCount' | 'climbCount' | 'profileScore';
 export type StageEditorClimbsSortKey = 'placementKm' | 'name' | 'category' | 'countryCode' | 'raceName' | 'stageNumber' | 'gainMeters' | 'distanceKm' | 'avgGradient' | 'maxGradient' | 'climbScore';

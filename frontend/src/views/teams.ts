@@ -77,7 +77,7 @@ export const TEAM_DETAIL_PAGE_COLUMNS: Record<TeamDetailPage, TeamTableColumn[]>
     { id: 'averageForm', label: 'Ø Form', title: 'Durchschnittliche Rennform (S-Form + R-Form)', sortKey: 'averageForm', className: 'team-table-col-points' },
     { id: 'longTermFatigueMalus', label: 'L-Ersch', title: 'Langzeit-Erschöpfung ab dem 50. Saisonrenntag', sortKey: 'longTermFatigueMalus', className: 'team-table-col-points' },
     { id: 'shortTermFatigueMalus', label: 'Akut', title: 'Akuter Verschleiß im rollenden 30-Tage-Fenster', sortKey: 'shortTermFatigueMalus', className: 'team-table-col-points' },
-    { id: 'seasonFormPhase', label: 'Phase', title: 'Formphase', className: 'team-table-col-phase' },
+    { id: 'seasonFormPhase', label: 'Phase', title: 'Formphase', sortKey: 'seasonFormPhase', className: 'team-table-col-phase' },
     { id: 'seasonPoints', label: 'Pkt', title: 'Saisonpunkte - kumulierte Punkte der aktuellen Saison', sortKey: 'seasonPoints', className: 'team-table-col-points' },
     { id: 'seasonRaceDays', label: 'Renntage', title: 'Renntage in der laufenden Saison', sortKey: 'seasonRaceDays', className: 'team-table-col-points' },
     { id: 'seasonWins', label: 'Siege', title: 'Siege in der laufenden Saison', sortKey: 'seasonWins', className: 'team-table-col-points' },
@@ -152,7 +152,7 @@ export function getSpecializationSortLabel(value: any): string | undefined {
 }
 
 export function getDefaultTeamSortDirection(sortKey: TeamTableSortKey): 'asc' | 'desc' {
-  return ['birthYear', 'age', 'overallRating', 'potOverall', 'formBonus', 'raceFormBonus', 'seasonPoints', 'seasonRaceDays', 'seasonWins', 'skillDevelopment', ...TEAM_SKILL_COLUMNS.map((column) => column.key)].includes(sortKey)
+  return ['birthYear', 'age', 'overallRating', 'potOverall', 'formBonus', 'raceFormBonus', 'seasonFormPhase', 'seasonPoints', 'seasonRaceDays', 'seasonWins', 'skillDevelopment', ...TEAM_SKILL_COLUMNS.map((column) => column.key)].includes(sortKey)
     ? 'desc'
     : 'asc';
 }
@@ -239,6 +239,7 @@ export function getTeamSortLabel(sortKey: TeamTableSortKey): string {
   if (sortKey === 'seasonRaceDays') return 'Renntage';
   if (sortKey === 'seasonWins') return 'Siege';
   if (sortKey === 'contractEndSeason') return 'Vertragsende';
+  if (sortKey === 'seasonFormPhase') return 'Formphase';
   if (sortKey === 'roleName') return 'Teamrolle';
   if (sortKey === 'riderType') return 'Fahrertyp';
   if (sortKey === 'specialization1') return 'Spec 1';
@@ -301,6 +302,9 @@ export function sortTeamRiders(riders: Rider[]): Rider[] {
         break;
       case 'contractEndSeason':
         comparison = (left.contractEndSeason ?? Number.MAX_SAFE_INTEGER) - (right.contractEndSeason ?? Number.MAX_SAFE_INTEGER);
+        break;
+      case 'seasonFormPhase':
+        comparison = compareStrings(left.seasonFormPhase ?? 'neutral', right.seasonFormPhase ?? 'neutral');
         break;
       case 'roleName':
         comparison = compareStrings(getRiderRoleName(left), getRiderRoleName(right));
@@ -394,6 +398,9 @@ export function sortRiderMenuRiders(riders: Rider[]): Rider[] {
         break;
       case 'contractEndSeason':
         comparison = (left.contractEndSeason ?? Number.MAX_SAFE_INTEGER) - (right.contractEndSeason ?? Number.MAX_SAFE_INTEGER);
+        break;
+      case 'seasonFormPhase':
+        comparison = compareStrings(left.seasonFormPhase ?? 'neutral', right.seasonFormPhase ?? 'neutral');
         break;
       case 'roleName':
         comparison = compareStrings(getRiderRoleName(left), getRiderRoleName(right));
