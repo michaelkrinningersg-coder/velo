@@ -126,11 +126,23 @@ export class RiderRepository {
 
 
   private attachMentorData(riders: Rider[]): Rider[] {
+    const ridersByTeam = new Map<number, Rider[]>();
+    for (const rider of riders) {
+      if (rider.activeTeamId != null) {
+        let teamRiders = ridersByTeam.get(rider.activeTeamId);
+        if (!teamRiders) {
+          teamRiders = [];
+          ridersByTeam.set(rider.activeTeamId, teamRiders);
+        }
+        teamRiders.push(rider);
+      }
+    }
+
     return riders.map((rider) => {
       if ((rider.age ?? 0) <= 23 && rider.activeTeamId != null) {
-        const mentors = riders.filter(m =>
+        const teamRiders = ridersByTeam.get(rider.activeTeamId) ?? [];
+        const mentors = teamRiders.filter(m =>
           m.id !== rider.id &&
-          m.activeTeamId === rider.activeTeamId &&
           (m.age ?? 0) >= 31 &&
           m.overallRating >= 73 &&
           (
@@ -657,36 +669,81 @@ export class RiderRepository {
       return statsByRiderId;
     }
 
-    const whereClause = riderId != null 
-      ? `stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ? AND stage_entries.rider_id = ?`
-      : `stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?`;
+    const riderFilterStageEntries = riderId != null ? 'AND stage_entries.rider_id = ?' : '';
+    const riderFilterResults = riderId != null ? 'AND results.rider_id = ?' : '';
+    const riderFilterStageEntriesResults = riderId != null ? 'AND stage_entries.rider_id = ?' : '';
 
-    const args = riderId != null 
-      ? [RESULT_TYPE_IDS.stage, RESULT_TYPE_IDS.stage, RESULT_TYPE_IDS.gc, season, riderId]
-      : [RESULT_TYPE_IDS.stage, RESULT_TYPE_IDS.stage, RESULT_TYPE_IDS.gc, season];
+    const argsStageEntries = riderId != null ? [season, riderId] : [season];
+    const argsResults = riderId != null ? [RESULT_TYPE_IDS.stage, season, riderId] : [RESULT_TYPE_IDS.stage, season];
+    const argsResultsGc = riderId != null ? [RESULT_TYPE_IDS.gc, season, riderId] : [RESULT_TYPE_IDS.gc, season];
 
-    const rows = this.db.prepare(`
-      SELECT
-        stage_entries.rider_id AS rider_id,
-        COUNT(DISTINCT stage_entries.stage_id) AS race_days,
-        COUNT(DISTINCT CASE WHEN results.rank = 1 THEN results.stage_id ELSE NULL END) AS wins
+    // 1. Race Days
+    const raceDaysRows = this.db.prepare(`
+      SELECT stage_entries.rider_id AS rider_id, COUNT(DISTINCT stage_entries.stage_id) AS race_days
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
-      JOIN races ON races.id = stages.race_id
-      LEFT JOIN results ON results.stage_id = stages.id AND (
-        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id) OR
-        (results.result_type_id = ? AND results.rider_id IS NULL AND results.team_id = stage_entries.team_id) OR
-        (results.result_type_id = ? AND results.rider_id = stage_entries.rider_id AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages)
-      )
-      WHERE ${whereClause}
+      WHERE stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${riderFilterStageEntries}
       GROUP BY stage_entries.rider_id
-    `).all(...args) as Array<{ rider_id: number; race_days: number; wins: number | null }>;
+    `).all(...argsStageEntries) as Array<{ rider_id: number; race_days: number }>;
 
-    for (const row of rows) {
-      statsByRiderId.set(row.rider_id, {
-        raceDays: row.race_days,
-        wins: row.wins ?? 0,
-      });
+    for (const row of raceDaysRows) {
+      statsByRiderId.set(row.rider_id, { raceDays: row.race_days, wins: 0 });
+    }
+
+    // 2. Individual Stage Wins
+    const individualWinsRows = this.db.prepare(`
+      SELECT results.rider_id AS rider_id, COUNT(*) AS wins
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${riderFilterResults}
+      GROUP BY results.rider_id
+    `).all(...argsResults) as Array<{ rider_id: number; wins: number }>;
+
+    for (const row of individualWinsRows) {
+      if (statsByRiderId.has(row.rider_id)) {
+        statsByRiderId.get(row.rider_id)!.wins += row.wins;
+      }
+    }
+
+    // 3. TTT Stage Wins
+    const tttWinsRows = this.db.prepare(`
+      SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NULL
+        AND stage_entries.status != 'dns'
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${riderFilterStageEntriesResults}
+      GROUP BY stage_entries.rider_id
+    `).all(...argsResults) as Array<{ rider_id: number; wins: number }>;
+
+    for (const row of tttWinsRows) {
+      if (statsByRiderId.has(row.rider_id)) {
+        statsByRiderId.get(row.rider_id)!.wins += row.wins;
+      }
+    }
+
+    // 4. GC Wins
+    const gcWinsRows = this.db.prepare(`
+      SELECT results.rider_id AS rider_id, COUNT(*) AS wins
+      FROM results
+      JOIN stages ON stages.id = results.stage_id
+      JOIN races ON races.id = stages.race_id
+      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
+        AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${riderFilterResults}
+      GROUP BY results.rider_id
+    `).all(...argsResultsGc) as Array<{ rider_id: number; wins: number }>;
+
+    for (const row of gcWinsRows) {
+      if (statsByRiderId.has(row.rider_id)) {
+        statsByRiderId.get(row.rider_id)!.wins += row.wins;
+      }
     }
 
     return statsByRiderId;
