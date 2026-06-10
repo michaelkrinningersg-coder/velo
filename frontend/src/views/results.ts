@@ -162,9 +162,16 @@ export function renderResultsView(): void {
       .join('');
   stageSelect.innerHTML = '<option value="">– Etappe auswählen –</option>' + stageOptions;
 
-  const selectedClassification = state.stageResults?.classifications.find(
+  const visibleClassifications = state.stageResults?.classifications.filter(c => {
+    if (selectedRace && !selectedRace.isStageRace && c.resultTypeId !== 1 && c.resultTypeId !== 6) {
+      return false;
+    }
+    return true;
+  }) ?? [];
+
+  const selectedClassification = visibleClassifications.find(
     (classification) => classification.resultTypeId === state.selectedResultTypeId,
-  ) ?? state.stageResults?.classifications[0] ?? null;
+  ) ?? visibleClassifications[0] ?? null;
   const showNonFinishers = state.selectedResultsSpecialView === 'nonFinishers';
   const showEvents = state.selectedResultsSpecialView === 'events';
   if (selectedClassification && !showNonFinishers && !showEvents) {
@@ -212,7 +219,7 @@ export function renderResultsView(): void {
   const isTeamClassification = selectedClassification?.resultTypeId === 6;
   const showTrendColumn = isGcClassification || isPointsLikeClassification || isYouthClassification || isTeamClassification;
 
-  const resultTypeButtons = state.stageResults.classifications.map((classification) => `
+  const resultTypeButtons = visibleClassifications.map((classification) => `
     <button
       type="button"
       class="results-type-btn${!showNonFinishers && !showEvents && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
@@ -233,7 +240,7 @@ export function renderResultsView(): void {
       data-results-special-view="${RESULTS_EVENTS_KEY}"
     >Ereignisse</button>
   `;
-  const teamButtonIndex = state.stageResults.classifications.findIndex((classification) => classification.resultTypeName.toLocaleLowerCase('de').includes('team'));
+  const teamButtonIndex = visibleClassifications.findIndex((classification) => classification.resultTypeName.toLocaleLowerCase('de').includes('team'));
   if (teamButtonIndex >= 0) {
     resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton, eventsButton);
   } else {

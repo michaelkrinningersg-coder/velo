@@ -22,6 +22,26 @@ export class ResultRepository {
     this.db = db;
   }
 
+  public getSeasonRankForRider(season: number, riderId: number): number | null {
+    if (!tableExists(this.db, 'season_point_events')) {
+      return null;
+    }
+
+    const row = this.db.prepare(`
+      WITH rankings AS (
+        SELECT
+          season_point_events.rider_id AS rider_id,
+          RANK() OVER (ORDER BY SUM(season_point_events.points_awarded) DESC, riders.last_name ASC, riders.first_name ASC) as rank
+        FROM season_point_events
+        JOIN riders ON riders.id = season_point_events.rider_id
+        WHERE season_point_events.season = ?
+        GROUP BY season_point_events.rider_id, riders.last_name, riders.first_name
+      )
+      SELECT rank FROM rankings WHERE rider_id = ?
+    `).get(season, riderId) as { rank: number } | undefined;
+
+    return row?.rank ?? null;
+  }
 
   public getSeasonStandings(season = new GameStateRepository(this.db).getCurrentSeason()): SeasonStandingsPayload {
     new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season);
