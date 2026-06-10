@@ -308,9 +308,9 @@ export class RiderRepository {
           m.overall_rating >= 73 &&
           (
             m.rider_type === rider.riderType ||
-            (rider.specialization1 && m.rider_type === (typeof rider.specialization1 === 'string' ? rider.specialization1 : rider.specialization1?.name)) ||
-            (rider.specialization2 && m.rider_type === (typeof rider.specialization2 === 'string' ? rider.specialization2 : rider.specialization2?.name)) ||
-            (rider.specialization3 && m.rider_type === (typeof rider.specialization3 === 'string' ? rider.specialization3 : rider.specialization3?.name))
+            (rider.specialization1 && m.rider_type === rider.specialization1) ||
+            (rider.specialization2 && m.rider_type === rider.specialization2) ||
+            (rider.specialization3 && m.rider_type === rider.specialization3)
           )
         );
         if (potentialMentors.length > 0) {
@@ -325,12 +325,9 @@ export class RiderRepository {
           m.age <= 23 &&
           (
             rider.riderType === m.rider_type ||
-            (m.rider_type && typeof rider.specialization1 === 'string' && m.rider_type === rider.specialization1) ||
-            (m.rider_type && typeof rider.specialization1 === 'object' && m.rider_type === rider.specialization1?.name) ||
-            (m.rider_type && typeof rider.specialization2 === 'string' && m.rider_type === rider.specialization2) ||
-            (m.rider_type && typeof rider.specialization2 === 'object' && m.rider_type === rider.specialization2?.name) ||
-            (m.rider_type && typeof rider.specialization3 === 'string' && m.rider_type === rider.specialization3) ||
-            (m.rider_type && typeof rider.specialization3 === 'object' && m.rider_type === rider.specialization3?.name)
+            (rider.specialization1 && m.rider_type === rider.specialization1) ||
+            (rider.specialization2 && m.rider_type === rider.specialization2) ||
+            (rider.specialization3 && m.rider_type === rider.specialization3)
           )
         ).map(m => `${m.first_name.charAt(0)}. ${m.last_name}`);
       }
