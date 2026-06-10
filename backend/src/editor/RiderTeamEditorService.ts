@@ -51,6 +51,7 @@ function resolveDataCsvDir(): string {
   const candidates = [
     path.resolve(__dirname, '..', '..', '..', 'data', 'csv'),
     path.resolve(__dirname, '..', '..', '..', '..', 'data', 'csv'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'data', 'csv'),
     path.resolve(process.cwd(), 'data', 'csv'),
   ];
 

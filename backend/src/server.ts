@@ -1,10 +1,31 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'node:fs';
+import path from 'node:path';
 import { bootstrap } from './bootstrapper';
 import { DatabaseService } from './db/DatabaseService';
 import { createRouter } from './routes/api';
 
 const PORT = Number(process.env['PORT'] ?? 3101);
+
+function resolveFrontendDistDir(): string | null {
+  const envDir = process.env['FRONTEND_DIST'];
+  const candidates = [
+    envDir,
+    path.join(process.cwd(), 'frontend-dist'),
+    path.join(path.dirname(process.execPath), 'frontend-dist'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'frontend', 'dist'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'frontend', 'dist'),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
 
 // 1. Bootstrap: Master-DB bei jedem Start neu bauen
 bootstrap(true);
@@ -22,6 +43,14 @@ app.use('/api', createRouter(dbService));
 
 // 5. Health-Check
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+const frontendDistDir = resolveFrontendDistDir();
+if (frontendDistDir) {
+  app.use(express.static(frontendDistDir));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(frontendDistDir, 'index.html'));
+  });
+}
 
 // 6. Server starten
 app.listen(PORT, () => {

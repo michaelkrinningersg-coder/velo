@@ -190,6 +190,12 @@ function safeStageDetailsFileName(fileName) {
     return trimmed;
 }
 function resolveDataRoot() {
+    const snapshotRelative = (0, path_1.resolve)(__dirname, '..', '..', '..', '..', '..', 'data');
+    if ((0, fs_1.existsSync)(snapshotRelative))
+        return snapshotRelative;
+    const distRelative = (0, path_1.resolve)(__dirname, '..', '..', '..', '..', 'data');
+    if ((0, fs_1.existsSync)(distRelative))
+        return distRelative;
     const backendRelative = (0, path_1.resolve)(process.cwd(), '..', 'data');
     if ((0, fs_1.existsSync)(backendRelative))
         return backendRelative;

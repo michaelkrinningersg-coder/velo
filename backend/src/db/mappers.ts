@@ -525,6 +525,7 @@ export function resolveDataCsvDir(): string {
   const candidates = [
     path.resolve(__dirname, '..', '..', '..', 'data', 'csv'),
     path.resolve(__dirname, '..', '..', '..', '..', 'data', 'csv'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'data', 'csv'),
     path.resolve(process.cwd(), 'data', 'csv'),
   ];
 
@@ -1085,4 +1086,4 @@ export function buildRaceSelect(): string {
     JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
   `;
 }
-
+

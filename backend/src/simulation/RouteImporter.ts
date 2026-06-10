@@ -269,8 +269,15 @@ function safeStageDetailsFileName(fileName: string): string {
 }
 
 function resolveDataRoot(): string {
+  const snapshotRelative = resolve(__dirname, '..', '..', '..', '..', '..', 'data');
+  if (existsSync(snapshotRelative)) return snapshotRelative;
+
+  const distRelative = resolve(__dirname, '..', '..', '..', '..', 'data');
+  if (existsSync(distRelative)) return distRelative;
+
   const backendRelative = resolve(process.cwd(), '..', 'data');
   if (existsSync(backendRelative)) return backendRelative;
+
   return resolve(process.cwd(), 'data');
 }
 
