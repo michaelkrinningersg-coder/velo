@@ -1449,6 +1449,7 @@ export class SimulationEngine {
     };
 
     this.messages.unshift(newMessage);
+    this.allEvents.push(newMessage);
     this.nextMessageId += 1;
     if (this.messages.length > 60) {
       this.messages.length = 60;

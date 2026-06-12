@@ -16,6 +16,7 @@ import {
   findRaceById,
   findStageById,
   renderResultsParticipant,
+  renderRiderNameLink,
   renderNonFinisherStatusBadge,
   formatNonFinisherReason,
   renderRankDelta,
@@ -87,6 +88,13 @@ export async function loadStageResults(stageId: number, silentIfMissing: boolean
   if (location) {
     state.selectedResultsRaceId = location.race.id;
     state.selectedResultsStageId = stageId;
+  }
+
+  if (state.riders.length === 0) {
+    const ridersRes = await api.getRiders();
+    if (ridersRes.success) {
+      state.riders = ridersRes.data ?? [];
+    }
   }
 
   const res = await api.getStageResults(stageId);
@@ -164,7 +172,61 @@ function renderLeaderDots(riderId: number | null): string {
   return `<span class="jersey-dots-wrapper">${dots.join('')}</span>`;
 }
 
+function formatEventTextWithAllRiders(text: string): string {
+  if (!text) return '';
+
+  let tempText = text;
+  const placeholders: string[] = [];
+
+  // Sort riders by name length descending to avoid partial replacements (e.g. "David Gaudu" before "David")
+  const riders = [...state.riders].sort((a, b) => {
+    const nameA = `${a.firstName} ${a.lastName}`;
+    const nameB = `${b.firstName} ${b.lastName}`;
+    return nameB.length - nameA.length;
+  });
+
+  for (const rider of riders) {
+    const name = `${rider.firstName} ${rider.lastName}`;
+
+    // Escape name for regex
+    const escapedName = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`${escapedName}(\\s+\\(\\d+\\.\\))?`, 'g');
+
+    if (regex.test(tempText)) {
+      tempText = tempText.replace(regex, (match) => {
+        const placeholder = `__RIDER_LINK_${placeholders.length}__`;
+        const linkHtml = renderRiderNameLink(match, {
+          riderId: rider.id,
+          teamId: rider.activeTeamId,
+          strong: true,
+          linkClassName: 'results-rider-link',
+          labelClassName: 'results-participant-label',
+        });
+        placeholders.push(linkHtml);
+        return placeholder;
+      });
+    }
+  }
+
+  let escapedHtml = esc(tempText);
+  for (let i = 0; i < placeholders.length; i++) {
+    escapedHtml = escapedHtml.replace(`__RIDER_LINK_${i}__`, placeholders[i]);
+  }
+
+  return escapedHtml;
+}
+
 export function renderResultsView(): void {
+  // If state.riders is empty, trigger a fetch so that links are rendered properly when data arrives
+  if (state.riders.length === 0) {
+    void api.getRiders().then((res) => {
+      if (res.success && res.data) {
+        state.riders = res.data;
+        renderResultsView();
+      }
+    });
+  }
+
   const raceSelect = $<HTMLSelectElement>('results-race-select');
   const stageSelect = $<HTMLSelectElement>('results-stage-select');
   const tabs = $('results-type-tabs');
@@ -530,10 +592,10 @@ export function renderResultsView(): void {
             <td>
               <div class="event-content">
                 <div class="event-title-wrapper">
-                  <span class="event-title">${esc(row.title || '')}</span>
+                  <span class="event-title">${formatEventTextWithAllRiders(row.title || '')}</span>
                   ${badgeHtml}
                 </div>
-                ${row.detail ? `<div class="event-detail">${esc(row.detail)}</div>` : ''}
+                ${row.detail ? `<div class="event-detail">${formatEventTextWithAllRiders(row.detail)}</div>` : ''}
               </div>
             </td>
           </tr>`;

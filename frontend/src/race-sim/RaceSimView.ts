@@ -8,6 +8,7 @@ import { handleRaceSimSidebarInteraction, renderRaceSimSidebar, type SidebarRend
 import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot } from './SimulationEngine';
 import { buildNamedRaceGroups, mergeDisplayedClusters, type NamedRaceGroup } from './groupClusters';
 import { summarizeStageMarkers } from './stageSummary';
+import { openRiderStats } from '../views/riderStats';
 
 interface RaceSimElements {
   layout: HTMLElement;
@@ -161,19 +162,25 @@ export class RaceSimView {
 
     this.elements.messages.addEventListener('click', (event) => {
       const riderGroupButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-rider-id]');
-      if (riderGroupButton && this.detailSnapshot) {
+      if (riderGroupButton) {
         const riderId = this.resolveRiderIdFromGroupButton(riderGroupButton);
         if (riderId != null) {
-          this.selectGroupByRiderId(riderId, this.detailSnapshot);
+          if (this.detailSnapshot) {
+            this.selectGroupByRiderId(riderId, this.detailSnapshot);
+          }
+          openRiderStats(riderId);
         }
         return;
       }
 
       const riderNameGroupButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-sim-group-rider-name]');
-      if (riderNameGroupButton && this.detailSnapshot) {
+      if (riderNameGroupButton) {
         const riderId = this.resolveRiderIdFromGroupButton(riderNameGroupButton);
         if (riderId != null) {
-          this.selectGroupByRiderId(riderId, this.detailSnapshot);
+          if (this.detailSnapshot) {
+            this.selectGroupByRiderId(riderId, this.detailSnapshot);
+          }
+          openRiderStats(riderId);
         }
         return;
       }
