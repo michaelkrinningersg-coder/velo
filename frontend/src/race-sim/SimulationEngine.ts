@@ -3323,7 +3323,7 @@ export class SimulationEngine {
       const specAdj = resolveSpecializationTieBreakAdjustment(rider, finishContext, climberMalusStage);
 
       console.log(
-        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)} (Skills ${skillScore.toFixed(2)} + SpecAdj ${specAdj > 0 ? '+' : ''}${specAdj.toFixed(2)} + Leadout +${leadoutBonus.toFixed(2)}) | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
+        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score (ohne Boni): ${skillScore.toFixed(2)} -> Score (mit Boni): ${rider.photoFinishScore.toFixed(2)} [SpecAdj: ${specAdj > 0 ? '+' : ''}${specAdj.toFixed(2)}, Leadout: +${leadoutBonus.toFixed(2)}] | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
       );
     });
 
@@ -3415,10 +3415,8 @@ export class SimulationEngine {
       return 0;
     }
 
-    const teamRiders = this.riders.filter(
-      (r) => r.rider.activeTeamId === teamId && r.finishStatus !== 'dnf'
-    );
-
+    // Find all team riders in the current race (starting roster)
+    const teamRiders = this.riders.filter((r) => r.rider.activeTeamId === teamId);
     if (teamRiders.length === 0) {
       return 0;
     }
@@ -3440,8 +3438,13 @@ export class SimulationEngine {
       return 0;
     }
 
+    // Count teammates (not DNF, OTL, or DNS) who have Sprint Skill >= 72
     const teammatesWithSprintCount = teamRiders.filter(
-      (r) => r.rider.id !== bestSprinter.rider.id && r.rider.skills.sprint >= 72
+      (r) => r.rider.id !== bestSprinter.rider.id &&
+             r.finishStatus !== 'dnf' &&
+             r.finishStatus !== 'otl' &&
+             r.finishStatus !== 'dns' &&
+             r.rider.skills.sprint >= 72
     ).length;
 
     if (teammatesWithSprintCount === 0) {
