@@ -243,6 +243,11 @@ export function setRealtimeStageLoadInFlightId(val: number | null): void {
   realtimeStageLoadInFlightId = val;
 }
 
+export let autoProgressActive = false;
+export function setAutoProgressActive(val: boolean): void {
+  autoProgressActive = val;
+}
+
 // ============================================================
 //  DOM-Helpers
 // ============================================================
@@ -532,7 +537,8 @@ export function hideModal(name: string): void {
 }
 
 export function showLoading(msg = 'Lade…'): void {
-  $('loading-msg').textContent = msg;
+  const suffix = autoProgressActive ? ' (Leertaste zum Stoppen)' : '';
+  $('loading-msg').textContent = msg + suffix;
   $('loading-progress').classList.add('hidden');
   $('loading-overlay').classList.remove('hidden');
 }
@@ -549,7 +555,8 @@ export function showInstantProgress(progress: number): void {
 
 export function updateInstantProgress(progress: number): void {
   const percent = Math.round(Math.min(1, Math.max(0, progress)) * 100);
-  $('loading-msg').textContent = `Instant-Simulation läuft … ${percent}%`;
+  const suffix = autoProgressActive ? ' (Leertaste zum Stoppen)' : '';
+  $('loading-msg').textContent = `Instant-Simulation läuft … ${percent}%${suffix}`;
   $<HTMLDivElement>('loading-progress-bar').style.width = `${percent}%`;
 }
 

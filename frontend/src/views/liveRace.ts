@@ -64,9 +64,9 @@ export function buildRealtimeCommitEntries(
     .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
 }
 
-export async function openInstantStage(stageId: number): Promise<void> {
+export async function openInstantStage(stageId: number, skipViewActivation = false): Promise<boolean> {
   if (instantStageInFlightId != null || realtimeCompletionInFlight) {
-    return;
+    return false;
   }
 
   setInstantStageInFlightId(stageId);
@@ -75,15 +75,17 @@ export async function openInstantStage(stageId: number): Promise<void> {
     const res = await api.getRealtimeSimulation(stageId);
     if (!res.success || !res.data) {
       alert('Instant-Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
-      return;
+      return false;
     }
 
     const bootstrap = res.data;
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
-    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents);
+    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation);
+    return true;
   } catch (error) {
     alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
+    return false;
   } finally {
     setInstantStageInFlightId(null);
     hideLoading();
@@ -356,6 +358,7 @@ export async function completeRealtimeStage(
   markerClassifications: StageMarkerClassification[],
   incidents: PrecalculatedRaceIncident[],
   events?: RaceSimMessage[],
+  skipViewActivation = false,
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -381,7 +384,9 @@ export async function completeRealtimeStage(
     await loadRaces();
     await refreshTeamsViewData();
     renderRealtimeRaceView();
-    activateView('results');
+    if (!skipViewActivation) {
+      activateView('results');
+    }
   } catch (error) {
     alert('Unerwarteter Fehler beim Speichern des Live-Ergebnisses: ' + (error as Error).message);
   } finally {

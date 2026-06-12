@@ -24,6 +24,8 @@ import {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
   getRiderSpecializationLabel,
+  autoProgressActive,
+  setAutoProgressActive,
 } from '../state';
 import type {
   Race,
@@ -693,24 +695,108 @@ export function initDashboardListeners(): void {
   });
 
   $('btn-advance-day').addEventListener('click', async () => {
-    showLoading('Tag wird fortgeschrieben...');
-    try {
-      const res = await api.advanceDay();
-      if (!res.success) {
-        alert('Tageswechsel fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
-        return;
-      }
-      if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
-      await loadGameState();
-      await loadRaces();
-      if (isActiveView('teams')) {
-        const { refreshTeamsViewData } = await import('./teams');
-        await refreshTeamsViewData();
-      }
-    } catch (e) {
-      alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
-    } finally {
-      hideLoading();
-    }
+    await executeDayAdvance();
+  });
+
+  $('btn-auto-progress').addEventListener('click', () => {
+    toggleAutoProgress();
   });
 }
+
+export async function executeDayAdvance(): Promise<boolean> {
+  showLoading('Tag wird fortgeschrieben...');
+  try {
+    const res = await api.advanceDay();
+    if (!res.success) {
+      alert('Tageswechsel fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
+      return false;
+    }
+    if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
+    await loadGameState();
+    await loadRaces();
+    if (isActiveView('teams')) {
+      const { refreshTeamsViewData } = await import('./teams');
+      await refreshTeamsViewData();
+    }
+    return true;
+  } catch (e) {
+    alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);
+    return false;
+  } finally {
+    hideLoading();
+  }
+}
+
+export function updateAutoProgressUI(): void {
+  const btn = document.getElementById('btn-auto-progress') as HTMLButtonElement | null;
+  if (!btn) return;
+  if (autoProgressActive) {
+    btn.textContent = 'Stoppen (Leertaste)';
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-danger');
+  } else {
+    btn.textContent = 'Auto Progress';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-secondary');
+  }
+}
+
+export function toggleAutoProgress(): void {
+  if (autoProgressActive) {
+    stopAutoProgress();
+  } else {
+    startAutoProgress();
+  }
+}
+
+export function startAutoProgress(): void {
+  if (autoProgressActive) return;
+  setAutoProgressActive(true);
+  updateAutoProgressUI();
+  void runAutoProgressLoop();
+}
+
+export function stopAutoProgress(): void {
+  if (!autoProgressActive) return;
+  setAutoProgressActive(false);
+  updateAutoProgressUI();
+}
+
+async function runAutoProgressLoop(): Promise<void> {
+  while (autoProgressActive) {
+    const pendingStages = state.gameStatus?.pendingStages ?? [];
+    let success = false;
+    if (pendingStages.length > 0) {
+      const nextStage = pendingStages[0];
+      success = await openInstantStage(nextStage.stageId, true);
+    } else {
+      success = await executeDayAdvance();
+    }
+
+    if (!success) {
+      setAutoProgressActive(false);
+      break;
+    }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }
+  updateAutoProgressUI();
+}
+
+// Window event listener for stopping auto progress via Spacebar
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'Space' || event.key === ' ') {
+    if (autoProgressActive) {
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      event.preventDefault();
+      stopAutoProgress();
+    }
+  }
+});
