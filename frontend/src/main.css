@@ -4822,9 +4822,9 @@ html, body {
 }
 
 .event-badge-attack {
-  background-color: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background-color: rgba(236, 72, 153, 0.15);
+  color: #f472b6;
+  border: 1px solid rgba(236, 72, 153, 0.3);
 }
 
 .event-badge-counter {
@@ -4849,6 +4849,12 @@ html, body {
   background-color: rgba(239, 68, 68, 0.2);
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.event-rider-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .event-content {
@@ -4913,3 +4919,39 @@ html, body {
   font-size: 0.8rem;
   line-height: 1;
 }
+
+/* ---- Jersey Dots in results ---- */
+.jersey-dots-wrapper {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+  align-items: center;
+}
+
+.jersey-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+}
+
+.jersey-dot-yellow {
+  background-color: #f59e0b; /* warm yellow */
+}
+
+.jersey-dot-green {
+  background-color: #10b981; /* green */
+}
+
+.jersey-dot-red {
+  background-color: #ef4444; /* red */
+}
+
+.jersey-dot-white {
+  background-color: #ffffff; /* white */
+}
+

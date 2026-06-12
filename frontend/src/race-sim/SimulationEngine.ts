@@ -3422,7 +3422,9 @@ export class SimulationEngine {
     }
 
     const sortedSprinters = [...teamRiders].sort((a, b) => {
-      const diff = b.rider.skills.sprint - a.rider.skills.sprint;
+      const scoreA = this.calculatePhotoFinishScore(a);
+      const scoreB = this.calculatePhotoFinishScore(b);
+      const diff = scoreB - scoreA;
       if (diff !== 0) {
         return diff;
       }
@@ -3442,8 +3444,8 @@ export class SimulationEngine {
     const teammatesWithSprintCount = teamRiders.filter(
       (r) => r.rider.id !== bestSprinter.rider.id &&
              r.finishStatus !== 'dnf' &&
-             r.finishStatus !== 'otl' &&
-             r.finishStatus !== 'dns' &&
+             (r.finishStatus as string) !== 'otl' &&
+             (r.finishStatus as string) !== 'dns' &&
              r.rider.skills.sprint >= 72
     ).length;
 
@@ -3453,7 +3455,7 @@ export class SimulationEngine {
 
     let teamRand = this.teamSprintRandomValues.get(teamId);
     if (teamRand === undefined) {
-      teamRand = randomBetween(0.2, 0.4);
+      teamRand = randomBetween(0.25, 0.6);
       this.teamSprintRandomValues.set(teamId, teamRand);
     }
 

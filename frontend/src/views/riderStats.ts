@@ -20,6 +20,28 @@ import type { Rider, RiderStatsPayload } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
+let comparedRiders: Array<{
+  riderId: number;
+  riderName: string;
+  teamId: number | null;
+  teamName: string | null;
+  formHistory: any[];
+}> = [];
+let selectedCompareTeamId: number | null = null;
+
+const COMPARE_COLORS = [
+  '#3b82f6', // blue
+  '#ec4899', // pink
+  '#8b5cf6', // purple
+  '#06b6d4', // cyan
+  '#10b981', // green
+  '#f43f5e', // rose
+  '#ef4444', // red
+  '#f59e0b', // amber
+  '#84cc16', // lime
+  '#a855f7', // purple-light
+];
+
 export const RIDER_STATS_ICONS = {
   seasonPoints: '<svg class="rider-stats-icon" viewBox="0 0 24 24" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
   rank: '<svg class="rider-stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="rgba(59, 130, 246, 0.2)" stroke="#3b82f6"/></svg>',
@@ -454,8 +476,9 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   
-  const chartW = 1000;
-  const chartH = 240;
+  // Scaled dimensions by 1.3x
+  const chartW = 1300;
+  const chartH = 312;
   const padL = 30;
   const padT = 20;
 
@@ -473,17 +496,12 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
 
   if (pts.length > 0) {
     pathData = `M ${pts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
-    pointsHtml = pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="var(--accent-primary)" stroke-width="2"><title>${p.date}: ${p.form}</title></circle>`).join('');
+    pointsHtml = pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="var(--accent-primary)" stroke-width="2"><title>${payload.riderName} (${p.date}): ${p.form}</title></circle>`).join('');
     fillPath = `${pathData} L ${pts[pts.length - 1].x},${padT + chartH} L ${pts[0].x},${padT + chartH} Z`;
   }
 
-  const phaseColors: Record<string, string> = {
-    build: 'rgba(16, 185, 129, 0.3)',
-    peak: 'rgba(16, 185, 129, 0.3)',
-    decline: 'rgba(239, 68, 68, 0.3)',
-    neutral: 'rgba(245, 158, 11, 0.3)',
-  };
-  const fillColor = phaseColors[payload.seasonFormPhase] ?? phaseColors.neutral;
+  // Draw area under curve ONLY for the original rider, in warm yellow
+  const fillColor = 'rgba(251, 191, 36, 0.15)'; 
 
   let gridHtml = '';
   for (let i = 0; i <= 12; i += 2) {
@@ -531,21 +549,112 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const currentX = padL + (currentDay / 365) * chartW;
   peaksHtml += `<line x1="${currentX}" y1="${padT}" x2="${currentX}" y2="${padT + chartH}" stroke="#ef4444" stroke-width="3"><title>Heute: ${currentDateStr}</title></line>`;
 
+  // Compared riders lines and points (no fills)
+  let comparedPathsHtml = '';
+  let comparedPointsHtml = '';
+  comparedRiders.forEach((cr, index) => {
+    const color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+    const crPts = cr.formHistory.map((entry) => {
+      const entryDate = new Date(entry.date).getTime();
+      const dayOfYear = (entryDate - yearStart) / msPerDay;
+      const x = padL + (dayOfYear / 365) * chartW;
+      const y = padT + chartH - (Math.min(12, Math.max(0, entry.totalForm)) / 12) * chartH;
+      return { x, y, form: entry.totalForm, date: entry.date };
+    });
+
+    if (crPts.length > 0) {
+      const pathDataCr = `M ${crPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+      comparedPathsHtml += `<path d="${pathDataCr}" fill="none" stroke="${color}" stroke-width="2" />`;
+      comparedPointsHtml += crPts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="${color}" stroke-width="2"><title>${cr.riderName} (${p.date}): ${p.form}</title></circle>`).join('');
+    }
+  });
+
+  // Controls for team and rider select (Tier 1 teams only)
+  const worldTourTeams = state.teams.filter(t => t.division === 'WorldTour' || t.divisionName === 'WorldTour');
+  
+  let teamOptions = '<option value="">-- Team auswählen --</option>';
+  for (const t of worldTourTeams) {
+    const isSelected = selectedCompareTeamId === t.id ? ' selected' : '';
+    teamOptions += `<option value="${t.id}"${isSelected}>${esc(t.name)}</option>`;
+  }
+
+  let riderOptions = '<option value="">-- Fahrer auswählen --</option>';
+  if (selectedCompareTeamId != null) {
+    const teamRiders = state.riders.filter(r => r.activeTeamId === selectedCompareTeamId && r.id !== payload.riderId && !comparedRiders.some(cr => cr.riderId === r.id));
+    for (const r of teamRiders) {
+      riderOptions += `<option value="${r.id}">${esc(r.firstName)} ${esc(r.lastName)}</option>`;
+    }
+  }
+
+  const selectorsHtml = `
+    <div class="rider-compare-controls" style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 1rem; background: var(--bg-secondary); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-primary);">
+      <span style="font-weight: 600; color: var(--text-100); font-size: 0.95rem;">Mit anderem Fahrer vergleichen:</span>
+      <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <label for="rider-compare-team-select" style="margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-300);">Team (Tier 1):</label>
+        <select id="rider-compare-team-select" class="form-control" style="width: auto; background: var(--bg-900); color: var(--text-100); border: 1px solid var(--border-primary);">
+          ${teamOptions}
+        </select>
+      </div>
+      <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <label for="rider-compare-rider-select" style="margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-300);">Fahrer:</label>
+        <select id="rider-compare-rider-select" class="form-control" style="width: auto; background: var(--bg-900); color: var(--text-100); border: 1px solid var(--border-primary);" ${selectedCompareTeamId == null ? 'disabled' : ''}>
+          ${riderOptions}
+        </select>
+      </div>
+    </div>
+  `;
+
+  // Sidebar legend right of the chart
+  const legendItemsHtml = [
+    `
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.50rem; padding: 0.25rem 0;">
+      <span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-primary); border-radius: 2px; flex-shrink: 0;"></span>
+      <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(payload.riderName)}">${esc(payload.riderName)}</span>
+    </div>
+    `
+  ];
+
+  comparedRiders.forEach((cr, index) => {
+    const color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+    legendItemsHtml.push(`
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.50rem; padding: 0.25rem 0; border-top: 1px solid rgba(255,255,255,0.05);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
+          <span style="display: inline-block; width: 12px; height: 12px; background: ${color}; border-radius: 2px; flex-shrink: 0;"></span>
+          <span style="font-size: 0.9rem; color: var(--text-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(cr.riderName)}">${esc(cr.riderName)}</span>
+        </div>
+        <button type="button" class="compare-remove-btn" data-remove-compare-id="${cr.riderId}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0 0.25rem; font-weight: bold; display: flex; align-items: center;" title="Vergleich entfernen">×</button>
+      </div>
+    `);
+  });
+
+  const legendContainerHtml = `
+    <div class="rider-stats-compare-legend" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary); max-height: 390px; overflow-y: auto; display: flex; flex-direction: column;">
+      <h4 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; color: var(--text-100); font-weight: bold;">Legende</h4>
+      ${legendItemsHtml.join('')}
+    </div>
+  `;
+
   return `
     <section class="rider-stats-form-tab">
       <div class="rider-stats-season-head">
         <h3>Formverlauf (Saison ${currentYear})</h3>
       </div>
-      <div class="rider-stats-chart-wrapper" style="margin-top: 1rem; overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-        <svg width="100%" height="300" viewBox="0 0 1050 280" style="min-width: 1000px;">
-          ${phaseBackgroundsHtml}
-          ${gridHtml}
-          ${xAxisHtml}
-          ${peaksHtml}
-          ${fillPath ? `<path d="${fillPath}" fill="${fillColor}" />` : ''}
-          ${pathData ? `<path d="${pathData}" fill="none" stroke="var(--accent-primary)" stroke-width="2" />` : ''}
-          ${pointsHtml}
-        </svg>
+      ${selectorsHtml}
+      <div class="rider-stats-form-container" style="display: grid; grid-template-columns: 1fr 240px; gap: 1rem; align-items: start; margin-top: 1rem;">
+        <div class="rider-stats-chart-wrapper" style="overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary);">
+          <svg width="100%" height="390" viewBox="0 0 1350 352" style="min-width: 1300px;">
+            ${phaseBackgroundsHtml}
+            ${gridHtml}
+            ${xAxisHtml}
+            ${peaksHtml}
+            ${fillPath ? `<path d="${fillPath}" fill="${fillColor}" />` : ''}
+            ${pathData ? `<path d="${pathData}" fill="none" stroke="var(--accent-primary)" stroke-width="2" />` : ''}
+            ${pointsHtml}
+            ${comparedPathsHtml}
+            ${comparedPointsHtml}
+          </svg>
+        </div>
+        ${legendContainerHtml}
       </div>
     </section>
   `;
@@ -792,6 +901,8 @@ export async function openRiderStats(riderId: number): Promise<void> {
     ? state.teams.find((team) => team.id === rider.activeTeamId)?.name ?? null
     : null;
 
+  comparedRiders = [];
+  selectedCompareTeamId = null;
   state.riderStatsSelectedRiderId = riderId;
   state.riderStatsPayload = null;
   state.riderStatsTab = 'results';
@@ -839,6 +950,16 @@ export function initRiderStatsListeners(): void {
   $('rider-stats-body').addEventListener('click', (event) => {
     const tabButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-stats-tab]');
     if (!tabButton) {
+      // Handle remove click
+      const removeBtn = (event.target as Element).closest<HTMLButtonElement>('button[data-remove-compare-id]');
+      if (removeBtn) {
+        const idToRemove = Number(removeBtn.dataset['removeCompareId']);
+        comparedRiders = comparedRiders.filter(r => r.riderId !== idToRemove);
+        const rider = findRiderById(state.riderStatsSelectedRiderId);
+        $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+        return;
+      }
+
       // Handle pagination click
       const pageButton = (event.target as Element).closest<HTMLButtonElement>('button[data-top-results-page]');
       if (pageButton) {
@@ -866,7 +987,7 @@ export function initRiderStatsListeners(): void {
     $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
   });
 
-  $('rider-stats-body').addEventListener('change', (event) => {
+  $('rider-stats-body').addEventListener('change', async (event) => {
     const target = event.target as HTMLSelectElement;
     if (target.id === 'rider-stats-filter-category') {
       state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
@@ -878,6 +999,38 @@ export function initRiderStatsListeners(): void {
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.id === 'rider-compare-team-select') {
+      const val = target.value;
+      selectedCompareTeamId = val ? Number(val) : null;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.id === 'rider-compare-rider-select') {
+      const val = target.value;
+      if (val) {
+        const riderId = Number(val);
+        if (comparedRiders.length >= 10) {
+          alert('Sie können maximal 10 Fahrer vergleichen.');
+          target.value = '';
+          return;
+        }
+        
+        // Fetch rider stats
+        const res = await api.getRiderStats(riderId);
+        if (res.success && res.data) {
+          comparedRiders.push({
+            riderId: res.data.riderId,
+            riderName: res.data.riderName,
+            teamId: res.data.teamId,
+            teamName: res.data.teamName,
+            formHistory: res.data.formHistory ?? [],
+          });
+        } else {
+          alert('Formverlauf konnte nicht geladen werden: ' + (res.error ?? ''));
+        }
+        
+        const rider = findRiderById(state.riderStatsSelectedRiderId);
+        $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+      }
     }
   });
 }

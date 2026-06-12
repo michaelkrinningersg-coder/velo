@@ -468,6 +468,7 @@ export const FLAG_CODE_BY_CODE3: Record<string, string> = {
   SUI: 'ch',
   IRE: 'ie',
   RSA: 'za',
+  OMA: 'om',
   OTH: 'un',
 };
 

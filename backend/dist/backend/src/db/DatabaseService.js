@@ -855,6 +855,10 @@ class DatabaseService {
         ON results(rider_id, result_type_id)
         WHERE rider_id IS NOT NULL;
     `);
+        createIfTable('season_point_events', `
+      CREATE INDEX IF NOT EXISTS idx_season_points_rider
+        ON season_point_events(rider_id);
+    `);
     }
     getActiveConnection() {
         if (!this.activeConnection) {

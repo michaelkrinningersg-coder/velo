@@ -38,6 +38,8 @@ export const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 export const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
 export const RESULTS_EVENTS_KEY = '__events__';
 
+let selectedEventFilter = 'all';
+
 export function isMountainClassificationMarkerType(markerType: string, markerCategory: string | null | undefined): boolean {
   if (markerType === 'climb_top' || markerType === 'finish_hill' || markerType === 'finish_mountain') {
     return true;
@@ -123,6 +125,43 @@ function getKmZeroEventPriority(row: { title?: string | null }): number {
     return 4; // DNS
   }
   return 5;
+}
+
+function renderLeaderDots(riderId: number | null): string {
+  if (riderId == null || !state.stageResults) return '';
+  const currentRace = findRaceById(state.selectedResultsRaceId);
+  const isStageRace = currentRace?.isStageRace ?? false;
+
+  const classifications = state.stageResults.classifications;
+  const gcLeader = classifications.find(c => c.resultTypeId === GC_RESULT_TYPE_ID)?.rows.find(r => r.rank === 1)?.riderId;
+  const pointsLeader = classifications.find(c => c.resultTypeId === POINTS_RESULT_TYPE_ID)?.rows.find(r => r.rank === 1)?.riderId;
+  const mountainLeader = classifications.find(c => c.resultTypeId === MOUNTAIN_RESULT_TYPE_ID)?.rows.find(r => r.rank === 1)?.riderId;
+  const youthLeader = classifications.find(c => c.resultTypeId === 5)?.rows.find(r => r.rank === 1)?.riderId;
+
+  const dots: string[] = [];
+  const currentTypeId = state.selectedResultTypeId;
+
+  // Yellow Dot (GC leader):
+  if (riderId === gcLeader) {
+    if (currentTypeId === GC_RESULT_TYPE_ID || (currentTypeId === 1 && isStageRace) || (currentTypeId !== 1 && currentTypeId !== GC_RESULT_TYPE_ID)) {
+      dots.push('<span class="jersey-dot jersey-dot-yellow" title="Gelbes Trikot (Gesamtwertung)"></span>');
+    }
+  }
+  // Green Dot (Points leader):
+  if (riderId === pointsLeader) {
+    dots.push('<span class="jersey-dot jersey-dot-green" title="Grünes Trikot (Punktewertung)"></span>');
+  }
+  // Red Dot (Mountain leader):
+  if (riderId === mountainLeader) {
+    dots.push('<span class="jersey-dot jersey-dot-red" title="Rotes Trikot (Bergwertung)"></span>');
+  }
+  // White Dot (Youth leader):
+  if (riderId === youthLeader) {
+    dots.push('<span class="jersey-dot jersey-dot-white" title="Weißes Trikot (Nachwuchswertung)"></span>');
+  }
+
+  if (dots.length === 0) return '';
+  return `<span class="jersey-dots-wrapper">${dots.join('')}</span>`;
 }
 
 export function renderResultsView(): void {
@@ -259,21 +298,39 @@ export function renderResultsView(): void {
   if (showMarkerTabs) {
     state.selectedResultsMarkerKey = selectedMarkerClassification?.markerKey ?? RESULTS_STAGE_OVERVIEW_KEY;
   }
-  markerTabs.innerHTML = showMarkerTabs
-    ? [`
+  if (showEvents) {
+    const filters = [
+      { key: 'all', label: 'Alle' },
+      { key: 'form', label: 'Tagesform' },
+      { key: 'attack', label: 'Attacken' },
+      { key: 'breakaway', label: 'Fluchtgruppe' },
+      { key: 'incident', label: 'Stürze/Defekte' },
+      { key: 'exit', label: 'Ausgeschieden' },
+    ];
+    markerTabs.innerHTML = filters.map((filter) => `
       <button
         type="button"
-        class="results-type-btn${state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY ? ' active' : ''}"
-        data-marker-key="${RESULTS_STAGE_OVERVIEW_KEY}"
-      >Tageswertung</button>`, ...stageMarkerClassifications.map((classification) => `
-      <button
-        type="button"
-        class="results-type-btn${classification.markerKey === state.selectedResultsMarkerKey ? ' active' : ''}"
-        data-marker-key="${classification.markerKey}"
-      >${esc(resolveMarkerResultButtonLabel(classification))}</button>
-    `)].join('')
-    : '';
-  markerTabs.classList.toggle('hidden', !showMarkerTabs);
+        class="results-type-btn${filter.key === selectedEventFilter ? ' active' : ''}"
+        data-event-filter="${filter.key}"
+      >${esc(filter.label)}</button>
+    `).join('');
+  } else {
+    markerTabs.innerHTML = showMarkerTabs
+      ? [`
+        <button
+          type="button"
+          class="results-type-btn${state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY ? ' active' : ''}"
+          data-marker-key="${RESULTS_STAGE_OVERVIEW_KEY}"
+        >Tageswertung</button>`, ...stageMarkerClassifications.map((classification) => `
+        <button
+          type="button"
+          class="results-type-btn${classification.markerKey === state.selectedResultsMarkerKey ? ' active' : ''}"
+          data-marker-key="${classification.markerKey}"
+        >${esc(resolveMarkerResultButtonLabel(classification))}</button>
+      `)].join('')
+      : '';
+  }
+  markerTabs.classList.toggle('hidden', !showEvents && !showMarkerTabs);
 
   const showStageOverviewTable = showNonFinishers || showEvents || !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
 
@@ -356,74 +413,104 @@ export function renderResultsView(): void {
       </tr>
     `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
     : showEvents
-    ? [...(state.stageResults.events ?? [])].sort((a, b) => {
-      const kmA = a.kmMark ?? 0;
-      const kmB = b.kmMark ?? 0;
-      if (Math.abs(kmA - kmB) > 0.0001) {
-        return kmA - kmB;
-      }
-      if (kmA === 0) {
-        const prioA = getKmZeroEventPriority(a);
-        const prioB = getKmZeroEventPriority(b);
-        if (prioA !== prioB) {
-          return prioA - prioB;
+    ? [...(state.stageResults.events ?? [])]
+      .filter((row) => {
+        if (selectedEventFilter === 'all') {
+          return true;
         }
-      }
-      const nameA = a.riderName ?? '';
-      const nameB = b.riderName ?? '';
-      return nameA.localeCompare(nameB, 'de');
-    }).map((row) => {
-      const kmFormatted = row.kmMark != null ? `${row.kmMark.toFixed(1).replace('.', ',')} km` : '0,0 km';
-      const teamName = row.riderTeamId != null ? (state.teams.find((t) => t.id === row.riderTeamId)?.name ?? null) : null;
-      const jerseyHtml = row.riderTeamId != null ? renderResultsJerseyColumn(row.riderTeamId, teamName) : '';
-      const flagHtml = row.riderId != null ? renderResultsFlagColumn(resolveRiderCountryCode(row.riderId)) : '';
-      const riderHtml = row.riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, row.riderId, row.riderTeamId) : esc(row.riderName || '–');
-
-      let badgeHtml = '';
-      if (row.title && row.title.includes('guten Tag')) {
-        badgeHtml = `<span class="event-badge event-badge-superform"><span class="event-icon">▲</span> Guten Tag</span>`;
-      } else if (row.title && row.title.includes('schlechten Tag')) {
-        badgeHtml = `<span class="event-badge event-badge-supermalus"><span class="event-icon">▼</span> Schlechten Tag</span>`;
-      } else if (row.title && (row.title.includes('Formhöhepunkt') || row.title.includes('Formhoehepunkt'))) {
-        badgeHtml = `<span class="event-badge event-badge-peak"><span class="event-icon">★</span> Formhöhepunkt</span>`;
-      } else if (row.title && row.title.includes('nicht am Start')) {
-        badgeHtml = `<span class="event-badge event-badge-dns">DNS</span>`;
-      } else if (row.title && row.title.includes('Massensturz')) {
-        badgeHtml = `<span class="event-badge event-badge-masscrash">Massensturz</span>`;
-      } else if (row.type === 'dnf') {
-        badgeHtml = `<span class="event-badge event-badge-dnf">DNF</span>`;
-      } else if (row.type === 'attack' || row.type === 'counter_attack' || (row.title && row.title.toLowerCase().includes('ausreißer'))) {
-        badgeHtml = `<span class="event-badge event-badge-breakaway">Fluchtgruppe</span>`;
-      } else if (row.type === 'incident') {
-        const isDefect = row.title && (row.title.toLowerCase().includes('defekt') || row.title.toLowerCase().includes('panne') || row.title.toLowerCase().includes('technisch'));
-        if (isDefect) {
-          badgeHtml = `<span class="event-badge event-badge-defect">Defekt</span>`;
-        } else {
-          badgeHtml = `<span class="event-badge event-badge-crash">Sturz</span>`;
+        if (selectedEventFilter === 'form') {
+          return !!(row.title && (row.title.includes('guten Tag') || row.title.includes('schlechten Tag') || row.title.includes('Formhöhepunkt') || row.title.includes('Formhoehepunkt')));
         }
-      }
+        if (selectedEventFilter === 'attack') {
+          return (row.type === 'attack' || row.type === 'counter_attack') && !(row.title && (row.title.toLowerCase().includes('ausreiß') || row.title.toLowerCase().includes('ausreiss')));
+        }
+        if (selectedEventFilter === 'breakaway') {
+          return !!(row.title && (row.title.toLowerCase().includes('ausreiß') || row.title.toLowerCase().includes('ausreiss')));
+        }
+        if (selectedEventFilter === 'incident') {
+          return (row.type === 'incident' || !!(row.title && row.title.includes('Massensturz'))) && !(row.title && (row.title.toLowerCase().includes('ausreiß') || row.title.toLowerCase().includes('ausreiss')));
+        }
+        if (selectedEventFilter === 'exit') {
+          return row.type === 'dnf' || !!(row.title && row.title.includes('nicht am Start'));
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const kmA = a.kmMark ?? 0;
+        const kmB = b.kmMark ?? 0;
+        if (Math.abs(kmA - kmB) > 0.0001) {
+          return kmA - kmB;
+        }
+        if (kmA === 0) {
+          const prioA = getKmZeroEventPriority(a);
+          const prioB = getKmZeroEventPriority(b);
+          if (prioA !== prioB) {
+            return prioA - prioB;
+          }
+        }
+        const nameA = a.riderName ?? '';
+        const nameB = b.riderName ?? '';
+        return nameA.localeCompare(nameB, 'de');
+      }).map((row) => {
+        const kmFormatted = row.kmMark != null ? `${row.kmMark.toFixed(1).replace('.', ',')} km` : '0,0 km';
+        const riderId = row.riderId;
+        const riderObj = riderId != null ? findRiderById(riderId) : null;
+        const teamId = row.riderTeamId ?? riderObj?.activeTeamId ?? null;
+        const teamName = teamId != null ? (state.teams.find((t) => t.id === teamId)?.name ?? null) : null;
 
-      return `
-        <tr>
-          <td>${kmFormatted}</td>
-          <td>
-            <div class="event-rider-info">
-              ${jerseyHtml}
-              ${riderHtml}
-              ${flagHtml}
-            </div>
-          </td>
-          <td>
-            <div class="event-content">
-              <div class="event-title-wrapper">
-                <span class="event-title">${esc(row.title || '')}</span>
-                ${badgeHtml}
+        const jerseyHtml = renderResultsJerseyColumn(teamId, teamName);
+        const flagHtml = renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
+        const riderHtml = riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–');
+
+        let badgeHtml = '';
+        if (row.title && row.title.includes('guten Tag')) {
+          badgeHtml = `<span class="event-badge event-badge-superform"><span class="event-icon">▲</span> Guten Tag</span>`;
+        } else if (row.title && row.title.includes('schlechten Tag')) {
+          badgeHtml = `<span class="event-badge event-badge-supermalus"><span class="event-icon">▼</span> Schlechten Tag</span>`;
+        } else if (row.title && (row.title.includes('Formhöhepunkt') || row.title.includes('Formhoehepunkt'))) {
+          badgeHtml = `<span class="event-badge event-badge-peak"><span class="event-icon">★</span> Formhöhepunkt</span>`;
+        } else if (row.title && row.title.includes('nicht am Start')) {
+          badgeHtml = `<span class="event-badge event-badge-dns">DNS</span>`;
+        } else if (row.title && row.title.includes('Massensturz')) {
+          badgeHtml = `<span class="event-badge event-badge-masscrash">Massensturz</span>`;
+        } else if (row.type === 'dnf') {
+          badgeHtml = `<span class="event-badge event-badge-dnf">DNF</span>`;
+        } else if (row.title && (row.title.toLowerCase().includes('ausreiß') || row.title.toLowerCase().includes('ausreiss'))) {
+          badgeHtml = `<span class="event-badge event-badge-breakaway">Fluchtgruppe</span>`;
+        } else if (row.type === 'attack') {
+          badgeHtml = `<span class="event-badge event-badge-attack">Attacke</span>`;
+        } else if (row.type === 'counter_attack') {
+          badgeHtml = `<span class="event-badge event-badge-counter">Konterattacke</span>`;
+        } else if (row.type === 'incident') {
+          const isDefect = row.title && (row.title.toLowerCase().includes('defekt') || row.title.toLowerCase().includes('panne') || row.title.toLowerCase().includes('technisch'));
+          if (isDefect) {
+            badgeHtml = `<span class="event-badge event-badge-defect">Defekt</span>`;
+          } else {
+            badgeHtml = `<span class="event-badge event-badge-crash">Sturz</span>`;
+          }
+        }
+
+        return `
+          <tr>
+            <td>${kmFormatted}</td>
+            <td>
+              <div class="event-rider-info">
+                ${jerseyHtml}
+                ${flagHtml}
+                ${riderHtml}
               </div>
-              ${row.detail ? `<div class="event-detail">${esc(row.detail)}</div>` : ''}
-            </div>
-          </td>
-        </tr>`;
-    }).join('') || '<tr><td colspan="3" class="results-empty-cell">Keine Ereignisse für diese Etappe.</td></tr>'
+            </td>
+            <td>
+              <div class="event-content">
+                <div class="event-title-wrapper">
+                  <span class="event-title">${esc(row.title || '')}</span>
+                  ${badgeHtml}
+                </div>
+                ${row.detail ? `<div class="event-detail">${esc(row.detail)}</div>` : ''}
+              </div>
+            </td>
+          </tr>`;
+      }).join('') || '<tr><td colspan="3" class="results-empty-cell">Keine Ereignisse für diese Etappe.</td></tr>'
     : showStageOverviewTable && selectedClassification
     ? selectedClassification.rows.map((row) => {
       const participant = row.riderName ?? row.teamName;
@@ -444,7 +531,7 @@ export function renderResultsView(): void {
             <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
             ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
-            <td>${participantCell}</td>
+            <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
             <td>${esc(teamName)}</td>
             <td>${row.points != null ? row.points : '–'}</td>
@@ -469,7 +556,7 @@ export function renderResultsView(): void {
           <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
           ${trendCell}
           <td class="results-jersey-col-cell">${jerseyCell}</td>
-          <td>${participantCell}</td>
+          <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
           <td class="results-flag-col-cell">${flagCell}</td>
           <td>${esc(teamName)}</td>
           <td>${timeCell}</td>
@@ -563,6 +650,7 @@ export function initResultsListeners(): void {
         renderResultsView();
       } else if (special === RESULTS_EVENTS_KEY) {
         state.selectedResultsSpecialView = 'events';
+        selectedEventFilter = 'all';
         renderResultsView();
       }
     }
@@ -570,12 +658,18 @@ export function initResultsListeners(): void {
 
   $('results-marker-tabs').addEventListener('click', (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button[data-marker-key]');
-    if (!button) {
+    if (button) {
+      const key = button.dataset['markerKey'];
+      state.selectedResultsMarkerKey = key ?? RESULTS_STAGE_OVERVIEW_KEY;
+      renderResultsView();
       return;
     }
 
-    const key = button.dataset['markerKey'];
-    state.selectedResultsMarkerKey = key ?? RESULTS_STAGE_OVERVIEW_KEY;
-    renderResultsView();
+    const filterButton = (event.target as Element).closest<HTMLButtonElement>('button[data-event-filter]');
+    if (filterButton) {
+      const filter = filterButton.dataset['eventFilter'];
+      selectedEventFilter = filter ?? 'all';
+      renderResultsView();
+    }
   });
 }

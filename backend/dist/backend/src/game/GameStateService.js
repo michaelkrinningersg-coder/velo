@@ -117,9 +117,7 @@ class GameStateService {
         new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
         if (this.syncedStateDate !== state.currentDate) {
             this.syncCurrentSeasonFormState(state.currentDate, state.season);
-            if (new Date(state.currentDate).getDay() === 1) {
-                this.syncWeeklyFormHistory(state.currentDate);
-            }
+            this.syncDailyFormHistory(state.currentDate);
             this.syncedStateDate = state.currentDate;
         }
         // Lazily populate rider_skill_yearly_baseline for current season if missing
@@ -576,9 +574,7 @@ class GameStateService {
                 this.db.prepare('DELETE FROM rider_form_history').run();
             }
         }
-        if (new Date(nextDate).getDay() === 1) {
-            this.syncWeeklyFormHistory(nextDate);
-        }
+        this.syncDailyFormHistory(nextDate);
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
     syncRiderLoadState(currentDate, currentSeason) {
@@ -668,7 +664,7 @@ class GameStateService {
         }
         this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
     }
-    syncWeeklyFormHistory(currentDate) {
+    syncDailyFormHistory(currentDate) {
         if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
             return;
         }

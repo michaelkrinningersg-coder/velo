@@ -165,9 +165,7 @@ export class GameStateService {
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
-      if (new Date(state.currentDate).getDay() === 1) {
-        this.syncWeeklyFormHistory(state.currentDate);
-      }
+      this.syncDailyFormHistory(state.currentDate);
       this.syncedStateDate = state.currentDate;
     }
 
@@ -707,9 +705,7 @@ export class GameStateService {
       }
     }
 
-    if (new Date(nextDate).getDay() === 1) {
-      this.syncWeeklyFormHistory(nextDate);
-    }
+    this.syncDailyFormHistory(nextDate);
 
     new RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
   }
@@ -807,7 +803,7 @@ export class GameStateService {
     this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
   }
 
-  private syncWeeklyFormHistory(currentDate: string): void {
+  private syncDailyFormHistory(currentDate: string): void {
     if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
       return;
     }
