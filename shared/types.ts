@@ -801,6 +801,28 @@ export interface RiderFormHistoryEntry {
   totalForm: number;
 }
 
+export interface RiderCareerStats {
+  breakawayAttempts: number;
+  attacks: number;
+  counterAttacks: number;
+  crashes: number;
+  defects: number;
+  totalGcWins: number;
+  totalStageWins: number;
+  categories: Record<string, {
+    gcWins: number;
+    gcPodiums: number;
+    gcTopTen: number;
+    stageWins: number;
+    stagePodiums: number;
+    oneDayWins: number;
+    oneDayPodiums: number;
+    mountainWins: number;
+    pointsWins: number;
+    youthWins: number;
+  }>;
+}
+
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
@@ -841,6 +863,7 @@ export interface RiderStatsPayload {
   seasons: RiderStatsSeason[];
   peakDates?: string[];
   formHistory?: RiderFormHistoryEntry[];
+  careerStats?: RiderCareerStats;
 }
 
 export interface SeasonStandingRow {

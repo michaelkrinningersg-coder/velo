@@ -1060,6 +1060,7 @@ export class SimulationEngine {
 
   private readonly skillBreakdownCache = new Map<string, string>();
   private readonly teamSprintRandomValues = new Map<number, number>();
+  private readonly teamSprintSpecialRandomValues = new Map<number, number>();
 
   private lastTeamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null;
 
@@ -1092,6 +1093,8 @@ export class SimulationEngine {
   private breakawayGroupPhaseEnded = false;
 
   private breakawayPhaseEnded = false;
+
+  private breakawayCaughtLogged = false;
 
   private readonly messages: RaceSimMessage[] = [];
   private readonly allEvents: RaceSimMessage[] = [];
@@ -1454,7 +1457,6 @@ export class SimulationEngine {
     if (this.messages.length > 60) {
       this.messages.length = 60;
     }
-    this.allEvents.push(newMessage);
   }
 
   private buildMarkerClassifications(ordered: RiderState[]): StageMarkerClassification[] {
@@ -1855,6 +1857,37 @@ export class SimulationEngine {
       this.syncBreakawayPlanRidersTelemetry(nextTeamGroupBonusByRiderId);
     }
     this.updateBreakawayGapStatus();
+
+    if (this.breakawayPlan && this.breakawayPhaseActive && !this.breakawayCaughtLogged) {
+      const breakawayRiderIds = new Set(this.breakawayPlan.riderIds);
+      const activeBreakawayRiders = this.riders.filter(r => breakawayRiderIds.has(r.rider.id) && !isRiderInactive(r));
+      const activeNonBreakawayRiders = this.riders.filter(r => !breakawayRiderIds.has(r.rider.id) && !isRiderInactive(r));
+
+      if (activeBreakawayRiders.length > 0 && activeNonBreakawayRiders.length > 0) {
+        const lastSurvivor = activeBreakawayRiders.reduce((best, r) => 
+          r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
+        , activeBreakawayRiders[0]);
+
+        const leadingChaser = activeNonBreakawayRiders.reduce((best, r) => 
+          r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
+        , activeNonBreakawayRiders[0]);
+
+        if (leadingChaser.distanceCoveredMeters >= lastSurvivor.distanceCoveredMeters) {
+          if (lastSurvivor.distanceCoveredMeters >= 0.40 * this.stageDistanceMeters) {
+            this.pushMessage({
+              elapsedSeconds: this.elapsedSeconds,
+              riderId: lastSurvivor.rider.id,
+              riderName: lastSurvivor.riderName,
+              type: 'attack',
+              tone: 'warning',
+              title: `Ausreißer eingeholt: ${lastSurvivor.riderName}`,
+              detail: `Der letzte Fahrer des Ausreißversuchs wurde eingeholt.`,
+            });
+          }
+          this.breakawayCaughtLogged = true;
+        }
+      }
+    }
 
     const updatedActiveAttacks = updateActiveStageAttacks(this.activeStageAttacksByRiderId, deltaSeconds);
     this.activeStageAttacksByRiderId.clear();
@@ -3411,6 +3444,10 @@ export class SimulationEngine {
       return 0;
     }
 
+    if (rider.rider.skills.sprint < 74) {
+      return 0;
+    }
+
     const teamId = rider.rider.activeTeamId;
     if (teamId == null) {
       return 0;
@@ -3422,45 +3459,54 @@ export class SimulationEngine {
       return 0;
     }
 
-    const sortedSprinters = [...teamRiders].sort((a, b) => {
-      const scoreA = this.calculatePhotoFinishScore(a);
-      const scoreB = this.calculatePhotoFinishScore(b);
-      const diff = scoreB - scoreA;
-      if (diff !== 0) {
-        return diff;
+    // Check teammate bonuses
+    let teamSprintRand = this.teamSprintRandomValues.get(teamId);
+    if (teamSprintRand === undefined) {
+      teamSprintRand = randomBetween(0.25, 0.6);
+      this.teamSprintRandomValues.set(teamId, teamSprintRand);
+    }
+
+    let teamSpecialRand = this.teamSprintSpecialRandomValues.get(teamId);
+    if (teamSpecialRand === undefined) {
+      teamSpecialRand = randomBetween(0.1, 0.3);
+      this.teamSprintSpecialRandomValues.set(teamId, teamSpecialRand);
+    }
+
+    let totalBonus = 0;
+    for (const r of teamRiders) {
+      if (r.rider.id === rider.rider.id) {
+        continue;
       }
-      return a.rider.id - b.rider.id;
-    });
+      if (r.finishStatus === 'dnf' || (r.finishStatus as string) === 'otl' || (r.finishStatus as string) === 'dns') {
+        continue;
+      }
 
-    const bestSprinter = sortedSprinters[0];
-    if (!bestSprinter || rider.rider.id !== bestSprinter.rider.id) {
-      return 0;
+      let metCount = 0;
+      const c1 = r.rider.skills.sprint >= 72;
+      const c2 = r.rider.skills.flat >= 78;
+      const c3 = r.rider.skills.timeTrial >= 76;
+      const c4 = r.rider.skills.acceleration >= 80;
+
+      if (c1) metCount++;
+      if (c2) metCount++;
+      if (c3) metCount++;
+      if (c4) metCount++;
+
+      if (metCount > 0) {
+        const baseBonus = c1 ? teamSprintRand : teamSpecialRand;
+        let multiplier = 1.0;
+        if (metCount === 2) {
+          multiplier = 1.25;
+        } else if (metCount === 3) {
+          multiplier = 1.5;
+        } else if (metCount === 4) {
+          multiplier = 2.0;
+        }
+        totalBonus += baseBonus * multiplier;
+      }
     }
 
-    if (bestSprinter.rider.skills.sprint <= 73) {
-      return 0;
-    }
-
-    // Count teammates (not DNF, OTL, or DNS) who have Sprint Skill >= 72
-    const teammatesWithSprintCount = teamRiders.filter(
-      (r) => r.rider.id !== bestSprinter.rider.id &&
-             r.finishStatus !== 'dnf' &&
-             (r.finishStatus as string) !== 'otl' &&
-             (r.finishStatus as string) !== 'dns' &&
-             r.rider.skills.sprint >= 72
-    ).length;
-
-    if (teammatesWithSprintCount === 0) {
-      return 0;
-    }
-
-    let teamRand = this.teamSprintRandomValues.get(teamId);
-    if (teamRand === undefined) {
-      teamRand = randomBetween(0.25, 0.6);
-      this.teamSprintRandomValues.set(teamId, teamRand);
-    }
-
-    return teammatesWithSprintCount * teamRand;
+    return totalBonus;
   }
 
   private resolveFinishMarkerType(): 'finish_flat' | 'finish_hill' | 'finish_mountain' {

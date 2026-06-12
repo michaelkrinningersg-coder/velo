@@ -721,6 +721,19 @@ export class DatabaseService {
     `).run();
   }
 
+  private ensureRiderCareerStatsSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_career_stats (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        breakaway_attempts INTEGER NOT NULL DEFAULT 0,
+        attacks INTEGER NOT NULL DEFAULT 0,
+        counter_attacks INTEGER NOT NULL DEFAULT 0,
+        crashes INTEGER NOT NULL DEFAULT 0,
+        defects INTEGER NOT NULL DEFAULT 0
+      )
+    `).run();
+  }
+
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS race_programs (
@@ -995,6 +1008,7 @@ export class DatabaseService {
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRiderFormSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
+    this.ensureRiderCareerStatsSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     this.ensureDayChangeIndexes(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
@@ -1055,6 +1069,7 @@ export class DatabaseService {
     this.ensureResultsSchema(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
+    this.ensureRiderCareerStatsSchema(this.activeConnection);
     this.ensureStageSpreadData(this.activeConnection);
 
     return this.activeConnection;

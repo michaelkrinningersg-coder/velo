@@ -382,7 +382,23 @@ export class StageResultCommitService {
     const combinedEvents = [...dnsEvents, ...events];
     ResultRepository.inMemoryStageEvents.set(stageId, combinedEvents);
 
-    return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents);
+    const breakawayRiderIds = new Set<number>();
+    for (const entry of sanitizedEntries) {
+      if (entry.isBreakaway) {
+        breakawayRiderIds.add(entry.riderId);
+      }
+    }
+
+    return this.persistStagePerformance(
+      race,
+      stage,
+      classifiedPerformance,
+      awardedMarkerClassifications,
+      [...dnfEntries, ...otlEntries],
+      incidents,
+      breakawayRiderIds,
+      events,
+    );
   }
 
   private loadDnsEvents(race: Race, stage: Stage): RaceSimMessage[] {
@@ -584,6 +600,8 @@ export class StageResultCommitService {
     markerClassifications: StageMarkerClassification[] = [],
     dnfEntries: Array<{ riderId: number; statusReason: string | null }> = [],
     incidents: PrecalculatedRaceIncident[] = [],
+    breakawayRiderIds: Set<number> = new Set(),
+    events: RaceSimMessage[] = [],
   ): StageResultCommitResponse {
     const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
 
@@ -769,6 +787,75 @@ export class StageResultCommitService {
           );
         }
       }
+      // Accumulate and update rider career stats (never reset)
+      const careerStatsIncrements = new Map<number, {
+        breakaway: number;
+        attacks: number;
+        counterAttacks: number;
+        crashes: number;
+        defects: number;
+      }>();
+
+      const getOrCreateIncrement = (riderId: number) => {
+        let inc = careerStatsIncrements.get(riderId);
+        if (!inc) {
+          inc = { breakaway: 0, attacks: 0, counterAttacks: 0, crashes: 0, defects: 0 };
+          careerStatsIncrements.set(riderId, inc);
+        }
+        return inc;
+      };
+
+      // 1. Breakaway attempts
+      for (const riderId of breakawayRiderIds) {
+        getOrCreateIncrement(riderId).breakaway = 1;
+      }
+
+      // 2. Crashes and mechanical defects
+      for (const incident of incidents) {
+        const inc = getOrCreateIncrement(incident.riderId);
+        if (incident.type === 'crash') {
+          inc.crashes++;
+        } else if (incident.type === 'mechanical') {
+          inc.defects++;
+        }
+      }
+
+      // 3. Attacks and counter-attacks
+      for (const event of events) {
+        if (event.riderId != null) {
+          const inc = getOrCreateIncrement(event.riderId);
+          if (event.type === 'attack' && event.title && event.title.includes('attackiert')) {
+            inc.attacks++;
+          } else if (event.type === 'counter_attack') {
+            inc.counterAttacks++;
+          }
+        }
+      }
+
+      // 4. Perform SQLite update
+      const updateStatsStmt = this.db.prepare(`
+        INSERT INTO rider_career_stats (
+          rider_id, breakaway_attempts, attacks, counter_attacks, crashes, defects
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(rider_id) DO UPDATE SET
+          breakaway_attempts = breakaway_attempts + excluded.breakaway_attempts,
+          attacks = attacks + excluded.attacks,
+          counter_attacks = counter_attacks + excluded.counter_attacks,
+          crashes = crashes + excluded.crashes,
+          defects = defects + excluded.defects
+      `);
+
+      for (const [riderId, inc] of careerStatsIncrements.entries()) {
+        updateStatsStmt.run(
+          riderId,
+          inc.breakaway,
+          inc.attacks,
+          inc.counterAttacks,
+          inc.crashes,
+          inc.defects
+        );
+      }
+
       this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
       for (const entry of dnfEntries) {
         this.repo.updateStageEntryStatus(stage.id, entry.riderId, 'dnf', entry.statusReason);

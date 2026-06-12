@@ -1,6 +1,6 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RiderCareerStats } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -659,6 +659,7 @@ export class RiderRepository {
       formHistory: tableExists(this.db, 'rider_form_history') 
         ? (this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id) as Array<{ date: string; sForm: number; rForm: number; totalForm: number }>)
         : [],
+      careerStats: this.getRiderCareerStats(rider.id),
     } satisfies RiderStatsPayload;
   }
 
@@ -1034,9 +1035,165 @@ export class RiderRepository {
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
       seasons: [],
+      careerStats: this.getRiderCareerStats(rider.id),
     };
   }
 
+  private getRiderCareerStats(riderId: number): RiderCareerStats {
+    const careerStatsRow = tableExists(this.db, 'rider_career_stats')
+      ? this.db.prepare(`
+          SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects
+          FROM rider_career_stats
+          WHERE rider_id = ?
+        `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number } | undefined
+      : undefined;
+
+    const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
+    const attacks = careerStatsRow?.attacks ?? 0;
+    const counterAttacks = careerStatsRow?.counter_attacks ?? 0;
+    const crashes = careerStatsRow?.crashes ?? 0;
+    const defects = careerStatsRow?.defects ?? 0;
+
+    const categories: Record<string, {
+      gcWins: number;
+      gcPodiums: number;
+      gcTopTen: number;
+      stageWins: number;
+      stagePodiums: number;
+      oneDayWins: number;
+      oneDayPodiums: number;
+      mountainWins: number;
+      pointsWins: number;
+      youthWins: number;
+    }> = {};
+
+    const knownCategories = [
+      'World Tour - Grand Tour',
+      'World Tour - Monument',
+      'World Tour - Stage Race High',
+      'World Tour - Stage Race Middle',
+      'World Tour - Stage Race Low',
+      'World Tour - One Day High',
+      'World Tour - One Day Middle',
+      'World Tour - One Day Low'
+    ];
+
+    for (const cat of knownCategories) {
+      categories[cat] = {
+        gcWins: 0,
+        gcPodiums: 0,
+        gcTopTen: 0,
+        stageWins: 0,
+        stagePodiums: 0,
+        oneDayWins: 0,
+        oneDayPodiums: 0,
+        mountainWins: 0,
+        pointsWins: 0,
+        youthWins: 0,
+      };
+    }
+
+    if (tableExists(this.db, 'results') && tableExists(this.db, 'stages')) {
+      const resultsRows = this.db.prepare(`
+        SELECT
+          r.result_type_id AS result_type_id,
+          r.rank AS rank,
+          races.is_stage_race AS is_stage_race,
+          races.number_of_stages AS number_of_stages,
+          stages.stage_number AS stage_number,
+          cat.name AS category_name
+        FROM results r
+        JOIN stages ON stages.id = r.stage_id
+        JOIN races ON races.id = stages.race_id
+        JOIN race_categories cat ON cat.id = races.category_id
+        WHERE r.rider_id = ?
+
+        UNION ALL
+
+        SELECT
+          r.result_type_id AS result_type_id,
+          r.rank AS rank,
+          races.is_stage_race AS is_stage_race,
+          races.number_of_stages AS number_of_stages,
+          stages.stage_number AS stage_number,
+          cat.name AS category_name
+        FROM results r
+        JOIN stages ON stages.id = r.stage_id
+        JOIN races ON races.id = stages.race_id
+        JOIN race_categories cat ON cat.id = races.category_id
+        JOIN stage_entries se ON se.stage_id = r.stage_id AND se.team_id = r.team_id
+        WHERE r.rider_id IS NULL AND se.rider_id = ? AND r.result_type_id = 1 AND stages.profile = 'TTT'
+      `).all(riderId, riderId) as Array<{
+        result_type_id: number;
+        rank: number;
+        is_stage_race: number;
+        number_of_stages: number;
+        stage_number: number;
+        category_name: string;
+      }>;
+
+      for (const row of resultsRows) {
+        let catStats = categories[row.category_name];
+        if (!catStats) {
+          catStats = {
+            gcWins: 0,
+            gcPodiums: 0,
+            gcTopTen: 0,
+            stageWins: 0,
+            stagePodiums: 0,
+            oneDayWins: 0,
+            oneDayPodiums: 0,
+            mountainWins: 0,
+            pointsWins: 0,
+            youthWins: 0,
+          };
+          categories[row.category_name] = catStats;
+        }
+
+        const rank = row.rank;
+        const isStageRace = row.is_stage_race === 1;
+        const isFinalStage = row.stage_number === row.number_of_stages;
+
+        if (row.result_type_id === 1) { // Stage result
+          if (!isStageRace) {
+            if (rank === 1) catStats.oneDayWins++;
+            if (rank <= 3) catStats.oneDayPodiums++;
+          } else {
+            if (rank === 1) catStats.stageWins++;
+            if (rank <= 3) catStats.stagePodiums++;
+          }
+        } else if (row.result_type_id === 2 && isStageRace && isFinalStage) { // GC
+          if (rank === 1) catStats.gcWins++;
+          if (rank <= 3) catStats.gcPodiums++;
+          if (rank <= 10) catStats.gcTopTen++;
+        } else if (row.result_type_id === 3 && isStageRace && isFinalStage) { // Points
+          if (rank === 1) catStats.pointsWins++;
+        } else if (row.result_type_id === 4 && isStageRace && isFinalStage) { // Mountain
+          if (rank === 1) catStats.mountainWins++;
+        } else if (row.result_type_id === 5 && isStageRace && isFinalStage) { // Youth
+          if (rank === 1) catStats.youthWins++;
+        }
+      }
+    }
+
+    let totalGcWins = 0;
+    let totalStageWins = 0;
+    for (const cat of Object.keys(categories)) {
+      totalGcWins += categories[cat].gcWins + categories[cat].oneDayWins;
+      totalStageWins += categories[cat].stageWins;
+    }
+
+    return {
+      breakawayAttempts,
+      attacks,
+      counterAttacks,
+      crashes,
+      defects,
+      totalGcWins,
+      totalStageWins,
+      categories,
+    };
+  }
 
   private getCareerWins(riderId: number): number {
     if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stage_entries')) {

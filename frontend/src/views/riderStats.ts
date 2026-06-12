@@ -460,6 +460,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'form' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="form" aria-selected="${state.riderStatsTab === 'form' ? 'true' : 'false'}">Form</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'skills' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="skills" aria-selected="${state.riderStatsTab === 'skills' ? 'true' : 'false'}">Skills</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="career" aria-selected="${state.riderStatsTab === 'career' ? 'true' : 'false'}">Karrierestatistiken</button>
     </div>`;
 }
 
@@ -502,57 +503,99 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
   const skillsToDraw = ['mountain', 'hill', 'sprint', 'timeTrial', 'cobble', 'attack'];
   const labels = ['Berg (MTN)', 'Hügel (HIL)', 'Sprint (SPR)', 'Zeitfahren (TT)', 'Pflaster (COB)', 'Angriff (ATT)'];
   
-  const CX = 200;
-  const CY = 200;
-  const R = 150;
+  // Wider viewBox so labels are never clipped
+  const SVG_W = 540;
+  const SVG_H = 440;
+  const CX = SVG_W / 2;   // 270
+  const CY = SVG_H / 2;   // 220
+  const R = 160;
   const minVal = 60;
   const maxVal = 85;
   const range = maxVal - minVal; // 25
 
-  // Generate grid hexagon paths
-  let gridPathsHtml = '';
-  const levels = [60, 65, 70, 75, 80, 85];
-  levels.forEach((level) => {
-    const r = R * ((level - minVal) / range);
-    if (r === 0) {
-      gridPathsHtml += `<circle cx="${CX}" cy="${CY}" r="2" fill="var(--border-primary)" />`;
-      return;
-    }
-    const points: string[] = [];
+  // Helper: compute hexagon points for a given radius
+  const hexPoints = (radius: number): string[] => {
+    const pts: string[] = [];
     for (let i = 0; i < 6; i++) {
       const angle = (i * Math.PI / 3) - (Math.PI / 2);
-      const px = CX + r * Math.cos(angle);
-      const py = CY + r * Math.sin(angle);
-      points.push(`${px},${py}`);
+      pts.push(`${CX + radius * Math.cos(angle)},${CY + radius * Math.sin(angle)}`);
     }
-    gridPathsHtml += `<polygon points="${points.join(' ')}" fill="none" stroke="var(--border-primary)" stroke-width="1" stroke-dasharray="${level === 85 ? 'none' : '2,2'}" />`;
-    // Add grid value text (show level numbers on the top vertical axis)
-    gridPathsHtml += `<text x="${CX + 4}" y="${CY - r + 3}" fill="var(--text-500)" font-size="9" text-anchor="start">${level}</text>`;
-  });
+    return pts;
+  };
 
-  // Spoke lines
+  // SVG defs: gradient fill for rider polygon, glow filter
+  const defsHtml = `
+    <defs>
+      <radialGradient id="radarBgGrad" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="rgba(30,32,48,0.95)" />
+        <stop offset="100%" stop-color="rgba(15,16,28,0.98)" />
+      </radialGradient>
+      <linearGradient id="riderFillGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(129,140,248,0.45)" />
+        <stop offset="100%" stop-color="rgba(79,70,229,0.20)" />
+      </linearGradient>
+      <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="6" result="blur" />
+        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+      </filter>
+      <filter id="dotGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+      </filter>
+    </defs>`;
+
+  // Background circle (subtle dark disc behind the web)
+  const bgCircle = `<circle cx="${CX}" cy="${CY}" r="${R + 8}" fill="url(#radarBgGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />`;
+
+  // ---------- Iso-lines ----------
+  // Every 2.5 points: dashed white lines; every 5 points: solid white lines
+  let gridPathsHtml = '';
+  for (let level = minVal; level <= maxVal; level += 2.5) {
+    const r = R * ((level - minVal) / range);
+    if (r < 1) {
+      gridPathsHtml += `<circle cx="${CX}" cy="${CY}" r="2" fill="rgba(255,255,255,0.25)" />`;
+      continue;
+    }
+    const pts = hexPoints(r);
+    const isMajor = level % 5 === 0;
+    const strokeW = isMajor ? 1 : 0.6;
+    const strokeDash = isMajor ? 'none' : '4,4';
+    const opacity = isMajor ? 0.4 : 0.18;
+    gridPathsHtml += `<polygon points="${pts.join(' ')}" fill="none" stroke="rgba(255,255,255,${opacity})" stroke-width="${strokeW}" stroke-dasharray="${strokeDash}" />`;
+
+    // Value labels along the top axis for major levels
+    if (isMajor && level > minVal) {
+      gridPathsHtml += `<text x="${CX + 5}" y="${CY - r + 4}" fill="rgba(255,255,255,0.45)" font-size="9" font-family="Inter, sans-serif" text-anchor="start">${level}</text>`;
+    }
+  }
+
+  // ---------- Spoke lines ----------
   let spokesHtml = '';
   let labelsHtml = '';
   for (let i = 0; i < 6; i++) {
     const angle = (i * Math.PI / 3) - (Math.PI / 2);
     const outerX = CX + R * Math.cos(angle);
     const outerY = CY + R * Math.sin(angle);
-    spokesHtml += `<line x1="${CX}" y1="${CY}" x2="${outerX}" y2="${outerY}" stroke="var(--border-primary)" stroke-width="1" />`;
+    spokesHtml += `<line x1="${CX}" y1="${CY}" x2="${outerX}" y2="${outerY}" stroke="rgba(255,255,255,0.15)" stroke-width="1" />`;
 
-    // Labels placement
-    const lx = CX + (R + 22) * Math.cos(angle);
-    const ly = CY + (R + 15) * Math.sin(angle);
+    // Labels – placed further out so they never clip
+    const labelR = R + 28;
+    const lx = CX + labelR * Math.cos(angle);
+    const ly = CY + labelR * Math.sin(angle);
     const cosVal = Math.cos(angle);
     let anchor = 'middle';
     if (cosVal > 0.15) anchor = 'start';
     else if (cosVal < -0.15) anchor = 'end';
-    
-    labelsHtml += `<text x="${lx}" y="${ly}" fill="var(--text-100)" font-size="11" font-weight="600" text-anchor="${anchor}" dominant-baseline="middle">${labels[i]}</text>`;
+
+    // Show skill value next to label
+    const skillVal = (riderSkills as any)[skillsToDraw[i]] ?? minVal;
+    labelsHtml += `<text x="${lx}" y="${ly}" fill="rgba(255,255,255,0.92)" font-size="11.5" font-weight="700" font-family="Inter, sans-serif" text-anchor="${anchor}" dominant-baseline="middle">${labels[i]}</text>`;
+    labelsHtml += `<text x="${lx}" y="${ly + 14}" fill="rgba(255,255,255,0.50)" font-size="10" font-weight="500" font-family="Inter, sans-serif" text-anchor="${anchor}" dominant-baseline="middle">${skillVal}</text>`;
   }
 
-  // Draw the actual rider's skill polygon
-  const riderPoints: string[] = [];
-  const riderCircles: string[] = [];
+  // ---------- Rider polygon ----------
+  const riderPts: string[] = [];
+  const riderDots: string[] = [];
   
   skillsToDraw.forEach((skillKey, i) => {
     const val = (riderSkills as any)[skillKey] ?? minVal;
@@ -560,13 +603,13 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
     const angle = (i * Math.PI / 3) - (Math.PI / 2);
     const px = CX + r * Math.cos(angle);
     const py = CY + r * Math.sin(angle);
-    riderPoints.push(`${px},${py}`);
-    riderCircles.push(`<circle cx="${px}" cy="${py}" r="4" fill="var(--accent-primary)" stroke="#fff" stroke-width="1.5"><title>${labels[i]}: ${val}</title></circle>`);
+    riderPts.push(`${px},${py}`);
+    riderDots.push(`<circle cx="${px}" cy="${py}" r="5" fill="#818cf8" stroke="#fff" stroke-width="2" filter="url(#dotGlow)"><title>${labels[i]}: ${val}</title></circle>`);
   });
 
-  const riderPolygonHtml = `<polygon points="${riderPoints.join(' ')}" fill="rgba(99, 102, 241, 0.35)" stroke="var(--accent-primary)" stroke-width="2.5" />`;
+  const riderPolygonHtml = `<polygon points="${riderPts.join(' ')}" fill="url(#riderFillGrad)" stroke="#818cf8" stroke-width="2.5" stroke-linejoin="round" filter="url(#radarGlow)" />`;
 
-  // Draw 10 skills in three columns beside the chart
+  // ---------- Skills list: 2 columns, sorted strongest → weakest ----------
   const skillsList = [
     { key: 'mountain', label: 'Berg (MTN)' },
     { key: 'hill', label: 'Hügel (HIL)' },
@@ -580,35 +623,46 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
     { key: 'acceleration', label: 'Beschleunigung (ACC)' }
   ];
 
-  const columnsHtml = ['', '', ''];
-  skillsList.forEach((skill, idx) => {
-    const colIdx = idx % 3; // Distribute across 3 columns
+  // Sort by score descending
+  const sortedSkills = [...skillsList].sort((a, b) => {
+    const sa = (riderSkills as any)[a.key] ?? 60;
+    const sb = (riderSkills as any)[b.key] ?? 60;
+    return sb - sa;
+  });
+
+  // Fill two columns: left col gets indices 0,2,4,6,8 – right col gets 1,3,5,7,9
+  const colLeft: string[] = [];
+  const colRight: string[] = [];
+  sortedSkills.forEach((skill, idx) => {
     const score = (riderSkills as any)[skill.key] ?? 60;
-    columnsHtml[colIdx] += `
+    const html = `
       <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-900); padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-primary); margin-bottom: 0.75rem;">
         <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-300);">${skill.label}</span>
         ${renderRiderSkillBadge(score)}
       </div>
     `;
+    if (idx % 2 === 0) colLeft.push(html);
+    else colRight.push(html);
   });
 
   const skillsGridHtml = `
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%; align-content: start;">
-      <div class="skills-col">${columnsHtml[0]}</div>
-      <div class="skills-col">${columnsHtml[1]}</div>
-      <div class="skills-col">${columnsHtml[2]}</div>
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; width: 100%; align-content: start;">
+      <div class="skills-col">${colLeft.join('')}</div>
+      <div class="skills-col">${colRight.join('')}</div>
     </div>
   `;
 
   return `
     <section class="rider-stats-skills-tab" style="margin-top: 1rem;">
-      <div class="rider-stats-skills-container" style="display: grid; grid-template-columns: 420px 1fr; gap: 2rem; align-items: start; background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-primary);">
-        <div class="skills-radar-wrapper" style="display: flex; justify-content: center; align-items: center; background: var(--bg-900); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-primary);">
-          <svg width="400" height="400" viewBox="0 0 400 400">
+      <div class="rider-stats-skills-container" style="display: grid; grid-template-columns: 540px 1fr; gap: 2rem; align-items: start; background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-primary);">
+        <div class="skills-radar-wrapper" style="display: flex; justify-content: center; align-items: center; background: var(--bg-900); padding: 1.25rem; border-radius: 10px; border: 1px solid var(--border-primary);">
+          <svg width="540" height="440" viewBox="0 0 ${SVG_W} ${SVG_H}" style="overflow: visible;">
+            ${defsHtml}
+            ${bgCircle}
             ${gridPathsHtml}
             ${spokesHtml}
             ${riderPolygonHtml}
-            ${riderCircles.join('')}
+            ${riderDots.join('')}
             ${labelsHtml}
           </svg>
         </div>
@@ -992,6 +1046,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsTopResultsTab(payload)}`;
   }
 
+  if (state.riderStatsTab === 'career') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsCareerTab(payload)}`;
+  }
+
   if (payload.seasons.length === 0) {
     return `
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
@@ -1028,12 +1089,12 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                     <col style="width: 5%;">
                     <col style="width: 5%;">
                     <col style="width: 4%;">
-                    <col style="width: 13%;">
-                    <col style="width: 20%;">
+                    <col style="width: 15%;">
+                    <col style="width: 18%;">
+                    <col style="width: 8%;">
                     <col style="width: 6%;">
                     <col style="width: 6%;">
-                    <col style="width: 6%;">
-                    <col style="width: 20%;">
+                    <col style="width: 18%;">
                     <col style="width: 5%;">
                   </colgroup>
                   <thead>
@@ -1066,8 +1127,8 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null)}</td>
                           <td>${esc(raceStageLabel)}</td>
                           <td>${row.profile ? renderStageProfileBadge(row.profile) : '–'}</td>
-                          <td>${row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–'}</td>
-                          <td>${row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–'}</td>
+                          <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
+                          <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
                           <td>${esc(formatRiderStatsResultDetail(row))}</td>
                           <td>${row.seasonPoints}</td>
                         </tr>`;
@@ -1159,7 +1220,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career') {
       return;
     }
 
@@ -1173,7 +1234,7 @@ export function initRiderStatsListeners(): void {
   });
 
   $('rider-stats-body').addEventListener('change', async (event) => {
-    const target = event.target as HTMLSelectElement;
+    const target = event.target as HTMLInputElement;
     if (target.id === 'rider-stats-filter-category') {
       state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
       state.riderStatsTopResultsPage = 1;
@@ -1181,6 +1242,12 @@ export function initRiderStatsListeners(): void {
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
     } else if (target.id === 'rider-stats-filter-season') {
       state.riderStatsTopResultsFilterSeason = target.value === 'all' ? null : Number(target.value);
+      state.riderStatsTopResultsPage = 1;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.classList.contains('rider-stats-filter-checkbox')) {
+      const filterType = target.dataset['filterType'] as 'gc' | 'mountain' | 'points' | 'youth' | 'oneDay' | 'stage';
+      state.riderStatsTopResultsFilters[filterType] = target.checked;
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
@@ -1255,7 +1322,23 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 
   const seasonsList = Array.from(new Set(allRows.map(r => r.season))).sort((a, b) => b - a);
 
-  let filteredRows = allRows;
+  let filteredRows = allRows.filter(r => {
+    const isFinalRow = r.rowType !== 'stage_result';
+    if (isFinalRow) {
+      if (r.rowType === 'gc_final') return state.riderStatsTopResultsFilters.gc;
+      if (r.rowType === 'mountain_final') return state.riderStatsTopResultsFilters.mountain;
+      if (r.rowType === 'points_final') return state.riderStatsTopResultsFilters.points;
+      if (r.rowType === 'youth_final') return state.riderStatsTopResultsFilters.youth;
+      return true;
+    } else {
+      if (r.isStageRace) {
+        return state.riderStatsTopResultsFilters.stage;
+      } else {
+        return state.riderStatsTopResultsFilters.oneDay;
+      }
+    }
+  });
+
   if (state.riderStatsTopResultsFilterCategory) {
     const filterVal = state.riderStatsTopResultsFilterCategory;
     if (filterVal.endsWith('-etappen')) {
@@ -1326,20 +1409,47 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   }).join('');
 
   const filtersHtml = `
-    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
+    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label for="rider-stats-filter-category" style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap;">Rennklasse:</label>
-        <select id="rider-stats-filter-category" class="form-control" style="width: auto; display: inline-block;">
+        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Rennklasse:</label>
+        <select id="rider-stats-filter-category" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
           <option value="all">Alle Rennklassen</option>
           ${categoryOptionsHtml}
         </select>
       </div>
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label for="rider-stats-filter-season" style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap;">Saison:</label>
-        <select id="rider-stats-filter-season" class="form-control" style="width: auto; display: inline-block;">
+        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Saison:</label>
+        <select id="rider-stats-filter-season" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
           <option value="all">All Time</option>
           ${seasonsList.map(yr => `<option value="${yr}" ${state.riderStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
         </select>
+      </div>
+      
+      <div class="top-results-checkboxes" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; border-left: 1px solid rgba(255, 255, 255, 0.15); padding-left: 1rem;">
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="gc" ${state.riderStatsTopResultsFilters.gc ? 'checked' : ''} style="accent-color: #ffd700; width: 14px; height: 14px; cursor: pointer;">
+          nur GC
+        </label>
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="mountain" ${state.riderStatsTopResultsFilters.mountain ? 'checked' : ''} style="accent-color: #ff4d4d; width: 14px; height: 14px; cursor: pointer;">
+          nur Bergwertung
+        </label>
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="points" ${state.riderStatsTopResultsFilters.points ? 'checked' : ''} style="accent-color: #2ecc71; width: 14px; height: 14px; cursor: pointer;">
+          nur Punktewertung
+        </label>
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="youth" ${state.riderStatsTopResultsFilters.youth ? 'checked' : ''} style="accent-color: #ffffff; width: 14px; height: 14px; cursor: pointer;">
+          nur Nachwuchs
+        </label>
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="oneDay" ${state.riderStatsTopResultsFilters.oneDay ? 'checked' : ''} style="accent-color: #9b59b6; width: 14px; height: 14px; cursor: pointer;">
+          One Day Races
+        </label>
+        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
+          <input type="checkbox" class="rider-stats-filter-checkbox" data-filter-type="stage" ${state.riderStatsTopResultsFilters.stage ? 'checked' : ''} style="accent-color: #3498db; width: 14px; height: 14px; cursor: pointer;">
+          Etappenwertungen
+        </label>
       </div>
     </div>
   `;
@@ -1434,6 +1544,147 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
         </table>
       </div>
       ${paginationHtml}
+    </section>
+  `;
+}
+
+export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
+  const stats = payload.careerStats || {
+    breakawayAttempts: 0,
+    attacks: 0,
+    counterAttacks: 0,
+    crashes: 0,
+    defects: 0,
+    totalGcWins: 0,
+    totalStageWins: 0,
+    categories: {}
+  };
+
+  // Helper function to render badge
+  const renderCareerBadge = (value: number, type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white', title: string): string => {
+    let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
+    if (value === 0) {
+      style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
+    } else {
+      if (type === 'gold') {
+        style += 'background: linear-gradient(135deg, #ffd700, #ffa500); color: #000; box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); text-shadow: 0 0 1px rgba(255,255,255,0.3);';
+      } else if (type === 'silver') {
+        style += 'background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; box-shadow: 0 0 5px rgba(229, 231, 235, 0.4);';
+      } else if (type === 'bronze') {
+        style += 'background: linear-gradient(135deg, #d35400, #a04000); color: #fff; box-shadow: 0 0 5px rgba(211, 84, 0, 0.4);';
+      } else if (type === 'green') {
+        style += 'background: #2ecc71; color: #fff; box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);';
+      } else if (type === 'red') {
+        style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
+      } else if (type === 'white') {
+        style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
+      }
+    }
+    return `<span style="${style}" title="${esc(title)}">${value}</span>`;
+  };
+
+  const categoriesToShow = [
+    { key: 'World Tour - Grand Tour', name: 'Grand Tour', isStage: true },
+    { key: 'World Tour - Monument', name: 'Monumente', isStage: false },
+    { key: 'World Tour - Stage Race High', name: 'Stage Race (High)', isStage: true },
+    { key: 'World Tour - Stage Race Middle', name: 'Stage Race (Middle)', isStage: true },
+    { key: 'World Tour - Stage Race Low', name: 'Stage Race (Low)', isStage: true },
+    { key: 'World Tour - One Day High', name: 'One Day (High)', isStage: false },
+    { key: 'World Tour - One Day Middle', name: 'One Day (Middle)', isStage: false },
+    { key: 'World Tour - One Day Low', name: 'One Day (Low)', isStage: false },
+  ];
+
+  return `
+    <section class="rider-stats-career" style="margin-top: 1.5rem;">
+      <!-- Career Summary cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Ausreißversuche</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #3498db;">${stats.breakawayAttempts}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Attacken</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #ffd700;">${stats.attacks}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Konterattacken</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #e67e22;">${stats.counterAttacks}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Stürze</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #e74c3c;">${stats.crashes}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Defekte</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #95a5a6;">${stats.defects}</div>
+        </div>
+      </div>
+
+      <!-- Categories details -->
+      <h3 style="margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 0.5rem; font-weight: 500; font-size: 1.15rem; color: #fff;">Ergebnisse nach Rennklasse</h3>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem;">
+        ${categoriesToShow.map(cat => {
+          const catData = stats.categories[cat.key] || {
+            gcWins: 0,
+            gcPodiums: 0,
+            gcTopTen: 0,
+            stageWins: 0,
+            stagePodiums: 0,
+            oneDayWins: 0,
+            oneDayPodiums: 0,
+            mountainWins: 0,
+            pointsWins: 0,
+            youthWins: 0,
+          };
+
+          return `
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1.25rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
+                <span style="font-weight: 600; font-size: 0.95rem; color: #fff;">${esc(cat.name)}</span>
+                ${renderRiderStatsCategoryBadge(cat.key)}
+              </div>
+              
+              ${cat.isStage ? `
+                <!-- Stage Race layout: Two lines -->
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                  <!-- Line 1: GC & Classifications -->
+                  <div>
+                    <div style="font-size: 0.75rem; color: #888; text-transform: uppercase; margin-bottom: 0.25rem; letter-spacing: 0.5px;">GC & Wertungen</div>
+                    <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                      ${renderCareerBadge(catData.gcWins, 'gold', 'Gesamtwertung Siege')}
+                      ${renderCareerBadge(catData.gcPodiums, 'silver', 'Gesamtwertung Podien')}
+                      ${renderCareerBadge(catData.gcTopTen, 'bronze', 'Gesamtwertung Top 10')}
+                      <span style="border-left: 1px solid rgba(255,255,255,0.15); height: 1.2rem; margin: 0 0.2rem; display: inline-block;"></span>
+                      ${renderCareerBadge(catData.mountainWins, 'red', 'Bergwertung Siege')}
+                      ${renderCareerBadge(catData.pointsWins, 'green', 'Punktewertung Siege')}
+                      ${renderCareerBadge(catData.youthWins, 'white', 'Nachwuchswertung Siege')}
+                    </div>
+                  </div>
+                  
+                  <!-- Line 2: Stages -->
+                  <div>
+                    <div style="font-size: 0.75rem; color: #888; text-transform: uppercase; margin-bottom: 0.25rem; letter-spacing: 0.5px;">Etappenergebnisse</div>
+                    <div style="display: flex; gap: 0.4rem; align-items: center;">
+                      ${renderCareerBadge(catData.stageWins, 'gold', 'Etappensiege')}
+                      ${renderCareerBadge(catData.stagePodiums, 'silver', 'Etappenpodien')}
+                    </div>
+                  </div>
+                </div>
+              ` : `
+                <!-- One Day Race layout: Single line -->
+                <div>
+                  <div style="font-size: 0.75rem; color: #888; text-transform: uppercase; margin-bottom: 0.25rem; letter-spacing: 0.5px;">Platzierungen</div>
+                  <div style="display: flex; gap: 0.4rem; align-items: center;">
+                    ${renderCareerBadge(catData.oneDayWins, 'gold', 'Siege')}
+                    ${renderCareerBadge(catData.oneDayPodiums, 'silver', 'Podien')}
+                  </div>
+                </div>
+              `}
+            </div>
+          `;
+        }).join('')}
+      </div>
     </section>
   `;
 }
