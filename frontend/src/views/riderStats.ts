@@ -26,6 +26,9 @@ let comparedRiders: Array<{
   teamId: number | null;
   teamName: string | null;
   formHistory: any[];
+  peakDates?: string[];
+  currentSeasonPoints: number;
+  currentSeasonRank: number | null;
 }> = [];
 let selectedCompareTeamId: number | null = null;
 
@@ -456,7 +459,166 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'topResults' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="topResults" aria-selected="${state.riderStatsTab === 'topResults' ? 'true' : 'false'}">Top - Results</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'form' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="form" aria-selected="${state.riderStatsTab === 'form' ? 'true' : 'false'}">Form</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'skills' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="skills" aria-selected="${state.riderStatsTab === 'skills' ? 'true' : 'false'}">Skills</button>
     </div>`;
+}
+
+export function renderRiderSkillBadge(score: number): string {
+  const stops = [
+    { score: 55, hue: 0, lightness: 28 }, // dark red (55 and less)
+    { score: 60, hue: 0, lightness: 40 }, // red
+    { score: 68, hue: 30, lightness: 42 }, // orange
+    { score: 74, hue: 60, lightness: 42 }, // yellow
+    { score: 80, hue: 120, lightness: 36 } // green (80 and more)
+  ];
+  
+  let hue = 120;
+  let lightness = 36;
+  
+  const clamped = Math.max(55, Math.min(80, score));
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1];
+    const curr = stops[i];
+    if (clamped <= curr.score) {
+      const ratio = (clamped - prev.score) / (curr.score - prev.score);
+      hue = Math.round(prev.hue + (curr.hue - prev.hue) * ratio);
+      lightness = Math.round(prev.lightness + (curr.lightness - prev.lightness) * ratio);
+      break;
+    }
+  }
+
+  const backgroundAlpha = 0.44;
+  const borderAlpha = 0.72;
+  const style = `--stage-editor-score-hue:${hue};--stage-editor-score-lightness:${lightness}%;--stage-editor-score-bg-alpha:${backgroundAlpha};--stage-editor-score-border-alpha:${borderAlpha};`;
+  return `<span class="stage-editor-score-badge" style="${style}">${score.toFixed(0)}</span>`;
+}
+
+export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderStatsPayload | null): string {
+  const riderSkills = rider?.skills ?? {
+    mountain: 60, hill: 60, sprint: 60, timeTrial: 60, cobble: 60, attack: 60,
+    mediumMountain: 60, flat: 60, prologue: 60, acceleration: 60
+  };
+
+  const skillsToDraw = ['mountain', 'hill', 'sprint', 'timeTrial', 'cobble', 'attack'];
+  const labels = ['Berg (MTN)', 'Hügel (HIL)', 'Sprint (SPR)', 'Zeitfahren (TT)', 'Pflaster (COB)', 'Angriff (ATT)'];
+  
+  const CX = 200;
+  const CY = 200;
+  const R = 150;
+  const minVal = 60;
+  const maxVal = 85;
+  const range = maxVal - minVal; // 25
+
+  // Generate grid hexagon paths
+  let gridPathsHtml = '';
+  const levels = [60, 65, 70, 75, 80, 85];
+  levels.forEach((level) => {
+    const r = R * ((level - minVal) / range);
+    if (r === 0) {
+      gridPathsHtml += `<circle cx="${CX}" cy="${CY}" r="2" fill="var(--border-primary)" />`;
+      return;
+    }
+    const points: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * Math.PI / 3) - (Math.PI / 2);
+      const px = CX + r * Math.cos(angle);
+      const py = CY + r * Math.sin(angle);
+      points.push(`${px},${py}`);
+    }
+    gridPathsHtml += `<polygon points="${points.join(' ')}" fill="none" stroke="var(--border-primary)" stroke-width="1" stroke-dasharray="${level === 85 ? 'none' : '2,2'}" />`;
+    // Add grid value text (show level numbers on the top vertical axis)
+    gridPathsHtml += `<text x="${CX + 4}" y="${CY - r + 3}" fill="var(--text-500)" font-size="9" text-anchor="start">${level}</text>`;
+  });
+
+  // Spoke lines
+  let spokesHtml = '';
+  let labelsHtml = '';
+  for (let i = 0; i < 6; i++) {
+    const angle = (i * Math.PI / 3) - (Math.PI / 2);
+    const outerX = CX + R * Math.cos(angle);
+    const outerY = CY + R * Math.sin(angle);
+    spokesHtml += `<line x1="${CX}" y1="${CY}" x2="${outerX}" y2="${outerY}" stroke="var(--border-primary)" stroke-width="1" />`;
+
+    // Labels placement
+    const lx = CX + (R + 22) * Math.cos(angle);
+    const ly = CY + (R + 15) * Math.sin(angle);
+    const cosVal = Math.cos(angle);
+    let anchor = 'middle';
+    if (cosVal > 0.15) anchor = 'start';
+    else if (cosVal < -0.15) anchor = 'end';
+    
+    labelsHtml += `<text x="${lx}" y="${ly}" fill="var(--text-100)" font-size="11" font-weight="600" text-anchor="${anchor}" dominant-baseline="middle">${labels[i]}</text>`;
+  }
+
+  // Draw the actual rider's skill polygon
+  const riderPoints: string[] = [];
+  const riderCircles: string[] = [];
+  
+  skillsToDraw.forEach((skillKey, i) => {
+    const val = (riderSkills as any)[skillKey] ?? minVal;
+    const r = R * ((Math.max(minVal, Math.min(maxVal, val)) - minVal) / range);
+    const angle = (i * Math.PI / 3) - (Math.PI / 2);
+    const px = CX + r * Math.cos(angle);
+    const py = CY + r * Math.sin(angle);
+    riderPoints.push(`${px},${py}`);
+    riderCircles.push(`<circle cx="${px}" cy="${py}" r="4" fill="var(--accent-primary)" stroke="#fff" stroke-width="1.5"><title>${labels[i]}: ${val}</title></circle>`);
+  });
+
+  const riderPolygonHtml = `<polygon points="${riderPoints.join(' ')}" fill="rgba(99, 102, 241, 0.35)" stroke="var(--accent-primary)" stroke-width="2.5" />`;
+
+  // Draw 10 skills in three columns beside the chart
+  const skillsList = [
+    { key: 'mountain', label: 'Berg (MTN)' },
+    { key: 'hill', label: 'Hügel (HIL)' },
+    { key: 'sprint', label: 'Sprint (SPR)' },
+    { key: 'timeTrial', label: 'Zeitfahren (TT)' },
+    { key: 'cobble', label: 'Pflaster (COB)' },
+    { key: 'attack', label: 'Angriff (ATT)' },
+    { key: 'mediumMountain', label: 'Mittelgebirge (MDM)' },
+    { key: 'flat', label: 'Flach (FLA)' },
+    { key: 'prologue', label: 'Prolog (PRO)' },
+    { key: 'acceleration', label: 'Beschleunigung (ACC)' }
+  ];
+
+  const columnsHtml = ['', '', ''];
+  skillsList.forEach((skill, idx) => {
+    const colIdx = idx % 3; // Distribute across 3 columns
+    const score = (riderSkills as any)[skill.key] ?? 60;
+    columnsHtml[colIdx] += `
+      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-900); padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-primary); margin-bottom: 0.75rem;">
+        <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-300);">${skill.label}</span>
+        ${renderRiderSkillBadge(score)}
+      </div>
+    `;
+  });
+
+  const skillsGridHtml = `
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%; align-content: start;">
+      <div class="skills-col">${columnsHtml[0]}</div>
+      <div class="skills-col">${columnsHtml[1]}</div>
+      <div class="skills-col">${columnsHtml[2]}</div>
+    </div>
+  `;
+
+  return `
+    <section class="rider-stats-skills-tab" style="margin-top: 1rem;">
+      <div class="rider-stats-skills-container" style="display: grid; grid-template-columns: 420px 1fr; gap: 2rem; align-items: start; background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-primary);">
+        <div class="skills-radar-wrapper" style="display: flex; justify-content: center; align-items: center; background: var(--bg-900); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-primary);">
+          <svg width="400" height="400" viewBox="0 0 400 400">
+            ${gridPathsHtml}
+            ${spokesHtml}
+            ${riderPolygonHtml}
+            ${riderCircles.join('')}
+            ${labelsHtml}
+          </svg>
+        </div>
+        <div class="skills-list-wrapper" style="display: flex; flex-direction: column; height: 100%; justify-content: start;">
+          <h4 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; color: var(--text-100); border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; font-weight: bold;">Fahrer-Skills</h4>
+          ${skillsGridHtml}
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): string {
@@ -468,7 +630,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       </section>`;
   }
 
-  const history = payload.formHistory ?? [];
+  const fullHistory = payload.formHistory ?? [];
+  const history = fullHistory.filter((_, idx) => idx % 2 === 0);
   const currentDateStr = state.gameState?.currentDate ?? new Date().toISOString();
   const currentYear = history.length > 0 
     ? new Date(history[history.length - 1].date).getUTCFullYear()
@@ -476,9 +639,9 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   
-  // Scaled dimensions by 1.3x
+  // Scaled dimensions (width 1.3x, height 1.6x)
   const chartW = 1300;
-  const chartH = 312;
+  const chartH = 384;
   const padL = 30;
   const padT = 20;
 
@@ -549,12 +712,25 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const currentX = padL + (currentDay / 365) * chartW;
   peaksHtml += `<line x1="${currentX}" y1="${padT}" x2="${currentX}" y2="${padT + chartH}" stroke="#ef4444" stroke-width="3"><title>Heute: ${currentDateStr}</title></line>`;
 
+  // Show peak dates for compared riders as vertical dashed lines in their colors
+  comparedRiders.forEach((cr, index) => {
+    const color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+    if (cr.peakDates) {
+      cr.peakDates.forEach((pDate) => {
+        const pTime = new Date(pDate).getTime();
+        const pDay = (pTime - yearStart) / msPerDay;
+        const x = padL + (pDay / 365) * chartW;
+        peaksHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="${color}" stroke-width="1.5" stroke-dasharray="3,3"><title>${cr.riderName} Peak: ${pDate}</title></line>`;
+      });
+    }
+  });
+
   // Compared riders lines and points (no fills)
   let comparedPathsHtml = '';
   let comparedPointsHtml = '';
   comparedRiders.forEach((cr, index) => {
     const color = COMPARE_COLORS[index % COMPARE_COLORS.length];
-    const crPts = cr.formHistory.map((entry) => {
+    const crPts = cr.formHistory.filter((_, idx) => idx % 2 === 0).map((entry) => {
       const entryDate = new Date(entry.date).getTime();
       const dayOfYear = (entryDate - yearStart) / msPerDay;
       const x = padL + (dayOfYear / 365) * chartW;
@@ -605,22 +781,24 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   `;
 
   // Sidebar legend right of the chart
+  const mainRank = payload.currentSeasonRank ?? resolveCurrentSeasonRank(payload.riderId) ?? '–';
   const legendItemsHtml = [
     `
     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.50rem; padding: 0.25rem 0;">
       <span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-primary); border-radius: 2px; flex-shrink: 0;"></span>
-      <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(payload.riderName)}">${esc(payload.riderName)}</span>
+      <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(payload.riderName)} (${payload.currentSeasonPoints}/${mainRank})">${esc(payload.riderName)} <span style="font-weight: normal; color: var(--text-500);">(${payload.currentSeasonPoints}/${mainRank})</span></span>
     </div>
     `
   ];
 
   comparedRiders.forEach((cr, index) => {
     const color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+    const crRank = cr.currentSeasonRank ?? resolveCurrentSeasonRank(cr.riderId) ?? '–';
     legendItemsHtml.push(`
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.50rem; padding: 0.25rem 0; border-top: 1px solid rgba(255,255,255,0.05);">
         <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
           <span style="display: inline-block; width: 12px; height: 12px; background: ${color}; border-radius: 2px; flex-shrink: 0;"></span>
-          <span style="font-size: 0.9rem; color: var(--text-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(cr.riderName)}">${esc(cr.riderName)}</span>
+          <span style="font-size: 0.9rem; color: var(--text-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(cr.riderName)} (${cr.currentSeasonPoints}/${crRank})">${esc(cr.riderName)} <span style="color: var(--text-500);">(${cr.currentSeasonPoints}/${crRank})</span></span>
         </div>
         <button type="button" class="compare-remove-btn" data-remove-compare-id="${cr.riderId}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0 0.25rem; font-weight: bold; display: flex; align-items: center;" title="Vergleich entfernen">×</button>
       </div>
@@ -628,7 +806,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   });
 
   const legendContainerHtml = `
-    <div class="rider-stats-compare-legend" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary); max-height: 390px; overflow-y: auto; display: flex; flex-direction: column;">
+    <div class="rider-stats-compare-legend" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary); max-height: 460px; overflow-y: auto; display: flex; flex-direction: column;">
       <h4 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; color: var(--text-100); font-weight: bold;">Legende</h4>
       ${legendItemsHtml.join('')}
     </div>
@@ -642,7 +820,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       ${selectorsHtml}
       <div class="rider-stats-form-container" style="display: grid; grid-template-columns: 1fr 240px; gap: 1rem; align-items: start; margin-top: 1rem;">
         <div class="rider-stats-chart-wrapper" style="overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary);">
-          <svg width="100%" height="390" viewBox="0 0 1350 352" style="min-width: 1300px;">
+          <svg width="100%" height="460" viewBox="0 0 1350 444" style="min-width: 1300px;">
             ${phaseBackgroundsHtml}
             ${gridHtml}
             ${xAxisHtml}
@@ -784,6 +962,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
         <h3>Keine Historie vorhanden</h3>
         <p>Für diesen Fahrer wurden in der aktuellen Karriere noch keine Ergebnisse gefunden.</p>
       </section>`;
+  }
+
+  if (state.riderStatsTab === 'skills') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsSkillsTab(rider, payload)}`;
   }
 
   if (state.riderStatsTab === 'program') {
@@ -974,7 +1159,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills') {
       return;
     }
 
@@ -1023,6 +1208,9 @@ export function initRiderStatsListeners(): void {
             teamId: res.data.teamId,
             teamName: res.data.teamName,
             formHistory: res.data.formHistory ?? [],
+            peakDates: res.data.peakDates ?? [],
+            currentSeasonPoints: res.data.currentSeasonPoints ?? 0,
+            currentSeasonRank: res.data.currentSeasonRank ?? null,
           });
         } else {
           alert('Formverlauf konnte nicht geladen werden: ' + (res.error ?? ''));

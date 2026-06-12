@@ -534,16 +534,36 @@ class GameStateRepository {
                 const pointsRows = new ResultRepository_1.ResultRepository(this.db).loadSeasonPointResultRows(stage.stage_id, mappers_1.RESULT_TYPE_IDS.points);
                 const mountainRows = new ResultRepository_1.ResultRepository(this.db).loadSeasonPointResultRows(stage.stage_id, mappers_1.RESULT_TYPE_IDS.mountain);
                 const youthRows = new ResultRepository_1.ResultRepository(this.db).loadSeasonPointResultRows(stage.stage_id, mappers_1.RESULT_TYPE_IDS.youth);
+                const pointsLeaderRow = this.db.prepare(`
+          SELECT points
+          FROM results
+          WHERE stage_id = ? AND result_type_id = ? AND rank = 1
+        `).get(stage.stage_id, mappers_1.RESULT_TYPE_IDS.points);
+                const hasPointsPoints = pointsLeaderRow != null && pointsLeaderRow.points != null && pointsLeaderRow.points > 0;
+                const mountainLeaderRow = this.db.prepare(`
+          SELECT points
+          FROM results
+          WHERE stage_id = ? AND result_type_id = ? AND rank = 1
+        `).get(stage.stage_id, mappers_1.RESULT_TYPE_IDS.mountain);
+                const hasMountainPoints = mountainLeaderRow != null && mountainLeaderRow.points != null && mountainLeaderRow.points > 0;
                 if (stage.is_stage_race === 1) {
                     new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'stage_result', stageRows, (0, mappers_1.resolveStageResultPointValues)(stage));
                     new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'gc_leader_day', gcRows[0], stage.points_jersey_leader_day);
-                    new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'points_leader_day', pointsRows[0], stage.points_jersey_sprint_day);
-                    new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'mountain_leader_day', mountainRows[0], stage.points_jersey_mountain_day);
+                    if (hasPointsPoints) {
+                        new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'points_leader_day', pointsRows[0], stage.points_jersey_sprint_day);
+                    }
+                    if (hasMountainPoints) {
+                        new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'mountain_leader_day', mountainRows[0], stage.points_jersey_mountain_day);
+                    }
                     new ResultRepository_1.ResultRepository(this.db).insertSeasonPointLeaderAward(insert, season, stage, 'youth_leader_day', youthRows[0], stage.points_jersey_youth_day);
                     if (stage.stage_number === stage.number_of_stages) {
                         new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'gc_final', gcRows, (0, mappers_1.parseRankedValues)(stage.points_gc_final));
-                        new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'points_final', pointsRows, (0, mappers_1.parseRankedValues)(stage.points_jersey_sprint_final));
-                        new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'mountain_final', mountainRows, (0, mappers_1.parseRankedValues)(stage.points_jersey_mountain_final));
+                        if (hasPointsPoints) {
+                            new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'points_final', pointsRows, (0, mappers_1.parseRankedValues)(stage.points_jersey_sprint_final));
+                        }
+                        if (hasMountainPoints) {
+                            new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'mountain_final', mountainRows, (0, mappers_1.parseRankedValues)(stage.points_jersey_mountain_final));
+                        }
                         new ResultRepository_1.ResultRepository(this.db).insertSeasonPointAwards(insert, season, stage, 'youth_final', youthRows, (0, mappers_1.parseRankedValues)(stage.points_jersey_youth_final));
                     }
                 }

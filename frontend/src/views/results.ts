@@ -251,6 +251,33 @@ export function renderResultsView(): void {
   meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
   const resultStage = findStageById(state.stageResults.stageId);
   const stageDistanceKm = resultStage?.stage.distanceKm ?? null;
+
+  const stagePointsMap = new Map<number, number>();
+  const stageMountainPointsMap = new Map<number, number>();
+
+  if (state.stageResults) {
+    const stageResultClassification = state.stageResults.classifications.find(c => c.resultTypeId === 1);
+    if (stageResultClassification) {
+      for (const r of stageResultClassification.rows) {
+        if (r.riderId != null && r.points != null && r.points > 0) {
+          stagePointsMap.set(r.riderId, r.points);
+        }
+      }
+    }
+    if (state.stageResults.markerClassifications) {
+      for (const mc of state.stageResults.markerClassifications) {
+        if (isMountainClassificationMarkerType(mc.markerType, mc.markerCategory)) {
+          for (const entry of mc.entries) {
+            if (entry.riderId != null && entry.pointsAwarded != null && entry.pointsAwarded > 0) {
+              const current = stageMountainPointsMap.get(entry.riderId) ?? 0;
+              stageMountainPointsMap.set(entry.riderId, current + entry.pointsAwarded);
+            }
+          }
+        }
+      }
+    }
+  }
+
   const isGcClassification = selectedClassification?.resultTypeId === GC_RESULT_TYPE_ID;
   const isPointsLikeClassification = selectedClassification?.resultTypeId === POINTS_RESULT_TYPE_ID
     || selectedClassification?.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
@@ -526,6 +553,14 @@ export function renderResultsView(): void {
         ? `<td class="results-gc-delta-cell">${renderRankDelta(row.previousRank, row.rankDelta)}</td>`
         : '';
       if (isPointsLikeClassification) {
+        let pointsHtml = row.points != null ? String(row.points) : '–';
+        if (row.points != null && row.riderId != null && selectedClassification) {
+          const isPoints = selectedClassification.resultTypeId === POINTS_RESULT_TYPE_ID;
+          const stagePoints = isPoints ? (stagePointsMap.get(row.riderId) ?? 0) : (stageMountainPointsMap.get(row.riderId) ?? 0);
+          if (stagePoints > 0) {
+            pointsHtml += ` <span style="font-size: 0.67em; color: var(--success, #22c55e); font-weight: bold; margin-left: 2px;">+${stagePoints}</span>`;
+          }
+        }
         return `
           <tr>
             <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
@@ -534,7 +569,7 @@ export function renderResultsView(): void {
             <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
             <td>${esc(teamName)}</td>
-            <td>${row.points != null ? row.points : '–'}</td>
+            <td>${pointsHtml}</td>
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
       }
