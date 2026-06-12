@@ -1042,10 +1042,11 @@ export class RiderRepository {
   private getRiderCareerStats(riderId: number): RiderCareerStats {
     const careerStatsRow = tableExists(this.db, 'rider_career_stats')
       ? this.db.prepare(`
-          SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects
+          SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects,
+                 illnesses, illness_days, injuries, injury_days
           FROM rider_career_stats
           WHERE rider_id = ?
-        `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number } | undefined
+        `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number; illnesses: number; illness_days: number; injuries: number; injury_days: number } | undefined
       : undefined;
 
     const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
@@ -1053,6 +1054,34 @@ export class RiderRepository {
     const counterAttacks = careerStatsRow?.counter_attacks ?? 0;
     const crashes = careerStatsRow?.crashes ?? 0;
     const defects = careerStatsRow?.defects ?? 0;
+    const illnesses = careerStatsRow?.illnesses ?? 0;
+    const illnessDays = careerStatsRow?.illness_days ?? 0;
+    const injuries = careerStatsRow?.injuries ?? 0;
+    const injuryDays = careerStatsRow?.injury_days ?? 0;
+
+    let dnsCount = 0;
+    let dnfCount = 0;
+    let otlCount = 0;
+
+    if (tableExists(this.db, 'stage_entries')) {
+      const nonFinisherRows = this.db.prepare(`
+        SELECT status, status_reason
+        FROM stage_entries
+        WHERE rider_id = ? AND status IN ('dns', 'dnf')
+      `).all(riderId) as Array<{ status: string; status_reason: string | null }>;
+
+      for (const row of nonFinisherRows) {
+        if (row.status === 'dns') {
+          dnsCount++;
+        } else if (row.status === 'dnf') {
+          if (row.status_reason?.startsWith('OTL ')) {
+            otlCount++;
+          } else {
+            dnfCount++;
+          }
+        }
+      }
+    }
 
     const categories: Record<string, {
       gcWins: number;
@@ -1060,11 +1089,14 @@ export class RiderRepository {
       gcTopTen: number;
       stageWins: number;
       stagePodiums: number;
+      stageTopTen: number;
       oneDayWins: number;
       oneDayPodiums: number;
+      oneDayTopTen: number;
       mountainWins: number;
       pointsWins: number;
       youthWins: number;
+      raceDays: number;
     }> = {};
 
     const knownCategories = [
@@ -1085,12 +1117,34 @@ export class RiderRepository {
         gcTopTen: 0,
         stageWins: 0,
         stagePodiums: 0,
+        stageTopTen: 0,
         oneDayWins: 0,
         oneDayPodiums: 0,
+        oneDayTopTen: 0,
         mountainWins: 0,
         pointsWins: 0,
         youthWins: 0,
+        raceDays: 0,
       };
+    }
+
+    if (tableExists(this.db, 'stage_entries') && tableExists(this.db, 'stages') && tableExists(this.db, 'races') && tableExists(this.db, 'race_categories')) {
+      const raceDaysRows = this.db.prepare(`
+        SELECT cat.name AS category_name, COUNT(DISTINCT se.stage_id) AS race_days
+        FROM stage_entries se
+        JOIN stages ON stages.id = se.stage_id
+        JOIN races ON races.id = stages.race_id
+        JOIN race_categories cat ON cat.id = races.category_id
+        WHERE se.rider_id = ? AND se.status != 'dns'
+        GROUP BY cat.name
+      `).all(riderId) as Array<{ category_name: string; race_days: number }>;
+
+      for (const row of raceDaysRows) {
+        let catStats = categories[row.category_name];
+        if (catStats) {
+          catStats.raceDays = row.race_days;
+        }
+      }
     }
 
     if (tableExists(this.db, 'results') && tableExists(this.db, 'stages')) {
@@ -1141,11 +1195,14 @@ export class RiderRepository {
             gcTopTen: 0,
             stageWins: 0,
             stagePodiums: 0,
+            stageTopTen: 0,
             oneDayWins: 0,
             oneDayPodiums: 0,
+            oneDayTopTen: 0,
             mountainWins: 0,
             pointsWins: 0,
             youthWins: 0,
+            raceDays: 0,
           };
           categories[row.category_name] = catStats;
         }
@@ -1157,15 +1214,17 @@ export class RiderRepository {
         if (row.result_type_id === 1) { // Stage result
           if (!isStageRace) {
             if (rank === 1) catStats.oneDayWins++;
-            if (rank <= 3) catStats.oneDayPodiums++;
+            if (rank > 1 && rank <= 3) catStats.oneDayPodiums++;
+            if (rank > 3 && rank <= 10) catStats.oneDayTopTen++;
           } else {
             if (rank === 1) catStats.stageWins++;
-            if (rank <= 3) catStats.stagePodiums++;
+            if (rank > 1 && rank <= 3) catStats.stagePodiums++;
+            if (rank > 3 && rank <= 10) catStats.stageTopTen++;
           }
         } else if (row.result_type_id === 2 && isStageRace && isFinalStage) { // GC
           if (rank === 1) catStats.gcWins++;
-          if (rank <= 3) catStats.gcPodiums++;
-          if (rank <= 10) catStats.gcTopTen++;
+          if (rank > 1 && rank <= 3) catStats.gcPodiums++;
+          if (rank > 3 && rank <= 10) catStats.gcTopTen++;
         } else if (row.result_type_id === 3 && isStageRace && isFinalStage) { // Points
           if (rank === 1) catStats.pointsWins++;
         } else if (row.result_type_id === 4 && isStageRace && isFinalStage) { // Mountain
@@ -1189,6 +1248,13 @@ export class RiderRepository {
       counterAttacks,
       crashes,
       defects,
+      illnesses,
+      illnessDays,
+      injuries,
+      injuryDays,
+      dnsCount,
+      dnfCount,
+      otlCount,
       totalGcWins,
       totalStageWins,
       categories,

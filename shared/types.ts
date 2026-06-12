@@ -807,6 +807,13 @@ export interface RiderCareerStats {
   counterAttacks: number;
   crashes: number;
   defects: number;
+  illnesses: number;
+  illnessDays: number;
+  injuries: number;
+  injuryDays: number;
+  dnsCount: number;
+  dnfCount: number;
+  otlCount: number;
   totalGcWins: number;
   totalStageWins: number;
   categories: Record<string, {
@@ -815,11 +822,14 @@ export interface RiderCareerStats {
     gcTopTen: number;
     stageWins: number;
     stagePodiums: number;
+    stageTopTen: number;
     oneDayWins: number;
     oneDayPodiums: number;
+    oneDayTopTen: number;
     mountainWins: number;
     pointsWins: number;
     youthWins: number;
+    raceDays: number;
   }>;
 }
 

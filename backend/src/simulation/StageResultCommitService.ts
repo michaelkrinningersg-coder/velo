@@ -915,6 +915,22 @@ export class StageResultCommitService {
           unavailable_days_remaining = ?
       WHERE rider_id = ?
     `).run(unavailableUntil, durationDays, riderId);
+
+    // Track crash-induced injury in career stats
+    const tableExists = (db: Database.Database, name: string): boolean => {
+      const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      return !!row;
+    };
+    if (tableExists(this.db, 'rider_career_stats')) {
+      this.db.prepare(`
+        INSERT INTO rider_career_stats (
+          rider_id, injuries, injury_days
+        ) VALUES (?, 1, ?)
+        ON CONFLICT(rider_id) DO UPDATE SET
+          injuries = injuries + excluded.injuries,
+          injury_days = injury_days + excluded.injury_days
+      `).run(riderId, durationDays);
+    }
   }
 
   private ensureStageCanBeSimulated(stage: Stage): void {

@@ -3459,6 +3459,44 @@ export class SimulationEngine {
       return 0;
     }
 
+    // Filter to active team sprinters (sprint >= 74) who are finishing (not DNF/DNS/OTL)
+    const activeSprinters = teamRiders.filter((r) => 
+      r.finishStatus !== 'dnf' && 
+      (r.finishStatus as string) !== 'otl' && 
+      (r.finishStatus as string) !== 'dns' &&
+      r.rider.skills.sprint >= 74
+    );
+
+    if (activeSprinters.length === 0) {
+      return 0;
+    }
+
+    // Find the strongest sprinter by pre-adjustment finish score
+    let bestSprinter: RiderState | null = null;
+    let maxScore = Number.NEGATIVE_INFINITY;
+
+    for (const r of activeSprinters) {
+      const score = this.calculatePhotoFinishScore(r);
+      if (score > maxScore) {
+        maxScore = score;
+        bestSprinter = r;
+      } else if (score === maxScore && bestSprinter !== null) {
+        // Tie breaker if scores are equal (by sprint skill, then by ID)
+        if (r.rider.skills.sprint > bestSprinter.rider.skills.sprint) {
+          bestSprinter = r;
+        } else if (r.rider.skills.sprint === bestSprinter.rider.skills.sprint) {
+          if (r.rider.id < bestSprinter.rider.id) {
+            bestSprinter = r;
+          }
+        }
+      }
+    }
+
+    // Only the best sprinter in the team receives the leadout bonus
+    if (bestSprinter && bestSprinter.rider.id !== rider.rider.id) {
+      return 0;
+    }
+
     // Check teammate bonuses
     let teamSprintRand = this.teamSprintRandomValues.get(teamId);
     if (teamSprintRand === undefined) {

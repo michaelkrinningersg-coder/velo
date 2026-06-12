@@ -80,7 +80,7 @@ export function renderRiderStatsRaceBadge(
   const categoryStyle = resolveRaceCategoryBadgeStyle(categoryName ?? null);
   const badgeStyle = buildRaceCategoryBadgeCssVariables(categoryStyle);
   const name = categoryName ?? 'Unbekannt';
-  return `<span class="badge badge-race-category" style="${badgeStyle}">${esc(name)}</span>`;
+  return `<span class="badge badge-race-category" style="${badgeStyle}; white-space: nowrap; display: inline-block;">${esc(name)}</span>`;
 }
 
 /** Legacy wrapper – kept for injuries.ts compatibility. */
@@ -88,7 +88,7 @@ export function renderRiderStatsCategoryBadge(categoryName: string | null | unde
   if (!categoryName) return '-';
   const categoryStyle = resolveRaceCategoryBadgeStyle(categoryName);
   const badgeStyle = buildRaceCategoryBadgeCssVariables(categoryStyle);
-  return `<span class="badge badge-race-category" style="${badgeStyle}">${esc(categoryName)}</span>`;
+  return `<span class="badge badge-race-category" style="${badgeStyle}; white-space: nowrap; display: inline-block;">${esc(categoryName)}</span>`;
 }
 
 export function getRankColor(rank: number): string {
@@ -1141,6 +1141,18 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       </section>`).join('')}`;
 }
 
+function updateRiderStatsModalWidth(): void {
+  const card = document.querySelector('.rider-stats-modal-card') as HTMLElement | null;
+  if (!card) return;
+  if (state.riderStatsTab === 'career') {
+    card.style.minWidth = 'min(1080px, 95vw)';
+    card.style.maxWidth = '1300px';
+  } else {
+    card.style.minWidth = '';
+    card.style.maxWidth = '';
+  }
+}
+
 export async function openRiderStats(riderId: number): Promise<void> {
   const rider = findRiderById(riderId);
   const teamName = rider?.activeTeamId != null
@@ -1150,8 +1162,8 @@ export async function openRiderStats(riderId: number): Promise<void> {
   comparedRiders = [];
   selectedCompareTeamId = null;
   state.riderStatsSelectedRiderId = riderId;
-  state.riderStatsPayload = null;
   state.riderStatsTab = 'results';
+  updateRiderStatsModalWidth();
   state.riderStatsTopResultsFilterCategory = null;
   state.riderStatsTopResultsFilterSeason = null;
   state.riderStatsTopResultsPage = 1;
@@ -1183,6 +1195,7 @@ export async function openRiderStats(riderId: number): Promise<void> {
   }
 
   state.riderStatsPayload = res.data;
+  updateRiderStatsModalWidth();
   $('rider-stats-title').innerHTML = renderRiderStatsTitle(rider, res.data);
   $('rider-stats-jersey').innerHTML = '';
   const finalAgeLabel = res.data.age ? ` · Alter ${res.data.age}` : (rider?.age ? ` · Alter ${rider.age}` : '');
@@ -1229,6 +1242,7 @@ export function initRiderStatsListeners(): void {
     }
 
     state.riderStatsTab = nextTab;
+    updateRiderStatsModalWidth();
     const rider = findRiderById(state.riderStatsSelectedRiderId);
     $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
   });
@@ -1555,10 +1569,19 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
     counterAttacks: 0,
     crashes: 0,
     defects: 0,
+    illnesses: 0,
+    illnessDays: 0,
+    injuries: 0,
+    injuryDays: 0,
+    dnsCount: 0,
+    dnfCount: 0,
+    otlCount: 0,
     totalGcWins: 0,
     totalStageWins: 0,
     categories: {}
   };
+
+  const careerRaceDays = (payload.careerRaceDaysBySeason || []).reduce((sum, r) => sum + r.raceDays, 0);
 
   // Helper function to render badge
   const renderCareerBadge = (value: number, type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white', title: string): string => {
@@ -1597,7 +1620,15 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
   return `
     <section class="rider-stats-career" style="margin-top: 1.5rem;">
       <!-- Career Summary cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Siege</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #fbbf24;">${payload.careerWins ?? 0}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Renntage</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #a855f7;">${careerRaceDays}</div>
+        </div>
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Ausreißversuche</div>
           <div style="font-size: 1.75rem; font-weight: bold; color: #3498db;">${stats.breakawayAttempts}</div>
@@ -1618,6 +1649,28 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Defekte</div>
           <div style="font-size: 1.75rem; font-weight: bold; color: #95a5a6;">${stats.defects}</div>
         </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">DNS</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #fc8181;">${stats.dnsCount ?? 0}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">DNF</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #f56565;">${stats.dnfCount ?? 0}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">OTL</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #e53e3e;">${stats.otlCount ?? 0}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px;">Krankheiten</div>
+          <div style="font-size: 1.45rem; font-weight: bold; color: #ed64a6; line-height: 1.25;">${stats.illnesses ?? 0}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">${stats.illnessDays ?? 0} Tage</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px;">Verletzungen</div>
+          <div style="font-size: 1.45rem; font-weight: bold; color: #f6ad55; line-height: 1.25;">${stats.injuries ?? 0}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">${stats.injuryDays ?? 0} Tage</div>
+        </div>
       </div>
 
       <!-- Categories details -->
@@ -1631,15 +1684,18 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
             gcTopTen: 0,
             stageWins: 0,
             stagePodiums: 0,
+            stageTopTen: 0,
             oneDayWins: 0,
             oneDayPodiums: 0,
+            oneDayTopTen: 0,
             mountainWins: 0,
             pointsWins: 0,
             youthWins: 0,
+            raceDays: 0
           };
 
           return `
-            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1.25rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1.25rem; padding-bottom: 2.25rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
                 <span style="font-weight: 600; font-size: 0.95rem; color: #fff;">${esc(cat.name)}</span>
                 ${renderRiderStatsCategoryBadge(cat.key)}
@@ -1654,7 +1710,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                     <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
                       ${renderCareerBadge(catData.gcWins, 'gold', 'Gesamtwertung Siege')}
                       ${renderCareerBadge(catData.gcPodiums, 'silver', 'Gesamtwertung Podien')}
-                      ${renderCareerBadge(catData.gcTopTen, 'bronze', 'Gesamtwertung Top 10')}
+                      ${renderCareerBadge(catData.gcTopTen || 0, 'bronze', 'Gesamtwertung Top 10')}
                       <span style="border-left: 1px solid rgba(255,255,255,0.15); height: 1.2rem; margin: 0 0.2rem; display: inline-block;"></span>
                       ${renderCareerBadge(catData.mountainWins, 'red', 'Bergwertung Siege')}
                       ${renderCareerBadge(catData.pointsWins, 'green', 'Punktewertung Siege')}
@@ -1668,6 +1724,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                     <div style="display: flex; gap: 0.4rem; align-items: center;">
                       ${renderCareerBadge(catData.stageWins, 'gold', 'Etappensiege')}
                       ${renderCareerBadge(catData.stagePodiums, 'silver', 'Etappenpodien')}
+                      ${renderCareerBadge(catData.stageTopTen || 0, 'bronze', 'Etappen Top 10')}
                     </div>
                   </div>
                 </div>
@@ -1678,9 +1735,16 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                   <div style="display: flex; gap: 0.4rem; align-items: center;">
                     ${renderCareerBadge(catData.oneDayWins, 'gold', 'Siege')}
                     ${renderCareerBadge(catData.oneDayPodiums, 'silver', 'Podien')}
+                    ${renderCareerBadge(catData.oneDayTopTen || 0, 'bronze', 'Top 10')}
                   </div>
                 </div>
               `}
+              
+              <!-- Race Days in bottom right -->
+              <div style="position: absolute; bottom: 0.75rem; right: 1.25rem; font-size: 0.8rem; color: #888; display: flex; align-items: center; gap: 0.25rem;" title="Renntage in dieser Rennklasse">
+                ${RIDER_STATS_ICONS.raceDays}
+                <span style="font-weight: bold; color: #a855f7;">${catData.raceDays || 0}</span>
+              </div>
             </div>
           `;
         }).join('')}

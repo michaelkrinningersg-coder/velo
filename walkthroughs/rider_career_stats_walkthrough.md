@@ -1,99 +1,52 @@
-# Walkthrough - Rider Career Statistics & Live Top Results Filtering
+# Walkthrough - Rider Career Statistics & Sprint Leadout Upgrades
 
-We have successfully implemented the requested features:
+We have successfully implemented the requested enhancements:
 
-1. **Live Checkbox Filtering in Top-Results Tab**:
-   - Added six premium checkboxes next to the Season filter dropdown in the `Top - Results` tab of the `RiderStatsView`:
-     - **nur GC** (filters for GC standings `gc_final`)
-     - **nur Bergwertung** (filters for mountain classification `mountain_final`)
-     - **nur Punktewertung** (filters for points classification `points_final`)
-     - **nur Nachwuchs** (filters for youth classification `youth_final`)
-     - **One Day Races** (filters for one-day race results)
-     - **Etappenwertungen** (filters for individual stage results in stage races)
-   - Checking/unchecking options triggers real-time filtering in the UI immediately without reloading the page.
-   - Kept all sorting and pagination logic completely intact.
+## Implementation Details
 
-2. **Persistent Career Statistics ("Karrierestatistiken" Tab)**:
-   - Added a new tab `"Karrierestatistiken"` to the `RiderStatsView`.
-   - Displays all-time stats that are never reset:
-     - **Ausreißversuche** (Breakaway attempts)
-     - **Attacken** (Attacks)
-     - **Konterattacken** (Counter-attacks)
-     - **Stürze** (Crashes)
-     - **Defekte** (Mechanical defects)
-   - Groups victories and podiums by race category (Rennklasse), styled with premium badges following exact colors:
-     - **Points Jersey**: Green
-     - **Mountain Jersey**: Red
-     - **Youth Jersey**: White
-     - **GC Positions / Wins**: Sieg (Gold), Podium (Silver), Top Ten (Bronze).
-     - **Zero Counts**: Faded/transparent styling to maintain clean UI legibility.
-   - Stage races display achievements in a two-line layout:
-     - *Line 1*: GC wins, GC podiums, GC Top Tens, and classification jersey wins.
-     - *Line 2*: Stage wins and stage podiums.
-   - One-day races display wins and podiums in a single line.
+### 1. Database & Backend Stats Retrieval (`RiderRepository.ts`)
+- Added SQL queries to aggregate rider non-finisher counts from the `stage_entries` table:
+  - **DNS (Did Not Start)**: Count of entries with status `'dns'`.
+  - **DNF (Did Not Finish)**: Count of entries with status `'dnf'` where `status_reason` does not start with `'OTL '`.
+  - **OTL (Over Time Limit)**: Count of entries with status `'dnf'` where `status_reason` starts with `'OTL '`.
+- Included these fields (`dnsCount`, `dnfCount`, `otlCount`) in the aggregated `RiderCareerStats` payload sent to the frontend.
 
-3. **Database Schema & Real-Time Logging**:
-   - Created the database table `rider_career_stats` to persistently track all-time counts.
-   - In `StageResultCommitService`, during the SQLite stage simulation commit transaction, computed and incremented each rider's breakaway attempts, end-stage attacks, counter-attacks, crashes, and mechanical defects.
-   - In `RiderRepository`, queried `rider_career_stats` and aggregated `results` to build the full `careerStats` payload for the frontend.
+### 2. Tab-Specific Dialog Width Scaling (`riderStats.ts`)
+- Implemented `updateRiderStatsModalWidth()` to dynamically check the current tab:
+  - When switching to the `"career"` (Karrierestatistiken) tab, the dialog modal card's `min-width` is set to `min(1080px, 95vw)` and `max-width` is set to `1300px` (20% width increase).
+  - When switching to any other tab, the custom modal dimensions are cleared.
+- Hooked this up dynamically during modal initialization and tab navigation.
 
----
+### 3. Wrap-Prevention for Race Category Badges (`riderStats.ts`)
+- Updated `renderRiderStatsRaceBadge` and `renderRiderStatsCategoryBadge` to output spans with style `white-space: nowrap; display: inline-block;`. This prevents race category badges from wrapping into multiple lines.
 
-## Technical Implementations
+### 4. Summary & Health Tracking Cards (`riderStats.ts`)
+- Inserted **Siege** (All-time victories) and **Renntage** (sum of days over all seasons) before **Ausreißversuche** at the top of the tab.
+- Added summary cards for **DNS**, **DNF**, and **OTL**.
+- Added split two-line counters for **Krankheiten** (Illnesses) and **Verletzungen** (Injuries), showing the number of occurrences on the first line and the duration (Tage) on the second line.
 
-### 1. Database Table
-Table created via `DatabaseService.ts`:
-```sql
-CREATE TABLE IF NOT EXISTS rider_career_stats (
-  rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
-  breakaway_attempts INTEGER NOT NULL DEFAULT 0,
-  attacks INTEGER NOT NULL DEFAULT 0,
-  counter_attacks INTEGER NOT NULL DEFAULT 0,
-  crashes INTEGER NOT NULL DEFAULT 0,
-  defects INTEGER NOT NULL DEFAULT 0
-);
-```
+### 5. Category Details Enhancements (`riderStats.ts`)
+- Displayed the all-time **Top 10** finishes (Bronze badge) for both:
+  - **One-Day Races** (alongside wins and podiums).
+  - **Stage Race Stages** (alongside stage wins and stage podiums).
+- Displayed the **Renntage** count for each specific race category in the bottom-right corner of its card, styled with a calendar icon and colored count.
 
-### 2. Stats Aggregation
-Aggregated inside the commit transaction block in `StageResultCommitService.ts`:
-```typescript
-const updateStatsStmt = this.db.prepare(`
-  INSERT INTO rider_career_stats (
-    rider_id, breakaway_attempts, attacks, counter_attacks, crashes, defects
-  ) VALUES (?, ?, ?, ?, ?, ?)
-  ON CONFLICT(rider_id) DO UPDATE SET
-    breakaway_attempts = breakaway_attempts + excluded.breakaway_attempts,
-    attacks = attacks + excluded.attacks,
-    counter_attacks = counter_attacks + excluded.counter_attacks,
-    crashes = crashes + excluded.crashes,
-    defects = defects + excluded.defects
-`);
-```
+### 6. Team Leadout Sprint Restriction (`SimulationEngine.ts`)
+- Enforced that only the strongest sprinter in the team (determined by the highest pre-adjustment photo finish score) is eligible for a leadout bonus.
+- Any other teammate sprinters with Sprint Skill >= 74 will receive a leadout bonus of `0` to prevent multiple riders from the same team from receiving leadout bonuses simultaneously.
 
-### 3. Frontend Filtering
-Applied in `renderRiderStatsTopResultsTab()` in `riderStats.ts`:
-```typescript
-let filteredRows = allRows.filter(r => {
-  const isFinalRow = r.rowType !== 'stage_result';
-  if (isFinalRow) {
-    if (r.rowType === 'gc_final') return state.riderStatsTopResultsFilters.gc;
-    if (r.rowType === 'mountain_final') return state.riderStatsTopResultsFilters.mountain;
-    if (r.rowType === 'points_final') return state.riderStatsTopResultsFilters.points;
-    if (r.rowType === 'youth_final') return state.riderStatsTopResultsFilters.youth;
-    return true;
-  } else {
-    if (r.isStageRace) {
-      return state.riderStatsTopResultsFilters.stage;
-    } else {
-      return state.riderStatsTopResultsFilters.oneDay;
-    }
-  }
-});
-```
+### 7. Exclusive Rank Counts in Career Statistics (`RiderRepository.ts`)
+- Implemented mutually exclusive rank counts:
+  - **Wins (Gold)**: `rank === 1`
+  - **Podiums (Silver)**: `rank > 1 && rank <= 3` (excludes wins)
+  - **Top 10 (Bronze)**: `rank > 3 && rank <= 10` (excludes podiums and wins)
+- Applies to Stage results, One-Day results, and overall GC results.
 
 ---
 
 ## Verification
-- Schema setup and database insertions run automatically and atomically within transactions.
-- Checkboxes live-filter top results correctly and reactively.
-- Career stats tab updates immediately as simulations finish and values persist across sessions.
+- Code successfully structures and aggregates stats dynamically from the database.
+- Front-end correctly renders the responsive grid and properly formats card content into multi-line layouts as requested.
+- Dynamic modal scaling transitions smoothly when navigating between stats tabs.
+- Simulating races confirms that only the strongest team sprinter receives the teammate leadout bonus.
+- Verified that podiums (Silver badge) do not count wins, and Top 10s (Bronze badge) do not count podiums/wins.

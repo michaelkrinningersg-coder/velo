@@ -729,9 +729,26 @@ export class DatabaseService {
         attacks INTEGER NOT NULL DEFAULT 0,
         counter_attacks INTEGER NOT NULL DEFAULT 0,
         crashes INTEGER NOT NULL DEFAULT 0,
-        defects INTEGER NOT NULL DEFAULT 0
+        defects INTEGER NOT NULL DEFAULT 0,
+        illnesses INTEGER NOT NULL DEFAULT 0,
+        illness_days INTEGER NOT NULL DEFAULT 0,
+        injuries INTEGER NOT NULL DEFAULT 0,
+        injury_days INTEGER NOT NULL DEFAULT 0
       )
     `).run();
+
+    if (!columnExists(db, 'rider_career_stats', 'illnesses')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN illnesses INTEGER NOT NULL DEFAULT 0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'illness_days')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN illness_days INTEGER NOT NULL DEFAULT 0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'injuries')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injuries INTEGER NOT NULL DEFAULT 0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'injury_days')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injury_days INTEGER NOT NULL DEFAULT 0').run();
+    }
   }
 
   private ensureRaceProgramSchema(db: Database.Database): void {
