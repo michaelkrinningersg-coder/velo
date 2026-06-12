@@ -203,6 +203,7 @@ interface RiderState {
   isAttacking: boolean;
   isBreakaway: boolean;
   isLeadingGroup: boolean;
+  leadoutBonus?: number;
 }
 
 interface BasePhysicsResult {
@@ -1058,6 +1059,7 @@ export class SimulationEngine {
   private readonly weightedSkillComponentsByTerrain = new Map<StageTerrain, WeightedSkillComponent[]>();
 
   private readonly skillBreakdownCache = new Map<string, string>();
+  private readonly teamSprintRandomValues = new Map<number, number>();
 
   private lastTeamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null;
 
@@ -1596,6 +1598,10 @@ export class SimulationEngine {
         rider.skillName = 'Finish';
         rider.skillBreakdown = '';
         rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
+        const specAdj = resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
+        const leadoutBonus = this.calculateSprintLeadoutBonus(rider);
+        rider.photoFinishScore += specAdj + leadoutBonus;
+        rider.leadoutBonus = leadoutBonus;
         continue;
       }
 
@@ -1813,7 +1819,10 @@ export class SimulationEngine {
         this.recordBreakawayFallbackCheckpointCrossings(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
         rider.finishTimeSeconds = activeStepStartSeconds + finishSeconds;
         rider.currentSpeedMps = 0;
-        rider.photoFinishScore += resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
+        const specAdj = resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
+        const leadoutBonus = this.calculateSprintLeadoutBonus(rider);
+        rider.photoFinishScore += specAdj + leadoutBonus;
+        rider.leadoutBonus = leadoutBonus;
       } else {
         rider.distanceCoveredMeters = targetDistance;
         this.recordIntermediateSplits(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
@@ -3309,11 +3318,12 @@ export class SimulationEngine {
       const timeLabel = gapToLeaderSeconds <= 0.0001
         ? `${finishTimeSeconds.toFixed(2)} s`
         : `${finishTimeSeconds.toFixed(2)} s (+${gapToLeaderSeconds.toFixed(2)} s)`;
+      const skillScore = this.calculatePhotoFinishScore(rider);
+      const leadoutBonus = rider.leadoutBonus ?? 0;
       const specAdj = resolveSpecializationTieBreakAdjustment(rider, finishContext, climberMalusStage);
-      const specAdjLabel = specAdj !== 0 ? ` | SpecAdj ${specAdj > 0 ? '+' : ''}${specAdj.toFixed(1)}` : '';
 
       console.log(
-        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)}${specAdjLabel} (effektiv ${effectiveScore(rider).toFixed(2)}) | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
+        `#${index + 1} Zielsprint | ${rider.riderName} | Zeit ${timeLabel} | Score ${rider.photoFinishScore.toFixed(2)} (Skills ${skillScore.toFixed(2)} + SpecAdj ${specAdj > 0 ? '+' : ''}${specAdj.toFixed(2)} + Leadout +${leadoutBonus.toFixed(2)}) | ID-Tiebreak ${rider.rider.id} | (${breakdown})`,
       );
     });
 
@@ -3392,6 +3402,59 @@ export class SimulationEngine {
   private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {
     const normalized = (!category || category === 'Sprint') ? 'HC' : category;
     return this.stageScoringWeightMap.get(`climb_top|${normalized}`) ?? CLIMB_TOP_WEIGHTS[normalized];
+  }
+
+  private calculateSprintLeadoutBonus(rider: RiderState): number {
+    const finishType = this.resolveFinishMarkerType();
+    if (finishType !== 'finish_flat' && finishType !== 'finish_hill') {
+      return 0;
+    }
+
+    const teamId = rider.rider.activeTeamId;
+    if (teamId == null) {
+      return 0;
+    }
+
+    const teamRiders = this.riders.filter(
+      (r) => r.rider.activeTeamId === teamId && r.finishStatus !== 'dnf'
+    );
+
+    if (teamRiders.length === 0) {
+      return 0;
+    }
+
+    const sortedSprinters = [...teamRiders].sort((a, b) => {
+      const diff = b.rider.skills.sprint - a.rider.skills.sprint;
+      if (diff !== 0) {
+        return diff;
+      }
+      return a.rider.id - b.rider.id;
+    });
+
+    const bestSprinter = sortedSprinters[0];
+    if (!bestSprinter || rider.rider.id !== bestSprinter.rider.id) {
+      return 0;
+    }
+
+    if (bestSprinter.rider.skills.sprint <= 73) {
+      return 0;
+    }
+
+    const teammatesWithSprintCount = teamRiders.filter(
+      (r) => r.rider.id !== bestSprinter.rider.id && r.rider.skills.sprint >= 72
+    ).length;
+
+    if (teammatesWithSprintCount === 0) {
+      return 0;
+    }
+
+    let teamRand = this.teamSprintRandomValues.get(teamId);
+    if (teamRand === undefined) {
+      teamRand = randomBetween(0.2, 0.4);
+      this.teamSprintRandomValues.set(teamId, teamRand);
+    }
+
+    return teammatesWithSprintCount * teamRand;
   }
 
   private resolveFinishMarkerType(): 'finish_flat' | 'finish_hill' | 'finish_mountain' {
