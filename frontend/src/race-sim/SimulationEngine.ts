@@ -1064,6 +1064,7 @@ export class SimulationEngine {
   private readonly skillBreakdownCache = new Map<string, string>();
   private readonly teamSprintRandomValues = new Map<number, number>();
   private readonly teamSprintSpecialRandomValues = new Map<number, number>();
+  private readonly teamBestSprinterRiderId = new Map<number, number>();
 
   private lastTeamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null;
 
@@ -3443,6 +3444,33 @@ export class SimulationEngine {
     return this.stageScoringWeightMap.get(`climb_top|${normalized}`) ?? CLIMB_TOP_WEIGHTS[normalized];
   }
 
+  private calculatePreLeadoutFinishScore(rider: RiderState): number {
+    const staminaEndPenalty = this.resolveStaminaPenalty(rider.rider.skills.stamina, this.stageDistanceMeters);
+    const staminaPenalty = staminaEndPenalty + rider.incidentStaminaPenalty;
+
+    const formBonus = resolveConditionFormBonus(rider.rider);
+    const baseScore = Object.entries(this.finishWeightProfile).reduce((sum, [skillKey, weight]) => {
+      if (!weight) {
+        return sum;
+      }
+
+      const effectiveStaminaPenalty = skillKey === 'stamina' ? staminaPenalty : 0;
+      const effectiveSkill = Math.max(
+        0,
+        rider.rider.skills[skillKey as RiderSkillKey] + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus - effectiveStaminaPenalty,
+      );
+      return sum + (effectiveSkill * weight);
+    }, 0);
+
+    const specAdj = resolveSpecializationTieBreakAdjustment(
+      rider,
+      this.resolveFinishMarkerType(),
+      this.isClimberMalusStage(),
+    );
+
+    return baseScore + specAdj;
+  }
+
   private calculateSprintLeadoutBonus(rider: RiderState): number {
     const finishType = this.resolveFinishMarkerType();
     if (finishType !== 'finish_flat' && finishType !== 'finish_hill') {
@@ -3476,29 +3504,39 @@ export class SimulationEngine {
       return 0;
     }
 
-    // Find the strongest sprinter by pre-adjustment finish score
-    let bestSprinter: RiderState | null = null;
-    let maxScore = Number.NEGATIVE_INFINITY;
+    // Retrieve or calculate the best sprinter ID for this team
+    let bestSprinterId = this.teamBestSprinterRiderId.get(teamId);
+    if (bestSprinterId === undefined) {
+      let bestSprinter: RiderState | null = null;
+      let maxScore = Number.NEGATIVE_INFINITY;
 
-    for (const r of activeSprinters) {
-      const score = this.calculatePhotoFinishScore(r);
-      if (score > maxScore) {
-        maxScore = score;
-        bestSprinter = r;
-      } else if (score === maxScore && bestSprinter !== null) {
-        // Tie breaker if scores are equal (by sprint skill, then by ID)
-        if (r.rider.skills.sprint > bestSprinter.rider.skills.sprint) {
+      for (const r of activeSprinters) {
+        const score = this.calculatePreLeadoutFinishScore(r);
+        if (score > maxScore) {
+          maxScore = score;
           bestSprinter = r;
-        } else if (r.rider.skills.sprint === bestSprinter.rider.skills.sprint) {
-          if (r.rider.id < bestSprinter.rider.id) {
+        } else if (score === maxScore && bestSprinter !== null) {
+          // Tie breaker if scores are equal (by sprint skill, then by ID)
+          if (r.rider.skills.sprint > bestSprinter.rider.skills.sprint) {
             bestSprinter = r;
+          } else if (r.rider.skills.sprint === bestSprinter.rider.skills.sprint) {
+            if (r.rider.id < bestSprinter.rider.id) {
+              bestSprinter = r;
+            }
           }
         }
+      }
+
+      if (bestSprinter) {
+        bestSprinterId = bestSprinter.rider.id;
+        this.teamBestSprinterRiderId.set(teamId, bestSprinterId);
+      } else {
+        bestSprinterId = -1;
       }
     }
 
     // Only the best sprinter in the team receives the leadout bonus
-    if (bestSprinter && bestSprinter.rider.id !== rider.rider.id) {
+    if (bestSprinterId !== rider.rider.id) {
       return 0;
     }
 

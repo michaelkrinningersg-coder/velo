@@ -2,12 +2,14 @@ import { api } from './api';
 import {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
+  renderTeamNameLink,
   resolveRaceCategoryBadgeStyle,
 } from './riderStatsUi';
 
 export {
   buildRaceCategoryBadgeCssVariables,
   renderRiderNameLink,
+  renderTeamNameLink,
   resolveRaceCategoryBadgeStyle,
 };
 import type {
@@ -20,6 +22,7 @@ import type {
   RaceRosterEditorPayload,
   RealtimeSimulationBootstrap,
   RiderStatsPayload,
+  TeamStatsPayload,
   RiderTeamEditorPayload,
   RiderTeamEditorRiderRow,
   RiderTeamEditorTeamSummary,
@@ -148,6 +151,21 @@ export const state: {
     oneDay: boolean;
     stage: boolean;
   };
+  teamStatsPayload: TeamStatsPayload | null;
+  teamStatsTab: 'topResults' | 'career' | 'contracts';
+  teamStatsSelectedTeamId: number | null;
+  teamStatsSelectedSeason: number | 'all';
+  teamStatsTopResultsFilterCategory: string | null;
+  teamStatsTopResultsFilterSeason: number | null;
+  teamStatsTopResultsPage: number;
+  teamStatsTopResultsFilters: {
+    gc: boolean;
+    mountain: boolean;
+    points: boolean;
+    youth: boolean;
+    oneDay: boolean;
+    stage: boolean;
+  };
   riderTeamEditorPayload: RiderTeamEditorPayload | null;
   riderTeamEditorSelectedTeamKey: string;
   riderTeamEditorSort: {
@@ -224,6 +242,21 @@ export const state: {
   riderStatsTopResultsFilterSeason: null,
   riderStatsTopResultsPage: 1,
   riderStatsTopResultsFilters: {
+    gc: true,
+    mountain: true,
+    points: true,
+    youth: true,
+    oneDay: true,
+    stage: true,
+  },
+  teamStatsPayload: null,
+  teamStatsTab: 'topResults',
+  teamStatsSelectedTeamId: null,
+  teamStatsSelectedSeason: 'all',
+  teamStatsTopResultsFilterCategory: null,
+  teamStatsTopResultsFilterSeason: null,
+  teamStatsTopResultsPage: 1,
+  teamStatsTopResultsFilters: {
     gc: true,
     mountain: true,
     points: true,

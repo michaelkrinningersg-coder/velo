@@ -84,3 +84,14 @@ export function renderRiderNameLink(name: string, options: RiderLinkRenderOption
 
   return `<button ${attributes.join(' ')}>${label}</button>`;
 }
+
+export function renderTeamNameLink(name: string, teamId: number | null | undefined, strong = true, extraClass = ''): string {
+  const labelTag = strong === false ? 'span' : 'strong';
+  const label = `<${labelTag} class="app-team-link-label">${esc(name)}</${labelTag}>`;
+
+  if (teamId == null) {
+    return label;
+  }
+
+  return `<button type="button" class="${joinClassNames('app-team-link', extraClass)}" data-team-id="${teamId}">${label}</button>`;
+}

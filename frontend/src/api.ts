@@ -31,6 +31,7 @@ import type {
   DraftHistoryRow,
   InjuryRow,
   RaceRosterPayload,
+  TeamStatsPayload,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
@@ -65,6 +66,7 @@ export const api = {
   getAvailableTeams:   () => call<Team[]>('GET', '/api/teams/available'),
   getTeams:            () => call<Team[]>('GET', '/api/teams'),
   getTeam:             (teamId: number) => call<Team & { riders: Rider[] }>('GET', `/api/teams/${teamId}`),
+  getTeamStats:        (teamId: number) => call<TeamStatsPayload>('GET', `/api/teams/${teamId}/stats`),
   getRiders:           (teamId?: number) => call<Rider[]>('GET', `/api/riders${teamId != null ? `?teamId=${teamId}` : ''}`),
   getRiderStats:       (riderId: number) => call<RiderStatsPayload>('GET', `/api/riders/${riderId}/stats`),
   getRiderProgramRaces: (riderId: number) => call<RiderProgramRaceSummary>('GET', `/api/riders/${riderId}/program-races`),

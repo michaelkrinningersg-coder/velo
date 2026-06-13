@@ -872,6 +872,17 @@ export interface RiderCareerStats {
     climbWins2: number;
     climbWins3: number;
     climbWins4: number;
+    winFlat: number;
+    winRolling: number;
+    winHilly: number;
+    winHillyDifficult: number;
+    winMediumMountain: number;
+    winMountain: number;
+    winHighMountain: number;
+    winCobble: number;
+    winCobbleHill: number;
+    winITT: number;
+    winTTT: number;
   }>;
 }
 
@@ -1197,4 +1208,108 @@ export interface InjuryRow {
     categoryName: string;
     countryCode: string;
   }[];
+}
+
+export interface TeamStatsRider {
+  id: number;
+  firstName: string;
+  lastName: string;
+  age: number;
+  nationality: Nationality;
+  overallRating: number;
+  seasonPoints: number;
+  seasonWins: number;
+  formBonus: number;
+  raceFormBonus: number;
+  skills: RiderSkills;
+  contractEndSeason: number | null;
+}
+
+export interface TeamStatsTopResult {
+  riderId: number;
+  riderName: string;
+  riderCountryCode: string | null;
+  rowType: RiderStatsRowType;
+  date: string;
+  raceId: number;
+  raceName: string;
+  raceCategoryName: string | null;
+  stageId: number | null;
+  stageNumber: number | null;
+  resultRank: number | null;
+  gcRank: number | null;
+  finishStatus: 'classified' | 'otl' | 'dnf';
+  statusReason: string | null;
+  profile: StageProfile | null;
+  seasonPoints: number;
+  season: number;
+  stageScore: number;
+}
+
+export interface TeamSuccessStats {
+  breakawayAttempts: number;
+  attacks: number;
+  counterAttacks: number;
+  crashes: number;
+  defects: number;
+  illnesses: number;
+  illnessDays: number;
+  injuries: number;
+  injuryDays: number;
+  dnsCount: number;
+  dnfCount: number;
+  otlCount: number;
+  totalGcWins: number;
+  totalStageWins: number;
+  successfulBreakaways: number;
+  raceDays: number;
+  categories: Record<string, {
+    gcWins: number;
+    gcSecond: number;
+    gcThird: number;
+    gcTopTen: number;
+    stageWins: number;
+    stageSecond: number;
+    stageThird: number;
+    stageTopTen: number;
+    oneDayWins: number;
+    oneDaySecond: number;
+    oneDayThird: number;
+    oneDayTopTen: number;
+    mountainWins: number;
+    pointsWins: number;
+    youthWins: number;
+    raceDays: number;
+    leaderJerseys: number;
+    sprintWins: number;
+    climbWinsHC: number;
+    climbWins1: number;
+    climbWins2: number;
+    climbWins3: number;
+    climbWins4: number;
+    winFlat: number;
+    winRolling: number;
+    winHilly: number;
+    winHillyDifficult: number;
+    winMediumMountain: number;
+    winMountain: number;
+    winHighMountain: number;
+    winCobble: number;
+    winCobbleHill: number;
+    winITT: number;
+    winTTT: number;
+  }>;
+}
+
+export interface TeamStatsPayload {
+  teamId: number;
+  teamName: string;
+  abbreviation: string;
+  divisionName: string | null;
+  countryCode: string | null;
+  riders: TeamStatsRider[];
+  topResults: TeamStatsTopResult[];
+  successStats: {
+    [seasonOrAll: string]: TeamSuccessStats;
+  };
 }

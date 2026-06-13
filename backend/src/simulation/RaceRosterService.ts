@@ -525,10 +525,17 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     const selectedIds = new Set(teamSelection.map((rider: any) => rider.id));
 
     if (teamSelection.length < riderLimit) {
-      const fillCandidates = orderFillCandidates(
-        roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)),
-        race,
-      );
+      let fillCandidates: Rider[];
+      if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
+        fillCandidates = roster
+          .filter((rider: any) => !selectedIds.has(rider.id) && !hasProgramCollision(db, rider.id, season, race))
+          .sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+      } else {
+        fillCandidates = orderFillCandidates(
+          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)),
+          race,
+        );
+      }
       for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
         teamSelection.push(rider);
         selectedIds.add(rider.id);

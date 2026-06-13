@@ -24,6 +24,7 @@ import {
   RaceRosterSelectionRequest,
   RiderProgramRaceSummary,
   RiderStatsPayload,
+  TeamStatsPayload,
   RiderTeamEditorExportPayload,
   RiderTeamEditorPayload,
   RiderTeamEditorSaveRequest,
@@ -208,6 +209,20 @@ export function createRouter(dbService: DatabaseService): Router {
       const team = teamRepo.getTeamById(id);
       if (!team) return fail(res, 404, `Team ${id} nicht gefunden.`);
       ok<Team & { riders: Rider[] }>(res, { ...team, riders: new RiderRepository(db).getRiders(id, true) });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/teams/:id/stats', (req: Request, res: Response) => {
+    const id = Number(req.params['id']);
+    if (!Number.isFinite(id)) return fail(res, 400, 'Ungültige Team-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const { TeamRepository } = require('../db/repositories/TeamRepository');
+      const teamRepo = new TeamRepository(db);
+      const payload = teamRepo.getTeamStats(id);
+      if (!payload) return fail(res, 404, `Team ${id} nicht gefunden.`);
+      ok<TeamStatsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

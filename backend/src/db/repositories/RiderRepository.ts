@@ -1083,31 +1083,7 @@ export class RiderRepository {
       }
     }
 
-    const categories: Record<string, {
-      gcWins: number;
-      gcSecond: number;
-      gcThird: number;
-      gcTopTen: number;
-      stageWins: number;
-      stageSecond: number;
-      stageThird: number;
-      stageTopTen: number;
-      oneDayWins: number;
-      oneDaySecond: number;
-      oneDayThird: number;
-      oneDayTopTen: number;
-      mountainWins: number;
-      pointsWins: number;
-      youthWins: number;
-      raceDays: number;
-      leaderJerseys: number;
-      sprintWins: number;
-      climbWinsHC: number;
-      climbWins1: number;
-      climbWins2: number;
-      climbWins3: number;
-      climbWins4: number;
-    }> = {};
+    const categories: RiderCareerStats['categories'] = {};
 
     const knownCategories = [
       'World Tour - Tour de France',
@@ -1146,6 +1122,17 @@ export class RiderRepository {
         climbWins2: 0,
         climbWins3: 0,
         climbWins4: 0,
+        winFlat: 0,
+        winRolling: 0,
+        winHilly: 0,
+        winHillyDifficult: 0,
+        winMediumMountain: 0,
+        winMountain: 0,
+        winHighMountain: 0,
+        winCobble: 0,
+        winCobbleHill: 0,
+        winITT: 0,
+        winTTT: 0,
       };
     }
 
@@ -1177,6 +1164,7 @@ export class RiderRepository {
           races.is_stage_race AS is_stage_race,
           races.number_of_stages AS number_of_stages,
           stages.stage_number AS stage_number,
+          stages.profile AS profile,
           cat.name AS category_name
         FROM results r
         JOIN stages ON stages.id = r.stage_id
@@ -1192,6 +1180,7 @@ export class RiderRepository {
           races.is_stage_race AS is_stage_race,
           races.number_of_stages AS number_of_stages,
           stages.stage_number AS stage_number,
+          stages.profile AS profile,
           cat.name AS category_name
         FROM results r
         JOIN stages ON stages.id = r.stage_id
@@ -1205,6 +1194,7 @@ export class RiderRepository {
         is_stage_race: number;
         number_of_stages: number;
         stage_number: number;
+        profile: string;
         category_name: string;
       }>;
 
@@ -1235,6 +1225,17 @@ export class RiderRepository {
             climbWins2: 0,
             climbWins3: 0,
             climbWins4: 0,
+            winFlat: 0,
+            winRolling: 0,
+            winHilly: 0,
+            winHillyDifficult: 0,
+            winMediumMountain: 0,
+            winMountain: 0,
+            winHighMountain: 0,
+            winCobble: 0,
+            winCobbleHill: 0,
+            winITT: 0,
+            winTTT: 0,
           };
           categories[row.category_name] = catStats;
         }
@@ -1244,6 +1245,20 @@ export class RiderRepository {
         const isFinalStage = row.stage_number === row.number_of_stages;
 
         if (row.result_type_id === 1) { // Stage result
+          if (rank === 1) {
+            const profile = row.profile;
+            if (profile === 'Flat') catStats.winFlat++;
+            else if (profile === 'Rolling') catStats.winRolling++;
+            else if (profile === 'Hilly') catStats.winHilly++;
+            else if (profile === 'Hilly_Difficult') catStats.winHillyDifficult++;
+            else if (profile === 'Medium_Mountain') catStats.winMediumMountain++;
+            else if (profile === 'Mountain') catStats.winMountain++;
+            else if (profile === 'High_Mountain') catStats.winHighMountain++;
+            else if (profile === 'Cobble') catStats.winCobble++;
+            else if (profile === 'Cobble_Hill') catStats.winCobbleHill++;
+            else if (profile === 'ITT') catStats.winITT++;
+            else if (profile === 'TTT') catStats.winTTT++;
+          }
           if (!isStageRace) {
             if (rank === 1) {
               catStats.oneDayWins++;

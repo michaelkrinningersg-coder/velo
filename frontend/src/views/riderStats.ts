@@ -149,6 +149,33 @@ export function renderRiderStatsFinalTypeBadge(rowType: string): string {
   return `<span class="rider-stats-final-type ${className}">${esc(getRiderStatsRowTypeLabel(rowType))}</span>`;
 }
 
+export function renderProfileWinBadge(
+  value: number,
+  profileType: 'flat' | 'rolling' | 'hilly' | 'hilly_difficult' | 'medium_mountain' | 'mountain' | 'high_mountain' | 'cobble' | 'cobble_hill' | 'itt' | 'ttt',
+  label: string
+): string {
+  let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
+  if (value === 0) {
+    style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
+  } else {
+    if (profileType === 'flat' || profileType === 'rolling') {
+      style += 'background: #2ecc71; color: #fff; box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);';
+    } else if (profileType === 'hilly' || profileType === 'hilly_difficult') {
+      style += 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 5px rgba(250, 204, 21, 0.4);';
+    } else if (profileType === 'medium_mountain') {
+      style += 'background: #e67e22; color: #fff; box-shadow: 0 0 5px rgba(230, 126, 34, 0.4);';
+    } else if (profileType === 'mountain' || profileType === 'high_mountain') {
+      style += 'background: #95a5a6; color: #fff; box-shadow: 0 0 5px rgba(149, 165, 166, 0.4);';
+    } else if (profileType === 'cobble' || profileType === 'cobble_hill') {
+      style += 'background: #34495e; color: #fff; box-shadow: 0 0 5px rgba(52, 73, 94, 0.4);';
+    } else if (profileType === 'itt' || profileType === 'ttt') {
+      style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
+    }
+  }
+  return `<span style="${style}" title="${esc(label)}: ${value} Siege">${value}</span>`;
+}
+
+
 export function formatRiderStatsRaceBlockMeta(block: any): string {
   const dateLabel = block.startDate === block.endDate
     ? formatDate(block.startDate)
@@ -1589,9 +1616,15 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
   }, 0);
 
   // Helper function to render badge
-  const renderCareerBadge = (value: number, type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple', title: string): string => {
+  const renderCareerBadge = (
+    displayValue: string | number,
+    type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple',
+    title: string,
+    value?: number
+  ): string => {
+    const checkVal = value !== undefined ? value : (typeof displayValue === 'number' ? displayValue : parseFloat(String(displayValue)) || 0);
     let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
-    if (value === 0) {
+    if (checkVal === 0) {
       style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
     } else {
       if (type === 'gold') {
@@ -1610,7 +1643,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
       }
     }
-    return `<span style="${style}" title="${esc(title)}">${value}</span>`;
+    return `<span style="${style}" title="${esc(title)}">${displayValue}</span>`;
   };
 
   const categoriesToShow = [
@@ -1714,10 +1747,21 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
             climbWins2: 0,
             climbWins3: 0,
             climbWins4: 0,
+            winFlat: 0,
+            winRolling: 0,
+            winHilly: 0,
+            winHillyDifficult: 0,
+            winMediumMountain: 0,
+            winMountain: 0,
+            winHighMountain: 0,
+            winCobble: 0,
+            winCobbleHill: 0,
+            winITT: 0,
+            winTTT: 0,
           };
 
           return `
-            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 300px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
+            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 365px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
                 <span style="font-weight: 600; font-size: 0.9rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
                 ${renderRiderStatsCategoryBadge(cat.key)}
@@ -1754,7 +1798,11 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                 <div style="overflow: hidden; white-space: nowrap;">
                   <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; padding: 0.2rem 0.6rem; border-radius: 20px; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);" title="Tage im Führungstrikot (P1 GC)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.leaderJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);'
+                    }" title="Tage im Führungstrikot (P1 GC)">
                       🎽 ${catData.leaderJerseys || 0}
                     </span>
                   </div>
@@ -1782,12 +1830,30 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
               <div style="overflow: hidden; white-space: nowrap;">
                 <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Checkpoint-Siege</div>
                 <div style="display: flex; gap: 0.3rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(21, 128, 61, 0.15); color: #4ade80; border: 1px solid rgba(21, 128, 61, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene Zwischensprints">Sprint: ${catData.sprintWins || 0}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(185, 28, 28, 0.15); color: #f87171; border: 1px solid rgba(185, 28, 28, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene HC-Bergwertungen">HC: ${catData.climbWinsHC || 0}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(234, 88, 12, 0.15); color: #fb923c; border: 1px solid rgba(234, 88, 12, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene Bergwertungen Kategorie 1">C1: ${catData.climbWins1 || 0}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(217, 119, 6, 0.15); color: #fbbf24; border: 1px solid rgba(217, 119, 6, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene Bergwertungen Kategorie 2">C2: ${catData.climbWins2 || 0}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(202, 138, 4, 0.15); color: #fef08a; border: 1px solid rgba(202, 138, 4, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene Bergwertungen Kategorie 3">C3: ${catData.climbWins3 || 0}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; background: rgba(101, 163, 13, 0.15); color: #a3e635; border: 1px solid rgba(101, 163, 13, 0.4); padding: 0.15rem 0.35rem; border-radius: 4px;" title="Gewonnene Bergwertungen Kategorie 4">C4: ${catData.climbWins4 || 0}</span>
+                  ${renderCareerBadge(catData.sprintWins || 0, 'green', 'Sprint: Gewonnene Zwischensprints')}
+                  ${renderCareerBadge(catData.climbWinsHC || 0, 'red', 'HC: Gewonnene HC-Bergwertungen')}
+                  ${renderCareerBadge(catData.climbWins1 || 0, 'red', 'C1: Gewonnene Bergwertungen Kategorie 1')}
+                  ${renderCareerBadge(catData.climbWins2 || 0, 'red', 'C2: Gewonnene Bergwertungen Kategorie 2')}
+                  ${renderCareerBadge(catData.climbWins3 || 0, 'red', 'C3: Gewonnene Bergwertungen Kategorie 3')}
+                  ${renderCareerBadge(catData.climbWins4 || 0, 'red', 'C4: Gewonnene Bergwertungen Kategorie 4')}
+                </div>
+              </div>
+
+              <!-- Profil Siege -->
+              <div style="overflow: hidden; white-space: nowrap;">
+                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Profil Siege</div>
+                <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
+                  ${renderProfileWinBadge(catData.winFlat || 0, 'flat', 'Flach (Flat)')}
+                  ${renderProfileWinBadge(catData.winRolling || 0, 'rolling', 'Hügelig leicht (Rolling)')}
+                  ${renderProfileWinBadge(catData.winHilly || 0, 'hilly', 'Hügelig (Hilly)')}
+                  ${renderProfileWinBadge(catData.winHillyDifficult || 0, 'hilly_difficult', 'Hügelig schwer (Hilly Difficult)')}
+                  ${renderProfileWinBadge(catData.winMediumMountain || 0, 'medium_mountain', 'Mittelgebirge (Medium Mountain)')}
+                  ${renderProfileWinBadge(catData.winMountain || 0, 'mountain', 'Hochgebirge (Mountain)')}
+                  ${renderProfileWinBadge(catData.winHighMountain || 0, 'high_mountain', 'Hochgebirge schwer (High Mountain)')}
+                  ${renderProfileWinBadge(catData.winCobble || 0, 'cobble', 'Kopfsteinpflaster (Cobble)')}
+                  ${renderProfileWinBadge(catData.winCobbleHill || 0, 'cobble_hill', 'Kopfsteinpflaster Hügel (Cobble Hill)')}
+                  ${renderProfileWinBadge(catData.winITT || 0, 'itt', 'Einzelzeitfahren (ITT)')}
+                  ${renderProfileWinBadge(catData.winTTT || 0, 'ttt', 'Mannschaftszeitfahren (TTT)')}
                 </div>
               </div>
               

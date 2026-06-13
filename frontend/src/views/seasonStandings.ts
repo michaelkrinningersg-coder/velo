@@ -15,7 +15,7 @@ import {
   renderResultsParticipant,
   isActiveView,
 } from '../state';
-import { renderRiderNameLink } from '../state';
+import { renderRiderNameLink, renderTeamNameLink } from '../state';
 import {
   formatRaceDateRange,
   raceCategoryBadge,
@@ -107,7 +107,7 @@ export function renderSeasonTeamNameCell(
 ): string {
   return `
     <div class="season-standings-country-anchor" tabindex="0">
-      <span class="season-standings-country-name">${esc(row.teamName)}</span>
+      <span class="season-standings-country-name">${renderTeamNameLink(row.teamName, row.teamId, false)}</span>
       <div class="season-standings-country-popover">
         ${renderSeasonTeamTopRiders(row, riderStandings)}
       </div>
@@ -209,16 +209,16 @@ export function renderSeasonStandingsView(): void {
         ? renderSeasonTeamNameCell(row, state.seasonStandings?.riderStandings ?? [])
         : renderResultsParticipant(primary, true, false, row.riderId, row.teamId);
       const flagCell = renderResultsFlagColumn(row.countryCode);
-      const secondary = state.selectedSeasonStandingScope === 'teams'
-        ? (row.countryName ?? row.countryCode ?? '–')
-        : row.teamName;
+      const secondaryCell = state.selectedSeasonStandingScope === 'teams'
+        ? esc(row.countryName ?? row.countryCode ?? '–')
+        : renderTeamNameLink(row.teamName ?? '–', row.teamId, false);
       return `
         <tr>
           <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
           <td class="results-jersey-col-cell">${jerseyCell}</td>
           <td>${primaryCell}</td>
           <td class="results-flag-col-cell">${flagCell}</td>
-          <td>${esc(secondary)}</td>
+          <td>${secondaryCell}</td>
           <td>${row.points}</td>
           <td>${esc(formatPointsGap(row.gapPoints))}</td>
         </tr>`;

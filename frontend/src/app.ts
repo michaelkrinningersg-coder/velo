@@ -61,7 +61,13 @@ import {
   openRiderStats,
   initRiderStatsListeners,
 } from './views/riderStats';
+import {
+  openTeamStats,
+  initTeamStatsListeners,
+} from './views/teamStats';
 import { RaceSimView } from './race-sim/RaceSimView';
+
+(window as any).openTeamStats = openTeamStats;
 
 // ============================================================
 //  Routing / Screen Navigation Context Bridging
@@ -125,12 +131,28 @@ function initAppListeners(): void {
     openRiderStats(riderId);
   });
 
+  // Global shared body team link click listener
+  document.body.addEventListener('click', (event) => {
+    const teamButton = (event.target as Element).closest<HTMLButtonElement>('button.app-team-link[data-team-id]');
+    if (!teamButton) {
+      return;
+    }
+
+    const teamId = Number(teamButton.dataset['teamId']);
+    if (!Number.isFinite(teamId)) {
+      return;
+    }
+
+    openTeamStats(teamId);
+  });
+
   // Global modals closes events registration
   $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
   $('btn-close-race-stages').addEventListener('click', () => hideModal('raceStages'));
   $('btn-close-stage-profile').addEventListener('click', () => hideModal('stageProfile'));
   $('btn-close-rider-program').addEventListener('click', () => hideModal('riderProgram'));
   $('btn-close-rider-stats').addEventListener('click', () => hideModal('riderStats'));
+  $('btn-close-team-stats').addEventListener('click', () => hideModal('teamStats'));
   $('btn-close-race-participants').addEventListener('click', () => hideModal('raceParticipants'));
   $('btn-close-roster-editor').addEventListener('click', () => hideRosterEditor());
   $('btn-cancel-roster-editor').addEventListener('click', () => hideRosterEditor());
@@ -154,6 +176,7 @@ function initAppListeners(): void {
   initResultsListeners();
   initStageEditorListeners();
   initRiderStatsListeners();
+  initTeamStatsListeners();
   initSeasonStandingsListeners();
 }
 

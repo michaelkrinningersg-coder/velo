@@ -17,6 +17,7 @@ import {
   findStageById,
   renderResultsParticipant,
   renderRiderNameLink,
+  renderTeamNameLink,
   renderNonFinisherStatusBadge,
   formatNonFinisherReason,
   renderRankDelta,
@@ -268,25 +269,65 @@ function renderRaceRoster(): string {
     team.avgRating = team.riders.reduce((sum, r) => sum + r.overallRating, 0) / team.riders.length;
   }
 
-  const getTeamPoints = (teamId: number | null): number => {
-    if (teamId == null || !state.seasonStandings?.teamStandings) return 0;
-    const standing = state.seasonStandings.teamStandings.find(t => t.teamId === teamId);
-    return standing?.points ?? 0;
+  const getBestGCRank = (teamRiders: RaceRosterEntry[]): number => {
+    let best = Number.POSITIVE_INFINITY;
+    for (const r of teamRiders) {
+      if (!r.hasDropped && r.gcRank != null && r.gcRank < best) {
+        best = r.gcRank;
+      }
+    }
+    return best;
   };
 
-  // Sort teams: by season standings points, then by average rating, then alphabetically
-  const teams = [...teamMap.values()].sort((a, b) => {
-    const ptsA = getTeamPoints(a.teamId);
-    const ptsB = getTeamPoints(b.teamId);
+  const getBestSeasonStandingPoints = (teamRiders: RaceRosterEntry[]): number => {
+    if (!state.seasonStandings?.riderStandings) return 0;
+    let maxPts = 0;
+    for (const r of teamRiders) {
+      const standing = state.seasonStandings.riderStandings.find(s => s.riderId === r.riderId);
+      if (standing && standing.points > maxPts) {
+        maxPts = standing.points;
+      }
+    }
+    return maxPts;
+  };
 
-    if (ptsA > 0 || ptsB > 0) {
-      if (ptsA !== ptsB) {
-        return ptsB - ptsA;
+  const getTeamTop10Average = (teamId: number | null): number => {
+    if (teamId == null) return 0;
+    const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
+    if (teamRiders.length === 0) return 0;
+
+    const scores = teamRiders.map(r => r.overallRating ?? 0);
+    scores.sort((a, b) => b - a);
+    const top10 = scores.slice(0, 10);
+    if (top10.length === 0) return 0;
+    return top10.reduce((sum, s) => sum + s, 0) / top10.length;
+  };
+
+  // Sort teams: by best GC rider rank, then by best participating rider's season standings points, then by average overall rating of the best 10 riders
+  const teams = [...teamMap.values()].sort((a, b) => {
+    const gcRankA = getBestGCRank(a.riders);
+    const gcRankB = getBestGCRank(b.riders);
+
+    if (gcRankA !== Number.POSITIVE_INFINITY || gcRankB !== Number.POSITIVE_INFINITY) {
+      if (gcRankA !== gcRankB) {
+        return gcRankA - gcRankB;
       }
     }
 
-    if (Math.abs(a.avgRating - b.avgRating) > 0.0001) {
-      return b.avgRating - a.avgRating;
+    const maxPtsA = getBestSeasonStandingPoints(a.riders);
+    const maxPtsB = getBestSeasonStandingPoints(b.riders);
+
+    if (maxPtsA > 0 || maxPtsB > 0) {
+      if (maxPtsA !== maxPtsB) {
+        return maxPtsB - maxPtsA;
+      }
+    }
+
+    const avgA = getTeamTop10Average(a.teamId);
+    const avgB = getTeamTop10Average(b.teamId);
+
+    if (Math.abs(avgA - avgB) > 0.0001) {
+      return avgB - avgA;
     }
 
     return (a.teamName ?? '').localeCompare(b.teamName ?? '', 'de');
@@ -397,7 +438,7 @@ function renderRaceRoster(): string {
     return `<div class="results-roster-team">
       <div class="results-roster-team-header">
         <div class="results-roster-jersey">${jerseyHtml}</div>
-        <div class="results-roster-team-name" title="${esc(team.teamName ?? '–')}">${esc(team.teamName ?? '–')} <span style="font-size: 0.7rem; color: var(--text-400); font-weight: 500;">(Ø ${avgStrStr})</span></div>
+        <div class="results-roster-team-name" title="${esc(team.teamName ?? '–')}">${renderTeamNameLink(team.teamName ?? '–', team.teamId)} <span style="font-size: 0.7rem; color: var(--text-400); font-weight: 500;">(Ø ${avgStrStr})</span></div>
       </div>
       <div class="results-roster-riders${isStageRace ? '' : ' results-roster-riders-oneday'}">${ridersHtml}</div>
     </div>`;
@@ -420,15 +461,16 @@ function renderLeadoutPopover(row: any): string {
     return '';
   }
 
-  // 1. Get active teammate riders in this race
+  // 1. Get active teammate riders who finished this stage
+  const stageClassification = state.stageResults?.classifications.find(c => c.resultTypeId === 1);
   const activeRaceRiderIds = new Set(
-    state.resultsRoster && state.resultsRoster.raceId === state.selectedResultsRaceId
-      ? state.resultsRoster.entries.filter(e => !e.hasDropped).map(e => e.riderId)
+    stageClassification
+      ? stageClassification.rows.map(r => r.riderId).filter((id): id is number => id != null)
       : []
   );
   const teammates = state.riders.filter(r => 
     r.activeTeamId === row.teamId && 
-    (activeRaceRiderIds.size === 0 || activeRaceRiderIds.has(r.id))
+    activeRaceRiderIds.has(r.id)
   );
   const droppedIds = new Set((state.stageResults?.nonFinishers ?? []).map(nf => nf.riderId));
 
@@ -980,7 +1022,7 @@ export function renderResultsView(): void {
         <td class="results-jersey-col-cell">${renderResultsJerseyColumn(row.teamId, row.teamName)}</td>
         <td>${renderResultsParticipant(row.riderName, true, false, row.riderId, row.teamId)}</td>
         <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
-        <td>${esc(row.teamName || '–')}</td>
+        <td>${renderTeamNameLink(row.teamName || '–', row.teamId)}</td>
         <td>${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</td>
       </tr>
     `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
@@ -1113,7 +1155,7 @@ export function renderResultsView(): void {
             <td class="results-jersey-col-cell">${jerseyCell}</td>
             <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
-            <td>${esc(teamName)}</td>
+            <td>${renderTeamNameLink(teamName, row.teamId)}</td>
             <td class="results-points-cell">${pointsHtml}</td>
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
@@ -1124,7 +1166,7 @@ export function renderResultsView(): void {
             <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
             ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
-            <td>${esc(row.teamName)}</td>
+            <td>${renderTeamNameLink(row.teamName, row.teamId)}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
             <td>${timeCell}</td>
             <td>${esc(formatRaceGap(row.gapSeconds))}</td>
@@ -1149,7 +1191,7 @@ export function renderResultsView(): void {
           <td class="results-jersey-col-cell">${jerseyCell}</td>
           <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
           <td class="results-flag-col-cell">${flagCell}</td>
-          <td>${esc(teamName)}</td>
+          <td>${renderTeamNameLink(teamName, row.teamId)}</td>
           <td>${timeCell}</td>
           <td>${esc(formatRaceGap(row.gapSeconds))}</td>
           <td class="results-points-cell">${pointsCellContent}</td>
