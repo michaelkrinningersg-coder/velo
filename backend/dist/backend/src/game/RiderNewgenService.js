@@ -118,9 +118,9 @@ class RiderNewgenService {
                     const calcOverall = (vals) => {
                         const sum = (vals['flat'] || 50) + (vals['mountain'] || 50) + (vals['medium_mountain'] || 50) +
                             (vals['hill'] || 50) + (vals['time_trial'] || 50) + (vals['cobble'] || 50) +
-                            (vals['sprint'] || 50) + (vals['stamina'] || 50) + (vals['resistance'] || 50) +
+                            ((vals['sprint'] || 50) * 1.2) + (vals['stamina'] || 50) + (vals['resistance'] || 50) +
                             (vals['recuperation'] || 50) + (vals['acceleration'] || 50);
-                        return sum / 11;
+                        return sum / 11.2;
                     };
                     const overallRating = calcOverall(startValues);
                     const potOverall = calcOverall(potValues);

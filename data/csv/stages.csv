@@ -40,4 +40,14 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 39,12,5,2026-02-23,Hilly_Difficult,65,vuelta_andalucia_st5.csv,50,65,2,2,1
 40,13,1,2026-03-01,Medium_Mountain,113,faun_ardeche.csv,70,75,1.5,2,1
 41,14,1,2026-03-02,Hilly_Difficult,87,faun_drome.csv,60,70,2.5,2,1
+42,15,1,2026-02-28,Cobble_Hill,6,omloop_het.csv,55,65,2,3,2.5
+43,16,1,2026-03-07,Hilly_Difficult,271,strade_bianche.csv,60,70,2.2,2,2
+44,17,1,2026-03-21,Hilly,81,msr.csv,65,80,2.4,1.5,1.5
+45,18,1,2026-03-09,ITT,2,tirreno_01.csv,70,90,1,1,1
+46,18,2,2026-03-10,Hilly_Difficult,53,tirreno_02.csv,70,90,1.4,1,1
+47,18,3,2026-03-11,Hilly,256,tirreno_03.csv,70,90,1.3,1,1
+48,18,4,2026-03-12,Hilly_Difficult,723,tirreno_04.csv,55,90,1.5,2.5,1
+49,18,5,2026-03-13,Hilly_Difficult,20,tirreno_05.csv,55,90,1.5,2,2
+50,18,6,2026-03-14,Medium_Mountain,230,tirreno_06.csv,60,75,1.8,2.5,1.5
+51,18,7,2026-03-15,Rolling,2,tirreno_07.csv,80,90,0.8,1.5,2
 

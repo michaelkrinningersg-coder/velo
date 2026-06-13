@@ -185,20 +185,18 @@ function clamp(value: number, min = 0, max = 85): number {
 }
 
 function calculateOverall(row: RiderTeamEditorRiderRow): number {
-  const values = [
-    row.skillFlat,
-    row.skillMountain,
-    row.skillMediumMountain,
-    row.skillHill,
-    row.skillTimeTrial,
-    row.skillCobble,
-    row.skillSprint,
-    row.skillStamina,
-    row.skillResistance,
-    row.skillRecuperation,
-    row.skillAcceleration,
-  ];
-  return clamp(values.reduce((sum, value) => sum + value, 0) / values.length);
+  const sum = row.skillFlat +
+    row.skillMountain +
+    row.skillMediumMountain +
+    row.skillHill +
+    row.skillTimeTrial +
+    row.skillCobble +
+    row.skillSprint * 1.2 +
+    row.skillStamina +
+    row.skillResistance +
+    row.skillRecuperation +
+    row.skillAcceleration;
+  return clamp(sum / 11.2);
 }
 
 function compareStrings(left: string, right: string): number {

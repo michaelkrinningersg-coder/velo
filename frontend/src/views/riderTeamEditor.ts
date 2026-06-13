@@ -62,19 +62,18 @@ export function getRiderTeamEditorTeamName(teamId: number | null): string {
 }
 
 export function calculateEditorOverall(rider: RiderTeamEditorRiderRow): number {
-  const values = [
-    rider.skillFlat,
-    rider.skillMountain,
-    rider.skillMediumMountain,
-    rider.skillHill,
-    rider.skillTimeTrial,
-    rider.skillCobble,
-    rider.skillSprint,
-    rider.skillStamina,
-    rider.skillResistance,
-    rider.skillRecuperation,
-  ];
-  return clamp(values.reduce((sum, value) => sum + value, 0) / values.length, 0, 100);
+  const sum = rider.skillFlat +
+    rider.skillMountain +
+    rider.skillMediumMountain +
+    rider.skillHill +
+    rider.skillTimeTrial +
+    rider.skillCobble +
+    rider.skillSprint * 1.2 +
+    rider.skillStamina +
+    rider.skillResistance +
+    rider.skillRecuperation +
+    rider.skillAcceleration;
+  return clamp(sum / 11.2, 0, 100);
 }
 
 export function getDefaultRiderTeamEditorSortDirection(sortKey: RiderTeamEditorSortKey): 'asc' | 'desc' {

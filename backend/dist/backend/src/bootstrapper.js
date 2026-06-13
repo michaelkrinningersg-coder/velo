@@ -675,20 +675,18 @@ function seedStages(db) {
     console.log(`  ${rows.length} Etappen eingefuegt.`);
 }
 function provisionalOverall(row, ctx) {
-    const values = [
-        int(req(row, 'skill_flat', ctx), ctx),
-        int(req(row, 'skill_mountain', ctx), ctx),
-        int(req(row, 'skill_medium_mountain', ctx), ctx),
-        int(req(row, 'skill_hill', ctx), ctx),
-        int(req(row, 'skill_time_trial', ctx), ctx),
-        int(req(row, 'skill_cobble', ctx), ctx),
-        int(req(row, 'skill_sprint', ctx), ctx),
-        int(req(row, 'skill_stamina', ctx), ctx),
-        int(req(row, 'skill_resistance', ctx), ctx),
-        int(req(row, 'skill_recuperation', ctx), ctx),
-        int(req(row, 'skill_acceleration', ctx), ctx),
-    ];
-    return clamp(values.reduce((sum, value) => sum + value, 0) / values.length);
+    const sum = int(req(row, 'skill_flat', ctx), ctx) +
+        int(req(row, 'skill_mountain', ctx), ctx) +
+        int(req(row, 'skill_medium_mountain', ctx), ctx) +
+        int(req(row, 'skill_hill', ctx), ctx) +
+        int(req(row, 'skill_time_trial', ctx), ctx) +
+        int(req(row, 'skill_cobble', ctx), ctx) +
+        int(req(row, 'skill_sprint', ctx), ctx) * 1.2 +
+        int(req(row, 'skill_stamina', ctx), ctx) +
+        int(req(row, 'skill_resistance', ctx), ctx) +
+        int(req(row, 'skill_recuperation', ctx), ctx) +
+        int(req(row, 'skill_acceleration', ctx), ctx);
+    return clamp(sum / 11.2);
 }
 function seedRiders(db) {
     const rows = readCsv('riders.csv');
