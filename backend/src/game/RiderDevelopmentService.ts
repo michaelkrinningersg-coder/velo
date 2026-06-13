@@ -128,7 +128,7 @@ function calcBikeHandling(skills: Pick<RiderSkills, 'downhill' | 'sprint' | 'att
   return clamp(skills.downhill * 0.7 + skills.sprint * 0.15 + skills.attack * 0.05 + skills.resistance * 0.1);
 }
 
-function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation'>): number {
+function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation' | 'acceleration'>): number {
   const includedSkills = [
     ['mountain', skills.mountain, 1.8],
     ['hill', skills.hill, 1],
@@ -140,6 +140,7 @@ function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMoun
     ['resistance', skills.resistance, 0.1],
     ['recuperation', skills.recuperation, 0.1],
     ['flat', skills.flat, 0.15],
+    ['acceleration', skills.acceleration, 0.8],
   ] as const;
 
   const weightedTotal = includedSkills.reduce((sum, [, value, weight]) => sum + value * weight, 0);
@@ -159,7 +160,7 @@ function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMoun
   }
 
   const bonusTotal = topSkillValue * 1.5 + secondSkillValue * 1.25;
-  const totalWeight = 1.8 + 1 + 1 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 1.5 + 1.25;
+  const totalWeight = 1.8 + 1 + 1 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 0.8 + 1.5 + 1.25;
   return clamp((weightedTotal + bonusTotal) / totalWeight);
 }
 

@@ -1,6 +1,6 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -183,6 +183,147 @@ export class ResultRepository {
   }
 
 
+  /**
+   * Returns the actual roster of a race — all riders who started the race,
+   * sourced from the race_entries table.
+   * Also marks riders who have dropped out (DNF/OTL from stage_non_finishers).
+   */
+  public getRaceRoster(raceId: number): RaceRosterPayload | null {
+    if (!tableExists(this.db, 'race_entries') || !tableExists(this.db, 'stages')) {
+      return null;
+    }
+
+    // Check that race exists
+    const raceRow = this.db.prepare(`
+      SELECT races.id AS race_id, races.name AS race_name
+      FROM races
+      WHERE races.id = ?
+    `).get(raceId) as { race_id: number; race_name: string } | undefined;
+    if (!raceRow) return null;
+
+    // Check if the race has actually started/has entries
+    const entriesCountRow = this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM race_entries
+      WHERE race_id = ?
+    `).get(raceId) as { count: number } | undefined;
+    
+    if (!entriesCountRow || entriesCountRow.count === 0) {
+      return null;
+    }
+
+    // Get all riders registered in race_entries for this race
+    type RosterDbRow = {
+      rider_id: number;
+      first_name: string;
+      last_name: string;
+      country_code: string | null;
+      team_id: number | null;
+      team_name: string | null;
+      role_id: number | null;
+      role_name: string | null;
+      overall_rating: number;
+      spec1_name: string | null;
+      spec2_name: string | null;
+      gc_rank: number | null;
+      dropout_status: string | null;
+      dropout_reason: string | null;
+    };
+
+    const rosterRows = this.db.prepare(`
+      SELECT DISTINCT
+        riders.id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        sta_country.code_3 AS country_code,
+        teams.id AS team_id,
+        teams.name AS team_name,
+        role.id AS role_id,
+        role.name AS role_name,
+        riders.overall_rating AS overall_rating,
+        specialization_1.type_key AS spec1_name,
+        specialization_2.type_key AS spec2_name,
+        (
+          SELECT r.rank
+          FROM results r
+          JOIN stages s ON s.id = r.stage_id
+          WHERE s.race_id = ? 
+            AND r.result_type_id = 2
+            AND r.rider_id = riders.id
+            AND s.stage_number = (
+              SELECT MAX(s2.stage_number)
+              FROM stages s2
+              JOIN results r2 ON r2.stage_id = s2.id
+              WHERE s2.race_id = ? AND r2.result_type_id = 2
+            )
+        ) AS gc_rank,
+        (
+          SELECT se.status
+          FROM stage_entries se
+          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
+          LIMIT 1
+        ) AS dropout_status,
+        (
+          SELECT se.status_reason
+          FROM stage_entries se
+          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
+          LIMIT 1
+        ) AS dropout_reason
+      FROM race_entries
+      JOIN riders ON riders.id = race_entries.rider_id
+      LEFT JOIN sta_country ON sta_country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = race_entries.team_id
+      LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
+      WHERE race_entries.race_id = ?
+      ORDER BY teams.name ASC, riders.last_name ASC, riders.first_name ASC
+    `).all(raceId, raceId, raceId, raceId, raceId) as RosterDbRow[];
+
+    // Determine dropped riders: any rider with a row in stage_non_finishers for this race
+    const droppedRiderIds = new Set<number>();
+    if (tableExists(this.db, 'stage_non_finishers')) {
+      type NonFinRow = { rider_id: number };
+      const nonFinRows = this.db.prepare(`
+        SELECT DISTINCT stage_non_finishers.rider_id AS rider_id
+        FROM stage_non_finishers
+        JOIN stages ON stages.id = stage_non_finishers.stage_id
+        WHERE stages.race_id = ?
+      `).all(raceId) as NonFinRow[];
+      for (const r of nonFinRows) {
+        droppedRiderIds.add(r.rider_id);
+      }
+    }
+
+    const entries: RaceRosterEntry[] = rosterRows.map((row) => {
+      const hasDropped = droppedRiderIds.has(row.rider_id) || row.dropout_status != null;
+      return {
+        riderId: row.rider_id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        countryCode: row.country_code,
+        teamId: row.team_id,
+        teamName: row.team_name,
+        roleId: row.role_id,
+        roleName: row.role_name,
+        overallRating: row.overall_rating,
+        specialization1: row.spec1_name,
+        specialization2: row.spec2_name,
+        hasDropped,
+        gcRank: hasDropped ? null : row.gc_rank,
+        dropoutStatus: row.dropout_status as any,
+        dropoutReason: row.dropout_reason,
+      };
+    });
+
+    return {
+      raceId: raceRow.race_id,
+      raceName: raceRow.race_name,
+      entries,
+    };
+  }
+
+
   public getStageResults(stageId: number): StageResultsPayload | null {
     if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
       return null;
@@ -227,11 +368,17 @@ export class ResultRepository {
         riders.first_name AS rider_first_name,
         riders.last_name AS rider_last_name,
         results.team_id AS team_id,
-        teams.name AS team_name
+        teams.name AS team_name,
+        results.leadout_rider_id AS leadout_rider_id,
+        results.leadout_bonus AS leadout_bonus,
+        leadout_riders.last_name AS leadout_rider_last_name,
+        leadout_countries.code_3 AS leadout_rider_country_code
       FROM results
       JOIN result_types ON result_types.id = results.result_type_id
       LEFT JOIN riders ON riders.id = results.rider_id
       LEFT JOIN teams ON teams.id = results.team_id
+      LEFT JOIN riders AS leadout_riders ON leadout_riders.id = results.leadout_rider_id
+      LEFT JOIN sta_country AS leadout_countries ON leadout_countries.id = leadout_riders.country_id
       WHERE results.stage_id = ?
       ORDER BY results.result_type_id ASC, results.rank ASC
     `).all(stageId) as StageResultDbRow[];
@@ -310,6 +457,10 @@ export class ResultRepository {
             uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
             previousRank: previousRank,
             rankDelta: previousRank != null ? previousRank - displayRank : null,
+            leadoutRiderId: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_rider_id : null,
+            leadoutBonus: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_bonus : null,
+            leadoutRiderLastName: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_rider_last_name : null,
+            leadoutRiderCountryCode: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_rider_country_code : null,
           };
         });
 

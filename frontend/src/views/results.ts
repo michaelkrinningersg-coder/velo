@@ -28,16 +28,19 @@ import {
   isActiveView,
   showLoading,
   hideLoading,
+  getRiderSpecializationLabel,
 } from '../state';
 import type {
   StageResultsPayload,
   StageMarkerClassification,
   Race,
+  RaceRosterEntry,
 } from '../../../shared/types';
 
 export const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 export const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
 export const RESULTS_EVENTS_KEY = '__events__';
+export const RESULTS_ROSTER_KEY = '__roster__';
 
 let selectedEventFilter = 'all';
 
@@ -83,6 +86,17 @@ export function formatResultsStageLabel(race: Race, stage: NonNullable<Race['sta
   return `${race.name} · ${stageLabel} · ${formatDate(stage.date)}`;
 }
 
+function getFlagEmoji(code3: string | null | undefined): string {
+  if (!code3) return '';
+  const alpha2 = FLAG_CODE_BY_CODE3[code3] ?? null;
+  if (!alpha2) return '';
+  const codePoints = alpha2
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
 export async function loadStageResults(stageId: number, silentIfMissing: boolean): Promise<void> {
   const location = findStageById(stageId);
   if (location) {
@@ -115,7 +129,440 @@ export async function loadStageResults(stageId: number, silentIfMissing: boolean
     state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
     state.selectedResultsSpecialView = null;
   }
+
+  // Also try to load roster for this race
+  if (state.selectedResultsRaceId != null) {
+    void loadRaceRoster(state.selectedResultsRaceId);
+  }
+
   renderResultsView();
+}
+
+export async function loadRaceRoster(raceId: number): Promise<void> {
+  // Load season standings first to support sorting teams in the roster
+  if (!state.seasonStandings) {
+    const standingsRes = await api.getSeasonStandings();
+    if (standingsRes.success && standingsRes.data) {
+      state.seasonStandings = standingsRes.data;
+    }
+  }
+
+  const res = await api.getRaceResultsRoster(raceId);
+  if (res.success && res.data) {
+    state.resultsRoster = res.data;
+  } else {
+    state.resultsRoster = null;
+  }
+}
+
+// --- Roster Color Coding: 15 spec/role combinations ----
+// Role IDs: 1=Kapitän, 2=Co-Kapitän, 3=Edelhelfer, 4=Starker Helfer, 5=Wasserträger, 6=Sprinter
+// Specs: Berg, Hill, Sprint, Timetrial, Cobble, Attacker
+// Color matrix for rider name/role by [spec1, spec2] combination (order-independent)
+type SpecPair = string; // e.g. "Berg+Sprint"
+
+function normalizeSpecPair(spec1: string | null, spec2: string | null): SpecPair {
+  const s1 = spec1 ?? '';
+  const s2 = spec2 ?? '';
+  const parts = [s1, s2].filter(Boolean).sort();
+  return parts.join('+');
+}
+
+const SPEC_PAIR_COLORS: Record<SpecPair, { color: string; bg: string }> = {
+  'Attacker+Berg':      { color: '#c084fc', bg: 'rgba(192,132,252,0.1)' },
+  'Attacker+Cobble':    { color: '#f43f5e', bg: 'rgba(244,63,94,0.1)' },
+  'Attacker+Hill':      { color: '#f472b6', bg: 'rgba(244,114,182,0.1)' },
+  'Attacker+Sprint':    { color: '#fb923c', bg: 'rgba(251,146,60,0.1)' },
+  'Attacker+Timetrial': { color: '#fda4af', bg: 'rgba(253,164,175,0.1)' },
+  'Berg+Cobble':        { color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)' },
+  'Berg+Hill':          { color: '#38bdf8', bg: 'rgba(56,189,248,0.1)' },
+  'Berg+Sprint':        { color: '#4ade80', bg: 'rgba(74,222,128,0.1)' },
+  'Berg+Timetrial':     { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)' },
+  'Cobble+Hill':        { color: '#ea580c', bg: 'rgba(234,88,12,0.1)' },
+  'Cobble+Sprint':      { color: '#f97316', bg: 'rgba(249,115,22,0.1)' },
+  'Cobble+Timetrial':   { color: '#d97706', bg: 'rgba(217,119,6,0.1)' },
+  'Hill+Sprint':        { color: '#2dd4bf', bg: 'rgba(45,212,191,0.1)' },
+  'Hill+Timetrial':     { color: '#818cf8', bg: 'rgba(129,140,248,0.1)' },
+  'Sprint+Timetrial':   { color: '#fde047', bg: 'rgba(253,224,71,0.1)' },
+};
+
+function getRoleStyle(roleId: number | null): { color: string; bg: string } {
+  if (roleId === 1) return { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' }; // Kapitän: Gelb
+  if (roleId === 2) return { color: '#cbd5e1', bg: 'rgba(203, 213, 225, 0.1)' }; // Co-Kapitän: Silber
+  if (roleId === 6) return { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.1)' }; // Sprinter: Grün
+  if (roleId === 3) return { color: '#c084fc', bg: 'rgba(192, 132, 252, 0.1)' }; // Edelhelfer: Violett
+  if (roleId === 4) return { color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.1)' }; // Starker Helfer: Hellblau
+  if (roleId === 5) return { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.1)' }; // Wasserträger: Orange
+  return { color: 'var(--text-300)', bg: 'transparent' };
+}
+
+// Role sort order: 1=Kapitän first, then 2,3,4,5,6
+function getRoleOrder(roleId: number | null): number {
+  if (roleId == null) return 99;
+  const order: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };
+  return order[roleId] ?? 99;
+}
+
+function renderRaceRoster(): string {
+  const roster = state.resultsRoster;
+  if (!roster || roster.entries.length === 0) {
+    return '<div class="results-roster-empty">Noch keine Teilnehmerdaten (Rennen noch nicht gestartet oder kein Starterfeld gefunden).</div>';
+  }
+
+  const currentRace = findRaceById(state.selectedResultsRaceId);
+  const isStageRace = currentRace?.isStageRace ?? false;
+
+
+  // Find the top 5 strongest riders in the entire race
+  const sortedAllRiders = [...roster.entries].sort((a, b) => b.overallRating - a.overallRating);
+  const top5RiderIds = new Set(sortedAllRiders.slice(0, 5).map(r => r.riderId));
+
+  const getSprintSkill = (riderId: number): number => {
+    const r = state.riders.find(x => x.id === riderId);
+    return r?.skills?.sprint ?? 0;
+  };
+
+  // Find the top 5 sprinters (sprint skill) who are not in the top 5 overall
+  const remainingRiders = roster.entries.filter(r => !top5RiderIds.has(r.riderId));
+  const sortedBySprint = [...remainingRiders].sort((a, b) => {
+    const sprintA = getSprintSkill(a.riderId);
+    const sprintB = getSprintSkill(b.riderId);
+    if (sprintB !== sprintA) {
+      return sprintB - sprintA;
+    }
+    return b.overallRating - a.overallRating;
+  });
+  const top5SprinterIds = new Set(sortedBySprint.slice(0, 5).map(r => r.riderId));
+
+  function getRosterSpecializationLabel(spec: string): string {
+    switch (spec) {
+      case 'Berg':
+        return 'Berg';
+      case 'Hill':
+        return 'Hügel';
+      case 'Sprint':
+        return 'Sprinter';
+      case 'Cobble':
+        return 'Pflaster';
+      case 'Timetrial':
+        return 'Zeitfahrer';
+      case 'Attacker':
+        return 'Ausreißer';
+      default:
+        return spec;
+    }
+  }
+
+  // Group riders by team
+  const teamMap = new Map<number | null, { teamId: number | null; teamName: string | null; riders: RaceRosterEntry[]; avgRating: number }>();
+  for (const entry of roster.entries) {
+    const key = entry.teamId;
+    if (!teamMap.has(key)) {
+      teamMap.set(key, { teamId: entry.teamId, teamName: entry.teamName, riders: [], avgRating: 0 });
+    }
+    teamMap.get(key)!.riders.push(entry);
+  }
+
+  // Calculate team average overall rating
+  for (const team of teamMap.values()) {
+    team.avgRating = team.riders.reduce((sum, r) => sum + r.overallRating, 0) / team.riders.length;
+  }
+
+  const getTeamPoints = (teamId: number | null): number => {
+    if (teamId == null || !state.seasonStandings?.teamStandings) return 0;
+    const standing = state.seasonStandings.teamStandings.find(t => t.teamId === teamId);
+    return standing?.points ?? 0;
+  };
+
+  // Sort teams: by season standings points, then by average rating, then alphabetically
+  const teams = [...teamMap.values()].sort((a, b) => {
+    const ptsA = getTeamPoints(a.teamId);
+    const ptsB = getTeamPoints(b.teamId);
+
+    if (ptsA > 0 || ptsB > 0) {
+      if (ptsA !== ptsB) {
+        return ptsB - ptsA;
+      }
+    }
+
+    if (Math.abs(a.avgRating - b.avgRating) > 0.0001) {
+      return b.avgRating - a.avgRating;
+    }
+
+    return (a.teamName ?? '').localeCompare(b.teamName ?? '', 'de');
+  });
+
+  // Sort riders within each team by role then overallRating desc
+  for (const team of teams) {
+    team.riders.sort((a, b) =>
+      getRoleOrder(a.roleId) - getRoleOrder(b.roleId) ||
+      b.overallRating - a.overallRating ||
+      a.lastName.localeCompare(b.lastName, 'de'),
+    );
+  }
+
+  // Render each team card
+  const teamsHtml = teams.map((team) => {
+    const jerseyHtml = team.teamId != null
+      ? renderMiniJersey(team.teamId, team.teamName)
+      : '';
+
+    const ridersHtml = team.riders.map((entry) => {
+      const roleStyle = getRoleStyle(entry.roleId);
+      const flagAlpha2 = entry.countryCode ? (FLAG_CODE_BY_CODE3[entry.countryCode] ?? entry.countryCode.slice(0, 2).toLowerCase()) : null;
+      const flagHtml = flagAlpha2
+        ? `<span class="fi fi-${flagAlpha2} results-roster-flag" title="${esc(entry.countryCode ?? '')}"></span>`
+        : '<span class="results-roster-flag-placeholder"></span>';
+      
+      const nameText = `${entry.firstName.charAt(0)}. ${entry.lastName}`;
+      const roleName = entry.roleName ?? '–';
+      
+      // Spec 1 and Spec 2
+      const specLabel1 = entry.specialization1 ? getRosterSpecializationLabel(entry.specialization1) : null;
+      const specLabel2 = entry.specialization2 ? getRosterSpecializationLabel(entry.specialization2) : null;
+      let roleAndSpec = roleName;
+      if (specLabel1) {
+        roleAndSpec += ` · ${specLabel1}`;
+      }
+      if (specLabel2) {
+        roleAndSpec += ` · ${specLabel2}`;
+      }
+
+      const overallHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(entry.overallRating)}" title="Gesamtstärke: ${entry.overallRating.toFixed(2)}">${entry.overallRating.toFixed(2)}</span>`;
+      const droppedClass = entry.hasDropped ? ' dropped' : '';
+      
+      let gcText = '';
+      if (entry.hasDropped) {
+        if (entry.dropoutStatus === 'dns') {
+          gcText = 'DNS';
+        } else if (entry.dropoutStatus === 'dnf') {
+          const isOtl = entry.dropoutReason?.startsWith('OTL') ?? false;
+          gcText = isOtl ? 'OTL' : 'DNF';
+        } else {
+          gcText = 'OUT';
+        }
+      } else if (entry.gcRank != null) {
+        gcText = `${entry.gcRank}`;
+      }
+
+      let gcBadgeHtml = '';
+      if (entry.hasDropped) {
+        gcBadgeHtml = `<span class="rider-stats-rank-badge" style="color: var(--danger, #ef4444); border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);" title="Ausgeschieden: ${esc(entry.dropoutReason || '')}">${gcText}</span>`;
+      } else if (entry.gcRank != null) {
+        let rankClass = 'rider-stats-rank-badge-gc';
+        if (entry.gcRank === 1) {
+          rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-1';
+        } else if (entry.gcRank === 2) {
+          rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-2';
+        } else if (entry.gcRank === 3) {
+          rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-3';
+        }
+        gcBadgeHtml = `<span class="rider-stats-rank-badge ${rankClass}" title="GC Stand: Platz ${entry.gcRank}">${entry.gcRank}</span>`;
+      }
+
+      const color = entry.hasDropped ? 'var(--text-500)' : roleStyle.color;
+      const roleStyleAttr = `style="color: ${color}; font-weight: bold;"`;
+      const isTop5Strongest = top5RiderIds.has(entry.riderId);
+      const isTop5Sprinter = top5SprinterIds.has(entry.riderId);
+      const highlightClass = isTop5Strongest ? ' strongest-rider' : (isTop5Sprinter ? ' best-sprinter' : '');
+
+      return `<div class="results-roster-rider${droppedClass}">
+        <div class="results-roster-rider-info">
+          <div class="results-roster-rider-top">
+            ${flagHtml}
+            <span class="results-roster-name${highlightClass}">
+              ${renderRiderNameLink(nameText, {
+                riderId: entry.riderId,
+                teamId: entry.teamId,
+                strong: true,
+                linkClassName: 'results-rider-link',
+                labelClassName: 'results-participant-label',
+              })}
+              ${renderLeaderDots(entry.riderId)}
+            </span>
+          </div>
+          <div class="results-roster-rider-meta">
+            <span class="results-roster-role-spec" ${roleStyleAttr}>${esc(roleAndSpec)}</span>
+          </div>
+        </div>
+        <div class="results-roster-rider-badges${isStageRace ? '' : ' results-roster-rider-badges-oneday'}">
+          ${isStageRace ? `${gcBadgeHtml ? gcBadgeHtml : '<span class="results-roster-gc-placeholder"></span>'}<span class="results-roster-badge-divider"></span>` : ''}
+          ${overallHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    const avgStrStr = team.avgRating.toFixed(1).replace('.', ',');
+
+    return `<div class="results-roster-team">
+      <div class="results-roster-team-header">
+        <div class="results-roster-jersey">${jerseyHtml}</div>
+        <div class="results-roster-team-name" title="${esc(team.teamName ?? '–')}">${esc(team.teamName ?? '–')} <span style="font-size: 0.7rem; color: var(--text-400); font-weight: 500;">(Ø ${avgStrStr})</span></div>
+      </div>
+      <div class="results-roster-riders${isStageRace ? '' : ' results-roster-riders-oneday'}">${ridersHtml}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="results-roster-grid">${teamsHtml}</div>`;
+}
+
+function getSkillColorForRating(value: number): string {
+  if (value >= 90) return '#22c55e';
+  if (value >= 80) return '#86efac';
+  if (value >= 70) return '#fbbf24';
+  if (value >= 60) return '#fb923c';
+  if (value >= 50) return '#f87171';
+  return '#94a3b8';
+}
+
+function renderLeadoutPopover(row: any): string {
+  if (row.leadoutBonus == null || !(row.leadoutBonus > 0) || row.leadoutRiderId == null || row.teamId == null) {
+    return '';
+  }
+
+  // 1. Get active teammate riders in this race
+  const activeRaceRiderIds = new Set(
+    state.resultsRoster && state.resultsRoster.raceId === state.selectedResultsRaceId
+      ? state.resultsRoster.entries.filter(e => !e.hasDropped).map(e => e.riderId)
+      : []
+  );
+  const teammates = state.riders.filter(r => 
+    r.activeTeamId === row.teamId && 
+    (activeRaceRiderIds.size === 0 || activeRaceRiderIds.has(r.id))
+  );
+  const droppedIds = new Set((state.stageResults?.nonFinishers ?? []).map(nf => nf.riderId));
+
+  // 2. Identify potential contributors
+  const contributors: Array<{
+    id: number;
+    firstName: string;
+    lastName: string;
+    countryCode: string | null;
+    isSprinter: boolean;
+    multiplier: number;
+    contribution: number;
+  }> = [];
+
+  for (const r of teammates) {
+    if (r.id === row.riderId || droppedIds.has(r.id)) {
+      continue;
+    }
+
+    let metCount = 0;
+    const c1 = r.skills.sprint >= 72;
+    const c2 = r.skills.flat >= 78;
+    const c3 = r.skills.timeTrial >= 76;
+    const c4 = r.skills.acceleration >= 80;
+
+    if (c1) metCount++;
+    if (c2) metCount++;
+    if (c3) metCount++;
+    if (c4) metCount++;
+
+    if (metCount > 0) {
+      let multiplier = 1.0;
+      if (metCount === 2) {
+        multiplier = 1.25;
+      } else if (metCount === 3) {
+        multiplier = 1.5;
+      } else if (metCount === 4) {
+        multiplier = 2.0;
+      }
+      contributors.push({
+        id: r.id,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        countryCode: r.nationality ?? null,
+        isSprinter: c1,
+        multiplier,
+        contribution: 0,
+      });
+    }
+  }
+
+  const T = row.leadoutBonus;
+
+  if (contributors.length > 0) {
+    // 3. Solve for sprint/special base values
+    const sprintersMultSum = contributors.filter(c => c.isSprinter).reduce((sum, c) => sum + c.multiplier, 0);
+    const specialsMultSum = contributors.filter(c => !c.isSprinter).reduce((sum, c) => sum + c.multiplier, 0);
+
+    let x = 0; // special base
+    let y = 0; // sprint base
+
+    if (sprintersMultSum > 0 && specialsMultSum > 0) {
+      x = T / (2.125 * sprintersMultSum + specialsMultSum);
+      y = 2.125 * x;
+      x = Math.max(0.1, Math.min(0.3, x));
+      y = Math.max(0.25, Math.min(0.6, y));
+    } else if (sprintersMultSum > 0) {
+      y = T / sprintersMultSum;
+      y = Math.max(0.25, Math.min(0.6, y));
+      x = y / 2.125;
+    } else if (specialsMultSum > 0) {
+      x = T / specialsMultSum;
+      x = Math.max(0.1, Math.min(0.3, x));
+      y = 2.125 * x;
+    }
+
+    for (const c of contributors) {
+      c.contribution = c.isSprinter ? (y * c.multiplier) : (x * c.multiplier);
+    }
+
+    // 4. Adjust sum to match T exactly
+    const sum = contributors.reduce((s, c) => s + c.contribution, 0);
+    if (sum > 0) {
+      const scale = T / sum;
+      for (const c of contributors) {
+        c.contribution *= scale;
+      }
+    }
+
+    // Sort by contribution desc
+    contributors.sort((a, b) => b.contribution - a.contribution);
+  } else {
+    // Fallback if no teammates match or state.riders is empty
+    contributors.push({
+      id: row.leadoutRiderId,
+      firstName: '',
+      lastName: row.leadoutRiderLastName ?? 'Teampartner',
+      countryCode: row.leadoutRiderCountryCode,
+      isSprinter: false,
+      multiplier: 1.0,
+      contribution: T,
+    });
+  }
+
+  const formattedTotalBonus = T.toFixed(2).replace('.', ',');
+
+  const rowsHtml = contributors.map((c) => {
+    const flagHtml = renderResultsFlagColumn(resolveRiderCountryCode(c.id) ?? c.countryCode);
+    const nameStr = c.firstName ? `${c.firstName.charAt(0)}. ${c.lastName}` : c.lastName;
+    const bonusStr = c.contribution.toFixed(2).replace('.', ',');
+    return `
+      <div class="leadout-bonus-popover-grid">
+        <span class="results-flag-col-cell">${flagHtml}</span>
+        <span class="leadout-bonus-rider-name">${esc(nameStr)}</span>
+        <strong>+${bonusStr}</strong>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="leadout-bonus-popover">
+      <div class="leadout-bonus-popover-card">
+        <div class="leadout-bonus-popover-head">
+          <strong>Leadout-Bonus Details (Gesamt: +${formattedTotalBonus})</strong>
+        </div>
+        <div class="leadout-bonus-popover-grid leadout-bonus-popover-grid-head">
+          <span>Land</span>
+          <span>Fahrer</span>
+          <span>Beitrag</span>
+        </div>
+        ${rowsHtml}
+      </div>
+    </div>
+  `;
 }
 
 function getKmZeroEventPriority(row: { title?: string | null }): number {
@@ -237,6 +684,7 @@ export function renderResultsView(): void {
   const headerRow = table.querySelector('thead tr');
   const tbody = $('results-tbody');
   const markerClassifications = $('results-marker-classifications');
+  const rosterContainer = $('results-roster');
 
   // Clean up colgroup and table layout from previous renders
   const existingColgroup = table.querySelector('colgroup');
@@ -275,7 +723,8 @@ export function renderResultsView(): void {
   ) ?? visibleClassifications[0] ?? null;
   const showNonFinishers = state.selectedResultsSpecialView === 'nonFinishers';
   const showEvents = state.selectedResultsSpecialView === 'events';
-  if (selectedClassification && !showNonFinishers && !showEvents) {
+  const showRoster = state.selectedResultsSpecialView === 'roster';
+  if (selectedClassification && !showNonFinishers && !showEvents && !showRoster) {
     state.selectedResultTypeId = selectedClassification.resultTypeId;
   }
 
@@ -291,7 +740,7 @@ export function renderResultsView(): void {
     table.insertBefore(colgroup, table.firstChild);
   }
 
-  if (!state.stageResults || (!selectedClassification && !showNonFinishers && !showEvents)) {
+  if ((!state.stageResults && !showRoster) || (!selectedClassification && !showNonFinishers && !showEvents && !showRoster)) {
     const selectedStage = findStageById(state.selectedResultsStageId);
     meta.textContent = selectedStage
       ? `${selectedStage.race.name} · ${selectedStage.stage.profile} · ${formatDate(selectedStage.stage.date)}`
@@ -303,6 +752,8 @@ export function renderResultsView(): void {
     markerClassifications.innerHTML = '';
     markerClassifications.classList.add('hidden');
     table.classList.add('hidden');
+    rosterContainer.innerHTML = '';
+    rosterContainer.classList.add('hidden');
     empty.classList.remove('hidden');
     empty.textContent = state.selectedResultsStageId != null
       ? 'Für diese Etappe liegen noch keine Ergebnisse vor.'
@@ -310,8 +761,17 @@ export function renderResultsView(): void {
     return;
   }
 
-  meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
-  const resultStage = findStageById(state.stageResults.stageId);
+  // Roster can be shown without stageResults
+  if (showRoster) {
+    if (state.resultsRoster) {
+      meta.textContent = `${state.resultsRoster.raceName} · Starterfeld`;
+    }
+    // Roster rendering handled after tab setup below
+  } else if (state.stageResults) {
+    meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
+  }
+
+  const resultStage = state.stageResults ? findStageById(state.stageResults.stageId) : null;
   const stageDistanceKm = resultStage?.stage.distanceKm ?? null;
 
   const stagePointsMap = new Map<number, number>();
@@ -350,7 +810,7 @@ export function renderResultsView(): void {
   const resultTypeButtons = visibleClassifications.map((classification) => `
     <button
       type="button"
-      class="results-type-btn${!showNonFinishers && !showEvents && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
+      class="results-type-btn${!showNonFinishers && !showEvents && !showRoster && classification.resultTypeId === state.selectedResultTypeId ? ' active' : ''}"
       data-result-type-id="${classification.resultTypeId}"
     >${esc(classification.resultTypeName)}</button>
   `);
@@ -368,16 +828,39 @@ export function renderResultsView(): void {
       data-results-special-view="${RESULTS_EVENTS_KEY}"
     >Ereignisse</button>
   `;
+  const rosterButton = `
+    <button
+      type="button"
+      class="results-type-btn${showRoster ? ' active' : ''}"
+      data-results-special-view="${RESULTS_ROSTER_KEY}"
+    >Teilnehmer</button>
+  `;
   const teamButtonIndex = visibleClassifications.findIndex((classification) => classification.resultTypeName.toLocaleLowerCase('de').includes('team'));
   if (teamButtonIndex >= 0) {
-    resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton, eventsButton);
+    resultTypeButtons.splice(teamButtonIndex + 1, 0, nonFinishersButton, eventsButton, rosterButton);
   } else {
-    resultTypeButtons.push(nonFinishersButton, eventsButton);
+    resultTypeButtons.push(nonFinishersButton, eventsButton, rosterButton);
   }
   tabs.innerHTML = resultTypeButtons.join('');
 
-  const stageMarkerClassifications = sortStageMarkerClassifications(state.stageResults.markerClassifications ?? []);
-  const showMarkerTabs = !showNonFinishers && !showEvents && selectedClassification?.resultTypeId === 1 && stageMarkerClassifications.length > 0;
+  const stageMarkerClassifications = sortStageMarkerClassifications(state.stageResults?.markerClassifications ?? []);
+
+  // Show roster view if requested
+  if (showRoster) {
+    rosterContainer.innerHTML = renderRaceRoster();
+    rosterContainer.classList.remove('hidden');
+    table.classList.add('hidden');
+    markerTabs.innerHTML = '';
+    markerTabs.classList.add('hidden');
+    markerClassifications.innerHTML = '';
+    markerClassifications.classList.add('hidden');
+    empty.classList.add('hidden');
+    return;
+  } else {
+    rosterContainer.innerHTML = '';
+    rosterContainer.classList.add('hidden');
+  }
+  const showMarkerTabs = !showNonFinishers && !showEvents && !showRoster && selectedClassification?.resultTypeId === 1 && stageMarkerClassifications.length > 0;
   const selectedStageSubViewKey = showMarkerTabs
     ? (state.selectedResultsMarkerKey ?? RESULTS_STAGE_OVERVIEW_KEY)
     : null;
@@ -450,7 +933,7 @@ export function renderResultsView(): void {
         <th>Team</th>
         <th>Zeit</th>
         <th>Rückstand</th>
-        <th>Punktewertung</th>
+        <th class="results-points-cell">Punktewertung</th>
         <th>UCI Punkte</th>
       `
       : isPointsLikeClassification
@@ -461,7 +944,7 @@ export function renderResultsView(): void {
           <th>Fahrer / Team</th>
           <th class="results-flag-col">Flagge</th>
           <th>Team</th>
-          <th>Punkte</th>
+          <th class="results-points-cell">Punkte</th>
           <th>UCI Punkte</th>
         `
       : isTeamClassification
@@ -484,13 +967,13 @@ export function renderResultsView(): void {
         <th>Team</th>
         <th>Zeit</th>
         <th>Rückstand</th>
-        <th>Punktewertung</th>
+        <th class="results-points-cell">Punktewertung</th>
         <th>UCI Punkte</th>
       `;
   }
 
   tbody.innerHTML = showNonFinishers
-    ? (state.stageResults.nonFinishers ?? []).map((row) => `
+    ? (state.stageResults?.nonFinishers ?? []).map((row) => `
       <tr>
         <td>${row.stageNumber}</td>
         <td>${renderNonFinisherStatusBadge(row.isOtl)}</td>
@@ -502,7 +985,7 @@ export function renderResultsView(): void {
       </tr>
     `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
     : showEvents
-    ? [...(state.stageResults.events ?? [])]
+    ? [...(state.stageResults?.events ?? [])]
       .filter((row) => {
         if (selectedEventFilter === 'all') {
           return true;
@@ -631,7 +1114,7 @@ export function renderResultsView(): void {
             <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
             <td class="results-flag-col-cell">${flagCell}</td>
             <td>${esc(teamName)}</td>
-            <td>${pointsHtml}</td>
+            <td class="results-points-cell">${pointsHtml}</td>
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
       }
@@ -648,6 +1131,17 @@ export function renderResultsView(): void {
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
       }
+      let pointsCellContent = row.points != null ? String(row.points) : '–';
+      if (row.leadoutBonus != null && row.leadoutBonus > 0 && row.leadoutRiderId != null) {
+        const popoverHtml = renderLeadoutPopover(row);
+        pointsCellContent = `
+          <div class="leadout-bonus-anchor">
+            ${row.points != null ? row.points : '–'}
+            ${popoverHtml}
+          </div>
+        `;
+      }
+
       return `
         <tr>
           <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
@@ -658,14 +1152,14 @@ export function renderResultsView(): void {
           <td>${esc(teamName)}</td>
           <td>${timeCell}</td>
           <td>${esc(formatRaceGap(row.gapSeconds))}</td>
-          <td>${row.points != null ? row.points : '–'}</td>
+          <td class="results-points-cell">${pointsCellContent}</td>
           <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
         </tr>`;
     }).join('')
     : '';
 
-  empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers || showEvents);
-  table.classList.toggle('hidden', !showStageOverviewTable);
+  empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers || showEvents || showRoster);
+  table.classList.toggle('hidden', !showStageOverviewTable || showRoster);
 
   if (selectedMarkerClassification) {
     const headerHtml = `
@@ -748,6 +1242,13 @@ export function initResultsListeners(): void {
       } else if (special === RESULTS_EVENTS_KEY) {
         state.selectedResultsSpecialView = 'events';
         selectedEventFilter = 'all';
+        renderResultsView();
+      } else if (special === RESULTS_ROSTER_KEY) {
+        state.selectedResultsSpecialView = 'roster';
+        // If roster not loaded yet for this race, fetch it
+        if (state.selectedResultsRaceId != null && state.resultsRoster?.raceId !== state.selectedResultsRaceId) {
+          void loadRaceRoster(state.selectedResultsRaceId).then(() => renderResultsView());
+        }
         renderResultsView();
       }
     }

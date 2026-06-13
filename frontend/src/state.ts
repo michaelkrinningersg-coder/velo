@@ -49,6 +49,7 @@ import type {
   StageTerrain,
   DraftHistoryPayload,
   InjuryRow,
+  RaceRosterPayload,
 } from '../../shared/types';
 import { RaceSimView } from './race-sim/RaceSimView';
 
@@ -84,7 +85,7 @@ export const state: {
   selectedResultsStageId: number | null;
   selectedResultTypeId: number;
   selectedResultsMarkerKey: string | null;
-  selectedResultsSpecialView: 'nonFinishers' | 'events' | null;
+  selectedResultsSpecialView: 'nonFinishers' | 'events' | 'roster' | null;
   selectedDashboardRaceId: number | null;
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
@@ -92,6 +93,7 @@ export const state: {
   stageSummaryErrorsByStageId: Record<number, string | undefined>;
   selectedRealtimeStageId: number | null;
   stageResults: StageResultsPayload | null;
+  resultsRoster: RaceRosterPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
   draftHistory: DraftHistoryPayload | null;
   injuries: InjuryRow[] | null;
@@ -174,6 +176,7 @@ export const state: {
   stageSummaryErrorsByStageId: {},
   selectedRealtimeStageId: null,
   stageResults: null,
+  resultsRoster: null,
   seasonStandings: null,
   draftHistory: null,
   injuries: null,

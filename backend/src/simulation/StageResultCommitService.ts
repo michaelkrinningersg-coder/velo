@@ -60,6 +60,8 @@ interface PerformanceEntry {
   gcBonusSeconds: number;
   mountainPoints: number;
   isBreakaway?: boolean;
+  leadoutRiderId?: number | null;
+  leadoutBonus?: number | null;
 }
 
 interface OtlEntry {
@@ -87,6 +89,8 @@ interface ResultInsertRow {
   timeSeconds: number | null;
   points: number | null;
   isBreakaway?: boolean;
+  leadoutRiderId?: number | null;
+  leadoutBonus?: number | null;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -311,6 +315,8 @@ export class StageResultCommitService {
           ? roundStageResultSeconds(entry.finishTimeSeconds)
           : null,
         photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
+        leadoutRiderId: entry.leadoutRiderId ?? null,
+        leadoutBonus: entry.leadoutBonus ?? null,
       }))
       .sort((left: any, right: any) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
@@ -356,6 +362,8 @@ export class StageResultCommitService {
         gcBonusSeconds: 0,
         mountainPoints: 0,
         isBreakaway: entry.isBreakaway === true,
+        leadoutRiderId: entry.leadoutRiderId,
+        leadoutBonus: entry.leadoutBonus,
       } satisfies PerformanceEntry;
     });
 
@@ -640,6 +648,8 @@ export class StageResultCommitService {
           timeSeconds: entry.stageTimeSeconds,
           points: race.isStageRace ? entry.points : null,
           isBreakaway: entry.isBreakaway === true,
+          leadoutRiderId: entry.leadoutRiderId,
+          leadoutBonus: entry.leadoutBonus,
         }));
 
     const gcRows = normalizeTimeRows([...classificationPerformance]
@@ -725,8 +735,8 @@ export class StageResultCommitService {
 
     const insert = this.db.prepare(`
       INSERT INTO results (
-        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertMarkerResult = this.db.prepare(`
       INSERT INTO stage_marker_results (
@@ -1023,6 +1033,8 @@ export class StageResultCommitService {
         row.timeSeconds,
         row.points,
         resultTypeId === RESULT_TYPES.stage && row.isBreakaway === true ? 1 : 0,
+        resultTypeId === RESULT_TYPES.stage && row.leadoutRiderId != null ? row.leadoutRiderId : null,
+        resultTypeId === RESULT_TYPES.stage && row.leadoutBonus != null ? row.leadoutBonus : null,
       );
     } catch (error) {
       throw new Error(
@@ -1040,7 +1052,7 @@ export class StageResultCommitService {
     ridersById: Map<number, Rider>
   ): void {
     const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
-    const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
+    const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.categoryId === 3 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
     const nameLow = race.name.toLowerCase();
     const isMonument = nameLow.includes('monument') || nameLow.includes('san remo') || nameLow.includes('sanremo') || nameLow.includes('roubaix') || nameLow.includes('vlaanderen') || nameLow.includes('flandern') || nameLow.includes('liège') || nameLow.includes('liege') || nameLow.includes('lombardia');
 
@@ -1118,7 +1130,7 @@ export class StageResultCommitService {
     youthRows: any[],
     ridersById: Map<number, Rider>
   ): void {
-    const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2;
+    const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.categoryId === 3;
     const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
     const currentSeason = this.repo.getCurrentSeason();
     const breakthroughRiderIds = new Set<number>();

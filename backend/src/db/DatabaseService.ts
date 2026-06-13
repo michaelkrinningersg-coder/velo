@@ -576,6 +576,20 @@ export class DatabaseService {
       `).run();
     }
 
+    if (!columnExists(db, 'results', 'leadout_rider_id')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL
+      `).run();
+    }
+
+    if (!columnExists(db, 'results', 'leadout_bonus')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN leadout_bonus REAL
+      `).run();
+    }
+
     const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'results'").get() as { sql: string | null } | undefined;
     const createSql = row?.sql ?? '';
     const needsMigration = createSql.includes('(result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)')
@@ -600,6 +614,8 @@ export class DatabaseService {
           time_seconds     INTEGER,
           points           INTEGER,
           is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
+          leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+          leadout_bonus    REAL,
           CHECK(
             (result_type_id = 1 AND team_id IS NOT NULL)
             OR
@@ -610,10 +626,10 @@ export class DatabaseService {
         );
 
         INSERT INTO results_new (
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
         )
         SELECT
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
         FROM results;
 
         DROP TABLE results;

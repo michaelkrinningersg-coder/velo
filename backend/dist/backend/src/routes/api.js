@@ -279,6 +279,21 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
+    router.get('/races/:id/results-roster', (req, res) => {
+        const raceId = Number(req.params['id']);
+        if (!Number.isFinite(raceId))
+            return fail(res, 400, 'Ungültige Rennen-ID.');
+        try {
+            const db = dbService.getActiveConnection();
+            const result = new ResultRepository_1.ResultRepository(db).getRaceRoster(raceId);
+            if (!result)
+                return fail(res, 404, 'Keine Teilnehmerdaten verfügbar (Rennen noch nicht gestartet?).');
+            ok(res, result);
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
     // ---- Stage Editor --------------------------------------
     router.get('/stage-editor/stages', (_req, res) => {
         try {

@@ -148,6 +148,120 @@ class ResultRepository {
             youthLeaderRiderId: this.getPreviousClassificationLeaderRiderId(raceId, stageNumber, mappers_1.RESULT_TYPE_IDS.youth),
         };
     }
+    /**
+     * Returns the actual roster of a race — all riders who started the race,
+     * sourced from the race_entries table.
+     * Also marks riders who have dropped out (DNF/OTL from stage_non_finishers).
+     */
+    getRaceRoster(raceId) {
+        if (!(0, mappers_1.tableExists)(this.db, 'race_entries') || !(0, mappers_1.tableExists)(this.db, 'stages')) {
+            return null;
+        }
+        // Check that race exists
+        const raceRow = this.db.prepare(`
+      SELECT races.id AS race_id, races.name AS race_name
+      FROM races
+      WHERE races.id = ?
+    `).get(raceId);
+        if (!raceRow)
+            return null;
+        // Check if the race has actually started/has entries
+        const entriesCountRow = this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM race_entries
+      WHERE race_id = ?
+    `).get(raceId);
+        if (!entriesCountRow || entriesCountRow.count === 0) {
+            return null;
+        }
+        const rosterRows = this.db.prepare(`
+      SELECT DISTINCT
+        riders.id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        sta_country.code_3 AS country_code,
+        teams.id AS team_id,
+        teams.name AS team_name,
+        role.id AS role_id,
+        role.name AS role_name,
+        riders.overall_rating AS overall_rating,
+        specialization_1.type_key AS spec1_name,
+        specialization_2.type_key AS spec2_name,
+        (
+          SELECT r.rank
+          FROM results r
+          JOIN stages s ON s.id = r.stage_id
+          WHERE s.race_id = ? 
+            AND r.result_type_id = 2
+            AND r.rider_id = riders.id
+            AND s.stage_number = (
+              SELECT MAX(s2.stage_number)
+              FROM stages s2
+              JOIN results r2 ON r2.stage_id = s2.id
+              WHERE s2.race_id = ? AND r2.result_type_id = 2
+            )
+        ) AS gc_rank,
+        (
+          SELECT se.status
+          FROM stage_entries se
+          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
+          LIMIT 1
+        ) AS dropout_status,
+        (
+          SELECT se.status_reason
+          FROM stage_entries se
+          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
+          LIMIT 1
+        ) AS dropout_reason
+      FROM race_entries
+      JOIN riders ON riders.id = race_entries.rider_id
+      LEFT JOIN sta_country ON sta_country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = race_entries.team_id
+      LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
+      LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
+      WHERE race_entries.race_id = ?
+      ORDER BY teams.name ASC, riders.last_name ASC, riders.first_name ASC
+    `).all(raceId, raceId, raceId, raceId, raceId);
+        // Determine dropped riders: any rider with a row in stage_non_finishers for this race
+        const droppedRiderIds = new Set();
+        if ((0, mappers_1.tableExists)(this.db, 'stage_non_finishers')) {
+            const nonFinRows = this.db.prepare(`
+        SELECT DISTINCT stage_non_finishers.rider_id AS rider_id
+        FROM stage_non_finishers
+        JOIN stages ON stages.id = stage_non_finishers.stage_id
+        WHERE stages.race_id = ?
+      `).all(raceId);
+            for (const r of nonFinRows) {
+                droppedRiderIds.add(r.rider_id);
+            }
+        }
+        const entries = rosterRows.map((row) => {
+            const hasDropped = droppedRiderIds.has(row.rider_id) || row.dropout_status != null;
+            return {
+                riderId: row.rider_id,
+                firstName: row.first_name,
+                lastName: row.last_name,
+                countryCode: row.country_code,
+                teamId: row.team_id,
+                teamName: row.team_name,
+                roleId: row.role_id,
+                roleName: row.role_name,
+                overallRating: row.overall_rating,
+                specialization1: row.spec1_name,
+                specialization2: row.spec2_name,
+                hasDropped,
+                gcRank: hasDropped ? null : row.gc_rank,
+                dropoutStatus: row.dropout_status,
+                dropoutReason: row.dropout_reason,
+            };
+        });
+        return {
+            raceId: raceRow.race_id,
+            raceName: raceRow.race_name,
+            entries,
+        };
+    }
     getStageResults(stageId) {
         if (!(0, mappers_1.tableExists)(this.db, 'results') || !(0, mappers_1.tableExists)(this.db, 'result_types')) {
             return null;
@@ -189,11 +303,17 @@ class ResultRepository {
         riders.first_name AS rider_first_name,
         riders.last_name AS rider_last_name,
         results.team_id AS team_id,
-        teams.name AS team_name
+        teams.name AS team_name,
+        results.leadout_rider_id AS leadout_rider_id,
+        results.leadout_bonus AS leadout_bonus,
+        leadout_riders.last_name AS leadout_rider_last_name,
+        leadout_countries.code_3 AS leadout_rider_country_code
       FROM results
       JOIN result_types ON result_types.id = results.result_type_id
       LEFT JOIN riders ON riders.id = results.rider_id
       LEFT JOIN teams ON teams.id = results.team_id
+      LEFT JOIN riders AS leadout_riders ON leadout_riders.id = results.leadout_rider_id
+      LEFT JOIN sta_country AS leadout_countries ON leadout_countries.id = leadout_riders.country_id
       WHERE results.stage_id = ?
       ORDER BY results.result_type_id ASC, results.rank ASC
     `).all(stageId);
@@ -269,6 +389,10 @@ class ResultRepository {
                     uciPoints: this.resolveStageRowUciPoints(meta, row, uciPointsByRiderAndAwardType, uciPointsByTeamId),
                     previousRank: previousRank,
                     rankDelta: previousRank != null ? previousRank - displayRank : null,
+                    leadoutRiderId: resultType.id === mappers_1.RESULT_TYPE_IDS.stage ? row.leadout_rider_id : null,
+                    leadoutBonus: resultType.id === mappers_1.RESULT_TYPE_IDS.stage ? row.leadout_bonus : null,
+                    leadoutRiderLastName: resultType.id === mappers_1.RESULT_TYPE_IDS.stage ? row.leadout_rider_last_name : null,
+                    leadoutRiderCountryCode: resultType.id === mappers_1.RESULT_TYPE_IDS.stage ? row.leadout_rider_country_code : null,
                 };
             });
             return {

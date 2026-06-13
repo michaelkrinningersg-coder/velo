@@ -27,7 +27,7 @@ const GENERIC_FILL_ROLE_PRIORITY = new Map([
     [3, 2],
     [6, 3],
 ]);
-const SPECIAL_FILL_CATEGORIES = new Set([1, 2, 3, 6]);
+const SPECIAL_FILL_CATEGORIES = new Set([1, 2, 3, 4, 7]);
 const SPECIAL_FILL_SEQUENCE = [
     { roleId: 3, phase: 'rise' },
     { roleId: 3, phase: 'neutral' },
@@ -110,7 +110,7 @@ function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
             }
         }
     }
-    if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+    if (race && (race.categoryId === 6 || race.categoryId === 9)) {
         const ridersByTeamId = groupRidersByTeam(riders);
         for (const teamRiders of ridersByTeamId.values()) {
             // Find the best Co-Captain (roleId === 2)

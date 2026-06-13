@@ -68,6 +68,13 @@ import { RaceSimView } from './race-sim/RaceSimView';
 // ============================================================
 
 export async function enterGameScreen(): Promise<void> {
+  // Clear any logged keys to ensure logs show on enter
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && (key.startsWith('programAssignmentsLogged_') || key.startsWith('participantCountsLogged_'))) {
+      localStorage.removeItem(key);
+    }
+  }
   showScreen('game');
   $('meta-career').textContent = state.currentSave?.careerName ?? '';
   activateView('dashboard');

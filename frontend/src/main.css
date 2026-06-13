@@ -822,6 +822,11 @@ html, body {
   vertical-align: middle;
 }
 
+.results-points-cell {
+  text-align: center;
+}
+
+
 .dashboard-stage-details {
   margin-top: .45rem;
 }
@@ -4940,7 +4945,7 @@ html, body {
 }
 
 .jersey-dot-yellow {
-  background-color: #f59e0b; /* warm yellow */
+  background-color: #fbbf24; /* yellow */
 }
 
 .jersey-dot-green {
@@ -4953,5 +4958,342 @@ html, body {
 
 .jersey-dot-white {
   background-color: #ffffff; /* white */
+}
+
+/* ============================================================
+   RESULTS ROSTER (Teilnehmerübersicht)
+============================================================ */
+
+.results-roster {
+  margin-top: 1rem;
+}
+
+.results-roster-empty {
+  padding: 1.2rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-800);
+  color: var(--text-500);
+}
+
+.results-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  background: var(--bg-800);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.results-roster-team {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem;
+  background: var(--bg-900);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.results-roster-team-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.results-roster-jersey {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.results-roster-jersey-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.results-roster-team-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.results-roster-riders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.results-roster-riders::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  right: 3.15rem;
+  width: 1px;
+  background-color: var(--border);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+
+.results-roster-rider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.results-roster-rider:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.results-roster-rider-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.results-roster-rider-badges {
+  display: grid;
+  grid-template-columns: 2.4rem auto 2.4rem;
+  gap: 0.4rem;
+  align-items: center;
+  justify-items: center;
+  flex-shrink: 0;
+}
+
+.results-roster-rider-badges.results-roster-rider-badges-oneday {
+  grid-template-columns: 2.4rem;
+}
+
+.results-roster-riders.results-roster-riders-oneday::after {
+  display: none;
+}
+
+
+.results-roster-badge-divider {
+  width: 1px;
+  height: 1.2rem;
+  flex-shrink: 0;
+}
+
+.results-roster-gc-placeholder {
+  width: 2.4rem;
+  height: 2.1rem;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.results-roster-rider-top {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.results-roster-flag {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 0.75rem;
+}
+
+.results-roster-flag-placeholder {
+  display: inline-block;
+  width: 1rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+}
+
+.results-roster-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.results-roster-name.strongest-rider {
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  padding: 0px 3px;
+  margin: -1px 0;
+  background: rgba(251, 191, 36, 0.08);
+  box-shadow: 0 0 3px rgba(251, 191, 36, 0.15);
+}
+
+.results-roster-name.best-sprinter {
+  border: 1px solid #10b981;
+  border-radius: 4px;
+  padding: 0px 3px;
+  margin: -1px 0;
+  background: rgba(16, 185, 129, 0.08);
+  box-shadow: 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.results-roster-rider-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding-left: 1.3rem;
+}
+
+.results-roster-role-spec {
+  font-size: 0.66rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+  opacity: 0.85;
+}
+
+.results-roster-overall-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  max-width: 2.4rem;
+  height: 2.1rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, .25);
+  background: rgba(15, 23, 42, .72);
+  font-size: .76rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.results-roster-rider-badges .rider-stats-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  max-width: 2.4rem;
+  height: 2.1rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  line-height: 1;
+  text-align: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.results-roster-rider.dropped {
+  opacity: 0.45;
+}
+
+.results-roster-rider.dropped .results-roster-name,
+.results-roster-rider.dropped .results-roster-role-spec {
+  text-decoration: line-through;
+}
+
+.results-roster-rider.dropped a {
+  color: var(--text-500) !important;
+  text-decoration: line-through !important;
+  pointer-events: none;
+}
+
+/* ============================================================
+   LEADOUT BONUS POPOVER
+   ============================================================ */
+.leadout-bonus-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.leadout-bonus-popover {
+  position: absolute;
+  top: calc(100% + .45rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  min-width: 20rem;
+  display: none;
+}
+
+.leadout-bonus-anchor:hover .leadout-bonus-popover,
+.leadout-bonus-anchor:focus-within .leadout-bonus-popover {
+  display: block;
+}
+
+.leadout-bonus-popover-card {
+  padding: .6rem .75rem;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(15, 23, 42, .98) 0%, rgba(2, 6, 23, .98) 100%);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.leadout-bonus-popover-head {
+  margin-bottom: .45rem;
+  color: var(--text-100);
+  font-size: .78rem;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  padding-bottom: .3rem;
+}
+
+.leadout-bonus-popover-grid {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 4rem;
+  gap: .45rem;
+  align-items: center;
+  padding: .22rem 0;
+  font-size: .76rem;
+  color: var(--text-100);
+}
+
+.leadout-bonus-popover-grid-head {
+  color: var(--text-500);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  margin-bottom: .2rem;
+  padding-bottom: .35rem;
+}
+
+.leadout-bonus-rider-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 

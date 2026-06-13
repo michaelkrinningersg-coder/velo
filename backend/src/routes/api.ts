@@ -41,6 +41,7 @@ import {
   StageEditorImportRequest,
   StageEditorOverviewResponse,
   StageResultsPayload,
+  RaceRosterPayload,
 } from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
@@ -279,6 +280,17 @@ export function createRouter(dbService: DatabaseService): Router {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
       ok<RaceProgramParticipant[]>(res, new GameRepository(db).getRaceProgramParticipants(raceId));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/races/:id/results-roster', (req: Request, res: Response) => {
+    const raceId = Number(req.params['id']);
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      const result = new ResultRepository(db).getRaceRoster(raceId);
+      if (!result) return fail(res, 404, 'Keine Teilnehmerdaten verfügbar (Rennen noch nicht gestartet?).');
+      ok<RaceRosterPayload>(res, result);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

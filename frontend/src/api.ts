@@ -30,6 +30,7 @@ import type {
   DraftHistoryPayload,
   DraftHistoryRow,
   InjuryRow,
+  RaceRosterPayload,
 } from '../../shared/types';
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
@@ -72,6 +73,7 @@ export const api = {
   exportRiderTeamEditor: (payload: RiderTeamEditorSaveRequest) => call<RiderTeamEditorExportPayload>('POST', '/api/rider-team-editor/export', payload),
   getRaces:            () => call<Race[]>('GET', '/api/races'),
   getRaceProgramParticipants: (raceId: number) => call<RaceProgramParticipant[]>('GET', `/api/races/${raceId}/program-participants`),
+  getRaceResultsRoster:       (raceId: number) => call<RaceRosterPayload>('GET', `/api/races/${raceId}/results-roster`),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   getStageSummary:     (stageId: number) => call<ParsedStageSummary>('GET', `/api/stages/${stageId}/summary`),

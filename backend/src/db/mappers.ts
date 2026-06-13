@@ -347,6 +347,10 @@ export interface StageResultDbRow {
   rider_last_name: string | null;
   team_id: number | null;
   team_name: string | null;
+  leadout_rider_id?: number | null;
+  leadout_bonus?: number | null;
+  leadout_rider_last_name?: string | null;
+  leadout_rider_country_code?: string | null;
 }
 
 export interface StageNonFinisherDbRow {

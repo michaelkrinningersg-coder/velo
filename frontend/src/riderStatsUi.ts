@@ -28,6 +28,9 @@ function joinClassNames(...classNames: Array<string | null | undefined | false>)
 export function resolveRaceCategoryBadgeStyle(categoryName: string | null | undefined): RaceCategoryBadgeStyle {
   const normalizedCategoryName = (categoryName ?? '').toLowerCase();
 
+  if (normalizedCategoryName.includes('tour de france')) {
+    return { background: 'rgba(253, 224, 71, .25)', color: '#fef08a', border: 'rgba(234, 179, 8, .6)' };
+  }
   if (normalizedCategoryName.includes('grand tour')) {
     return { background: 'rgba(6, 182, 212, .16)', color: '#a5f3fc', border: 'rgba(34, 211, 238, .34)' };
   }

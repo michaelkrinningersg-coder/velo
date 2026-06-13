@@ -209,6 +209,8 @@ class StageResultCommitService {
                 ? (0, stageResultRules_1.roundStageResultSeconds)(entry.finishTimeSeconds)
                 : null,
             photoFinishScore: Number.isFinite(entry.photoFinishScore) ? entry.photoFinishScore : 0,
+            leadoutRiderId: entry.leadoutRiderId ?? null,
+            leadoutBonus: entry.leadoutBonus ?? null,
         }))
             .sort((left, right) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
         if (sanitizedEntries.length !== riders.length) {
@@ -248,6 +250,8 @@ class StageResultCommitService {
                 gcBonusSeconds: 0,
                 mountainPoints: 0,
                 isBreakaway: entry.isBreakaway === true,
+                leadoutRiderId: entry.leadoutRiderId,
+                leadoutBonus: entry.leadoutBonus,
             };
         });
         if (seenRiderIds.size !== riders.length) {
@@ -265,7 +269,13 @@ class StageResultCommitService {
         const dnsEvents = this.loadDnsEvents(race, stage);
         const combinedEvents = [...dnsEvents, ...events];
         ResultRepository_1.ResultRepository.inMemoryStageEvents.set(stageId, combinedEvents);
-        return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents);
+        const breakawayRiderIds = new Set();
+        for (const entry of sanitizedEntries) {
+            if (entry.isBreakaway) {
+                breakawayRiderIds.add(entry.riderId);
+            }
+        }
+        return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents, breakawayRiderIds, events);
     }
     loadDnsEvents(race, stage) {
         const tableExists = (db, name) => {
@@ -415,7 +425,7 @@ class StageResultCommitService {
             };
         });
     }
-    persistStagePerformance(race, stage, performance, markerClassifications = [], dnfEntries = [], incidents = []) {
+    persistStagePerformance(race, stage, performance, markerClassifications = [], dnfEntries = [], incidents = [], breakawayRiderIds = new Set(), events = []) {
         const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
         const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
         const previousGc = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.gc, 'time_seconds');
@@ -449,6 +459,8 @@ class StageResultCommitService {
                 timeSeconds: entry.stageTimeSeconds,
                 points: race.isStageRace ? entry.points : null,
                 isBreakaway: entry.isBreakaway === true,
+                leadoutRiderId: entry.leadoutRiderId,
+                leadoutBonus: entry.leadoutBonus,
             }));
         const gcRows = normalizeTimeRows([...classificationPerformance]
             .map((entry) => ({
@@ -525,8 +537,8 @@ class StageResultCommitService {
         }));
         const insert = this.db.prepare(`
       INSERT INTO results (
-        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         const insertMarkerResult = this.db.prepare(`
       INSERT INTO stage_marker_results (
@@ -571,6 +583,57 @@ class StageResultCommitService {
                         continue;
                     insertMarkerResult.run(race.id, stage.id, classification.markerKey, classification.markerLabel, classification.markerType, classification.markerCategory, classification.kmMark, entry.riderId, performanceEntry.team.id, entry.rank, entry.crossingTimeSeconds, entry.gapSeconds, entry.pointsAwarded ?? 0, entry.photoFinishScore);
                 }
+            }
+            // Accumulate and update rider career stats (never reset)
+            const careerStatsIncrements = new Map();
+            const getOrCreateIncrement = (riderId) => {
+                let inc = careerStatsIncrements.get(riderId);
+                if (!inc) {
+                    inc = { breakaway: 0, attacks: 0, counterAttacks: 0, crashes: 0, defects: 0 };
+                    careerStatsIncrements.set(riderId, inc);
+                }
+                return inc;
+            };
+            // 1. Breakaway attempts
+            for (const riderId of breakawayRiderIds) {
+                getOrCreateIncrement(riderId).breakaway = 1;
+            }
+            // 2. Crashes and mechanical defects
+            for (const incident of incidents) {
+                const inc = getOrCreateIncrement(incident.riderId);
+                if (incident.type === 'crash') {
+                    inc.crashes++;
+                }
+                else if (incident.type === 'mechanical') {
+                    inc.defects++;
+                }
+            }
+            // 3. Attacks and counter-attacks
+            for (const event of events) {
+                if (event.riderId != null) {
+                    const inc = getOrCreateIncrement(event.riderId);
+                    if (event.type === 'attack' && event.title && event.title.includes('attackiert')) {
+                        inc.attacks++;
+                    }
+                    else if (event.type === 'counter_attack') {
+                        inc.counterAttacks++;
+                    }
+                }
+            }
+            // 4. Perform SQLite update
+            const updateStatsStmt = this.db.prepare(`
+        INSERT INTO rider_career_stats (
+          rider_id, breakaway_attempts, attacks, counter_attacks, crashes, defects
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(rider_id) DO UPDATE SET
+          breakaway_attempts = breakaway_attempts + excluded.breakaway_attempts,
+          attacks = attacks + excluded.attacks,
+          counter_attacks = counter_attacks + excluded.counter_attacks,
+          crashes = crashes + excluded.crashes,
+          defects = defects + excluded.defects
+      `);
+            for (const [riderId, inc] of careerStatsIncrements.entries()) {
+                updateStatsStmt.run(riderId, inc.breakaway, inc.attacks, inc.counterAttacks, inc.crashes, inc.defects);
             }
             this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
             for (const entry of dnfEntries) {
@@ -624,6 +687,21 @@ class StageResultCommitService {
           unavailable_days_remaining = ?
       WHERE rider_id = ?
     `).run(unavailableUntil, durationDays, riderId);
+        // Track crash-induced injury in career stats
+        const tableExists = (db, name) => {
+            const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+            return !!row;
+        };
+        if (tableExists(this.db, 'rider_career_stats')) {
+            this.db.prepare(`
+        INSERT INTO rider_career_stats (
+          rider_id, injuries, injury_days
+        ) VALUES (?, 1, ?)
+        ON CONFLICT(rider_id) DO UPDATE SET
+          injuries = injuries + excluded.injuries,
+          injury_days = injury_days + excluded.injury_days
+      `).run(riderId, durationDays);
+        }
     }
     ensureStageCanBeSimulated(stage) {
         const existing = this.db.prepare(`
@@ -696,7 +774,7 @@ class StageResultCommitService {
     }
     insertResultRow(insert, raceId, stageId, resultTypeId, row) {
         try {
-            insert.run(raceId, stageId, row.riderId ?? null, row.teamId, resultTypeId, row.rank, row.timeSeconds, row.points, resultTypeId === RESULT_TYPES.stage && row.isBreakaway === true ? 1 : 0);
+            insert.run(raceId, stageId, row.riderId ?? null, row.teamId, resultTypeId, row.rank, row.timeSeconds, row.points, resultTypeId === RESULT_TYPES.stage && row.isBreakaway === true ? 1 : 0, resultTypeId === RESULT_TYPES.stage && row.leadoutRiderId != null ? row.leadoutRiderId : null, resultTypeId === RESULT_TYPES.stage && row.leadoutBonus != null ? row.leadoutBonus : null);
         }
         catch (error) {
             throw new Error(`Ergebnis konnte nicht gespeichert werden (type=${resultTypeId}, stage=${stageId}, rank=${row.rank}, rider=${row.riderId ?? 'null'}, team=${row.teamId ?? 'null'}): ${error.message}`);
@@ -704,7 +782,7 @@ class StageResultCommitService {
     }
     evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById) {
         const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
-        const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
+        const isCat1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.categoryId === 3 || race.category?.name?.startsWith('1.') || race.category?.name?.startsWith('2.');
         const nameLow = race.name.toLowerCase();
         const isMonument = nameLow.includes('monument') || nameLow.includes('san remo') || nameLow.includes('sanremo') || nameLow.includes('roubaix') || nameLow.includes('vlaanderen') || nameLow.includes('flandern') || nameLow.includes('liège') || nameLow.includes('liege') || nameLow.includes('lombardia');
         const winRiderIds = new Set();
@@ -767,7 +845,7 @@ class StageResultCommitService {
         }
     }
     evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById) {
-        const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2;
+        const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.categoryId === 3;
         const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
         const currentSeason = this.repo.getCurrentSeason();
         const breakthroughRiderIds = new Set();

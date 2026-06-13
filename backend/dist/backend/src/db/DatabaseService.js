@@ -438,6 +438,18 @@ class DatabaseService {
         ADD COLUMN is_breakaway INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1))
       `).run();
         }
+        if (!columnExists(db, 'results', 'leadout_rider_id')) {
+            db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL
+      `).run();
+        }
+        if (!columnExists(db, 'results', 'leadout_bonus')) {
+            db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN leadout_bonus REAL
+      `).run();
+        }
         const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'results'").get();
         const createSql = row?.sql ?? '';
         const needsMigration = createSql.includes('(result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)')
@@ -460,6 +472,8 @@ class DatabaseService {
           time_seconds     INTEGER,
           points           INTEGER,
           is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
+          leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+          leadout_bonus    REAL,
           CHECK(
             (result_type_id = 1 AND team_id IS NOT NULL)
             OR
@@ -470,10 +484,10 @@ class DatabaseService {
         );
 
         INSERT INTO results_new (
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
         )
         SELECT
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
         FROM results;
 
         DROP TABLE results;
@@ -571,6 +585,34 @@ class DatabaseService {
         PRIMARY KEY (rider_id, award_date)
       )
     `).run();
+    }
+    ensureRiderCareerStatsSchema(db) {
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_career_stats (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        breakaway_attempts INTEGER NOT NULL DEFAULT 0,
+        attacks INTEGER NOT NULL DEFAULT 0,
+        counter_attacks INTEGER NOT NULL DEFAULT 0,
+        crashes INTEGER NOT NULL DEFAULT 0,
+        defects INTEGER NOT NULL DEFAULT 0,
+        illnesses INTEGER NOT NULL DEFAULT 0,
+        illness_days INTEGER NOT NULL DEFAULT 0,
+        injuries INTEGER NOT NULL DEFAULT 0,
+        injury_days INTEGER NOT NULL DEFAULT 0
+      )
+    `).run();
+        if (!columnExists(db, 'rider_career_stats', 'illnesses')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN illnesses INTEGER NOT NULL DEFAULT 0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'illness_days')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN illness_days INTEGER NOT NULL DEFAULT 0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'injuries')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injuries INTEGER NOT NULL DEFAULT 0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'injury_days')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injury_days INTEGER NOT NULL DEFAULT 0').run();
+        }
     }
     ensureRaceProgramSchema(db) {
         db.exec(`
@@ -810,6 +852,7 @@ class DatabaseService {
         this.ensureStageRaceStateSchema(this.activeConnection);
         this.ensureRiderFormSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);
+        this.ensureRiderCareerStatsSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         this.ensureDayChangeIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
@@ -868,6 +911,7 @@ class DatabaseService {
         this.ensureResultsSchema(this.activeConnection);
         this.ensureStageRaceStateSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);
+        this.ensureRiderCareerStatsSchema(this.activeConnection);
         this.ensureStageSpreadData(this.activeConnection);
         return this.activeConnection;
     }

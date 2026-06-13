@@ -60,6 +60,8 @@ export function buildRealtimeCommitEntries(
       isBreakaway: rider.isBreakaway,
       statusReason: rider.statusReason ?? null,
       photoFinishScore: rider.photoFinishScore,
+      leadoutRiderId: rider.leadoutRiderId,
+      leadoutBonus: rider.leadoutBonus,
     } satisfies RealtimeStageCommitEntry))
     .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
 }

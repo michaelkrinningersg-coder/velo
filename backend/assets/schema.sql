@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 --  VELO â€“ Master-Datenbankschema (world_data.db)
 --  Wird bei Spielstart als schreibgeschÃ¼tzte Vorlage genutzt.
 --  Beim Erstellen einer neuen Karriere wird diese Datei in den
@@ -392,6 +392,8 @@ CREATE TABLE IF NOT EXISTS results (
   time_seconds     INTEGER,
   points           INTEGER,
   is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
+  leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+  leadout_bonus    REAL,
   CHECK(
     (result_type_id = 1 AND team_id IS NOT NULL)
     OR

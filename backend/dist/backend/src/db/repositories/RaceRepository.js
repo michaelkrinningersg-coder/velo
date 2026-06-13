@@ -95,7 +95,7 @@ class RaceRepository {
             }
         }
         const excludedRiderIds = new Set();
-        if (race && (race.categoryId === 5 || race.categoryId === 8)) {
+        if (race && (race.categoryId === 6 || race.categoryId === 9)) {
             for (const teamRiders of ridersByTeamId.values()) {
                 // Find best Co-Captain (roleId === 2)
                 const coCaptains = teamRiders.filter((r) => r.roleId === 2);

@@ -686,6 +686,7 @@ function provisionalOverall(row, ctx) {
         int(req(row, 'skill_stamina', ctx), ctx),
         int(req(row, 'skill_resistance', ctx), ctx),
         int(req(row, 'skill_recuperation', ctx), ctx),
+        int(req(row, 'skill_acceleration', ctx), ctx),
     ];
     return clamp(values.reduce((sum, value) => sum + value, 0) / values.length);
 }

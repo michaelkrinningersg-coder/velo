@@ -2668,7 +2668,7 @@ class GameRepository {
         return this.db.prepare(`
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
-        COUNT(*) AS race_days
+        COUNT(*) AS raceDays
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       WHERE stage_entries.status != 'dns'

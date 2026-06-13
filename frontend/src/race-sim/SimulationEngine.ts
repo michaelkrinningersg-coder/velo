@@ -61,6 +61,8 @@ export interface RealtimeRiderSnapshot {
   activeTerrain: StageTerrain | 'Finish';
   skillName: TerrainSkillName | 'Finish';
   skillBreakdown: string;
+  leadoutBonus?: number;
+  leadoutRiderId?: number | null;
   baseSkill: number;
   teamGroupBonus: number;
   effectiveSkill: number;
@@ -204,6 +206,7 @@ interface RiderState {
   isBreakaway: boolean;
   isLeadingGroup: boolean;
   leadoutBonus?: number;
+  leadoutRiderId?: number | null;
 }
 
 interface BasePhysicsResult {
@@ -1391,6 +1394,8 @@ export class SimulationEngine {
         draftPackFactor: rider.draftPackFactor,
         currentSpeedMps: rider.currentSpeedMps,
         photoFinishScore: rider.photoFinishScore,
+        leadoutBonus: rider.leadoutBonus,
+        leadoutRiderId: rider.leadoutRiderId,
         lastSplitLabel: rider.lastSplitLabel,
         lastSplitTimeSeconds: rider.lastSplitTimeSeconds,
         splitTimes: { ...rider.splitTimes },
@@ -3510,7 +3515,12 @@ export class SimulationEngine {
       this.teamSprintSpecialRandomValues.set(teamId, teamSpecialRand);
     }
 
+    rider.leadoutRiderId = null;
+
     let totalBonus = 0;
+    let maxContribution = 0;
+    let bestTeammateId: number | null = null;
+
     for (const r of teamRiders) {
       if (r.rider.id === rider.rider.id) {
         continue;
@@ -3540,10 +3550,24 @@ export class SimulationEngine {
         } else if (metCount === 4) {
           multiplier = 2.0;
         }
-        totalBonus += baseBonus * multiplier;
+        const contribution = baseBonus * multiplier;
+        totalBonus += contribution;
+
+        if (contribution > maxContribution) {
+          maxContribution = contribution;
+          bestTeammateId = r.rider.id;
+        } else if (contribution === maxContribution && bestTeammateId !== null) {
+          const existingRider = this.riders.find((x) => x.rider.id === bestTeammateId);
+          if (existingRider && r.rider.skills.sprint > existingRider.rider.skills.sprint) {
+            bestTeammateId = r.rider.id;
+          }
+        }
       }
     }
 
+    if (totalBonus > 0) {
+      rider.leadoutRiderId = bestTeammateId;
+    }
     return totalBonus;
   }
 

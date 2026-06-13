@@ -10,6 +10,8 @@ type RiderProgramRow = {
   specialization_1_id: number | null;
   specialization_2_id: number | null;
   specialization_3_id: number | null;
+  overall_rating: number;
+  team_id: number;
   skill_flat: number;
   skill_mountain: number;
   skill_medium_mountain: number;
@@ -187,12 +189,56 @@ export class RiderProgramService {
       return;
     }
 
+    // Query all active riders to compute rankings within each team
+    const allActiveRiders = this.db.prepare(`
+      SELECT riders.id,
+             role.name AS role_name,
+             riders.overall_rating,
+             COALESCE(current_contract.team_id, riders.active_team_id) AS team_id
+      FROM riders
+      LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN contracts current_contract
+        ON current_contract.id = (
+          SELECT contracts.id
+          FROM contracts
+          WHERE contracts.rider_id = riders.id
+            AND contracts.start_season <= ?
+            AND contracts.end_season >= ?
+          ORDER BY contracts.start_season DESC, contracts.id DESC
+          LIMIT 1
+        )
+      WHERE riders.is_retired = 0
+        AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
+    `).all(season, season) as Array<{ id: number; role_name: string | null; overall_rating: number; team_id: number }>;
+
+    const ridersByTeam = new Map<number, typeof allActiveRiders>();
+    for (const r of allActiveRiders) {
+      const teamId = r.team_id;
+      if (!ridersByTeam.has(teamId)) {
+        ridersByTeam.set(teamId, []);
+      }
+      ridersByTeam.get(teamId)!.push(r);
+    }
+    for (const teamRiders of ridersByTeam.values()) {
+      teamRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+    }
+
+    const bestSprinterByTeam = new Map<number, number>();
+    for (const [teamId, teamRiders] of ridersByTeam.entries()) {
+      const sprinters = teamRiders.filter(r => normalizeRoleName(r.role_name) === 'Sprinter');
+      if (sprinters.length > 0) {
+        bestSprinterByTeam.set(teamId, sprinters[0].id);
+      }
+    }
+
     const riders = this.db.prepare(`
       SELECT riders.id,
              role.name AS role_name,
              riders.specialization_1_id,
              riders.specialization_2_id,
              riders.specialization_3_id,
+             riders.overall_rating,
+             COALESCE(current_contract.team_id, riders.active_team_id) AS team_id,
              riders.skill_flat,
              riders.skill_mountain,
              riders.skill_medium_mountain,
@@ -240,7 +286,33 @@ export class RiderProgramService {
       for (const rider of riders) {
         const roleName = normalizeRoleName(rider.role_name);
         const specs = resolveBestSpecIds(rider);
-        const rulePool = selectRulePool(rules, roleName, specs);
+
+        const isBestSprinter = bestSprinterByTeam.get(rider.team_id) === rider.id;
+        let rulePool: ProbabilityRuleRow[];
+
+        if (isBestSprinter) {
+          rulePool = [
+            { id: -1, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 2, probability: 50 },
+            { id: -2, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 6, probability: 50 },
+          ];
+        } else {
+          const excludedProgramIds = new Set<number>();
+          if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
+            [14, 15, 17, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
+          }
+          const teamRiders = ridersByTeam.get(rider.team_id) ?? [];
+          const nonLeaderRiders = teamRiders.filter(
+            r => normalizeRoleName(r.role_name) !== 'Kapitaen' && normalizeRoleName(r.role_name) !== 'Co-Kapitaen'
+          );
+          const nonLeaderIndex = nonLeaderRiders.findIndex(r => r.id === rider.id);
+          if (nonLeaderIndex >= 0 && nonLeaderIndex <= 3) {
+            [15, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
+          }
+
+          const filteredRules = rules.filter(r => !excludedProgramIds.has(r.program_id));
+          rulePool = selectRulePool(filteredRules, roleName, specs);
+        }
+
         const programId = chooseProgramId(rulePool, `${season}|${rider.id}|${roleName}|${specs.join('|')}`);
         if (programId == null) {
           continue;
@@ -248,6 +320,43 @@ export class RiderProgramService {
         insert.run(season, rider.id, programId, assignedDate);
       }
     })();
+
+    // Debug output: count program assignments and print detailed lists sorted by overall strength
+    try {
+      const assignments = this.db.prepare(`
+        SELECT riders.first_name,
+               riders.last_name,
+               riders.overall_rating,
+               race_programs.name AS program_name,
+               race_programs.id AS program_id
+        FROM rider_season_programs
+        JOIN riders ON riders.id = rider_season_programs.rider_id
+        JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+        WHERE rider_season_programs.season = ?
+      `).all(season) as Array<{ first_name: string; last_name: string; overall_rating: number; program_name: string; program_id: number }>;
+
+      const assignmentsByProgram = new Map<string, typeof assignments>();
+      for (const a of assignments) {
+        if (!assignmentsByProgram.has(a.program_name)) {
+          assignmentsByProgram.set(a.program_name, []);
+        }
+        assignmentsByProgram.get(a.program_name)!.push(a);
+      }
+
+      console.log(`\n=== RACE PROGRAM ASSIGNMENTS FOR SEASON ${season} ===`);
+      const sortedProgNames = Array.from(assignmentsByProgram.keys()).sort();
+      for (const progName of sortedProgNames) {
+        const progRiders = assignmentsByProgram.get(progName)!;
+        progRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.last_name.localeCompare(b.last_name));
+        console.log(`Program: ${progName} (Count: ${progRiders.length})`);
+        for (const r of progRiders) {
+          console.log(`  - ${r.first_name} ${r.last_name} (OVR: ${r.overall_rating})`);
+        }
+      }
+      console.log(`===================================================\n`);
+    } catch (error) {
+      console.error('Failed to print race program assignment debug log:', error);
+    }
   }
 
   private ensureSchema(): void {

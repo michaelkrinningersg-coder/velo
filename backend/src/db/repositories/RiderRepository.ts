@@ -1085,21 +1085,32 @@ export class RiderRepository {
 
     const categories: Record<string, {
       gcWins: number;
-      gcPodiums: number;
+      gcSecond: number;
+      gcThird: number;
       gcTopTen: number;
       stageWins: number;
-      stagePodiums: number;
+      stageSecond: number;
+      stageThird: number;
       stageTopTen: number;
       oneDayWins: number;
-      oneDayPodiums: number;
+      oneDaySecond: number;
+      oneDayThird: number;
       oneDayTopTen: number;
       mountainWins: number;
       pointsWins: number;
       youthWins: number;
       raceDays: number;
+      leaderJerseys: number;
+      sprintWins: number;
+      climbWinsHC: number;
+      climbWins1: number;
+      climbWins2: number;
+      climbWins3: number;
+      climbWins4: number;
     }> = {};
 
     const knownCategories = [
+      'World Tour - Tour de France',
       'World Tour - Grand Tour',
       'World Tour - Monument',
       'World Tour - Stage Race High',
@@ -1113,18 +1124,28 @@ export class RiderRepository {
     for (const cat of knownCategories) {
       categories[cat] = {
         gcWins: 0,
-        gcPodiums: 0,
+        gcSecond: 0,
+        gcThird: 0,
         gcTopTen: 0,
         stageWins: 0,
-        stagePodiums: 0,
+        stageSecond: 0,
+        stageThird: 0,
         stageTopTen: 0,
         oneDayWins: 0,
-        oneDayPodiums: 0,
+        oneDaySecond: 0,
+        oneDayThird: 0,
         oneDayTopTen: 0,
         mountainWins: 0,
         pointsWins: 0,
         youthWins: 0,
         raceDays: 0,
+        leaderJerseys: 0,
+        sprintWins: 0,
+        climbWinsHC: 0,
+        climbWins1: 0,
+        climbWins2: 0,
+        climbWins3: 0,
+        climbWins4: 0,
       };
     }
 
@@ -1142,7 +1163,8 @@ export class RiderRepository {
       for (const row of raceDaysRows) {
         let catStats = categories[row.category_name];
         if (catStats) {
-          catStats.raceDays = row.race_days;
+          const days = (row as any).race_days ?? (row as any).raceDays ?? (row as any).racedays ?? 0;
+          catStats.raceDays = Number(days);
         }
       }
     }
@@ -1191,18 +1213,28 @@ export class RiderRepository {
         if (!catStats) {
           catStats = {
             gcWins: 0,
-            gcPodiums: 0,
+            gcSecond: 0,
+            gcThird: 0,
             gcTopTen: 0,
             stageWins: 0,
-            stagePodiums: 0,
+            stageSecond: 0,
+            stageThird: 0,
             stageTopTen: 0,
             oneDayWins: 0,
-            oneDayPodiums: 0,
+            oneDaySecond: 0,
+            oneDayThird: 0,
             oneDayTopTen: 0,
             mountainWins: 0,
             pointsWins: 0,
             youthWins: 0,
             raceDays: 0,
+            leaderJerseys: 0,
+            sprintWins: 0,
+            climbWinsHC: 0,
+            climbWins1: 0,
+            climbWins2: 0,
+            climbWins3: 0,
+            climbWins4: 0,
           };
           categories[row.category_name] = catStats;
         }
@@ -1213,18 +1245,36 @@ export class RiderRepository {
 
         if (row.result_type_id === 1) { // Stage result
           if (!isStageRace) {
-            if (rank === 1) catStats.oneDayWins++;
-            if (rank > 1 && rank <= 3) catStats.oneDayPodiums++;
-            if (rank > 3 && rank <= 10) catStats.oneDayTopTen++;
+            if (rank === 1) {
+              catStats.oneDayWins++;
+            } else if (rank === 2) {
+              catStats.oneDaySecond++;
+            } else if (rank === 3) {
+              catStats.oneDayThird++;
+            } else if (rank > 3 && rank <= 10) {
+              catStats.oneDayTopTen++;
+            }
           } else {
-            if (rank === 1) catStats.stageWins++;
-            if (rank > 1 && rank <= 3) catStats.stagePodiums++;
-            if (rank > 3 && rank <= 10) catStats.stageTopTen++;
+            if (rank === 1) {
+              catStats.stageWins++;
+            } else if (rank === 2) {
+              catStats.stageSecond++;
+            } else if (rank === 3) {
+              catStats.stageThird++;
+            } else if (rank > 3 && rank <= 10) {
+              catStats.stageTopTen++;
+            }
           }
         } else if (row.result_type_id === 2 && isStageRace && isFinalStage) { // GC
-          if (rank === 1) catStats.gcWins++;
-          if (rank > 1 && rank <= 3) catStats.gcPodiums++;
-          if (rank > 3 && rank <= 10) catStats.gcTopTen++;
+          if (rank === 1) {
+            catStats.gcWins++;
+          } else if (rank === 2) {
+            catStats.gcSecond++;
+          } else if (rank === 3) {
+            catStats.gcThird++;
+          } else if (rank > 3 && rank <= 10) {
+            catStats.gcTopTen++;
+          }
         } else if (row.result_type_id === 3 && isStageRace && isFinalStage) { // Points
           if (rank === 1) catStats.pointsWins++;
         } else if (row.result_type_id === 4 && isStageRace && isFinalStage) { // Mountain
@@ -1233,6 +1283,84 @@ export class RiderRepository {
           if (rank === 1) catStats.youthWins++;
         }
       }
+    }
+
+    if (tableExists(this.db, 'results') && tableExists(this.db, 'stages')) {
+      const leaderJerseyRows = this.db.prepare(`
+        SELECT cat.name AS category_name, COUNT(*) AS count
+        FROM results r
+        JOIN stages ON stages.id = r.stage_id
+        JOIN races ON races.id = stages.race_id
+        JOIN race_categories cat ON cat.id = races.category_id
+        WHERE r.rider_id = ?
+          AND r.result_type_id = 2
+          AND r.rank = 1
+          AND races.is_stage_race = 1
+        GROUP BY cat.name
+      `).all(riderId) as Array<{ category_name: string; count: number }>;
+
+      for (const row of leaderJerseyRows) {
+        let catStats = categories[row.category_name];
+        if (catStats) {
+          catStats.leaderJerseys = row.count;
+        }
+      }
+    }
+
+    if (tableExists(this.db, 'stage_marker_results') && tableExists(this.db, 'races') && tableExists(this.db, 'race_categories')) {
+      const checkpointWinsRows = this.db.prepare(`
+        SELECT 
+          cat.name AS category_name,
+          smr.marker_type,
+          smr.marker_category
+        FROM stage_marker_results smr
+        JOIN races ON races.id = smr.race_id
+        JOIN race_categories cat ON cat.id = races.category_id
+        WHERE smr.rider_id = ? AND smr.rank = 1
+      `).all(riderId) as Array<{ category_name: string; marker_type: string; marker_category: string | null }>;
+
+      for (const row of checkpointWinsRows) {
+        let catStats = categories[row.category_name];
+        if (catStats) {
+          const mType = row.marker_type;
+          const mCat = row.marker_category;
+
+          if (mType === 'sprint_intermediate' || mCat === 'Sprint') {
+            catStats.sprintWins++;
+          }
+          if (mCat === 'HC') {
+            catStats.climbWinsHC++;
+          } else if (mCat === '1') {
+            catStats.climbWins1++;
+          } else if (mCat === '2') {
+            catStats.climbWins2++;
+          } else if (mCat === '3') {
+            catStats.climbWins3++;
+          } else if (mCat === '4') {
+            catStats.climbWins4++;
+          }
+        }
+      }
+    }
+
+    let successfulBreakaways = 0;
+    if (tableExists(this.db, 'results') && tableExists(this.db, 'stages')) {
+      const breakRow = this.db.prepare(`
+        SELECT COUNT(*) as count
+        FROM results r1
+        JOIN stages s ON s.id = r1.stage_id
+        WHERE r1.rider_id = ?
+          AND r1.result_type_id = 1
+          AND r1.is_breakaway = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM results r2
+            WHERE r2.stage_id = r1.stage_id
+              AND r2.result_type_id = 1
+              AND r2.rank < r1.rank
+              AND r2.is_breakaway = 0
+          )
+      `).get(riderId) as { count: number } | undefined;
+      successfulBreakaways = breakRow?.count ?? 0;
     }
 
     let totalGcWins = 0;
@@ -1257,6 +1385,7 @@ export class RiderRepository {
       otlCount,
       totalGcWins,
       totalStageWins,
+      successfulBreakaways,
       categories,
     };
   }
@@ -1321,17 +1450,22 @@ export class RiderRepository {
       return [];
     }
 
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
-        COUNT(*) AS race_days
+        COUNT(*) AS raceDays
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       WHERE stage_entries.status != 'dns'
         AND stage_entries.rider_id = ?
       GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
       ORDER BY season DESC
-    `).all(riderId) as CareerRaceDaysSeasonRow[];
+    `).all(riderId) as any[];
+
+    return rows.map(r => ({
+      season: Number(r.season),
+      raceDays: Number(r.raceDays ?? r.race_days ?? r.racedays ?? 0)
+    }));
   }
 
 

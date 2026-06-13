@@ -162,6 +162,7 @@ export async function loadRaces(): Promise<void> {
     renderDashboard();
   }
   void logParticipantCountsOnce();
+  void logProgramAssignmentsOnce();
 }
 
 async function logParticipantCountsOnce(): Promise<void> {
@@ -189,6 +190,43 @@ async function logParticipantCountsOnce(): Promise<void> {
     if (count >= 0) {
       console.log(`${race.name} (${race.startDate}): ${count} Programmfahrer`);
     }
+  }
+  console.groupEnd();
+
+  localStorage.setItem(storageKey, '1');
+}
+
+export async function logProgramAssignmentsOnce(): Promise<void> {
+  const season = state.gameState?.season;
+  if (!season) return;
+
+  const storageKey = `programAssignmentsLogged_${season}`;
+  if (localStorage.getItem(storageKey)) return;
+
+  const res = await api.getRiders();
+  if (!res.success || !res.data) return;
+
+  const riders = res.data;
+  // Group riders by program
+  const assignmentsByProgram = new Map<number, { name: string; riders: Rider[] }>();
+
+  for (const r of riders) {
+    if (r.seasonProgram) {
+      const prog = r.seasonProgram;
+      if (!assignmentsByProgram.has(prog.id)) {
+        assignmentsByProgram.set(prog.id, { name: prog.name, riders: [] });
+      }
+      assignmentsByProgram.get(prog.id)!.riders.push(r);
+    }
+  }
+
+  if (assignmentsByProgram.size === 0) return;
+
+  console.group(`[Velo] Programmzuweisungen Saison ${season}`);
+  const sortedProgIds = Array.from(assignmentsByProgram.keys()).sort((a, b) => a - b);
+  for (const progId of sortedProgIds) {
+    const prog = assignmentsByProgram.get(progId)!;
+    console.log(`Program: ${progId} - ${prog.name} (Count: ${prog.riders.length})`);
   }
   console.groupEnd();
 

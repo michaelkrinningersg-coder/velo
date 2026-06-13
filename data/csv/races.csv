@@ -1,15 +1,15 @@
 id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_date,prestige
-1,Santos Tour Down Under,20,3,1,8,2026-01-11,2026-01-18,72
-2,Surf Coast Classic ME,20,7,0,1,2026-01-29,2026-01-29,60
-3,Volta Algarve,29,4,1,5,2026-02-18,2026-02-22,68
-4,Cadel Evans Great Ocean Road  Race,20,6,0,1,2026-02-02,2026-02-02,65
-5,Volta a la Comunitat Valenciana,8,4,1,5,2026-02-05,2026-02-09,63
-8,Clasica Almeria,8,7,0,1,2026-02-16,2026-02-16,62
-9,Figueira Champions Classic,29,7,0,1,2026-02-16,2026-02-16,61
-10,UAE Tour,105,3,1,7,2026-02-17,2026-02-23,70
-11,Tour of Oman,68,4,1,5,2026-02-07,2026-02-11,60
-12,Vuelta a Andalucia,8,4,1,5,2026-02-19,2026-02-23,62
-13,Faun-Ardeche,3,7,0,1,2026-03-01,2026-03-01,60
-14,Faun Drome,3,7,0,1,2026-03-02,2026-03-02,60
+1,Santos Tour Down Under,20,4,1,8,2026-01-11,2026-01-18,72
+2,Surf Coast Classic ME,20,8,0,1,2026-01-29,2026-01-29,60
+3,Volta Algarve,29,5,1,5,2026-02-18,2026-02-22,68
+4,Cadel Evans Great Ocean Road  Race,20,7,0,1,2026-02-02,2026-02-02,65
+5,Volta a la Comunitat Valenciana,8,5,1,5,2026-02-05,2026-02-09,63
+8,Clasica Almeria,8,8,0,1,2026-02-16,2026-02-16,62
+9,Figueira Champions Classic,29,8,0,1,2026-02-16,2026-02-16,61
+10,UAE Tour,105,4,1,7,2026-02-17,2026-02-23,70
+11,Tour of Oman,68,5,1,5,2026-02-07,2026-02-11,60
+12,Vuelta a Andalucia,8,5,1,5,2026-02-19,2026-02-23,62
+13,Faun-Ardeche,3,8,0,1,2026-03-01,2026-03-01,60
+14,Faun Drome,3,8,0,1,2026-03-02,2026-03-02,60
 
 

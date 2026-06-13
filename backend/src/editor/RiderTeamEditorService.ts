@@ -196,6 +196,7 @@ function calculateOverall(row: RiderTeamEditorRiderRow): number {
     row.skillStamina,
     row.skillResistance,
     row.skillRecuperation,
+    row.skillAcceleration,
   ];
   return clamp(values.reduce((sum, value) => sum + value, 0) / values.length);
 }

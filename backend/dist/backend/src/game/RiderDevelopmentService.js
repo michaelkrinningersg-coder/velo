@@ -61,6 +61,7 @@ function calcOverall(skills) {
         ['resistance', skills.resistance, 0.1],
         ['recuperation', skills.recuperation, 0.1],
         ['flat', skills.flat, 0.15],
+        ['acceleration', skills.acceleration, 0.8],
     ];
     const weightedTotal = includedSkills.reduce((sum, [, value, weight]) => sum + value * weight, 0);
     let topSkillValue = -Infinity;
@@ -76,7 +77,7 @@ function calcOverall(skills) {
         }
     }
     const bonusTotal = topSkillValue * 1.5 + secondSkillValue * 1.25;
-    const totalWeight = 1.8 + 1 + 1 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 1.5 + 1.25;
+    const totalWeight = 1.8 + 1 + 1 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 0.8 + 1.5 + 1.25;
     return clamp((weightedTotal + bonusTotal) / totalWeight);
 }
 function scoreProfile(skills, weights) {

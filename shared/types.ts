@@ -155,6 +155,31 @@ export interface RaceProgramParticipant {
   program: RaceProgram;
 }
 
+export interface RaceRosterEntry {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  roleId: number | null;
+  roleName: string | null;
+  overallRating: number;
+  specialization1: string | null;
+  specialization2: string | null;
+  /** Whether this rider has not finished (DNF/OTL) in the race */
+  hasDropped: boolean;
+  gcRank?: number | null;
+  dropoutStatus?: 'dns' | 'dnf' | null;
+  dropoutReason?: string | null;
+}
+
+export interface RaceRosterPayload {
+  raceId: number;
+  raceName: string;
+  entries: RaceRosterEntry[];
+}
+
 export interface Rider {
   id: number;
   firstName: string;
@@ -576,6 +601,10 @@ export interface RaceClassificationRow {
   uciPoints: number | null;
   previousRank?: number | null;
   rankDelta?: number | null;
+  leadoutRiderId?: number | null;
+  leadoutBonus?: number | null;
+  leadoutRiderLastName?: string | null;
+  leadoutRiderCountryCode?: string | null;
 }
 
 export type StageResultRow = RaceClassificationRow;
@@ -657,6 +686,8 @@ export interface RealtimeStageCommitEntry {
   isBreakaway?: boolean;
   statusReason?: string | null;
   photoFinishScore?: number;
+  leadoutRiderId?: number | null;
+  leadoutBonus?: number | null;
 }
 
 export interface RealtimeGcStanding {
@@ -816,20 +847,31 @@ export interface RiderCareerStats {
   otlCount: number;
   totalGcWins: number;
   totalStageWins: number;
+  successfulBreakaways: number;
   categories: Record<string, {
     gcWins: number;
-    gcPodiums: number;
+    gcSecond: number;
+    gcThird: number;
     gcTopTen: number;
     stageWins: number;
-    stagePodiums: number;
+    stageSecond: number;
+    stageThird: number;
     stageTopTen: number;
     oneDayWins: number;
-    oneDayPodiums: number;
+    oneDaySecond: number;
+    oneDayThird: number;
     oneDayTopTen: number;
     mountainWins: number;
     pointsWins: number;
     youthWins: number;
     raceDays: number;
+    leaderJerseys: number;
+    sprintWins: number;
+    climbWinsHC: number;
+    climbWins1: number;
+    climbWins2: number;
+    climbWins3: number;
+    climbWins4: number;
   }>;
 }
 
