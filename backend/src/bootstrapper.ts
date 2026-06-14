@@ -42,6 +42,10 @@ interface RiderAllocationRow {
 }
 
 function resolveBackendRoot(): string {
+  if ((process as any).pkg) {
+    return path.resolve(__dirname, '..', '..', '..');
+  }
+
   const candidates = [
     path.resolve(__dirname, '..', '..'),
     path.resolve(__dirname, '..', '..', '..'),

@@ -30,6 +30,10 @@ function columnExists(db: Database.Database, tableName: string, columnName: stri
 }
 
 function resolveAssetsDir(): string {
+  if ((process as any).pkg) {
+    return path.resolve(__dirname, '..', '..', '..', '..', 'assets');
+  }
+
   const candidates = [
     path.resolve(__dirname, '..', '..', 'assets'),
     path.resolve(__dirname, '..', '..', '..', 'assets'),
