@@ -38,11 +38,13 @@ jobs:
       - name: Rename output EXE
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path backend/dist -Filter *.exe | Select-Object -First 1
-          if (-not $exe) {
+          if (Test-Path "backend/dist/velo-backend.exe") {
+            Rename-Item -Path "backend/dist/velo-backend.exe" -NewName "velo-win-x64.exe"
+          } elseif (Test-Path "backend/dist/server.exe") {
+            Rename-Item -Path "backend/dist/server.exe" -NewName "velo-win-x64.exe"
+          } else {
             throw "No EXE generated in backend/dist"
           }
-          Rename-Item -Path $exe.FullName -NewName "velo-win-x64.exe"
 
       - name: Copy SQLite native binary next to EXE
         shell: pwsh
