@@ -56,7 +56,9 @@ export class DatabaseService {
 
   constructor() {
     const assetsDir = resolveAssetsDir();
-    this.masterDbPath = path.join(assetsDir, MASTER_DB_NAME);
+    this.masterDbPath = (process as any).pkg
+      ? path.join(path.dirname(process.execPath), MASTER_DB_NAME)
+      : path.join(assetsDir, MASTER_DB_NAME);
     this.schemaPath = path.join(assetsDir, 'schema.sql');
     this.savegamesDir = process.env['SAVEGAME_DIR']
       ?? path.join(os.homedir(), '.velo', 'savegames');

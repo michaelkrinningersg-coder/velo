@@ -83,7 +83,9 @@ class DatabaseService {
         this.activeConnection = null;
         this.activeSaveName = null;
         const assetsDir = resolveAssetsDir();
-        this.masterDbPath = path.join(assetsDir, MASTER_DB_NAME);
+        this.masterDbPath = process.pkg
+            ? path.join(path.dirname(process.execPath), MASTER_DB_NAME)
+            : path.join(assetsDir, MASTER_DB_NAME);
         this.schemaPath = path.join(assetsDir, 'schema.sql');
         this.savegamesDir = process.env['SAVEGAME_DIR']
             ?? path.join(os.homedir(), '.velo', 'savegames');

@@ -237,6 +237,17 @@ class TeamRepository {
                     climbWins2: 0,
                     climbWins3: 0,
                     climbWins4: 0,
+                    winFlat: 0,
+                    winRolling: 0,
+                    winHilly: 0,
+                    winHillyDifficult: 0,
+                    winMediumMountain: 0,
+                    winMountain: 0,
+                    winHighMountain: 0,
+                    winCobble: 0,
+                    winCobbleHill: 0,
+                    winITT: 0,
+                    winTTT: 0,
                 };
             }
             return {
@@ -406,6 +417,7 @@ class TeamRepository {
         races.is_stage_race AS is_stage_race,
         races.number_of_stages AS number_of_stages,
         stages.stage_number AS stage_number,
+        stages.profile AS profile,
         cat.name AS category_name
       FROM results r
       JOIN stages ON stages.id = r.stage_id
@@ -424,6 +436,31 @@ class TeamRepository {
                 const isStageRace = row.is_stage_race === 1;
                 const isFinalStage = row.stage_number === row.number_of_stages;
                 if (row.result_type_id === 1) { // Stage result
+                    if (rank === 1) {
+                        const profile = row.profile;
+                        if (profile === 'Flat')
+                            catStats.winFlat++;
+                        else if (profile === 'Rolling')
+                            catStats.winRolling++;
+                        else if (profile === 'Hilly')
+                            catStats.winHilly++;
+                        else if (profile === 'Hilly_Difficult')
+                            catStats.winHillyDifficult++;
+                        else if (profile === 'Medium_Mountain')
+                            catStats.winMediumMountain++;
+                        else if (profile === 'Mountain')
+                            catStats.winMountain++;
+                        else if (profile === 'High_Mountain')
+                            catStats.winHighMountain++;
+                        else if (profile === 'Cobble')
+                            catStats.winCobble++;
+                        else if (profile === 'Cobble_Hill')
+                            catStats.winCobbleHill++;
+                        else if (profile === 'ITT')
+                            catStats.winITT++;
+                        else if (profile === 'TTT')
+                            catStats.winTTT++;
+                    }
                     if (!isStageRace) {
                         if (rank === 1)
                             catStats.oneDayWins++;

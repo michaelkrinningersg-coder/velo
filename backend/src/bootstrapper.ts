@@ -63,7 +63,9 @@ const ASSETS_DIR = path.join(BACKEND_ROOT, 'assets');
 const CSV_DIR = path.join(BACKEND_ROOT, '..', 'data', 'csv');
 const STAGES_DIR = path.join(BACKEND_ROOT, '..', 'data', 'stages');
 const SCHEMA_PATH = path.join(ASSETS_DIR, 'schema.sql');
-const DB_PATH = path.join(ASSETS_DIR, 'world_data.db');
+const DB_PATH = (process as any).pkg
+  ? path.join(path.dirname(process.execPath), 'world_data.db')
+  : path.join(ASSETS_DIR, 'world_data.db');
 const DEFAULT_RIDER_TYPE_ID = 1;
 const RULE_APPLIES_TO = new Set(['sprint_intermediate', 'climb_top', 'finish']);
 const RULE_MARKER_TYPES = new Set(['sprint_intermediate', 'climb_top', 'finish_flat', 'finish_hill', 'finish_mountain']);
@@ -1247,7 +1249,7 @@ export function bootstrap(force = false): void {
 
   console.log('Bootstrap: Erstelle world_data.db ...');
 
-  if (!fs.existsSync(ASSETS_DIR)) {
+  if (!(process as any).pkg && !fs.existsSync(ASSETS_DIR)) {
     fs.mkdirSync(ASSETS_DIR, { recursive: true });
   }
 

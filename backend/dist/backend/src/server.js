@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
+const node_child_process_1 = require("node:child_process");
 const bootstrapper_1 = require("./bootstrapper");
 const DatabaseService_1 = require("./db/DatabaseService");
 const api_1 = require("./routes/api");
@@ -49,4 +50,14 @@ if (frontendDistDir) {
 // 6. Server starten
 app.listen(PORT, () => {
     console.log(`Velo Backend läuft auf http://localhost:${PORT}`);
+    // Im verpackten Zustand (pkg) automatisch den Browser öffnen
+    if (process.pkg) {
+        const url = `http://localhost:${PORT}`;
+        const cmd = process.platform === 'win32' ? `start ""` : process.platform === 'darwin' ? 'open' : 'xdg-open';
+        (0, node_child_process_1.exec)(`${cmd} "${url}"`, (err) => {
+            if (err) {
+                console.error(`Fehler beim automatischen Öffnen des Browsers: ${err.message}`);
+            }
+        });
+    }
 });
