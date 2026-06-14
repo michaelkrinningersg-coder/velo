@@ -30,6 +30,21 @@ function columnExists(db: Database.Database, tableName: string, columnName: stri
 }
 
 function resolveAssetsDir(): string {
+  if ((process as any).pkg) {
+    let current = __dirname;
+    while (true) {
+      if (path.basename(current) === 'dist') {
+        return path.join(path.dirname(current), 'assets');
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+    return '/snapshot/backend/assets';
+  }
+
   let current = __dirname;
   while (true) {
     const candidate = path.join(current, 'assets');
@@ -43,10 +58,7 @@ function resolveAssetsDir(): string {
     current = parent;
   }
 
-  // Fallback
-  return (process as any).pkg
-    ? '/snapshot/backend/assets'
-    : path.resolve(__dirname, '..', '..', 'assets');
+  return path.resolve(__dirname, '..', '..', 'assets');
 }
 
 export class DatabaseService {

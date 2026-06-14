@@ -51,6 +51,20 @@ const RiderDevelopmentService_1 = require("./game/RiderDevelopmentService");
 const RiderNewgenService_1 = require("./game/RiderNewgenService");
 const StageScoreCalculator_1 = require("./simulation/StageScoreCalculator");
 function resolveBackendRoot() {
+    if (process.pkg) {
+        let current = __dirname;
+        while (true) {
+            if (path.basename(current) === 'dist') {
+                return path.dirname(current);
+            }
+            const parent = path.dirname(current);
+            if (parent === current) {
+                break;
+            }
+            current = parent;
+        }
+        return '/snapshot/backend';
+    }
     let current = __dirname;
     while (true) {
         const candidate = path.join(current, 'assets');
@@ -63,9 +77,7 @@ function resolveBackendRoot() {
         }
         current = parent;
     }
-    return process.pkg
-        ? '/snapshot/backend'
-        : path.resolve(__dirname, '..', '..');
+    return path.resolve(__dirname, '..', '..');
 }
 const BACKEND_ROOT = resolveBackendRoot();
 const ASSETS_DIR = path.join(BACKEND_ROOT, 'assets');
