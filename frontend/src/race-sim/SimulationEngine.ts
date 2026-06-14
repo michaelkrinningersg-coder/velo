@@ -3606,7 +3606,7 @@ export class SimulationEngine {
     if (totalBonus > 0) {
       rider.leadoutRiderId = bestTeammateId;
     }
-    return totalBonus;
+    return totalBonus * 1.5;
   }
 
   private resolveFinishMarkerType(): 'finish_flat' | 'finish_hill' | 'finish_mountain' {
