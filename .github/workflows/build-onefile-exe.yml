@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 jobs:
-  build-windows-exe:
+  build-standalone-exe:
     runs-on: windows-latest
 
     steps:
@@ -19,44 +19,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install backend dependencies
-        run: npm ci --prefix backend
-
-      - name: Build one-file EXE
-        run: npm run build:exe:win --prefix backend
-
-      - name: Rename output
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem -Path backend/dist -Filter *.exe | Select-Object -First 1
-          if (-not $exe) {
-            throw "No EXE generated in backend/dist"
-          }
-          Rename-Item -Path $exe.FullName -NewName "velo-backend-win-x64.exe"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: velo-backend-win-x64
-          path: backend/dist/velo-backend-win-x64.exe
-          if-no-files-found: error
-
-  build-portable-ui:
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install backend dependencies
-        run: npm ci --prefix backend
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
@@ -64,51 +29,24 @@ jobs:
       - name: Build frontend
         run: npm run build --prefix frontend
 
-      - name: Build backend EXE
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Build standalone EXE
         run: npm run build:exe:win --prefix backend
 
-      - name: Assemble portable package
+      - name: Rename output EXE
         shell: pwsh
         run: |
-          $portableRoot = "release/velo-portable-ui-win-x64"
-          New-Item -ItemType Directory -Path $portableRoot -Force | Out-Null
-
           $exe = Get-ChildItem -Path backend/dist -Filter *.exe | Select-Object -First 1
           if (-not $exe) {
             throw "No EXE generated in backend/dist"
           }
+          Rename-Item -Path $exe.FullName -NewName "velo-win-x64.exe"
 
-          Copy-Item -Path $exe.FullName -Destination "$portableRoot/velo-backend-win-x64.exe" -Force
-          Copy-Item -Path frontend/dist -Destination "$portableRoot/frontend-dist" -Recurse -Force
-
-          $startScript = @(
-            '@echo off',
-            'setlocal',
-            'set SCRIPT_DIR=%~dp0',
-            'start "Velo Backend" "%SCRIPT_DIR%velo-backend-win-x64.exe"',
-            'timeout /t 2 /nobreak >nul',
-            'start "" "http://localhost:3101"',
-            'echo Velo wurde gestartet. Fenster kann geschlossen werden.'
-          )
-          Set-Content -Path "$portableRoot/start-velo.cmd" -Value $startScript -Encoding ASCII
-
-          $readme = @(
-            'Velo Portable UI (Windows x64)',
-            '',
-            '1. start-velo.cmd ausfuehren.',
-            '2. Der Browser oeffnet auf http://localhost:3101.',
-            '3. Zum Beenden den Prozess velo-backend-win-x64.exe im Task-Manager schliessen.'
-          )
-          Set-Content -Path "$portableRoot/README.txt" -Value $readme -Encoding ASCII
-
-      - name: Zip portable package
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "release/velo-portable-ui-win-x64/*" -DestinationPath "release/velo-portable-ui-win-x64.zip" -Force
-
-      - name: Upload portable artifact
+      - name: Upload standalone EXE
         uses: actions/upload-artifact@v4
         with:
-          name: velo-portable-ui-win-x64
-          path: release/velo-portable-ui-win-x64.zip
+          name: velo-win-x64
+          path: backend/dist/velo-win-x64.exe
           if-no-files-found: error

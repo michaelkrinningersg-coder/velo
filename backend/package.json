@@ -26,7 +26,8 @@
   "pkg": {
     "assets": [
       "assets/**/*",
-      "../data/**/*"
+      "../data/**/*",
+      "../frontend/dist/**/*"
     ],
     "scripts": [
       "dist/backend/src/**/*.js",
