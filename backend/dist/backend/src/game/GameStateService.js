@@ -17,14 +17,14 @@ const RiderNewgenService_1 = require("./RiderNewgenService");
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
 const SEASON_FORM_MIN_RAW = 0;
-const SEASON_FORM_MAX_RAW = 6;
+const SEASON_FORM_MAX_RAW = 4;
 const SEASON_FORM_RISE_DAYS = 56;
 const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
 const SEASON_FORM_FALL_DAYS = 14;
 const RACE_FORM_BUILD_STEP = 0.25;
 const RACE_FORM_FREE_STEP = 0.15;
-const BUILD_R_FORM_EXPIRY_DAYS = 40;
-const FREE_R_FORM_EXPIRY_DAYS = 20;
+const BUILD_R_FORM_EXPIRY_DAYS = 56;
+const FREE_R_FORM_EXPIRY_DAYS = 25;
 const PEAK_MIN_SPACING_DAYS = 28;
 const ILLNESS_CHANCE = 0.0025;
 const INJURY_CHANCE = 0.002;
@@ -690,9 +690,9 @@ class GameStateService {
         rds.rider_id,
         @date AS date,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100 AS s_form,
-        MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
+        MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
         ROUND((rds.form_bonus + rds.peak_s_form) * 100) / 100 
-          + MIN(5.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
+          + MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
           AS total_form
       FROM rider_daily_state rds
       JOIN riders ON riders.id = rds.rider_id

@@ -88,9 +88,9 @@ const RIDER_SKILL_COLUMNS = [
     ['recuperation', 'recuperation'],
     ['bikeHandling', 'bike_handling'],
 ];
-const SEASON_FORM_RISE_DAYS = 42;
+const SEASON_FORM_RISE_DAYS = 56;
 const SEASON_FORM_FALL_DAYS = 14;
-const SEASON_FORM_MAX_RAW = 6;
+const SEASON_FORM_MAX_RAW = 4;
 const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
 const DIVISION_BY_TIER = {
     1: 'WorldTour',

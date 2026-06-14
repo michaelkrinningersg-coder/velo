@@ -42,7 +42,7 @@ const SPECIAL_FILL_SEQUENCE = [
   { roleId: 5, phase: 'neutral' },
 ] as const;
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -63,6 +63,7 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
   'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
   'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
+  'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
 };
 
 
@@ -126,9 +127,25 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
   const currentDate = repo.getCurrentDate();
   const locks = new Map<number, RiderLockReason>();
 
+  let hasCobbleStage = false;
+  if (race && race.id) {
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM stages
+      WHERE race_id = ? AND (profile = 'Cobble' OR profile = 'Cobble_Hill')
+    `).get(race.id) as { count: number } | undefined;
+    hasCobbleStage = (row?.count ?? 0) > 0;
+  }
+
   for (const rider of riders) {
     if (rider.isUnavailable) {
       locks.set(rider.id, 'unavailable');
+    } else if (hasCobbleStage) {
+      const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
+      const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
+      if (isBerg && !hasCobbleSkill) {
+        locks.set(rider.id, 'cobble-climber-exclusion');
+      }
     }
   }
 

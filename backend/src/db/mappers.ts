@@ -61,7 +61,7 @@ export const RIDER_SKILL_COLUMNS = [
 
 export const SEASON_FORM_RISE_DAYS = 56;
 export const SEASON_FORM_FALL_DAYS = 14;
-export const SEASON_FORM_MAX_RAW = 6;
+export const SEASON_FORM_MAX_RAW = 4;
 export const SEASON_FORM_RISE_STEP_RAW = SEASON_FORM_MAX_RAW / SEASON_FORM_RISE_DAYS;
 export const DIVISION_BY_TIER: Record<number, Team['division']> = {
   1: 'WorldTour',
@@ -777,7 +777,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
   const peakDates = parsePeakDates(row.peak_dates_json);
   const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
   const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
-  const totalRaceFormBonus = Math.min(5.0, roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0)));
+  const totalRaceFormBonus = Math.min(4.0, roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0)));
   const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
   return {
     id: row.id,

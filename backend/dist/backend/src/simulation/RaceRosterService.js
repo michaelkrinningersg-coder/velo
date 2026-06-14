@@ -44,6 +44,7 @@ const RIDER_LOCK_MESSAGES = {
     unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
     'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
     'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
+    'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
 };
 function createDeterministicRandom(seed) {
     let state = seed >>> 0;
@@ -94,9 +95,25 @@ function groupRidersByTeam(riders) {
 function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
     const currentDate = repo.getCurrentDate();
     const locks = new Map();
+    let hasCobbleStage = false;
+    if (race && race.id) {
+        const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM stages
+      WHERE race_id = ? AND (profile = 'Cobble' OR profile = 'Cobble_Hill')
+    `).get(race.id);
+        hasCobbleStage = (row?.count ?? 0) > 0;
+    }
     for (const rider of riders) {
         if (rider.isUnavailable) {
             locks.set(rider.id, 'unavailable');
+        }
+        else if (hasCobbleStage) {
+            const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
+            const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
+            if (isBerg && !hasCobbleSkill) {
+                locks.set(rider.id, 'cobble-climber-exclusion');
+            }
         }
     }
     if ((0, mappers_1.isWinterBreak)(currentDate)) {

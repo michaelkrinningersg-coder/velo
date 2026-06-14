@@ -730,7 +730,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
     const entryDate = new Date(entry.date).getTime();
     const dayOfYear = (entryDate - yearStart) / msPerDay;
     const x = padL + (dayOfYear / 365) * chartW;
-    const y = padT + chartH - (Math.min(12, Math.max(0, entry.totalForm)) / 12) * chartH;
+    const y = padT + chartH - (Math.min(8, Math.max(0, entry.totalForm)) / 8) * chartH;
     return { x, y, form: entry.totalForm, date: entry.date };
   });
 
@@ -748,8 +748,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const fillColor = 'rgba(251, 191, 36, 0.15)'; 
 
   let gridHtml = '';
-  for (let i = 0; i <= 12; i += 2) {
-    const y = padT + chartH - (i / 12) * chartH;
+  for (let i = 0; i <= 8; i += 2) {
+    const y = padT + chartH - (i / 8) * chartH;
     gridHtml += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border-primary)" stroke-dasharray="2,2" />`;
     gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="#ffffff" font-size="10" text-anchor="end">${i}</text>`;
   }
@@ -815,7 +815,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       const entryDate = new Date(entry.date).getTime();
       const dayOfYear = (entryDate - yearStart) / msPerDay;
       const x = padL + (dayOfYear / 365) * chartW;
-      const y = padT + chartH - (Math.min(12, Math.max(0, entry.totalForm)) / 12) * chartH;
+      const y = padT + chartH - (Math.min(8, Math.max(0, entry.totalForm)) / 8) * chartH;
       return { x, y, form: entry.totalForm, date: entry.date };
     });
 
