@@ -10,5 +10,4 @@ velo.db
 node_modules
 .continue/
 .continueignore
-*.csv
 walkthoughs/**
