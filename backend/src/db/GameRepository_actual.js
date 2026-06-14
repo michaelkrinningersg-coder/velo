@@ -37,7 +37,6 @@ exports.GameRepository = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const skillWeights_1 = require("../../../shared/skillWeights");
-const RiderLoadModel_1 = require("../game/RiderLoadModel");
 const StageParser_1 = require("../simulation/StageParser");
 const RESULT_TYPE_IDS = {
     stage: 1,
@@ -318,7 +317,15 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
     const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
     const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
     const totalRaceFormBonus = roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0));
-    const riderLoadSummary = (0, RiderLoadModel_1.buildRiderLoadSummary)(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
+    const shortTermFatigueMalus = row.short_term_fatigue ?? 0.0;
+    const longTermFatigueMalus = roundToTwoDecimals((row.long_term_fatigue_decayable ?? 0.0) + (row.long_term_fatigue_locked ?? 0.0));
+    const totalFatigueLoadMalus = roundToTwoDecimals(shortTermFatigueMalus + longTermFatigueMalus);
+    let shortTermFatigueWarning = 'none';
+    if (shortTermFatigueMalus > 3.5) {
+        shortTermFatigueWarning = 'critical';
+    } else if (shortTermFatigueMalus > 1.0) {
+        shortTermFatigueWarning = 'warning';
+    }
     return {
         id: row.id,
         firstName: row.first_name,
@@ -357,14 +364,16 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
         activeContractId: row.active_contract_id,
         contractEndSeason: row.contract_end_season,
         seasonPoints,
-        seasonRaceDaysTotal: riderLoadSummary.seasonRaceDaysTotal,
-        rolling30dRaceDays: riderLoadSummary.rolling30dRaceDays,
+        seasonRaceDaysTotal: row.season_race_days_total ?? 0,
+        rolling30dRaceDays: row.rolling_30d_race_days ?? 0,
         formBonus: resolveEffectiveSeasonForm(row.form_bonus ?? 0),
         raceFormBonus: totalRaceFormBonus,
-        longTermFatigueMalus: riderLoadSummary.longTermFatigueMalus,
-        shortTermFatigueMalus: riderLoadSummary.shortTermFatigueMalus,
-        totalFatigueLoadMalus: riderLoadSummary.totalFatigueLoadMalus,
-        shortTermFatigueWarning: riderLoadSummary.shortTermFatigueWarning,
+        longTermFatigueMalus,
+        longTermFatigueDecayable: row.long_term_fatigue_decayable ?? 0.0,
+        longTermFatigueLocked: row.long_term_fatigue_locked ?? 0.0,
+        shortTermFatigueMalus,
+        totalFatigueLoadMalus,
+        shortTermFatigueWarning,
         peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
         peakRForm: row.peak_r_form ?? 0,
         activePeakDate: row.active_peak_date,
@@ -1017,7 +1026,10 @@ class GameRepository {
       ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
       ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
       ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
-      ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days
+      ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+      ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+      ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+      ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked
     `;
         const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
         const freeRaceFormJoin = useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : '';
@@ -1748,6 +1760,9 @@ class GameRepository {
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+             ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+             ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+             ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked,
              0 AS accumulated_random_fatigue,
              (
                SELECT c.end_season
@@ -1937,6 +1952,9 @@ class GameRepository {
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+              ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+              ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+              ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked,
              ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              ${useStageRaceState ? 'COALESCE(race_state.incident_day_form_penalty, 0)' : '0'} AS incident_day_form_penalty,
              ${useStageRaceState ? 'COALESCE(race_state.incident_micro_form_penalty, 0)' : '0'} AS incident_micro_form_penalty,
@@ -2005,6 +2023,9 @@ class GameRepository {
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+              ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+              ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+              ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked,
              ${useStageRaceState ? 'COALESCE(race_state.accumulated_random_fatigue, 0)' : '0'} AS accumulated_random_fatigue,
              ${useStageRaceState ? 'COALESCE(race_state.incident_day_form_penalty, 0)' : '0'} AS incident_day_form_penalty,
              ${useStageRaceState ? 'COALESCE(race_state.incident_micro_form_penalty, 0)' : '0'} AS incident_micro_form_penalty,

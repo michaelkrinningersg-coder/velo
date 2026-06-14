@@ -487,6 +487,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'program' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="program" aria-selected="${state.riderStatsTab === 'program' ? 'true' : 'false'}"${hasProgram ? '' : ' disabled'}>Programm</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'form' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="form" aria-selected="${state.riderStatsTab === 'form' ? 'true' : 'false'}">Form</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'skills' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="skills" aria-selected="${state.riderStatsTab === 'skills' ? 'true' : 'false'}">Skills</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'fatigue' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="fatigue" aria-selected="${state.riderStatsTab === 'fatigue' ? 'true' : 'false'}">Erschöpfung</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="career" aria-selected="${state.riderStatsTab === 'career' ? 'true' : 'false'}">Karrierestatistiken</button>
     </div>`;
 }
@@ -697,6 +698,222 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
           <h4 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; color: var(--text-100); border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; font-weight: bold;">Fahrer-Skills</h4>
           ${skillsGridHtml}
         </div>
+      </div>
+    </section>
+  `;
+}
+
+export function renderRiderStatsFatigueTab(rider: Rider | null, payload: RiderStatsPayload): string {
+  const shortTermFatigue = payload.shortTermFatigueMalus ?? 0;
+  const longTermDecayable = payload.longTermFatigueDecayable ?? 0;
+  const longTermLocked = payload.longTermFatigueLocked ?? 0;
+  const longTermTotal = payload.longTermFatigueMalus ?? 0;
+  const totalMalus = payload.totalFatigueLoadMalus ?? 0;
+
+  const shortRecoveryDays = (shortTermFatigue / 0.2).toFixed(1).replace('.', ',');
+  const longDecayableRecoveryDays = (longTermDecayable / 0.01).toFixed(0);
+
+  let shortTermFatigueColor = '#fff';
+  if (payload.shortTermFatigueWarning === 'critical') {
+    shortTermFatigueColor = '#ef4444';
+  } else if (payload.shortTermFatigueWarning === 'warning') {
+    shortTermFatigueColor = '#fbbf24';
+  }
+
+  const fatigueHistory = payload.fatigueHistory ?? [];
+
+  let historyRowsHtml = '';
+  if (fatigueHistory.length === 0) {
+    historyRowsHtml = `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem; color: #888;">Keine Erschöpfungshistorie für diesen Fahrer vorhanden.</td></tr>`;
+  } else {
+    historyRowsHtml = fatigueHistory.map((entry) => {
+      const formattedDate = formatDate(entry.date);
+      let eventLabel = '';
+      if (entry.type === 'race') {
+        eventLabel = `${esc(entry.raceName)}${entry.stageNumber != null ? ` - Etappe ${entry.stageNumber}` : ''}`;
+      } else {
+        eventLabel = entry.raceName ? esc(entry.raceName) : 'Regeneration';
+      }
+
+      const stageScoreHtml = entry.type === 'race' && entry.stageScore != null
+        ? `<span class="badge" style="background: rgba(255,255,255,0.08); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 600;">${entry.stageScore.toFixed(0)}</span>`
+        : `<span style="color: #666;">–</span>`;
+
+      // Short change format
+      let shortChangeHtml = '';
+      if (entry.shortChange > 0) {
+        shortChangeHtml = `<span style="color: #ef4444; font-weight: 600;">+${entry.shortChange.toFixed(2).replace('.', ',')}</span>`;
+      } else if (entry.shortChange < 0) {
+        shortChangeHtml = `<span style="color: #2ecc71; font-weight: 600;">${entry.shortChange.toFixed(2).replace('.', ',')}</span>`;
+      } else {
+        shortChangeHtml = `<span style="color: #666;">0,00</span>`;
+      }
+
+      // Long change formats
+      const longChanges: string[] = [];
+      if (entry.longDecayableChange !== 0) {
+        const sign = entry.longDecayableChange > 0 ? '+' : '';
+        const color = entry.longDecayableChange > 0 ? '#ef4444' : '#2ecc71';
+        longChanges.push(`<span style="color: ${color}; font-weight: 500;">${sign}${entry.longDecayableChange.toFixed(2).replace('.', ',')} <span style="font-size: 0.8rem; color: #999;">(Abbau.)</span></span>`);
+      }
+      if (entry.longLockedChange !== 0) {
+        const sign = entry.longLockedChange > 0 ? '+' : '';
+        const color = entry.longLockedChange > 0 ? '#a855f7' : '#2ecc71';
+        longChanges.push(`<span style="color: ${color}; font-weight: 500;">${sign}${entry.longLockedChange.toFixed(2).replace('.', ',')} <span style="font-size: 0.8rem; color: #999;">(Gesp.)</span></span>`);
+      }
+
+      const longChangeHtml = longChanges.length > 0
+        ? `<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem;">${longChanges.join('')}</div>`
+        : `<span style="color: #666;">0,00</span>`;
+
+      const currentTotal = (entry.shortAfter + entry.longAfter);
+
+      return `
+        <tr>
+          <td style="color: #ccc; font-weight: 500; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">${formattedDate}</td>
+          <td style="color: #fff; font-weight: 600; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">${eventLabel}</td>
+          <td style="text-align: right; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">${stageScoreHtml}</td>
+          <td style="text-align: right; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div style="display: inline-flex; align-items: center; gap: 0.4rem;">
+              ${shortChangeHtml}
+              <span style="font-size: 0.85rem; color: #888;">(${entry.shortAfter.toFixed(2).replace('.', ',')})</span>
+            </div>
+          </td>
+          <td style="text-align: right; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div style="display: inline-flex; align-items: center; gap: 0.4rem; justify-content: flex-end; width: 100%;">
+              ${longChangeHtml}
+              <span style="font-size: 0.85rem; color: #888;">(${entry.longAfter.toFixed(2).replace('.', ',')})</span>
+            </div>
+          </td>
+          <td style="text-align: right; padding: 0.75rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <strong style="color: #ef4444; font-size: 0.95rem;">-${currentTotal.toFixed(2).replace('.', ',')}</strong>
+            <span style="font-size: 0.8rem; color: #888; margin-left: 0.3rem;">(K: ${entry.shortAfter.toFixed(2).replace('.', ',')} | L: ${entry.longAfter.toFixed(2).replace('.', ',')})</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  return `
+    <section class="rider-stats-fatigue-tab" style="padding: 1.5rem 0.5rem;">
+      <!-- Main Penalty Box -->
+      <div class="rider-stats-fatigue-total" style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <h3 style="margin: 0 0 0.25rem 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Gesamt-Abzug auf alle Skills</h3>
+          <p style="margin: 0; font-size: 0.85rem; color: #bbb;">
+            Die Summe aus akuter und langfristiger Erschöpfung wird direkt von allen Attributwerten abgezogen.
+          </p>
+        </div>
+        <div style="text-align: right;">
+          <span style="font-size: 2rem; font-weight: 800; color: #ef4444; text-shadow: 0 0 15px rgba(239, 68, 68, 0.25);">
+            -${totalMalus.toFixed(2).replace('.', ',')}
+          </span>
+          <div style="font-size: 0.8rem; color: #888; margin-top: 0.1rem;">
+            (Kurzzeit -${shortTermFatigue.toFixed(2).replace('.', ',')} | Langzeit -${longTermTotal.toFixed(2).replace('.', ',')})
+          </div>
+        </div>
+      </div>
+
+      <!-- Fatigue Metric Cards -->
+      <div class="rider-stats-fatigue-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        
+        <!-- Card 1: Short-term Fatigue -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(251, 191, 36, 0.1); color: #fbbf24;">
+                ${RIDER_STATS_ICONS.shortFatigue}
+              </span>
+              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Akute Erschöpfung (Kurzzeit)</h4>
+            </div>
+            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
+              Steigt durch Rennbelastungen proportional zum Stage Score (ab 10 Pkt.). Sinkt um 0,2 pro tageswechsel.
+            </p>
+          </div>
+          <div>
+            <div style="font-size: 1.6rem; font-weight: 700; color: ${shortTermFatigueColor}; margin-bottom: 0.25rem;">
+              -${shortTermFatigue.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #aaa;">
+              Erholungszeit: <strong style="color: #fff;">${shortRecoveryDays} Tage</strong> (ohne Belastung)
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Long-term Decayable Fatigue -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+                ${RIDER_STATS_ICONS.longFatigue}
+              </span>
+              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Langzeit (Abbaubar)</h4>
+            </div>
+            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
+              Steigt durch Rennbelastungen proportional zum Stage Score. Regeneriert langsam um 0,01 pro tageswechsel.
+            </p>
+          </div>
+          <div>
+            <div style="font-size: 1.6rem; font-weight: 700; color: #ef4444; margin-bottom: 0.25rem;">
+              -${longTermDecayable.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #aaa;">
+              Erholungszeit: <strong style="color: #fff;">${longDecayableRecoveryDays} Tage</strong> (ohne Belastung)
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Long-term Locked Fatigue -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(168, 85, 247, 0.1); color: #a855f7;">
+                <svg class="rider-stats-icon" style="stroke: #a855f7;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Langzeit (Gesperrt)</h4>
+            </div>
+            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
+              Steigt mit zunehmender Anzahl an Renntagen (ab 30 Renntagen). Kann unter der Saison nicht abgebaut werden.
+            </p>
+          </div>
+          <div>
+            <div style="font-size: 1.6rem; font-weight: 700; color: #a855f7; margin-bottom: 0.25rem;">
+              -${longTermLocked.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #aaa;">
+              Status: <strong style="color: #a855f7;">Gesperrt bis Saisonende</strong>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Chronological History Table -->
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: #fff; margin-bottom: 0.75rem; padding-left: 0.25rem;">Chronologischer Erschöpfungsverlauf</h3>
+      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap" style="margin-top: 0.5rem;">
+        <table class="data-table rider-stats-table">
+          <colgroup>
+            <col style="width: 14%;">
+            <col style="width: 26%;">
+            <col style="width: 10%;">
+            <col style="width: 18%;">
+            <col style="width: 18%;">
+            <col style="width: 14%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th style="padding: 0.75rem 0.5rem;">Datum</th>
+              <th style="padding: 0.75rem 0.5rem;">Ereignis</th>
+              <th style="text-align: right; padding: 0.75rem 0.5rem;">Stage Score</th>
+              <th style="text-align: right; padding: 0.75rem 0.5rem;">Kurzzeit-Änderung</th>
+              <th style="text-align: right; padding: 0.75rem 0.5rem;">Langzeit-Änderung</th>
+              <th style="text-align: right; padding: 0.75rem 0.5rem;">Neue Erschöpfung</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${historyRowsHtml}
+          </tbody>
+        </table>
       </div>
     </section>
   `;
@@ -1052,6 +1269,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsSkillsTab(rider, payload)}`;
   }
 
+  if (state.riderStatsTab === 'fatigue') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsFatigueTab(rider, payload)}`;
+  }
+
   if (state.riderStatsTab === 'program') {
     return `
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
@@ -1260,7 +1484,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career' && nextTab !== 'fatigue') {
       return;
     }
 

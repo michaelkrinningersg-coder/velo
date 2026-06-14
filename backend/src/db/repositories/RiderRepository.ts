@@ -1,6 +1,6 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RiderCareerStats } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RiderCareerStats, RiderFatigueHistoryEntry } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -45,7 +45,10 @@ export class RiderRepository {
       ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
       ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
       ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
-      ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days
+      ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+      ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+      ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+      ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked
     `;
     const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
     const freeRaceFormJoin = useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : '';
@@ -618,6 +621,19 @@ export class RiderRepository {
       }
     }
 
+    const fatigueHistory = tableExists(this.db, 'rider_fatigue_history')
+      ? (this.db.prepare(`
+          SELECT id, rider_id AS riderId, date, type, race_name AS raceName,
+                 stage_number AS stageNumber, stage_score AS stageScore,
+                 short_change AS shortChange, long_decayable_change AS longDecayableChange,
+                 long_locked_change AS longLockedChange, short_after AS shortAfter,
+                 long_after AS longAfter
+          FROM rider_fatigue_history
+          WHERE rider_id = ?
+          ORDER BY date DESC, id DESC
+        `).all(rider.id) as RiderFatigueHistoryEntry[])
+      : [];
+
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
@@ -644,6 +660,8 @@ export class RiderRepository {
       seasonRaceDaysTotal: rider.seasonRaceDaysTotal ?? 0,
       rolling30dRaceDays: rider.rolling30dRaceDays ?? 0,
       longTermFatigueMalus: rider.longTermFatigueMalus ?? 0,
+      longTermFatigueDecayable: rider.longTermFatigueDecayable ?? 0,
+      longTermFatigueLocked: rider.longTermFatigueLocked ?? 0,
       shortTermFatigueMalus: rider.shortTermFatigueMalus ?? 0,
       totalFatigueLoadMalus: rider.totalFatigueLoadMalus ?? 0,
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
@@ -660,6 +678,7 @@ export class RiderRepository {
         ? (this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id) as Array<{ date: string; sForm: number; rForm: number; totalForm: number }>)
         : [],
       careerStats: this.getRiderCareerStats(rider.id),
+      fatigueHistory,
     } satisfies RiderStatsPayload;
   }
 
@@ -878,6 +897,9 @@ export class RiderRepository {
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
+             ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
+             ${useDailyState ? 'rider_state.long_term_fatigue_decayable' : '0.0'} AS long_term_fatigue_decayable,
+             ${useDailyState ? 'rider_state.long_term_fatigue_locked' : '0.0'} AS long_term_fatigue_locked,
              0 AS accumulated_random_fatigue,
              (
                SELECT c.end_season
@@ -1026,6 +1048,8 @@ export class RiderRepository {
       seasonRaceDaysTotal: rider.seasonRaceDaysTotal ?? 0,
       rolling30dRaceDays: rider.rolling30dRaceDays ?? 0,
       longTermFatigueMalus: rider.longTermFatigueMalus ?? 0,
+      longTermFatigueDecayable: rider.longTermFatigueDecayable ?? 0,
+      longTermFatigueLocked: rider.longTermFatigueLocked ?? 0,
       shortTermFatigueMalus: rider.shortTermFatigueMalus ?? 0,
       totalFatigueLoadMalus: rider.totalFatigueLoadMalus ?? 0,
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
@@ -1036,6 +1060,7 @@ export class RiderRepository {
       careerRaceDaysBySeason,
       seasons: [],
       careerStats: this.getRiderCareerStats(rider.id),
+      fatigueHistory: [],
     };
   }
 

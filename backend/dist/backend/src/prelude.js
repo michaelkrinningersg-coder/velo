@@ -47,8 +47,19 @@ node_module_1.default.prototype.require = function (id) {
                     const externalAddonPath = path.join(path.dirname(process.execPath), 'better_sqlite3.node');
                     return originalRequire.call(this, externalAddonPath);
                 }
+                else {
+                    try {
+                        const sqliteModuleDir = path.dirname(require.resolve('better-sqlite3/package.json'));
+                        const addonPath = path.join(sqliteModuleDir, 'build', 'Release', 'better_sqlite3.node');
+                        return originalRequire.call(this, addonPath);
+                    }
+                    catch (e) {
+                        // fallback if resolution fails
+                    }
+                }
             }
-            return originalRequire.apply(this, arguments);
+            const realBindings = originalRequire.call(this, 'bindings');
+            return realBindings.apply(this, arguments);
         };
     }
     return originalRequire.apply(this, arguments);

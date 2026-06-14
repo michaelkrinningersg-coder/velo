@@ -1049,7 +1049,7 @@ export function renderResultsView(): void {
           return row.type === 'dnf' || !!(row.title && row.title.includes('nicht am Start'));
         }
         if (selectedEventFilter === 'home') {
-          return !!(row.title && (row.title.includes('Super-Heimvorteil') || row.title.includes('Heimdruck')));
+          return !!(row.title && (row.title.includes('Heimvorteil') || row.title.includes('Heimdruck')));
         }
         return true;
       })
@@ -1110,6 +1110,8 @@ export function renderResultsView(): void {
           badgeHtml = `<span class="event-badge event-badge-superhome"><span class="event-icon">♥</span> Super-Heim</span>`;
         } else if (row.title && row.title.includes('Heimdruck')) {
           badgeHtml = `<span class="event-badge event-badge-homepressure"><span class="event-icon">♦</span> Heimdruck</span>`;
+        } else if (row.title && row.title.includes('Heimvorteil')) {
+          badgeHtml = `<span class="event-badge event-badge-normalhome"><span class="event-icon">♥</span> Heimvorteil</span>`;
         }
 
         return `

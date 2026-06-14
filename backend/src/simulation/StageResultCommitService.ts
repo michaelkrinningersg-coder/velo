@@ -878,6 +878,7 @@ export class StageResultCommitService {
     const gameStateService = new GameStateService(this.db);
     gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
     gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
+    gameStateService.applyStageFatigue(stage.id, completedRiderIds, dnfEntries.map((e) => e.riderId));
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
 
@@ -908,7 +909,12 @@ export class StageResultCommitService {
         peak_dates_json TEXT NOT NULL DEFAULT '[]',
         health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
         unavailable_until TEXT,
-        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
+        season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0),
+        rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0),
+        short_term_fatigue REAL NOT NULL DEFAULT 0.0,
+        long_term_fatigue_decayable REAL NOT NULL DEFAULT 0.0,
+        long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0
       )
     `).run();
 

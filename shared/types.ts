@@ -231,6 +231,8 @@ export interface Rider {
   formBonus?: number;
   raceFormBonus?: number;
   longTermFatigueMalus?: number;
+  longTermFatigueDecayable?: number;
+  longTermFatigueLocked?: number;
   shortTermFatigueMalus?: number;
   totalFatigueLoadMalus?: number;
   shortTermFatigueWarning?: RiderLoadWarningLevel;
@@ -239,6 +241,7 @@ export interface Rider {
   activePeakDate?: string | null;
   fatigueMalus?: number;
   homeEffect?: 'normal_home' | 'super_home' | 'home_pressure' | null;
+  homeEffectSkills?: RiderSkillKey[] | null;
   accumulatedRandomFatigue?: number;
   stageRaceDayFormPenalty?: number;
   stageRaceMicroFormPenalty?: number;
@@ -504,6 +507,7 @@ export interface Stage {
   mechanicalIncidentMultiplier: number;
   distanceKm?: number;
   elevationGainMeters?: number;
+  profileScore?: number;
 }
 
 // ------ Simulation -------------------------------------------
@@ -913,6 +917,8 @@ export interface RiderStatsPayload {
   seasonRaceDaysTotal: number;
   rolling30dRaceDays: number;
   longTermFatigueMalus: number;
+  longTermFatigueDecayable: number;
+  longTermFatigueLocked: number;
   shortTermFatigueMalus: number;
   totalFatigueLoadMalus: number;
   shortTermFatigueWarning: RiderLoadWarningLevel;
@@ -928,6 +934,22 @@ export interface RiderStatsPayload {
   peakDates?: string[];
   formHistory?: RiderFormHistoryEntry[];
   careerStats?: RiderCareerStats;
+  fatigueHistory?: RiderFatigueHistoryEntry[];
+}
+
+export interface RiderFatigueHistoryEntry {
+  id: number;
+  riderId: number;
+  date: string;
+  type: 'race' | 'decay';
+  raceName: string | null;
+  stageNumber: number | null;
+  stageScore: number | null;
+  shortChange: number;
+  longDecayableChange: number;
+  longLockedChange: number;
+  shortAfter: number;
+  longAfter: number;
 }
 
 export interface SeasonStandingRow {

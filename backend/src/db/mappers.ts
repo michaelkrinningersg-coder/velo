@@ -1,9 +1,8 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderLoadWarningLevel, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../shared/skillWeights';
-import { buildRiderLoadSummary } from '../game/RiderLoadModel';
 import { summarizeStageProfile } from '../simulation/StageParser';
 
 export const RESULT_TYPE_IDS = {
@@ -157,6 +156,9 @@ export interface RiderRow {
   incident_day_form_cap: number | null;
   race_recuperation_penalty: number | null;
   current_recovery_penalty: number | null;
+  short_term_fatigue: number | null;
+  long_term_fatigue_decayable: number | null;
+  long_term_fatigue_locked: number | null;
 }
 
 export interface RiderSeasonRaceStats {
@@ -268,6 +270,7 @@ export interface StageRow {
   final_spread_difficulty_multiplier: number;
   crash_incident_multiplier: number;
   mechanical_incident_multiplier: number;
+  stage_score?: number;
 }
 
 export interface StageResultsMetaRow {
@@ -778,7 +781,18 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
   const accumulatedRandomFatigue = row.accumulated_random_fatigue ?? 0;
   const stageRaceRecuperationPenalty = (row.race_recuperation_penalty ?? 0) + (row.current_recovery_penalty ?? 0);
   const totalRaceFormBonus = Math.min(4.0, roundToTwoDecimals((row.race_form_bonus ?? 0) + (row.free_r_form_bonus ?? 0)));
-  const riderLoadSummary = buildRiderLoadSummary(row.season_race_days_total ?? 0, row.rolling_30d_race_days ?? 0, currentYear - row.birth_year);
+  
+  const shortTermFatigueMalus = row.short_term_fatigue ?? 0.0;
+  const longTermFatigueMalus = roundToTwoDecimals((row.long_term_fatigue_decayable ?? 0.0) + (row.long_term_fatigue_locked ?? 0.0));
+  const totalFatigueLoadMalus = roundToTwoDecimals(shortTermFatigueMalus + longTermFatigueMalus);
+  
+  let shortTermFatigueWarning: RiderLoadWarningLevel = 'none';
+  if (shortTermFatigueMalus > 3.5) {
+    shortTermFatigueWarning = 'critical';
+  } else if (shortTermFatigueMalus > 1.0) {
+    shortTermFatigueWarning = 'warning';
+  }
+
   return {
     id: row.id,
     firstName: row.first_name,
@@ -817,14 +831,16 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     activeContractId: row.active_contract_id,
     contractEndSeason: row.contract_end_season,
     seasonPoints,
-    seasonRaceDaysTotal: riderLoadSummary.seasonRaceDaysTotal,
-    rolling30dRaceDays: riderLoadSummary.rolling30dRaceDays,
+    seasonRaceDaysTotal: row.season_race_days_total ?? 0,
+    rolling30dRaceDays: row.rolling_30d_race_days ?? 0,
     formBonus: resolveEffectiveSeasonForm(row.form_bonus ?? 0),
     raceFormBonus: totalRaceFormBonus,
-    longTermFatigueMalus: riderLoadSummary.longTermFatigueMalus,
-    shortTermFatigueMalus: riderLoadSummary.shortTermFatigueMalus,
-    totalFatigueLoadMalus: riderLoadSummary.totalFatigueLoadMalus,
-    shortTermFatigueWarning: riderLoadSummary.shortTermFatigueWarning,
+    longTermFatigueMalus,
+    longTermFatigueDecayable: row.long_term_fatigue_decayable ?? 0.0,
+    longTermFatigueLocked: row.long_term_fatigue_locked ?? 0.0,
+    shortTermFatigueMalus,
+    totalFatigueLoadMalus,
+    shortTermFatigueWarning,
     peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
     peakRForm: row.peak_r_form ?? 0,
     activePeakDate: row.active_peak_date,
@@ -972,6 +988,7 @@ export function mapStage(row: StageRow): Stage {
     mechanicalIncidentMultiplier: row.mechanical_incident_multiplier,
     distanceKm: summary.distanceKm,
     elevationGainMeters: summary.elevationGainMeters,
+    profileScore: row.stage_score,
   };
 }
 

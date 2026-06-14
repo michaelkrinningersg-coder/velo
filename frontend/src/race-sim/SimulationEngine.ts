@@ -408,6 +408,24 @@ const SKILL_SHORT_LABELS: Record<RiderSkillKey, string> = {
   bikeHandling: 'Ftg',
 };
 
+const SKILL_GERMAN_LABELS: Record<RiderSkillKey, string> = {
+  flat: 'Flach',
+  mountain: 'Berg',
+  mediumMountain: 'Mittlere Berge',
+  hill: 'Hügel',
+  timeTrial: 'Zeitfahren',
+  prologue: 'Prolog',
+  cobble: 'Pflaster',
+  sprint: 'Sprint',
+  acceleration: 'Antritt',
+  downhill: 'Abfahrt',
+  attack: 'Attacke',
+  stamina: 'Stamina',
+  resistance: 'Widerstand',
+  recuperation: 'Regeneration',
+  bikeHandling: 'Fahrtechnik',
+};
+
 interface IntermediateMarker {
   key: string;
   distanceMeters: number;
@@ -1125,42 +1143,76 @@ export class SimulationEngine {
           };
 
           const roll = Math.random();
-          const skillKeys: RiderSkillKey[] = [
-            'flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial',
-            'prologue', 'cobble', 'sprint', 'acceleration', 'downhill',
-            'attack', 'stamina', 'resistance', 'recuperation', 'bikeHandling'
+          const profile = bootstrap.stage.profile;
+          const isTimeTrial = profile === 'ITT' || profile === 'TTT';
+
+          // Allowed skills: flat, hill, sprint, acceleration, stamina, resistance, recuperation, bikeHandling
+          const allowedPool: RiderSkillKey[] = [
+            'flat', 'hill', 'sprint', 'acceleration', 'stamina', 'resistance', 'recuperation', 'bikeHandling'
           ];
 
+          // Add cobble only if stage is Cobble or Cobble_Hill
+          if (profile === 'Cobble' || profile === 'Cobble_Hill') {
+            allowedPool.push('cobble');
+          }
+
+          // Add mountain and mediumMountain only if profile is not flat, rolling, cobble, cobble_hill, itt, ttt
+          const excludeMountain = [
+            'Flat', 'Rolling', 'Cobble', 'Cobble_Hill', 'ITT', 'TTT'
+          ].includes(profile);
+
+          if (!excludeMountain) {
+            allowedPool.push('mountain', 'mediumMountain');
+          }
+
           const pickRandomSkills = (n: number): RiderSkillKey[] => {
-            const keys = [...skillKeys];
+            const keys = [...allowedPool];
             const result: RiderSkillKey[] = [];
-            for (let i = 0; i < n; i++) {
-              const idx = Math.floor(Math.random() * keys.length);
-              result.push(keys.splice(idx, 1)[0]);
+            
+            if (isTimeTrial) {
+              // TimeTrial skill is guaranteed to be one of the selected skills.
+              result.push('timeTrial');
+              // We need to pick n - 1 additional skills from the allowed pool.
+              const limit = Math.min(n - 1, keys.length);
+              for (let i = 0; i < limit; i++) {
+                const idx = Math.floor(Math.random() * keys.length);
+                result.push(keys.splice(idx, 1)[0]);
+              }
+            } else {
+              // We pick n skills from the allowed pool.
+              const limit = Math.min(n, keys.length);
+              for (let i = 0; i < limit; i++) {
+                const idx = Math.floor(Math.random() * keys.length);
+                result.push(keys.splice(idx, 1)[0]);
+              }
             }
             return result;
           };
 
           const selectedSkills = pickRandomSkills(5);
+          // Shuffle to randomize which of the selected skills gets the +3 (which is index 0)
+          const shuffledSkills = [...selectedSkills].sort(() => Math.random() - 0.5);
+          clonedRider.homeEffectSkills = shuffledSkills;
+
           if (roll < 0.05) {
             // Heimdruck (5% chance): -0.5 on 5 random skills
             clonedRider.homeEffect = 'home_pressure';
-            for (const key of selectedSkills) {
+            for (const key of shuffledSkills) {
               clonedRider.skills[key] = Math.max(0, clonedRider.skills[key] - 0.5);
             }
-          } else if (roll < 0.07) {
-            // Super Heimvorteil (2% chance): +1 on 4 skills, +3 on 1 skill
+          } else if (roll < 0.10) {
+            // Super Heimvorteil (5% chance): +1 on 4 skills, +3 on 1 skill
             clonedRider.homeEffect = 'super_home';
-            const plus3Key = selectedSkills[0];
+            const plus3Key = shuffledSkills[0];
             clonedRider.skills[plus3Key] = Math.min(100, clonedRider.skills[plus3Key] + 3);
             for (let i = 1; i < 5; i++) {
-              const key = selectedSkills[i];
+              const key = shuffledSkills[i];
               clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
             }
           } else {
-            // Normal Heimvorteil (93% chance): +1 on 5 random skills
+            // Normal Heimvorteil (90% chance): +1 on 5 random skills
             clonedRider.homeEffect = 'normal_home';
-            for (const key of selectedSkills) {
+            for (const key of shuffledSkills) {
               clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
             }
           }
@@ -1360,7 +1412,13 @@ export class SimulationEngine {
 
     // Log special form states & form peaks at stage start (km 0)
     for (const r of this.riders) {
+      const skills = r.rider.homeEffectSkills;
+      const getSkillName = (key: RiderSkillKey): string => SKILL_GERMAN_LABELS[key] || key;
+
       if (r.rider.homeEffect === 'super_home') {
+        const skillList = skills && skills.length === 5
+          ? `${getSkillName(skills[0])} (+3), ${getSkillName(skills[1])} (+1), ${getSkillName(skills[2])} (+1), ${getSkillName(skills[3])} (+1), ${getSkillName(skills[4])} (+1)`
+          : '';
         this.pushMessage({
           elapsedSeconds: 0,
           riderId: r.rider.id,
@@ -1368,10 +1426,11 @@ export class SimulationEngine {
           type: 'support_resume',
           tone: 'neutral',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute Super-Heimvorteil!`,
-          detail: 'Beflügelt durch die Fans im eigenen Land! (+1 auf 4 Skills, +3 auf einen Skill)',
+          detail: `Beflügelt durch die Fans im eigenen Land! (+1 auf 4 Skills, +3 auf einen Skill) (${skillList})`,
         });
       }
       if (r.rider.homeEffect === 'home_pressure') {
+        const skillList = skills ? skills.map(getSkillName).join(', ') : '';
         this.pushMessage({
           elapsedSeconds: 0,
           riderId: r.rider.id,
@@ -1379,7 +1438,19 @@ export class SimulationEngine {
           type: 'support_wait',
           tone: 'danger',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} leidet unter Heimdruck!`,
-          detail: 'Der Druck im eigenen Land belastet die Nerven. (-0,5 auf 5 Skills)',
+          detail: `Der Druck im eigenen Land belastet die Nerven. (-0,5 auf 5 Skills) (${skillList})`,
+        });
+      }
+      if (r.rider.homeEffect === 'normal_home') {
+        const skillList = skills ? skills.map(getSkillName).join(', ') : '';
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_resume',
+          tone: 'neutral',
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute Heimvorteil!`,
+          detail: `Beflügelt durch die Fans im eigenen Land! (+1 auf 5 Skills) (${skillList})`,
         });
       }
       if (r.rider.hasSuperform) {
@@ -2220,11 +2291,7 @@ export class SimulationEngine {
     const windModifier = 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52);
     const speedSkillFactor = this.isTimeTrialMode
       ? 0.5
-      : skillName === 'Flat'
-        ? 0.14
-        : skillName === 'Downhill'
-          ? 0.18
-          : (10 / 35);
+      : this.resolveRoadSpeedSkillFactor(segment.terrain);
     return {
       skillName,
       skillBreakdown: weightedSkill.breakdown,
@@ -2277,9 +2344,11 @@ export class SimulationEngine {
     return 1 + (spreadSteps * ELEVATION_SPREAD_STEP_FACTOR);
   }
 
-  private resolveRoadSpeedSkillFactor(skillName: TerrainSkillName | 'Finish'): number {
-    if (skillName === 'Flat') return 0.14;
-    if (skillName === 'Downhill') return 0.18;
+  private resolveRoadSpeedSkillFactor(terrain: StageTerrain | TerrainSkillName | 'Finish'): number {
+    if (terrain === 'Flat') return 0.14;
+    if (terrain === 'Abfahrt' || terrain === 'Downhill') return 0.18;
+    if (terrain === 'Cobble') return 15 / 35;
+    if (terrain === 'Cobble_Hill') return 20 / 35;
     return 10 / 35;
   }
 
@@ -2560,7 +2629,7 @@ export class SimulationEngine {
         segment,
         rider.gradientModifier,
         rider.windModifier,
-        this.resolveRoadSpeedSkillFactor(rider.skillName),
+        this.resolveRoadSpeedSkillFactor(segment.terrain),
       );
       const breakawayDraft = this.resolveMaxBreakawayDraftModifier(rider, segment, activeBreakawayRiders.length);
       rider.draftModifier = breakawayDraft.draftModifier;

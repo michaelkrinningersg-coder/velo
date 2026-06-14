@@ -553,7 +553,45 @@ class DatabaseService {
           ADD COLUMN rolling_30d_race_days INTEGER NOT NULL DEFAULT 0
         `).run();
             }
+            if (!columnExists(db, 'rider_daily_state', 'short_term_fatigue')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN short_term_fatigue REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'long_term_fatigue_decayable')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN long_term_fatigue_decayable REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'long_term_fatigue_locked')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0
+        `).run();
+            }
         }
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_fatigue_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('race', 'decay')),
+        race_name TEXT,
+        stage_number INTEGER,
+        stage_score REAL,
+        short_change REAL NOT NULL,
+        long_decayable_change REAL NOT NULL,
+        long_locked_change REAL NOT NULL,
+        short_after REAL NOT NULL,
+        long_after REAL NOT NULL
+      )
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_fatigue_history_rider_date
+      ON rider_fatigue_history(rider_id, date)
+    `).run();
         db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_r_form_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

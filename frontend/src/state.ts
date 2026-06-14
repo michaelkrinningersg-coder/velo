@@ -57,7 +57,7 @@ import type {
 import { RaceSimView } from './race-sim/RaceSimView';
 
 export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
-export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career';
+export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'fatigue';
 export type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
 export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonFormPhase' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
