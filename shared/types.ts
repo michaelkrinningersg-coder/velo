@@ -238,6 +238,7 @@ export interface Rider {
   peakRForm?: number;
   activePeakDate?: string | null;
   fatigueMalus?: number;
+  homeEffect?: 'normal_home' | 'super_home' | 'home_pressure' | null;
   accumulatedRandomFatigue?: number;
   stageRaceDayFormPenalty?: number;
   stageRaceMicroFormPenalty?: number;

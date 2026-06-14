@@ -1112,6 +1112,63 @@ export class SimulationEngine {
     options?: { maxSubstepSeconds?: number },
   ) {
     this.maxSubstepSeconds = options?.maxSubstepSeconds ?? 1;
+
+    // Apply Home Advantage / Pressure modifications
+    const raceCountryCode = bootstrap.race.country?.code3;
+    if (raceCountryCode) {
+      bootstrap.riders = bootstrap.riders.map((originalRider) => {
+        const riderNation = originalRider.nationality || originalRider.country?.code3;
+        if (riderNation && riderNation.trim().toUpperCase() === raceCountryCode.trim().toUpperCase()) {
+          const clonedRider = {
+            ...originalRider,
+            skills: { ...originalRider.skills },
+          };
+
+          const roll = Math.random();
+          const skillKeys: RiderSkillKey[] = [
+            'flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial',
+            'prologue', 'cobble', 'sprint', 'acceleration', 'downhill',
+            'attack', 'stamina', 'resistance', 'recuperation', 'bikeHandling'
+          ];
+
+          const pickRandomSkills = (n: number): RiderSkillKey[] => {
+            const keys = [...skillKeys];
+            const result: RiderSkillKey[] = [];
+            for (let i = 0; i < n; i++) {
+              const idx = Math.floor(Math.random() * keys.length);
+              result.push(keys.splice(idx, 1)[0]);
+            }
+            return result;
+          };
+
+          const selectedSkills = pickRandomSkills(5);
+          if (roll < 0.05) {
+            // Heimdruck (5% chance): -0.5 on 5 random skills
+            clonedRider.homeEffect = 'home_pressure';
+            for (const key of selectedSkills) {
+              clonedRider.skills[key] = Math.max(0, clonedRider.skills[key] - 0.5);
+            }
+          } else if (roll < 0.07) {
+            // Super Heimvorteil (2% chance): +1 on 4 skills, +3 on 1 skill
+            clonedRider.homeEffect = 'super_home';
+            const plus3Key = selectedSkills[0];
+            clonedRider.skills[plus3Key] = Math.min(100, clonedRider.skills[plus3Key] + 3);
+            for (let i = 1; i < 5; i++) {
+              const key = selectedSkills[i];
+              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+            }
+          } else {
+            // Normal Heimvorteil (93% chance): +1 on 5 random skills
+            clonedRider.homeEffect = 'normal_home';
+            for (const key of selectedSkills) {
+              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+            }
+          }
+          return clonedRider;
+        }
+        return originalRider;
+      });
+    }
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.isTeamTimeTrial = bootstrap.stage.profile === 'TTT';
@@ -1303,6 +1360,28 @@ export class SimulationEngine {
 
     // Log special form states & form peaks at stage start (km 0)
     for (const r of this.riders) {
+      if (r.rider.homeEffect === 'super_home') {
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_resume',
+          tone: 'neutral',
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute Super-Heimvorteil!`,
+          detail: 'Beflügelt durch die Fans im eigenen Land! (+1 auf 4 Skills, +3 auf einen Skill)',
+        });
+      }
+      if (r.rider.homeEffect === 'home_pressure') {
+        this.pushMessage({
+          elapsedSeconds: 0,
+          riderId: r.rider.id,
+          riderName: r.riderName,
+          type: 'support_wait',
+          tone: 'danger',
+          title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} leidet unter Heimdruck!`,
+          detail: 'Der Druck im eigenen Land belastet die Nerven. (-0,5 auf 5 Skills)',
+        });
+      }
       if (r.rider.hasSuperform) {
         this.pushMessage({
           elapsedSeconds: 0,

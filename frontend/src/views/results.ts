@@ -920,6 +920,7 @@ export function renderResultsView(): void {
       { key: 'breakaway', label: 'Fluchtgruppe' },
       { key: 'incident', label: 'Stürze/Defekte' },
       { key: 'exit', label: 'Ausgeschieden' },
+      { key: 'home', label: 'Heimvorteil' },
     ];
     markerTabs.innerHTML = filters.map((filter) => `
       <button
@@ -1047,6 +1048,9 @@ export function renderResultsView(): void {
         if (selectedEventFilter === 'exit') {
           return row.type === 'dnf' || !!(row.title && row.title.includes('nicht am Start'));
         }
+        if (selectedEventFilter === 'home') {
+          return !!(row.title && (row.title.includes('Super-Heimvorteil') || row.title.includes('Heimdruck')));
+        }
         return true;
       })
       .sort((a, b) => {
@@ -1102,6 +1106,10 @@ export function renderResultsView(): void {
           } else {
             badgeHtml = `<span class="event-badge event-badge-crash">Sturz</span>`;
           }
+        } else if (row.title && row.title.includes('Super-Heimvorteil')) {
+          badgeHtml = `<span class="event-badge event-badge-superhome"><span class="event-icon">♥</span> Super-Heim</span>`;
+        } else if (row.title && row.title.includes('Heimdruck')) {
+          badgeHtml = `<span class="event-badge event-badge-homepressure"><span class="event-icon">♦</span> Heimdruck</span>`;
         }
 
         return `
