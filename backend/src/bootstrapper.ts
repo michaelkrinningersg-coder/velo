@@ -42,24 +42,22 @@ interface RiderAllocationRow {
 }
 
 function resolveBackendRoot(): string {
-  if ((process as any).pkg) {
-    return path.resolve(__dirname, '..', '..', '..');
-  }
-
-  const candidates = [
-    path.resolve(__dirname, '..', '..'),
-    path.resolve(__dirname, '..', '..', '..'),
-    path.resolve(__dirname, '..', '..', '..', '..'),
-    process.cwd(),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, 'assets', 'schema.sql'))) {
-      return candidate;
+  let current = __dirname;
+  while (true) {
+    const candidate = path.join(current, 'assets');
+    if (fs.existsSync(path.join(candidate, 'schema.sql'))) {
+      return current;
     }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
   }
 
-  return candidates[0];
+  return (process as any).pkg
+    ? '/snapshot/backend'
+    : path.resolve(__dirname, '..', '..');
 }
 
 const BACKEND_ROOT = resolveBackendRoot();

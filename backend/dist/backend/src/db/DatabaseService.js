@@ -64,22 +64,22 @@ function columnExists(db, tableName, columnName) {
     return columns.some((column) => column.name === columnName);
 }
 function resolveAssetsDir() {
-    if (process.pkg) {
-        return path.resolve(__dirname, '..', '..', '..', '..', 'assets');
-    }
-    const candidates = [
-        path.resolve(__dirname, '..', '..', 'assets'),
-        path.resolve(__dirname, '..', '..', '..', 'assets'),
-        path.resolve(__dirname, '..', '..', '..', '..', 'assets'),
-        path.resolve(process.cwd(), 'assets'),
-        path.resolve(process.cwd(), 'backend', 'assets'),
-    ];
-    for (const candidate of candidates) {
+    let current = __dirname;
+    while (true) {
+        const candidate = path.join(current, 'assets');
         if (fs.existsSync(path.join(candidate, 'schema.sql'))) {
             return candidate;
         }
+        const parent = path.dirname(current);
+        if (parent === current) {
+            break;
+        }
+        current = parent;
     }
-    throw new Error('Konnte backend/assets mit schema.sql nicht finden.');
+    // Fallback
+    return process.pkg
+        ? '/snapshot/backend/assets'
+        : path.resolve(__dirname, '..', '..', 'assets');
 }
 class DatabaseService {
     constructor() {

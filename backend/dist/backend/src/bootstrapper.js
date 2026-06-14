@@ -51,21 +51,21 @@ const RiderDevelopmentService_1 = require("./game/RiderDevelopmentService");
 const RiderNewgenService_1 = require("./game/RiderNewgenService");
 const StageScoreCalculator_1 = require("./simulation/StageScoreCalculator");
 function resolveBackendRoot() {
-    if (process.pkg) {
-        return path.resolve(__dirname, '..', '..', '..');
-    }
-    const candidates = [
-        path.resolve(__dirname, '..', '..'),
-        path.resolve(__dirname, '..', '..', '..'),
-        path.resolve(__dirname, '..', '..', '..', '..'),
-        process.cwd(),
-    ];
-    for (const candidate of candidates) {
-        if (fs.existsSync(path.join(candidate, 'assets', 'schema.sql'))) {
-            return candidate;
+    let current = __dirname;
+    while (true) {
+        const candidate = path.join(current, 'assets');
+        if (fs.existsSync(path.join(candidate, 'schema.sql'))) {
+            return current;
         }
+        const parent = path.dirname(current);
+        if (parent === current) {
+            break;
+        }
+        current = parent;
     }
-    return candidates[0];
+    return process.pkg
+        ? '/snapshot/backend'
+        : path.resolve(__dirname, '..', '..');
 }
 const BACKEND_ROOT = resolveBackendRoot();
 const ASSETS_DIR = path.join(BACKEND_ROOT, 'assets');
