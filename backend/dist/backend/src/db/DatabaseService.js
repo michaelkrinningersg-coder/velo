@@ -64,6 +64,9 @@ function columnExists(db, tableName, columnName) {
     return columns.some((column) => column.name === columnName);
 }
 function resolveAssetsDir() {
+    if (process.pkg) {
+        return path.resolve(__dirname, '..', '..', '..', '..', 'assets');
+    }
     const candidates = [
         path.resolve(__dirname, '..', '..', 'assets'),
         path.resolve(__dirname, '..', '..', '..', 'assets'),

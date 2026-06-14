@@ -51,6 +51,9 @@ const RiderDevelopmentService_1 = require("./game/RiderDevelopmentService");
 const RiderNewgenService_1 = require("./game/RiderNewgenService");
 const StageScoreCalculator_1 = require("./simulation/StageScoreCalculator");
 function resolveBackendRoot() {
+    if (process.pkg) {
+        return path.resolve(__dirname, '..', '..', '..');
+    }
     const candidates = [
         path.resolve(__dirname, '..', '..'),
         path.resolve(__dirname, '..', '..', '..'),
