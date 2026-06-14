@@ -11,3 +11,5 @@ node_modules
 .continue/
 .continueignore
 *.csv
+!data/**/*.csv
+
