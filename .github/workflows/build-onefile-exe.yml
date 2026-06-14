@@ -47,7 +47,11 @@ jobs:
       - name: Copy SQLite native binary next to EXE
         shell: pwsh
         run: |
-          Copy-Item -Path backend/node_modules/better-sqlite3/build/Release/better_sqlite3.node -Destination backend/dist/better_sqlite3.node -Force
+          $nodeFile = Get-ChildItem -Path backend/node_modules -Filter better_sqlite3.node -Recurse | Select-Object -First 1
+          if (-not $nodeFile) {
+            throw "better_sqlite3.node not found in backend/node_modules"
+          }
+          Copy-Item -Path $nodeFile.FullName -Destination backend/dist/better_sqlite3.node -Force
 
       - name: Upload standalone package
         uses: actions/upload-artifact@v4
