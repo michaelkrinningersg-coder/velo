@@ -42,7 +42,7 @@ const SPECIAL_FILL_SEQUENCE = [
   { roleId: 5, phase: 'neutral' },
 ] as const;
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -64,6 +64,7 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
   'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
   'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
+  'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Kurzzeit > 10 oder Gesamt > 11).',
 };
 
 
@@ -137,14 +138,33 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
     hasCobbleStage = (row?.count ?? 0) > 0;
   }
 
+  const currentStageRow = race && race.id
+    ? db.prepare('SELECT stage_number FROM stages WHERE race_id = ? AND date = ?').get(race.id, currentDate) as { stage_number: number } | undefined
+    : undefined;
+  const currentStageNumber = currentStageRow?.stage_number ?? 1;
+
   for (const rider of riders) {
+    let isContinuingStageRace = false;
+    if (race && race.isStageRace && currentStageNumber > 1) {
+      const hasEntry = db.prepare('SELECT 1 FROM race_entries WHERE race_id = ? AND rider_id = ?').get(race.id, rider.id);
+      if (hasEntry) {
+        isContinuingStageRace = true;
+      }
+    }
+
     if (rider.isUnavailable) {
       locks.set(rider.id, 'unavailable');
-    } else if (hasCobbleStage) {
-      const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
-      const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
-      if (isBerg && !hasCobbleSkill) {
-        locks.set(rider.id, 'cobble-climber-exclusion');
+    } else {
+      const shortTerm = rider.shortTermFatigueMalus ?? 0.0;
+      const longTerm = rider.longTermFatigueMalus ?? 0.0;
+      if (!isContinuingStageRace && (shortTerm > 10.0 || (shortTerm + longTerm) > 11.0)) {
+        locks.set(rider.id, 'fatigue-exclusion');
+      } else if (hasCobbleStage) {
+        const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
+        const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
+        if (isBerg && !hasCobbleSkill) {
+          locks.set(rider.id, 'cobble-climber-exclusion');
+        }
       }
     }
   }

@@ -477,9 +477,11 @@ class GameStateService {
         this.removeExpiredRaceFormEvents(nextDate);
         this.syncRiderLoadState(nextDate, nextSeason);
         const rows = this.db.prepare(`
-      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days,
-             short_term_fatigue, long_term_fatigue_decayable, long_term_fatigue_locked
-      FROM rider_daily_state
+      SELECT rds.rider_id, rds.season, rds.form_bonus, rds.race_form_bonus, rds.peak_s_form, rds.peak_r_form, rds.active_peak_date, rds.peak_dates_json, rds.health_status, rds.unavailable_until, rds.unavailable_days_remaining, rds.season_race_days_total, rds.rolling_30d_race_days,
+             rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked,
+             r.skill_recuperation
+      FROM rider_daily_state rds
+      JOIN riders r ON r.id = rds.rider_id
     `).all();
         const updateState = this.db.prepare(`
       UPDATE rider_daily_state
@@ -635,8 +637,10 @@ class GameStateService {
             else {
                 const oldShort = shortTermFatigue;
                 const oldLongDecayable = longTermDecayable;
-                shortTermFatigue = Math.max(0.0, roundToTwoDecimals(shortTermFatigue - 0.2));
-                longTermDecayable = Math.max(0.0, roundToTwoDecimals(longTermDecayable - 0.01));
+                const R = row.skill_recuperation ?? 65;
+                const decayMultiplier = 1 + (R - 65) * 0.01;
+                shortTermFatigue = Math.max(0.0, roundToTwoDecimals(shortTermFatigue - (0.2 * decayMultiplier)));
+                longTermDecayable = Math.max(0.0, roundToTwoDecimals(longTermDecayable - (0.01 * decayMultiplier)));
                 shortChange = roundToTwoDecimals(shortTermFatigue - oldShort);
                 longDecayableChange = roundToTwoDecimals(longTermDecayable - oldLongDecayable);
                 if (shortChange !== 0 || longDecayableChange !== 0) {
@@ -987,8 +991,8 @@ class GameStateService {
                 const multiplier = R >= 65
                     ? 1 - (R - 65) * 0.02
                     : 1 + (65 - R) * 0.02;
-                const addedShort = stageScore >= 10 ? roundToTwoDecimals((stageScore / 100) * multiplier) : 0;
-                const addedLongDecayable = stageScore >= 10 ? roundToTwoDecimals((stageScore / 1000) * multiplier) : 0;
+                const addedShort = stageScore >= 10 ? roundToTwoDecimals((stageScore / 100) * 0.75 * multiplier) : 0;
+                const addedLongDecayable = stageScore >= 10 ? roundToTwoDecimals((stageScore / 1000) * 0.75 * multiplier) : 0;
                 // n is season race days total. Note: refreshRiderLoadState already updated season_race_days_total
                 // so it already includes the current stage!
                 const n = row.season_race_days_total ?? 0;
