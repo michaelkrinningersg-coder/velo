@@ -44,9 +44,16 @@ jobs:
           }
           Rename-Item -Path $exe.FullName -NewName "velo-win-x64.exe"
 
-      - name: Upload standalone EXE
+      - name: Copy SQLite native binary next to EXE
+        shell: pwsh
+        run: |
+          Copy-Item -Path backend/node_modules/better-sqlite3/build/Release/better_sqlite3.node -Destination backend/dist/better_sqlite3.node -Force
+
+      - name: Upload standalone package
         uses: actions/upload-artifact@v4
         with:
           name: velo-win-x64
-          path: backend/dist/velo-win-x64.exe
+          path: |
+            backend/dist/velo-win-x64.exe
+            backend/dist/better_sqlite3.node
           if-no-files-found: error
