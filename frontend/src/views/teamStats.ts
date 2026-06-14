@@ -132,6 +132,16 @@ function getTeamOverallRank(teamId: number): { rank: number; total: number; aver
   };
 }
 
+function getRoleStyle(roleId: number | null): { color: string; bg: string } {
+  if (roleId === 1) return { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' }; // Kapitän: Gelb
+  if (roleId === 2) return { color: '#cbd5e1', bg: 'rgba(203, 213, 225, 0.1)' }; // Co-Kapitän: Silber
+  if (roleId === 6) return { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.1)' }; // Sprinter: Grün
+  if (roleId === 3) return { color: '#c084fc', bg: 'rgba(192, 132, 252, 0.1)' }; // Edelhelfer: Violett
+  if (roleId === 4) return { color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.1)' }; // Starker Helfer: Hellblau
+  if (roleId === 5) return { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.1)' }; // Wasserträger: Orange
+  return { color: 'var(--text-200)', bg: 'rgba(255, 255, 255, 0.05)' };
+}
+
 export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
   const resolvedCountryFlag = payload.countryCode ? renderFlag(payload.countryCode) : '';
   const specs = getTopRidersBySpecialization(payload.riders);
@@ -167,9 +177,12 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
         ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
         : '';
 
+      const fullRider = state.riders.find(r => r.id === rider.id);
+      const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+
       return `
         <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; display: flex; align-items: center;">
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; display: flex; align-items: center; color: ${roleStyle.color};">
             ${flagHtml}
             ${link}
           </span>
@@ -205,9 +218,13 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
       : '';
     const valText = (formValue >= 0 ? '+' : '') + formValue.toFixed(1).replace('.', ',');
     const tooltip = `S-Form: ${rider.formBonus >= 0 ? '+' : ''}${rider.formBonus.toFixed(1)} / R-Form: ${rider.raceFormBonus >= 0 ? '+' : ''}${rider.raceFormBonus.toFixed(1)}`;
+
+    const fullRider = state.riders.find(r => r.id === rider.id);
+    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+
     return `
       <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
-        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
           ${flagHtml}
           ${link}
         </span>
@@ -236,9 +253,12 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
     else if (uciRank === 3) rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-3';
     const badgeHtml = `<span class="rider-stats-rank-badge ${rankClass}" style="margin: 0; font-size: 0.75rem; padding: 0; min-width: 2rem; height: 1.35rem; display: inline-flex; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; line-height: 1;" title="UCI Weltrangliste: Platz ${uciRank}">${uciRank}</span>`;
 
+    const fullRider = state.riders.find(r => r.id === rider.id);
+    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+
     return `
       <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
-        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
           ${flagHtml}
           ${link}
         </span>
