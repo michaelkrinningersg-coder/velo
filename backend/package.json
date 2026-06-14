@@ -7,7 +7,7 @@
     "build": "tsc && node -e \"const fs = require('fs'); fs.copyFileSync('src/db/GameRepository_actual.js', 'dist/backend/src/db/GameRepository_actual.js')\"",
     "dev": "ts-node -r tsconfig-paths/register --project tsconfig.json src/server.ts",
     "start": "node dist/backend/src/server.js",
-    "build:exe:win": "npm run build && npx @yao-pkg/pkg@5.13.0 --targets node18-win-x64 --out-path dist --public-packages \"*\" dist/backend/src/server.js"
+    "build:exe:win": "npm run build && npx @yao-pkg/pkg@5.13.0 --targets node20-win-x64 --out-path dist --public-packages \"*\" dist/backend/src/server.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",
