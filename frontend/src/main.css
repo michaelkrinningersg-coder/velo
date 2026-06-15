@@ -5349,23 +5349,22 @@ html, body {
 /* Calendar Layout Container */
 .calendar-layout-container {
   display: flex;
+  flex-direction: column;
   gap: 1.5rem;
-  align-items: stretch;
-  height: calc(100vh - 170px);
-  min-height: 550px;
+  width: 100%;
+  height: auto;
   margin-top: 1rem;
 }
 
 /* Left Pane (Calendar) */
 .calendar-pane {
-  flex: 1.4;
+  flex: none;
   display: flex;
   flex-direction: column;
   background: var(--bg-card, #1e293b);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
   border-radius: 12px;
   padding: 1.2rem;
-  min-width: 0;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
@@ -5406,10 +5405,8 @@ html, body {
 }
 
 .calendar-weeks-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
   gap: 6px;
   padding-top: 6px;
   padding-right: 2px;
@@ -5551,15 +5548,15 @@ html, body {
 
 /* Right Pane (Races List) */
 .calendar-list-pane {
-  flex: 1.1;
+  flex: none;
   display: flex;
   flex-direction: column;
   background: var(--bg-card, #1e293b);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
   border-radius: 12px;
   padding: 1.2rem;
-  min-width: 0;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  margin-bottom: 2rem;
 }
 
 .calendar-list-header {
@@ -5600,7 +5597,7 @@ html, body {
 }
 
 .calendar-list-table-wrap {
-  flex: 1;
+  max-height: 480px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 6px;
@@ -5618,4 +5615,5 @@ tr.calendar-highlight {
   background-color: rgba(59, 130, 246, 0.08) !important;
   border-left: 3px solid #3b82f6 !important;
 }
+
 

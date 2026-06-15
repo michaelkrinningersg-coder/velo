@@ -6,10 +6,11 @@ We have successfully implemented the "Saisonkalender" (Season Calendar) dashboar
 
 ### 1. Navigation Button & View Layout
 - **[index.html](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/index.html)**:
-  - Added a "📅 Kalender" button in the sidebar nav directly above "Teams".
-  - Created a new view container (`#view-calendar`) layout hosting a split pane:
-    - **Left Pane**: Monthly calendar grid layout displaying week rows (Monday-Sunday) and day cells, with today's date highlighted.
-    - **Right Pane**: A detailed table list of all season races including Start Date, Format, Location, Category, Participants, Distance, Elevation, and Status.
+  - Added a "▧ Kalender" button in the sidebar nav directly above "Teams".
+  - Updated the "⧉ Statistiken & Rekorde" menu icon to match the monochrome geometric aesthetic of the other sidebar links.
+  - Created a new view container (`#view-calendar`) layout hosting a vertical pane flow:
+    - **Top Pane**: Full-width monthly calendar grid layout displaying week rows (Monday-Sunday) and day cells, with today's date highlighted.
+    - **Bottom Pane**: A detailed full-width table list of all season races including Start Date, Format, Location, Category, Participants, Distance, Elevation, and Status.
 
 ### 2. View Controllers & Business Logic
 - **[state.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/state.ts)**:
@@ -33,7 +34,7 @@ We have successfully implemented the "Saisonkalender" (Season Calendar) dashboar
 
 ### 4. Styles & Aesthetics
 - **[main.css](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/main.css)**:
-  - Added calendar split layout styling with card overlays and scrollable table wraps.
+  - Added calendar stacked layout styling with card overlays and scrollable table wraps.
   - Styled day cells, weekday headers, and past/other-month days.
   - Designed the connecting event bars, glowing active live race state, and a pulsing red live indicator dot.
   - Added dashboard table subsection divider rows.

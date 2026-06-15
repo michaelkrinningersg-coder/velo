@@ -49,6 +49,7 @@ export class LeaderboardRepository {
       if (!tableExists(this.db, 'rider_daily_state')) {
         return [];
       }
+      const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
       let selectVal = '';
       if (metricKey === 'fatigue_short') {
         selectVal = 'rds.short_term_fatigue';
@@ -57,14 +58,22 @@ export class LeaderboardRepository {
       } else if (metricKey === 'fatigue_combined') {
         selectVal = 'rds.short_term_fatigue + rds.long_term_fatigue_decayable';
       } else if (metricKey === 'form_r') {
-        selectVal = 'rds.race_form_bonus';
+        selectVal = useFreeRaceForm
+          ? 'MIN(4.0, COALESCE(rds.race_form_bonus, 0) + COALESCE(free_r_form.total, 0))'
+          : 'rds.race_form_bonus';
       } else if (metricKey === 'form_s') {
         selectVal = 'rds.form_bonus';
       } else if (metricKey === 'form_combined') {
-        selectVal = 'rds.form_bonus + rds.race_form_bonus';
+        selectVal = useFreeRaceForm
+          ? 'rds.form_bonus + MIN(4.0, COALESCE(rds.race_form_bonus, 0) + COALESCE(free_r_form.total, 0))'
+          : 'rds.form_bonus + rds.race_form_bonus';
       } else {
         return [];
       }
+
+      const freeRaceFormJoin = useFreeRaceForm
+        ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = r.id'
+        : '';
 
       query = `
         SELECT 
@@ -80,6 +89,7 @@ export class LeaderboardRepository {
         JOIN sta_country c ON c.id = r.country_id
         JOIN rider_daily_state rds ON rds.rider_id = r.id
         LEFT JOIN teams t ON t.id = r.active_team_id
+        ${freeRaceFormJoin}
         WHERE rds.season = ? AND r.is_retired = 0
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
@@ -425,7 +435,7 @@ export class LeaderboardRepository {
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
       `;
-      valueFormatter = (r) => r.val.toFixed(1);
+      valueFormatter = (r) => r.val.toFixed(2);
 
     } else {
       // 9. Season stats / Career stats (crashes, defects, breakaway kms etc.)
