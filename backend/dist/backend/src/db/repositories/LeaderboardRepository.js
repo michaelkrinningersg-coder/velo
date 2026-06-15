@@ -441,6 +441,75 @@ class LeaderboardRepository {
             }
             valueFormatter = (r) => `${r.val}`;
         }
+        else if (metricKey === 'successful_breakaways') {
+            if (period === 'season') {
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            COUNT(*) AS val
+          FROM results r1
+          JOIN stages s ON s.id = r1.stage_id
+          JOIN riders r ON r.id = r1.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE r1.result_type_id = 1
+            AND r1.is_breakaway = 1
+            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM results r2
+              WHERE r2.stage_id = r1.stage_id
+                AND r2.result_type_id = 1
+                AND r2.rank < r1.rank
+                AND r2.is_breakaway = 0
+            )
+          GROUP BY r.id
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
+                params.push(currentSeason);
+            }
+            else {
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            COUNT(*) AS val
+          FROM results r1
+          JOIN stages s ON s.id = r1.stage_id
+          JOIN riders r ON r.id = r1.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE r1.result_type_id = 1
+            AND r1.is_breakaway = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM results r2
+              WHERE r2.stage_id = r1.stage_id
+                AND r2.result_type_id = 1
+                AND r2.rank < r1.rank
+                AND r2.is_breakaway = 0
+            )
+          GROUP BY r.id
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
+            }
+            valueFormatter = (r) => `${r.val}`;
+        }
         else if (metricKey === 'race_days' || metricKey.startsWith('race_days_terrain_')) {
             // 6. Race Days
             let extraFilter = '';
@@ -1213,6 +1282,57 @@ class LeaderboardRepository {
                 console.error('Team leadout leaderboard query error:', e.message);
                 return [];
             }
+        }
+        else if (metricKey === 'successful_breakaways') {
+            if (period === 'season') {
+                query = `
+          SELECT 
+            r.active_team_id AS team_id,
+            COUNT(*) AS val
+          FROM results r1
+          JOIN stages s ON s.id = r1.stage_id
+          JOIN riders r ON r.id = r1.rider_id
+          WHERE r1.result_type_id = 1
+            AND r1.is_breakaway = 1
+            AND r.active_team_id IS NOT NULL
+            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM results r2
+              WHERE r2.stage_id = r1.stage_id
+                AND r2.result_type_id = 1
+                AND r2.rank < r1.rank
+                AND r2.is_breakaway = 0
+            )
+          GROUP BY r.active_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+                params.push(currentSeason);
+            }
+            else {
+                query = `
+          SELECT 
+            r.active_team_id AS team_id,
+            COUNT(*) AS val
+          FROM results r1
+          JOIN stages s ON s.id = r1.stage_id
+          JOIN riders r ON r.id = r1.rider_id
+          WHERE r1.result_type_id = 1
+            AND r1.is_breakaway = 1
+            AND r.active_team_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM results r2
+              WHERE r2.stage_id = r1.stage_id
+                AND r2.result_type_id = 1
+                AND r2.rank < r1.rank
+                AND r2.is_breakaway = 0
+            )
+          GROUP BY r.active_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+            }
+            valueFormatter = (r) => `${r.val}`;
         }
         else {
             // Sum other fields (breakaways, crashes etc.) from season stats

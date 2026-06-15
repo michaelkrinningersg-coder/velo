@@ -826,7 +826,7 @@ function inferFormat(fileName, fileContent) {
         return 'tcx';
     throw new Error('Nur GPX- und TCX-Dateien werden unterstützt.');
 }
-function sanitizeSegments(segments) {
+function sanitizeSegments(segments, skipLengthCheck = false) {
     if (segments.length === 0) {
         throw new Error('Mindestens ein Segment ist erforderlich.');
     }
@@ -851,9 +851,11 @@ function sanitizeSegments(segments) {
         ...sanitized[sanitized.length - 1],
         endMarkers: ensureFinishMarker(sanitized[sanitized.length - 1].endMarkers, 'Ziel'),
     };
-    for (let index = 0; index < sanitized.length; index += 1) {
-        if (sanitized[index].lengthKm < MIN_SEGMENT_KM) {
-            throw new Error(`Segment ${index + 1} ist zu kurz (${sanitized[index].lengthKm.toFixed(2)} km). Minimum sind ${MIN_SEGMENT_KM.toFixed(1)} km.`);
+    if (!skipLengthCheck) {
+        for (let index = 0; index < sanitized.length; index += 1) {
+            if (sanitized[index].lengthKm < MIN_SEGMENT_KM) {
+                throw new Error(`Segment ${index + 1} ist zu kurz (${sanitized[index].lengthKm.toFixed(2)} km). Minimum sind ${MIN_SEGMENT_KM.toFixed(1)} km.`);
+            }
         }
     }
     const totalDistanceKm = round2(sanitized.reduce((sum, segment) => sum + segment.lengthKm, 0));
@@ -982,7 +984,7 @@ class RouteImporter {
             let stageScore = 0;
             let climbScores = [];
             try {
-                segments = this.loadStageDetailSegments(stage);
+                segments = this.loadStageDetailSegments(stage, true);
                 const waypoints = deriveWaypointsFromSegments(segments);
                 profilePoints = waypoints.map((waypoint) => ({
                     distanceKm: waypoint.kmMark,
@@ -1052,7 +1054,7 @@ class RouteImporter {
         if (!metadata) {
             throw new Error(`Stage ${stageId} wurde in data/csv/stages.csv nicht gefunden.`);
         }
-        const segments = this.loadStageDetailSegments(metadata);
+        const segments = this.loadStageDetailSegments(metadata, true);
         const waypoints = deriveWaypointsFromSegments(segments);
         const profilePoints = waypoints.map((waypoint) => ({
             distanceKm: waypoint.kmMark,
@@ -1208,7 +1210,7 @@ class RouteImporter {
         }
         return result;
     }
-    loadStageDetailSegments(metadata) {
+    loadStageDetailSegments(metadata, skipLengthCheck = false) {
         const detailsPath = (0, path_1.resolve)(this.dataRoot, 'stages', safeStageDetailsFileName(metadata.detailsCsvFile));
         if (!(0, fs_1.existsSync)(detailsPath)) {
             throw new Error(`Detaildatei wurde nicht gefunden: ${metadata.detailsCsvFile}`);
@@ -1245,7 +1247,7 @@ class RouteImporter {
             startElevation = Math.round(startElevation + ((lengthKm * 1000) * (gradientPercent / 100)));
             return segment;
         });
-        return sanitizeSegments(segments);
+        return sanitizeSegments(segments, skipLengthCheck);
     }
 }
 exports.RouteImporter = RouteImporter;
