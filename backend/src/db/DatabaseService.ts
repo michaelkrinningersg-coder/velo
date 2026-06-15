@@ -591,12 +591,6 @@ export class DatabaseService {
         `).run();
       }
     }
-
-    db.prepare(`
-      UPDATE stages
-      SET allowed_weather = '1|2|3|4|5|6|7'
-      WHERE allowed_weather = '1' OR allowed_weather = '1|3'
-    `).run();
   }
 
   private ensureStageRaceStateSchema(db: Database.Database): void {
@@ -887,7 +881,85 @@ export class DatabaseService {
     if (!columnExists(db, 'rider_career_stats', 'injury_days')) {
       db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injury_days INTEGER NOT NULL DEFAULT 0').run();
     }
+
+    if (!columnExists(db, 'rider_career_stats', 'max_short_term_fatigue')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_short_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'max_long_term_fatigue')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_long_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'max_combined_fatigue')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'max_s_form')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_s_form REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'max_r_form')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_r_form REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!columnExists(db, 'rider_career_stats', 'max_combined_form')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_form REAL NOT NULL DEFAULT 0.0').run();
+    }
+
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_fatigue
+      AFTER UPDATE OF short_term_fatigue, long_term_fatigue_decayable ON rider_daily_state
+      BEGIN
+        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
+        UPDATE rider_career_stats SET
+          max_short_term_fatigue = MAX(max_short_term_fatigue, NEW.short_term_fatigue),
+          max_long_term_fatigue = MAX(max_long_term_fatigue, NEW.long_term_fatigue_decayable),
+          max_combined_fatigue = MAX(max_combined_fatigue, NEW.short_term_fatigue + NEW.long_term_fatigue_decayable)
+        WHERE rider_id = NEW.rider_id;
+      END;
+    `).run();
+
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_form
+      AFTER UPDATE OF form_bonus, race_form_bonus ON rider_daily_state
+      BEGIN
+        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
+        UPDATE rider_career_stats SET
+          max_s_form = MAX(max_s_form, NEW.form_bonus),
+          max_r_form = MAX(max_r_form, NEW.race_form_bonus),
+          max_combined_form = MAX(max_combined_form, NEW.form_bonus + NEW.race_form_bonus)
+        WHERE rider_id = NEW.rider_id;
+      END;
+    `).run();
   }
+
+  private ensureRiderSeasonStatsSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_season_stats (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        breakaway_attempts INTEGER NOT NULL DEFAULT 0,
+        breakaway_kms REAL NOT NULL DEFAULT 0.0,
+        attacks INTEGER NOT NULL DEFAULT 0,
+        counter_attacks INTEGER NOT NULL DEFAULT 0,
+        crashes INTEGER NOT NULL DEFAULT 0,
+        defects INTEGER NOT NULL DEFAULT 0,
+        illnesses INTEGER NOT NULL DEFAULT 0,
+        illness_days INTEGER NOT NULL DEFAULT 0,
+        injuries INTEGER NOT NULL DEFAULT 0,
+        injury_days INTEGER NOT NULL DEFAULT 0,
+        dns_count INTEGER NOT NULL DEFAULT 0,
+        dnf_count INTEGER NOT NULL DEFAULT 0,
+        otl_count INTEGER NOT NULL DEFAULT 0,
+        superform_days INTEGER NOT NULL DEFAULT 0,
+        supermalus_days INTEGER NOT NULL DEFAULT 0,
+        home_advantage_days INTEGER NOT NULL DEFAULT 0,
+        super_home_advantage_days INTEGER NOT NULL DEFAULT 0,
+        home_pressure_days INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (rider_id, season)
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_season_stats_season ON rider_season_stats(season);
+    `).run();
+  }
+
 
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
@@ -1068,8 +1140,11 @@ export class DatabaseService {
             program.peak3_max,
           );
         }
+        const validRaceIds = new Set(db.prepare('SELECT id FROM races').all().map((r: any) => r.id));
         for (const row of programRaces) {
-          insertProgramRace.run(row.id, row.program_id, row.race_id);
+          if (validRaceIds.has(row.race_id)) {
+            insertProgramRace.run(row.id, row.program_id, row.race_id);
+          }
         }
         for (const row of rules) {
           insertRule.run(row.id, row.role_name, row.spec_1, row.spec_2, row.spec_3, row.program_id, row.probability);
@@ -1165,6 +1240,7 @@ export class DatabaseService {
     this.ensureRiderFormSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
     this.ensureRiderCareerStatsSchema(this.activeConnection);
+    this.ensureRiderSeasonStatsSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     this.ensureDayChangeIndexes(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();

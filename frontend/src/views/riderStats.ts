@@ -1427,16 +1427,17 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
               <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
                 <table class="data-table rider-stats-table">
                   <colgroup>
-                    <col style="width: 10%;">
-                    <col style="width: 5%;">
-                    <col style="width: 5%;">
+                    <col style="width: 9%;">
                     <col style="width: 4%;">
-                    <col style="width: 15%;">
-                    <col style="width: 18%;">
-                    <col style="width: 8%;">
-                    <col style="width: 6%;">
-                    <col style="width: 6%;">
-                    <col style="width: 18%;">
+                    <col style="width: 4%;">
+                    <col style="width: 3%;">
+                    <col style="width: 4%;">
+                    <col style="width: 14%;">
+                    <col style="width: 20%;">
+                    <col style="width: 7%;">
+                    <col style="width: 5%;">
+                    <col style="width: 5%;">
+                    <col style="width: 20%;">
                     <col style="width: 5%;">
                   </colgroup>
                   <thead>
@@ -1445,6 +1446,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                       <th>Platz</th>
                       <th>GC</th>
                       <th class="rider-stats-breakaway-col"></th>
+                      <th>Wetter</th>
                       <th>Klasse</th>
                       <th>Rennen / Etappe</th>
                       <th>Profil</th>
@@ -1466,8 +1468,9 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${renderRiderStatsPlacement(row)}</td>
                           <td>${renderRiderStatsGcPlacement(row)}</td>
                           <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
+                          <td>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null)}</td>
-                          <td>${esc(raceStageLabel)}${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
+                          <td>${esc(raceStageLabel)}</td>
                           <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
@@ -1486,9 +1489,9 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
 function updateRiderStatsModalWidth(): void {
   const card = document.querySelector('.rider-stats-modal-card') as HTMLElement | null;
   if (!card) return;
-  if (state.riderStatsTab === 'career') {
-    card.style.minWidth = 'min(1080px, 95vw)';
-    card.style.maxWidth = '1300px';
+  if (state.riderStatsTab === 'career' || state.riderStatsTab === 'results') {
+    card.style.minWidth = 'min(1180px, 95vw)';
+    card.style.maxWidth = '1350px';
   } else {
     card.style.minWidth = '';
     card.style.maxWidth = '';

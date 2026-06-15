@@ -65,6 +65,10 @@ import {
   openTeamStats,
   initTeamStatsListeners,
 } from './views/teamStats';
+import {
+  initLeaderboardsView,
+  showLeaderboardsView,
+} from './views/leaderboards';
 import { RaceSimView } from './race-sim/RaceSimView';
 
 (window as any).openTeamStats = openTeamStats;
@@ -112,6 +116,7 @@ function initAppListeners(): void {
       if (view === 'draft') void loadDraftHistory(state.draftSelectedSeason || state.currentSave?.currentSeason || 2026);
       if (view === 'injuries') void loadInjuries();
       if (view === 'season-standings') void loadSeasonStandings(true);
+      if (view === 'leaderboards') void showLeaderboardsView();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
     });
   });
@@ -178,6 +183,7 @@ function initAppListeners(): void {
   initRiderStatsListeners();
   initTeamStatsListeners();
   initSeasonStandingsListeners();
+  initLeaderboardsView();
 }
 
 // ============================================================

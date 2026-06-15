@@ -37,6 +37,7 @@ import type {
   Race,
   RaceRosterEntry,
 } from '../../../shared/types';
+import { renderWeatherIcon } from './riderStats';
 
 export const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 export const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
@@ -921,6 +922,7 @@ export function renderResultsView(): void {
       { key: 'incident', label: 'Stürze/Defekte' },
       { key: 'exit', label: 'Ausgeschieden' },
       { key: 'home', label: 'Heimvorteil' },
+      { key: 'weather', label: 'Wetter' },
     ];
     markerTabs.innerHTML = filters.map((filter) => `
       <button
@@ -1051,6 +1053,9 @@ export function renderResultsView(): void {
         if (selectedEventFilter === 'home') {
           return !!(row.title && (row.title.includes('Heimvorteil') || row.title.includes('Heimdruck')));
         }
+        if (selectedEventFilter === 'weather') {
+          return !!(row.title && row.title.startsWith('Wetterbericht:'));
+        }
         return true;
       })
       .sort((a, b) => {
@@ -1076,9 +1081,16 @@ export function renderResultsView(): void {
         const teamId = row.riderTeamId ?? riderObj?.activeTeamId ?? null;
         const teamName = teamId != null ? (state.teams.find((t) => t.id === teamId)?.name ?? null) : null;
 
-        const jerseyHtml = renderResultsJerseyColumn(teamId, teamName);
-        const flagHtml = renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
-        const riderHtml = riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–');
+        let jerseyHtml = renderResultsJerseyColumn(teamId, teamName);
+        const isWeatherReport = !!(row.title && row.title.startsWith('Wetterbericht:'));
+        if (isWeatherReport) {
+          const resultStage = state.stageResults ? findStageById(state.stageResults.stageId) : null;
+          const weatherId = resultStage?.stage.rolledWeatherId;
+          const weatherName = resultStage?.stage.rolledWetterName;
+          jerseyHtml = `<span class="results-jersey-cell">${renderWeatherIcon(weatherId, weatherName)}</span>`;
+        }
+        const flagHtml = isWeatherReport ? '' : renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
+        const riderHtml = isWeatherReport ? '' : (riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–'));
 
         let badgeHtml = '';
         if (row.title && row.title.includes('guten Tag')) {
@@ -1112,6 +1124,8 @@ export function renderResultsView(): void {
           badgeHtml = `<span class="event-badge event-badge-homepressure"><span class="event-icon">♦</span> Heimdruck</span>`;
         } else if (row.title && row.title.includes('Heimvorteil')) {
           badgeHtml = `<span class="event-badge event-badge-normalhome"><span class="event-icon">♥</span> Heimvorteil</span>`;
+        } else if (row.title && row.title.startsWith('Wetterbericht:')) {
+          badgeHtml = `<span class="event-badge event-badge-weather"><span class="event-icon">🌤️</span> Wetter</span>`;
         }
 
         return `

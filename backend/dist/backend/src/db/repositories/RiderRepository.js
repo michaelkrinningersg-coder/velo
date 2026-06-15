@@ -333,11 +333,14 @@ class RiderRepository {
         stage_points.points_awarded AS stage_points,
         stage_entries.status AS stage_entry_status,
         stage_entries.status_reason AS stage_entry_status_reason,
-        stages.stage_score AS stage_score
+        stages.stage_score AS stage_score,
+        stages.rolled_weather_id AS rolled_weather_id,
+        wetter.wetter_name AS rolled_wetter_name
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
+      LEFT JOIN wetter ON wetter.id = stages.rolled_weather_id
       LEFT JOIN results rider_stage_results
         ON rider_stage_results.stage_id = stages.id
        AND rider_stage_results.rider_id = stage_entries.rider_id
@@ -478,6 +481,8 @@ class RiderRepository {
                 elevationGainMeters: summary.elevationGainMeters,
                 seasonPoints: stagePoints,
                 stageScore: row.stage_score ?? 0,
+                rolledWeatherId: row.rolled_weather_id ?? null,
+                rolledWetterName: row.rolled_wetter_name ?? null,
             });
             const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
             pointsByTerrain[terrainBucket] += stagePoints;
@@ -1007,6 +1012,13 @@ class RiderRepository {
                 winCobbleHill: 0,
                 winITT: 0,
                 winTTT: 0,
+                winWeather1: 0,
+                winWeather2: 0,
+                winWeather3: 0,
+                winWeather4: 0,
+                winWeather5: 0,
+                winWeather6: 0,
+                winWeather7: 0,
             };
         }
         if ((0, mappers_1.tableExists)(this.db, 'stage_entries') && (0, mappers_1.tableExists)(this.db, 'stages') && (0, mappers_1.tableExists)(this.db, 'races') && (0, mappers_1.tableExists)(this.db, 'race_categories')) {
@@ -1036,7 +1048,8 @@ class RiderRepository {
           races.number_of_stages AS number_of_stages,
           stages.stage_number AS stage_number,
           stages.profile AS profile,
-          cat.name AS category_name
+          cat.name AS category_name,
+          stages.rolled_weather_id AS rolled_weather_id
         FROM results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
@@ -1052,7 +1065,8 @@ class RiderRepository {
           races.number_of_stages AS number_of_stages,
           stages.stage_number AS stage_number,
           stages.profile AS profile,
-          cat.name AS category_name
+          cat.name AS category_name,
+          stages.rolled_weather_id AS rolled_weather_id
         FROM results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
@@ -1098,6 +1112,13 @@ class RiderRepository {
                         winCobbleHill: 0,
                         winITT: 0,
                         winTTT: 0,
+                        winWeather1: 0,
+                        winWeather2: 0,
+                        winWeather3: 0,
+                        winWeather4: 0,
+                        winWeather5: 0,
+                        winWeather6: 0,
+                        winWeather7: 0,
                     };
                     categories[row.category_name] = catStats;
                 }
@@ -1129,6 +1150,10 @@ class RiderRepository {
                             catStats.winITT++;
                         else if (profile === 'TTT')
                             catStats.winTTT++;
+                        if (row.rolled_weather_id != null && row.rolled_weather_id >= 1 && row.rolled_weather_id <= 7) {
+                            const weatherKey = `winWeather${row.rolled_weather_id}`;
+                            catStats[weatherKey]++;
+                        }
                     }
                     if (!isStageRace) {
                         if (rank === 1) {

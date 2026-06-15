@@ -8,6 +8,7 @@ const ResultRepository_1 = require("../db/repositories/ResultRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const TeamRepository_1 = require("../db/repositories/TeamRepository");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
+const mappers_1 = require("../db/mappers");
 const ContractService_1 = require("./ContractService");
 const RiderDevelopmentService_1 = require("./RiderDevelopmentService");
 const RiderProgramService_1 = require("./RiderProgramService");
@@ -574,6 +575,19 @@ class GameStateService {
                 injury_days = injury_days + excluded.injury_days
             `).run(row.rider_id, isIll ? 1 : 0, isIll ? newCondition.durationDays : 0, isIll ? 0 : 1, isIll ? 0 : newCondition.durationDays);
                     }
+                    if (tableExists(this.db, 'rider_season_stats')) {
+                        const isIll = newCondition.status === 'ill';
+                        this.db.prepare(`
+              INSERT INTO rider_season_stats (
+                rider_id, season, illnesses, illness_days, injuries, injury_days
+              ) VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(rider_id, season) DO UPDATE SET
+                illnesses = illnesses + excluded.illnesses,
+                illness_days = illness_days + excluded.illness_days,
+                injuries = injuries + excluded.injuries,
+                injury_days = injury_days + excluded.injury_days
+            `).run(row.rider_id, nextSeason, isIll ? 1 : 0, isIll ? newCondition.durationDays : 0, isIll ? 0 : 1, isIll ? 0 : newCondition.durationDays);
+                    }
                 }
             }
             const phase = resolvePeakPhase(nextDate, peakDates);
@@ -986,9 +1000,11 @@ class GameStateService {
             return;
         }
         const stageRow = this.db.prepare(`
-      SELECT s.stage_score, s.stage_number, r.name AS race_name, s.date
+      SELECT s.id, s.stage_score, s.stage_number, r.name AS race_name, s.date,
+             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max
       FROM stages s
       JOIN races r ON r.id = s.race_id
+      LEFT JOIN wetter w ON w.id = s.rolled_weather_id
       WHERE s.id = ?
     `).get(stageId);
         if (!stageRow) {
@@ -1053,6 +1069,11 @@ class GameStateService {
                     const totalIncreasePercent = (increasePerYearPercent * yearsUnder24) / 100;
                     addedShort *= (1 + totalIncreasePercent);
                     addedLongDecayable *= (1 + totalIncreasePercent);
+                }
+                if (stageRow.rolled_weather_id != null) {
+                    const rolledEffektFatigue = (0, mappers_1.getDeterministicWeatherEffect)(stageRow.id, 'fatigue', stageRow.effekt_fatigue_min ?? 0, stageRow.effekt_fatigue_max ?? 0);
+                    addedShort *= (1 + rolledEffektFatigue / 100);
+                    addedLongDecayable *= (1 + rolledEffektFatigue / 100);
                 }
                 addedShort = roundToTwoDecimals(addedShort);
                 addedLongDecayable = roundToTwoDecimals(addedLongDecayable);

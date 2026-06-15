@@ -4,6 +4,7 @@ import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
 import { GameRepository } from '../db/GameRepository';
 import { RiderRepository } from '../db/repositories/RiderRepository';
 import { ResultRepository } from '../db/repositories/ResultRepository';
+import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
@@ -566,6 +567,26 @@ export function createRouter(dbService: DatabaseService): Router {
       const db = dbService.getActiveConnection();
       ok<SeasonStandingsPayload>(res, new GameRepository(db).getSeasonStandings());
     } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/leaderboards', (req: Request, res: Response) => {
+    const scope = req.query['scope'] as 'riders' | 'teams';
+    const metricKey = req.query['metricKey'] as string;
+    const period = req.query['period'] as 'season' | 'alltime' | 'live';
+
+    if (!scope || !metricKey || !period) {
+      return fail(res, 400, 'Missing scope, metricKey, or period parameter.');
+    }
+
+    try {
+      const db = dbService.getActiveConnection();
+      const gameState = db.prepare('SELECT season FROM game_state').get() as { season: number } | undefined;
+      const currentSeason = gameState?.season ?? 2026;
+      const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason);
+      ok(res, data);
+    } catch (e) {
+      fail(res, 400, (e as Error).message);
+    }
   });
 
   router.post('/state/advance', (_req: Request, res: Response) => {

@@ -93,4 +93,6 @@ export const api = {
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
   getInjuries:         () => call<InjuryRow[]>('GET', '/api/injuries'),
   getDraftHistory:     (season: number) => call<DraftHistoryPayload>('GET', `/api/draft/${season}`),
+  getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
+    call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),
 };

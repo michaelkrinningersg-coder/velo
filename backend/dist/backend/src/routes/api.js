@@ -6,6 +6,7 @@ const RiderTeamEditorService_1 = require("../editor/RiderTeamEditorService");
 const GameRepository_1 = require("../db/GameRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
+const LeaderboardRepository_1 = require("../db/repositories/LeaderboardRepository");
 const GameStateService_1 = require("../game/GameStateService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
@@ -383,6 +384,7 @@ function createRouter(dbService) {
                 return fail(res, 400, 'Diese Etappe ist aktuell nicht zur Live-Simulation freigegeben.');
             }
             const db = dbService.getActiveConnection();
+            ensureWeatherRolled(db, stageId);
             const repo = new GameRepository_1.GameRepository(db);
             const stage = repo.getStageById(stageId);
             if (!stage) {
@@ -472,6 +474,7 @@ function createRouter(dbService) {
                 return fail(res, 400, 'Es wurden keine Teilnehmer Ã¼bergeben.');
             }
             const db = dbService.getActiveConnection();
+            ensureWeatherRolled(db, stageId);
             const repo = new GameRepository_1.GameRepository(db);
             const stage = repo.getStageById(stageId);
             if (!stage) {
@@ -567,6 +570,24 @@ function createRouter(dbService) {
         try {
             const db = dbService.getActiveConnection();
             ok(res, new GameRepository_1.GameRepository(db).getSeasonStandings());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/leaderboards', (req, res) => {
+        const scope = req.query['scope'];
+        const metricKey = req.query['metricKey'];
+        const period = req.query['period'];
+        if (!scope || !metricKey || !period) {
+            return fail(res, 400, 'Missing scope, metricKey, or period parameter.');
+        }
+        try {
+            const db = dbService.getActiveConnection();
+            const gameState = db.prepare('SELECT season FROM game_state').get();
+            const currentSeason = gameState?.season ?? 2026;
+            const data = new LeaderboardRepository_1.LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason);
+            ok(res, data);
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -695,4 +716,20 @@ function createRouter(dbService) {
         }
     });
     return router;
+}
+function ensureWeatherRolled(db, stageId) {
+    const row = db.prepare('SELECT rolled_weather_id, allowed_weather FROM stages WHERE id = ?').get(stageId);
+    if (!row) {
+        return;
+    }
+    if (row.rolled_weather_id != null) {
+        return;
+    }
+    const allowed = row.allowed_weather.split('|').map((id) => parseInt(id.trim(), 10)).filter(Number.isFinite);
+    if (allowed.length === 0) {
+        allowed.push(1);
+    }
+    const randomIndex = Math.floor(Math.random() * allowed.length);
+    const rolledId = allowed[randomIndex];
+    db.prepare('UPDATE stages SET rolled_weather_id = ? WHERE id = ?').run(rolledId, stageId);
 }

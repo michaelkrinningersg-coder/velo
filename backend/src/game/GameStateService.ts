@@ -709,6 +709,26 @@ export class GameStateService {
               isIll ? 0 : newCondition.durationDays
             );
           }
+          if (tableExists(this.db, 'rider_season_stats')) {
+            const isIll = newCondition.status === 'ill';
+            this.db.prepare(`
+              INSERT INTO rider_season_stats (
+                rider_id, season, illnesses, illness_days, injuries, injury_days
+              ) VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(rider_id, season) DO UPDATE SET
+                illnesses = illnesses + excluded.illnesses,
+                illness_days = illness_days + excluded.illness_days,
+                injuries = injuries + excluded.injuries,
+                injury_days = injury_days + excluded.injury_days
+            `).run(
+              row.rider_id,
+              nextSeason,
+              isIll ? 1 : 0,
+              isIll ? newCondition.durationDays : 0,
+              isIll ? 0 : 1,
+              isIll ? 0 : newCondition.durationDays
+            );
+          }
         }
       }
 

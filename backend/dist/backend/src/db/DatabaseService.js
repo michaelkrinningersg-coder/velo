@@ -401,6 +401,60 @@ class DatabaseService {
             masterDb.close();
         }
     }
+    ensureWeatherSchema(db) {
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS wetter (
+        id INTEGER PRIMARY KEY,
+        wetter_name TEXT NOT NULL UNIQUE,
+        effekt_sturz_min REAL NOT NULL DEFAULT 0.0,
+        effekt_sturz_max REAL NOT NULL DEFAULT 0.0,
+        effekt_defekt_min REAL NOT NULL DEFAULT 0.0,
+        effekt_defekt_max REAL NOT NULL DEFAULT 0.0,
+        windkanten_gefahr_min REAL NOT NULL DEFAULT 0.0,
+        windkanten_gefahr_max REAL NOT NULL DEFAULT 0.0,
+        effekt_fatigue_min REAL NOT NULL DEFAULT 0.0,
+        effekt_fatigue_max REAL NOT NULL DEFAULT 0.0,
+        breakaway_bonus_min REAL NOT NULL DEFAULT 0.0,
+        breakaway_bonus_max REAL NOT NULL DEFAULT 0.0
+      )
+    `).run();
+        const insert = db.prepare(`
+      INSERT OR IGNORE INTO wetter (
+        id, wetter_name,
+        effekt_sturz_min, effekt_sturz_max,
+        effekt_defekt_min, effekt_defekt_max,
+        windkanten_gefahr_min, windkanten_gefahr_max,
+        effekt_fatigue_min, effekt_fatigue_max,
+        breakaway_bonus_min, breakaway_bonus_max
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+        const weatherRows = [
+            [1, 'Sonnig', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [2, 'Extreme Hitze', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 15.0, 30.0, 0.0, 0.0],
+            [3, 'Leichter Regen', 1.0, 3.0, 0.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [4, 'Starkregen', 3.0, 7.0, 1.5, 4.0, 0.0, 0.0, 5.0, 15.0, 0.0, 0.0],
+            [5, 'Starker Wind', 0.5, 2.0, 0.0, 0.0, 0.05, 0.15, 5.0, 10.0, 0.0, 0.0],
+            [6, 'Dichter Nebel', 2.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 3.0],
+            [7, 'Schnee/Eis', 5.0, 12.0, 1.0, 3.0, 0.0, 0.0, 15.0, 35.0, 0.0, 0.0],
+        ];
+        db.transaction(() => {
+            for (const row of weatherRows) {
+                insert.run(...row);
+            }
+        })();
+        const weatherStageColumns = [
+            ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
+            ['rolled_weather_id', 'INTEGER REFERENCES wetter(id)'],
+        ];
+        for (const [columnName, columnDefinition] of weatherStageColumns) {
+            if (!columnExists(db, 'stages', columnName)) {
+                db.prepare(`
+          ALTER TABLE stages
+          ADD COLUMN ${columnName} ${columnDefinition}
+        `).run();
+            }
+        }
+    }
     ensureStageRaceStateSchema(db) {
         db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_stage_race_state (
@@ -667,6 +721,78 @@ class DatabaseService {
         if (!columnExists(db, 'rider_career_stats', 'injury_days')) {
             db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injury_days INTEGER NOT NULL DEFAULT 0').run();
         }
+        if (!columnExists(db, 'rider_career_stats', 'max_short_term_fatigue')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_short_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'max_long_term_fatigue')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_long_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'max_combined_fatigue')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'max_s_form')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_s_form REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'max_r_form')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_r_form REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_career_stats', 'max_combined_form')) {
+            db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_form REAL NOT NULL DEFAULT 0.0').run();
+        }
+        db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_fatigue
+      AFTER UPDATE OF short_term_fatigue, long_term_fatigue_decayable ON rider_daily_state
+      BEGIN
+        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
+        UPDATE rider_career_stats SET
+          max_short_term_fatigue = MAX(max_short_term_fatigue, NEW.short_term_fatigue),
+          max_long_term_fatigue = MAX(max_long_term_fatigue, NEW.long_term_fatigue_decayable),
+          max_combined_fatigue = MAX(max_combined_fatigue, NEW.short_term_fatigue + NEW.long_term_fatigue_decayable)
+        WHERE rider_id = NEW.rider_id;
+      END;
+    `).run();
+        db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_form
+      AFTER UPDATE OF form_bonus, race_form_bonus ON rider_daily_state
+      BEGIN
+        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
+        UPDATE rider_career_stats SET
+          max_s_form = MAX(max_s_form, NEW.form_bonus),
+          max_r_form = MAX(max_r_form, NEW.race_form_bonus),
+          max_combined_form = MAX(max_combined_form, NEW.form_bonus + NEW.race_form_bonus)
+        WHERE rider_id = NEW.rider_id;
+      END;
+    `).run();
+    }
+    ensureRiderSeasonStatsSchema(db) {
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_season_stats (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        breakaway_attempts INTEGER NOT NULL DEFAULT 0,
+        breakaway_kms REAL NOT NULL DEFAULT 0.0,
+        attacks INTEGER NOT NULL DEFAULT 0,
+        counter_attacks INTEGER NOT NULL DEFAULT 0,
+        crashes INTEGER NOT NULL DEFAULT 0,
+        defects INTEGER NOT NULL DEFAULT 0,
+        illnesses INTEGER NOT NULL DEFAULT 0,
+        illness_days INTEGER NOT NULL DEFAULT 0,
+        injuries INTEGER NOT NULL DEFAULT 0,
+        injury_days INTEGER NOT NULL DEFAULT 0,
+        dns_count INTEGER NOT NULL DEFAULT 0,
+        dnf_count INTEGER NOT NULL DEFAULT 0,
+        otl_count INTEGER NOT NULL DEFAULT 0,
+        superform_days INTEGER NOT NULL DEFAULT 0,
+        supermalus_days INTEGER NOT NULL DEFAULT 0,
+        home_advantage_days INTEGER NOT NULL DEFAULT 0,
+        super_home_advantage_days INTEGER NOT NULL DEFAULT 0,
+        home_pressure_days INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (rider_id, season)
+      )
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_season_stats_season ON rider_season_stats(season);
+    `).run();
     }
     ensureRaceProgramSchema(db) {
         db.exec(`
@@ -820,8 +946,11 @@ class DatabaseService {
                 for (const program of programs) {
                     insertProgram.run(program.id, program.name, program.peak1_min, program.peak1_max, program.peak2_min, program.peak2_max, program.peak3_min, program.peak3_max);
                 }
+                const validRaceIds = new Set(db.prepare('SELECT id FROM races').all().map((r) => r.id));
                 for (const row of programRaces) {
-                    insertProgramRace.run(row.id, row.program_id, row.race_id);
+                    if (validRaceIds.has(row.race_id)) {
+                        insertProgramRace.run(row.id, row.program_id, row.race_id);
+                    }
                 }
                 for (const row of rules) {
                     insertRule.run(row.id, row.role_name, row.spec_1, row.spec_2, row.spec_3, row.program_id, row.probability);
@@ -898,6 +1027,7 @@ class DatabaseService {
         this.activeConnection.pragma('synchronous = NORMAL');
         this.activeConnection.pragma('foreign_keys = ON');
         this.applyLatestSchema(this.activeConnection);
+        this.ensureWeatherSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
         this.ensureRaceCategoryBonusSchema(this.activeConnection);
         this.ensureRulesData(this.activeConnection);
@@ -907,6 +1037,7 @@ class DatabaseService {
         this.ensureRiderFormSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);
         this.ensureRiderCareerStatsSchema(this.activeConnection);
+        this.ensureRiderSeasonStatsSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         this.ensureDayChangeIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
@@ -962,6 +1093,7 @@ class DatabaseService {
             throw new Error('Kein Savegame geladen. Bitte zuerst ein Savegame laden.');
         }
         this.applyLatestSchema(this.activeConnection);
+        this.ensureWeatherSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
         this.ensureStageRaceStateSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);

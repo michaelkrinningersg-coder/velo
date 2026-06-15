@@ -866,6 +866,153 @@ export class StageResultCommitService {
         );
       }
 
+      // 5. Update season stats table (rider_season_stats)
+      const currentSeason = this.repo.getCurrentSeason();
+
+      // Ensure stats row exists for the season
+      const insertSeasonStatsRowStmt = this.db.prepare(`
+        INSERT OR IGNORE INTO rider_season_stats (rider_id, season) VALUES (?, ?)
+      `);
+      // Update statement for stage results career-like increments in season stats
+      const updateSeasonCareerLikeStmt = this.db.prepare(`
+        UPDATE rider_season_stats SET
+          breakaway_attempts = breakaway_attempts + ?,
+          attacks = attacks + ?,
+          counter_attacks = counter_attacks + ?,
+          crashes = crashes + ?,
+          defects = defects + ?
+        WHERE rider_id = ? AND season = ?
+      `);
+
+      // Fill basic rows
+      for (const [riderId, inc] of careerStatsIncrements.entries()) {
+        insertSeasonStatsRowStmt.run(riderId, currentSeason);
+        updateSeasonCareerLikeStmt.run(
+          inc.breakaway,
+          inc.attacks,
+          inc.counterAttacks,
+          inc.crashes,
+          inc.defects,
+          riderId,
+          currentSeason
+        );
+      }
+
+      // DNS
+      const dnsEvents = this.loadDnsEvents(race, stage);
+      const updateDnsStmt = this.db.prepare(`
+        UPDATE rider_season_stats SET dns_count = dns_count + 1 WHERE rider_id = ? AND season = ?
+      `);
+      for (const dns of dnsEvents) {
+        if (dns.riderId != null) {
+          insertSeasonStatsRowStmt.run(dns.riderId, currentSeason);
+          updateDnsStmt.run(dns.riderId, currentSeason);
+        }
+      }
+
+      // DNF / OTL
+      const updateDnfStmt = this.db.prepare(`
+        UPDATE rider_season_stats SET dnf_count = dnf_count + 1 WHERE rider_id = ? AND season = ?
+      `);
+      const updateOtlStmt = this.db.prepare(`
+        UPDATE rider_season_stats SET otl_count = otl_count + 1 WHERE rider_id = ? AND season = ?
+      `);
+      for (const entry of dnfEntries) {
+        insertSeasonStatsRowStmt.run(entry.riderId, currentSeason);
+        if (entry.statusReason?.startsWith('OTL ')) {
+          updateOtlStmt.run(entry.riderId, currentSeason);
+        } else {
+          updateDnfStmt.run(entry.riderId, currentSeason);
+        }
+      }
+
+      // Parse breakaway kms, form and home advantage events
+      const riderEscapeStart = new Map<number, number>();
+      const riderEscapeKms = new Map<number, number>();
+      let stageDistance = 0;
+      for (const event of events) {
+        if (event.kmMark != null && event.kmMark > stageDistance) {
+          stageDistance = event.kmMark;
+        }
+      }
+      for (const event of events) {
+        if (event.riderId == null) continue;
+        const rId = event.riderId;
+        const title = event.title ?? '';
+        if (title.startsWith('Ausreißversuch:')) {
+          if (event.kmMark != null) {
+            riderEscapeStart.set(rId, event.kmMark);
+          }
+        } else if (title.startsWith('Ausreißer eingeholt:')) {
+          const startKm = riderEscapeStart.get(rId);
+          if (startKm != null) {
+            const endKm = event.kmMark ?? startKm;
+            riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, endKm - startKm));
+            riderEscapeStart.delete(rId);
+          }
+        }
+      }
+      for (const [rId, startKm] of riderEscapeStart.entries()) {
+        riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, stageDistance - startKm));
+      }
+
+      const superformCounts = new Map<number, number>();
+      const supermalusCounts = new Map<number, number>();
+      const homeAdvantageCounts = new Map<number, number>();
+      const superHomeAdvantageCounts = new Map<number, number>();
+      const homePressureCounts = new Map<number, number>();
+
+      for (const event of events) {
+        if (event.riderId == null) continue;
+        const rId = event.riderId;
+        const title = event.title ?? '';
+        if (title.includes('guten Tag')) {
+          superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
+        } else if (title.includes('schlechten Tag')) {
+          supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
+        } else if (title.includes('Super-Heimvorteil')) {
+          superHomeAdvantageCounts.set(rId, (superHomeAdvantageCounts.get(rId) || 0) + 1);
+        } else if (title.includes('Heimvorteil') && !title.includes('Super-Heimvorteil')) {
+          homeAdvantageCounts.set(rId, (homeAdvantageCounts.get(rId) || 0) + 1);
+        } else if (title.includes('Heimdruck')) {
+          homePressureCounts.set(rId, (homePressureCounts.get(rId) || 0) + 1);
+        }
+      }
+
+      const allEventRiderIds = new Set<number>([
+        ...riderEscapeKms.keys(),
+        ...superformCounts.keys(),
+        ...supermalusCounts.keys(),
+        ...superHomeAdvantageCounts.keys(),
+        ...homeAdvantageCounts.keys(),
+        ...homePressureCounts.keys(),
+      ]);
+
+      const updateSeasonEventsStmt = this.db.prepare(`
+        UPDATE rider_season_stats SET
+          breakaway_kms = breakaway_kms + ?,
+          superform_days = superform_days + ?,
+          supermalus_days = supermalus_days + ?,
+          home_advantage_days = home_advantage_days + ?,
+          super_home_advantage_days = super_home_advantage_days + ?,
+          home_pressure_days = home_pressure_days + ?
+        WHERE rider_id = ? AND season = ?
+      `);
+
+      for (const rId of allEventRiderIds) {
+        insertSeasonStatsRowStmt.run(rId, currentSeason);
+        updateSeasonEventsStmt.run(
+          riderEscapeKms.get(rId) ?? 0.0,
+          superformCounts.get(rId) ?? 0,
+          supermalusCounts.get(rId) ?? 0,
+          homeAdvantageCounts.get(rId) ?? 0,
+          superHomeAdvantageCounts.get(rId) ?? 0,
+          homePressureCounts.get(rId) ?? 0,
+          rId,
+          currentSeason
+        );
+      }
+
       this.repo.markStageEntriesFinished(stage.id, completedRiderIds);
       for (const entry of dnfEntries) {
         this.repo.updateStageEntryStatus(stage.id, entry.riderId, 'dnf', entry.statusReason);
@@ -946,6 +1093,17 @@ export class StageResultCommitService {
           injuries = injuries + excluded.injuries,
           injury_days = injury_days + excluded.injury_days
       `).run(riderId, durationDays);
+    }
+    if (tableExists(this.db, 'rider_season_stats')) {
+      const currentSeason = this.repo.getCurrentSeason();
+      this.db.prepare(`
+        INSERT INTO rider_season_stats (
+          rider_id, season, injuries, injury_days
+        ) VALUES (?, ?, 1, ?)
+        ON CONFLICT(rider_id, season) DO UPDATE SET
+          injuries = injuries + excluded.injuries,
+          injury_days = injury_days + excluded.injury_days
+      `).run(riderId, currentSeason, durationDays);
     }
   }
 

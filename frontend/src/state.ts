@@ -564,7 +564,8 @@ export type ViewName =
   | 'season-standings'
   | 'stage-editor'
   | 'stage-editor-stages'
-  | 'stage-editor-climbs';
+  | 'stage-editor-climbs'
+  | 'leaderboards';
 
 interface ActiveViewListener {
   (viewName: ViewName): void;

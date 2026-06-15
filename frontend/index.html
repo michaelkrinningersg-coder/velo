@@ -73,6 +73,9 @@
         <button class="nav-btn" data-view="season-standings">
           <span class="nav-icon">★</span> Season Standings
         </button>
+        <button class="nav-btn" data-view="leaderboards">
+          <span class="nav-icon">📊</span> Statistiken &amp; Rekorde
+        </button>
         <button class="nav-btn" data-view="draft">
           <span class="nav-icon">♺</span> Draft
         </button>
@@ -324,6 +327,138 @@
             </tr>
           </thead>
           <tbody id="season-standings-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Leaderboards -->
+      <div id="view-leaderboards" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Statistiken &amp; Rekorde</h2>
+            <p id="leaderboards-meta" class="text-muted">Ranglisten und All-Time Rekorde der Fahrer und Teams.</p>
+          </div>
+        </div>
+
+        <div class="results-toolbar" style="gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+          <div class="results-type-tabs" style="margin: 0;" id="leaderboards-scope-tabs">
+            <button class="results-type-tab active" data-scope="riders">Fahrer</button>
+            <button class="results-type-tab" data-scope="teams">Teams</button>
+          </div>
+
+          <div class="results-type-tabs" style="margin: 0;" id="leaderboards-period-tabs">
+            <button class="results-type-tab active" data-period="season">Aktuelle Saison</button>
+            <button class="results-type-tab" data-period="alltime">All-Time</button>
+          </div>
+        </div>
+
+        <div class="results-toolbar" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label for="leaderboard-select-performance">Rennerfolg ▾</label>
+            <select id="leaderboard-select-performance">
+              <option value="">– Wählen –</option>
+              <option value="wins">Gesamtsiege</option>
+              <option value="wins_terrain_Flat">Siege: Flach</option>
+              <option value="wins_terrain_Rolling">Siege: Rolling</option>
+              <option value="wins_terrain_Hilly">Siege: Hügelig</option>
+              <option value="wins_terrain_Hilly_Difficult">Siege: Hügelig (Schwer)</option>
+              <option value="wins_terrain_Medium_Mountain">Siege: Medium Mountain</option>
+              <option value="wins_terrain_Mountain">Siege: Mountain</option>
+              <option value="wins_terrain_High_Mountain">Siege: High Mountain</option>
+              <option value="wins_terrain_Cobble">Siege: Cobble</option>
+              <option value="wins_terrain_Cobble_Hill">Siege: Cobble Hill</option>
+              <option value="wins_terrain_ITT">Siege: ITT</option>
+              <option value="wins_terrain_TTT">Siege: TTT</option>
+              <option value="wins_weather_1">Siege: Sonnig</option>
+              <option value="wins_weather_2">Siege: Extreme Hitze</option>
+              <option value="wins_weather_3">Siege: Leichter Regen</option>
+              <option value="wins_weather_4">Siege: Starkregen</option>
+              <option value="wins_weather_5">Siege: Starker Wind</option>
+              <option value="wins_weather_6">Siege: Dichter Nebel</option>
+              <option value="wins_weather_7">Siege: Schnee/Eis</option>
+              <option value="uci_points">UCI Punkte</option>
+              <option value="stage_scores">Stage Scores (Summe)</option>
+              <option value="youngest_winners">Jüngste Sieger (All-Time)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-select-load">Belastung ▾</label>
+            <select id="leaderboard-select-load">
+              <option value="">– Wählen –</option>
+              <option value="race_days">Renntage (Absolut)</option>
+              <option value="race_days_terrain_Flat">Renntage: Flach</option>
+              <option value="race_days_terrain_Rolling">Renntage: Rolling</option>
+              <option value="race_days_terrain_Hilly">Renntage: Hügelig</option>
+              <option value="race_days_terrain_Hilly_Difficult">Renntage: Hügelig (Schwer)</option>
+              <option value="race_days_terrain_Medium_Mountain">Renntage: Medium Mountain</option>
+              <option value="race_days_terrain_Mountain">Renntage: Mountain</option>
+              <option value="race_days_terrain_High_Mountain">Renntage: High Mountain</option>
+              <option value="race_days_terrain_Cobble">Renntage: Cobble</option>
+              <option value="race_days_terrain_Cobble_Hill">Renntage: Cobble Hill</option>
+              <option value="race_days_terrain_ITT">Renntage: ITT</option>
+              <option value="race_days_terrain_TTT">Renntage: TTT</option>
+            </select>
+          </div>
+          <div class="form-group" id="leaderboard-group-physis">
+            <label for="leaderboard-select-physis">Physis &amp; Form ▾</label>
+            <select id="leaderboard-select-physis">
+              <option value="">– Wählen –</option>
+              <option value="fatigue_short">Kurzzeitfatigue (Live)</option>
+              <option value="fatigue_long">Langzeitfatigue (Live)</option>
+              <option value="fatigue_combined">Kombinierte Fatigue (Live)</option>
+              <option value="form_r">R-Form (Live)</option>
+              <option value="form_s">S-Form (Live)</option>
+              <option value="form_combined">Kombinierte R+S-Form (Live)</option>
+              <option value="max_short_term_fatigue">Höchste Kurzzeitfatigue (Peak)</option>
+              <option value="max_long_term_fatigue">Höchste Langzeitfatigue (Peak)</option>
+              <option value="max_combined_fatigue">Höchste Kombinierte Fatigue (Peak)</option>
+              <option value="max_s_form">Höchste S-Form (Peak)</option>
+              <option value="max_r_form">Höchste R-Form (Peak)</option>
+              <option value="max_combined_form">Höchste Kombinierte Form (Peak)</option>
+              <option value="mentors_ranking">U23 Mentoren-Verzeichnis</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-select-action">Action &amp; Taktik ▾</label>
+            <select id="leaderboard-select-action">
+              <option value="">– Wählen –</option>
+              <option value="breakaway_attempts">Breakaway-Versuche</option>
+              <option value="breakaway_kms">Breakaway-Kilometer</option>
+              <option value="attacks">Attacken</option>
+              <option value="counter_attacks">Konterattacken</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-select-jersey">Wertungen ▾</label>
+            <select id="leaderboard-select-jersey">
+              <option value="">– Wählen –</option>
+              <option value="jersey_gc">Tage im Gelben Trikot</option>
+              <option value="jersey_points">Tage im Grünen Trikot</option>
+              <option value="jersey_mountain">Tage im Gepunkteten Trikot</option>
+              <option value="jersey_youth">Tage im Weißen Trikot</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-select-events">Ereignisse ▾</label>
+            <select id="leaderboard-select-events">
+              <option value="">– Wählen –</option>
+              <option value="dns_count">DNS-Zähler</option>
+              <option value="dnf_count">DNF-Zähler</option>
+              <option value="otl_count">OTL-Zähler</option>
+              <option value="illnesses">Krankheiten</option>
+              <option value="illness_days">Krankheitstage</option>
+              <option value="injuries">Verletzungen</option>
+              <option value="injury_days">Verletzungstage</option>
+              <option value="superform_malus_days">Tagesform-Ereignisse</option>
+              <option value="home_advantage_days_total">Heimvorteil-Statistik</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="leaderboard-empty" class="results-empty">Wähle eine Statistik aus den Dropdowns oben aus, um die Rangliste zu laden.</div>
+
+        <table class="data-table hidden" id="leaderboard-table">
+          <thead id="leaderboard-thead"></thead>
+          <tbody id="leaderboard-tbody"></tbody>
         </table>
       </div>
 

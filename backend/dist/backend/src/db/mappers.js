@@ -70,6 +70,8 @@ exports.mapRaceCategoryBonus = mapRaceCategoryBonus;
 exports.mapRaceCategory = mapRaceCategory;
 exports.mapStageScoringRule = mapStageScoringRule;
 exports.mapSkillWeightRule = mapSkillWeightRule;
+exports.getDeterministicRandom = getDeterministicRandom;
+exports.getDeterministicWeatherEffect = getDeterministicWeatherEffect;
 exports.mapStage = mapStage;
 exports.loadFallbackStages = loadFallbackStages;
 exports.mapRace = mapRace;
@@ -568,8 +570,36 @@ function mapSkillWeightRule(row) {
         tttSpeedMultiplier: row.ttt_speed_multiplier,
     };
 }
+function getDeterministicRandom(seedStr) {
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+        hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const x = Math.sin(hash) * 10000;
+    return x - Math.floor(x);
+}
+function getDeterministicWeatherEffect(stageId, effectKey, min, max) {
+    if (min === max)
+        return min;
+    return min + getDeterministicRandom(`${stageId}:${effectKey}`) * (max - min);
+}
 function mapStage(row) {
     const summary = (0, StageParser_1.summarizeStageProfile)(row.details_csv_file, row.start_elevation);
+    const rolledWeatherId = row.rolled_weather_id ?? null;
+    const rolledWetterName = row.wetter_name ?? null;
+    // Compute effects deterministically if weather is rolled
+    let rolledEffektSturz = 0;
+    let rolledEffektDefekt = 0;
+    let rolledWindkantenGefahr = 0;
+    let rolledEffektFatigue = 0;
+    let rolledBreakawayBonus = 0;
+    if (rolledWeatherId != null) {
+        rolledEffektSturz = getDeterministicWeatherEffect(row.id, 'sturz', row.effekt_sturz_min ?? 0, row.effekt_sturz_max ?? 0);
+        rolledEffektDefekt = getDeterministicWeatherEffect(row.id, 'defekt', row.effekt_defekt_min ?? 0, row.effekt_defekt_max ?? 0);
+        rolledWindkantenGefahr = getDeterministicWeatherEffect(row.id, 'windkante', row.windkanten_gefahr_min ?? 0, row.windkanten_gefahr_max ?? 0);
+        rolledEffektFatigue = getDeterministicWeatherEffect(row.id, 'fatigue', row.effekt_fatigue_min ?? 0, row.effekt_fatigue_max ?? 0);
+        rolledBreakawayBonus = getDeterministicWeatherEffect(row.id, 'breakaway', row.breakaway_bonus_min ?? 0, row.breakaway_bonus_max ?? 0);
+    }
     return {
         id: row.id,
         raceId: row.race_id,
@@ -586,6 +616,14 @@ function mapStage(row) {
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
         profileScore: row.stage_score,
+        allowedWeather: row.allowed_weather,
+        rolledWeatherId,
+        rolledWetterName,
+        rolledEffektSturz,
+        rolledEffektDefekt,
+        rolledWindkantenGefahr,
+        rolledEffektFatigue,
+        rolledBreakawayBonus,
     };
 }
 function loadFallbackStages(raceIds) {
@@ -618,6 +656,7 @@ function loadFallbackStages(raceIds) {
             final_spread_difficulty_multiplier: Number(record['final_spread_difficulty_multiplier'] ?? '1') || 1,
             crash_incident_multiplier: Number(record['crash_incident_multiplier'] ?? '1') || 1,
             mechanical_incident_multiplier: Number(record['mechanical_incident_multiplier'] ?? '1') || 1,
+            allowed_weather: record['allowed_weather'] ?? '1|2|3|4|5|6|7',
         };
     })
         .filter((row) => raceIds.includes(row.race_id) && Number.isFinite(row.id) && Number.isFinite(row.race_id));

@@ -4879,6 +4879,12 @@ html, body {
   border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
+.event-badge-weather {
+  background-color: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
 .event-rider-info {
   display: flex;
   align-items: center;
