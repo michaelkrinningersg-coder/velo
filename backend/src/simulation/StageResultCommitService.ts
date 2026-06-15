@@ -18,6 +18,7 @@ import type {
   StageMarkerClassification,
   Team,
   RaceSimMessage,
+  RealtimeLeadoutContribution,
 } from '../../../shared/types';
 import {
   TIME_TIE_THRESHOLD_SECONDS,
@@ -301,6 +302,7 @@ export class StageResultCommitService {
     markerClassifications: StageMarkerClassification[] = [],
     incidents: PrecalculatedRaceIncident[] = [],
     events: RaceSimMessage[] = [],
+    leadoutContributions?: RealtimeLeadoutContribution[],
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
@@ -406,6 +408,7 @@ export class StageResultCommitService {
       incidents,
       breakawayRiderIds,
       events,
+      leadoutContributions,
     );
   }
 
@@ -610,6 +613,7 @@ export class StageResultCommitService {
     incidents: PrecalculatedRaceIncident[] = [],
     breakawayRiderIds: Set<number> = new Set(),
     events: RaceSimMessage[] = [],
+    leadoutContributions?: RealtimeLeadoutContribution[],
   ): StageResultCommitResponse {
     const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
 
@@ -1019,6 +1023,19 @@ export class StageResultCommitService {
       }
       for (const riderId of severeCrashRiderIds) {
         this.applySevereCrashInjury(stage.date, riderId);
+      }
+
+      // Clean up previous leadout contributions for this stage just in case
+      this.db.prepare('DELETE FROM stage_leadouts WHERE stage_id = ?').run(stage.id);
+
+      if (leadoutContributions && leadoutContributions.length > 0) {
+        const insertLeadoutStmt = this.db.prepare(`
+          INSERT INTO stage_leadouts (stage_id, race_id, season, team_id, sprinter_id, leadout_bonus, contributors_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const c of leadoutContributions) {
+          insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
+        }
       }
     })();
 

@@ -764,6 +764,26 @@ class DatabaseService {
       END;
     `).run();
     }
+    ensureStageLeadoutsSchema(db) {
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_leadouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stage_id INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+        race_id INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        team_id INTEGER NOT NULL REFERENCES teams(id),
+        sprinter_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        leadout_bonus REAL NOT NULL,
+        contributors_json TEXT NOT NULL
+      )
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_stage_leadouts_sprinter ON stage_leadouts(sprinter_id)
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_stage_leadouts_team ON stage_leadouts(team_id)
+    `).run();
+    }
     ensureRiderSeasonStatsSchema(db) {
         db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_season_stats (
@@ -1038,6 +1058,7 @@ class DatabaseService {
         this.ensureRaceProgramSchema(this.activeConnection);
         this.ensureRiderCareerStatsSchema(this.activeConnection);
         this.ensureRiderSeasonStatsSchema(this.activeConnection);
+        this.ensureStageLeadoutsSchema(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         this.ensureDayChangeIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
@@ -1099,6 +1120,7 @@ class DatabaseService {
         this.ensureRaceProgramSchema(this.activeConnection);
         this.ensureRiderCareerStatsSchema(this.activeConnection);
         this.ensureStageSpreadData(this.activeConnection);
+        this.ensureStageLeadoutsSchema(this.activeConnection);
         return this.activeConnection;
     }
     getMasterConnection() {

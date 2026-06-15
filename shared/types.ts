@@ -654,6 +654,8 @@ export interface StageResultsPayload {
   markerClassifications?: StageMarkerClassification[];
   nonFinishers?: StageNonFinisherRow[];
   events?: RaceSimMessage[];
+  rolledWeatherId?: number | null;
+  rolledWetterName?: string | null;
 }
 
 export interface StageResultCommitResponse {
@@ -726,11 +728,19 @@ export interface RealtimeClassificationLeaders {
   youthLeaderRiderId: number | null;
 }
 
+export interface RealtimeLeadoutContribution {
+  teamId: number;
+  sprinterId: number;
+  leadoutBonus: number;
+  contributorsJson: string;
+}
+
 export interface RealtimeStageCommitRequest {
   entries: RealtimeStageCommitEntry[];
   markerClassifications?: StageMarkerClassification[];
   incidents?: PrecalculatedRaceIncident[];
   events?: RaceSimMessage[];
+  leadoutContributions?: RealtimeLeadoutContribution[];
 }
 
 export interface RaceRosterSelectionRequest {

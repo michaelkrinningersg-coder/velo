@@ -1084,9 +1084,8 @@ export function renderResultsView(): void {
         let jerseyHtml = renderResultsJerseyColumn(teamId, teamName);
         const isWeatherReport = !!(row.title && row.title.startsWith('Wetterbericht:'));
         if (isWeatherReport) {
-          const resultStage = state.stageResults ? findStageById(state.stageResults.stageId) : null;
-          const weatherId = resultStage?.stage.rolledWeatherId;
-          const weatherName = resultStage?.stage.rolledWetterName;
+          const weatherId = state.stageResults?.rolledWeatherId;
+          const weatherName = state.stageResults?.rolledWetterName;
           jerseyHtml = `<span class="results-jersey-cell">${renderWeatherIcon(weatherId, weatherName)}</span>`;
         }
         const flagHtml = isWeatherReport ? '' : renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);

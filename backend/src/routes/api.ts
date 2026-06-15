@@ -545,7 +545,8 @@ export function createRouter(dbService: DatabaseService): Router {
         payload.entries,
         payload.markerClassifications ?? [],
         payload.incidents ?? [],
-        payload.events ?? []
+        payload.events ?? [],
+        payload.leadoutContributions
       ));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

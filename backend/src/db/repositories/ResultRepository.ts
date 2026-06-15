@@ -338,11 +338,14 @@ export class ResultRepository {
         stages.date AS date,
         stages.profile AS profile,
         races.is_stage_race AS is_stage_race,
-        races.number_of_stages AS number_of_stages
+        races.number_of_stages AS number_of_stages,
+        stages.rolled_weather_id AS rolled_weather_id,
+        w.wetter_name AS rolled_wetter_name
       FROM stages
       JOIN races ON races.id = stages.race_id
+      LEFT JOIN wetter w ON w.id = stages.rolled_weather_id
       WHERE stages.id = ?
-    `).get(stageId) as StageResultsMetaRow | undefined;
+    `).get(stageId) as (StageResultsMetaRow & { rolled_weather_id: number | null, rolled_wetter_name: string | null }) | undefined;
     if (!meta) return null;
 
     const season = Number.parseInt(meta.date.slice(0, 4), 10);
@@ -490,6 +493,8 @@ export class ResultRepository {
         : [],
       nonFinishers: this.loadStageNonFinishers(meta.race_id, meta.stage_number),
       events: ResultRepository.inMemoryStageEvents.get(stageId) ?? [],
+      rolledWeatherId: meta.rolled_weather_id,
+      rolledWetterName: meta.rolled_wetter_name,
     };
   }
 

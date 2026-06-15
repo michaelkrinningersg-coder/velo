@@ -163,9 +163,8 @@ function isAllTimeOnlyMetric(key: string): boolean {
     'max_s_form',
     'max_r_form',
     'max_combined_form',
-    'youngest_winners',
     'mentors_ranking',
-  ].includes(key);
+  ].includes(key) || key.startsWith('youngest_winners');
 }
 
 function isPhysisMetric(key: string): boolean {

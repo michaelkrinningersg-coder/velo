@@ -275,9 +275,12 @@ class ResultRepository {
         stages.date AS date,
         stages.profile AS profile,
         races.is_stage_race AS is_stage_race,
-        races.number_of_stages AS number_of_stages
+        races.number_of_stages AS number_of_stages,
+        stages.rolled_weather_id AS rolled_weather_id,
+        w.wetter_name AS rolled_wetter_name
       FROM stages
       JOIN races ON races.id = stages.race_id
+      LEFT JOIN wetter w ON w.id = stages.rolled_weather_id
       WHERE stages.id = ?
     `).get(stageId);
         if (!meta)
@@ -420,6 +423,8 @@ class ResultRepository {
                 : [],
             nonFinishers: this.loadStageNonFinishers(meta.race_id, meta.stage_number),
             events: ResultRepository.inMemoryStageEvents.get(stageId) ?? [],
+            rolledWeatherId: meta.rolled_weather_id,
+            rolledWetterName: meta.rolled_wetter_name,
         };
     }
     loadStageNonFinishers(raceId, upToStageNumber) {

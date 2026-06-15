@@ -32,6 +32,7 @@ import type {
   PrecalculatedRaceIncident,
   StageProfile,
   RaceSimMessage,
+  RealtimeLeadoutContribution,
 } from '../../../shared/types';
 import { runInstantSimulation } from '../race-sim/runInstantSimulation';
 import { SimulationSnapshot } from '../race-sim/SimulationEngine';
@@ -66,6 +67,28 @@ export function buildRealtimeCommitEntries(
     .filter((entry) => entry.finishStatus === 'dnf' || entry.finishTimeSeconds != null);
 }
 
+export function buildRealtimeLeadoutContributions(
+  snapshot: SimulationSnapshot,
+  bootstrap: RealtimeSimulationBootstrap,
+): RealtimeLeadoutContribution[] {
+  const contributions: RealtimeLeadoutContribution[] = [];
+  for (const r of snapshot.riders) {
+    if (r.leadoutBonus != null && r.leadoutBonus > 0 && r.leadoutContributions && r.leadoutContributions.length > 0) {
+      const riderObj = bootstrap.riders.find(x => x.id === r.riderId);
+      const teamId = riderObj?.activeTeamId ?? null;
+      if (teamId != null) {
+        contributions.push({
+          teamId,
+          sprinterId: r.riderId,
+          leadoutBonus: r.leadoutBonus,
+          contributorsJson: JSON.stringify(r.leadoutContributions),
+        });
+      }
+    }
+  }
+  return contributions;
+}
+
 export async function openInstantStage(stageId: number, skipViewActivation = false): Promise<boolean> {
   if (instantStageInFlightId != null || realtimeCompletionInFlight) {
     return false;
@@ -83,7 +106,8 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
     const bootstrap = res.data;
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
-    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation);
+    const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);
+    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation, leadoutContributions);
     return true;
   } catch (error) {
     alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
@@ -216,7 +240,8 @@ function loadRaceSimViewInstance(): RaceSimView {
     }, {
       onFinishRequested: (snapshot, bootstrap) => {
         const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
-        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents);
+        const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);
+        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, false, leadoutContributions);
       },
     });
     setRaceSimView(view);
@@ -361,6 +386,7 @@ export async function completeRealtimeStage(
   incidents: PrecalculatedRaceIncident[],
   events?: RaceSimMessage[],
   skipViewActivation = false,
+  leadoutContributions?: RealtimeLeadoutContribution[],
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -369,7 +395,7 @@ export async function completeRealtimeStage(
   setRealtimeCompletionInFlight(true);
   showLoading('Live-Ergebnis wird gespeichert...');
   try {
-    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications, incidents, events });
+    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications, incidents, events, leadoutContributions });
     if (!res.success) {
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;

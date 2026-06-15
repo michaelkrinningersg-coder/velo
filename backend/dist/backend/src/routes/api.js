@@ -545,7 +545,7 @@ function createRouter(dbService) {
                 return fail(res, 400, 'Es wurden keine Live-Ergebnisse Ã¼bergeben.');
             }
             const db = dbService.getActiveConnection();
-            ok(res, new StageResultCommitService_1.StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? [], payload.events ?? []));
+            ok(res, new StageResultCommitService_1.StageResultCommitService(db).commitRealtimeStage(stageId, payload.entries, payload.markerClassifications ?? [], payload.incidents ?? [], payload.events ?? [], payload.leadoutContributions));
         }
         catch (e) {
             fail(res, 400, e.message);

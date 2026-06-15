@@ -82,8 +82,14 @@ class LeaderboardRepository {
             // Custom mentor calculations done in JS for U23 mentor count
             return this.getMentorsLeaderboard(currentSeason);
         }
-        else if (metricKey === 'youngest_winners') {
+        else if (metricKey.startsWith('youngest_winners')) {
             // 2. Custom All-Time Youngest Winners
+            let categoryFilter = '';
+            const parts = metricKey.split('_');
+            if (parts[2]) {
+                const catId = parseInt(parts[2], 10);
+                categoryFilter = `AND ra.category_id = ${catId}`;
+            }
             query = `
         WITH rider_wins AS (
           SELECT
@@ -96,7 +102,7 @@ class LeaderboardRepository {
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
-          WHERE res.rank = 1 AND res.result_type_id = 1 AND r.is_retired = 0
+          WHERE res.rank = 1 AND res.result_type_id = 1 AND r.is_retired = 0 ${categoryFilter}
         )
         SELECT
           r.id AS id,
@@ -123,15 +129,14 @@ class LeaderboardRepository {
         else if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey === 'wins') {
             // 3. Stage Wins
             let extraFilter = '';
+            let terrainOrWeather = null;
             if (metricKey.startsWith('wins_terrain_')) {
-                const terrain = metricKey.replace('wins_terrain_', '');
+                terrainOrWeather = metricKey.replace('wins_terrain_', '');
                 extraFilter = `AND s.profile = ?`;
-                params.push(terrain);
             }
             else if (metricKey.startsWith('wins_weather_')) {
-                const weatherId = parseInt(metricKey.replace('wins_weather_', ''), 10);
+                terrainOrWeather = parseInt(metricKey.replace('wins_weather_', ''), 10);
                 extraFilter = `AND s.rolled_weather_id = ?`;
-                params.push(weatherId);
             }
             if (period === 'season') {
                 query = `
@@ -157,6 +162,9 @@ class LeaderboardRepository {
           LIMIT 100
         `;
                 params.push(currentSeason);
+                if (terrainOrWeather !== null) {
+                    params.push(terrainOrWeather);
+                }
             }
             else {
                 query = `
@@ -180,8 +188,89 @@ class LeaderboardRepository {
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;
+                if (terrainOrWeather !== null) {
+                    params.push(terrainOrWeather);
+                }
             }
             valueFormatter = (r) => `${r.val} Sieg${r.val !== 1 ? 'e' : ''}`;
+        }
+        else if (metricKey.startsWith('final_')) {
+            // Final classification wins (GC, Points, Mountain, Youth) at end of stage races
+            let typeId = 2; // GC
+            let label = 'Gesamtsieg';
+            let categoryFilter = '';
+            const parts = metricKey.split('_');
+            const winType = parts[1]; // gc, points, mountain, youth
+            if (winType === 'points') {
+                typeId = 3;
+                label = 'Punktesieg';
+            }
+            else if (winType === 'mountain') {
+                typeId = 4;
+                label = 'Bergsieg';
+            }
+            else if (winType === 'youth') {
+                typeId = 5;
+                label = 'Nachwuchssieg';
+            }
+            if (parts[3]) {
+                const catId = parseInt(parts[3], 10);
+                categoryFilter = `AND ra.category_id = ${catId}`;
+            }
+            if (period === 'season') {
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            COUNT(*) AS val
+          FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
+          JOIN riders r ON r.id = res.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            ${categoryFilter}
+          GROUP BY r.id
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
+                params.push(typeId, currentSeason);
+            }
+            else {
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            COUNT(*) AS val
+          FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
+          JOIN riders r ON r.id = res.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+            ${categoryFilter}
+          GROUP BY r.id
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
+                params.push(typeId);
+            }
+            valueFormatter = (r) => `${r.val} ${label}${r.val !== 1 ? 'e' : ''}`;
         }
         else if (metricKey === 'uci_points') {
             // 4. UCI Points
@@ -283,10 +372,10 @@ class LeaderboardRepository {
         else if (metricKey === 'race_days' || metricKey.startsWith('race_days_terrain_')) {
             // 6. Race Days
             let extraFilter = '';
+            let terrain = null;
             if (metricKey.startsWith('race_days_terrain_')) {
-                const terrain = metricKey.replace('race_days_terrain_', '');
+                terrain = metricKey.replace('race_days_terrain_', '');
                 extraFilter = `AND s.profile = ?`;
-                params.push(terrain);
             }
             if (period === 'season') {
                 query = `
@@ -312,6 +401,9 @@ class LeaderboardRepository {
           LIMIT 100
         `;
                 params.push(currentSeason);
+                if (terrain !== null) {
+                    params.push(terrain);
+                }
             }
             else {
                 query = `
@@ -335,6 +427,9 @@ class LeaderboardRepository {
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;
+                if (terrain !== null) {
+                    params.push(terrain);
+                }
             }
             valueFormatter = (r) => `${r.val} Tag${r.val !== 1 ? 'e' : ''}`;
         }
@@ -342,14 +437,21 @@ class LeaderboardRepository {
             // 7. Classification Jersey Wear Days
             let typeId = 2; // GC
             let label = 'Tage';
-            if (metricKey === 'jersey_points') {
+            let categoryFilter = '';
+            const parts = metricKey.split('_');
+            const jerseyType = parts[1]; // gc, points, mountain, youth
+            if (jerseyType === 'points') {
                 typeId = 3;
             }
-            else if (metricKey === 'jersey_mountain') {
+            else if (jerseyType === 'mountain') {
                 typeId = 4;
             }
-            else if (metricKey === 'jersey_youth') {
+            else if (jerseyType === 'youth') {
                 typeId = 5;
+            }
+            if (parts[2]) {
+                const catId = parseInt(parts[2], 10);
+                categoryFilter = `AND ra.category_id = ${catId}`;
             }
             if (period === 'season') {
                 query = `
@@ -364,11 +466,13 @@ class LeaderboardRepository {
             COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
           WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            ${categoryFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -387,10 +491,13 @@ class LeaderboardRepository {
             t.id AS team_id,
             COUNT(*) AS val
           FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
           WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+            ${categoryFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -423,6 +530,35 @@ class LeaderboardRepository {
         LIMIT 100
       `;
             valueFormatter = (r) => r.val.toFixed(2);
+        }
+        else if (metricKey === 'highest_leadout_bonus') {
+            if (!(0, mappers_1.tableExists)(this.db, 'stage_leadouts')) {
+                return [];
+            }
+            query = `
+        SELECT 
+          r.id AS id,
+          r.first_name,
+          r.last_name,
+          c.code_3 AS nationality,
+          t.abbreviation AS team_abbr,
+          t.name AS team_name,
+          t.id AS team_id,
+          MAX(sl.leadout_bonus) AS val
+        FROM stage_leadouts sl
+        JOIN riders r ON r.id = sl.sprinter_id
+        JOIN sta_country c ON c.id = r.country_id
+        LEFT JOIN teams t ON t.id = r.active_team_id
+        WHERE r.is_retired = 0
+          ${period === 'season' ? 'AND sl.season = ?' : ''}
+        GROUP BY r.id
+        ORDER BY val DESC, r.last_name ASC
+        LIMIT 100
+      `;
+            if (period === 'season') {
+                params.push(currentSeason);
+            }
+            valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
         }
         else {
             // 9. Season stats / Career stats (crashes, defects, breakaway kms etc.)
@@ -557,15 +693,14 @@ class LeaderboardRepository {
         if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey === 'wins') {
             // Stage wins: Rider wins + TTT wins
             let extraFilter = '';
+            let terrainOrWeather = null;
             if (metricKey.startsWith('wins_terrain_')) {
-                const terrain = metricKey.replace('wins_terrain_', '');
+                terrainOrWeather = metricKey.replace('wins_terrain_', '');
                 extraFilter = `AND s.profile = ?`;
-                params.push(terrain);
             }
             else if (metricKey.startsWith('wins_weather_')) {
-                const weatherId = parseInt(metricKey.replace('wins_weather_', ''), 10);
+                terrainOrWeather = parseInt(metricKey.replace('wins_weather_', ''), 10);
                 extraFilter = `AND s.rolled_weather_id = ?`;
-                params.push(weatherId);
             }
             if (period === 'season') {
                 query = `
@@ -591,7 +726,14 @@ class LeaderboardRepository {
           ORDER BY val DESC
           LIMIT 100
         `;
-                params.push(currentSeason, currentSeason);
+                params.push(currentSeason);
+                if (terrainOrWeather !== null) {
+                    params.push(terrainOrWeather);
+                }
+                params.push(currentSeason);
+                if (terrainOrWeather !== null) {
+                    params.push(terrainOrWeather);
+                }
             }
             else {
                 query = `
@@ -615,8 +757,70 @@ class LeaderboardRepository {
           ORDER BY val DESC
           LIMIT 100
         `;
+                if (terrainOrWeather !== null) {
+                    params.push(terrainOrWeather);
+                    params.push(terrainOrWeather);
+                }
             }
             valueFormatter = (r) => `${r.val} Sieg${r.val !== 1 ? 'e' : ''}`;
+        }
+        else if (metricKey.startsWith('final_')) {
+            // Final classification wins (GC, Points, Mountain, Youth) at end of stage races
+            let typeId = 2; // GC
+            let label = 'Gesamtsieg';
+            let categoryFilter = '';
+            const parts = metricKey.split('_');
+            const winType = parts[1]; // gc, points, mountain, youth
+            if (winType === 'points') {
+                typeId = 3;
+                label = 'Punktesieg';
+            }
+            else if (winType === 'mountain') {
+                typeId = 4;
+                label = 'Bergsieg';
+            }
+            else if (winType === 'youth') {
+                typeId = 5;
+                label = 'Nachwuchssieg';
+            }
+            if (parts[3]) {
+                const catId = parseInt(parts[3], 10);
+                categoryFilter = `AND ra.category_id = ${catId}`;
+            }
+            if (period === 'season') {
+                query = `
+          SELECT r.active_team_id AS team_id, COUNT(*) AS val
+          FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
+          JOIN riders r ON r.id = res.rider_id
+          WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
+            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            ${categoryFilter}
+          GROUP BY r.active_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+                params.push(typeId, currentSeason);
+            }
+            else {
+                query = `
+          SELECT r.active_team_id AS team_id, COUNT(*) AS val
+          FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
+          JOIN riders r ON r.id = res.rider_id
+          WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
+            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+            ${categoryFilter}
+          GROUP BY r.active_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+                params.push(typeId);
+            }
+            valueFormatter = (r) => `${r.val} ${label}${r.val !== 1 ? 'e' : ''}`;
         }
         else if (metricKey === 'uci_points') {
             // UCI points: Sum points of events grouped by team_id
@@ -676,10 +880,10 @@ class LeaderboardRepository {
         else if (metricKey === 'race_days' || metricKey.startsWith('race_days_terrain_')) {
             // Race days: Sum race days of team riders
             let extraFilter = '';
+            let terrain = null;
             if (metricKey.startsWith('race_days_terrain_')) {
-                const terrain = metricKey.replace('race_days_terrain_', '');
+                terrain = metricKey.replace('race_days_terrain_', '');
                 extraFilter = `AND s.profile = ?`;
-                params.push(terrain);
             }
             if (period === 'season') {
                 query = `
@@ -695,6 +899,9 @@ class LeaderboardRepository {
           LIMIT 100
         `;
                 params.push(currentSeason);
+                if (terrain !== null) {
+                    params.push(terrain);
+                }
             }
             else {
                 query = `
@@ -708,29 +915,41 @@ class LeaderboardRepository {
           ORDER BY val DESC
           LIMIT 100
         `;
+                if (terrain !== null) {
+                    params.push(terrain);
+                }
             }
             valueFormatter = (r) => `${r.val} Tag${r.val !== 1 ? 'e' : ''}`;
         }
         else if (metricKey.startsWith('jersey_')) {
             // Trikottage (classification leadership)
             let typeId = 2; // GC
-            if (metricKey === 'jersey_points') {
+            let categoryFilter = '';
+            const parts = metricKey.split('_');
+            const jerseyType = parts[1]; // gc, points, mountain, youth
+            if (jerseyType === 'points') {
                 typeId = 3;
             }
-            else if (metricKey === 'jersey_mountain') {
+            else if (jerseyType === 'mountain') {
                 typeId = 4;
             }
-            else if (metricKey === 'jersey_youth') {
+            else if (jerseyType === 'youth') {
                 typeId = 5;
+            }
+            if (parts[2]) {
+                const catId = parseInt(parts[2], 10);
+                categoryFilter = `AND ra.category_id = ${catId}`;
             }
             if (period === 'season') {
                 query = `
           SELECT r.active_team_id AS team_id, COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
           WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            ${categoryFilter}
           GROUP BY r.active_team_id
           ORDER BY val DESC
           LIMIT 100
@@ -741,8 +960,11 @@ class LeaderboardRepository {
                 query = `
           SELECT r.active_team_id AS team_id, COUNT(*) AS val
           FROM results res
+          JOIN stages s ON s.id = res.stage_id
+          JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
           WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
+            ${categoryFilter}
           GROUP BY r.active_team_id
           ORDER BY val DESC
           LIMIT 100
@@ -750,6 +972,75 @@ class LeaderboardRepository {
                 params.push(typeId);
             }
             valueFormatter = (r) => `${r.val} Tage`;
+        }
+        else if (metricKey === 'highest_leadout_bonus') {
+            if (!(0, mappers_1.tableExists)(this.db, 'stage_leadouts')) {
+                return [];
+            }
+            const leadoutRowsQuery = `
+        SELECT 
+          sl.team_id,
+          sl.sprinter_id,
+          sl.leadout_bonus,
+          sl.contributors_json,
+          t.name AS team_name
+        FROM stage_leadouts sl
+        JOIN teams t ON t.id = sl.team_id
+        ${period === 'season' ? 'WHERE sl.season = ?' : ''}
+        ORDER BY sl.leadout_bonus DESC
+        LIMIT 1000
+      `;
+            const leadoutParams = period === 'season' ? [currentSeason] : [];
+            try {
+                const leadoutRows = this.db.prepare(leadoutRowsQuery).all(...leadoutParams);
+                // Fetch rider last names for formatting
+                const riders = this.db.prepare(`SELECT id, last_name FROM riders`).all();
+                const riderMap = new Map();
+                for (const r of riders) {
+                    riderMap.set(r.id, r.last_name);
+                }
+                const seen = new Set();
+                const finalRows = [];
+                for (const row of leadoutRows) {
+                    let contributors = [];
+                    try {
+                        contributors = JSON.parse(row.contributors_json);
+                    }
+                    catch (e) {
+                        continue;
+                    }
+                    // Create unique key based on team_id, sprinter_id, and sorted contributor riderIds
+                    const contributorIds = contributors.map(c => c.riderId).sort((a, b) => a - b);
+                    const key = `${row.team_id}:${row.sprinter_id}:${contributorIds.join(',')}`;
+                    if (seen.has(key)) {
+                        continue;
+                    }
+                    seen.add(key);
+                    // Sort contributors by contribution descending
+                    contributors.sort((a, b) => b.contribution - a.contribution);
+                    const formattedContributors = contributors.map(c => {
+                        const helperLastName = riderMap.get(c.riderId) || c.name.split(' ').pop() || c.name;
+                        return `${helperLastName} (+${c.contribution.toFixed(2)})`;
+                    }).join(', ');
+                    const sprinterLastName = riderMap.get(row.sprinter_id) || 'Unknown';
+                    const formattedTeamName = `${row.team_name} (Sprinter: ${sprinterLastName} [Leadout: ${formattedContributors}])`;
+                    finalRows.push({
+                        rank: finalRows.length + 1,
+                        teamId: row.team_id,
+                        teamName: formattedTeamName,
+                        value: row.leadout_bonus.toFixed(2),
+                        rawValue: row.leadout_bonus
+                    });
+                    if (finalRows.length >= 100) {
+                        break;
+                    }
+                }
+                return finalRows;
+            }
+            catch (e) {
+                console.error('Team leadout leaderboard query error:', e.message);
+                return [];
+            }
         }
         else {
             // Sum other fields (breakaways, crashes etc.) from season stats

@@ -195,7 +195,7 @@ class StageResultCommitService {
             clearStageEntries: (stageId) => gsRepo.clearStageEntries(stageId),
         };
     }
-    commitRealtimeStage(stageId, entries, markerClassifications = [], incidents = [], events = []) {
+    commitRealtimeStage(stageId, entries, markerClassifications = [], incidents = [], events = [], leadoutContributions) {
         const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
         const rosterById = new Map(riders.map((rider) => [rider.id, rider]));
         const sanitizedEntries = [...entries]
@@ -275,7 +275,7 @@ class StageResultCommitService {
                 breakawayRiderIds.add(entry.riderId);
             }
         }
-        return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents, breakawayRiderIds, events);
+        return this.persistStagePerformance(race, stage, classifiedPerformance, awardedMarkerClassifications, [...dnfEntries, ...otlEntries], incidents, breakawayRiderIds, events, leadoutContributions);
     }
     loadDnsEvents(race, stage) {
         const tableExists = (db, name) => {
@@ -425,7 +425,7 @@ class StageResultCommitService {
             };
         });
     }
-    persistStagePerformance(race, stage, performance, markerClassifications = [], dnfEntries = [], incidents = [], breakawayRiderIds = new Set(), events = []) {
+    persistStagePerformance(race, stage, performance, markerClassifications = [], dnfEntries = [], incidents = [], breakawayRiderIds = new Set(), events = [], leadoutContributions) {
         const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
         const previousStageId = this.getPreviousSimulatedStageId(stage.raceId, stage.stageNumber);
         const previousGc = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.gc, 'time_seconds');
@@ -768,6 +768,17 @@ class StageResultCommitService {
             }
             for (const riderId of severeCrashRiderIds) {
                 this.applySevereCrashInjury(stage.date, riderId);
+            }
+            // Clean up previous leadout contributions for this stage just in case
+            this.db.prepare('DELETE FROM stage_leadouts WHERE stage_id = ?').run(stage.id);
+            if (leadoutContributions && leadoutContributions.length > 0) {
+                const insertLeadoutStmt = this.db.prepare(`
+          INSERT INTO stage_leadouts (stage_id, race_id, season, team_id, sprinter_id, leadout_bonus, contributors_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+                for (const c of leadoutContributions) {
+                    insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
+                }
             }
         })();
         const gameStateService = new GameStateService_1.GameStateService(this.db);

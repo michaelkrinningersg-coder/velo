@@ -1469,7 +1469,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${renderRiderStatsGcPlacement(row)}</td>
                           <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
                           <td>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
-                          <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null)}</td>
+                          <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null)}</td>
                           <td>${esc(raceStageLabel)}</td>
                           <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
@@ -1841,7 +1841,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 
         const profileBadgeHtml = isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–');
         const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
-        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null);
+        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null);
 
         return `
           <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">

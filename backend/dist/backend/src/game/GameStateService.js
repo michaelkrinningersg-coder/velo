@@ -523,6 +523,13 @@ class GameStateService {
       WHERE s.date = ? AND se.status IN ('scheduled', 'started')
     `).all(nextDate);
         const racingRiderIds = new Set(racingRidersRow.map((r) => r.rider_id));
+        const yesterday = addDaysIso(nextDate, -1);
+        const racedYesterdayRow = this.db.prepare(`
+      SELECT se.rider_id FROM stage_entries se
+      JOIN stages s ON s.id = se.stage_id
+      WHERE s.date = ? AND se.status IN ('finished', 'dnf')
+    `).all(yesterday);
+        const racedYesterdayRiderIds = new Set(racedYesterdayRow.map((r) => r.rider_id));
         // Bulk-load program windows for the current season ONCE instead of doing
         // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
         const programWindows = this.getProgramWindowsForSeason(nextSeason);
@@ -645,7 +652,7 @@ class GameStateService {
             if (seasonChanged) {
                 consecutiveNonRaceDays = 0;
             }
-            else if (racingRiderIds.has(row.rider_id)) {
+            else if (racedYesterdayRiderIds.has(row.rider_id)) {
                 consecutiveNonRaceDays = 0;
             }
             else {
@@ -837,7 +844,7 @@ class GameStateService {
         @date AS date,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100 AS s_form,
         MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
-        ROUND((rds.form_bonus + rds.peak_s_form) * 100) / 100 
+        ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
           + MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
           AS total_form
       FROM rider_daily_state rds
@@ -853,6 +860,24 @@ class GameStateService {
             date: currentDate,
             seasonFormMax: SEASON_FORM_MAX_RAW,
         });
+        if (tableExists(this.db, 'rider_career_stats')) {
+            this.db.prepare(`
+        INSERT INTO rider_career_stats (rider_id, max_s_form, max_r_form, max_combined_form)
+        SELECT
+          rider_id,
+          s_form,
+          r_form,
+          total_form
+        FROM rider_form_history
+        WHERE date = @date
+        ON CONFLICT(rider_id) DO UPDATE SET
+          max_s_form = MAX(max_s_form, excluded.max_s_form),
+          max_r_form = MAX(max_r_form, excluded.max_r_form),
+          max_combined_form = MAX(max_combined_form, excluded.max_combined_form)
+      `).run({
+                date: currentDate
+            });
+        }
     }
     applyRaceDayFormBonuses(raceDate, riderIds) {
         if (riderIds.length === 0 || !tableExists(this.db, 'rider_daily_state')) {
@@ -1030,7 +1055,8 @@ class GameStateService {
       UPDATE rider_daily_state
       SET short_term_fatigue = ?,
           long_term_fatigue_decayable = ?,
-          long_term_fatigue_locked = ?
+          long_term_fatigue_locked = ?,
+          consecutive_non_race_days = 0
       WHERE rider_id = ?
     `);
         const stmtInsertHistory = this.db.prepare(`

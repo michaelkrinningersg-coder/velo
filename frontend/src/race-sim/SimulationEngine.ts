@@ -63,6 +63,7 @@ export interface RealtimeRiderSnapshot {
   skillBreakdown: string;
   leadoutBonus?: number;
   leadoutRiderId?: number | null;
+  leadoutContributions?: Array<{ riderId: number; name: string; contribution: number }>;
   baseSkill: number;
   teamGroupBonus: number;
   effectiveSkill: number;
@@ -207,6 +208,7 @@ interface RiderState {
   isLeadingGroup: boolean;
   leadoutBonus?: number;
   leadoutRiderId?: number | null;
+  leadoutContributions?: Array<{ riderId: number; name: string; contribution: number }>;
 }
 
 interface BasePhysicsResult {
@@ -1576,6 +1578,7 @@ export class SimulationEngine {
         photoFinishScore: rider.photoFinishScore,
         leadoutBonus: rider.leadoutBonus,
         leadoutRiderId: rider.leadoutRiderId,
+        leadoutContributions: rider.leadoutContributions,
         lastSplitLabel: rider.lastSplitLabel,
         lastSplitTimeSeconds: rider.lastSplitTimeSeconds,
         splitTimes: { ...rider.splitTimes },
@@ -3033,7 +3036,7 @@ export class SimulationEngine {
         return gapBehindAttackerMeters >= 0 && gapBehindAttackerMeters <= 150;
       });
     const counterRiderIds = resolveCounterAttackStarterIds(nearbyCounterFavorites, rider.rider.id, activeAttackerIds);
-    const counterRiders: Array<{ riderName: string; riderTeamId: number | null }> = [];
+    const counterRiders: Array<{ riderId: number; riderName: string; riderTeamId: number | null }> = [];
     for (const counterRiderId of counterRiderIds) {
       const counterRider = this.riders.find((candidate) => candidate.rider.id === counterRiderId);
       if (!counterRider || isRiderInactive(counterRider) || this.activeStageAttacksByRiderId.has(counterRiderId)) {
@@ -3052,6 +3055,7 @@ export class SimulationEngine {
       });
       counterRider.isAttacking = true;
       counterRiders.push({
+        riderId: counterRiderId,
         riderName: this.formatRiderWithPreStageGc(counterRiderId, counterRider.riderName),
         riderTeamId: counterRider.rider.activeTeamId ?? null,
       });
@@ -3070,10 +3074,9 @@ export class SimulationEngine {
 
     // Push counter_attack messages for each counter-attacker
     for (const counterRider of counterRiders) {
-      const cRiderState = this.riders.find(r => r.riderName === counterRider.riderName);
       this.pushMessage({
         elapsedSeconds: startedAtElapsedSeconds,
-        riderId: cRiderState?.rider.id ?? null,
+        riderId: counterRider.riderId,
         riderName: counterRider.riderName,
         type: 'counter_attack',
         tone: 'warning',
@@ -3738,6 +3741,7 @@ export class SimulationEngine {
     let totalBonus = 0;
     let maxContribution = 0;
     let bestTeammateId: number | null = null;
+    const contributions: Array<{ riderId: number; name: string; contribution: number }> = [];
 
     for (const r of teamRiders) {
       if (r.rider.id === rider.rider.id) {
@@ -3768,13 +3772,19 @@ export class SimulationEngine {
         } else if (metCount === 4) {
           multiplier = 2.0;
         }
-        const contribution = baseBonus * multiplier;
-        totalBonus += contribution;
+        const contribution = baseBonus * multiplier * 1.5;
+        totalBonus += baseBonus * multiplier;
 
-        if (contribution > maxContribution) {
-          maxContribution = contribution;
+        contributions.push({
+          riderId: r.rider.id,
+          name: r.riderName,
+          contribution: Number(contribution.toFixed(2)),
+        });
+
+        if (baseBonus * multiplier > maxContribution) {
+          maxContribution = baseBonus * multiplier;
           bestTeammateId = r.rider.id;
-        } else if (contribution === maxContribution && bestTeammateId !== null) {
+        } else if (baseBonus * multiplier === maxContribution && bestTeammateId !== null) {
           const existingRider = this.riders.find((x) => x.rider.id === bestTeammateId);
           if (existingRider && r.rider.skills.sprint > existingRider.rider.skills.sprint) {
             bestTeammateId = r.rider.id;
@@ -3785,6 +3795,7 @@ export class SimulationEngine {
 
     if (totalBonus > 0) {
       rider.leadoutRiderId = bestTeammateId;
+      rider.leadoutContributions = contributions;
     }
     return totalBonus * 1.5;
   }

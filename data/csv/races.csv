@@ -15,5 +15,6 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 16,Strade Bianche,2,7,0,1,2026-03-07,2026-03-07,76
 17,Mailand San Remo,2,3,0,1,2026-03-21,2026-03-21,93
 18,Tirreno Adriatico,2,4,1,7,2026-03-09,2026-03-15,84
+19,Paris Nice,3,4,1,8,2026-03-09,2026-03-16,88
 
 
