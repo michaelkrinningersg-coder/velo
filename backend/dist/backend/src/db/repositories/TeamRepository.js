@@ -231,6 +231,9 @@ class TeamRepository {
                     youthWins: 0,
                     raceDays: 0,
                     leaderJerseys: 0,
+                    pointsJerseys: 0,
+                    mountainJerseys: 0,
+                    youthJerseys: 0,
                     sprintWins: 0,
                     climbWinsHC: 0,
                     climbWins1: 0,
@@ -494,7 +497,7 @@ class TeamRepository {
                             catStats.stageTopTen++;
                     }
                 }
-                else if (row.result_type_id === 2 && isStageRace && isFinalStage) { // GC
+                else if ((row.result_type_id === 2 || row.result_type_id === 6) && isStageRace && isFinalStage) { // GC
                     if (rank === 1)
                         catStats.gcWins++;
                     else if (rank === 2)
@@ -523,23 +526,35 @@ class TeamRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         cat.name AS category_name,
+        r.result_type_id,
         COUNT(*) AS count
       FROM results r
       JOIN stages ON stages.id = r.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
       WHERE r.team_id = ?
-        AND r.result_type_id = 2
+        AND r.result_type_id IN (2, 3, 4, 5)
         AND r.rank = 1
         AND races.is_stage_race = 1
-      GROUP BY season, category_name
+      GROUP BY season, category_name, r.result_type_id
     `).all(teamId);
         for (const row of leaderJerseyRows) {
             const statsList = [successStats['all'], successStats[String(row.season)]].filter(Boolean);
             for (const stats of statsList) {
                 let catStats = stats.categories[row.category_name];
                 if (catStats) {
-                    catStats.leaderJerseys = row.count;
+                    if (row.result_type_id === 2) {
+                        catStats.leaderJerseys = row.count;
+                    }
+                    else if (row.result_type_id === 3) {
+                        catStats.pointsJerseys = row.count;
+                    }
+                    else if (row.result_type_id === 4) {
+                        catStats.mountainJerseys = row.count;
+                    }
+                    else if (row.result_type_id === 5) {
+                        catStats.youthJerseys = row.count;
+                    }
                 }
             }
         }

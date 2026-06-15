@@ -891,6 +891,9 @@ export interface RiderCareerStats {
     youthWins: number;
     raceDays: number;
     leaderJerseys: number;
+    pointsJerseys?: number;
+    mountainJerseys?: number;
+    youthJerseys?: number;
     sprintWins: number;
     climbWinsHC: number;
     climbWins1: number;
@@ -1332,6 +1335,9 @@ export interface TeamSuccessStats {
     youthWins: number;
     raceDays: number;
     leaderJerseys: number;
+    pointsJerseys?: number;
+    mountainJerseys?: number;
+    youthJerseys?: number;
     sprintWins: number;
     climbWinsHC: number;
     climbWins1: number;

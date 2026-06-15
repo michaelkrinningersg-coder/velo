@@ -13,6 +13,18 @@ export interface LeaderboardRow {
   jerseyPath?: string;
   value: string | number;
   rawValue: number;
+  isRetired?: boolean;
+  teamDivisionId?: number | null;
+  leadoutDetails?: {
+    sprinterLastName: string;
+    sprinterNationality?: string;
+    contributors: Array<{
+      riderId: number;
+      lastName: string;
+      nationality?: string;
+      contribution: number;
+    }>;
+  };
 }
 
 export class LeaderboardRepository {
@@ -84,13 +96,15 @@ export class LeaderboardRepository {
           t.abbreviation AS team_abbr,
           t.name AS team_name,
           t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
           ${selectVal} AS val
         FROM riders r
         JOIN sta_country c ON c.id = r.country_id
         JOIN rider_daily_state rds ON rds.rider_id = r.id
         LEFT JOIN teams t ON t.id = r.active_team_id
         ${freeRaceFormJoin}
-        WHERE rds.season = ? AND r.is_retired = 0
+        WHERE rds.season = ?
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
       `;
@@ -120,7 +134,12 @@ export class LeaderboardRepository {
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
-          WHERE res.rank = 1 AND res.result_type_id = 1 AND r.is_retired = 0 ${categoryFilter}
+          WHERE res.rank = 1 ${categoryFilter}
+            AND (
+              (ra.is_stage_race = 1 AND res.result_type_id = 2 AND s.stage_number = ra.number_of_stages)
+              OR
+              (ra.is_stage_race = 0 AND res.result_type_id = 1)
+            )
         )
         SELECT
           r.id AS id,
@@ -130,6 +149,8 @@ export class LeaderboardRepository {
           t.abbreviation AS team_abbr,
           t.name AS team_name,
           t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
           rc.name AS race_category,
           rw.stage_date,
           rw.age_at_win AS val
@@ -158,6 +179,32 @@ export class LeaderboardRepository {
 
       if (period === 'season') {
         query = `
+          WITH individual_wins AS (
+            SELECT 
+              res.rider_id AS rider_id,
+              s.id AS stage_id
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            WHERE res.rank = 1 
+              AND res.result_type_id = 1 
+              AND res.rider_id IS NOT NULL
+              AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+              ${extraFilter}
+            UNION ALL
+            SELECT 
+              se.rider_id AS rider_id,
+              s.id AS stage_id
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
+            WHERE res.rank = 1 
+              AND res.result_type_id = 1 
+              AND res.rider_id IS NULL
+              AND s.profile = 'TTT'
+              AND se.status = 'finished'
+              AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+              ${extraFilter}
+          )
           SELECT 
             r.id AS id,
             r.first_name,
@@ -166,15 +213,13 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
-            COUNT(*) AS val
-          FROM results res
-          JOIN stages s ON s.id = res.stage_id
-          JOIN riders r ON r.id = res.rider_id
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            COUNT(iw.stage_id) AS val
+          FROM riders r
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = 1 AND r.is_retired = 0
-            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
-            ${extraFilter}
+          JOIN individual_wins iw ON iw.rider_id = r.id
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -183,8 +228,36 @@ export class LeaderboardRepository {
         if (terrainOrWeather !== null) {
           params.push(terrainOrWeather);
         }
+        params.push(currentSeason);
+        if (terrainOrWeather !== null) {
+          params.push(terrainOrWeather);
+        }
       } else {
         query = `
+          WITH individual_wins AS (
+            SELECT 
+              res.rider_id AS rider_id,
+              s.id AS stage_id
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            WHERE res.rank = 1 
+              AND res.result_type_id = 1 
+              AND res.rider_id IS NOT NULL
+              ${extraFilter}
+            UNION ALL
+            SELECT 
+              se.rider_id AS rider_id,
+              s.id AS stage_id
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
+            WHERE res.rank = 1 
+              AND res.result_type_id = 1 
+              AND res.rider_id IS NULL
+              AND s.profile = 'TTT'
+              AND se.status = 'finished'
+              ${extraFilter}
+          )
           SELECT 
             r.id AS id,
             r.first_name,
@@ -193,19 +266,19 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
-            COUNT(*) AS val
-          FROM results res
-          JOIN stages s ON s.id = res.stage_id
-          JOIN riders r ON r.id = res.rider_id
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            COUNT(iw.stage_id) AS val
+          FROM riders r
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = 1 AND r.is_retired = 0
-            ${extraFilter}
+          JOIN individual_wins iw ON iw.rider_id = r.id
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;
         if (terrainOrWeather !== null) {
+          params.push(terrainOrWeather);
           params.push(terrainOrWeather);
         }
       }
@@ -245,6 +318,8 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
@@ -252,7 +327,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+          WHERE res.rank = 1 AND res.result_type_id = ?
             AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
             ${categoryFilter}
@@ -271,6 +346,8 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
@@ -278,7 +355,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+          WHERE res.rank = 1 AND res.result_type_id = ?
             AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
             ${categoryFilter}
           GROUP BY r.id
@@ -301,12 +378,14 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             SUM(spe.points_awarded) AS val
           FROM season_point_events spe
           JOIN riders r ON r.id = spe.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE spe.season = ? AND r.is_retired = 0
+          WHERE spe.season = ?
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -322,12 +401,13 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             SUM(spe.points_awarded) AS val
           FROM season_point_events spe
           JOIN riders r ON r.id = spe.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE r.is_retired = 0
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -347,13 +427,15 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             SUM(s.stage_score) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE se.status = 'finished' AND r.is_retired = 0
+          WHERE se.status = 'finished'
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -370,13 +452,15 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             SUM(s.stage_score) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE se.status = 'finished' AND r.is_retired = 0
+          WHERE se.status = 'finished'
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -403,13 +487,15 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE se.status != 'dns' AND r.is_retired = 0
+          WHERE se.status != 'dns'
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
             ${extraFilter}
           GROUP BY r.id
@@ -430,13 +516,15 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE se.status != 'dns' AND r.is_retired = 0
+          WHERE se.status != 'dns'
             ${extraFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -479,6 +567,8 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
@@ -486,7 +576,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+          WHERE res.rank = 1 AND res.result_type_id = ?
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
             ${categoryFilter}
           GROUP BY r.id
@@ -504,6 +594,8 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             COUNT(*) AS val
           FROM results res
           JOIN stages s ON s.id = res.stage_id
@@ -511,7 +603,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = res.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.is_retired = 0
+          WHERE res.rank = 1 AND res.result_type_id = ?
             ${categoryFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -535,12 +627,14 @@ export class LeaderboardRepository {
           t.abbreviation AS team_abbr,
           t.name AS team_name,
           t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
           rcs.${metricKey} AS val
         FROM riders r
         JOIN sta_country c ON c.id = r.country_id
         JOIN rider_career_stats rcs ON rcs.rider_id = r.id
         LEFT JOIN teams t ON t.id = r.active_team_id
-        WHERE r.is_retired = 0 AND val > 0
+        WHERE val > 0
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
       `;
@@ -559,13 +653,14 @@ export class LeaderboardRepository {
           t.abbreviation AS team_abbr,
           t.name AS team_name,
           t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
           MAX(sl.leadout_bonus) AS val
         FROM stage_leadouts sl
         JOIN riders r ON r.id = sl.sprinter_id
         JOIN sta_country c ON c.id = r.country_id
         LEFT JOIN teams t ON t.id = r.active_team_id
-        WHERE r.is_retired = 0
-          ${period === 'season' ? 'AND sl.season = ?' : ''}
+        ${period === 'season' ? 'WHERE sl.season = ?' : ''}
         GROUP BY r.id
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
@@ -602,12 +697,14 @@ export class LeaderboardRepository {
             t.abbreviation AS team_abbr,
             t.name AS team_name,
             t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
             ${selectExp} AS val
           FROM rider_season_stats rss
           JOIN riders r ON r.id = rss.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE rss.season = ? AND r.is_retired = 0 AND val > 0
+          WHERE rss.season = ? AND val > 0
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;
@@ -624,12 +721,14 @@ export class LeaderboardRepository {
               t.abbreviation AS team_abbr,
               t.name AS team_name,
               t.id AS team_id,
+              t.division_id AS team_division_id,
+              r.is_retired AS is_retired,
               rcs.${metricKey} AS val
             FROM rider_career_stats rcs
             JOIN riders r ON r.id = rcs.rider_id
             JOIN sta_country c ON c.id = r.country_id
             LEFT JOIN teams t ON t.id = r.active_team_id
-            WHERE r.is_retired = 0 AND val > 0
+            WHERE val > 0
             ORDER BY val DESC, r.last_name ASC
             LIMIT 100
           `;
@@ -647,12 +746,13 @@ export class LeaderboardRepository {
               t.abbreviation AS team_abbr,
               t.name AS team_name,
               t.id AS team_id,
+              t.division_id AS team_division_id,
+              r.is_retired AS is_retired,
               SUM(${selectExp}) AS val
             FROM rider_season_stats rss
             JOIN riders r ON r.id = rss.rider_id
             JOIN sta_country c ON c.id = r.country_id
             LEFT JOIN teams t ON t.id = r.active_team_id
-            WHERE r.is_retired = 0
             GROUP BY r.id
             HAVING val > 0
             ORDER BY val DESC, r.last_name ASC
@@ -691,7 +791,9 @@ export class LeaderboardRepository {
         teamAbbr: r.team_abbr ?? undefined,
         teamName: r.team_name ?? undefined,
         value: valueFormatter(r),
-        rawValue: r.val ?? 0
+        rawValue: r.val ?? 0,
+        isRetired: r.is_retired === 1,
+        teamDivisionId: r.team_division_id !== undefined ? r.team_division_id : null
       }));
     } catch (e: any) {
       console.error('Leaderboard query error:', e.message);
@@ -801,37 +903,96 @@ export class LeaderboardRepository {
         categoryFilter = `AND ra.category_id = ${catId}`;
       }
 
-      if (period === 'season') {
-        query = `
-          SELECT r.active_team_id AS team_id, COUNT(*) AS val
-          FROM results res
-          JOIN stages s ON s.id = res.stage_id
-          JOIN races ra ON ra.id = s.race_id
-          JOIN riders r ON r.id = res.rider_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
-            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
-            AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
-            ${categoryFilter}
-          GROUP BY r.active_team_id
-          ORDER BY val DESC
-          LIMIT 100
-        `;
-        params.push(typeId, currentSeason);
+      if (winType === 'gc') {
+        if (period === 'season') {
+          query = `
+            SELECT team_id, COUNT(*) AS val
+            FROM (
+              SELECT r.active_team_id AS team_id
+              FROM results res
+              JOIN stages s ON s.id = res.stage_id
+              JOIN races ra ON ra.id = s.race_id
+              JOIN riders r ON r.id = res.rider_id
+              WHERE res.rank = 1 AND res.result_type_id = 2
+                AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+                AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+                ${categoryFilter}
+              UNION ALL
+              SELECT res.team_id
+              FROM results res
+              JOIN stages s ON s.id = res.stage_id
+              JOIN races ra ON ra.id = s.race_id
+              WHERE res.rank = 1 AND res.result_type_id = 6 AND res.rider_id IS NULL
+                AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+                AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+                ${categoryFilter}
+            )
+            WHERE team_id IS NOT NULL
+            GROUP BY team_id
+            ORDER BY val DESC
+            LIMIT 100
+          `;
+          params.push(currentSeason, currentSeason);
+        } else {
+          query = `
+            SELECT team_id, COUNT(*) AS val
+            FROM (
+              SELECT r.active_team_id AS team_id
+              FROM results res
+              JOIN stages s ON s.id = res.stage_id
+              JOIN races ra ON ra.id = s.race_id
+              JOIN riders r ON r.id = res.rider_id
+              WHERE res.rank = 1 AND res.result_type_id = 2
+                AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+                ${categoryFilter}
+              UNION ALL
+              SELECT res.team_id
+              FROM results res
+              JOIN stages s ON s.id = res.stage_id
+              JOIN races ra ON ra.id = s.race_id
+              WHERE res.rank = 1 AND res.result_type_id = 6 AND res.rider_id IS NULL
+                AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+                ${categoryFilter}
+            )
+            WHERE team_id IS NOT NULL
+            GROUP BY team_id
+            ORDER BY val DESC
+            LIMIT 100
+          `;
+        }
       } else {
-        query = `
-          SELECT r.active_team_id AS team_id, COUNT(*) AS val
-          FROM results res
-          JOIN stages s ON s.id = res.stage_id
-          JOIN races ra ON ra.id = s.race_id
-          JOIN riders r ON r.id = res.rider_id
-          WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
-            AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
-            ${categoryFilter}
-          GROUP BY r.active_team_id
-          ORDER BY val DESC
-          LIMIT 100
-        `;
-        params.push(typeId);
+        if (period === 'season') {
+          query = `
+            SELECT r.active_team_id AS team_id, COUNT(*) AS val
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            JOIN races ra ON ra.id = s.race_id
+            JOIN riders r ON r.id = res.rider_id
+            WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
+              AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+              AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+              ${categoryFilter}
+            GROUP BY r.active_team_id
+            ORDER BY val DESC
+            LIMIT 100
+          `;
+          params.push(typeId, currentSeason);
+        } else {
+          query = `
+            SELECT r.active_team_id AS team_id, COUNT(*) AS val
+            FROM results res
+            JOIN stages s ON s.id = res.stage_id
+            JOIN races ra ON ra.id = s.race_id
+            JOIN riders r ON r.id = res.rider_id
+            WHERE res.rank = 1 AND res.result_type_id = ? AND r.active_team_id IS NOT NULL
+              AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
+              ${categoryFilter}
+            GROUP BY r.active_team_id
+            ORDER BY val DESC
+            LIMIT 100
+          `;
+          params.push(typeId);
+        }
       }
       valueFormatter = (r) => `${r.val} ${label}${r.val !== 1 ? 'e' : ''}`;
 
@@ -899,7 +1060,7 @@ export class LeaderboardRepository {
 
       if (period === 'season') {
         query = `
-          SELECT r.active_team_id AS team_id, COUNT(*) AS val
+          SELECT r.active_team_id AS team_id, COUNT(DISTINCT se.stage_id) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
@@ -916,7 +1077,7 @@ export class LeaderboardRepository {
         }
       } else {
         query = `
-          SELECT r.active_team_id AS team_id, COUNT(*) AS val
+          SELECT r.active_team_id AS team_id, COUNT(DISTINCT se.stage_id) AS val
           FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
@@ -1006,11 +1167,15 @@ export class LeaderboardRepository {
       try {
         const leadoutRows = this.db.prepare(leadoutRowsQuery).all(...leadoutParams) as any[];
         
-        // Fetch rider last names for formatting
-        const riders = this.db.prepare(`SELECT id, last_name FROM riders`).all() as Array<{ id: number; last_name: string }>;
-        const riderMap = new Map<number, string>();
+        // Fetch rider last names and nationalities for formatting
+        const riders = this.db.prepare(`
+          SELECT r.id, r.last_name, c.code_3 AS nationality 
+          FROM riders r
+          JOIN sta_country c ON c.id = r.country_id
+        `).all() as Array<{ id: number; last_name: string; nationality: string }>;
+        const riderMap = new Map<number, { last_name: string; nationality: string }>();
         for (const r of riders) {
-          riderMap.set(r.id, r.last_name);
+          riderMap.set(r.id, { last_name: r.last_name, nationality: r.nationality });
         }
 
         const seen = new Set<string>();
@@ -1036,19 +1201,38 @@ export class LeaderboardRepository {
           // Sort contributors by contribution descending
           contributors.sort((a, b) => b.contribution - a.contribution);
           const formattedContributors = contributors.map(c => {
-            const helperLastName = riderMap.get(c.riderId) || c.name.split(' ').pop() || c.name;
+            const helperInfo = riderMap.get(c.riderId);
+            const helperLastName = helperInfo?.last_name || c.name.split(' ').pop() || c.name;
             return `${helperLastName} (+${c.contribution.toFixed(2)})`;
           }).join(', ');
 
-          const sprinterLastName = riderMap.get(row.sprinter_id) || 'Unknown';
+          const sprinterInfo = riderMap.get(row.sprinter_id);
+          const sprinterLastName = sprinterInfo?.last_name || 'Unknown';
+          const sprinterNationality = sprinterInfo?.nationality || '';
+
           const formattedTeamName = `${row.team_name} (Sprinter: ${sprinterLastName} [Leadout: ${formattedContributors}])`;
+
+          const detailContributors = contributors.map(c => {
+            const helperInfo = riderMap.get(c.riderId);
+            return {
+              riderId: c.riderId,
+              lastName: helperInfo?.last_name || c.name.split(' ').pop() || c.name,
+              nationality: helperInfo?.nationality || undefined,
+              contribution: c.contribution
+            };
+          });
 
           finalRows.push({
             rank: finalRows.length + 1,
             teamId: row.team_id,
             teamName: formattedTeamName,
             value: row.leadout_bonus.toFixed(2),
-            rawValue: row.leadout_bonus
+            rawValue: row.leadout_bonus,
+            leadoutDetails: {
+              sprinterLastName,
+              sprinterNationality,
+              contributors: detailContributors
+            }
           });
 
           if (finalRows.length >= 100) {

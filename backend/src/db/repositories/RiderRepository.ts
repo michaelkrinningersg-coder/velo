@@ -740,7 +740,7 @@ export class RiderRepository {
       JOIN stages ON stages.id = results.stage_id
       JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
       WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NULL
-        AND stage_entries.status != 'dns'
+        AND stage_entries.status = 'finished'
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         ${riderFilterStageEntriesResults}
       GROUP BY stage_entries.rider_id
@@ -1146,6 +1146,9 @@ export class RiderRepository {
         youthWins: 0,
         raceDays: 0,
         leaderJerseys: 0,
+        pointsJerseys: 0,
+        mountainJerseys: 0,
+        youthJerseys: 0,
         sprintWins: 0,
         climbWinsHC: 0,
         climbWins1: 0,
@@ -1226,7 +1229,7 @@ export class RiderRepository {
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
         JOIN stage_entries se ON se.stage_id = r.stage_id AND se.team_id = r.team_id
-        WHERE r.rider_id IS NULL AND se.rider_id = ? AND r.result_type_id = 1 AND stages.profile = 'TTT'
+        WHERE r.rider_id IS NULL AND se.rider_id = ? AND r.result_type_id = 1 AND stages.profile = 'TTT' AND se.status = 'finished'
       `).all(riderId, riderId) as Array<{
         result_type_id: number;
         rank: number;
@@ -1259,6 +1262,9 @@ export class RiderRepository {
             youthWins: 0,
             raceDays: 0,
             leaderJerseys: 0,
+            pointsJerseys: 0,
+            mountainJerseys: 0,
+            youthJerseys: 0,
             sprintWins: 0,
             climbWinsHC: 0,
             climbWins1: 0,
@@ -1354,22 +1360,30 @@ export class RiderRepository {
 
     if (tableExists(this.db, 'results') && tableExists(this.db, 'stages')) {
       const leaderJerseyRows = this.db.prepare(`
-        SELECT cat.name AS category_name, COUNT(*) AS count
+        SELECT cat.name AS category_name, r.result_type_id, COUNT(*) AS count
         FROM results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
         WHERE r.rider_id = ?
-          AND r.result_type_id = 2
+          AND r.result_type_id IN (2, 3, 4, 5)
           AND r.rank = 1
           AND races.is_stage_race = 1
-        GROUP BY cat.name
-      `).all(riderId) as Array<{ category_name: string; count: number }>;
+        GROUP BY cat.name, r.result_type_id
+      `).all(riderId) as Array<{ category_name: string; result_type_id: number; count: number }>;
 
       for (const row of leaderJerseyRows) {
         let catStats = categories[row.category_name];
         if (catStats) {
-          catStats.leaderJerseys = row.count;
+          if (row.result_type_id === 2) {
+            catStats.leaderJerseys = row.count;
+          } else if (row.result_type_id === 3) {
+            catStats.pointsJerseys = row.count;
+          } else if (row.result_type_id === 4) {
+            catStats.mountainJerseys = row.count;
+          } else if (row.result_type_id === 5) {
+            catStats.youthJerseys = row.count;
+          }
         }
       }
     }

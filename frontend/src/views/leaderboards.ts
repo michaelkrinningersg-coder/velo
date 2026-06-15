@@ -78,6 +78,19 @@ export function initLeaderboardsView(): void {
 
   // Expose global callback for openRiderStats from leaderboard links
   (window as any).openRiderStatsFromLeaderboard = openRiderStats;
+
+  // Setup listeners for checkboxes
+  const wtCheckbox = $('leaderboard-filter-wt');
+  const ptCheckbox = $('leaderboard-filter-pt');
+  const otherCheckbox = $('leaderboard-filter-other');
+
+  [wtCheckbox, ptCheckbox, otherCheckbox].forEach((checkbox) => {
+    if (checkbox) {
+      checkbox.addEventListener('change', () => {
+        renderLeaderboard();
+      });
+    }
+  });
 }
 
 export function showLeaderboardsView(): void {
@@ -237,6 +250,11 @@ export async function renderLeaderboard(): Promise<void> {
 
   if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
 
+  const filterContainer = $('leaderboard-filter-container');
+  if (filterContainer) {
+    filterContainer.style.display = activeScope === 'teams' ? 'none' : 'flex';
+  }
+
   if (!activeMetricKey) {
     emptyEl.textContent = 'Wähle eine Statistik aus den Dropdowns oben aus, um die Rangliste zu laden.';
     emptyEl.classList.remove('hidden');
@@ -260,6 +278,32 @@ export async function renderLeaderboard(): Promise<void> {
     emptyEl.classList.remove('hidden');
     tableEl.classList.add('hidden');
     return;
+  }
+
+  // Live filtering
+  let filteredData = res.data;
+  if (activeScope === 'riders') {
+    const wtChecked = ($('leaderboard-filter-wt') as HTMLInputElement)?.checked ?? true;
+    const ptChecked = ($('leaderboard-filter-pt') as HTMLInputElement)?.checked ?? true;
+    const otherChecked = ($('leaderboard-filter-other') as HTMLInputElement)?.checked ?? false;
+
+    filteredData = res.data.filter((row: any) => {
+      const isWT = row.teamDivisionId === 1 && !row.isRetired;
+      const isPT = row.teamDivisionId === 2 && !row.isRetired;
+      const isOther = row.teamDivisionId === null || row.teamDivisionId === undefined || row.isRetired || (row.teamDivisionId !== 1 && row.teamDivisionId !== 2);
+
+      if (isWT && wtChecked) return true;
+      if (isPT && ptChecked) return true;
+      if (isOther && otherChecked) return true;
+      return false;
+    });
+
+    if (filteredData.length === 0) {
+      emptyEl.textContent = 'Keine Einträge für die ausgewählten Filter gefunden.';
+      emptyEl.classList.remove('hidden');
+      tableEl.classList.add('hidden');
+      return;
+    }
   }
 
   // Hide empty state, show table
@@ -291,9 +335,11 @@ export async function renderLeaderboard(): Promise<void> {
 
   // Render rows
   let html = '';
-  for (const row of res.data) {
-    const rankBadgeClass = row.rank === 1 ? 'badge-primary' : row.rank <= 3 ? 'badge-secondary' : 'badge-ghost';
-    const rankHtml = `<span class="badge ${rankBadgeClass}" style="min-width: 28px; text-align: center; display: inline-block;">${row.rank}</span>`;
+  let rank = 1;
+  for (const row of filteredData) {
+    const displayRank = rank++;
+    const rankBadgeClass = displayRank === 1 ? 'badge-primary' : displayRank <= 3 ? 'badge-secondary' : 'badge-ghost';
+    const rankHtml = `<span class="badge ${rankBadgeClass}" style="min-width: 28px; text-align: center; display: inline-block;">${displayRank}</span>`;
     const jerseyHtml = renderMiniJersey(row.teamId, row.teamName);
 
     if (activeScope === 'riders') {
@@ -312,12 +358,46 @@ export async function renderLeaderboard(): Promise<void> {
         </tr>
       `;
     } else {
-      const teamName = `<strong>${esc(row.teamName ?? '')}</strong>`;
+      let teamNameHtml = '';
+      if (row.leadoutDetails) {
+        const det = row.leadoutDetails;
+        const sprinterFlag = det.sprinterNationality ? renderFlag(det.sprinterNationality) : '';
+        
+        teamNameHtml = `
+          <div style="font-weight: bold; font-size: 0.95rem; color: #fff;">${esc(row.teamName.split(' (Sprinter:')[0])}</div>
+          <div style="margin-top: 0.3rem; padding-left: 0.75rem; border-left: 2px solid rgba(255, 255, 255, 0.15); display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.825rem;">
+            <div style="color: #94a3b8; display: flex; align-items: center; gap: 0.35rem;">
+              <span>Sprinter:</span>
+              <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; color: #facc15;">
+                ${sprinterFlag}${esc(det.sprinterLastName)}
+              </span>
+            </div>
+            <div style="color: #94a3b8; display: flex; flex-direction: column; gap: 0.15rem; margin-top: 0.1rem;">
+              <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 0.1rem;">Leadout Helfer:</span>
+              ${det.contributors.map((c: any) => {
+                const helperFlag = c.nationality ? renderFlag(c.nationality) : '';
+                return `
+                  <div style="display: flex; align-items: center; gap: 0.35rem; padding-left: 0.5rem; color: #cbd5e1;">
+                    <span>•</span>
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem;">
+                      ${helperFlag}${esc(c.lastName)}
+                    </span>
+                    <span style="color: #34d399; font-weight: 500;">(+${c.contribution.toFixed(2)})</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        teamNameHtml = `<strong>${esc(row.teamName ?? '')}</strong>`;
+      }
+
       html += `
         <tr>
           <td style="text-align: center; vertical-align: middle;">${rankHtml}</td>
           <td style="text-align: center; vertical-align: middle;">${jerseyHtml}</td>
-          <td style="vertical-align: middle;">${teamName}</td>
+          <td style="vertical-align: middle; padding: 0.6rem 0.75rem;">${teamNameHtml}</td>
           <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
         </tr>
       `;

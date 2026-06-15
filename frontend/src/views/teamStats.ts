@@ -727,7 +727,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
             stageWins: 0, stageSecond: 0, stageThird: 0, stageTopTen: 0,
             oneDayWins: 0, oneDaySecond: 0, oneDayThird: 0, oneDayTopTen: 0,
             mountainWins: 0, pointsWins: 0, youthWins: 0, raceDays: 0,
-            leaderJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
+            leaderJerseys: 0, pointsJerseys: 0, mountainJerseys: 0, youthJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
             winFlat: 0, winRolling: 0, winHilly: 0, winHillyDifficult: 0, winMediumMountain: 0, winMountain: 0, winHighMountain: 0, winCobble: 0, winCobbleHill: 0, winITT: 0, winTTT: 0,
             winWeather1: 0, winWeather2: 0, winWeather3: 0, winWeather4: 0, winWeather5: 0, winWeather6: 0, winWeather7: 0,
           };
@@ -770,12 +770,37 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                 <div style="overflow: hidden; white-space: nowrap;">
                   <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
+                    <!-- Gelbes Trikot (GC) -->
                     <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
                       (catData.leaderJerseys || 0) === 0
                         ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
                         : 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);'
-                    }" title="Tage im Führungstrikot (P1 GC)">
+                    }" title="Tage im Gelben Trikot (GC)">
                       🎽 ${catData.leaderJerseys || 0}
+                    </span>
+                    <!-- Grünes Trikot (Punkte) -->
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.pointsJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #bbf7d0, #4ade80); color: #14532d; border: 1px solid #22c55e; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);'
+                    }" title="Tage im Grünen Trikot (Punkte)">
+                      🎽 ${catData.pointsJerseys || 0}
+                    </span>
+                    <!-- Rotes Trikot (Berg) -->
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.mountainJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #fecaca, #f87171); color: #7f1d1d; border: 1px solid #ef4444; box-shadow: 0 0 4px rgba(248, 113, 113, 0.4);'
+                    }" title="Tage im Berg- / Roten Trikot (Berg)">
+                      🎽 ${catData.mountainJerseys || 0}
+                    </span>
+                    <!-- Weißes Trikot (Nachwuchs) -->
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.youthJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'
+                    }" title="Tage im Weißen Trikot (Nachwuchs)">
+                      🎽 ${catData.youthJerseys || 0}
                     </span>
                   </div>
                 </div>

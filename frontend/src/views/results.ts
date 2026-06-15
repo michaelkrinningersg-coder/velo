@@ -1083,10 +1083,14 @@ export function renderResultsView(): void {
 
         let jerseyHtml = renderResultsJerseyColumn(teamId, teamName);
         const isWeatherReport = !!(row.title && row.title.startsWith('Wetterbericht:'));
+        let eventTitle = row.title || '';
         if (isWeatherReport) {
           const weatherId = state.stageResults?.rolledWeatherId;
           const weatherName = state.stageResults?.rolledWetterName;
           jerseyHtml = `<span class="results-jersey-cell">${renderWeatherIcon(weatherId, weatherName)}</span>`;
+          if (weatherName) {
+            eventTitle = `Wetterbericht: ${weatherName}`;
+          }
         }
         const flagHtml = isWeatherReport ? '' : renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
         const riderHtml = isWeatherReport ? '' : (riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–'));
@@ -1140,7 +1144,7 @@ export function renderResultsView(): void {
             <td>
               <div class="event-content">
                 <div class="event-title-wrapper">
-                  <span class="event-title">${formatEventTextWithAllRiders(row.title || '')}</span>
+                  <span class="event-title">${formatEventTextWithAllRiders(eventTitle)}</span>
                   ${badgeHtml}
                 </div>
                 ${row.detail ? `<div class="event-detail">${formatEventTextWithAllRiders(row.detail)}</div>` : ''}
