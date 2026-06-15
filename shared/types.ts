@@ -508,6 +508,14 @@ export interface Stage {
   distanceKm?: number;
   elevationGainMeters?: number;
   profileScore?: number;
+  allowedWeather?: string;
+  rolledWeatherId?: number | null;
+  rolledWetterName?: string | null;
+  rolledEffektSturz?: number;
+  rolledEffektDefekt?: number;
+  rolledWindkantenGefahr?: number;
+  rolledEffektFatigue?: number;
+  rolledBreakawayBonus?: number;
 }
 
 // ------ Simulation -------------------------------------------
@@ -799,6 +807,8 @@ export interface RiderStatsRow {
   elevationGainMeters: number | null;
   seasonPoints: number;
   stageScore: number;
+  rolledWeatherId?: number | null;
+  rolledWetterName?: string | null;
 }
 
 export interface RiderStatsPointsByTerrain {

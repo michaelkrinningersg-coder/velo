@@ -366,6 +366,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
+      ensureWeatherRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -458,6 +459,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
+      ensureWeatherRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -691,4 +693,24 @@ export function createRouter(dbService: DatabaseService): Router {
   });
 
   return router;
+}
+
+function ensureWeatherRolled(db: any, stageId: number): void {
+  const row = db.prepare('SELECT rolled_weather_id, allowed_weather FROM stages WHERE id = ?').get(stageId) as { rolled_weather_id: number | null, allowed_weather: string } | undefined;
+  if (!row) {
+    return;
+  }
+  if (row.rolled_weather_id != null) {
+    return;
+  }
+
+  const allowed = row.allowed_weather.split('|').map((id: string) => parseInt(id.trim(), 10)).filter(Number.isFinite);
+  if (allowed.length === 0) {
+    allowed.push(1);
+  }
+
+  const randomIndex = Math.floor(Math.random() * allowed.length);
+  const rolledId = allowed[randomIndex];
+
+  db.prepare('UPDATE stages SET rolled_weather_id = ? WHERE id = ?').run(rolledId, stageId);
 }

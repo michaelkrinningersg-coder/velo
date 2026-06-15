@@ -45,6 +45,70 @@ const COMPARE_COLORS = [
   '#a855f7', // purple-light
 ];
 
+export function renderWeatherIcon(weatherId: number | null | undefined, weatherName: string | null | undefined): string {
+  if (weatherId == null) return '';
+  const title = weatherName ? esc(weatherName) : 'Wetter';
+  switch (weatherId) {
+    case 1: // Sonnig
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <circle cx="12" cy="12" r="4" fill="rgba(234, 179, 8, 0.2)"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+      `;
+    case 2: // Extreme Hitze
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" fill="rgba(239, 68, 68, 0.2)"></path>
+          <line x1="12" y1="9" x2="12" y2="15"></line>
+        </svg>
+      `;
+    case 3: // Leichter Regen
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <path d="M12 2v2M4.93 4.93l1.41 1.41M2 12h2" stroke="#eab308"></path>
+          <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" stroke="#94a3b8" fill="rgba(148, 163, 184, 0.2)"></path>
+          <line x1="8" y1="20" x2="8" y2="22"></line>
+          <line x1="12" y1="20" x2="12" y2="22"></line>
+        </svg>
+      `;
+    case 4: // Starkregen
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" stroke="#64748b" fill="rgba(100, 116, 139, 0.2)"></path>
+          <line x1="8" y1="19" x2="6" y2="22"></line>
+          <line x1="12" y1="19" x2="10" y2="22"></line>
+          <line x1="16" y1="19" x2="14" y2="22"></line>
+        </svg>
+      `;
+    case 5: // Starker Wind
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59-3.41A2 2 0 1 1 14 7h-2M12.59 15.41A2 2 0 1 0 14 12H2m12.59 3.41A2 2 0 1 0 11 16h2"></path>
+        </svg>
+      `;
+    case 6: // Dichter Nebel
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <line x1="5" y1="8" x2="19" y2="8"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="6" y1="16" x2="18" y2="16"></line>
+          <line x1="8" y1="20" x2="16" y2="20"></line>
+        </svg>
+      `;
+    case 7: // Schnee/Eis
+      return `
+        <svg class="rider-stats-icon weather-icon" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 4px;" title="${title}">
+          <line x1="12" y1="2" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M20 16l-4-4 4-4M4 8l4 4-4 4M16 4l-4 4-4-4M8 20l4-4 4 4"></path>
+        </svg>
+      `;
+    default:
+      return '';
+  }
+}
+
 export const RIDER_STATS_ICONS = {
   seasonPoints: '<svg class="rider-stats-icon" viewBox="0 0 24 24" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
   rank: '<svg class="rider-stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="rgba(59, 130, 246, 0.2)" stroke="#3b82f6"/></svg>',
@@ -1376,7 +1440,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${renderRiderStatsGcPlacement(row)}</td>
                           <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName, row.isStageRace, null)}</td>
-                          <td>${esc(raceStageLabel)}</td>
+                          <td>${esc(raceStageLabel)}${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
                           <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
@@ -1753,7 +1817,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
           <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
             <td>${stagePlacementHtml}</td>
             <td>${gcPlacementHtml}</td>
-            <td><strong>${esc(raceStageLabel)}</strong></td>
+            <td><strong>${esc(raceStageLabel)}</strong>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
             <td>${categoryBadgeHtml}</td>

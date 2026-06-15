@@ -533,6 +533,66 @@ export class DatabaseService {
     }
   }
 
+  private ensureWeatherSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS wetter (
+        id INTEGER PRIMARY KEY,
+        wetter_name TEXT NOT NULL UNIQUE,
+        effekt_sturz_min REAL NOT NULL DEFAULT 0.0,
+        effekt_sturz_max REAL NOT NULL DEFAULT 0.0,
+        effekt_defekt_min REAL NOT NULL DEFAULT 0.0,
+        effekt_defekt_max REAL NOT NULL DEFAULT 0.0,
+        windkanten_gefahr_min REAL NOT NULL DEFAULT 0.0,
+        windkanten_gefahr_max REAL NOT NULL DEFAULT 0.0,
+        effekt_fatigue_min REAL NOT NULL DEFAULT 0.0,
+        effekt_fatigue_max REAL NOT NULL DEFAULT 0.0,
+        breakaway_bonus_min REAL NOT NULL DEFAULT 0.0,
+        breakaway_bonus_max REAL NOT NULL DEFAULT 0.0
+      )
+    `).run();
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO wetter (
+        id, wetter_name,
+        effekt_sturz_min, effekt_sturz_max,
+        effekt_defekt_min, effekt_defekt_max,
+        windkanten_gefahr_min, windkanten_gefahr_max,
+        effekt_fatigue_min, effekt_fatigue_max,
+        breakaway_bonus_min, breakaway_bonus_max
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const weatherRows = [
+      [1, 'Sonnig', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [2, 'Extreme Hitze', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 15.0, 30.0, 0.0, 0.0],
+      [3, 'Leichter Regen', 1.0, 3.0, 0.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [4, 'Starkregen', 3.0, 7.0, 1.5, 4.0, 0.0, 0.0, 5.0, 15.0, 0.0, 0.0],
+      [5, 'Starker Wind', 0.5, 2.0, 0.0, 0.0, 0.05, 0.15, 5.0, 10.0, 0.0, 0.0],
+      [6, 'Dichter Nebel', 2.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 3.0],
+      [7, 'Schnee/Eis', 5.0, 12.0, 1.0, 3.0, 0.0, 0.0, 15.0, 35.0, 0.0, 0.0],
+    ];
+
+    db.transaction(() => {
+      for (const row of weatherRows) {
+        insert.run(...row);
+      }
+    })();
+
+    const weatherStageColumns = [
+      ['allowed_weather', "TEXT NOT NULL DEFAULT '1'"],
+      ['rolled_weather_id', 'INTEGER REFERENCES wetter(id)'],
+    ] as const;
+
+    for (const [columnName, columnDefinition] of weatherStageColumns) {
+      if (!columnExists(db, 'stages', columnName)) {
+        db.prepare(`
+          ALTER TABLE stages
+          ADD COLUMN ${columnName} ${columnDefinition}
+        `).run();
+      }
+    }
+  }
+
   private ensureStageRaceStateSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_stage_race_state (
@@ -1089,6 +1149,7 @@ export class DatabaseService {
     this.activeConnection.pragma('synchronous = NORMAL');
     this.activeConnection.pragma('foreign_keys = ON');
     this.applyLatestSchema(this.activeConnection);
+    this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureRaceCategoryBonusSchema(this.activeConnection);
     this.ensureRulesData(this.activeConnection);
@@ -1155,6 +1216,7 @@ export class DatabaseService {
     }
 
     this.applyLatestSchema(this.activeConnection);
+    this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);

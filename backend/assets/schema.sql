@@ -311,6 +311,22 @@ CREATE TABLE IF NOT EXISTS rider_season_programs (
 CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
   ON rider_season_programs(season, program_id);
 
+-- ---- Wetter --------------------------------------------------
+CREATE TABLE IF NOT EXISTS wetter (
+  id INTEGER PRIMARY KEY,
+  wetter_name TEXT NOT NULL UNIQUE,
+  effekt_sturz_min REAL NOT NULL DEFAULT 0.0,
+  effekt_sturz_max REAL NOT NULL DEFAULT 0.0,
+  effekt_defekt_min REAL NOT NULL DEFAULT 0.0,
+  effekt_defekt_max REAL NOT NULL DEFAULT 0.0,
+  windkanten_gefahr_min REAL NOT NULL DEFAULT 0.0,
+  windkanten_gefahr_max REAL NOT NULL DEFAULT 0.0,
+  effekt_fatigue_min REAL NOT NULL DEFAULT 0.0,
+  effekt_fatigue_max REAL NOT NULL DEFAULT 0.0,
+  breakaway_bonus_min REAL NOT NULL DEFAULT 0.0,
+  breakaway_bonus_max REAL NOT NULL DEFAULT 0.0
+);
+
 -- ---- Etappen -----------------------------------------------
 CREATE TABLE IF NOT EXISTS stages (
   id                INTEGER PRIMARY KEY,
@@ -326,8 +342,11 @@ CREATE TABLE IF NOT EXISTS stages (
   crash_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0),
   mechanical_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0),
   stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
+  allowed_weather TEXT NOT NULL DEFAULT '1',
+  rolled_weather_id INTEGER REFERENCES wetter(id),
   UNIQUE(race_id, stage_number)
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_stages_race ON stages(race_id);
 CREATE INDEX IF NOT EXISTS idx_stages_date ON stages(date);
@@ -553,7 +572,8 @@ CREATE TABLE IF NOT EXISTS rider_daily_state (
   peak_dates_json         TEXT NOT NULL DEFAULT '[]',
   health_status           TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
   unavailable_until       TEXT,
-  unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0)
+  unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
+  consecutive_non_race_days INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_rider_daily_state_season ON rider_daily_state(season);

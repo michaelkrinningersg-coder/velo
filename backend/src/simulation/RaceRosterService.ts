@@ -23,24 +23,7 @@ const DEFAULT_ROLE_REQUIREMENTS: Record<number, number> = {
   6: 1,
 };
 const COBBLE_SELECTION_MIN_SKILL = 65;
-const CAPTAIN_ROLE_IDS = new Set([1, 2]);
-const GENERIC_FILL_ROLE_PRIORITY = new Map<number, number>([
-  [5, 0],
-  [4, 1],
-  [3, 2],
-  [6, 3],
-]);
-const SPECIAL_FILL_CATEGORIES = new Set([1, 2, 3, 4, 7]);
-const SPECIAL_FILL_SEQUENCE = [
-  { roleId: 3, phase: 'rise' },
-  { roleId: 3, phase: 'neutral' },
-  { roleId: 4, phase: 'rise' },
-  { roleId: 4, phase: 'neutral' },
-  { roleId: 6, phase: 'rise' },
-  { roleId: 6, phase: 'neutral' },
-  { roleId: 5, phase: 'rise' },
-  { roleId: 5, phase: 'neutral' },
-] as const;
+
 
 type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
@@ -474,56 +457,163 @@ function orderProgramCandidates(candidates: Rider[]): Rider[] {
   });
 }
 
-function hasProgramCollision(db: Database.Database, riderId: number, season: number, race: Race): boolean {
-  const row = db.prepare(`
-    SELECT COUNT(*) AS count
-    FROM rider_season_programs
-    JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
-    JOIN races program_race ON program_race.id = race_program_races.race_id
-    WHERE rider_season_programs.season = ?
-      AND rider_season_programs.rider_id = ?
-      AND program_race.id != ?
-      AND program_race.start_date <= ?
-      AND program_race.end_date >= ?
-  `).get(season, riderId, race.id, race.endDate, race.startDate) as { count: number } | undefined;
-  return (row?.count ?? 0) > 0;
+function hasActiveOrEarmarkedCollision(
+  db: Database.Database,
+  repo: any,
+  rider: Rider,
+  teamRiders: Rider[],
+  season: number,
+  targetRace: Race,
+  riderLocks: Map<number, RiderLockReason>
+): boolean {
+  const overlappingRaces = db.prepare(`
+    SELECT id, name, category_id, start_date, end_date
+    FROM races
+    WHERE id != ?
+      AND start_date <= ?
+      AND end_date >= ?
+  `).all(targetRace.id, targetRace.endDate, targetRace.startDate) as Race[];
+
+  for (const overlapRace of overlappingRaces) {
+    const entriesCountRow = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM race_entries
+      WHERE race_id = ? AND team_id = ?
+    `).get(overlapRace.id, rider.activeTeamId) as { count: number } | undefined;
+    const isRosterFinalized = (entriesCountRow?.count ?? 0) > 0;
+
+    if (isRosterFinalized) {
+      const hasEntry = db.prepare(`
+        SELECT 1
+        FROM race_entries
+        WHERE race_id = ? AND rider_id = ?
+      `).get(overlapRace.id, rider.id);
+      if (hasEntry) {
+        return true;
+      }
+    } else {
+      const overlapPrograms = repo.getRaceProgramsForRace(overlapRace.id);
+      if (overlapPrograms.length > 0) {
+        const programIds = new Set(overlapPrograms.map((p: any) => p.id));
+        if (rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)) {
+          const overlapRoster = teamRiders.filter((r: any) => {
+            return r.seasonProgram != null && programIds.has(r.seasonProgram.id) && !r.isUnavailable;
+          });
+
+          const orderedCandidates = orderProgramCandidates(overlapRoster);
+          const categoryRow = db.prepare(`
+            SELECT number_of_riders
+            FROM race_categories
+            WHERE id = ?
+          `).get(overlapRace.categoryId) as { number_of_riders: number } | undefined;
+          const limit = categoryRow?.number_of_riders ?? 8;
+
+          const earmarked = orderedCandidates.slice(0, limit);
+          if (earmarked.some((r: any) => r.id === rider.id)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
-function canFillRosterSlot(db: Database.Database, rider: Rider, season: number, race: Race): boolean {
-  if (rider.roleId == null || CAPTAIN_ROLE_IDS.has(rider.roleId)) {
+
+function canFillRosterSlot(
+  db: Database.Database,
+  repo: any,
+  rider: Rider,
+  teamRiders: Rider[],
+  riderLocks: Map<number, RiderLockReason>,
+  season: number,
+  race: Race
+): boolean {
+  if (rider.roleId == null) {
     return false;
   }
-  if (!GENERIC_FILL_ROLE_PRIORITY.has(rider.roleId)) {
-    return false;
+
+  const name = race.category?.name ?? '';
+  const isMonumentOrGrandTour = name.includes('Monument') || name.includes('Grand Tour') || name.includes('Tour de France');
+  const isHighCategory = name.includes('Stage Race High') || name.includes('One Day High');
+
+  if (isMonumentOrGrandTour) {
+    // Monument/Grand Tour: Captain (1), Co-Captain (2), Sprinter (6), Edelhelfer (3), Starke Helfer (4), Wasserträger (5)
+    if (![1, 2, 6, 3, 4, 5].includes(rider.roleId)) {
+      return false;
+    }
+  } else if (isHighCategory) {
+    // High category: Edelhelfer (3), Starke Helfer (4), Wasserträger (5)
+    if (![3, 4, 5].includes(rider.roleId)) {
+      return false;
+    }
+  } else {
+    // Other (Middle/Low): Edelhelfer (3), Starke Helfer (4), Wasserträger (5), Sprinter (6)
+    if (![3, 4, 5, 6].includes(rider.roleId)) {
+      return false;
+    }
   }
-  return !hasProgramCollision(db, rider.id, season, race);
+
+  return !hasActiveOrEarmarkedCollision(db, repo, rider, teamRiders, season, race, riderLocks);
 }
 
-function resolveSpecialFillIndex(rider: Rider): number {
-  return SPECIAL_FILL_SEQUENCE.findIndex((entry: any) => {
-    if (rider.roleId !== entry.roleId) return false;
-    if (entry.phase === 'rise') return rider.seasonFormPhase === 'rise';
-    return isNeutralPhase(rider);
-  });
-}
+
 
 function orderFillCandidates(candidates: Rider[], race: Race): Rider[] {
-  if (SPECIAL_FILL_CATEGORIES.has(race.categoryId)) {
-    return [...candidates]
-      .map((rider: any) => ({ rider, index: resolveSpecialFillIndex(rider) }))
-      .filter((entry: any) => entry.index >= 0)
-      .sort((left: any, right: any) => left.index - right.index || right.rider.overallRating - left.rider.overallRating || left.rider.id - right.rider.id)
-      .map((entry: any) => entry.rider);
+  const name = race.category?.name ?? '';
+  const isMonumentOrGrandTour = name.includes('Monument') || name.includes('Grand Tour') || name.includes('Tour de France');
+  const isHighCategory = name.includes('Stage Race High') || name.includes('One Day High');
+
+  if (isMonumentOrGrandTour) {
+    const roleOrder = [1, 2, 6, 3, 4, 5];
+    return [...candidates].sort((left: any, right: any) => {
+      const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
+      const idxRight = roleOrder.indexOf(right.roleId ?? 0);
+      const pLeft = idxLeft === -1 ? 99 : idxLeft;
+      const pRight = idxRight === -1 ? 99 : idxRight;
+
+      if (pLeft !== pRight) {
+        return pLeft - pRight;
+      }
+      return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
+    });
   }
 
+  if (isHighCategory) {
+    const roleOrder = [3, 4, 5];
+    return [...candidates].sort((left: any, right: any) => {
+      const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
+      const idxRight = roleOrder.indexOf(right.roleId ?? 0);
+      const pLeft = idxLeft === -1 ? 99 : idxLeft;
+      const pRight = idxRight === -1 ? 99 : idxRight;
+
+      if (pLeft !== pRight) {
+        return pLeft - pRight;
+      }
+      return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
+    });
+  }
+
+  // Other races: Middle, Low, etc.
+  const roleOrder = [5, 4, 3, 6];
   return [...candidates].sort((left: any, right: any) => {
-    const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
-    if (phaseCompare !== 0) return phaseCompare;
-    const roleCompare = (GENERIC_FILL_ROLE_PRIORITY.get(left.roleId ?? 0) ?? 99) - (GENERIC_FILL_ROLE_PRIORITY.get(right.roleId ?? 0) ?? 99);
-    if (roleCompare !== 0) return roleCompare;
-    const raceDaysCompare = (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0);
-    if (raceDaysCompare !== 0) return raceDaysCompare;
-    return hashString(`${race.id}|${left.activeTeamId ?? 0}|${left.id}`) - hashString(`${race.id}|${right.activeTeamId ?? 0}|${right.id}`);
+    const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
+    const idxRight = roleOrder.indexOf(right.roleId ?? 0);
+    const pLeft = idxLeft === -1 ? 99 : idxLeft;
+    const pRight = idxRight === -1 ? 99 : idxRight;
+
+    if (pLeft !== pRight) {
+      return pLeft - pRight;
+    }
+
+    if (left.roleId === 6) {
+      // Sprinters: weak to strong overall rating
+      return (left.overallRating ?? 0) - (right.overallRating ?? 0) || left.id - right.id;
+    } else {
+      // Wasserträger, Starke Helfer, Edelhelfer: fewest race days first
+      return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+    }
   });
 }
 
@@ -556,7 +646,8 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     .slice(0, teamLimit);
 
   const selected = selectedTeams.flatMap((team: any) => {
-    const roster = getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks);
+    const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
+    const roster = getEligibleRiders(teamFullRoster, riderLocks);
     const programCandidates = orderProgramCandidates(roster.filter((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
     const teamSelection = programCandidates.slice(0, riderLimit);
     const selectedIds = new Set(teamSelection.map((rider: any) => rider.id));
@@ -565,11 +656,11 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
       let fillCandidates: Rider[];
       if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
         fillCandidates = roster
-          .filter((rider: any) => !selectedIds.has(rider.id) && !hasProgramCollision(db, rider.id, season, race))
+          .filter((rider: any) => !selectedIds.has(rider.id) && !hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks))
           .sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
       } else {
         fillCandidates = orderFillCandidates(
-          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, rider, season, race)),
+          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race)),
           race,
         );
       }

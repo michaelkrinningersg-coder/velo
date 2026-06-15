@@ -729,7 +729,7 @@ function seedContracts(db) {
         throw new Error('game_state muss vor contracts gesetzt sein.');
     }
     const teams = db.prepare(`
-    SELECT teams.id, division_teams.name AS division_name, division_teams.tier AS tier
+    SELECT teams.id, division_teams.name AS division_name, division_teams.tier AS tier, division_teams.min_roster_size, division_teams.max_roster_size
     FROM teams
     JOIN division_teams ON division_teams.id = teams.division_id
     WHERE division_teams.name IN ('WorldTour', 'ProTour')
@@ -748,8 +748,10 @@ function seedContracts(db) {
     }
     for (const team of teams) {
         const riderCount = riderCountByTeam.get(team.id) ?? 0;
-        if (riderCount !== 30) {
-            throw new Error(`Team ${team.id} (${team.division_name}) hat ${riderCount} gesetzte Fahrer in riders.csv, erwartet 30.`);
+        const minRosterSize = team.min_roster_size;
+        const maxRosterSize = team.max_roster_size;
+        if (riderCount < minRosterSize || riderCount > maxRosterSize) {
+            throw new Error(`Team ${team.id} (${team.division_name}) hat ${riderCount} gesetzte Fahrer in riders.csv, erwartet zwischen ${minRosterSize} und ${maxRosterSize}.`);
         }
     }
     const insert = db.prepare(`

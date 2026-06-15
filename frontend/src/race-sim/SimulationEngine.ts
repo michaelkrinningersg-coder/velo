@@ -1487,6 +1487,35 @@ export class SimulationEngine {
         });
       }
     }
+
+    // Weather announcement message
+    const weatherName = this.bootstrap.stage.rolledWetterName ?? 'Sonnig';
+    const rolledSturz = this.bootstrap.stage.rolledEffektSturz ?? 0;
+    const rolledDefekt = this.bootstrap.stage.rolledEffektDefekt ?? 0;
+    const rolledWind = this.bootstrap.stage.rolledWindkantenGefahr ?? 0;
+    const rolledFatigue = this.bootstrap.stage.rolledEffektFatigue ?? 0;
+    const rolledBreakaway = this.bootstrap.stage.rolledBreakawayBonus ?? 0;
+
+    const effectsList: string[] = [];
+    if (rolledSturz > 0) effectsList.push(`Sturzwahrscheinlichkeit +${rolledSturz.toFixed(1)}%`);
+    if (rolledDefekt > 0) effectsList.push(`Defektwahrscheinlichkeit +${rolledDefekt.toFixed(1)}%`);
+    if (rolledWind > 0) effectsList.push(`Windkanten-Gefahr +${(rolledWind * 100).toFixed(1)}%`);
+    if (rolledFatigue > 0) effectsList.push(`Fatigue +${rolledFatigue.toFixed(1)}%`);
+    if (rolledBreakaway > 0) effectsList.push(`Ausreißer-Bonus +${rolledBreakaway.toFixed(1)}`);
+
+    const detailText = effectsList.length > 0
+      ? `Wettereinflüsse: ${effectsList.join(', ')}`
+      : 'Keine nennenswerten Wettereinflüsse auf das Rennen.';
+
+    this.pushMessage({
+      elapsedSeconds: 0,
+      riderId: null,
+      riderName: null,
+      type: 'support_resume',
+      tone: 'neutral',
+      title: `Wetterbericht: ${weatherName}`,
+      detail: detailText,
+    });
   }
 
   public step(deltaSeconds: number): SimulationFrameSnapshot {
@@ -2345,7 +2374,10 @@ export class SimulationEngine {
   }
 
   private resolveRoadSpeedSkillFactor(terrain: StageTerrain | TerrainSkillName | 'Finish'): number {
-    if (terrain === 'Flat') return 0.12;
+    if (terrain === 'Flat') {
+      const windkantenGefahr = this.bootstrap.stage.rolledWindkantenGefahr ?? 0;
+      return 0.12 + windkantenGefahr;
+    }
     if (terrain === 'Abfahrt' || terrain === 'Downhill') return 0.15;
     if (terrain === 'Cobble') return 20 / 35;
     if (terrain === 'Cobble_Hill') return 25 / 35;

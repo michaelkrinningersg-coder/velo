@@ -271,6 +271,19 @@ export interface StageRow {
   crash_incident_multiplier: number;
   mechanical_incident_multiplier: number;
   stage_score?: number;
+  allowed_weather?: string;
+  rolled_weather_id?: number | null;
+  wetter_name?: string | null;
+  effekt_sturz_min?: number;
+  effekt_sturz_max?: number;
+  effekt_defekt_min?: number;
+  effekt_defekt_max?: number;
+  windkanten_gefahr_min?: number;
+  windkanten_gefahr_max?: number;
+  effekt_fatigue_min?: number;
+  effekt_fatigue_max?: number;
+  breakaway_bonus_min?: number;
+  breakaway_bonus_max?: number;
 }
 
 export interface StageResultsMetaRow {
@@ -468,6 +481,8 @@ export interface RiderStatsStageDbRow {
   stage_entry_status: 'finished' | 'dnf';
   stage_entry_status_reason: string | null;
   stage_score: number;
+  rolled_weather_id?: number | null;
+  rolled_wetter_name?: string | null;
 }
 
 export interface RiderStatsFinalDbRow {
@@ -971,8 +986,41 @@ export function mapSkillWeightRule(row: SkillWeightRow): SkillWeightRule {
   };
 }
 
+export function getDeterministicRandom(seedStr: string): number {
+  let hash = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const x = Math.sin(hash) * 10000;
+  return x - Math.floor(x);
+}
+
+export function getDeterministicWeatherEffect(stageId: number, effectKey: string, min: number, max: number): number {
+  if (min === max) return min;
+  return min + getDeterministicRandom(`${stageId}:${effectKey}`) * (max - min);
+}
+
 export function mapStage(row: StageRow): Stage {
   const summary = summarizeStageProfile(row.details_csv_file, row.start_elevation);
+  
+  const rolledWeatherId = row.rolled_weather_id ?? null;
+  const rolledWetterName = row.wetter_name ?? null;
+
+  // Compute effects deterministically if weather is rolled
+  let rolledEffektSturz = 0;
+  let rolledEffektDefekt = 0;
+  let rolledWindkantenGefahr = 0;
+  let rolledEffektFatigue = 0;
+  let rolledBreakawayBonus = 0;
+
+  if (rolledWeatherId != null) {
+    rolledEffektSturz = getDeterministicWeatherEffect(row.id, 'sturz', row.effekt_sturz_min ?? 0, row.effekt_sturz_max ?? 0);
+    rolledEffektDefekt = getDeterministicWeatherEffect(row.id, 'defekt', row.effekt_defekt_min ?? 0, row.effekt_defekt_max ?? 0);
+    rolledWindkantenGefahr = getDeterministicWeatherEffect(row.id, 'windkante', row.windkanten_gefahr_min ?? 0, row.windkanten_gefahr_max ?? 0);
+    rolledEffektFatigue = getDeterministicWeatherEffect(row.id, 'fatigue', row.effekt_fatigue_min ?? 0, row.effekt_fatigue_max ?? 0);
+    rolledBreakawayBonus = getDeterministicWeatherEffect(row.id, 'breakaway', row.breakaway_bonus_min ?? 0, row.breakaway_bonus_max ?? 0);
+  }
+
   return {
     id: row.id,
     raceId: row.race_id,
@@ -989,6 +1037,14 @@ export function mapStage(row: StageRow): Stage {
     distanceKm: summary.distanceKm,
     elevationGainMeters: summary.elevationGainMeters,
     profileScore: row.stage_score,
+    allowedWeather: row.allowed_weather,
+    rolledWeatherId,
+    rolledWetterName,
+    rolledEffektSturz,
+    rolledEffektDefekt,
+    rolledWindkantenGefahr,
+    rolledEffektFatigue,
+    rolledBreakawayBonus,
   };
 }
 

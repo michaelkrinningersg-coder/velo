@@ -474,7 +474,21 @@ export class RaceSimView {
       stageMeta.sprintCount > 0 ? `${stageMeta.sprintCount} Sprint${stageMeta.sprintCount === 1 ? '' : 's'}` : null,
       stageMeta.climbCount > 0 ? `${stageMeta.climbCount} Bergwertung${stageMeta.climbCount === 1 ? '' : 'en'}` : null,
     ].filter((value): value is string => value != null).join(' · ');
-    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}${markerMeta ? ` · ${markerMeta}` : ''}`;
+
+    const weatherEmojis: Record<number, string> = {
+      1: '☀️',
+      2: '🌡️',
+      3: '🌦️',
+      4: '🌧️',
+      5: '💨',
+      6: '🌫️',
+      7: '❄️',
+    };
+    const weatherId = this.bootstrap.stage.rolledWeatherId;
+    const weatherEmoji = weatherId != null ? (weatherEmojis[weatherId] ?? '') : '';
+    const weatherSuffix = weatherEmoji ? ` · ${weatherEmoji}` : '';
+
+    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}${markerMeta ? ` · ${markerMeta}` : ''}${weatherSuffix}`;
 
     const shouldRenderProfile = forceSidebar
       || !this.isRunning

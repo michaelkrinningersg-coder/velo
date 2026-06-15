@@ -396,11 +396,14 @@ export class RiderRepository {
         stage_points.points_awarded AS stage_points,
         stage_entries.status AS stage_entry_status,
         stage_entries.status_reason AS stage_entry_status_reason,
-        stages.stage_score AS stage_score
+        stages.stage_score AS stage_score,
+        stages.rolled_weather_id AS rolled_weather_id,
+        wetter.wetter_name AS rolled_wetter_name
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
+      LEFT JOIN wetter ON wetter.id = stages.rolled_weather_id
       LEFT JOIN results rider_stage_results
         ON rider_stage_results.stage_id = stages.id
        AND rider_stage_results.rider_id = stage_entries.rider_id
@@ -550,6 +553,8 @@ export class RiderRepository {
         elevationGainMeters: summary.elevationGainMeters,
         seasonPoints: stagePoints,
         stageScore: row.stage_score ?? 0,
+        rolledWeatherId: row.rolled_weather_id ?? null,
+        rolledWetterName: row.rolled_wetter_name ?? null,
       } satisfies RiderStatsRow);
 
       const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);

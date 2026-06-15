@@ -341,11 +341,16 @@ export class RaceRepository {
 
   public getStageById(id: number): Stage | null {
     const row = this.db.prepare(`
-      SELECT id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
-             final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-             crash_incident_multiplier, mechanical_incident_multiplier
-      FROM stages
-      WHERE id = ?
+      SELECT s.id, s.race_id, s.stage_number, s.date, s.profile, s.start_elevation, s.details_csv_file,
+             s.final_spread_start_percent, s.final_push_start_percent, s.final_spread_difficulty_multiplier,
+             s.crash_incident_multiplier, s.mechanical_incident_multiplier, s.stage_score,
+             s.allowed_weather, s.rolled_weather_id, w.wetter_name,
+             w.effekt_sturz_min, w.effekt_sturz_max, w.effekt_defekt_min, w.effekt_defekt_max,
+             w.windkanten_gefahr_min, w.windkanten_gefahr_max, w.effekt_fatigue_min, w.effekt_fatigue_max,
+             w.breakaway_bonus_min, w.breakaway_bonus_max
+      FROM stages s
+      LEFT JOIN wetter w ON w.id = s.rolled_weather_id
+      WHERE s.id = ?
     `).get(id) as StageRow | undefined;
     return row ? mapStage(row) : null;
   }
@@ -362,12 +367,17 @@ export class RaceRepository {
 
     const placeholders = raceIds.map(() => '?').join(', ');
     const stageRows = this.db.prepare(`
-      SELECT id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
-            final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-            crash_incident_multiplier, mechanical_incident_multiplier
-      FROM stages
-      WHERE race_id IN (${placeholders})
-      ORDER BY race_id ASC, stage_number ASC
+      SELECT s.id, s.race_id, s.stage_number, s.date, s.profile, s.start_elevation, s.details_csv_file,
+             s.final_spread_start_percent, s.final_push_start_percent, s.final_spread_difficulty_multiplier,
+             s.crash_incident_multiplier, s.mechanical_incident_multiplier, s.stage_score,
+             s.allowed_weather, s.rolled_weather_id, w.wetter_name,
+             w.effekt_sturz_min, w.effekt_sturz_max, w.effekt_defekt_min, w.effekt_defekt_max,
+             w.windkanten_gefahr_min, w.windkanten_gefahr_max, w.effekt_fatigue_min, w.effekt_fatigue_max,
+             w.breakaway_bonus_min, w.breakaway_bonus_max
+      FROM stages s
+      LEFT JOIN wetter w ON w.id = s.rolled_weather_id
+      WHERE s.race_id IN (${placeholders})
+      ORDER BY s.race_id ASC, s.stage_number ASC
     `).all(...raceIds) as StageRow[];
 
     for (const row of stageRows) {

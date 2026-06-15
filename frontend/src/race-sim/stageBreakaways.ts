@@ -361,7 +361,8 @@ export function precalculateStageBreakaway(
     triggerDistanceMeters + 1000,
     Math.min(phaseEndDistanceMeters - 1000, phaseEndDistanceMeters - groupPhaseLeadOutMeters),
   );
-  const skillBonus = randomInteger(3, 8);
+  const breakawayBonus = stage.rolledBreakawayBonus ?? 0;
+  const skillBonus = randomInteger(3 + breakawayBonus, 8 + breakawayBonus);
 
   return {
     riderIds: selectedRiders.map((rider) => rider.id),

@@ -8,6 +8,7 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
 import { refreshRaceEntriesForRaceStart } from '../simulation/RaceRosterService';
+import { getDeterministicWeatherEffect } from '../db/mappers';
 import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
@@ -73,6 +74,8 @@ interface RiderDailyStateRow {
   long_term_fatigue_decayable: number;
   long_term_fatigue_locked: number;
   skill_recuperation?: number;
+  consecutive_non_race_days?: number;
+  birth_year?: number;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -149,6 +152,7 @@ export class GameStateService {
     this.knownColumns.add('rider_daily_state.short_term_fatigue');
     this.knownColumns.add('rider_daily_state.long_term_fatigue_decayable');
     this.knownColumns.add('rider_daily_state.long_term_fatigue_locked');
+    this.knownColumns.add('rider_daily_state.consecutive_non_race_days');
     this.schemaReady = true;
   }
 
@@ -338,7 +342,8 @@ export class GameStateService {
         rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0),
         short_term_fatigue REAL NOT NULL DEFAULT 0.0,
         long_term_fatigue_decayable REAL NOT NULL DEFAULT 0.0,
-        long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0
+        long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0,
+        consecutive_non_race_days INTEGER NOT NULL DEFAULT 0
       )
     `).run();
 
@@ -374,6 +379,13 @@ export class GameStateService {
       this.db.prepare(`
         ALTER TABLE rider_daily_state
         ADD COLUMN long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0
+      `).run();
+    }
+
+    if (!columnExists(this.db, 'rider_daily_state', 'consecutive_non_race_days')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN consecutive_non_race_days INTEGER NOT NULL DEFAULT 0
       `).run();
     }
 
@@ -591,8 +603,8 @@ export class GameStateService {
 
     const rows = this.db.prepare(`
       SELECT rds.rider_id, rds.season, rds.form_bonus, rds.race_form_bonus, rds.peak_s_form, rds.peak_r_form, rds.active_peak_date, rds.peak_dates_json, rds.health_status, rds.unavailable_until, rds.unavailable_days_remaining, rds.season_race_days_total, rds.rolling_30d_race_days,
-             rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked,
-             r.skill_recuperation
+             rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked, rds.consecutive_non_race_days,
+             r.skill_recuperation, r.birth_year
       FROM rider_daily_state rds
       JOIN riders r ON r.id = rds.rider_id
     `).all() as RiderDailyStateRow[];
@@ -610,7 +622,8 @@ export class GameStateService {
           unavailable_days_remaining = ?,
           short_term_fatigue = ?,
           long_term_fatigue_decayable = ?,
-          long_term_fatigue_locked = ?
+          long_term_fatigue_locked = ?,
+          consecutive_non_race_days = ?
       WHERE rider_id = ?
     `);
 
@@ -748,6 +761,15 @@ export class GameStateService {
       });
 
       // Daily Fatigue Decay / Season Resets
+      let consecutiveNonRaceDays = row.consecutive_non_race_days ?? 0;
+      if (seasonChanged) {
+        consecutiveNonRaceDays = 0;
+      } else if (racingRiderIds.has(row.rider_id)) {
+        consecutiveNonRaceDays = 0;
+      } else {
+        consecutiveNonRaceDays++;
+      }
+
       let shortTermFatigue = row.short_term_fatigue ?? 0.0;
       let longTermDecayable = row.long_term_fatigue_decayable ?? 0.0;
       let longTermLocked = row.long_term_fatigue_locked ?? 0.0;
@@ -782,14 +804,36 @@ export class GameStateService {
         const oldShort = shortTermFatigue;
         const oldLongDecayable = longTermDecayable;
 
-        const R = row.skill_recuperation ?? 65;
-        const decayMultiplier = 1 + (R - 65) * 0.01;
+        const age = nextSeason - (row.birth_year ?? 0);
+        let recoveryShort: number;
+        let recoveryLong: number;
 
-        shortTermFatigue = Math.max(0.0, roundToTwoDecimals(shortTermFatigue - (0.2 * decayMultiplier)));
-        longTermDecayable = Math.max(0.0, roundToTwoDecimals(longTermDecayable - (0.01 * decayMultiplier)));
+        if (consecutiveNonRaceDays >= 14) {
+          const extraDays = consecutiveNonRaceDays - 14;
+          if (age < 24) {
+            const randShort = (Math.random() * 0.1) - 0.05; // -0.05 to 0.05
+            recoveryShort = Math.min((0.3 + randShort) + extraDays * 0.01, 0.45);
+            const randLong = (Math.random() * 0.01) - 0.005; // -0.005 to 0.005
+            recoveryLong = Math.min((0.02 + randLong) + extraDays * 0.001, 0.025);
+          } else {
+            recoveryShort = Math.min(0.2 + extraDays * 0.01, 0.35);
+            recoveryLong = Math.min(0.015 + extraDays * 0.001, 0.02);
+          }
+        } else {
+          const R = row.skill_recuperation ?? 65;
+          const decayMultiplier = 1 + (R - 65) * 0.01;
+          recoveryShort = 0.2 * decayMultiplier;
+          recoveryLong = 0.01 * decayMultiplier;
+        }
 
-        shortChange = roundToTwoDecimals(shortTermFatigue - oldShort);
-        longDecayableChange = roundToTwoDecimals(longTermDecayable - oldLongDecayable);
+        shortTermFatigue = Math.max(0.0, shortTermFatigue - recoveryShort);
+        longTermDecayable = Math.max(0.0, longTermDecayable - recoveryLong);
+
+        shortTermFatigue = roundToThreeDecimals(shortTermFatigue);
+        longTermDecayable = roundToThreeDecimals(longTermDecayable);
+
+        shortChange = roundToThreeDecimals(shortTermFatigue - oldShort);
+        longDecayableChange = roundToThreeDecimals(longTermDecayable - oldLongDecayable);
 
         if (shortChange !== 0 || longDecayableChange !== 0) {
           insertFatigueHistory.run(
@@ -803,7 +847,7 @@ export class GameStateService {
             longDecayableChange,
             0.0,
             shortTermFatigue,
-            roundToTwoDecimals(longTermDecayable + longTermLocked)
+            roundToThreeDecimals(longTermDecayable + longTermLocked)
           );
         }
       }
@@ -827,6 +871,7 @@ export class GameStateService {
         || row.short_term_fatigue !== shortTermFatigue
         || row.long_term_fatigue_decayable !== longTermDecayable
         || row.long_term_fatigue_locked !== longTermLocked
+        || row.consecutive_non_race_days !== consecutiveNonRaceDays
       ) {
         updateState.run(
           nextSeason,
@@ -842,6 +887,7 @@ export class GameStateService {
           shortTermFatigue,
           longTermDecayable,
           longTermLocked,
+          consecutiveNonRaceDays,
           row.rider_id,
         );
       }
@@ -1152,11 +1198,22 @@ export class GameStateService {
     }
 
     const stageRow = this.db.prepare(`
-      SELECT s.stage_score, s.stage_number, r.name AS race_name, s.date
+      SELECT s.id, s.stage_score, s.stage_number, r.name AS race_name, s.date,
+             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max
       FROM stages s
       JOIN races r ON r.id = s.race_id
+      LEFT JOIN wetter w ON w.id = s.rolled_weather_id
       WHERE s.id = ?
-    `).get(stageId) as { stage_score: number; stage_number: number; race_name: string; date: string } | undefined;
+    `).get(stageId) as {
+      id: number;
+      stage_score: number;
+      stage_number: number;
+      race_name: string;
+      date: string;
+      rolled_weather_id: number | null;
+      effekt_fatigue_min: number | null;
+      effekt_fatigue_max: number | null;
+    } | undefined;
 
     if (!stageRow) {
       return;
@@ -1173,7 +1230,7 @@ export class GameStateService {
     }
 
     const stmtSelect = this.db.prepare(`
-      SELECT r.id, r.skill_recuperation,
+      SELECT r.id, r.skill_recuperation, r.birth_year,
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked,
              rds.season_race_days_total
       FROM riders r
@@ -1202,6 +1259,7 @@ export class GameStateService {
         const row = stmtSelect.get(riderId) as {
           id: number;
           skill_recuperation: number;
+          birth_year: number;
           short_term_fatigue: number | null;
           long_term_fatigue_decayable: number | null;
           long_term_fatigue_locked: number | null;
@@ -1215,8 +1273,40 @@ export class GameStateService {
           ? 1 - (R - 65) * 0.02
           : 1 + (65 - R) * 0.02;
 
-        const addedShort = stageScore >= 10 ? roundToTwoDecimals((stageScore / 100) * 0.75 * multiplier) : 0;
-        const addedLongDecayable = stageScore >= 10 ? roundToTwoDecimals((stageScore / 1000) * 0.75 * multiplier) : 0;
+        let addedShort = stageScore >= 10 ? (stageScore / 100) * 0.75 * multiplier : 0;
+        let addedLongDecayable = stageScore >= 10 ? (stageScore / 1000) * 0.75 * multiplier : 0;
+
+        const age = Number(stageDate.slice(0, 4)) - row.birth_year;
+        if (age >= 30 && age <= 34) {
+          const reductionPercent = randomInteger(8, 12) / 100;
+          addedShort *= (1 - reductionPercent);
+          addedLongDecayable *= (1 - reductionPercent);
+        } else if (age < 24) {
+          const yearsUnder24 = 24 - age;
+          let increasePerYearPercent: number;
+          if (stageScore > 300) {
+            increasePerYearPercent = 6 + (Math.random() * 6 - 3); // 6 +- 3%
+          } else {
+            increasePerYearPercent = 3 + (Math.random() * 4 - 2); // 3 +- 2%
+          }
+          const totalIncreasePercent = (increasePerYearPercent * yearsUnder24) / 100;
+          addedShort *= (1 + totalIncreasePercent);
+          addedLongDecayable *= (1 + totalIncreasePercent);
+        }
+
+        if (stageRow.rolled_weather_id != null) {
+          const rolledEffektFatigue = getDeterministicWeatherEffect(
+            stageRow.id,
+            'fatigue',
+            stageRow.effekt_fatigue_min ?? 0,
+            stageRow.effekt_fatigue_max ?? 0
+          );
+          addedShort *= (1 + rolledEffektFatigue / 100);
+          addedLongDecayable *= (1 + rolledEffektFatigue / 100);
+        }
+
+        addedShort = roundToTwoDecimals(addedShort);
+        addedLongDecayable = roundToTwoDecimals(addedLongDecayable);
         
         // n is season race days total. Note: refreshRiderLoadState already updated season_race_days_total
         // so it already includes the current stage!
@@ -1672,4 +1762,8 @@ function resolveLockedFatigueAddition(n: number): number {
   if (n <= 130) return 0.17;
   if (n <= 140) return 0.22;
   return 0.28;
+}
+
+function roundToThreeDecimals(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }

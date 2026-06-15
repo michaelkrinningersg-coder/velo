@@ -94,8 +94,10 @@ export function precalculateRaceIncidents(riders: Rider[], stage: Stage, stageLe
   for (const rider of riders) {
     const crashRoll = Math.random();
     const mechanicalRoll = Math.random();
-    const crashChance = BASE_CRASH_CHANCE * Math.max(0, stage.crashIncidentMultiplier ?? 1);
-    const mechanicalChance = BASE_MECHANICAL_CHANCE * Math.max(0, stage.mechanicalIncidentMultiplier ?? 1);
+    const baseCrashChance = BASE_CRASH_CHANCE * Math.max(0, stage.crashIncidentMultiplier ?? 1);
+    const baseMechanicalChance = BASE_MECHANICAL_CHANCE * Math.max(0, stage.mechanicalIncidentMultiplier ?? 1);
+    const crashChance = baseCrashChance + (stage.rolledEffektSturz ?? 0) / 100;
+    const mechanicalChance = baseMechanicalChance + (stage.rolledEffektDefekt ?? 0) / 100;
     const crashHit = crashRoll < crashChance;
     const mechanicalHit = mechanicalRoll < mechanicalChance;
 
