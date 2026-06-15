@@ -77,6 +77,17 @@ export class RiderDraftService {
 
     // 4. Team Kadergrößen ermitteln
     const teamCountsMap = new Map<number, number>();
+    const teamLimitsMap = new Map<number, number>();
+
+    const limits = this.db.prepare(`
+      SELECT t.id, dt.max_roster_size 
+      FROM teams t 
+      JOIN division_teams dt ON t.division_id = dt.id
+    `).all() as Array<{ id: number; max_roster_size: number }>;
+    for (const limit of limits) {
+      teamLimitsMap.set(limit.id, limit.max_roster_size);
+    }
+
     for (const teamId of rankedTeamIds) {
       const count = (this.db.prepare(`
         SELECT COUNT(*) as c FROM contracts 
@@ -86,7 +97,6 @@ export class RiderDraftService {
     }
 
     // 5. Draft Loop Setup
-    const maxRosterSize = 30;
     
     // Draft Sequenzen (0-basiert, bezogen auf das Array rankedTeamIds)
     // Runde 1-15 (danach im Loop)
@@ -142,6 +152,7 @@ export class RiderDraftService {
         const teamId = rankedTeamIds[i];
         
         const currentCount = teamCountsMap.get(teamId) || 0;
+        const maxRosterSize = teamLimitsMap.get(teamId) ?? 30;
         if (currentCount >= maxRosterSize) {
           continue; // Team voll
         }
@@ -176,6 +187,7 @@ export class RiderDraftService {
       // Prüfen ob wirklich alle Teams voll sind (nicht nur in diesem Chunk)
       let globalAllFull = true;
       for (const tId of rankedTeamIds) {
+        const maxRosterSize = teamLimitsMap.get(tId) ?? 30;
         if ((teamCountsMap.get(tId) || 0) < maxRosterSize) {
           globalAllFull = false;
           break;
