@@ -69,6 +69,10 @@ import {
   initLeaderboardsView,
   showLeaderboardsView,
 } from './views/leaderboards';
+import {
+  initCalendarView,
+  showCalendarView,
+} from './views/calendar';
 import { RaceSimView } from './race-sim/RaceSimView';
 
 (window as any).openTeamStats = openTeamStats;
@@ -117,6 +121,7 @@ function initAppListeners(): void {
       if (view === 'injuries') void loadInjuries();
       if (view === 'season-standings') void loadSeasonStandings(true);
       if (view === 'leaderboards') void showLeaderboardsView();
+      if (view === 'calendar') showCalendarView();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
     });
   });
@@ -174,6 +179,7 @@ function initAppListeners(): void {
   // Views specfics event registration initialization
   initSavegameListeners();
   initDashboardListeners();
+  initCalendarView();
   initTeamsListeners();
   initRidersListeners();
   initRiderTeamEditorListeners();

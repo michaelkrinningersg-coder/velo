@@ -554,6 +554,7 @@ export function formatGradient(value: number): string {
 
 export type ViewName =
   | 'dashboard'
+  | 'calendar'
   | 'teams'
   | 'riders'
   | 'rider-team-editor'

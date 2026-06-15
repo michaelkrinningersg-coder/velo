@@ -233,59 +233,111 @@ export async function logProgramAssignmentsOnce(): Promise<void> {
   localStorage.setItem(storageKey, '1');
 }
 
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function renderRaceRowHtml(race: Race): string {
+  const isLive = state.gameState != null
+    && race.startDate <= state.gameState.currentDate
+    && race.endDate >= state.gameState.currentDate;
+  const isDone = state.gameState != null && race.endDate < state.gameState.currentDate;
+  const statusBadge = isDone
+    ? `<span class="badge badge-done">Abgeschlossen</span>`
+    : isLive
+      ? `<span class="badge badge-live">Läuft</span>`
+      : `<span class="badge badge-todo">Geplant</span>`;
+  const location = race.country?.name ?? `Land ${race.countryId}`;
+  const locationFlag = race.country?.code3 ? renderFlag(race.country.code3) : '';
+  const totalDistanceKm = race.isStageRace
+    ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
+    : (race.upcomingStage?.distanceKm ?? null);
+  const totalElevationGain = race.isStageRace
+    ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.elevationGainMeters ?? 0), 0)
+    : (race.upcomingStage?.elevationGainMeters ?? null);
+  const distance = totalDistanceKm != null ? String(totalDistanceKm.toFixed(1)).replace('.', ',') : '-';
+  const elevation = totalElevationGain != null ? String(Math.round(totalElevationGain)) : '-';
+  return `
+    <tr>
+      <td>${formatDate(race.startDate)}</td>
+      <td>
+        <button type="button" class="dashboard-race-link" data-dashboard-race-id="${race.id}">
+          <strong>${esc(race.name)}</strong>
+        </button>
+      </td>
+      <td>
+        <button type="button" class="dashboard-race-link dashboard-race-link-format" data-dashboard-race-id="${race.id}">
+          ${raceCategoryBadge(race)}
+        </button>
+      </td>
+      <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
+      <td>${raceCategoryNameBadge(race)}</td>
+      <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
+      <td>${distance}</td>
+      <td>${elevation}</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+}
+
 export function renderDashboardRaces(): void {
   const tbody = $('dashboard-races-tbody');
-  const visibleRaces = state.races
-    .filter(race => !state.gameState || race.endDate >= state.gameState.currentDate)
-    .slice(0, 20);
-
-  if (visibleRaces.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Keine kommenden Rennen.</td></tr>';
+  if (!state.gameState) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Kein Spiel geladen.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = visibleRaces.map(race => {
-    const isLive = state.gameState != null
-      && race.startDate <= state.gameState.currentDate
-      && race.endDate >= state.gameState.currentDate;
-    const isDone = state.gameState != null && race.endDate < state.gameState.currentDate;
-    const statusBadge = isDone
-      ? `<span class="badge badge-done">Abgeschlossen</span>`
-      : isLive
-        ? `<span class="badge badge-live">Läuft</span>`
-        : `<span class="badge badge-todo">Geplant</span>`;
-    const location = race.country?.name ?? `Land ${race.countryId}`;
-    const locationFlag = race.country?.code3 ? renderFlag(race.country.code3) : '';
-    const categoryName = race.category?.name ?? `Kategorie ${race.categoryId}`;
-    const totalDistanceKm = race.isStageRace
-      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
-      : (race.upcomingStage?.distanceKm ?? null);
-    const totalElevationGain = race.isStageRace
-      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.elevationGainMeters ?? 0), 0)
-      : (race.upcomingStage?.elevationGainMeters ?? null);
-    const distance = totalDistanceKm != null ? String(totalDistanceKm.toFixed(1)).replace('.', ',') : '-';
-    const elevation = totalElevationGain != null ? String(Math.round(totalElevationGain)) : '-';
-    return `
+  const currentDate = state.gameState.currentDate;
+  const maxDateStr = addDays(currentDate, 7);
+
+  const inProgressRaces = state.races.filter(race =>
+    race.startDate <= currentDate && race.endDate >= currentDate
+  );
+
+  const upcomingRaces = state.races.filter(race =>
+    race.startDate > currentDate && race.startDate <= maxDateStr
+  );
+
+  let html = '';
+
+  // In Progress
+  html += `
+    <tr class="table-subsection-header">
+      <td colspan="9"><strong>In Progress</strong></td>
+    </tr>
+  `;
+  if (inProgressRaces.length === 0) {
+    html += `
       <tr>
-        <td>${formatDate(race.startDate)}</td>
-        <td>
-          <button type="button" class="dashboard-race-link" data-dashboard-race-id="${race.id}">
-            <strong>${esc(race.name)}</strong>
-          </button>
-        </td>
-        <td>
-          <button type="button" class="dashboard-race-link dashboard-race-link-format" data-dashboard-race-id="${race.id}">
-            ${raceCategoryBadge(race)}
-          </button>
-        </td>
-        <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
-        <td>${raceCategoryNameBadge(race)}</td>
-        <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
-        <td>${distance}</td>
-        <td>${elevation}</td>
-        <td>${statusBadge}</td>
-      </tr>`;
-  }).join('');
+        <td colspan="9" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine laufenden Rennen.</td>
+      </tr>
+    `;
+  } else {
+    html += inProgressRaces.map(race => renderRaceRowHtml(race)).join('');
+  }
+
+  // Upcoming
+  html += `
+    <tr class="table-subsection-header">
+      <td colspan="9"><strong>Geplant (Nächste 7 Tage)</strong></td>
+    </tr>
+  `;
+  if (upcomingRaces.length === 0) {
+    html += `
+      <tr>
+        <td colspan="9" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine geplanten Rennen in den nächsten 7 Tagen.</td>
+      </tr>
+    `;
+  } else {
+    html += upcomingRaces.map(race => renderRaceRowHtml(race)).join('');
+  }
+
+  tbody.innerHTML = html;
 }
 
 export function getStageDisplayName(stage: Stage): string {

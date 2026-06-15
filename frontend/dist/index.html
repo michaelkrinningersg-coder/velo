@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-Byoaf7Nw.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CdOr6Zxs.css">
+  <script type="module" crossorigin src="/assets/index-DRBvK7Pl.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-ChquBInd.css">
 </head>
 <body>
 
@@ -58,6 +58,9 @@
       <nav class="sidebar-nav">
         <button class="nav-btn active" data-view="dashboard">
           <span class="nav-icon">⌂</span> Dashboard
+        </button>
+        <button class="nav-btn" data-view="calendar">
+          <span class="nav-icon">📅</span> Kalender
         </button>
         <button class="nav-btn" data-view="teams">
           <span class="nav-icon">◫</span> Teams
@@ -141,6 +144,53 @@
             <tbody id="dashboard-races-tbody"></tbody>
           </table>
         </section>
+      </div>
+
+      <!-- Kalender -->
+      <div id="view-calendar" class="view">
+        <div class="view-header"><h2>Saisonkalender</h2></div>
+        <div class="calendar-layout-container">
+          <div class="calendar-pane">
+            <div class="calendar-header">
+              <button class="btn btn-secondary" id="calendar-prev-month">◄</button>
+              <h3 id="calendar-month-label">Juni 2026</h3>
+              <button class="btn btn-secondary" id="calendar-next-month">►</button>
+              <button class="btn btn-ghost btn-sm" id="calendar-today-btn">Heute</button>
+            </div>
+            <div class="calendar-grid-wrapper">
+              <div class="calendar-weekdays">
+                <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+              </div>
+              <div class="calendar-weeks-container" id="calendar-weeks"></div>
+            </div>
+          </div>
+          <div class="calendar-list-pane">
+            <div class="calendar-list-header">
+              <h3>Rennliste (Saison)</h3>
+              <div class="calendar-list-search-wrap">
+                <input type="text" id="calendar-race-search" placeholder="Rennen suchen..." />
+              </div>
+            </div>
+            <div class="calendar-list-table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Rennen</th>
+                    <th>Format</th>
+                    <th>Land</th>
+                    <th>Rennklasse</th>
+                    <th>Teilnehmer</th>
+                    <th>Distanz</th>
+                    <th>Höhenmeter</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="calendar-races-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Teams -->
