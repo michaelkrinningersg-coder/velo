@@ -2345,10 +2345,10 @@ export class SimulationEngine {
   }
 
   private resolveRoadSpeedSkillFactor(terrain: StageTerrain | TerrainSkillName | 'Finish'): number {
-    if (terrain === 'Flat') return 0.14;
-    if (terrain === 'Abfahrt' || terrain === 'Downhill') return 0.18;
-    if (terrain === 'Cobble') return 15 / 35;
-    if (terrain === 'Cobble_Hill') return 20 / 35;
+    if (terrain === 'Flat') return 0.12;
+    if (terrain === 'Abfahrt' || terrain === 'Downhill') return 0.15;
+    if (terrain === 'Cobble') return 20 / 35;
+    if (terrain === 'Cobble_Hill') return 25 / 35;
     return 10 / 35;
   }
 
