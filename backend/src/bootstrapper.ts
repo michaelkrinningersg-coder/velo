@@ -34,6 +34,7 @@ interface TeamAllocationRow {
   id: number;
   division_name: string;
   tier: number;
+  min_roster_size: number;
   max_roster_size: number;
 }
 
@@ -997,7 +998,7 @@ function seedContracts(db: Database.Database): void {
   }
 
   const teams = db.prepare(`
-    SELECT teams.id, division_teams.name AS division_name, division_teams.tier AS tier, division_teams.max_roster_size
+    SELECT teams.id, division_teams.name AS division_name, division_teams.tier AS tier, division_teams.min_roster_size, division_teams.max_roster_size
     FROM teams
     JOIN division_teams ON division_teams.id = teams.division_id
     WHERE division_teams.name IN ('WorldTour', 'ProTour')
@@ -1019,9 +1020,10 @@ function seedContracts(db: Database.Database): void {
 
   for (const team of teams) {
     const riderCount = riderCountByTeam.get(team.id) ?? 0;
+    const minRosterSize = team.min_roster_size;
     const maxRosterSize = team.max_roster_size;
-    if (riderCount !== maxRosterSize) {
-      throw new Error(`Team ${team.id} (${team.division_name}) hat ${riderCount} gesetzte Fahrer in riders.csv, erwartet ${maxRosterSize}.`);
+    if (riderCount < minRosterSize || riderCount > maxRosterSize) {
+      throw new Error(`Team ${team.id} (${team.division_name}) hat ${riderCount} gesetzte Fahrer in riders.csv, erwartet zwischen ${minRosterSize} und ${maxRosterSize}.`);
     }
   }
 
