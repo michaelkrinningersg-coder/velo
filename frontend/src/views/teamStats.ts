@@ -16,7 +16,7 @@ import {
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
 import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
-import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge } from './riderStats';
+import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
 function getCategoryPriority(categoryName: string | null | undefined): number {
@@ -202,6 +202,40 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
     `;
   }).join('');
 
+  // Stärkste Column
+  const overallRiders = [...payload.riders]
+    .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0))
+    .slice(0, 10);
+
+  const overallHtml = overallRiders.map((rider) => {
+    const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
+    const link = renderRiderNameLink(nameText, {
+      riderId: rider.id,
+      teamId: payload.teamId,
+      strong: true,
+      linkClassName: 'results-rider-link',
+      labelClassName: 'results-participant-label',
+    });
+    const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+    const flagHtml = flagAlpha2
+      ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+      : '';
+    const valText = rider.overallRating.toFixed(0);
+
+    const fullRider = state.riders.find(r => r.id === rider.id);
+    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+
+    return `
+      <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
+          ${flagHtml}
+          ${link}
+        </span>
+        <span style="font-weight: 700; color: var(--text-300); font-size: 0.8rem;">${valText}</span>
+      </li>
+    `;
+  }).join('');
+
   // Formstärkste Column
   const formHtml = formRiders.map(({ rider, formValue }) => {
     const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
@@ -272,7 +306,11 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
       <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
         ${specsHtml}
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; border-top: 1px solid var(--border-primary); padding-top: 0.75rem;">
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; border-top: 1px solid var(--border-primary); padding-top: 0.75rem;">
+        <div style="background: rgba(99, 102, 241, 0.02); border: 1px solid rgba(99, 102, 241, 0.08); padding: 0.5rem 0.75rem; border-radius: 6px;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: var(--accent-h);">Die 10 stärksten Fahrer</h4>
+          <ul style="margin: 0; padding: 0; list-style: none;">${overallHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Daten vorhanden</li>'}</ul>
+        </div>
         <div style="background: rgba(251, 191, 36, 0.02); border: 1px solid rgba(251, 191, 36, 0.08); padding: 0.5rem 0.75rem; border-radius: 6px;">
           <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #fbbf24;">Die 10 formstärksten Fahrer</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${formHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Daten vorhanden</li>'}</ul>
@@ -691,10 +729,11 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
             mountainWins: 0, pointsWins: 0, youthWins: 0, raceDays: 0,
             leaderJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
             winFlat: 0, winRolling: 0, winHilly: 0, winHillyDifficult: 0, winMediumMountain: 0, winMountain: 0, winHighMountain: 0, winCobble: 0, winCobbleHill: 0, winITT: 0, winTTT: 0,
+            winWeather1: 0, winWeather2: 0, winWeather3: 0, winWeather4: 0, winWeather5: 0, winWeather6: 0, winWeather7: 0,
           };
 
           return `
-            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 365px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
+            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
                 <span style="font-weight: 600; font-size: 0.9rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
                 ${renderRiderStatsCategoryBadge(cat.key)}
@@ -787,6 +826,20 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                   ${renderProfileWinBadge(catData.winCobbleHill || 0, 'cobble_hill', 'Kopfsteinpflaster Hügel (Cobble Hill)')}
                   ${renderProfileWinBadge(catData.winITT || 0, 'itt', 'Einzelzeitfahren (ITT)')}
                   ${renderProfileWinBadge(catData.winTTT || 0, 'ttt', 'Mannschaftszeitfahren (TTT)')}
+                </div>
+              </div>
+
+              <!-- Wetter Siege -->
+              <div style="overflow: hidden; white-space: nowrap;">
+                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Wetter Siege</div>
+                <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
+                  ${renderWeatherWinBadge(catData.winWeather1 || 0, 1, 'Sonnig')}
+                  ${renderWeatherWinBadge(catData.winWeather2 || 0, 2, 'Extreme Hitze')}
+                  ${renderWeatherWinBadge(catData.winWeather3 || 0, 3, 'Leichter Regen')}
+                  ${renderWeatherWinBadge(catData.winWeather4 || 0, 4, 'Starkregen')}
+                  ${renderWeatherWinBadge(catData.winWeather5 || 0, 5, 'Starker Wind')}
+                  ${renderWeatherWinBadge(catData.winWeather6 || 0, 6, 'Dichter Nebel')}
+                  ${renderWeatherWinBadge(catData.winWeather7 || 0, 7, 'Schnee/Eis')}
                 </div>
               </div>
               

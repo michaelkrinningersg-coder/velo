@@ -1078,6 +1078,7 @@ export function loadFallbackStages(raceIds: number[]): StageRow[] {
         final_spread_difficulty_multiplier: Number(record['final_spread_difficulty_multiplier'] ?? '1') || 1,
         crash_incident_multiplier: Number(record['crash_incident_multiplier'] ?? '1') || 1,
         mechanical_incident_multiplier: Number(record['mechanical_incident_multiplier'] ?? '1') || 1,
+        allowed_weather: record['allowed_weather'] ?? '1|2|3|4|5|6|7',
       } satisfies StageRow;
     })
     .filter((row) => raceIds.includes(row.race_id) && Number.isFinite(row.id) && Number.isFinite(row.race_id));

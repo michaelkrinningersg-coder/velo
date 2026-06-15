@@ -66,7 +66,7 @@ const MOUNTAIN_MIN_TOP_ELEVATION_METERS = 850;
 const CLIMB_BREAK_DESCENT_METERS = 50;
 const IMPORT_SEGMENT_MERGE_MAX_GRADIENT_DIFF = 2.7;
 const SEGMENT_MIN_HILL_GAIN_METERS = 15;
-const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
+const STAGES_METADATA_HEADER = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier,allowed_weather';
 const STAGE_DETAILS_HEADER = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
 
 function round2(value: number): number {
@@ -1050,7 +1050,7 @@ function sanitizeSegments(segments: StageEditorSegment[]): StageEditorSegment[] 
 
 function buildStagesCsv(payload: StageEditorExportRequest): string {
   const { metadata } = payload;
-  const header = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier';
+  const header = 'id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier,allowed_weather';
   const row = [
     metadata.stageId,
     metadata.raceId,
@@ -1064,6 +1064,7 @@ function buildStagesCsv(payload: StageEditorExportRequest): string {
     metadata.finalSpreadDifficultyMultiplier,
     metadata.crashIncidentMultiplier,
     metadata.mechanicalIncidentMultiplier,
+    metadata.allowedWeather,
   ].map(escapeCsv).join(',');
   return `${header}\n${row}\n`;
 }
@@ -1117,6 +1118,9 @@ function validateExportRequest(payload: StageEditorExportRequest): StageEditorEx
   }
   if (!Number.isFinite(metadata.mechanicalIncidentMultiplier) || metadata.mechanicalIncidentMultiplier <= 0) {
     throw new Error('mechanicalIncidentMultiplier muss groesser als 0 sein.');
+  }
+  if (!metadata.allowedWeather || !/^[1-7](\|[1-7])*$/.test(metadata.allowedWeather)) {
+    throw new Error('allowedWeather muss eine durch | getrennte Liste von Wetter-IDs (1-7) sein.');
   }
 
   const sanitizedSegments = sanitizeSegments(draft.segments);
@@ -1355,6 +1359,7 @@ export class RouteImporter {
         finalSpreadDifficultyMultiplier: parseRequiredNumber(row[9], `stages.csv Zeile ${index + 2} final_spread_difficulty_multiplier`),
         crashIncidentMultiplier: parseRequiredNumber(row[10], `stages.csv Zeile ${index + 2} crash_incident_multiplier`),
         mechanicalIncidentMultiplier: parseRequiredNumber(row[11], `stages.csv Zeile ${index + 2} mechanical_incident_multiplier`),
+        allowedWeather: row[12]?.trim() ?? '1|2|3|4|5|6|7',
         raceName: race?.name,
         countryCode: race?.countryCode ?? null,
       };

@@ -898,6 +898,13 @@ export interface RiderCareerStats {
     winCobbleHill: number;
     winITT: number;
     winTTT: number;
+    winWeather1: number;
+    winWeather2: number;
+    winWeather3: number;
+    winWeather4: number;
+    winWeather5: number;
+    winWeather6: number;
+    winWeather7: number;
   }>;
 }
 
@@ -1070,6 +1077,7 @@ export interface StageEditorMetadata {
   finalSpreadDifficultyMultiplier: number;
   crashIncidentMultiplier: number;
   mechanicalIncidentMultiplier: number;
+  allowedWeather: string;
 }
 
 export interface StageEditorExistingStageOption extends StageEditorMetadata {
@@ -1331,6 +1339,13 @@ export interface TeamSuccessStats {
     winCobbleHill: number;
     winITT: number;
     winTTT: number;
+    winWeather1: number;
+    winWeather2: number;
+    winWeather3: number;
+    winWeather4: number;
+    winWeather5: number;
+    winWeather6: number;
+    winWeather7: number;
   }>;
 }
 

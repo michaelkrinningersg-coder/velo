@@ -239,6 +239,33 @@ export function renderProfileWinBadge(
   return `<span style="${style}" title="${esc(label)}: ${value} Siege">${value}</span>`;
 }
 
+export function renderWeatherWinBadge(
+  value: number,
+  weatherId: number,
+  label: string
+): string {
+  let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
+  if (value === 0) {
+    style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
+  } else {
+    if (weatherId === 1) { // Sonnig
+      style += 'background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; box-shadow: 0 0 5px rgba(251, 191, 36, 0.4);';
+    } else if (weatherId === 2) { // Extreme Hitze
+      style += 'background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; box-shadow: 0 0 5px rgba(249, 115, 22, 0.4);';
+    } else if (weatherId === 3) { // Leichter Regen
+      style += 'background: linear-gradient(135deg, #38bdf8, #0284c7); color: #fff; box-shadow: 0 0 5px rgba(56, 189, 248, 0.4);';
+    } else if (weatherId === 4) { // Starkregen
+      style += 'background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; box-shadow: 0 0 5px rgba(37, 99, 235, 0.4);';
+    } else if (weatherId === 5) { // Starker Wind
+      style += 'background: linear-gradient(135deg, #0d9488, #0f766e); color: #fff; box-shadow: 0 0 5px rgba(13, 148, 136, 0.4);';
+    } else if (weatherId === 6) { // Dichter Nebel
+      style += 'background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; box-shadow: 0 0 5px rgba(139, 92, 246, 0.4);';
+    } else if (weatherId === 7) { // Schnee/Eis
+      style += 'background: linear-gradient(135deg, #cbd5e1, #94a3b8); color: #000; box-shadow: 0 0 5px rgba(203, 213, 225, 0.4);';
+    }
+  }
+  return `<span style="${style}" title="${esc(label)}: ${value} Siege">${value}</span>`;
+}
 
 export function formatRiderStatsRaceBlockMeta(block: any): string {
   const dateLabel = block.startDate === block.endDate
@@ -2046,10 +2073,17 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
             winCobbleHill: 0,
             winITT: 0,
             winTTT: 0,
+            winWeather1: 0,
+            winWeather2: 0,
+            winWeather3: 0,
+            winWeather4: 0,
+            winWeather5: 0,
+            winWeather6: 0,
+            winWeather7: 0,
           };
 
           return `
-            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 365px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
+            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
                 <span style="font-weight: 600; font-size: 0.9rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
                 ${renderRiderStatsCategoryBadge(cat.key)}
@@ -2142,6 +2176,20 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                   ${renderProfileWinBadge(catData.winCobbleHill || 0, 'cobble_hill', 'Kopfsteinpflaster Hügel (Cobble Hill)')}
                   ${renderProfileWinBadge(catData.winITT || 0, 'itt', 'Einzelzeitfahren (ITT)')}
                   ${renderProfileWinBadge(catData.winTTT || 0, 'ttt', 'Mannschaftszeitfahren (TTT)')}
+                </div>
+              </div>
+
+              <!-- Wetter Siege -->
+              <div style="overflow: hidden; white-space: nowrap;">
+                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Wetter Siege</div>
+                <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
+                  ${renderWeatherWinBadge(catData.winWeather1 || 0, 1, 'Sonnig')}
+                  ${renderWeatherWinBadge(catData.winWeather2 || 0, 2, 'Extreme Hitze')}
+                  ${renderWeatherWinBadge(catData.winWeather3 || 0, 3, 'Leichter Regen')}
+                  ${renderWeatherWinBadge(catData.winWeather4 || 0, 4, 'Starkregen')}
+                  ${renderWeatherWinBadge(catData.winWeather5 || 0, 5, 'Starker Wind')}
+                  ${renderWeatherWinBadge(catData.winWeather6 || 0, 6, 'Dichter Nebel')}
+                  ${renderWeatherWinBadge(catData.winWeather7 || 0, 7, 'Schnee/Eis')}
                 </div>
               </div>
               

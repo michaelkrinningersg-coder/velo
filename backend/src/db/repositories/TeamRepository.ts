@@ -424,6 +424,13 @@ export class TeamRepository {
           winCobbleHill: 0,
           winITT: 0,
           winTTT: 0,
+          winWeather1: 0,
+          winWeather2: 0,
+          winWeather3: 0,
+          winWeather4: 0,
+          winWeather5: 0,
+          winWeather6: 0,
+          winWeather7: 0,
         };
       }
       return {
@@ -605,7 +612,8 @@ export class TeamRepository {
         races.number_of_stages AS number_of_stages,
         stages.stage_number AS stage_number,
         stages.profile AS profile,
-        cat.name AS category_name
+        cat.name AS category_name,
+        stages.rolled_weather_id AS rolled_weather_id
       FROM results r
       JOIN stages ON stages.id = r.stage_id
       JOIN races ON races.id = stages.race_id
@@ -620,6 +628,7 @@ export class TeamRepository {
       stage_number: number;
       profile: string;
       category_name: string;
+      rolled_weather_id: number | null;
     }>;
 
     for (const row of resultsRows) {
@@ -648,6 +657,11 @@ export class TeamRepository {
             else if (profile === 'Cobble_Hill') catStats.winCobbleHill++;
             else if (profile === 'ITT') catStats.winITT++;
             else if (profile === 'TTT') catStats.winTTT++;
+
+            if (row.rolled_weather_id != null && row.rolled_weather_id >= 1 && row.rolled_weather_id <= 7) {
+              const weatherKey = `winWeather${row.rolled_weather_id}` as keyof typeof catStats;
+              (catStats[weatherKey] as number)++;
+            }
           }
           if (!isStageRace) {
             if (rank === 1) catStats.oneDayWins++;

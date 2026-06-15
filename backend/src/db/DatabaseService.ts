@@ -579,7 +579,7 @@ export class DatabaseService {
     })();
 
     const weatherStageColumns = [
-      ['allowed_weather', "TEXT NOT NULL DEFAULT '1'"],
+      ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
       ['rolled_weather_id', 'INTEGER REFERENCES wetter(id)'],
     ] as const;
 
@@ -591,6 +591,12 @@ export class DatabaseService {
         `).run();
       }
     }
+
+    db.prepare(`
+      UPDATE stages
+      SET allowed_weather = '1|2|3|4|5|6|7'
+      WHERE allowed_weather = '1' OR allowed_weather = '1|3'
+    `).run();
   }
 
   private ensureStageRaceStateSchema(db: Database.Database): void {

@@ -3940,7 +3940,7 @@ html, body {
 }
 
 .stage-editor-table {
-  min-width: 1560px;
+  min-width: 1000px;
 }
 
 .stage-editor-col-nr {
@@ -3949,16 +3949,16 @@ html, body {
 
 .stage-editor-col-length,
 .stage-editor-col-gradient {
-  width: 7.5rem;
+  width: 3.75rem;
 }
 
 .stage-editor-col-terrain {
-  width: 15rem;
+  width: 7.5rem;
 }
 
 .stage-editor-col-start-markers,
 .stage-editor-col-end-markers {
-  width: 24rem;
+  width: 16rem;
 }
 
 .stage-editor-col-actions {
@@ -4162,7 +4162,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: .22rem;
-  min-width: 23rem;
+  min-width: 15rem;
 }
 
 .stage-editor-marker-row {

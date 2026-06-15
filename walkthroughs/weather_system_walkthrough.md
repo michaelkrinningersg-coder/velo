@@ -13,10 +13,10 @@ Es wurde eine neue Tabelle `wetter` in der Datenbank eingeführt, die 7 standard
 7. **Schnee/Eis** (Extreme Erhöhung der Sturzwahrscheinlichkeit, Defekte und Fatigue)
 
 ### Schema & Migrationen
-- **Datenbank-Seeding**: [DatabaseService.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/db/DatabaseService.ts) erstellt und befüllt die Tabelle `wetter` automatisch beim Laden/Erstellen eines Spielstands.
-- **Migration `stages`**: Die Tabelle `stages` wurde erweitert um:
-  - `allowed_weather TEXT NOT NULL DEFAULT '1'` (enthält erlaubte Wetter-IDs, z. B. `"1|2|5"`)
-  - `rolled_weather_id INTEGER REFERENCES wetter(id)` (speichert das ausgewürfelte Wetter)
+- **Datenbank-Seeding**: [DatabaseService.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/db/DatabaseService.ts) erstellt und befüllt die Tabelle `wetter` automatisch beim Laden eines Spielstands.
+- **CSV-basiertes Seeding (Neue Karrieren)**: `wetter.csv` wurde in [wetter.csv](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/data/csv/wetter.csv) erstellt, damit Wettertypen und Modifikatoren frei editiert werden können. [stages.csv](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/data/csv/stages.csv) wurde um die Spalte `allowed_weather` ergänzt.
+- **Bootstrapper-Unterstützung**: [bootstrapper.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/bootstrapper.ts) liest nun bei der Welterstellung `wetter.csv` und `allowed_weather` aus `stages.csv` ein. Zudem liest [mappers.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/db/mappers.ts) (`loadFallbackStages`) die neue Spalte korrekt aus.
+- **Migration `stages`**: Die Tabelle `stages` wurde um `allowed_weather` (default `'1'`) und `rolled_weather_id` erweitert.
 
 ## 2. Wetter-Auswahl (Rolling) & Determinismus
 - **Rolling-Logik**: Vor Etappenstart (in `/simulation/realtime/:stageId` und `/simulation/roster/:stageId/apply`) wird in `ensureWeatherRolled` zufällig ein Wetter aus `allowed_weather` bestimmt und in der Datenbank hinterlegt. So wird das Wetter genau einmal pro Etappe ausgewürfelt.

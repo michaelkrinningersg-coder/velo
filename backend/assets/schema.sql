@@ -342,7 +342,7 @@ CREATE TABLE IF NOT EXISTS stages (
   crash_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0),
   mechanical_incident_multiplier REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0),
   stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
-  allowed_weather TEXT NOT NULL DEFAULT '1',
+  allowed_weather TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7',
   rolled_weather_id INTEGER REFERENCES wetter(id),
   UNIQUE(race_id, stage_number)
 );

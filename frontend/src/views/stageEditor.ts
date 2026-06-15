@@ -134,7 +134,7 @@ export function markerTypeOptionsHtml(selected: StageMarkerType, scope: 'start' 
   const allowedTypes = STAGE_MARKER_TYPES.filter((markerType) => {
     if (scope === 'start') {
       if (markerType === 'start') return segmentIndex === 0;
-      return markerType === 'climb_start' || markerType === 'sprint_intermediate';
+      return markerType === 'climb_start';
     }
 
     if (markerType === 'start' || markerType === 'climb_start') {
@@ -787,14 +787,16 @@ export function resolveFirstFreePositiveInteger(values: number[]): number {
 }
 
 export function resolveNextFreeStageEditorStageId(): number {
-  return resolveFirstFreePositiveInteger(state.stageEditorExistingStages.map((stage) => stage.stageId));
+  const ids = state.stageEditorExistingStages.map((stage) => stage.stageId);
+  return ids.length > 0 ? Math.max(...ids) + 1 : 1;
 }
 
 export function resolveNextFreeStageEditorRaceId(): number {
-  return resolveFirstFreePositiveInteger([
+  const ids = [
     ...state.stageEditorExistingStages.map((stage) => stage.raceId),
     ...state.races.map((race) => race.id),
-  ]);
+  ];
+  return ids.length > 0 ? Math.max(...ids) + 1 : 1;
 }
 
 export function setStageEditorDefaults(draft: StageEditorDraft): void {
@@ -814,6 +816,11 @@ export function setStageEditorDefaults(draft: StageEditorDraft): void {
   if (!dateInput.value && state.gameState?.currentDate) {
     dateInput.value = state.gameState.currentDate;
   }
+
+  const checkboxes = document.querySelectorAll('input[name="stage-editor-weather"]') as NodeListOf<HTMLInputElement>;
+  checkboxes.forEach((cb) => {
+    cb.checked = true;
+  });
 }
 
 export function setStageEditorMetadataFields(metadata: StageEditorMetadata): void {
@@ -830,6 +837,12 @@ export function setStageEditorMetadataFields(metadata: StageEditorMetadata): voi
   $<HTMLInputElement>('stage-editor-final-spread-difficulty').value = String(metadata.finalSpreadDifficultyMultiplier);
   $<HTMLInputElement>('stage-editor-crash-multiplier').value = String(metadata.crashIncidentMultiplier);
   $<HTMLInputElement>('stage-editor-mechanical-multiplier').value = String(metadata.mechanicalIncidentMultiplier);
+
+  const allowed = (metadata.allowedWeather || '1|2|3|4|5|6|7').split('|').map((s) => s.trim());
+  const checkboxes = document.querySelectorAll('input[name="stage-editor-weather"]') as NodeListOf<HTMLInputElement>;
+  checkboxes.forEach((cb) => {
+    cb.checked = allowed.includes(cb.value);
+  });
 }
 
 export function getStageEditorIssues(draft: StageEditorDraft | null): string[] {
@@ -901,10 +914,18 @@ export function getStageEditorMetadataErrors(): string[] {
     errors.push('Defekt-Multiplikator muss groesser als 0 sein.');
   }
 
+  const checkedWeather = document.querySelectorAll('input[name="stage-editor-weather"]:checked');
+  if (checkedWeather.length === 0) {
+    errors.push('Mindestens eine Wetterart muss ausgewählt sein.');
+  }
+
   return errors;
 }
 
 export function readStageEditorMetadata(): StageEditorMetadata {
+  const weatherInputs = document.querySelectorAll('input[name="stage-editor-weather"]:checked') as NodeListOf<HTMLInputElement>;
+  const allowedWeather = Array.from(weatherInputs).map((input) => input.value).join('|');
+
   return {
     stageId: Number($<HTMLInputElement>('stage-editor-stage-id').value),
     raceId: Number($<HTMLInputElement>('stage-editor-race-id').value),
@@ -918,6 +939,7 @@ export function readStageEditorMetadata(): StageEditorMetadata {
     finalSpreadDifficultyMultiplier: Number($<HTMLInputElement>('stage-editor-final-spread-difficulty').value),
     crashIncidentMultiplier: Number($<HTMLInputElement>('stage-editor-crash-multiplier').value),
     mechanicalIncidentMultiplier: Number($<HTMLInputElement>('stage-editor-mechanical-multiplier').value),
+    allowedWeather,
   };
 }
 
@@ -1344,6 +1366,97 @@ function markerLabelValue(markers: StageMarker[]): string {
   return markers.map((marker) => marker.type).join(' | ');
 }
 
+export interface PairedClimb {
+  name: string;
+  startKm: number;
+  endKm: number;
+  distanceKm: number;
+  gainMeters: number;
+  avgGradient: number;
+  category: StageMarkerCategory;
+}
+
+export interface IntermediateSprint {
+  name: string;
+  kmMark: number;
+}
+
+export function getPairedClimbs(draft: StageEditorDraft): PairedClimb[] {
+  const climbs: PairedClimb[] = [];
+  const openClimbs: Array<{ name: string; segmentIndex: number; startKm: number; startElevation: number }> = [];
+
+  let currentKm = 0;
+  draft.segments.forEach((segment, segmentIndex) => {
+    const segmentStartKm = currentKm;
+    const segmentEndKm = roundStageEditorKm(segmentStartKm + segment.lengthKm);
+    const segmentEndElevation = getStageEditorSegmentEndElevation(segment);
+
+    segment.markers.forEach((marker) => {
+      if (marker.type === 'climb_start' && marker.name) {
+        openClimbs.push({
+          name: marker.name,
+          segmentIndex,
+          startKm: segmentStartKm,
+          startElevation: segment.startElevation,
+        });
+      }
+    });
+
+    segment.endMarkers.forEach((marker) => {
+      if (isMountainClassificationMarkerType(marker.type, marker.cat) && marker.name) {
+        let matchingIndex = -1;
+        for (let i = openClimbs.length - 1; i >= 0; i--) {
+          if (openClimbs[i].name === marker.name) {
+            matchingIndex = i;
+            break;
+          }
+        }
+
+        if (matchingIndex >= 0) {
+          const start = openClimbs[matchingIndex];
+          openClimbs.splice(matchingIndex, 1);
+
+          const distanceKm = roundStageEditorKm(segmentEndKm - start.startKm);
+          const gainMeters = Math.max(0, segmentEndElevation - start.startElevation);
+          const avgGradient = distanceKm > 0 ? roundStageEditorOneDecimal(gainMeters / (distanceKm * 10)) : 0;
+
+          climbs.push({
+            name: marker.name,
+            startKm: start.startKm,
+            endKm: segmentEndKm,
+            distanceKm,
+            gainMeters,
+            avgGradient,
+            category: marker.cat || '4',
+          });
+        }
+      }
+    });
+
+    currentKm = segmentEndKm;
+  });
+
+  return climbs;
+}
+
+export function getIntermediateSprints(draft: StageEditorDraft): IntermediateSprint[] {
+  const sprints: IntermediateSprint[] = [];
+  let currentKm = 0;
+  draft.segments.forEach((segment) => {
+    const segmentEndKm = roundStageEditorKm(currentKm + segment.lengthKm);
+    segment.endMarkers.forEach((marker) => {
+      if (marker.type === 'sprint_intermediate') {
+        sprints.push({
+          name: marker.name || 'Zwischensprint',
+          kmMark: segmentEndKm,
+        });
+      }
+    });
+    currentKm = segmentEndKm;
+  });
+  return sprints;
+}
+
 export function renderStageEditor(): void {
   renderStageEditorExistingStages();
   const draft = state.stageEditorDraft;
@@ -1384,14 +1497,73 @@ export function renderStageEditor(): void {
     ? '<div class="stage-editor-alert stage-editor-alert-ok">Export bereit. Keine Validierungsfehler.</div>'
     : alertItems.map((item) => `<div class="stage-editor-alert">${esc(item)}</div>`).join('');
 
-  climbs.innerHTML = draft.climbs.length === 0
-    ? '<p class="text-muted">Keine relevanten Climb-Vorschläge erkannt.</p>'
-    : draft.climbs.map((climb) => `
-      <div class="stage-editor-climb">
-        <strong>Kat. ${esc(climb.category)}</strong>
-        <span>${formatKm(climb.startKm)} - ${formatKm(climb.endKm)}</span>
-        <span>${climb.gainMeters} hm · ${climb.avgGradient.toFixed(1).replace('.', ',')}%</span>
-      </div>`).join('');
+  const pairedClimbs = getPairedClimbs(draft);
+  const intermediateSprints = getIntermediateSprints(draft);
+
+  let sidebarContent = '';
+
+  if (pairedClimbs.length > 0) {
+    sidebarContent += `
+      <div style="margin-top: 1rem; margin-bottom: 0.5rem; font-weight: bold; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: var(--accent-h);">
+        Bergwertungen (${pairedClimbs.length})
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        ${pairedClimbs.map((climb) => `
+          <div class="stage-editor-climb" style="padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); border-left: 3px solid var(--accent);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <strong style="color: #fff; font-size: 0.85rem;">${esc(climb.name)}</strong>
+              <span class="stage-editor-climb-category-badge ${climb.category === 'HC' ? 'is-hc' : `is-cat-${climb.category}`}" style="font-size: 0.7rem; padding: 0.1rem 0.35rem;">
+                Kat. ${esc(climb.category)}
+              </span>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-300); display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              <span>${formatKm(climb.startKm)} - ${formatKm(climb.endKm)}</span>
+              <span>·</span>
+              <span><strong>${climb.distanceKm.toFixed(1).replace('.', ',')} km</strong></span>
+              <span>·</span>
+              <span><strong>${climb.gainMeters} hm</strong></span>
+              <span>·</span>
+              <span><strong>${climb.avgGradient.toFixed(1).replace('.', ',')}%</strong></span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    sidebarContent += `
+      <div style="margin-top: 1rem; margin-bottom: 0.5rem; font-weight: bold; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: var(--accent-h);">
+        Bergwertungen (0)
+      </div>
+      <p class="text-muted" style="font-size: 0.75rem;">Keine Bergwertungen definiert (climb_start und climb_top Marker mit gleichem Namen paaren).</p>
+    `;
+  }
+
+  if (intermediateSprints.length > 0) {
+    sidebarContent += `
+      <div style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: bold; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: var(--success);">
+        Zwischensprints (${intermediateSprints.length})
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        ${intermediateSprints.map((sprint) => `
+          <div class="stage-editor-sprint" style="padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); border-left: 3px solid var(--success); display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #fff; font-size: 0.85rem;">${esc(sprint.name)}</strong>
+            <span style="font-size: 0.75rem; color: var(--text-300); font-weight: bold;">
+              ${formatKm(sprint.kmMark)}
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    sidebarContent += `
+      <div style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: bold; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: var(--success);">
+        Zwischensprints (0)
+      </div>
+      <p class="text-muted" style="font-size: 0.75rem;">Keine Zwischensprints definiert (sprint_intermediate Marker hinzufügen).</p>
+    `;
+  }
+
+  climbs.innerHTML = sidebarContent;
 
   chart.innerHTML = renderStageEditorChart(draft);
   tbody.innerHTML = draft.segments.map((segment, index) => `
@@ -1827,5 +1999,9 @@ export function initStageEditorListeners(): void {
     if (el) {
       el.addEventListener('change', () => renderStageEditor());
     }
+  });
+
+  document.querySelectorAll('input[name="stage-editor-weather"]').forEach((cb) => {
+    cb.addEventListener('change', () => renderStageEditor());
   });
 }

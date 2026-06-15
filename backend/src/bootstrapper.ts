@@ -847,8 +847,8 @@ function seedStages(db: Database.Database): void {
     INSERT INTO stages (
       id, race_id, stage_number, date, profile, start_elevation, details_csv_file,
       final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-      crash_incident_multiplier, mechanical_incident_multiplier, stage_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      crash_incident_multiplier, mechanical_incident_multiplier, stage_score, allowed_weather
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertClimbScore = db.prepare(`
     INSERT INTO stage_climb_scores (
@@ -912,6 +912,7 @@ function seedStages(db: Database.Database): void {
       crashIncidentMultiplier,
       mechanicalIncidentMultiplier,
       stageScore,
+      row['allowed_weather'] ?? '1|2|3|4|5|6|7',
     );
 
     for (const climbScore of calculateClimbScoresForStage(scoreSegments, startElevation)) {
@@ -928,6 +929,40 @@ function seedStages(db: Database.Database): void {
   }
 
   console.log(`  ${rows.length} Etappen eingefuegt.`);
+}
+
+function seedWetter(db: Database.Database): void {
+  const rows = readCsv('wetter.csv');
+  const insert = db.prepare(`
+    INSERT INTO wetter (
+      id, wetter_name,
+      effekt_sturz_min, effekt_sturz_max,
+      effekt_defekt_min, effekt_defekt_max,
+      windkanten_gefahr_min, windkanten_gefahr_max,
+      effekt_fatigue_min, effekt_fatigue_max,
+      breakaway_bonus_min, breakaway_bonus_max
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `wetter.csv Zeile ${index + 2}`;
+    insert.run(
+      int(req(row, 'id', ctx), ctx),
+      req(row, 'wetter_name', ctx),
+      real(row['effekt_sturz_min'] ?? '0', `${ctx} / effekt_sturz_min`),
+      real(row['effekt_sturz_max'] ?? '0', `${ctx} / effekt_sturz_max`),
+      real(row['effekt_defekt_min'] ?? '0', `${ctx} / effekt_defekt_min`),
+      real(row['effekt_defekt_max'] ?? '0', `${ctx} / effekt_defekt_max`),
+      real(row['windkanten_gefahr_min'] ?? '0', `${ctx} / windkanten_gefahr_min`),
+      real(row['windkanten_gefahr_max'] ?? '0', `${ctx} / windkanten_gefahr_max`),
+      real(row['effekt_fatigue_min'] ?? '0', `${ctx} / effekt_fatigue_min`),
+      real(row['effekt_fatigue_max'] ?? '0', `${ctx} / effekt_fatigue_max`),
+      real(row['breakaway_bonus_min'] ?? '0', `${ctx} / breakaway_bonus_min`),
+      real(row['breakaway_bonus_max'] ?? '0', `${ctx} / breakaway_bonus_max`),
+    );
+  }
+
+  console.log(`  ${rows.length} Wetterkonditionen eingefuegt.`);
 }
 
 function provisionalOverall(row: CsvRow, ctx: string): number {
@@ -1301,6 +1336,7 @@ export function bootstrap(force = false): void {
     seedRacePrograms(db);
     seedRaceProgramRaces(db);
     seedRaceProgramProbabilityRules(db);
+    seedWetter(db);
     seedStages(db);
     seedRiders(db);
     const currentSeason = seedGameState(db);
