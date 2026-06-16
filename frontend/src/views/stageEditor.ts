@@ -1632,12 +1632,14 @@ export function renderStageEditor(): void {
   emptyState.classList.add('hidden');
   const issues = getStageEditorIssues(draft);
   const metadataErrors = getStageEditorMetadataErrors();
+  const profileSelectEl = document.getElementById('stage-editor-profile') as HTMLSelectElement | null;
+  const currentProfile = profileSelectEl && profileSelectEl.value ? profileSelectEl.value : draft.suggestedProfile;
 
   summary.innerHTML = `
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Route</span><strong>${esc(draft.routeName)}</strong></div>
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Distanz</span><strong>${formatKm(draft.totalDistanceKm)}</strong></div>
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Anstieg</span><strong>${draft.elevationGainMeters} m</strong></div>
-    <div class="stage-editor-stat"><span class="stage-editor-stat-label">Profil</span><strong>${esc(draft.suggestedProfile)}</strong></div>
+    <div class="stage-editor-stat"><span class="stage-editor-stat-label">Profil</span><strong>${esc(currentProfile)}</strong></div>
     <div class="stage-editor-stat"><span class="stage-editor-stat-label">Segmente</span><strong>${draft.segments.length}</strong></div>`;
 
   const alertItems = [...draft.warnings, ...issues, ...metadataErrors];
