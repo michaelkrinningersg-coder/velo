@@ -5616,4 +5616,118 @@ tr.calendar-highlight {
   border-left: 3px solid #3b82f6 !important;
 }
 
+/* --- New Jersey Dots & Event Status Dots --- */
+.jersey-dot-purple {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #a855f7; /* Purple */
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* Glassmorphic tooltips & event dots */
+.status-dots-container {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  position: relative;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.1s ease;
+}
+
+.status-dot:hover {
+  transform: scale(1.3);
+}
+
+/* Event Dot Colors */
+.event-dot-1 { background-color: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.5); } /* Sturz - Red */
+.event-dot-2 { background-color: #f97316; box-shadow: 0 0 5px rgba(249, 115, 22, 0.5); } /* Defekt - Orange */
+.event-dot-3 { background-color: #10b981; box-shadow: 0 0 5px rgba(16, 185, 129, 0.5); } /* Superform - Emerald */
+.event-dot-4 { background-color: #3b82f6; box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); } /* Supermalus - Blue */
+.event-dot-5 { background-color: #ec4899; box-shadow: 0 0 5px rgba(236, 72, 153, 0.5); } /* Attacken - Pink */
+.event-dot-6 { background-color: #d946ef; box-shadow: 0 0 5px rgba(217, 70, 239, 0.5); } /* Konterattacken - Fuchsia */
+.event-dot-7 { background-color: #eab308; box-shadow: 0 0 5px rgba(234, 179, 8, 0.5); } /* Heimvorteil - Yellow */
+.event-dot-8 { background-color: #f59e0b; box-shadow: 0 0 5px rgba(245, 158, 11, 0.5); } /* Superheimvorteil - Gold */
+.event-dot-9 { background-color: #84cc16; box-shadow: 0 0 5px rgba(132, 204, 22, 0.5); } /* Heimdruck - Lime */
+
+/* Jersey Dot Colors in Results */
+.jersey-dot-yellow { background-color: #facc15; box-shadow: 0 0 5px rgba(250, 204, 21, 0.5); }
+.jersey-dot-green { background-color: #22c55e; box-shadow: 0 0 5px rgba(34, 197, 94, 0.5); }
+.jersey-dot-red { background-color: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.5); }
+.jersey-dot-white { background-color: #ffffff; box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+.jersey-dot-purple-worn { background-color: #a855f7; box-shadow: 0 0 5px rgba(168, 85, 247, 0.5); }
+
+/* Glassmorphic Tooltip styling */
+.status-tooltip {
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px) saturate(190%);
+  -webkit-backdrop-filter: blur(10px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-100, #f1f5f9);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 1000;
+  box-shadow: var(--shadow);
+}
+
+.status-dots-container:hover .status-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.status-tooltip-title {
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 3px;
+}
+
+.status-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.status-tooltip-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Badge styled for career stats wins and jerseys */
+.badge-breakaway-wins {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+}
+
+.badge-breakaway-jerseys {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1.5px solid #a855f7;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.25);
+}
+
 

@@ -1272,6 +1272,79 @@ export function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): s
     </section>`;
 }
 
+const EVENT_LABELS: Record<string, string> = {
+  '1': 'Sturz',
+  '2': 'Defekt',
+  '3': 'Superform',
+  '4': 'Supermalus',
+  '5': 'Attacken',
+  '6': 'Konterattacken',
+  '7': 'Heimvorteil',
+  '8': 'Superheimvorteil',
+  '9': 'Heimdruck',
+};
+
+const JERSEY_LABELS: Record<string, string> = {
+  'yellow': 'Gelbes Trikot (Gesamtwertung)',
+  'green': 'Grünes Trikot (Punktewertung)',
+  'red': 'Bergtrikot (Bergwertung)',
+  'white': 'Weißes Trikot (Nachwuchswertung)',
+  'purple': 'Lila Trikot (Aktivste Fahrer)',
+};
+
+export function renderStatusDotsColumn(row: any): string {
+  const dots: string[] = [];
+  const tooltipRows: string[] = [];
+
+  if (row.jerseysWorn) {
+    const jerseyKey = row.jerseysWorn.trim();
+    if (jerseyKey) {
+      const label = JERSEY_LABELS[jerseyKey] || `${jerseyKey} Trikot`;
+      const colorClass = jerseyKey === 'purple' ? 'jersey-dot-purple-worn' : `jersey-dot-${jerseyKey}`;
+      dots.push(`<span class="status-dot ${colorClass}"></span>`);
+      tooltipRows.push(`
+        <div class="status-tooltip-row">
+          <span class="status-dot ${colorClass}"></span>
+          <span>${esc(label)}</span>
+        </div>
+      `);
+    }
+  }
+
+  if (row.eventIds) {
+    const parts = row.eventIds.split('|');
+    for (const part of parts) {
+      const [eventId, countStr] = part.split(':');
+      if (eventId) {
+        const count = countStr ? parseInt(countStr, 10) : 1;
+        const label = EVENT_LABELS[eventId] || `Event ${eventId}`;
+        const countSuffix = count > 1 ? ` (${count}x)` : '';
+        dots.push(`<span class="status-dot event-dot-${eventId}"></span>`);
+        tooltipRows.push(`
+          <div class="status-tooltip-row">
+            <span class="status-dot event-dot-${eventId}"></span>
+            <span>${esc(label)}${esc(countSuffix)}</span>
+          </div>
+        `);
+      }
+    }
+  }
+
+  if (dots.length === 0) {
+    return '';
+  }
+
+  return `
+    <div class="status-dots-container">
+      ${dots.join('')}
+      <div class="status-tooltip">
+        <div class="status-tooltip-title">Status Details</div>
+        ${tooltipRows.join('')}
+      </div>
+    </div>
+  `;
+}
+
 export function renderRiderStatsRankBadge(label: string, variant: 'place' | 'gc'): string {
   return `<span class="rider-stats-rank-badge rider-stats-rank-badge-${variant}">${esc(label)}</span>`;
 }
@@ -1427,17 +1500,18 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
               <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
                 <table class="data-table rider-stats-table">
                   <colgroup>
-                    <col style="width: 9%;">
+                    <col style="width: 8%;">
+                    <col style="width: 3.5%;">
+                    <col style="width: 3.5%;">
+                    <col style="width: 2.5%;">
+                    <col style="width: 3.5%;">
+                    <col style="width: 11%;">
+                    <col style="width: 23%;">
                     <col style="width: 4%;">
-                    <col style="width: 4%;">
-                    <col style="width: 3%;">
-                    <col style="width: 4%;">
-                    <col style="width: 14%;">
-                    <col style="width: 20%;">
-                    <col style="width: 7%;">
-                    <col style="width: 5%;">
-                    <col style="width: 5%;">
-                    <col style="width: 20%;">
+                    <col style="width: 9.5%;">
+                    <col style="width: 4.5%;">
+                    <col style="width: 4.5%;">
+                    <col style="width: 17%;">
                     <col style="width: 5%;">
                   </colgroup>
                   <thead>
@@ -1449,6 +1523,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                       <th>Wetter</th>
                       <th>Klasse</th>
                       <th>Rennen / Etappe</th>
+                      <th>Status</th>
                       <th>Profil</th>
                       <th>km</th>
                       <th>HM</th>
@@ -1471,6 +1546,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null)}</td>
                           <td>${esc(raceStageLabel)}</td>
+                          <td>${renderStatusDotsColumn(row)}</td>
                           <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
@@ -1489,7 +1565,8 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
 function updateRiderStatsModalWidth(): void {
   const card = document.querySelector('.rider-stats-modal-card') as HTMLElement | null;
   if (!card) return;
-  if (state.riderStatsTab === 'career' || state.riderStatsTab === 'results') {
+  const wideTabs = ['results', 'topResults', 'career', 'form', 'fatigue'];
+  if (wideTabs.includes(state.riderStatsTab)) {
     card.style.minWidth = 'min(1180px, 95vw)';
     card.style.maxWidth = '1350px';
   } else {
@@ -1815,7 +1892,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   `;
 
   const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+    ? `<tr><td colspan="9" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
@@ -1848,6 +1925,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
             <td>${stagePlacementHtml}</td>
             <td>${gcPlacementHtml}</td>
             <td><strong>${esc(raceStageLabel)}</strong>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
+            <td>${renderStatusDotsColumn(row)}</td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
             <td>${categoryBadgeHtml}</td>
@@ -1877,20 +1955,22 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
         <table class="data-table rider-stats-table">
           <colgroup>
-            <col style="width: 6%;">
+            <col style="width: 5%;">
+            <col style="width: 9%;">
+            <col style="width: 34%;">
+            <col style="width: 5%;">
             <col style="width: 10%;">
-            <col style="width: 38%;">
-            <col style="width: 8%;">
-            <col style="width: 6%;">
-            <col style="width: 20%;">
-            <col style="width: 6%;">
-            <col style="width: 6%;">
+            <col style="width: 5%;">
+            <col style="width: 18%;">
+            <col style="width: 7%;">
+            <col style="width: 7%;">
           </colgroup>
           <thead>
             <tr>
               <th>Platz</th>
               <th>GC / Wertung</th>
               <th>Rennen</th>
+              <th>Status</th>
               <th>Profil</th>
               <th>Score</th>
               <th>Klasse</th>
@@ -1936,7 +2016,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
   // Helper function to render badge
   const renderCareerBadge = (
     displayValue: string | number,
-    type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple',
+    type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple' | 'breakaway',
     title: string,
     value?: number
   ): string => {
@@ -1959,6 +2039,8 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
       } else if (type === 'white') {
         style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
+      } else if (type === 'breakaway') {
+        style += 'background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4);';
       }
     }
     return `<span style="${style}" title="${esc(title)}">${displayValue}</span>`;
@@ -2057,11 +2139,13 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
             mountainWins: 0,
             pointsWins: 0,
             youthWins: 0,
+            breakawayWins: 0,
             raceDays: 0,
             leaderJerseys: 0,
             pointsJerseys: 0,
             mountainJerseys: 0,
             youthJerseys: 0,
+            breakawayJerseys: 0,
             sprintWins: 0,
             climbWinsHC: 0,
             climbWins1: 0,
@@ -2108,6 +2192,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                     ${renderCareerBadge(catData.mountainWins, 'red', 'Bergwertung Siege')}
                     ${renderCareerBadge(catData.pointsWins, 'green', 'Punktewertung Siege')}
                     ${renderCareerBadge(catData.youthWins, 'white', 'Nachwuchswertung Siege')}
+                    ${renderCareerBadge(catData.breakawayWins || 0, 'breakaway', 'Ausreißerwertung Siege')}
                   </div>
                 </div>
                 
@@ -2157,6 +2242,14 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                         : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'
                     }" title="Tage im Weißen Trikot (Nachwuchs)">
                       🎽 ${catData.youthJerseys || 0}
+                    </span>
+                    <!-- Lila Trikot (Aktivste Fahrer) -->
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.breakawayJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
+                    }" title="Tage im Lila Trikot (Aktivste Fahrer)">
+                      🎽 ${catData.breakawayJerseys || 0}
                     </span>
                   </div>
                 </div>

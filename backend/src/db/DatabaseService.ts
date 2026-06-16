@@ -666,6 +666,27 @@ export class DatabaseService {
       `).run();
     }
 
+    if (!columnExists(db, 'results', 'breakaway_kms')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN breakaway_kms REAL
+      `).run();
+    }
+
+    if (!columnExists(db, 'results', 'event_ids')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN event_ids TEXT
+      `).run();
+    }
+
+    if (!columnExists(db, 'results', 'jerseys_worn')) {
+      db.prepare(`
+        ALTER TABLE results
+        ADD COLUMN jerseys_worn TEXT
+      `).run();
+    }
+
     const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'results'").get() as { sql: string | null } | undefined;
     const createSql = row?.sql ?? '';
     const needsMigration = createSql.includes('(result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)')
@@ -692,6 +713,9 @@ export class DatabaseService {
           is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
           leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
           leadout_bonus    REAL,
+          breakaway_kms    REAL,
+          event_ids        TEXT,
+          jerseys_worn     TEXT,
           CHECK(
             (result_type_id = 1 AND team_id IS NOT NULL)
             OR
@@ -702,10 +726,10 @@ export class DatabaseService {
         );
 
         INSERT INTO results_new (
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
         )
         SELECT
-          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
+          id, race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
         FROM results;
 
         DROP TABLE results;

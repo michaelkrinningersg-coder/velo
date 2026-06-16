@@ -15,6 +15,9 @@ export interface LeaderboardRow {
   rawValue: number;
   isRetired?: boolean;
   teamDivisionId?: number | null;
+  raceName?: string;
+  stageNumber?: number;
+  season?: number;
   leadoutDetails?: {
     sprinterLastName: string;
     sprinterNationality?: string;
@@ -723,11 +726,16 @@ export class LeaderboardRepository {
           t.id AS team_id,
           t.division_id AS team_division_id,
           r.is_retired AS is_retired,
+          sl.season AS season,
+          ra.name AS race_name,
+          st.stage_number AS stage_number,
           MAX(sl.leadout_bonus) AS val
         FROM stage_leadouts sl
         JOIN riders r ON r.id = sl.sprinter_id
         JOIN sta_country c ON c.id = r.country_id
         LEFT JOIN teams t ON t.id = r.active_team_id
+        JOIN races ra ON ra.id = sl.race_id
+        JOIN stages st ON st.id = sl.stage_id
         ${period === 'season' ? 'WHERE sl.season = ?' : ''}
         GROUP BY r.id
         ORDER BY val DESC, r.last_name ASC
@@ -861,7 +869,10 @@ export class LeaderboardRepository {
         value: valueFormatter(r),
         rawValue: r.val ?? 0,
         isRetired: r.is_retired === 1,
-        teamDivisionId: r.team_division_id !== undefined ? r.team_division_id : null
+        teamDivisionId: r.team_division_id !== undefined ? r.team_division_id : null,
+        season: r.season !== undefined ? r.season : undefined,
+        raceName: r.race_name !== undefined ? r.race_name : undefined,
+        stageNumber: r.stage_number !== undefined ? r.stage_number : undefined,
       }));
     } catch (e: any) {
       console.error('Leaderboard query error:', e.message);
@@ -1223,9 +1234,14 @@ export class LeaderboardRepository {
           sl.sprinter_id,
           sl.leadout_bonus,
           sl.contributors_json,
+          sl.season AS season,
+          ra.name AS race_name,
+          st.stage_number AS stage_number,
           t.name AS team_name
         FROM stage_leadouts sl
         JOIN teams t ON t.id = sl.team_id
+        JOIN races ra ON ra.id = sl.race_id
+        JOIN stages st ON st.id = sl.stage_id
         ${period === 'season' ? 'WHERE sl.season = ?' : ''}
         ORDER BY sl.leadout_bonus DESC
         LIMIT 1000
@@ -1296,6 +1312,9 @@ export class LeaderboardRepository {
             teamName: formattedTeamName,
             value: row.leadout_bonus.toFixed(2),
             rawValue: row.leadout_bonus,
+            season: row.season,
+            raceName: row.race_name,
+            stageNumber: row.stage_number,
             leadoutDetails: {
               sprinterLastName,
               sprinterNationality,

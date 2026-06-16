@@ -12,6 +12,7 @@ export const RESULT_TYPE_IDS = {
   mountain: 4,
   youth: 5,
   team: 6,
+  breakaway: 7,
 } as const;
 
 export const RACE_FORM_BUILD_SOURCE_AMOUNT = 0.25;
@@ -367,6 +368,9 @@ export interface StageResultDbRow {
   leadout_bonus?: number | null;
   leadout_rider_last_name?: string | null;
   leadout_rider_country_code?: string | null;
+  breakaway_kms?: number | null;
+  event_ids?: string | null;
+  jerseys_worn?: string | null;
 }
 
 export interface StageNonFinisherDbRow {

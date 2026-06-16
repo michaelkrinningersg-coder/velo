@@ -329,6 +329,8 @@ class RiderRepository {
         COALESCE(rider_stage_results.rank, team_stage_results.rank) AS stage_rank,
         COALESCE(rider_stage_results.time_seconds, team_stage_results.time_seconds) AS stage_time_seconds,
         rider_stage_results.is_breakaway AS is_breakaway,
+        rider_stage_results.event_ids AS event_ids,
+        rider_stage_results.jerseys_worn AS jerseys_worn,
         gc_results.rank AS gc_rank,
         stage_points.points_awarded AS stage_points,
         stage_entries.status AS stage_entry_status,
@@ -483,6 +485,8 @@ class RiderRepository {
                 stageScore: row.stage_score ?? 0,
                 rolledWeatherId: row.rolled_weather_id ?? null,
                 rolledWetterName: row.rolled_wetter_name ?? null,
+                eventIds: row.event_ids ?? null,
+                jerseysWorn: row.jerseys_worn ?? null,
             });
             const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
             pointsByTerrain[terrainBucket] += stagePoints;
@@ -993,11 +997,13 @@ class RiderRepository {
                 mountainWins: 0,
                 pointsWins: 0,
                 youthWins: 0,
+                breakawayWins: 0,
                 raceDays: 0,
                 leaderJerseys: 0,
                 pointsJerseys: 0,
                 mountainJerseys: 0,
                 youthJerseys: 0,
+                breakawayJerseys: 0,
                 sprintWins: 0,
                 climbWinsHC: 0,
                 climbWins1: 0,
@@ -1096,11 +1102,13 @@ class RiderRepository {
                         mountainWins: 0,
                         pointsWins: 0,
                         youthWins: 0,
+                        breakawayWins: 0,
                         raceDays: 0,
                         leaderJerseys: 0,
                         pointsJerseys: 0,
                         mountainJerseys: 0,
                         youthJerseys: 0,
+                        breakawayJerseys: 0,
                         sprintWins: 0,
                         climbWinsHC: 0,
                         climbWins1: 0,
@@ -1216,6 +1224,10 @@ class RiderRepository {
                     if (rank === 1)
                         catStats.youthWins++;
                 }
+                else if (row.result_type_id === 7 && isStageRace && isFinalStage) { // Breakaway
+                    if (rank === 1)
+                        catStats.breakawayWins = (catStats.breakawayWins ?? 0) + 1;
+                }
             }
         }
         if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
@@ -1226,7 +1238,7 @@ class RiderRepository {
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
         WHERE r.rider_id = ?
-          AND r.result_type_id IN (2, 3, 4, 5)
+          AND r.result_type_id IN (2, 3, 4, 5, 7)
           AND r.rank = 1
           AND races.is_stage_race = 1
         GROUP BY cat.name, r.result_type_id
@@ -1245,6 +1257,9 @@ class RiderRepository {
                     }
                     else if (row.result_type_id === 5) {
                         catStats.youthJerseys = row.count;
+                    }
+                    else if (row.result_type_id === 7) {
+                        catStats.breakawayJerseys = row.count;
                     }
                 }
             }

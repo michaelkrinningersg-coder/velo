@@ -374,6 +374,9 @@ export class ResultRepository {
         teams.name AS team_name,
         results.leadout_rider_id AS leadout_rider_id,
         results.leadout_bonus AS leadout_bonus,
+        results.breakaway_kms AS breakaway_kms,
+        results.event_ids AS event_ids,
+        results.jerseys_worn AS jerseys_worn,
         leadout_riders.last_name AS leadout_rider_last_name,
         leadout_countries.code_3 AS leadout_rider_country_code
       FROM results
@@ -428,7 +431,8 @@ export class ResultRepository {
           && (resultType.id === RESULT_TYPE_IDS.gc
             || resultType.id === RESULT_TYPE_IDS.points
             || resultType.id === RESULT_TYPE_IDS.mountain
-            || resultType.id === RESULT_TYPE_IDS.youth);
+            || resultType.id === RESULT_TYPE_IDS.youth
+            || resultType.id === RESULT_TYPE_IDS.breakaway);
         const visibleRows = shouldFilterCompletedRiders
           ? typeRows.filter((row) => row.rider_id != null && fullyClassifiedRiderIds.has(row.rider_id))
           : typeRows;
@@ -464,6 +468,9 @@ export class ResultRepository {
             leadoutBonus: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_bonus : null,
             leadoutRiderLastName: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_rider_last_name : null,
             leadoutRiderCountryCode: resultType.id === RESULT_TYPE_IDS.stage ? row.leadout_rider_country_code : null,
+            breakawayKms: (resultType.id === RESULT_TYPE_IDS.stage || resultType.id === RESULT_TYPE_IDS.breakaway) ? row.breakaway_kms : null,
+            eventIds: resultType.id === RESULT_TYPE_IDS.stage ? row.event_ids : null,
+            jerseysWorn: resultType.id === RESULT_TYPE_IDS.stage ? row.jerseys_worn : null,
           };
         });
 

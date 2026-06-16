@@ -238,13 +238,16 @@ export class TeamRepository {
         spe.award_type,
         spe.rank AS result_rank,
         spe.points_awarded AS season_points,
-        stages.stage_score AS stage_score
+        stages.stage_score AS stage_score,
+        results.event_ids AS event_ids,
+        results.jerseys_worn AS jerseys_worn
       FROM season_point_events spe
       JOIN riders r ON r.id = spe.rider_id
       JOIN sta_country c ON c.id = r.country_id
       JOIN stages ON stages.id = spe.stage_id
       JOIN races ON races.id = spe.race_id
       JOIN race_categories cat ON cat.id = races.category_id
+      LEFT JOIN results ON results.stage_id = spe.stage_id AND results.rider_id = spe.rider_id AND results.result_type_id = 1
       WHERE spe.team_id = ?
         AND spe.points_awarded > 0
         AND spe.award_type IN ('stage_result', 'one_day_result', 'gc_final', 'points_final', 'mountain_final', 'youth_final')
@@ -267,6 +270,8 @@ export class TeamRepository {
       result_rank: number;
       season_points: number;
       stage_score: number;
+      event_ids: string | null;
+      jerseys_worn: string | null;
     }>;
 
     const topResults: TeamStatsTopResult[] = topResultsRows.map((row) => {
@@ -295,6 +300,8 @@ export class TeamRepository {
         seasonPoints: row.season_points,
         season: row.season,
         stageScore: row.stage_score,
+        eventIds: row.event_ids,
+        jerseysWorn: row.jerseys_worn,
       };
     });
 
@@ -405,11 +412,13 @@ export class TeamRepository {
           mountainWins: 0,
           pointsWins: 0,
           youthWins: 0,
+          breakawayWins: 0,
           raceDays: 0,
           leaderJerseys: 0,
           pointsJerseys: 0,
           mountainJerseys: 0,
           youthJerseys: 0,
+          breakawayJerseys: 0,
           sprintWins: 0,
           climbWinsHC: 0,
           climbWins1: 0,
@@ -688,6 +697,8 @@ export class TeamRepository {
           if (rank === 1) catStats.mountainWins++;
         } else if (row.result_type_id === 5 && isStageRace && isFinalStage) { // Youth
           if (rank === 1) catStats.youthWins++;
+        } else if (row.result_type_id === 7 && isStageRace && isFinalStage) { // Breakaway
+          if (rank === 1) catStats.breakawayWins = (catStats.breakawayWins ?? 0) + 1;
         }
       }
     }
@@ -704,7 +715,7 @@ export class TeamRepository {
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
       WHERE r.team_id = ?
-        AND r.result_type_id IN (2, 3, 4, 5)
+        AND r.result_type_id IN (2, 3, 4, 5, 7)
         AND r.rank = 1
         AND races.is_stage_race = 1
       GROUP BY season, category_name, r.result_type_id
@@ -723,6 +734,8 @@ export class TeamRepository {
             catStats.mountainJerseys = row.count;
           } else if (row.result_type_id === 5) {
             catStats.youthJerseys = row.count;
+          } else if (row.result_type_id === 7) {
+            catStats.breakawayJerseys = row.count;
           }
         }
       }

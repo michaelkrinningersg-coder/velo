@@ -16,6 +16,7 @@ const RESULT_TYPES = {
     mountain: 4,
     youth: 5,
     team: 6,
+    breakaway: 7,
 };
 const SUPPORTED_RESULT_TYPES = [
     { id: RESULT_TYPES.stage, name: 'Stage' },
@@ -24,6 +25,7 @@ const SUPPORTED_RESULT_TYPES = [
     { id: RESULT_TYPES.mountain, name: 'Mountain' },
     { id: RESULT_TYPES.youth, name: 'Youth' },
     { id: RESULT_TYPES.team, name: 'Team' },
+    { id: RESULT_TYPES.breakaway, name: 'Breakaway' },
 ];
 function tableExists(db, tableName) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
@@ -535,10 +537,139 @@ class StageResultCommitService {
             timeSeconds: entry.timeSeconds,
             points: null,
         }));
+        // Parse breakaway kms, form and home advantage events
+        const riderEscapeStart = new Map();
+        const riderEscapeKms = new Map();
+        let stageDistance = 0;
+        for (const event of events) {
+            if (event.kmMark != null && event.kmMark > stageDistance) {
+                stageDistance = event.kmMark;
+            }
+        }
+        for (const event of events) {
+            if (event.riderId == null)
+                continue;
+            const rId = event.riderId;
+            const title = event.title ?? '';
+            if (title.startsWith('Ausreißversuch:')) {
+                if (event.kmMark != null) {
+                    riderEscapeStart.set(rId, event.kmMark);
+                }
+            }
+            else if (title.startsWith('Ausreißer eingeholt:')) {
+                const startKm = riderEscapeStart.get(rId);
+                if (startKm != null) {
+                    const endKm = event.kmMark ?? startKm;
+                    riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, endKm - startKm));
+                    riderEscapeStart.delete(rId);
+                }
+            }
+        }
+        for (const [rId, startKm] of riderEscapeStart.entries()) {
+            riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, stageDistance - startKm));
+        }
+        const crashCounts = new Map();
+        const defectCounts = new Map();
+        for (const inc of incidents) {
+            if (inc.type === 'crash') {
+                crashCounts.set(inc.riderId, (crashCounts.get(inc.riderId) || 0) + 1);
+            }
+            else if (inc.type === 'mechanical') {
+                defectCounts.set(inc.riderId, (defectCounts.get(inc.riderId) || 0) + 1);
+            }
+        }
+        const superformCounts = new Map();
+        const supermalusCounts = new Map();
+        const attackCounts = new Map();
+        const counterAttackCounts = new Map();
+        const homeAdvantageCounts = new Map();
+        const superHomeAdvantageCounts = new Map();
+        const homePressureCounts = new Map();
+        for (const ev of events) {
+            if (ev.riderId == null)
+                continue;
+            const rId = ev.riderId;
+            const title = ev.title ?? '';
+            if (ev.type === 'attack') {
+                attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
+            }
+            else if (ev.type === 'counter_attack') {
+                counterAttackCounts.set(rId, (counterAttackCounts.get(rId) || 0) + 1);
+            }
+            else if (ev.type === 'incident') {
+                if (ev.detail === 'Superform aktiv.') {
+                    superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
+                }
+                else if (ev.detail === 'Supermalus aktiv.') {
+                    supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
+                }
+                else if (title.includes('Super-Heimvorteil')) {
+                    superHomeAdvantageCounts.set(rId, (superHomeAdvantageCounts.get(rId) || 0) + 1);
+                }
+                else if (title.includes('Heimdruck')) {
+                    homePressureCounts.set(rId, (homePressureCounts.get(rId) || 0) + 1);
+                }
+                else if (title.includes('Heimvorteil') && !title.includes('Super-Heimvorteil')) {
+                    homeAdvantageCounts.set(rId, (homeAdvantageCounts.get(rId) || 0) + 1);
+                }
+            }
+        }
+        const previousBreakaway = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.breakaway, 'breakaway_kms');
+        const breakawayRows = race.isStageRace
+            ? [...classificationPerformance]
+                .map((entry) => {
+                const currentStageKms = riderEscapeKms.get(entry.rider.id) ?? 0.0;
+                const totalKms = (previousBreakaway.get(entry.rider.id) ?? 0.0) + currentStageKms;
+                return {
+                    riderId: entry.rider.id,
+                    teamId: entry.team.id,
+                    breakawayKms: totalKms,
+                    points: Math.floor(totalKms),
+                };
+            })
+                .filter((entry) => entry.breakawayKms > 0)
+                .sort((left, right) => right.breakawayKms - left.breakawayKms
+                || (stageRankByRiderId.get(left.riderId) ?? 9999) - (stageRankByRiderId.get(right.riderId) ?? 9999)
+                || left.riderId - right.riderId)
+                .map((entry, index) => ({ ...entry, rank: index + 1, timeSeconds: null }))
+            : [];
+        const jerseysByRiderId = new Map();
+        if (previousStageId != null) {
+            const standingsRows = this.db.prepare(`
+        SELECT result_type_id, rider_id, rank
+        FROM results
+        WHERE stage_id = ? AND result_type_id IN (2, 3, 4, 5, 7) AND rider_id IS NOT NULL
+        ORDER BY rank ASC
+      `).all(previousStageId);
+            const leadersByClassification = new Map();
+            for (const row of standingsRows) {
+                const list = leadersByClassification.get(row.result_type_id) ?? [];
+                list.push(row.rider_id);
+                leadersByClassification.set(row.result_type_id, list);
+            }
+            const assignedRiderIds = new Set();
+            const classifications = [
+                { typeId: 2, key: 'yellow' }, // GC
+                { typeId: 3, key: 'green' }, // Points
+                { typeId: 4, key: 'red' }, // Mountain
+                { typeId: 5, key: 'white' }, // Youth
+                { typeId: 7, key: 'purple' }, // Breakaway
+            ];
+            for (const cls of classifications) {
+                const riders = leadersByClassification.get(cls.typeId) ?? [];
+                for (const rId of riders) {
+                    if (!assignedRiderIds.has(rId)) {
+                        jerseysByRiderId.set(rId, cls.key);
+                        assignedRiderIds.add(rId);
+                        break;
+                    }
+                }
+            }
+        }
         const insert = this.db.prepare(`
       INSERT INTO results (
-        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         const insertMarkerResult = this.db.prepare(`
       INSERT INTO stage_marker_results (
@@ -552,7 +683,34 @@ class StageResultCommitService {
         this.db.transaction(() => {
             this.repo.applyIncidentRaceState(race.id, incidents);
             for (const row of stageRows) {
-                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.stage, row);
+                const riderId = row.riderId;
+                let eventIdsStr = null;
+                if (riderId != null) {
+                    const eventParts = [];
+                    if ((crashCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`1:${crashCounts.get(riderId)}`);
+                    if ((defectCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`2:${defectCounts.get(riderId)}`);
+                    if ((superformCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`3:${superformCounts.get(riderId)}`);
+                    if ((supermalusCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`4:${supermalusCounts.get(riderId)}`);
+                    if ((attackCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`5:${attackCounts.get(riderId)}`);
+                    if ((counterAttackCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`6:${counterAttackCounts.get(riderId)}`);
+                    if ((homeAdvantageCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`7:${homeAdvantageCounts.get(riderId)}`);
+                    if ((superHomeAdvantageCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`8:${superHomeAdvantageCounts.get(riderId)}`);
+                    if ((homePressureCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`9:${homePressureCounts.get(riderId)}`);
+                    if (eventParts.length > 0)
+                        eventIdsStr = eventParts.join('|');
+                }
+                const breakawayKms = riderId != null ? (riderEscapeKms.get(riderId) ?? null) : null;
+                const jerseysWorn = riderId != null ? (jerseysByRiderId.get(riderId) ?? null) : null;
+                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.stage, row, breakawayKms, eventIdsStr, jerseysWorn);
             }
             for (const row of gcRows) {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.gc, row);
@@ -565,6 +723,15 @@ class StageResultCommitService {
             }
             for (const row of youthRows) {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.youth, row);
+            }
+            for (const row of breakawayRows) {
+                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.breakaway, {
+                    rank: row.rank,
+                    riderId: row.riderId,
+                    teamId: row.teamId,
+                    timeSeconds: null,
+                    points: row.points,
+                }, row.breakawayKms);
             }
             for (const row of teamRows) {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.team, {
@@ -681,63 +848,6 @@ class StageResultCommitService {
                 }
                 else {
                     updateDnfStmt.run(entry.riderId, currentSeason);
-                }
-            }
-            // Parse breakaway kms, form and home advantage events
-            const riderEscapeStart = new Map();
-            const riderEscapeKms = new Map();
-            let stageDistance = 0;
-            for (const event of events) {
-                if (event.kmMark != null && event.kmMark > stageDistance) {
-                    stageDistance = event.kmMark;
-                }
-            }
-            for (const event of events) {
-                if (event.riderId == null)
-                    continue;
-                const rId = event.riderId;
-                const title = event.title ?? '';
-                if (title.startsWith('Ausreißversuch:')) {
-                    if (event.kmMark != null) {
-                        riderEscapeStart.set(rId, event.kmMark);
-                    }
-                }
-                else if (title.startsWith('Ausreißer eingeholt:')) {
-                    const startKm = riderEscapeStart.get(rId);
-                    if (startKm != null) {
-                        const endKm = event.kmMark ?? startKm;
-                        riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, endKm - startKm));
-                        riderEscapeStart.delete(rId);
-                    }
-                }
-            }
-            for (const [rId, startKm] of riderEscapeStart.entries()) {
-                riderEscapeKms.set(rId, (riderEscapeKms.get(rId) || 0) + Math.max(0, stageDistance - startKm));
-            }
-            const superformCounts = new Map();
-            const supermalusCounts = new Map();
-            const homeAdvantageCounts = new Map();
-            const superHomeAdvantageCounts = new Map();
-            const homePressureCounts = new Map();
-            for (const event of events) {
-                if (event.riderId == null)
-                    continue;
-                const rId = event.riderId;
-                const title = event.title ?? '';
-                if (title.includes('guten Tag')) {
-                    superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
-                }
-                else if (title.includes('schlechten Tag')) {
-                    supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
-                }
-                else if (title.includes('Super-Heimvorteil')) {
-                    superHomeAdvantageCounts.set(rId, (superHomeAdvantageCounts.get(rId) || 0) + 1);
-                }
-                else if (title.includes('Heimvorteil') && !title.includes('Super-Heimvorteil')) {
-                    homeAdvantageCounts.set(rId, (homeAdvantageCounts.get(rId) || 0) + 1);
-                }
-                else if (title.includes('Heimdruck')) {
-                    homePressureCounts.set(rId, (homePressureCounts.get(rId) || 0) + 1);
                 }
             }
             const allEventRiderIds = new Set([
@@ -897,7 +1007,7 @@ class StageResultCommitService {
         if (previousStageId == null)
             return new Map();
         const rows = this.db.prepare(`
-      SELECT rider_id, team_id, time_seconds, points
+      SELECT rider_id, team_id, time_seconds, points, breakaway_kms
       FROM results
       WHERE stage_id = ? AND result_type_id = ? AND rider_id IS NOT NULL
     `).all(previousStageId, resultTypeId);
@@ -927,9 +1037,9 @@ class StageResultCommitService {
         }
         return result;
     }
-    insertResultRow(insert, raceId, stageId, resultTypeId, row) {
+    insertResultRow(insert, raceId, stageId, resultTypeId, row, breakawayKms = null, eventIds = null, jerseysWorn = null) {
         try {
-            insert.run(raceId, stageId, row.riderId ?? null, row.teamId, resultTypeId, row.rank, row.timeSeconds, row.points, resultTypeId === RESULT_TYPES.stage && row.isBreakaway === true ? 1 : 0, resultTypeId === RESULT_TYPES.stage && row.leadoutRiderId != null ? row.leadoutRiderId : null, resultTypeId === RESULT_TYPES.stage && row.leadoutBonus != null ? row.leadoutBonus : null);
+            insert.run(raceId, stageId, row.riderId ?? null, row.teamId, resultTypeId, row.rank, row.timeSeconds, row.points, resultTypeId === RESULT_TYPES.stage && row.isBreakaway === true ? 1 : 0, resultTypeId === RESULT_TYPES.stage && row.leadoutRiderId != null ? row.leadoutRiderId : null, resultTypeId === RESULT_TYPES.stage && row.leadoutBonus != null ? row.leadoutBonus : null, breakawayKms, eventIds, jerseysWorn);
         }
         catch (error) {
             throw new Error(`Ergebnis konnte nicht gespeichert werden (type=${resultTypeId}, stage=${stageId}, rank=${row.rank}, rider=${row.riderId ?? 'null'}, team=${row.teamId ?? 'null'}): ${error.message}`);

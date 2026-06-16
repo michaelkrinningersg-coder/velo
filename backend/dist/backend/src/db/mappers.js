@@ -89,6 +89,7 @@ exports.RESULT_TYPE_IDS = {
     mountain: 4,
     youth: 5,
     team: 6,
+    breakaway: 7,
 };
 exports.RACE_FORM_BUILD_SOURCE_AMOUNT = 0.25;
 function isMountainClassificationType(markerType, markerCategory) {

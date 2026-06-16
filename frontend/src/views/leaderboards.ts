@@ -311,6 +311,7 @@ export async function renderLeaderboard(): Promise<void> {
   tableEl.classList.remove('hidden');
 
   // Render headers
+  const isLeadout = activeMetricKey === 'highest_leadout_bonus';
   if (activeScope === 'riders') {
     theadEl.innerHTML = `
       <tr>
@@ -319,6 +320,7 @@ export async function renderLeaderboard(): Promise<void> {
         <th style="width: 60px; text-align: center;">Land</th>
         <th>Fahrer</th>
         <th>Team</th>
+        ${isLeadout ? '<th>Rennen / Etappe / Jahr</th>' : ''}
         <th style="text-align: right; width: 180px;">Wert</th>
       </tr>
     `;
@@ -328,6 +330,7 @@ export async function renderLeaderboard(): Promise<void> {
         <th style="width: 60px; text-align: center;">Platz</th>
         <th style="width: 60px; text-align: center;">Trikot</th>
         <th>Team</th>
+        ${isLeadout ? '<th>Rennen / Etappe / Jahr</th>' : ''}
         <th style="text-align: right; width: 180px;">Wert</th>
       </tr>
     `;
@@ -342,6 +345,12 @@ export async function renderLeaderboard(): Promise<void> {
     const rankHtml = `<span class="badge ${rankBadgeClass}" style="min-width: 28px; text-align: center; display: inline-block;">${displayRank}</span>`;
     const jerseyHtml = renderMiniJersey(row.teamId, row.teamName);
 
+    let leadoutCell = '';
+    if (isLeadout) {
+      const stageLabel = row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–';
+      leadoutCell = `<td style="vertical-align: middle;">${esc(row.raceName ?? '–')} · ${esc(stageLabel)} · ${esc(String(row.season ?? '–'))}</td>`;
+    }
+
     if (activeScope === 'riders') {
       const flagHtml = row.nationality ? renderFlag(row.nationality) : '—';
       const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
@@ -354,6 +363,7 @@ export async function renderLeaderboard(): Promise<void> {
           <td style="text-align: center; vertical-align: middle;">${flagHtml}</td>
           <td style="vertical-align: middle;">${riderName}</td>
           <td style="vertical-align: middle;">${teamHtml}</td>
+          ${leadoutCell}
           <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
         </tr>
       `;
@@ -398,6 +408,7 @@ export async function renderLeaderboard(): Promise<void> {
           <td style="text-align: center; vertical-align: middle;">${rankHtml}</td>
           <td style="text-align: center; vertical-align: middle;">${jerseyHtml}</td>
           <td style="vertical-align: middle; padding: 0.6rem 0.75rem;">${teamNameHtml}</td>
+          ${leadoutCell}
           <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
         </tr>
       `;

@@ -618,6 +618,9 @@ export interface RaceClassificationRow {
   leadoutBonus?: number | null;
   leadoutRiderLastName?: string | null;
   leadoutRiderCountryCode?: string | null;
+  breakawayKms?: number | null;
+  eventIds?: string | null;
+  jerseysWorn?: string | null;
 }
 
 export type StageResultRow = RaceClassificationRow;
@@ -819,6 +822,8 @@ export interface RiderStatsRow {
   stageScore: number;
   rolledWeatherId?: number | null;
   rolledWetterName?: string | null;
+  eventIds?: string | null;
+  jerseysWorn?: string | null;
 }
 
 export interface RiderStatsPointsByTerrain {
@@ -889,11 +894,13 @@ export interface RiderCareerStats {
     mountainWins: number;
     pointsWins: number;
     youthWins: number;
+    breakawayWins?: number;
     raceDays: number;
     leaderJerseys: number;
     pointsJerseys?: number;
     mountainJerseys?: number;
     youthJerseys?: number;
+    breakawayJerseys?: number;
     sprintWins: number;
     climbWinsHC: number;
     climbWins1: number;
@@ -1311,6 +1318,8 @@ export interface TeamStatsTopResult {
   seasonPoints: number;
   season: number;
   stageScore: number;
+  eventIds?: string | null;
+  jerseysWorn?: string | null;
 }
 
 export interface TeamSuccessStats {
@@ -1346,11 +1355,13 @@ export interface TeamSuccessStats {
     mountainWins: number;
     pointsWins: number;
     youthWins: number;
+    breakawayWins?: number;
     raceDays: number;
     leaderJerseys: number;
     pointsJerseys?: number;
     mountainJerseys?: number;
     youthJerseys?: number;
+    breakawayJerseys?: number;
     sprintWins: number;
     climbWinsHC: number;
     climbWins1: number;

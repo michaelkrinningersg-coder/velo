@@ -635,6 +635,7 @@ function renderLeaderDots(riderId: number | null): string {
   const pointsLeader = classifications.find(c => c.resultTypeId === POINTS_RESULT_TYPE_ID)?.rows.find(r => r.rank === 1)?.riderId;
   const mountainLeader = classifications.find(c => c.resultTypeId === MOUNTAIN_RESULT_TYPE_ID)?.rows.find(r => r.rank === 1)?.riderId;
   const youthLeader = classifications.find(c => c.resultTypeId === 5)?.rows.find(r => r.rank === 1)?.riderId;
+  const breakawayLeader = classifications.find(c => c.resultTypeId === 7)?.rows.find(r => r.rank === 1)?.riderId;
 
   const dots: string[] = [];
   const currentTypeId = state.selectedResultTypeId;
@@ -656,6 +657,10 @@ function renderLeaderDots(riderId: number | null): string {
   // White Dot (Youth leader):
   if (riderId === youthLeader) {
     dots.push('<span class="jersey-dot jersey-dot-white" title="Weißes Trikot (Nachwuchswertung)"></span>');
+  }
+  // Purple Dot (Breakaway leader):
+  if (riderId === breakawayLeader) {
+    dots.push('<span class="jersey-dot jersey-dot-purple" title="Lila Trikot (Aktivste Fahrer)"></span>');
   }
 
   if (dots.length === 0) return '';
@@ -819,6 +824,7 @@ export function renderResultsView(): void {
 
   const stagePointsMap = new Map<number, number>();
   const stageMountainPointsMap = new Map<number, number>();
+  const stageBreakawayKmsMap = new Map<number, number>();
 
   if (state.stageResults) {
     const stageResultClassification = state.stageResults.classifications.find(c => c.resultTypeId === 1);
@@ -826,6 +832,9 @@ export function renderResultsView(): void {
       for (const r of stageResultClassification.rows) {
         if (r.riderId != null && r.points != null && r.points > 0) {
           stagePointsMap.set(r.riderId, r.points);
+        }
+        if (r.riderId != null && r.breakawayKms != null && r.breakawayKms > 0) {
+          stageBreakawayKmsMap.set(r.riderId, r.breakawayKms);
         }
       }
     }
@@ -848,7 +857,8 @@ export function renderResultsView(): void {
     || selectedClassification?.resultTypeId === MOUNTAIN_RESULT_TYPE_ID;
   const isYouthClassification = selectedClassification?.resultTypeId === 5;
   const isTeamClassification = selectedClassification?.resultTypeId === 6;
-  const showTrendColumn = isGcClassification || isPointsLikeClassification || isYouthClassification || isTeamClassification;
+  const isBreakawayClassification = selectedClassification?.resultTypeId === 7;
+  const showTrendColumn = isGcClassification || isPointsLikeClassification || isYouthClassification || isTeamClassification || isBreakawayClassification;
 
   const resultTypeButtons = visibleClassifications.map((classification) => `
     <button
@@ -990,6 +1000,17 @@ export function renderResultsView(): void {
           <th class="results-flag-col">Flagge</th>
           <th>Team</th>
           <th class="results-points-cell">Punkte</th>
+          <th>UCI Punkte</th>
+        `
+      : isBreakawayClassification
+        ? `
+          <th>Platz</th>
+          <th>Trend</th>
+          <th class="results-jersey-col">Trikot</th>
+          <th>Fahrer / Team</th>
+          <th class="results-flag-col">Flagge</th>
+          <th>Team</th>
+          <th class="results-points-cell">Kilometer</th>
           <th>UCI Punkte</th>
         `
       : isTeamClassification
@@ -1184,6 +1205,26 @@ export function renderResultsView(): void {
             <td class="results-flag-col-cell">${flagCell}</td>
             <td>${renderTeamNameLink(teamName, row.teamId)}</td>
             <td class="results-points-cell">${pointsHtml}</td>
+            <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
+          </tr>`;
+      }
+      if (isBreakawayClassification) {
+        let kmsHtml = row.breakawayKms != null ? `${row.breakawayKms.toFixed(1).replace('.', ',')} km` : '–';
+        if (row.breakawayKms != null && row.riderId != null) {
+          const stageKms = stageBreakawayKmsMap.get(row.riderId) ?? 0;
+          if (stageKms > 0) {
+            kmsHtml += ` <span style="font-size: 0.67em; color: var(--success, #22c55e); font-weight: bold; margin-left: 2px;">+${stageKms.toFixed(1).replace('.', ',')} km</span>`;
+          }
+        }
+        return `
+          <tr>
+            <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+            ${trendCell}
+            <td class="results-jersey-col-cell">${jerseyCell}</td>
+            <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
+            <td class="results-flag-col-cell">${flagCell}</td>
+            <td>${renderTeamNameLink(teamName, row.teamId)}</td>
+            <td class="results-points-cell">${kmsHtml}</td>
             <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
           </tr>`;
       }

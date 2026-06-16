@@ -16,7 +16,7 @@ import {
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
 import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
-import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge } from './riderStats';
+import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
 function getCategoryPriority(categoryName: string | null | undefined): number {
@@ -472,7 +472,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
   `;
 
   const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="10" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+    ? `<tr><td colspan="11" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
@@ -520,6 +520,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
             <td>${flagHtml}</td>
             <td style="white-space: nowrap;">${nameLink}</td>
             <td><strong>${esc(raceStageLabel)}</strong></td>
+            <td>${renderStatusDotsColumn(row)}</td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
             <td>${categoryBadgeHtml}</td>
@@ -553,7 +554,8 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
             <col style="width: 8%;">
             <col style="width: 4%;">
             <col style="width: 15%;">
-            <col style="width: 32%;">
+            <col style="width: 27%;">
+            <col style="width: 5%;">
             <col style="width: 7%;">
             <col style="width: 5%;">
             <col style="width: 12%;">
@@ -567,6 +569,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
               <th>Nat</th>
               <th>Fahrer</th>
               <th>Rennen</th>
+              <th>Status</th>
               <th>Profil</th>
               <th>Score</th>
               <th>Klasse</th>
@@ -726,8 +729,8 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
             gcWins: 0, gcSecond: 0, gcThird: 0, gcTopTen: 0,
             stageWins: 0, stageSecond: 0, stageThird: 0, stageTopTen: 0,
             oneDayWins: 0, oneDaySecond: 0, oneDayThird: 0, oneDayTopTen: 0,
-            mountainWins: 0, pointsWins: 0, youthWins: 0, raceDays: 0,
-            leaderJerseys: 0, pointsJerseys: 0, mountainJerseys: 0, youthJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
+            mountainWins: 0, pointsWins: 0, youthWins: 0, breakawayWins: 0, raceDays: 0,
+            leaderJerseys: 0, pointsJerseys: 0, mountainJerseys: 0, youthJerseys: 0, breakawayJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
             winFlat: 0, winRolling: 0, winHilly: 0, winHillyDifficult: 0, winMediumMountain: 0, winMountain: 0, winHighMountain: 0, winCobble: 0, winCobbleHill: 0, winITT: 0, winTTT: 0,
             winWeather1: 0, winWeather2: 0, winWeather3: 0, winWeather4: 0, winWeather5: 0, winWeather6: 0, winWeather7: 0,
           };
@@ -752,6 +755,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                     ${renderTeamCareerBadge(catData.mountainWins, 'red', 'Bergwertung Siege')}
                     ${renderTeamCareerBadge(catData.pointsWins, 'green', 'Punktewertung Siege')}
                     ${renderTeamCareerBadge(catData.youthWins, 'white', 'Nachwuchswertung Siege')}
+                    ${renderTeamCareerBadge(catData.breakawayWins || 0, 'purple', 'Ausreißerwertung Siege')}
                   </div>
                 </div>
                 
@@ -801,6 +805,14 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                         : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'
                     }" title="Tage im Weißen Trikot (Nachwuchs)">
                       🎽 ${catData.youthJerseys || 0}
+                    </span>
+                    <!-- Lila Trikot (Aktivste Fahrer) -->
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
+                      (catData.breakawayJerseys || 0) === 0
+                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+                        : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
+                    }" title="Tage im Lila Trikot (Aktivste Fahrer)">
+                      🎽 ${catData.breakawayJerseys || 0}
                     </span>
                   </div>
                 </div>
