@@ -357,6 +357,30 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
+    router.get('/stage-editor/countries', (_req, res) => {
+        try {
+            ok(res, routeImporter.loadCountriesList());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/stage-editor/race-categories', (_req, res) => {
+        try {
+            ok(res, routeImporter.loadRaceCategoriesList());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/stage-editor/race-programs', (_req, res) => {
+        try {
+            ok(res, routeImporter.loadRaceProgramsList());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
     // ---- Game State ---------------------------------------
     router.get('/state', (_req, res) => {
         try {

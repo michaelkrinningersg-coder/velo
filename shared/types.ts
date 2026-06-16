@@ -1149,6 +1149,19 @@ export interface StageEditorExistingStageLoadResponse {
 export interface StageEditorExportRequest {
   metadata: StageEditorMetadata;
   draft: StageEditorDraft;
+  newRace?: boolean;
+  raceDetails?: {
+    name: string;
+    countryId: number;
+    categoryId: number;
+    isStageRace: boolean;
+    numberOfStages: number;
+    startDate: string;
+    endDate: string;
+    prestige: number;
+  };
+  updatePrograms?: boolean;
+  programIds?: number[];
 }
 
 export interface StageEditorExportPayload {

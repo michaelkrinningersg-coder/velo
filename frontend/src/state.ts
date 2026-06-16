@@ -120,6 +120,7 @@ export const state: {
   stageEditorOverviewLoading: boolean;
   stageEditorStageRows: StageEditorStageOverviewRow[];
   stageEditorClimbRows: StageEditorClimbOverviewRow[];
+  stageEditorPrograms?: Array<{ id: number; name: string }>;
   stageEditorStagesSort: {
     key: StageEditorStagesSortKey;
     direction: 'asc' | 'desc';
@@ -218,6 +219,7 @@ export const state: {
   stageEditorOverviewLoading: false,
   stageEditorStageRows: [],
   stageEditorClimbRows: [],
+  stageEditorPrograms: [],
   stageEditorStagesSort: {
     key: 'stageId',
     direction: 'asc',

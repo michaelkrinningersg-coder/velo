@@ -344,6 +344,24 @@ export function createRouter(dbService: DatabaseService): Router {
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
+  router.get('/stage-editor/countries', (_req: Request, res: Response) => {
+    try {
+      ok(res, routeImporter.loadCountriesList());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/stage-editor/race-categories', (_req: Request, res: Response) => {
+    try {
+      ok(res, routeImporter.loadRaceCategoriesList());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/stage-editor/race-programs', (_req: Request, res: Response) => {
+    try {
+      ok(res, routeImporter.loadRaceProgramsList());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   // ---- Game State ---------------------------------------
 
   router.get('/state', (_req: Request, res: Response) => {

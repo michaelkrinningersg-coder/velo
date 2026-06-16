@@ -759,11 +759,72 @@ export function removeStageEditorMarker(segmentIndex: number, markerIndex: numbe
   renderStageEditor();
 }
 
-export function initializeStageEditorForm(): void {
+let prevStageId = 0;
+let prevRaceId = 0;
+
+export async function initializeStageEditorForm(): Promise<void> {
   $<HTMLSelectElement>('stage-editor-profile').innerHTML = stageProfileOptionsHtml('Flat');
   $('stage-editor-chart').innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
   $('stage-editor-climbs').innerHTML = '<p class="text-muted">Climb-Vorschläge erscheinen nach dem Import.</p>';
+
+  // Load countries, categories, and programs dynamically from backend
+  const [countriesRes, categoriesRes, programsRes] = await Promise.all([
+    api.listStageEditorCountries(),
+    api.listStageEditorRaceCategories(),
+    api.listStageEditorRacePrograms(),
+  ]);
+
+  if (countriesRes.success && countriesRes.data) {
+    const countrySelect = $<HTMLSelectElement>('stage-editor-race-country');
+    countrySelect.innerHTML = countriesRes.data
+      .map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.code3)})</option>`)
+      .join('');
+  }
+
+  if (categoriesRes.success && categoriesRes.data) {
+    const catSelect = $<HTMLSelectElement>('stage-editor-race-category');
+    catSelect.innerHTML = categoriesRes.data
+      .map(c => `<option value="${c.id}">${esc(c.name)}</option>`)
+      .join('');
+  }
+
+  if (programsRes.success && programsRes.data) {
+    state.stageEditorPrograms = programsRes.data;
+    renderProgramsDropdown();
+  }
 }
+
+export function renderProgramsDropdown(): void {
+  const container = $('stage-editor-programs-list');
+  if (!state.stageEditorPrograms) return;
+
+  container.innerHTML = state.stageEditorPrograms
+    .map((prog) => `
+      <label style="display: flex; align-items: center; gap: 0.35rem; font-weight: normal; cursor: pointer; user-select: none; padding: 0.15rem 0;">
+        <input type="checkbox" name="stage-editor-program-selection" value="${prog.id}" style="width: auto; margin: 0;" />
+        <span style="font-size: 0.85rem;">${prog.id}: ${esc(prog.name)}</span>
+      </label>
+    `)
+    .join('');
+}
+
+export function updateSelectedProgramsText(): void {
+  const checked = document.querySelectorAll('input[name="stage-editor-program-selection"]:checked') as NodeListOf<HTMLInputElement>;
+  const selectedTextSpan = $('stage-editor-programs-selected-text');
+
+  if (checked.length === 0) {
+    selectedTextSpan.textContent = 'Keine Programme ausgewählt';
+    selectedTextSpan.classList.add('text-muted');
+  } else {
+    const names = Array.from(checked).map(cb => {
+      const prog = state.stageEditorPrograms?.find((p) => String(p.id) === cb.value);
+      return prog ? prog.name : cb.value;
+    });
+    selectedTextSpan.textContent = `${checked.length} ausgewählt: ${names.join(', ')}`;
+    selectedTextSpan.classList.remove('text-muted');
+  }
+}
+
 
 export function getStageEditorSegmentStartKm(draft: StageEditorDraft, index: number): number {
   let kmMark = 0;
@@ -799,13 +860,50 @@ export function resolveNextFreeStageEditorRaceId(): number {
   return ids.length > 0 ? Math.max(...ids) + 1 : 1;
 }
 
+export function findNextFreeStageId(startId: number, direction: number): number {
+  let candidate = startId;
+  const existingIds = new Set(state.stageEditorExistingStages.map((s) => s.stageId));
+  while (candidate > 0 && existingIds.has(candidate)) {
+    candidate += direction;
+  }
+  if (candidate <= 0) {
+    candidate = 1;
+    while (existingIds.has(candidate)) {
+      candidate += 1;
+    }
+  }
+  return candidate;
+}
+
+export function findNextFreeRaceId(startId: number, direction: number): number {
+  let candidate = startId;
+  const existingIds = new Set([
+    ...state.stageEditorExistingStages.map((s) => s.raceId),
+    ...state.races.map((r) => r.id),
+  ]);
+  while (candidate > 0 && existingIds.has(candidate)) {
+    candidate += direction;
+  }
+  if (candidate <= 0) {
+    candidate = 1;
+    while (existingIds.has(candidate)) {
+      candidate += 1;
+    }
+  }
+  return candidate;
+}
+
 export function setStageEditorDefaults(draft: StageEditorDraft): void {
   const profileSelect = $<HTMLSelectElement>('stage-editor-profile');
   profileSelect.innerHTML = stageProfileOptionsHtml(draft.suggestedProfile);
   profileSelect.value = draft.suggestedProfile;
 
-  $<HTMLInputElement>('stage-editor-stage-id').value = String(resolveNextFreeStageEditorStageId());
-  $<HTMLInputElement>('stage-editor-race-id').value = String(resolveNextFreeStageEditorRaceId());
+  const nextStageId = resolveNextFreeStageEditorStageId();
+  const nextRaceId = resolveNextFreeStageEditorRaceId();
+  $<HTMLInputElement>('stage-editor-stage-id').value = String(nextStageId);
+  $<HTMLInputElement>('stage-editor-race-id').value = String(nextRaceId);
+  prevStageId = nextStageId;
+  prevRaceId = nextRaceId;
 
   const detailsFileInput = $<HTMLInputElement>('stage-editor-details-file');
   if (!detailsFileInput.value.trim()) {
@@ -826,6 +924,8 @@ export function setStageEditorDefaults(draft: StageEditorDraft): void {
 export function setStageEditorMetadataFields(metadata: StageEditorMetadata): void {
   $<HTMLInputElement>('stage-editor-stage-id').value = String(metadata.stageId);
   $<HTMLInputElement>('stage-editor-race-id').value = String(metadata.raceId);
+  prevStageId = metadata.stageId;
+  prevRaceId = metadata.raceId;
   $<HTMLInputElement>('stage-editor-stage-number').value = String(metadata.stageNumber);
   $<HTMLInputElement>('stage-editor-date').value = metadata.date;
   $<HTMLInputElement>('stage-editor-details-file').value = metadata.detailsCsvFile;
@@ -917,6 +1017,54 @@ export function getStageEditorMetadataErrors(): string[] {
   const checkedWeather = document.querySelectorAll('input[name="stage-editor-weather"]:checked');
   if (checkedWeather.length === 0) {
     errors.push('Mindestens eine Wetterart muss ausgewählt sein.');
+  }
+
+  // Already existing Stage-ID check
+  const existingStageIds = state.stageEditorExistingStages.map(s => s.stageId);
+  if (existingStageIds.includes(stageId)) {
+    errors.push(`Die Stage-ID ${stageId} existiert bereits in stages.csv.`);
+  }
+
+  // Race-ID checks depending on new race flag
+  const isNewRace = $<HTMLInputElement>('stage-editor-new-race-checkbox').checked;
+  const existingRaceIds = [
+    ...state.stageEditorExistingStages.map(s => s.raceId),
+    ...state.races.map(r => r.id)
+  ];
+
+  if (isNewRace) {
+    if (existingRaceIds.includes(raceId)) {
+      errors.push(`Die Race-ID ${raceId} existiert bereits.`);
+    }
+
+    const raceName = $<HTMLInputElement>('stage-editor-race-name').value.trim();
+    const countryId = Number($<HTMLSelectElement>('stage-editor-race-country').value);
+    const categoryId = Number($<HTMLSelectElement>('stage-editor-race-category').value);
+    const numStages = Number($<HTMLInputElement>('stage-editor-race-num-stages').value);
+    const startDate = $<HTMLInputElement>('stage-editor-race-start-date').value.trim();
+    const endDate = $<HTMLInputElement>('stage-editor-race-end-date').value.trim();
+    const prestige = Number($<HTMLInputElement>('stage-editor-race-prestige').value);
+
+    if (!raceName) errors.push('Rennname fehlt.');
+    if (!Number.isInteger(countryId) || countryId <= 0) errors.push('Land fehlt oder ist ungültig.');
+    if (!Number.isInteger(categoryId) || categoryId <= 0) errors.push('Kategorie fehlt oder ist ungültig.');
+    if (!Number.isInteger(numStages) || numStages <= 0) errors.push('Etappenanzahl muss eine positive Ganzzahl sein.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) errors.push('Startdatum muss im Format YYYY-MM-DD vorliegen.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) errors.push('Enddatum muss im Format YYYY-MM-DD vorliegen.');
+    if (!Number.isInteger(prestige) || prestige < 1 || prestige > 100) errors.push('Prestige muss zwischen 1 und 100 liegen.');
+  } else {
+    if (!existingRaceIds.includes(raceId)) {
+      errors.push(`Die Race-ID ${raceId} existiert nicht. Wenn Sie ein neues Rennen erstellen möchten, aktivieren Sie bitte 'Neues Rennen anlegen'.`);
+    }
+  }
+
+  // Program mapping check
+  const updatePrograms = $<HTMLInputElement>('stage-editor-program-checkbox').checked;
+  if (updatePrograms) {
+    const checkedPrograms = document.querySelectorAll('input[name="stage-editor-program-selection"]:checked');
+    if (checkedPrograms.length === 0) {
+      errors.push('Mindestens ein Programm muss ausgewählt sein.');
+    }
   }
 
   return errors;
@@ -1850,11 +1998,38 @@ export async function onStageEditorExport(): Promise<void> {
     return;
   }
 
+  const newRace = $<HTMLInputElement>('stage-editor-new-race-checkbox').checked;
+  const updatePrograms = $<HTMLInputElement>('stage-editor-program-checkbox').checked;
+
+  let raceDetails = undefined;
+  if (newRace) {
+    raceDetails = {
+      name: $<HTMLInputElement>('stage-editor-race-name').value.trim(),
+      countryId: Number($<HTMLSelectElement>('stage-editor-race-country').value),
+      categoryId: Number($<HTMLSelectElement>('stage-editor-race-category').value),
+      isStageRace: Number($<HTMLSelectElement>('stage-editor-race-is-stage-race').value) === 1,
+      numberOfStages: Number($<HTMLInputElement>('stage-editor-race-num-stages').value),
+      startDate: $<HTMLInputElement>('stage-editor-race-start-date').value.trim(),
+      endDate: $<HTMLInputElement>('stage-editor-race-end-date').value.trim(),
+      prestige: Number($<HTMLInputElement>('stage-editor-race-prestige').value),
+    };
+  }
+
+  let programIds = undefined;
+  if (updatePrograms) {
+    const checked = document.querySelectorAll('input[name="stage-editor-program-selection"]:checked') as NodeListOf<HTMLInputElement>;
+    programIds = Array.from(checked).map(cb => Number(cb.value));
+  }
+
   showLoading('CSV-Dateien werden erstellt……');
   try {
     const res = await api.exportStageRoute({
       metadata: readStageEditorMetadata(),
       draft: state.stageEditorDraft,
+      newRace,
+      raceDetails,
+      updatePrograms,
+      programIds,
     });
     if (!res.success || !res.data) {
       alert(`Export fehlgeschlagen: ${res.error ?? 'Unbekannter Fehler'}`);
@@ -1863,6 +2038,52 @@ export async function onStageEditorExport(): Promise<void> {
 
     downloadTextFile(res.data.stagesFileName, res.data.stagesCsv);
     downloadTextFile(res.data.stageDetailsFileName, res.data.stageDetailsCsv);
+
+    // Post-export auto-increment and reload logic
+    const stageNumInput = $<HTMLInputElement>('stage-editor-stage-number');
+    const stageNum = Number(stageNumInput.value) || 1;
+    stageNumInput.value = String(stageNum + 1);
+
+    const dateInput = $<HTMLInputElement>('stage-editor-date');
+    const currentDateVal = dateInput.value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(currentDateVal)) {
+      const d = new Date(currentDateVal);
+      d.setDate(d.getDate() + 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      dateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    await Promise.all([
+      loadStageEditorOverview(true),
+      loadStageEditorExistingStages(true),
+    ]);
+
+    const nextStageId = resolveNextFreeStageEditorStageId();
+    $<HTMLInputElement>('stage-editor-stage-id').value = String(nextStageId);
+    prevStageId = nextStageId;
+
+    const newRaceCheckbox = $<HTMLInputElement>('stage-editor-new-race-checkbox');
+    if (newRaceCheckbox) newRaceCheckbox.checked = false;
+    const newRaceDetails = $('stage-editor-new-race-details');
+    if (newRaceDetails) {
+      newRaceDetails.classList.add('hidden');
+      newRaceDetails.style.display = 'none';
+    }
+
+    const programCheckbox = $<HTMLInputElement>('stage-editor-program-checkbox');
+    if (programCheckbox) programCheckbox.checked = false;
+    const programDetails = $('stage-editor-program-details');
+    if (programDetails) {
+      programDetails.classList.add('hidden');
+      programDetails.style.display = 'none';
+    }
+
+    const raceIdVal = Number($<HTMLInputElement>('stage-editor-race-id').value);
+    prevRaceId = raceIdVal;
+
+    renderStageEditor();
   } finally {
     hideLoading();
   }
@@ -2001,7 +2222,166 @@ export function initStageEditorListeners(): void {
     }
   });
 
-  document.querySelectorAll('input[name="stage-editor-weather"]').forEach((cb) => {
+  const weatherInputs = document.querySelectorAll('input[name="stage-editor-weather"]');
+  weatherInputs.forEach((cb) => {
     cb.addEventListener('change', () => renderStageEditor());
   });
+
+  // Toggle fields for Neues Rennen
+  const newRaceCb = $<HTMLInputElement>('stage-editor-new-race-checkbox');
+  const newRaceDetails = $('stage-editor-new-race-details');
+  const programCb = $<HTMLInputElement>('stage-editor-program-checkbox');
+  const programDetails = $('stage-editor-program-details');
+
+  if (newRaceCb) {
+    newRaceCb.addEventListener('change', () => {
+      const checked = newRaceCb.checked;
+      if (checked) {
+        if (newRaceDetails) {
+          newRaceDetails.classList.remove('hidden');
+          newRaceDetails.style.display = 'grid';
+        }
+        if (programCb) {
+          programCb.checked = true;
+          if (programDetails) {
+            programDetails.classList.remove('hidden');
+            programDetails.style.display = 'block';
+          }
+        }
+      } else {
+        if (newRaceDetails) {
+          newRaceDetails.classList.add('hidden');
+          newRaceDetails.style.display = 'none';
+        }
+      }
+      renderStageEditor();
+    });
+  }
+
+  if (programCb) {
+    programCb.addEventListener('change', () => {
+      const checked = programCb.checked;
+      if (checked) {
+        if (programDetails) {
+          programDetails.classList.remove('hidden');
+          programDetails.style.display = 'block';
+        }
+      } else {
+        if (programDetails) {
+          programDetails.classList.add('hidden');
+          programDetails.style.display = 'none';
+        }
+      }
+      renderStageEditor();
+    });
+  }
+
+  // Custom multi-select programs dropdown trigger/OK/click outside
+  const trigger = $('stage-editor-programs-dropdown-trigger');
+  const menu = $('stage-editor-programs-dropdown-menu');
+  const okBtn = $('btn-stage-editor-programs-ok');
+
+  if (trigger && menu) {
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isHidden = menu.style.display === 'none' || !menu.style.display;
+      menu.style.display = isHidden ? 'flex' : 'none';
+    });
+
+    if (okBtn) {
+      okBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.style.display = 'none';
+        renderStageEditor();
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (menu.style.display === 'flex' && !menu.contains(target) && target !== trigger && !trigger.contains(target)) {
+        menu.style.display = 'none';
+        renderStageEditor();
+      }
+    });
+  }
+
+  const programList = $('stage-editor-programs-list');
+  if (programList) {
+    programList.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.name === 'stage-editor-program-selection') {
+        updateSelectedProgramsText();
+      }
+    });
+  }
+
+  // Arrow up/down & spinner skipping for Stage ID & Race ID
+  let isTyping = false;
+  let typingTimeout: any = null;
+
+  const stageIdInput = $<HTMLInputElement>('stage-editor-stage-id');
+  const raceIdInput = $<HTMLInputElement>('stage-editor-race-id');
+
+  if (stageIdInput && raceIdInput) {
+    [stageIdInput, raceIdInput].forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+          isTyping = true;
+          if (typingTimeout) clearTimeout(typingTimeout);
+        }
+      });
+      input.addEventListener('keyup', (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+          if (typingTimeout) clearTimeout(typingTimeout);
+          typingTimeout = setTimeout(() => {
+            isTyping = false;
+          }, 150);
+        }
+      });
+      input.addEventListener('blur', () => {
+        isTyping = false;
+      });
+    });
+
+    const handleIdInput = (input: HTMLInputElement, type: 'stage' | 'race') => {
+      const val = Number(input.value);
+      if (!Number.isInteger(val) || val <= 0) {
+        if (type === 'stage') prevStageId = val;
+        else prevRaceId = val;
+        return;
+      }
+
+      const prevVal = type === 'stage' ? prevStageId : prevRaceId;
+      const diff = val - prevVal;
+
+      if (!isTyping && (diff === 1 || diff === -1)) {
+        let nextVal = val;
+        if (type === 'stage') {
+          nextVal = findNextFreeStageId(val, diff);
+        } else {
+          const isNewRace = $<HTMLInputElement>('stage-editor-new-race-checkbox').checked;
+          if (isNewRace) {
+            nextVal = findNextFreeRaceId(val, diff);
+          }
+        }
+        input.value = String(nextVal);
+      }
+
+      if (type === 'stage') {
+        prevStageId = Number(input.value);
+      } else {
+        prevRaceId = Number(input.value);
+      }
+    };
+
+    stageIdInput.addEventListener('input', () => {
+      handleIdInput(stageIdInput, 'stage');
+      renderStageEditor();
+    });
+
+    raceIdInput.addEventListener('input', () => {
+      handleIdInput(raceIdInput, 'race');
+      renderStageEditor();
+    });
+  }
 }

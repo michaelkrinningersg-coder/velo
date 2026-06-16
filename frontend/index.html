@@ -695,6 +695,76 @@
                     <label style="display: flex; align-items: center; gap: 0.35rem; font-weight: normal; cursor: pointer; user-select: none;">
                       <input type="checkbox" name="stage-editor-weather" value="7" style="width: auto; margin: 0;" /> ❄️ Schnee/Eis
                     </label>
+                </div>
+                <!-- Race Details Selection -->
+                <div class="form-group form-group-wide" style="grid-column: 1 / -1; margin-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.1); padding-top: 1rem;">
+                  <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="stage-editor-new-race-checkbox" style="width: auto; margin: 0;" /> Neues Rennen anlegen / aktualisieren (races.csv)
+                  </label>
+                </div>
+
+                <div id="stage-editor-new-race-details" class="stage-editor-form-grid hidden" style="grid-column: 1 / -1; display: none;">
+                  <div class="form-group">
+                    <label for="stage-editor-race-name">Rennname</label>
+                    <input type="text" id="stage-editor-race-name" placeholder="z. B. Tour de France" />
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-country">Land</label>
+                    <select id="stage-editor-race-country">
+                      <option value="">Lade Länder...</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-category">Kategorie</label>
+                    <select id="stage-editor-race-category">
+                      <option value="">Lade Kategorien...</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-is-stage-race">Rundfahrt?</label>
+                    <select id="stage-editor-race-is-stage-race">
+                      <option value="0">Eintagesrennen</option>
+                      <option value="1">Mehrere Etappen (Rundfahrt)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-num-stages">Etappenanzahl</label>
+                    <input type="number" id="stage-editor-race-num-stages" min="1" step="1" value="1" />
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-start-date">Startdatum</label>
+                    <input type="date" id="stage-editor-race-start-date" />
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-end-date">Enddatum</label>
+                    <input type="date" id="stage-editor-race-end-date" />
+                  </div>
+                  <div class="form-group">
+                    <label for="stage-editor-race-prestige">Prestige (1-100)</label>
+                    <input type="number" id="stage-editor-race-prestige" min="1" max="100" step="1" value="50" />
+                  </div>
+                </div>
+
+                <!-- Race Program Races selection -->
+                <div class="form-group form-group-wide" style="grid-column: 1 / -1; margin-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.1); padding-top: 1rem;">
+                  <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="stage-editor-program-checkbox" style="width: auto; margin: 0;" /> Programme definieren (race_program_races.csv)
+                  </label>
+                </div>
+
+                <div id="stage-editor-program-details" class="form-group form-group-wide hidden" style="grid-column: 1 / -1; display: none; position: relative;">
+                  <label style="display: block; margin-bottom: 0.25rem;">Zugeordnete Programme</label>
+                  <div id="stage-editor-programs-dropdown-trigger" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.1); padding: 0.5rem; border-radius: var(--radius-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 2.2rem;">
+                    <span id="stage-editor-programs-selected-text" class="text-muted">Keine Programme ausgewählt</span>
+                    <span>▼</span>
+                  </div>
+                  <div id="stage-editor-programs-dropdown-menu" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: #1e293b; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: var(--radius-sm); padding: 0.5rem; max-height: 250px; overflow-y: auto; display: none; flex-direction: column; gap: 0.35rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5);">
+                    <div id="stage-editor-programs-list" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                      <!-- Will be populated dynamically -->
+                    </div>
+                    <div style="border-top: 1px solid rgba(148, 163, 184, 0.1); padding-top: 0.5rem; margin-top: 0.5rem; display: flex; justify-content: flex-end;">
+                      <button type="button" class="btn btn-primary btn-xs" id="btn-stage-editor-programs-ok">OK</button>
+                    </div>
                   </div>
                 </div>
               </div>

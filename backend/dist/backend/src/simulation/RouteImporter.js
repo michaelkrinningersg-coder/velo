@@ -892,9 +892,10 @@ function buildStagesCsv(payload) {
         metadata.finalSpreadDifficultyMultiplier,
         metadata.crashIncidentMultiplier,
         metadata.mechanicalIncidentMultiplier,
-        metadata.allowedWeather,
-    ].map(escapeCsv).join(',');
-    return `${header}\n${row}\n`;
+    ].map(escapeCsv);
+    const escapedWeather = `"${String(metadata.allowedWeather).replace(/"/g, '')}"`;
+    row.push(escapedWeather);
+    return `${header}\n${row.join(',')}\n`;
 }
 function buildStageDetailsCsv(segments) {
     const header = 'length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat';
@@ -1114,12 +1115,165 @@ class RouteImporter {
     }
     exportCsv(request) {
         const validated = validateExportRequest(request);
+        // 1. Save stage metadata to stages.csv automatically
+        this.updateStagesCsv(validated.metadata);
+        // 2. Save details to data/stages/detailsCsvFile automatically
+        const detailsContent = buildStageDetailsCsv(validated.draft.segments);
+        const detailsPath = (0, path_1.resolve)(this.dataRoot, 'stages', safeStageDetailsFileName(validated.metadata.detailsCsvFile));
+        (0, fs_1.writeFileSync)(detailsPath, detailsContent, 'utf8');
+        // 3. Save race details to races.csv automatically if requested
+        if (request.newRace && request.raceDetails) {
+            this.updateRacesCsv(validated.metadata.raceId, request.raceDetails);
+        }
+        // 4. Save race program mappings to race_program_races.csv automatically if requested
+        if (request.updatePrograms && request.programIds) {
+            this.updateRaceProgramRacesCsv(validated.metadata.raceId, request.programIds);
+        }
         return {
             stagesCsv: buildStagesCsv(validated),
-            stageDetailsCsv: buildStageDetailsCsv(validated.draft.segments),
+            stageDetailsCsv: detailsContent,
             stagesFileName: `stage_${validated.metadata.stageId}.csv`,
             stageDetailsFileName: validated.metadata.detailsCsvFile,
         };
+    }
+    loadCountriesList() {
+        const countriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'sta_country.csv');
+        if (!(0, fs_1.existsSync)(countriesPath))
+            return [];
+        const rows = parseCsvRows((0, fs_1.readFileSync)(countriesPath, 'utf8'));
+        const [header, ...dataRows] = rows;
+        const idIndex = header?.indexOf('id') ?? -1;
+        const nameIndex = header?.indexOf('name') ?? -1;
+        const codeIndex = header?.indexOf('code_3') ?? -1;
+        if (idIndex < 0 || nameIndex < 0 || codeIndex < 0)
+            return [];
+        return dataRows.map((row) => {
+            const id = Number.parseInt(row[idIndex] ?? '', 10);
+            const name = (row[nameIndex] ?? '').trim();
+            const code3 = (row[codeIndex] ?? '').trim();
+            return { id, name, code3 };
+        }).filter(c => Number.isInteger(c.id) && c.name);
+    }
+    loadRaceCategoriesList() {
+        const categoriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'race_categories.csv');
+        if (!(0, fs_1.existsSync)(categoriesPath))
+            return [];
+        const rows = parseCsvRows((0, fs_1.readFileSync)(categoriesPath, 'utf8'));
+        const [header, ...dataRows] = rows;
+        const idIndex = header?.indexOf('id') ?? -1;
+        const nameIndex = header?.indexOf('name') ?? -1;
+        if (idIndex < 0 || nameIndex < 0)
+            return [];
+        return dataRows.map((row) => {
+            const id = Number.parseInt(row[idIndex] ?? '', 10);
+            const name = (row[nameIndex] ?? '').trim();
+            return { id, name };
+        }).filter(c => Number.isInteger(c.id) && c.name);
+    }
+    loadRaceProgramsList() {
+        const programsPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'race_programs.csv');
+        if (!(0, fs_1.existsSync)(programsPath))
+            return [];
+        const rows = parseCsvRows((0, fs_1.readFileSync)(programsPath, 'utf8'));
+        const [header, ...dataRows] = rows;
+        const idIndex = header?.indexOf('id') ?? -1;
+        const nameIndex = header?.indexOf('name') ?? -1;
+        if (idIndex < 0 || nameIndex < 0)
+            return [];
+        return dataRows.map((row) => {
+            const id = Number.parseInt(row[idIndex] ?? '', 10);
+            const name = (row[nameIndex] ?? '').trim();
+            return { id, name };
+        }).filter(p => Number.isInteger(p.id) && p.name);
+    }
+    updateStagesCsv(metadata) {
+        const stagesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'stages.csv');
+        const header = STAGES_METADATA_HEADER;
+        let rows = [];
+        if ((0, fs_1.existsSync)(stagesPath)) {
+            rows = parseCsvRows((0, fs_1.readFileSync)(stagesPath, 'utf8'));
+        }
+        let dataRows = rows.slice(1);
+        const stageIdStr = String(metadata.stageId);
+        let foundIndex = dataRows.findIndex(row => row[0] === stageIdStr);
+        const escapedWeather = `"${String(metadata.allowedWeather).replace(/"/g, '')}"`;
+        const newRow = [
+            metadata.stageId,
+            metadata.raceId,
+            metadata.stageNumber,
+            metadata.date,
+            metadata.profile,
+            metadata.startElevation,
+            metadata.detailsCsvFile,
+            metadata.finalSpreadStartPercent,
+            metadata.finalPushStartPercent,
+            metadata.finalSpreadDifficultyMultiplier,
+            metadata.crashIncidentMultiplier,
+            metadata.mechanicalIncidentMultiplier,
+        ].map(escapeCsv);
+        newRow.push(escapedWeather);
+        if (foundIndex >= 0) {
+            dataRows[foundIndex] = newRow;
+        }
+        else {
+            dataRows.push(newRow);
+        }
+        const lines = [header, ...dataRows.map(row => row.join(','))];
+        const content = lines.join('\n') + '\n';
+        (0, fs_1.writeFileSync)(stagesPath, content, 'utf8');
+    }
+    updateRacesCsv(raceId, details) {
+        const racesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'races.csv');
+        const header = 'id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_date,prestige';
+        let rows = [];
+        if ((0, fs_1.existsSync)(racesPath)) {
+            rows = parseCsvRows((0, fs_1.readFileSync)(racesPath, 'utf8'));
+        }
+        let dataRows = rows.slice(1);
+        const raceIdStr = String(raceId);
+        let foundIndex = dataRows.findIndex(row => row[0] === raceIdStr);
+        const newRow = [
+            raceId,
+            details.name,
+            details.countryId,
+            details.categoryId,
+            details.isStageRace ? 1 : 0,
+            details.numberOfStages,
+            details.startDate,
+            details.endDate,
+            details.prestige,
+        ].map(escapeCsv);
+        if (foundIndex >= 0) {
+            dataRows[foundIndex] = newRow;
+        }
+        else {
+            dataRows.push(newRow);
+        }
+        const lines = [header, ...dataRows.map(row => row.join(','))];
+        const content = lines.join('\n') + '\n';
+        (0, fs_1.writeFileSync)(racesPath, content, 'utf8');
+    }
+    updateRaceProgramRacesCsv(raceId, programIds) {
+        const filePath = (0, path_1.resolve)(this.dataRoot, 'csv', 'race_program_races.csv');
+        const header = 'id,program_id,race_id';
+        let rows = [];
+        if ((0, fs_1.existsSync)(filePath)) {
+            rows = parseCsvRows((0, fs_1.readFileSync)(filePath, 'utf8'));
+        }
+        let dataRows = rows.slice(1);
+        const raceIdStr = String(raceId);
+        dataRows = dataRows.filter(row => row[2] !== raceIdStr);
+        for (const progId of programIds) {
+            dataRows.push(['', String(progId), raceIdStr]);
+        }
+        dataRows = dataRows.map((row, index) => [
+            String(index + 1),
+            row[1],
+            row[2]
+        ]);
+        const lines = [header, ...dataRows.map(row => row.join(','))];
+        const content = lines.join('\n') + '\n';
+        (0, fs_1.writeFileSync)(filePath, content, 'utf8');
     }
     loadStageMetadataRows() {
         const stagesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'stages.csv');
