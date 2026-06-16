@@ -57,4 +57,7 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 56,19,5,2026-03-12,Hilly_Difficult,198,parisnice05.csv,60,70,2.2,2.5,1.5,1|3|4
 57,19,6,2026-03-13,Hilly_Difficult,20,parisnice06.csv,60,70,2,1,1.5,1|3|4
 58,19,7,2026-03-14,Medium_Mountain,20,parisnice07.csv,60,70,2.8,1,1.5,1|3
-59,19,8,2026-03-15,Medium_Mountain,47,parisnice08.csv,50,65,2.6,1,1.5,"1|2|3|4|5|6|7"
+59,19,8,2026-03-15,Medium_Mountain,47,parisnice08.csv,50,65,2.6,1,1.5,1|2|3|4|5|6|7
+60,20,1,2026-03-25,Flat,9,ronde_van_brugge_tour_of_bruges_2026.csv,80,95,1.2,1,1,1|3|4|5
+61,21,1,2026-03-27,Cobble_Hill,14,e3_classics.csv,50,65,2.2,3,2.5,1|3
+62,21,1,2026-02-06,Hilly_Difficult,1,muscat_classic.csv,60,75,2.2,1,1,"1|2"
