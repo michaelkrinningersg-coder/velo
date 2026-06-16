@@ -1,0 +1,47 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+5.16,1.000,Flat,5,5,start,Start,null,,,
+0.62,4.300,Hill,5,5,,,,,,
+0.74,0.700,Flat,5,5,,,,,,
+2.12,-3.200,Abfahrt,5,5,,,,,,
+12.64,0.300,Flat,5,5,,,,,,
+2.73,4.900,Hill,5,5,climb_start,Cote de Saint Remy de Provence,null,,,
+0.38,0.900,Flat,5,5,,,,,,
+0.56,5.000,Hill,5,5,,,,climb_top,Cote de Saint Remy de Provence,3
+2.30,-5.700,Abfahrt,5,5,,,,,,
+10.47,-0.800,Flat,5,5,,,,,,
+1.25,4.500,Hill,5,5,,,,,,
+12.73,0.100,Flat,5,5,,,,,,
+0.41,6.900,Hill,5,5,,,,,,
+47.17,0.500,Flat,5,5,,,,sprint_intermediate,Sprint 1,Sprint
+1.32,-4.000,Abfahrt,5,5,,,,,,
+5.26,2.800,Hill,5,5,climb_start,Cote de Bonnieux,null,climb_top,Cote de Bonnieux,4
+0.46,-2.300,Abfahrt,5,5,,,,,,
+0.37,-8.400,Abfahrt,5,5,,,,,,
+7.84,-2.400,Abfahrt,5,5,,,,sprint_intermediate,Sprint 2,Sprint
+13.18,0.700,Flat,5,5,,,,,,
+0.71,4.900,Hill,5,5,,,,,,
+2.63,1.400,Flat,5,5,,,,,,
+0.39,-3.100,Abfahrt,5,5,,,,,,
+7.20,0.300,Flat,5,5,,,,,,
+3.53,3.800,Hill,5,5,climb_start,Col de l'Aire Deï Masco,null,,,
+0.65,7.600,Medium_Mountain,5,5,,,,,,
+3.08,4.100,Medium_Mountain,5,5,,,,climb_top,Col de l'Aire Deï Masco,3
+0.40,-2.200,Abfahrt,5,5,,,,,,
+6.12,-5.000,Abfahrt,5,5,,,,,,
+1.01,1.700,Flat,5,5,,,,,,
+6.96,-1.200,Flat,5,5,,,,,,
+2.63,5.400,Hill,5,5,climb_start,Saint Martin de Castillon,null,climb_top,Saint Martin de Castillon,3
+2.29,-0.500,Flat,5,5,,,,,,
+2.46,-6.900,Abfahrt,5,5,,,,,,
+2.79,-0.600,Flat,5,5,,,,,,
+0.68,2.800,Hill,5,5,climb_start,Côte de Saignon,null,,,
+2.03,6.200,Hill,5,5,,,,,,
+0.74,1.700,Hill,5,5,,,,,,
+0.60,8.200,Medium_Mountain,5,5,,,,climb_top,Côte de Saignon,3
+0.61,-6.900,Abfahrt,5,5,,,,,,
+0.57,-10.700,Abfahrt,5,5,,,,,,
+0.99,-7.200,Abfahrt,5,5,,,,,,
+0.39,-3.300,Abfahrt,5,5,,,,,,
+0.37,-10.200,Abfahrt,5,5,,,,,,
+0.36,-4.600,Abfahrt,5,5,,,,,,
+1.31,0.800,Flat,5,5,,,,finish_flat,Ziel,null
