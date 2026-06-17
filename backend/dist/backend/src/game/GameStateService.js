@@ -353,9 +353,30 @@ class GameStateService {
         s_form REAL NOT NULL,
         r_form REAL NOT NULL,
         total_form REAL NOT NULL,
+        short_fatigue REAL NOT NULL DEFAULT 0.0,
+        long_fatigue REAL NOT NULL DEFAULT 0.0,
+        combined_fatigue REAL NOT NULL DEFAULT 0.0,
         PRIMARY KEY (rider_id, date)
       )
     `).run();
+        const colExists = (tableName, colName) => {
+            try {
+                const info = this.db.prepare(`PRAGMA table_info(${tableName})`).all();
+                return info.some((c) => c.name === colName);
+            }
+            catch (e) {
+                return false;
+            }
+        };
+        if (!colExists('rider_form_history', 'short_fatigue')) {
+            this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN short_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!colExists('rider_form_history', 'long_fatigue')) {
+            this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN long_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!colExists('rider_form_history', 'combined_fatigue')) {
+            this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
         this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
       ON rider_form_history(date, rider_id)
@@ -411,6 +432,37 @@ class GameStateService {
             return;
         }
         this.ensureRiderDailyStateRows(currentSeason);
+        if (this.isTable('rider_lieutenants')) {
+            this.db.prepare(`
+        UPDATE rider_daily_state
+        SET peak_dates_json = (
+          SELECT lds.peak_dates_json
+          FROM rider_lieutenants rl
+          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+        )
+        WHERE EXISTS (
+          SELECT 1
+          FROM rider_lieutenants rl
+          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+            AND lds.peak_dates_json IS NOT NULL AND lds.peak_dates_json != '[]'
+        )
+      `).run(currentSeason, currentSeason);
+            if (this.isTable('lieutenant_all_time_peaks')) {
+                this.db.prepare(`
+          INSERT INTO lieutenant_all_time_peaks (rider_id, max_overall_rating, leader_id, season)
+          SELECT rl.lieutenant_id, r.overall_rating, rl.leader_id, rl.season
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.lieutenant_id
+          WHERE rl.season = ?
+          ON CONFLICT(rider_id) DO UPDATE SET
+            leader_id = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.leader_id ELSE leader_id END,
+            season = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.season ELSE season END,
+            max_overall_rating = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.max_overall_rating ELSE max_overall_rating END
+        `).run(currentSeason);
+            }
+        }
         this.syncRiderLoadState(currentDate, currentSeason);
         const rows = this.db.prepare(`
       SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
@@ -838,7 +890,9 @@ class GameStateService {
         // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
         // in one statement instead of a per-rider JS loop.
         this.db.prepare(`
-      INSERT INTO rider_form_history (rider_id, date, s_form, r_form, total_form)
+      INSERT INTO rider_form_history (
+        rider_id, date, s_form, r_form, total_form, short_fatigue, long_fatigue, combined_fatigue
+      )
       SELECT
         rds.rider_id,
         @date AS date,
@@ -846,16 +900,22 @@ class GameStateService {
         MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
           + MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
-          AS total_form
+          AS total_form,
+        ROUND(rds.short_term_fatigue * 100) / 100 AS short_fatigue,
+        ROUND((rds.long_term_fatigue_decayable + rds.long_term_fatigue_locked) * 100) / 100 AS long_fatigue,
+        ROUND((rds.short_term_fatigue + rds.long_term_fatigue_decayable + rds.long_term_fatigue_locked) * 100) / 100 AS combined_fatigue
       FROM rider_daily_state rds
       JOIN riders ON riders.id = rds.rider_id
       LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
       WHERE riders.active_team_id IS NOT NULL AND riders.is_retired = 0
-      GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus
+      GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus, rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked
       ON CONFLICT(rider_id, date) DO UPDATE SET
         s_form = excluded.s_form,
         r_form = excluded.r_form,
-        total_form = excluded.total_form
+        total_form = excluded.total_form,
+        short_fatigue = excluded.short_fatigue,
+        long_fatigue = excluded.long_fatigue,
+        combined_fatigue = excluded.combined_fatigue
     `).run({
             date: currentDate,
             seasonFormMax: SEASON_FORM_MAX_RAW,
@@ -1026,7 +1086,8 @@ class GameStateService {
         }
         const stageRow = this.db.prepare(`
       SELECT s.id, s.stage_score, s.stage_number, r.name AS race_name, s.date,
-             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max
+             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max,
+             r.category_id AS category_id
       FROM stages s
       JOIN races r ON r.id = s.race_id
       LEFT JOIN wetter w ON w.id = s.rolled_weather_id
@@ -1064,13 +1125,28 @@ class GameStateService {
         rider_id, date, type, race_name, stage_number, stage_score,
         short_change, long_decayable_change, long_locked_change,
         short_after, long_after
-      ) VALUES (?, ?, 'race', ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         this.db.transaction(() => {
             for (const riderId of participatedRiderIds) {
                 const row = stmtSelect.get(riderId);
                 if (!row)
                     continue;
+                let currentShort = row.short_term_fatigue ?? 0.0;
+                let currentLongDecayable = row.long_term_fatigue_decayable ?? 0.0;
+                const currentLongLocked = row.long_term_fatigue_locked ?? 0.0;
+                // Apply newly started race additions if stageNumber === 1
+                if (stageNumber === 1) {
+                    const transferShortChange = 0.5;
+                    const transferLongDecayableChange = 0.05;
+                    currentShort = roundToTwoDecimals(currentShort + transferShortChange);
+                    currentLongDecayable = roundToTwoDecimals(currentLongDecayable + transferLongDecayableChange);
+                    stmtUpdate.run(currentShort, currentLongDecayable, currentLongLocked, riderId);
+                    stmtInsertHistory.run(riderId, stageDate, 'race', 'Transfer', null, // stageNumber
+                    null, // stageScore
+                    transferShortChange, transferLongDecayableChange, 0.0, // longLockedChange
+                    currentShort, roundToTwoDecimals(currentLongDecayable + currentLongLocked));
+                }
                 const R = row.skill_recuperation;
                 const multiplier = R >= 65
                     ? 1 - (R - 65) * 0.02
@@ -1101,20 +1177,49 @@ class GameStateService {
                     addedShort *= (1 + rolledEffektFatigue / 100);
                     addedLongDecayable *= (1 + rolledEffektFatigue / 100);
                 }
+                // Apply category multipliers
+                let shortMult = 1.0;
+                let longMult = 1.0;
+                const catId = stageRow.category_id;
+                if (catId === 6 || catId === 9) {
+                    shortMult = 0.9;
+                    longMult = 0.9;
+                }
+                else if (catId === 5 || catId === 8) {
+                    shortMult = 0.95;
+                    longMult = 1.0;
+                }
+                else if (catId === 4 || catId === 7) {
+                    shortMult = 1.0;
+                    longMult = 1.1;
+                }
+                else if (catId === 3) {
+                    shortMult = 1.15;
+                    longMult = 1.25;
+                }
+                else if (catId === 2) {
+                    shortMult = 1.1;
+                    longMult = 1.15;
+                }
+                else if (catId === 1) {
+                    shortMult = 1.15;
+                    longMult = 1.3;
+                }
+                addedShort *= shortMult;
+                addedLongDecayable *= longMult;
+                // Limit short term fatigue buildup from a single stage/race to +4.0
+                addedShort = Math.min(4.0, addedShort);
                 addedShort = roundToTwoDecimals(addedShort);
                 addedLongDecayable = roundToTwoDecimals(addedLongDecayable);
                 // n is season race days total. Note: refreshRiderLoadState already updated season_race_days_total
                 // so it already includes the current stage!
                 const n = row.season_race_days_total ?? 0;
                 const addedLongLocked = resolveLockedFatigueAddition(n);
-                const currentShort = row.short_term_fatigue ?? 0.0;
-                const currentLongDecayable = row.long_term_fatigue_decayable ?? 0.0;
-                const currentLongLocked = row.long_term_fatigue_locked ?? 0.0;
                 const newShort = roundToTwoDecimals(currentShort + addedShort);
                 const newLongDecayable = roundToTwoDecimals(currentLongDecayable + addedLongDecayable);
                 const newLongLocked = roundToTwoDecimals(currentLongLocked + addedLongLocked);
                 stmtUpdate.run(newShort, newLongDecayable, newLongLocked, riderId);
-                stmtInsertHistory.run(riderId, stageDate, raceName, stageNumber, stageScore, addedShort, addedLongDecayable, addedLongLocked, newShort, roundToTwoDecimals(newLongDecayable + newLongLocked));
+                stmtInsertHistory.run(riderId, stageDate, 'race', raceName, stageNumber, stageScore, addedShort, addedLongDecayable, addedLongLocked, newShort, roundToTwoDecimals(newLongDecayable + newLongLocked));
             }
         })();
     }

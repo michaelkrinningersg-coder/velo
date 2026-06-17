@@ -259,7 +259,7 @@ class RiderRepository {
             }),
         };
     }
-    getRiderStats(riderId) {
+    getRiderStats(riderId, excludeFatigue = false) {
         const rider = this.getRiderById(riderId);
         if (!rider) {
             return null;
@@ -550,7 +550,26 @@ class RiderRepository {
                     || (left.resultRank ?? 999) - (right.resultRank ?? 999)));
             }
         }
-        const fatigueHistory = (0, mappers_1.tableExists)(this.db, 'rider_fatigue_history')
+        const hasLieutenantsTable = (0, mappers_1.tableExists)(this.db, 'rider_lieutenants');
+        const lieutenantRow = hasLieutenantsTable
+            ? this.db.prepare(`
+          SELECT rl.lieutenant_id, r.first_name, r.last_name
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.lieutenant_id
+          WHERE rl.leader_id = ? AND rl.season = ?
+        `).get(rider.id, currentSeason)
+            : undefined;
+        const leaderRow = hasLieutenantsTable
+            ? this.db.prepare(`
+          SELECT rl.leader_id, r.first_name, r.last_name
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.leader_id
+          WHERE rl.lieutenant_id = ? AND rl.season = ?
+        `).get(rider.id, currentSeason)
+            : undefined;
+        const lieutenantInfo = lieutenantRow ? { id: lieutenantRow.lieutenant_id, name: `${lieutenantRow.first_name} ${lieutenantRow.last_name}` } : null;
+        const leaderInfo = leaderRow ? { id: leaderRow.leader_id, name: `${leaderRow.first_name} ${leaderRow.last_name}` } : null;
+        const fatigueHistory = !excludeFatigue && (0, mappers_1.tableExists)(this.db, 'rider_fatigue_history')
             ? this.db.prepare(`
           SELECT id, rider_id AS riderId, date, type, race_name AS raceName,
                  stage_number AS stageNumber, stage_score AS stageScore,
@@ -563,6 +582,8 @@ class RiderRepository {
         `).all(rider.id)
             : [];
         return {
+            lieutenantInfo,
+            leaderInfo,
             riderId: rider.id,
             riderName: `${rider.firstName} ${rider.lastName}`,
             age: rider.age ?? (new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason() - rider.birthYear),
@@ -603,7 +624,7 @@ class RiderRepository {
                 ? (0, mappers_1.parsePeakDates)(this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id)?.peak_dates_json)
                 : [],
             formHistory: (0, mappers_1.tableExists)(this.db, 'rider_form_history')
-                ? this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id)
+                ? this.db.prepare(`SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm ${excludeFatigue ? ', 0.0 AS shortFatigue, 0.0 AS longFatigue, 0.0 AS combinedFatigue' : ', short_fatigue AS shortFatigue, long_fatigue AS longFatigue, combined_fatigue AS combinedFatigue'} FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC`).all(rider.id)
                 : [],
             careerStats: this.getRiderCareerStats(rider.id),
             fatigueHistory,
@@ -941,11 +962,13 @@ class RiderRepository {
         let homeAdvantageDays = 0;
         let superHomeAdvantageDays = 0;
         let homePressureDays = 0;
+        let breakawayKms = 0;
         if ((0, mappers_1.tableExists)(this.db, 'rider_season_stats')) {
             const row = this.db.prepare(`
         SELECT SUM(home_advantage_days) as home_adv,
                SUM(super_home_advantage_days) as super_home,
-               SUM(home_pressure_days) as home_press
+               SUM(home_pressure_days) as home_press,
+               SUM(breakaway_kms) as breakaway_kms
         FROM rider_season_stats
         WHERE rider_id = ?
       `).get(riderId);
@@ -953,6 +976,7 @@ class RiderRepository {
                 homeAdvantageDays = row.home_adv ?? 0;
                 superHomeAdvantageDays = row.super_home ?? 0;
                 homePressureDays = row.home_press ?? 0;
+                breakawayKms = row.breakaway_kms ?? 0;
             }
         }
         const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
@@ -1364,6 +1388,7 @@ class RiderRepository {
             homeAdvantageDays,
             superHomeAdvantageDays,
             homePressureDays,
+            breakawayKms,
             categories,
         };
     }

@@ -434,6 +434,23 @@ export class RiderProgramService {
       return;
     }
 
+    // Cleanup any existing lieutenants where the leader is not a Captain (role_id = 1) or Sprinter (role_id = 6)
+    this.db.prepare(`
+      DELETE FROM rider_lieutenants
+      WHERE season = ? AND leader_id IN (
+        SELECT id FROM riders WHERE role_id NOT IN (1, 6)
+      )
+    `).run(season);
+
+    if (tableExists(this.db, 'lieutenant_all_time_peaks')) {
+      this.db.prepare(`
+        DELETE FROM lieutenant_all_time_peaks
+        WHERE season = ? AND leader_id IN (
+          SELECT id FROM riders WHERE role_id NOT IN (1, 6)
+        )
+      `).run(season);
+    }
+
     // Find teams that already have any lieutenant assigned for this season
     const teamsWithLts = new Set(
       this.db.prepare(`

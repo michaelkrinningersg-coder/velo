@@ -37,13 +37,14 @@ function buildPositionedScoreSegments(segments, startElevation) {
             gradientPercent: segment.gradientPercent,
             markers: segment.markers,
             endMarkers: segment.endMarkers,
+            terrain: segment.terrain,
         };
         currentKm = endKm;
         currentElevation = endElevation;
         return positionedSegment;
     });
 }
-function calculateSegmentScore(lengthKm, gradientPercent, endKm, endElevation, totalDistanceKm) {
+function calculateSegmentScore(lengthKm, gradientPercent, endKm, endElevation, totalDistanceKm, terrain) {
     if (lengthKm <= 0 || totalDistanceKm <= 0) {
         return 0;
     }
@@ -52,9 +53,19 @@ function calculateSegmentScore(lengthKm, gradientPercent, endKm, endElevation, t
         : lengthKm * 0.1;
     const progress = endKm / totalDistanceKm;
     const positionMultiplier = 0.1 + (1.9 * (progress ** 1.8));
+    let terrainMultiplier = 1.0;
+    if (terrain) {
+        const norm = terrain.toLowerCase();
+        if (norm === 'cobble') {
+            terrainMultiplier = 3.0;
+        }
+        else if (norm === 'cobble_hill' || norm === 'cobblehill') {
+            terrainMultiplier = 4.0;
+        }
+    }
     const distanceFactor = 0.5 + (0.25 * (endKm / 150));
     const altitudeFactor = 1 + (0.08 * ((endElevation / 1000) ** 2));
-    return (baseFactor * positionMultiplier * distanceFactor * altitudeFactor) / SCORE_CALIBRATION_DIVISOR;
+    return (baseFactor * positionMultiplier * terrainMultiplier * distanceFactor * altitudeFactor) / SCORE_CALIBRATION_DIVISOR;
 }
 function calculateScoreForRange(positionedSegments, totalDistanceKm, startKm, endKm) {
     return positionedSegments.reduce((sum, segment) => {
@@ -72,7 +83,7 @@ function calculateScoreForRange(positionedSegments, totalDistanceKm, startKm, en
         const clippedGradientPercent = clippedLengthKm > 0
             ? ((clippedEndElevation - clippedStartElevation) / (clippedLengthKm * 1000)) * 100
             : segment.gradientPercent;
-        return sum + calculateSegmentScore(clippedLengthKm, clippedGradientPercent, clippedEndKm, clippedEndElevation, totalDistanceKm);
+        return sum + calculateSegmentScore(clippedLengthKm, clippedGradientPercent, clippedEndKm, clippedEndElevation, totalDistanceKm, segment.terrain);
     }, 0);
 }
 function calculateStageScore(segments, startElevation) {

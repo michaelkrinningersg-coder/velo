@@ -692,9 +692,21 @@ class DatabaseService {
         s_form REAL NOT NULL,
         r_form REAL NOT NULL,
         total_form REAL NOT NULL,
+        short_fatigue REAL NOT NULL DEFAULT 0.0,
+        long_fatigue REAL NOT NULL DEFAULT 0.0,
+        combined_fatigue REAL NOT NULL DEFAULT 0.0,
         PRIMARY KEY (rider_id, date)
       )
     `).run();
+        if (!columnExists(db, 'rider_form_history', 'short_fatigue')) {
+            db.prepare('ALTER TABLE rider_form_history ADD COLUMN short_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_form_history', 'long_fatigue')) {
+            db.prepare('ALTER TABLE rider_form_history ADD COLUMN long_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
+        if (!columnExists(db, 'rider_form_history', 'combined_fatigue')) {
+            db.prepare('ALTER TABLE rider_form_history ADD COLUMN combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
+        }
         db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
       ON rider_form_history(date, rider_id)
@@ -915,6 +927,22 @@ class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
         ON rider_season_programs(season, program_id);
+
+      CREATE TABLE IF NOT EXISTS rider_lieutenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        lieutenant_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        UNIQUE(season, leader_id),
+        UNIQUE(season, lieutenant_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS lieutenant_all_time_peaks (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        max_overall_rating INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL
+      );
     `);
         if (!columnExists(db, 'race_programs', 'peak1_min')) {
             db.prepare('ALTER TABLE race_programs ADD COLUMN peak1_min INTEGER NOT NULL DEFAULT 1 CHECK(peak1_min BETWEEN 1 AND 53)').run();

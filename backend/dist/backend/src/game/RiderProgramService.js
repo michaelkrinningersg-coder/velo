@@ -223,6 +223,8 @@ class RiderProgramService {
             for (const rider of riders) {
                 const roleName = normalizeRoleName(rider.role_name);
                 const specs = resolveBestSpecIds(rider);
+                const teamRiders = ridersByTeam.get(rider.team_id) ?? [];
+                const isBestRider = teamRiders[0]?.id === rider.id;
                 const isBestSprinter = bestSprinterByTeam.get(rider.team_id) === rider.id;
                 let rulePool;
                 if (isBestSprinter) {
@@ -236,22 +238,52 @@ class RiderProgramService {
                     if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
                         [14, 15, 17, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
                     }
-                    const teamRiders = ridersByTeam.get(rider.team_id) ?? [];
                     const nonLeaderRiders = teamRiders.filter(r => normalizeRoleName(r.role_name) !== 'Kapitaen' && normalizeRoleName(r.role_name) !== 'Co-Kapitaen');
                     const nonLeaderIndex = nonLeaderRiders.findIndex(r => r.id === rider.id);
                     if (nonLeaderIndex >= 0 && nonLeaderIndex <= 3) {
                         [15, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
                     }
-                    const filteredRules = rules.filter(r => !excludedProgramIds.has(r.program_id));
-                    rulePool = selectRulePool(filteredRules, roleName, specs);
+                    // Non-Tour versions (25-28) can only be assigned to Wassertraeger and Starke Helfer
+                    if (roleName !== 'Wassertraeger' && roleName !== 'Starke Helfer') {
+                        [25, 26, 27, 28].forEach(id => excludedProgramIds.add(id));
+                    }
+                    if (isBestRider) {
+                        // Best rider is only allowed program IDs in [1-8, 13-19, 21-24]
+                        // We exclude 9, 10, 11, 12, 20, 25, 26, 27, 28
+                        const bestRiderExclusions = [9, 10, 11, 12, 20, 25, 26, 27, 28];
+                        const combinedExclusions = new Set([...excludedProgramIds, ...bestRiderExclusions]);
+                        const filteredRules = rules.filter(r => !combinedExclusions.has(r.program_id));
+                        const tempRulePool = selectRulePool(filteredRules, roleName, specs);
+                        const totalWeight = tempRulePool.reduce((sum, rule) => sum + Math.max(0, rule.probability), 0);
+                        if (totalWeight > 0) {
+                            rulePool = tempRulePool;
+                        }
+                        else {
+                            // Fallback: relax role exclusions but keep best rider exclusions and non-Tour exclusions
+                            const bestRiderExclusionsSet = new Set(bestRiderExclusions);
+                            if (roleName !== 'Wassertraeger' && roleName !== 'Starke Helfer') {
+                                [25, 26, 27, 28].forEach(id => bestRiderExclusionsSet.add(id));
+                            }
+                            const relaxedRules = rules.filter(r => !bestRiderExclusionsSet.has(r.program_id));
+                            rulePool = selectRulePool(relaxedRules, roleName, specs);
+                        }
+                    }
+                    else {
+                        const filteredRules = rules.filter(r => !excludedProgramIds.has(r.program_id));
+                        rulePool = selectRulePool(filteredRules, roleName, specs);
+                    }
                 }
-                const programId = chooseProgramId(rulePool, `${season}|${rider.id}|${roleName}|${specs.join('|')}`);
+                let programId = chooseProgramId(rulePool, `${season}|${rider.id}|${roleName}|${specs.join('|')}`);
+                if (programId == null && isBestRider) {
+                    programId = 1; // Giro_Tour_A fallback
+                }
                 if (programId == null) {
                     continue;
                 }
                 insert.run(season, rider.id, programId, assignedDate);
             }
         })();
+        this.ensureLieutenants(season, assignedDate);
         // Debug output: count program assignments and print detailed lists sorted by overall strength
         try {
             const assignments = this.db.prepare(`
@@ -301,11 +333,186 @@ class RiderProgramService {
 
       CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
         ON rider_season_programs(season, program_id);
+
+      CREATE TABLE IF NOT EXISTS rider_lieutenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        lieutenant_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        UNIQUE(season, leader_id),
+        UNIQUE(season, lieutenant_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS lieutenant_all_time_peaks (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        max_overall_rating INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL
+      );
     `);
     }
     resolveAssignedOn(season) {
         const row = this.db.prepare('SELECT "current_date" AS current_date FROM game_state WHERE id = 1').get();
         return row?.current_date ?? `${season}-01-01`;
+    }
+    ensureLieutenants(season, assignedDate) {
+        if (!tableExists(this.db, 'rider_lieutenants')) {
+            return;
+        }
+        // Cleanup any existing lieutenants where the leader is not a Captain (role_id = 1) or Sprinter (role_id = 6)
+        this.db.prepare(`
+      DELETE FROM rider_lieutenants
+      WHERE season = ? AND leader_id IN (
+        SELECT id FROM riders WHERE role_id NOT IN (1, 6)
+      )
+    `).run(season);
+        if (tableExists(this.db, 'lieutenant_all_time_peaks')) {
+            this.db.prepare(`
+        DELETE FROM lieutenant_all_time_peaks
+        WHERE season = ? AND leader_id IN (
+          SELECT id FROM riders WHERE role_id NOT IN (1, 6)
+        )
+      `).run(season);
+        }
+        // Find teams that already have any lieutenant assigned for this season
+        const teamsWithLts = new Set(this.db.prepare(`
+        SELECT DISTINCT COALESCE(c.team_id, r.active_team_id) AS team_id
+        FROM rider_lieutenants rl
+        JOIN riders r ON r.id = rl.lieutenant_id
+        LEFT JOIN contracts c ON c.rider_id = r.id AND c.start_season <= ? AND c.end_season >= ?
+        WHERE rl.season = ? AND COALESCE(c.team_id, r.active_team_id) IS NOT NULL
+      `).all(season, season, season).map((row) => row.team_id));
+        // Retrieve all active riders with their roles, specs, and details
+        const riders = this.db.prepare(`
+      SELECT r.id,
+             role.name AS role_name,
+             r.specialization_1_id,
+             r.specialization_2_id,
+             r.specialization_3_id,
+             r.overall_rating,
+             COALESCE(current_contract.team_id, r.active_team_id) AS team_id,
+             r.skill_sprint
+      FROM riders r
+      LEFT JOIN sta_role role ON role.id = r.role_id
+      LEFT JOIN contracts current_contract
+        ON current_contract.id = (
+          SELECT contracts.id
+          FROM contracts
+          WHERE contracts.rider_id = r.id
+            AND contracts.start_season <= ?
+            AND contracts.end_season >= ?
+          ORDER BY contracts.start_season DESC, contracts.id DESC
+          LIMIT 1
+        )
+      WHERE r.is_retired = 0
+        AND COALESCE(current_contract.team_id, r.active_team_id) IS NOT NULL
+      ORDER BY r.overall_rating DESC, r.id ASC
+    `).all(season, season);
+        // Group riders by team
+        const ridersByTeam = new Map();
+        for (const r of riders) {
+            if (!ridersByTeam.has(r.team_id)) {
+                ridersByTeam.set(r.team_id, []);
+            }
+            ridersByTeam.get(r.team_id).push(r);
+        }
+        const insertLt = this.db.prepare(`
+      INSERT OR IGNORE INTO rider_lieutenants (season, leader_id, lieutenant_id)
+      VALUES (?, ?, ?)
+    `);
+        const updateLtProgram = this.db.prepare(`
+      INSERT OR REPLACE INTO rider_season_programs (season, rider_id, program_id, assigned_on)
+      VALUES (?, ?, ?, ?)
+    `);
+        const insertPeakInitial = this.db.prepare(`
+      INSERT OR IGNORE INTO lieutenant_all_time_peaks (rider_id, max_overall_rating, leader_id, season)
+      VALUES (?, ?, ?, ?)
+    `);
+        this.db.transaction(() => {
+            for (const [teamId, teamRiders] of ridersByTeam.entries()) {
+                if (teamsWithLts.has(teamId)) {
+                    continue; // Already generated for this team
+                }
+                // Available helpers pool: Edelhelfer, Starke Helfer, Wassertraeger
+                const helpers = teamRiders.filter(r => r.role_name === 'Edelhelfer' ||
+                    r.role_name === 'Starke Helfer' ||
+                    r.role_name === 'Wassertraeger');
+                helpers.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+                const assignedHelperIds = new Set();
+                // 1. Process top 3 Captains
+                const captains = teamRiders.filter(r => r.role_name === 'Kapitaen');
+                captains.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+                const top3Captains = captains.slice(0, 3);
+                for (const captain of top3Captains) {
+                    const specTarget = captain.specialization_1_id;
+                    if (specTarget == null)
+                        continue;
+                    let lieutenant = null;
+                    // Search steps:
+                    // 1. Edelhelfer spec_1 === specTarget
+                    lieutenant = helpers.find(r => r.role_name === 'Edelhelfer' && r.specialization_1_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    // 2. Edelhelfer spec_2 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.role_name === 'Edelhelfer' && r.specialization_2_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    // 3. Starke Helfer spec_1 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.role_name === 'Starke Helfer' && r.specialization_1_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    // 4. Starke Helfer spec_2 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.role_name === 'Starke Helfer' && r.specialization_2_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    // 5. Wassertraeger spec_1 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.role_name === 'Wassertraeger' && r.specialization_1_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    // 6. Wassertraeger spec_2 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.role_name === 'Wassertraeger' && r.specialization_2_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    // 7. Union with spec_3 === specTarget
+                    if (!lieutenant) {
+                        lieutenant = helpers.find(r => r.specialization_3_id === specTarget && !assignedHelperIds.has(r.id)) || null;
+                    }
+                    if (lieutenant) {
+                        assignedHelperIds.add(lieutenant.id);
+                        insertLt.run(season, captain.id, lieutenant.id);
+                        // Fetch the program of the captain
+                        const capProg = this.db.prepare(`
+              SELECT program_id FROM rider_season_programs WHERE season = ? AND rider_id = ?
+            `).get(season, captain.id);
+                        if (capProg) {
+                            updateLtProgram.run(season, lieutenant.id, capProg.program_id, assignedDate);
+                        }
+                        // Populate all time peaks initial entry
+                        insertPeakInitial.run(lieutenant.id, lieutenant.overall_rating, captain.id, season);
+                    }
+                }
+                // 2. Process strongest Sprinter
+                const sprinters = teamRiders.filter(r => r.role_name === 'Sprinter');
+                sprinters.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+                const strongestSprinter = sprinters[0] ?? null;
+                if (strongestSprinter) {
+                    const availableForSprint = helpers.filter(r => !assignedHelperIds.has(r.id));
+                    if (availableForSprint.length > 0) {
+                        availableForSprint.sort((a, b) => b.skill_sprint - a.skill_sprint || b.overall_rating - a.overall_rating || a.id - b.id);
+                        const lieutenant = availableForSprint[0];
+                        assignedHelperIds.add(lieutenant.id);
+                        insertLt.run(season, strongestSprinter.id, lieutenant.id);
+                        // Fetch the program of the sprinter
+                        const sprinterProg = this.db.prepare(`
+              SELECT program_id FROM rider_season_programs WHERE season = ? AND rider_id = ?
+            `).get(season, strongestSprinter.id);
+                        if (sprinterProg) {
+                            updateLtProgram.run(season, lieutenant.id, sprinterProg.program_id, assignedDate);
+                        }
+                        // Populate all time peaks initial entry
+                        insertPeakInitial.run(lieutenant.id, lieutenant.overall_rating, strongestSprinter.id, season);
+                    }
+                }
+            }
+        })();
     }
 }
 exports.RiderProgramService = RiderProgramService;

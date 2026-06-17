@@ -598,6 +598,9 @@ class LeaderboardRepository {
             else if (jerseyType === 'youth') {
                 typeId = 5;
             }
+            else if (jerseyType === 'breakaway') {
+                typeId = 7;
+            }
             if (parts[2]) {
                 const catId = parseInt(parts[2], 10);
                 categoryFilter = `AND ra.category_id = ${catId}`;
@@ -718,6 +721,77 @@ class LeaderboardRepository {
       `;
             if (period === 'season') {
                 params.push(currentSeason);
+            }
+            valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
+        }
+        else if (metricKey === 'strongest_lieutenants') {
+            if (!(0, mappers_1.tableExists)(this.db, 'rider_lieutenants')) {
+                return [];
+            }
+            if (period === 'season') {
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            r.overall_rating AS val,
+            
+            leader.id AS leader_id,
+            leader.first_name AS leader_first_name,
+            leader.last_name AS leader_last_name,
+            leader_c.code_3 AS leader_nationality,
+            leader_role.name AS leader_role_name
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.lieutenant_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          JOIN riders leader ON leader.id = rl.leader_id
+          JOIN sta_country leader_c ON leader_c.id = leader.country_id
+          LEFT JOIN sta_role leader_role ON leader_role.id = leader.role_id
+          WHERE rl.season = ?
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
+                params.push(currentSeason);
+            }
+            else {
+                if (!(0, mappers_1.tableExists)(this.db, 'lieutenant_all_time_peaks')) {
+                    return [];
+                }
+                query = `
+          SELECT 
+            r.id AS id,
+            r.first_name,
+            r.last_name,
+            c.code_3 AS nationality,
+            t.abbreviation AS team_abbr,
+            t.name AS team_name,
+            t.id AS team_id,
+            t.division_id AS team_division_id,
+            r.is_retired AS is_retired,
+            latp.max_overall_rating AS val,
+            
+            leader.id AS leader_id,
+            leader.first_name AS leader_first_name,
+            leader.last_name AS leader_last_name,
+            leader_c.code_3 AS leader_nationality,
+            leader_role.name AS leader_role_name
+          FROM lieutenant_all_time_peaks latp
+          JOIN riders r ON r.id = latp.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          JOIN riders leader ON leader.id = latp.leader_id
+          JOIN sta_country leader_c ON leader_c.id = leader.country_id
+          LEFT JOIN sta_role leader_role ON leader_role.id = leader.role_id
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100
+        `;
             }
             valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
         }
@@ -850,6 +924,13 @@ class LeaderboardRepository {
                 season: r.season !== undefined ? r.season : undefined,
                 raceName: r.race_name !== undefined ? r.race_name : undefined,
                 stageNumber: r.stage_number !== undefined ? r.stage_number : undefined,
+                lieutenantDetails: r.leader_id ? {
+                    leaderId: r.leader_id,
+                    leaderFirstName: r.leader_first_name,
+                    leaderLastName: r.leader_last_name,
+                    leaderNationality: r.leader_nationality ?? undefined,
+                    leaderRoleName: r.leader_role_name ?? undefined,
+                } : undefined,
             }));
         }
         catch (e) {
@@ -1171,6 +1252,9 @@ class LeaderboardRepository {
             }
             else if (jerseyType === 'youth') {
                 typeId = 5;
+            }
+            else if (jerseyType === 'breakaway') {
+                typeId = 7;
             }
             if (parts[2]) {
                 const catId = parseInt(parts[2], 10);

@@ -864,6 +864,9 @@ export interface RiderFormHistoryEntry {
   sForm: number;
   rForm: number;
   totalForm: number;
+  shortFatigue?: number;
+  longFatigue?: number;
+  combinedFatigue?: number;
 }
 
 export interface RiderCareerStats {

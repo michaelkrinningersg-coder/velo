@@ -1398,7 +1398,7 @@ export class GameStateService {
           stmtInsertHistory.run(
             riderId,
             stageDate,
-            'transfer',
+            'race',
             'Transfer',
             null, // stageNumber
             null, // stageScore

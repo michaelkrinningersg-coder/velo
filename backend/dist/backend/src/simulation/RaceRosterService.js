@@ -25,7 +25,7 @@ const RIDER_LOCK_MESSAGES = {
     'active-stage-race': 'Aktuell noch in einer anderen Rundfahrt gebunden.',
     unavailable: 'Aktuell krank oder verletzt und nicht startberechtigt.',
     'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
-    'low-category-exclusion': 'Nicht startberechtigt für Low-Kategorie Rennen (Kapitän / bester Co-Kapitän / bester Sprinter).',
+    'low-category-exclusion': 'Nicht startberechtigt für diese Rennkategorie aufgrund der Rolle (Kapitän / Co-Kapitän / Sprinter).',
     'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
     'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Kurzzeit > 10 oder Gesamt > 11).',
 };
@@ -128,32 +128,41 @@ function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
             }
         }
     }
-    if (race && (race.categoryId === 6 || race.categoryId === 9)) {
-        const ridersByTeamId = groupRidersByTeam(riders);
-        for (const teamRiders of ridersByTeamId.values()) {
-            // Find the best Co-Captain (roleId === 2)
-            const coCaptains = teamRiders.filter((r) => r.roleId === 2);
-            if (coCaptains.length > 0) {
-                coCaptains.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
-                const bestCoCap = coCaptains[0];
-                if (!locks.has(bestCoCap.id)) {
-                    locks.set(bestCoCap.id, 'low-category-exclusion');
-                }
-            }
-            // Find the best Sprinter (roleId === 6)
-            const sprinters = teamRiders.filter((r) => r.roleId === 6);
-            if (sprinters.length > 0) {
+    if (race) {
+        const catId = race.categoryId;
+        const isCapLockedCategory = ![1, 2, 3, 4, 7].includes(catId);
+        const isCoCapLockedCategory = ![1, 2, 3, 4, 5, 7, 8].includes(catId);
+        if (isCapLockedCategory || isCoCapLockedCategory) {
+            const ridersByTeamId = groupRidersByTeam(riders);
+            for (const teamRiders of ridersByTeamId.values()) {
+                // Find and sort sprinters of this team by overall rating (roleId === 6)
+                const sprinters = teamRiders.filter((r) => r.roleId === 6);
                 sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
-                const bestSprinter = sprinters[0];
-                if (!locks.has(bestSprinter.id)) {
-                    locks.set(bestSprinter.id, 'low-category-exclusion');
+                const bestSprinter = sprinters[0] ?? null;
+                const secondBestSprinter = sprinters[1] ?? null;
+                // 1. Captains and best Sprinter: locked in category 5, 6, 8, 9
+                if (isCapLockedCategory) {
+                    const captains = teamRiders.filter((r) => r.roleId === 1);
+                    for (const cap of captains) {
+                        if (!locks.has(cap.id)) {
+                            locks.set(cap.id, 'low-category-exclusion');
+                        }
+                    }
+                    if (bestSprinter && !locks.has(bestSprinter.id)) {
+                        locks.set(bestSprinter.id, 'low-category-exclusion');
+                    }
                 }
-            }
-            // Lock all Captains (roleId === 1)
-            const captains = teamRiders.filter((r) => r.roleId === 1);
-            for (const cap of captains) {
-                if (!locks.has(cap.id)) {
-                    locks.set(cap.id, 'low-category-exclusion');
+                // 2. Co-Captains and second best Sprinter: locked in category 6, 9
+                if (isCoCapLockedCategory) {
+                    const coCaptains = teamRiders.filter((r) => r.roleId === 2);
+                    for (const coCap of coCaptains) {
+                        if (!locks.has(coCap.id)) {
+                            locks.set(coCap.id, 'low-category-exclusion');
+                        }
+                    }
+                    if (secondBestSprinter && !locks.has(secondBestSprinter.id)) {
+                        locks.set(secondBestSprinter.id, 'low-category-exclusion');
+                    }
                 }
             }
         }
@@ -333,6 +342,7 @@ function resolveParticipatingTeams(repo, race, riderLocks, ridersByTeamId) {
         .slice(0, race.category?.numberOfTeams ?? 0);
 }
 function buildLegacyRaceRoster(db, repo, race, stage, enableDebug = false) {
+    const season = repo.getCurrentSeason();
     const riders = repo.getRiders();
     const ridersByTeamId = groupRidersByTeam(riders);
     const riderLocks = buildRiderLockMap(db, repo, race, riders);
@@ -343,7 +353,10 @@ function buildLegacyRaceRoster(db, repo, race, stage, enableDebug = false) {
         if (enableDebug) {
             logAutomaticRosterSelection(team, race, stage, selectedEntries);
         }
-        return selectedEntries.map((entry) => entry.rider);
+        let teamSelection = selectedEntries.map((entry) => entry.rider);
+        teamSelection = enforceSprinterLimits(teamSelection, ridersByTeamId.get(team.id) ?? [], getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks), db, repo, riderLocks, season, race, stage, race.category?.numberOfRiders ?? 0);
+        teamSelection = enforceLieutenantRules(db, repo, team.id, teamSelection, getEligibleRiders(ridersByTeamId.get(team.id) ?? [], riderLocks), ridersByTeamId.get(team.id) ?? [], riderLocks, season, race, stage, race.category?.numberOfRiders ?? 0);
+        return teamSelection;
     })
         .sort((left, right) => right.overallRating - left.overallRating || left.id - right.id);
 }
@@ -521,7 +534,7 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
         const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
         const roster = getEligibleRiders(teamFullRoster, riderLocks);
         const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
-        const teamSelection = programCandidates.slice(0, riderLimit);
+        let teamSelection = programCandidates.slice(0, riderLimit);
         const selectedIds = new Set(teamSelection.map((rider) => rider.id));
         if (teamSelection.length < riderLimit) {
             let fillCandidates;
@@ -538,6 +551,8 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
                 selectedIds.add(rider.id);
             }
         }
+        teamSelection = enforceSprinterLimits(teamSelection, teamFullRoster, roster, db, repo, riderLocks, season, race, stage, riderLimit);
+        teamSelection = enforceLieutenantRules(db, repo, team.id, teamSelection, roster, teamFullRoster, riderLocks, season, race, stage, riderLimit);
         if (enableDebug) {
             const underfilled = teamSelection.length < riderLimit ? ` | unterbesetzt ${teamSelection.length}/${riderLimit}` : '';
             console.log(`[RaceRoster] ${race.name} | ${formatStageDebugLabel(stage)} | ${team.name} | ${teamSelection.length} Programmfahrer/Fuellfahrer ausgewaehlt${underfilled}`);
@@ -616,6 +631,20 @@ function applyRaceRosterSelection(db, repo, race, stage, riderIds) {
     if (unknownSelection != null) {
         throw new Error('Die Auswahl enthält Fahrer ausserhalb deines Teams.');
     }
+    // Check if all three top sprinters of the player team are selected
+    const sprinters = playerRoster.filter((r) => r.roleId === 6);
+    sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+    const s1 = sprinters[0] ?? null;
+    const s2 = sprinters[1] ?? null;
+    const s3 = sprinters[2] ?? null;
+    if (s1 && s2 && s3) {
+        const s1Selected = validatedSelections.some((r) => r.id === s1.id);
+        const s2Selected = validatedSelections.some((r) => r.id === s2.id);
+        const s3Selected = validatedSelections.some((r) => r.id === s3.id);
+        if (s1Selected && s2Selected && s3Selected) {
+            throw new Error(`Ungültige Auswahl: Der drittbeste Sprinter ${s3.firstName} ${s3.lastName} darf nicht aufgestellt werden, wenn bereits der beste und zweitbeste Sprinter aufgestellt sind.`);
+        }
+    }
     const autoEntries = previewRaceRoster(db, repo, race, stage).filter((rider) => rider.activeTeamId !== playerTeam.id);
     const finalSelections = [...autoEntries, ...validatedSelections];
     const deleteEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
@@ -678,4 +707,141 @@ function refreshRaceEntriesForRaceStart(db, repo, race, stage) {
     }
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);
+}
+function enforceLieutenantRules(db, repo, teamId, teamSelection, roster, teamFullRoster, riderLocks, season, race, stage, riderLimit) {
+    if (!(0, mappers_1.tableExists)(db, 'rider_lieutenants')) {
+        return teamSelection;
+    }
+    const lieutenants = db.prepare(`
+    SELECT leader_id, lieutenant_id FROM rider_lieutenants WHERE season = ?
+  `).all(season);
+    const leaderToLt = new Map();
+    const ltToLeader = new Map();
+    for (const row of lieutenants) {
+        leaderToLt.set(row.leader_id, row.lieutenant_id);
+        ltToLeader.set(row.lieutenant_id, row.leader_id);
+    }
+    let currentSelection = [...teamSelection];
+    let changed = true;
+    let attempts = 0;
+    while (changed && attempts < 10) {
+        changed = false;
+        attempts++;
+        const selectedLeaderIds = new Set();
+        for (const r of currentSelection) {
+            if (leaderToLt.has(r.id)) {
+                selectedLeaderIds.add(r.id);
+            }
+        }
+        const toRemoveIds = new Set();
+        for (const r of currentSelection) {
+            if (ltToLeader.has(r.id)) {
+                const leaderId = ltToLeader.get(r.id);
+                if (!selectedLeaderIds.has(leaderId)) {
+                    toRemoveIds.add(r.id);
+                }
+            }
+        }
+        if (toRemoveIds.size > 0) {
+            currentSelection = currentSelection.filter(r => !toRemoveIds.has(r.id));
+            changed = true;
+        }
+        const currentSelectedLeaderIds = new Set();
+        for (const r of currentSelection) {
+            if (leaderToLt.has(r.id)) {
+                currentSelectedLeaderIds.add(r.id);
+            }
+        }
+        const toAddLts = [];
+        for (const leaderId of currentSelectedLeaderIds) {
+            const ltId = leaderToLt.get(leaderId);
+            const alreadySelected = currentSelection.some(r => r.id === ltId);
+            if (!alreadySelected) {
+                const eligibleLt = roster.find(r => r.id === ltId);
+                if (eligibleLt) {
+                    toAddLts.push(eligibleLt);
+                }
+            }
+        }
+        if (toAddLts.length > 0) {
+            for (const lt of toAddLts) {
+                if (currentSelection.length < riderLimit) {
+                    currentSelection.push(lt);
+                    changed = true;
+                }
+                else {
+                    const removableCandidates = currentSelection.filter(r => !leaderToLt.has(r.id) &&
+                        !ltToLeader.has(r.id));
+                    if (removableCandidates.length > 0) {
+                        removableCandidates.sort((a, b) => a.overallRating - b.overallRating || b.id - a.id);
+                        const toDrop = removableCandidates[0];
+                        currentSelection = currentSelection.filter(r => r.id !== toDrop.id);
+                        currentSelection.push(lt);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (currentSelection.length < riderLimit) {
+            const currentSelectedIds = new Set(currentSelection.map(r => r.id));
+            const fillPool = roster.filter(r => {
+                if (currentSelectedIds.has(r.id))
+                    return false;
+                if (ltToLeader.has(r.id)) {
+                    const leaderId = ltToLeader.get(r.id);
+                    return currentSelectedIds.has(leaderId);
+                }
+                return true;
+            });
+            if (fillPool.length > 0) {
+                let sortedFill;
+                if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
+                    sortedFill = [...fillPool].sort((a, b) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+                }
+                else {
+                    sortedFill = orderFillCandidates(fillPool.filter(r => canFillRosterSlot(db, repo, r, teamFullRoster, riderLocks, season, race)), race);
+                }
+                if (sortedFill.length > 0) {
+                    currentSelection.push(sortedFill[0]);
+                    changed = true;
+                }
+            }
+        }
+    }
+    return currentSelection;
+}
+function enforceSprinterLimits(teamSelection, teamFullRoster, roster, // eligible roster (excluding locks)
+db, repo, riderLocks, season, race, stage, riderLimit) {
+    let currentSelection = [...teamSelection];
+    // Find and sort sprinters of this team by overall rating (roleId === 6)
+    const sprinters = teamFullRoster.filter((r) => r.roleId === 6);
+    sprinters.sort((a, b) => b.overallRating - a.overallRating || a.lastName.localeCompare(b.lastName, 'de') || a.firstName.localeCompare(b.firstName, 'de') || a.id - b.id);
+    const s1 = sprinters[0] ?? null;
+    const s2 = sprinters[1] ?? null;
+    const s3 = sprinters[2] ?? null;
+    if (s1 && s2 && s3) {
+        const s1Selected = currentSelection.some(r => r.id === s1.id);
+        const s2Selected = currentSelection.some(r => r.id === s2.id);
+        const s3Selected = currentSelection.some(r => r.id === s3.id);
+        if (s1Selected && s2Selected && s3Selected) {
+            // Remove s3 from the selection
+            currentSelection = currentSelection.filter(r => r.id !== s3.id);
+            // We need to fill the empty slot with another candidate who is NOT s3 (and not already selected)
+            const currentSelectedIds = new Set(currentSelection.map(r => r.id));
+            const fillPool = roster.filter(r => r.id !== s3.id && !currentSelectedIds.has(r.id));
+            if (fillPool.length > 0) {
+                let sortedFill;
+                if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
+                    sortedFill = [...fillPool].sort((a, b) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+                }
+                else {
+                    sortedFill = orderFillCandidates(fillPool.filter(r => canFillRosterSlot(db, repo, r, teamFullRoster, riderLocks, season, race)), race);
+                }
+                if (sortedFill.length > 0) {
+                    currentSelection.push(sortedFill[0]);
+                }
+            }
+        }
+    }
+    return currentSelection;
 }

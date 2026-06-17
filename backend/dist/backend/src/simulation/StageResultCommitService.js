@@ -585,6 +585,7 @@ class StageResultCommitService {
         const homeAdvantageCounts = new Map();
         const superHomeAdvantageCounts = new Map();
         const homePressureCounts = new Map();
+        const breakawayAttemptCounts = new Map();
         for (const ev of events) {
             if (ev.riderId == null)
                 continue;
@@ -592,7 +593,12 @@ class StageResultCommitService {
             const title = ev.title ?? '';
             const detail = ev.detail ?? '';
             if (ev.type === 'attack') {
-                attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
+                if (title.toLowerCase().includes('ausreiß') || title.toLowerCase().includes('ausreiss')) {
+                    breakawayAttemptCounts.set(rId, (breakawayAttemptCounts.get(rId) || 0) + 1);
+                }
+                else {
+                    attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
+                }
             }
             else if (ev.type === 'counter_attack') {
                 counterAttackCounts.set(rId, (counterAttackCounts.get(rId) || 0) + 1);
@@ -722,6 +728,8 @@ class StageResultCommitService {
                         eventParts.push(`8:${superHomeAdvantageCounts.get(riderId)}`);
                     if ((homePressureCounts.get(riderId) ?? 0) > 0)
                         eventParts.push(`9:${homePressureCounts.get(riderId)}`);
+                    if ((breakawayAttemptCounts.get(riderId) ?? 0) > 0)
+                        eventParts.push(`10:${breakawayAttemptCounts.get(riderId)}`);
                     if (eventParts.length > 0)
                         eventIdsStr = eventParts.join('|');
                 }
@@ -798,7 +806,10 @@ class StageResultCommitService {
                 if (event.riderId != null) {
                     const inc = getOrCreateIncrement(event.riderId);
                     if (event.type === 'attack' && event.title && event.title.includes('attackiert')) {
-                        inc.attacks++;
+                        const lowerTitle = event.title.toLowerCase();
+                        if (!lowerTitle.includes('ausreiß') && !lowerTitle.includes('ausreiss')) {
+                            inc.attacks++;
+                        }
                     }
                     else if (event.type === 'counter_attack') {
                         inc.counterAttacks++;

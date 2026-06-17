@@ -137,26 +137,63 @@ class RiderRoleService {
             return [];
         }
         const assignments = new Map();
+        // 1. Sort by leadership
         const leadershipRoster = [...roster].sort(compareLeadership);
         const leadershipCounts = this.resolveLeadershipRoleCounts(roster.length, roleIds);
-        let cursor = 0;
-        cursor = this.assignRoleSlice(assignments, leadershipRoster, cursor, leadershipCounts.captain, roleIds.captain.id);
-        this.assignRoleSlice(assignments, leadershipRoster, cursor, leadershipCounts.coCaptain, roleIds.coCaptain.id);
-        const sprintCandidates = roster
-            .filter((rider) => !assignments.has(rider.id) && rider.skill_sprint >= 74)
-            .sort(compareSprint)
-            .slice(0, 3);
-        for (const sprinter of sprintCandidates) {
-            assignments.set(sprinter.id, roleIds.sprinter.id);
+        // Assign Captains
+        let assignedCaptains = 0;
+        for (const rider of leadershipRoster) {
+            if (assignedCaptains < leadershipCounts.captain) {
+                assignments.set(rider.id, roleIds.captain.id);
+                assignedCaptains++;
+            }
         }
+        // 2. Sort sprinter candidates (sprint skill >= 74)
+        const allSprinterCandidates = roster
+            .filter((rider) => rider.skill_sprint >= 74)
+            .sort(compareSprint);
+        // Assign Best Sprinter (first sprinter candidate who is not a Captain)
+        let bestSprinter = null;
+        for (const sprinter of allSprinterCandidates) {
+            if (!assignments.has(sprinter.id)) {
+                assignments.set(sprinter.id, roleIds.sprinter.id);
+                bestSprinter = sprinter;
+                break;
+            }
+        }
+        // 3. Assign Co-Captains (next leadership counts, skipping already assigned)
+        let assignedCoCaptains = 0;
+        for (const rider of leadershipRoster) {
+            if (assignments.has(rider.id)) {
+                continue;
+            }
+            if (assignedCoCaptains < leadershipCounts.coCaptain) {
+                assignments.set(rider.id, roleIds.coCaptain.id);
+                assignedCoCaptains++;
+            }
+        }
+        // 4. Assign 2nd and 3rd best sprinters (who are not Captains or Co-Captains)
+        let extraSprintersCount = 0;
+        for (const sprinter of allSprinterCandidates) {
+            if (bestSprinter && sprinter.id === bestSprinter.id) {
+                continue;
+            }
+            if (!assignments.has(sprinter.id)) {
+                if (extraSprintersCount < 2) { // up to 2 additional sprinters (2nd and 3rd best)
+                    assignments.set(sprinter.id, roleIds.sprinter.id);
+                    extraSprintersCount++;
+                }
+            }
+        }
+        // 5. Assign helper roles to remaining unassigned riders
         const helperRoster = roster
             .filter((rider) => !assignments.has(rider.id))
             .sort(compareLeadership);
         const helperCounts = this.resolveHelperRoleCounts(helperRoster.length, roleIds);
-        cursor = 0;
-        cursor = this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.eliteHelper, roleIds.eliteHelper.id);
-        cursor = this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.strongHelper, roleIds.strongHelper.id);
-        this.assignRoleSlice(assignments, helperRoster, cursor, helperCounts.waterCarrier, roleIds.waterCarrier.id);
+        let helperCursor = 0;
+        helperCursor = this.assignRoleSlice(assignments, helperRoster, helperCursor, helperCounts.eliteHelper, roleIds.eliteHelper.id);
+        helperCursor = this.assignRoleSlice(assignments, helperRoster, helperCursor, helperCounts.strongHelper, roleIds.strongHelper.id);
+        this.assignRoleSlice(assignments, helperRoster, helperCursor, helperCounts.waterCarrier, roleIds.waterCarrier.id);
         return roster.map((rider) => ({
             riderId: rider.id,
             roleId: assignments.get(rider.id) ?? roleIds.waterCarrier.id,
