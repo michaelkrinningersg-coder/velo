@@ -520,7 +520,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
             <td>${flagHtml}</td>
             <td style="white-space: nowrap;">${nameLink}</td>
             <td><strong>${esc(raceStageLabel)}</strong></td>
-            <td>${renderStatusDotsColumn(row)}</td>
+            <td class="status-cell">${renderStatusDotsColumn(row)}</td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
             <td>${categoryBadgeHtml}</td>
@@ -550,12 +550,12 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
         <table class="data-table rider-stats-table">
           <colgroup>
-            <col style="width: 5%;">
+            <col style="width: 6%;">
             <col style="width: 8%;">
             <col style="width: 4%;">
             <col style="width: 15%;">
-            <col style="width: 27%;">
-            <col style="width: 5%;">
+            <col style="width: 21%;">
+            <col style="width: 10%;">
             <col style="width: 7%;">
             <col style="width: 5%;">
             <col style="width: 12%;">

@@ -936,6 +936,23 @@ class RiderRepository {
           WHERE rider_id = ?
         `).get(riderId)
             : undefined;
+        let homeAdvantageDays = 0;
+        let superHomeAdvantageDays = 0;
+        let homePressureDays = 0;
+        if ((0, mappers_1.tableExists)(this.db, 'rider_season_stats')) {
+            const row = this.db.prepare(`
+        SELECT SUM(home_advantage_days) as home_adv,
+               SUM(super_home_advantage_days) as super_home,
+               SUM(home_pressure_days) as home_press
+        FROM rider_season_stats
+        WHERE rider_id = ?
+      `).get(riderId);
+            if (row) {
+                homeAdvantageDays = row.home_adv ?? 0;
+                superHomeAdvantageDays = row.super_home ?? 0;
+                homePressureDays = row.home_press ?? 0;
+            }
+        }
         const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
         const attacks = careerStatsRow?.attacks ?? 0;
         const counterAttacks = careerStatsRow?.counter_attacks ?? 0;
@@ -1342,6 +1359,9 @@ class RiderRepository {
             totalGcWins,
             totalStageWins,
             successfulBreakaways,
+            homeAdvantageDays,
+            superHomeAdvantageDays,
+            homePressureDays,
             categories,
         };
     }

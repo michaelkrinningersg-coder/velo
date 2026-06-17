@@ -878,6 +878,9 @@ export interface RiderCareerStats {
   totalGcWins: number;
   totalStageWins: number;
   successfulBreakaways: number;
+  homeAdvantageDays?: number;
+  superHomeAdvantageDays?: number;
+  homePressureDays?: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;

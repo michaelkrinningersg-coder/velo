@@ -810,6 +810,29 @@ export class StageResultCommitService {
       }
     }
 
+    const bestPrevStageRank = new Map<number, number>();
+    if (race.isStageRace) {
+      const prevRanks = this.db.prepare(`
+        SELECT rider_id, MIN(rank) as min_rank
+        FROM results
+        WHERE race_id = ? AND result_type_id = 1 AND rider_id IS NOT NULL
+        GROUP BY rider_id
+      `).all(race.id) as Array<{ rider_id: number; min_rank: number }>;
+      for (const r of prevRanks) {
+        bestPrevStageRank.set(r.rider_id, r.min_rank);
+      }
+    }
+
+    const getBestStagePlacementInRace = (riderId: number): number => {
+      const prevBest = bestPrevStageRank.get(riderId) ?? 9999;
+      const currentRank = stageRankByRiderId.get(riderId) ?? 9999;
+      return Math.min(prevBest, currentRank);
+    };
+
+    const gcRankByRiderId = new Map<number, number>(
+      gcRows.map((r: any) => [r.riderId as number, r.rank as number])
+    );
+
     const previousBreakaway = this.loadPreviousRiderMetricMap(previousStageId, RESULT_TYPES.breakaway, 'breakaway_kms');
     const breakawayRows = race.isStageRace
       ? [...classificationPerformance]
@@ -824,48 +847,46 @@ export class StageResultCommitService {
             };
           })
           .filter((entry: any) => entry.breakawayKms > 0)
-          .sort((left: any, right: any) =>
-            right.breakawayKms - left.breakawayKms
-            || (stageRankByRiderId.get(left.riderId) ?? 9999) - (stageRankByRiderId.get(right.riderId) ?? 9999)
-            || left.riderId - right.riderId)
+          .sort((left: any, right: any) => {
+            const diff = right.breakawayKms - left.breakawayKms;
+            if (Math.abs(diff) > 0.0001) {
+              return diff;
+            }
+            const leftBestStage = getBestStagePlacementInRace(left.riderId);
+            const rightBestStage = getBestStagePlacementInRace(right.riderId);
+            if (leftBestStage !== rightBestStage) {
+              return leftBestStage - rightBestStage;
+            }
+            const leftGcRank = gcRankByRiderId.get(left.riderId) ?? 9999;
+            const rightGcRank = gcRankByRiderId.get(right.riderId) ?? 9999;
+            return leftGcRank - rightGcRank || left.riderId - right.riderId;
+          })
           .map((entry: any, index: any) => ({ ...entry, rank: index + 1, timeSeconds: null as number | null }))
       : [];
 
-    const jerseysByRiderId = new Map<number, string>();
-    if (previousStageId != null) {
-      const standingsRows = this.db.prepare(`
-        SELECT result_type_id, rider_id, rank
-        FROM results
-        WHERE stage_id = ? AND result_type_id IN (2, 3, 4, 5, 7) AND rider_id IS NOT NULL
-        ORDER BY rank ASC
-      `).all(previousStageId) as Array<{ result_type_id: number; rider_id: number; rank: number }>;
+    const leadersAfterStage = new Map<number, string[]>();
+    const addLeader = (riderId: number | null | undefined, key: string) => {
+      if (riderId == null) return;
+      const list = leadersAfterStage.get(riderId) ?? [];
+      list.push(key);
+      leadersAfterStage.set(riderId, list);
+    };
 
-      const leadersByClassification = new Map<number, number[]>();
-      for (const row of standingsRows) {
-        const list = leadersByClassification.get(row.result_type_id) ?? [];
-        list.push(row.rider_id);
-        leadersByClassification.set(row.result_type_id, list);
-      }
+    if (race.isStageRace) {
+      const gcLeader = gcRows.find((r: any) => r.rank === 1)?.riderId;
+      addLeader(gcLeader, 'yellow');
 
-      const assignedRiderIds = new Set<number>();
-      const classifications = [
-        { typeId: 2, key: 'yellow' }, // GC
-        { typeId: 3, key: 'green' },  // Points
-        { typeId: 4, key: 'red' },    // Mountain
-        { typeId: 5, key: 'white' },  // Youth
-        { typeId: 7, key: 'purple' }, // Breakaway
-      ];
+      const pointsLeader = pointsRows.find((r: any) => r.rank === 1)?.riderId;
+      addLeader(pointsLeader, 'green');
 
-      for (const cls of classifications) {
-        const riders = leadersByClassification.get(cls.typeId) ?? [];
-        for (const rId of riders) {
-          if (!assignedRiderIds.has(rId)) {
-            jerseysByRiderId.set(rId, cls.key);
-            assignedRiderIds.add(rId);
-            break;
-          }
-        }
-      }
+      const mountainLeader = mountainRows.find((r: any) => r.rank === 1)?.riderId;
+      addLeader(mountainLeader, 'red');
+
+      const youthLeader = youthRows.find((r: any) => r.rank === 1)?.riderId;
+      addLeader(youthLeader, 'white');
+
+      const breakawayLeader = breakawayRows.find((r: any) => r.rank === 1)?.riderId;
+      addLeader(breakawayLeader, 'purple');
     }
 
     const insert = this.db.prepare(`
@@ -902,7 +923,8 @@ export class StageResultCommitService {
           if (eventParts.length > 0) eventIdsStr = eventParts.join('|');
         }
         const breakawayKms = riderId != null ? (riderEscapeKms.get(riderId) ?? null) : null;
-        const jerseysWorn = riderId != null ? (jerseysByRiderId.get(riderId) ?? null) : null;
+        const ledList = riderId != null ? (leadersAfterStage.get(riderId) ?? []) : [];
+        const jerseysWorn = ledList.length > 0 ? ledList.join(',') : null;
 
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.stage, row, breakawayKms, eventIdsStr, jerseysWorn);
       }

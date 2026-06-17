@@ -1083,6 +1083,24 @@ export class RiderRepository {
         `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number; illnesses: number; illness_days: number; injuries: number; injury_days: number } | undefined
       : undefined;
 
+    let homeAdvantageDays = 0;
+    let superHomeAdvantageDays = 0;
+    let homePressureDays = 0;
+    if (tableExists(this.db, 'rider_season_stats')) {
+      const row = this.db.prepare(`
+        SELECT SUM(home_advantage_days) as home_adv,
+               SUM(super_home_advantage_days) as super_home,
+               SUM(home_pressure_days) as home_press
+        FROM rider_season_stats
+        WHERE rider_id = ?
+      `).get(riderId) as { home_adv: number | null; super_home: number | null; home_press: number | null } | undefined;
+      if (row) {
+        homeAdvantageDays = row.home_adv ?? 0;
+        superHomeAdvantageDays = row.super_home ?? 0;
+        homePressureDays = row.home_press ?? 0;
+      }
+    }
+
     const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
     const attacks = careerStatsRow?.attacks ?? 0;
     const counterAttacks = careerStatsRow?.counter_attacks ?? 0;
@@ -1479,6 +1497,9 @@ export class RiderRepository {
       totalGcWins,
       totalStageWins,
       successfulBreakaways,
+      homeAdvantageDays,
+      superHomeAdvantageDays,
+      homePressureDays,
       categories,
     };
   }

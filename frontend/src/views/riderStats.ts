@@ -1293,50 +1293,78 @@ const JERSEY_LABELS: Record<string, string> = {
 };
 
 export function renderStatusDotsColumn(row: any): string {
-  const dots: string[] = [];
-  const tooltipRows: string[] = [];
-
+  const activeJerseys = new Set<string>();
   if (row.jerseysWorn) {
-    const jerseyKey = row.jerseysWorn.trim();
-    if (jerseyKey) {
-      const label = JERSEY_LABELS[jerseyKey] || `${jerseyKey} Trikot`;
-      const colorClass = jerseyKey === 'purple' ? 'jersey-dot-purple-worn' : `jersey-dot-${jerseyKey}`;
-      dots.push(`<span class="status-dot ${colorClass}"></span>`);
-      tooltipRows.push(`
-        <div class="status-tooltip-row">
-          <span class="status-dot ${colorClass}"></span>
-          <span>${esc(label)}</span>
-        </div>
-      `);
+    const keys = row.jerseysWorn.split(',').map((k: string) => k.trim()).filter(Boolean);
+    for (const jerseyKey of keys) {
+      activeJerseys.add(jerseyKey);
     }
   }
 
+  const eventCounts = new Map<string, number>();
   if (row.eventIds) {
     const parts = row.eventIds.split('|');
     for (const part of parts) {
       const [eventId, countStr] = part.split(':');
       if (eventId) {
-        const count = countStr ? parseInt(countStr, 10) : 1;
-        const label = EVENT_LABELS[eventId] || `Event ${eventId}`;
-        const countSuffix = count > 1 ? ` (${count}x)` : '';
-        dots.push(`<span class="status-dot event-dot-${eventId}"></span>`);
+        eventCounts.set(eventId, countStr ? parseInt(countStr, 10) : 1);
+      }
+    }
+  }
+
+  const orderList = [
+    { type: 'jersey', key: 'yellow', label: 'Gelbes Trikot (Gesamtwertung)', colorClass: 'jersey-dot-yellow' },
+    { type: 'jersey', key: 'green', label: 'Grünes Trikot (Punktewertung)', colorClass: 'jersey-dot-green' },
+    { type: 'jersey', key: 'red', label: 'Bergtrikot (Bergwertung)', colorClass: 'jersey-dot-red' },
+    { type: 'jersey', key: 'white', label: 'Weißes Trikot (Nachwuchswertung)', colorClass: 'jersey-dot-white' },
+    { type: 'jersey', key: 'purple', label: 'Lila Trikot (Aktivste Fahrer)', colorClass: 'jersey-dot-purple-worn' },
+    { type: 'event', key: '3', label: 'Superform', colorClass: 'event-dot-3' },
+    { type: 'event', key: '4', label: 'Supermalus', colorClass: 'event-dot-4' },
+    { type: 'event', key: '1', label: 'Sturz', colorClass: 'event-dot-1' },
+    { type: 'event', key: '2', label: 'Defekt', colorClass: 'event-dot-2' },
+    { type: 'event', key: '7', label: 'Heimvorteil', colorClass: 'event-dot-7' },
+    { type: 'event', key: '8', label: 'Superheimvorteil', colorClass: 'event-dot-8' },
+    { type: 'event', key: '9', label: 'Heimdruck', colorClass: 'event-dot-9' },
+    { type: 'event', key: '5', label: 'Attacken', colorClass: 'event-dot-5' },
+    { type: 'event', key: '6', label: 'Konterattacken', colorClass: 'event-dot-6' }
+  ];
+
+  const renderedDots: string[] = [];
+  const tooltipRows: string[] = [];
+
+  for (const item of orderList) {
+    if (item.type === 'jersey') {
+      if (activeJerseys.has(item.key)) {
+        renderedDots.push(`<span class="status-dot ${item.colorClass}"></span>`);
         tooltipRows.push(`
           <div class="status-tooltip-row">
-            <span class="status-dot event-dot-${eventId}"></span>
-            <span>${esc(label)}${esc(countSuffix)}</span>
+            <span class="status-dot ${item.colorClass}"></span>
+            <span>${esc(item.label)}</span>
+          </div>
+        `);
+      }
+    } else {
+      const count = eventCounts.get(item.key);
+      if (count !== undefined && count > 0) {
+        const countSuffix = count > 1 ? ` (${count}x)` : '';
+        renderedDots.push(`<span class="status-dot ${item.colorClass}"></span>`);
+        tooltipRows.push(`
+          <div class="status-tooltip-row">
+            <span class="status-dot ${item.colorClass}"></span>
+            <span>${esc(item.label)}${esc(countSuffix)}</span>
           </div>
         `);
       }
     }
   }
 
-  if (dots.length === 0) {
+  if (renderedDots.length === 0) {
     return '';
   }
 
   return `
     <div class="status-dots-container">
-      ${dots.join('')}
+      ${renderedDots.join('')}
       <div class="status-tooltip">
         <div class="status-tooltip-title">Status Details</div>
         ${tooltipRows.join('')}
@@ -1501,17 +1529,17 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                 <table class="data-table rider-stats-table">
                   <colgroup>
                     <col style="width: 8%;">
-                    <col style="width: 3.5%;">
+                    <col style="width: 4.5%;">
                     <col style="width: 3.5%;">
                     <col style="width: 2.5%;">
                     <col style="width: 3.5%;">
                     <col style="width: 11%;">
-                    <col style="width: 23%;">
-                    <col style="width: 4%;">
+                    <col style="width: 20%;">
+                    <col style="width: 8%;">
                     <col style="width: 9.5%;">
                     <col style="width: 4.5%;">
                     <col style="width: 4.5%;">
-                    <col style="width: 17%;">
+                    <col style="width: 15%;">
                     <col style="width: 5%;">
                   </colgroup>
                   <thead>
@@ -1546,7 +1574,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null)}</td>
                           <td>${esc(raceStageLabel)}</td>
-                          <td>${renderStatusDotsColumn(row)}</td>
+                          <td class="status-cell">${renderStatusDotsColumn(row)}</td>
                           <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
@@ -1567,8 +1595,8 @@ function updateRiderStatsModalWidth(): void {
   if (!card) return;
   const wideTabs = ['results', 'topResults', 'career', 'form', 'fatigue'];
   if (wideTabs.includes(state.riderStatsTab)) {
-    card.style.minWidth = 'min(1180px, 95vw)';
-    card.style.maxWidth = '1350px';
+    card.style.minWidth = 'min(1475px, 95vw)';
+    card.style.maxWidth = '1687px';
   } else {
     card.style.minWidth = '';
     card.style.maxWidth = '';
@@ -1925,7 +1953,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
             <td>${stagePlacementHtml}</td>
             <td>${gcPlacementHtml}</td>
             <td><strong>${esc(raceStageLabel)}</strong>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
-            <td>${renderStatusDotsColumn(row)}</td>
+            <td class="status-cell">${renderStatusDotsColumn(row)}</td>
             <td>${profileBadgeHtml}</td>
             <td>${stageScoreBadgeHtml}</td>
             <td>${categoryBadgeHtml}</td>
@@ -1955,10 +1983,10 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
         <table class="data-table rider-stats-table">
           <colgroup>
-            <col style="width: 5%;">
+            <col style="width: 6%;">
             <col style="width: 9%;">
-            <col style="width: 34%;">
-            <col style="width: 5%;">
+            <col style="width: 28%;">
+            <col style="width: 10%;">
             <col style="width: 10%;">
             <col style="width: 5%;">
             <col style="width: 18%;">
@@ -2115,6 +2143,21 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Verletzungen</div>
           <div style="font-size: 1.45rem; font-weight: bold; color: #f6ad55; line-height: 1.25;">${stats.injuries ?? 0}</div>
           <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">${stats.injuryDays ?? 0} Tage</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimvorteil</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #38bdf8; line-height: 1.25;">${stats.homeAdvantageDays ?? 0}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimbonus</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #facc15; line-height: 1.25;">${stats.superHomeAdvantageDays ?? 0}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimmalus</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #fb7185; line-height: 1.25;">${stats.homePressureDays ?? 0}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
         </div>
       </div>
 

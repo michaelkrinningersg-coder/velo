@@ -304,6 +304,9 @@ export class LeaderboardRepository {
       } else if (winType === 'youth') {
         typeId = 5;
         label = 'Nachwuchssieg';
+      } else if (winType === 'breakaway') {
+        typeId = 7;
+        label = 'Ausreißersieg';
       }
       
       if (parts[3]) {
@@ -975,6 +978,9 @@ export class LeaderboardRepository {
       } else if (winType === 'youth') {
         typeId = 5;
         label = 'Nachwuchssieg';
+      } else if (winType === 'breakaway') {
+        typeId = 7;
+        label = 'Ausreißersieg';
       }
       
       if (parts[3]) {

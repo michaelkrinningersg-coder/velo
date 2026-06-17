@@ -274,6 +274,10 @@ class LeaderboardRepository {
                 typeId = 5;
                 label = 'Nachwuchssieg';
             }
+            else if (winType === 'breakaway') {
+                typeId = 7;
+                label = 'Ausreißersieg';
+            }
             if (parts[3]) {
                 const catId = parseInt(parts[3], 10);
                 categoryFilter = `AND ra.category_id = ${catId}`;
@@ -949,6 +953,10 @@ class LeaderboardRepository {
             else if (winType === 'youth') {
                 typeId = 5;
                 label = 'Nachwuchssieg';
+            }
+            else if (winType === 'breakaway') {
+                typeId = 7;
+                label = 'Ausreißersieg';
             }
             if (parts[3]) {
                 const catId = parseInt(parts[3], 10);
