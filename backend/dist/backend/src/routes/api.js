@@ -446,11 +446,31 @@ function createRouter(dbService) {
     router.get('/stages/:stageId/summary', (req, res) => {
         const stageId = Number(req.params['stageId']);
         if (!Number.isFinite(stageId))
-            return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+            return fail(res, 400, 'Ungültige Stage-ID.');
         try {
             const db = dbService.getActiveConnection();
             const repo = new GameRepository_1.GameRepository(db);
-            const stage = repo.getStageById(stageId);
+            let stage = repo.getStageById(stageId);
+            if (!stage) {
+                try {
+                    const loaded = routeImporter.loadExistingStage(stageId);
+                    if (loaded && loaded.metadata) {
+                        stage = {
+                            id: loaded.metadata.stageId,
+                            raceId: loaded.metadata.raceId,
+                            stageNumber: loaded.metadata.stageNumber,
+                            date: loaded.metadata.date,
+                            profile: loaded.metadata.profile,
+                            startElevation: loaded.metadata.startElevation,
+                            detailsCsvFile: loaded.metadata.detailsCsvFile,
+                            isStageRace: true,
+                        };
+                    }
+                }
+                catch (e) {
+                    // ignore
+                }
+            }
             if (!stage) {
                 return fail(res, 404, `Stage ${stageId} nicht gefunden.`);
             }
@@ -463,7 +483,7 @@ function createRouter(dbService) {
     router.get('/simulation/roster/:stageId', (req, res) => {
         const stageId = Number(req.params['stageId']);
         if (!Number.isFinite(stageId))
-            return fail(res, 400, 'UngÃ¼ltige Stage-ID.');
+            return fail(res, 400, 'Ungültige Stage-ID.');
         try {
             const pendingStageIds = new Set(getGss().loadStatus().pendingStages.map((stage) => stage.stageId));
             if (!pendingStageIds.has(stageId)) {

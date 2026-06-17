@@ -36,6 +36,7 @@ import {
   getStageDisplayName,
   buildDashboardStageProfileLabel,
   renderStageProfileBadge,
+  openDashboardStageProfile,
 } from './dashboard';
 
 // Constants
@@ -2096,6 +2097,15 @@ export function initStageEditorListeners(): void {
   const stagesTable = document.getElementById('stage-editor-stages-table');
   if (stagesTable) {
     stagesTable.addEventListener('click', (event) => {
+      const profileButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-profile-open-stage-id]');
+      if (profileButton) {
+        const stageId = Number(profileButton.dataset['stageProfileOpenStageId']);
+        if (Number.isFinite(stageId)) {
+          void openDashboardStageProfile(stageId);
+        }
+        return;
+      }
+
       const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-editor-stages-sort]');
       if (!sortButton) return;
 
@@ -2115,6 +2125,20 @@ export function initStageEditorListeners(): void {
   const climbsTable = document.getElementById('stage-editor-climbs-table');
   if (climbsTable) {
     climbsTable.addEventListener('click', (event) => {
+      const profileButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-profile-open-stage-id]');
+      if (profileButton) {
+        const stageId = Number(profileButton.dataset['stageProfileOpenStageId']);
+        const climbId = profileButton.dataset['stageProfileOpenClimbId'] ?? null;
+        if (Number.isFinite(stageId)) {
+          let selectedClimb: StageEditorClimbOverviewRow | null = null;
+          if (climbId && state.stageEditorClimbRows) {
+            selectedClimb = state.stageEditorClimbRows.find((c) => c.id === climbId) ?? null;
+          }
+          void openDashboardStageProfile(stageId, selectedClimb);
+        }
+        return;
+      }
+
       const sortButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-editor-climbs-sort]');
       if (!sortButton) return;
 

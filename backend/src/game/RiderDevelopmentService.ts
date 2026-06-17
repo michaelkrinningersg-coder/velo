@@ -184,7 +184,7 @@ function getSpecializationScores(skills: RiderSkills): Array<{ specialization: R
     { specialization: 'Sprint', score: scoreProfile(skills, [['sprint', 0.4], ['acceleration', 0.25], ['flat', 0.15], ['bikeHandling', 0.1], ['resistance', 0.1]]) },
     { specialization: 'Timetrial', score: scoreProfile(skills, [['timeTrial', 0.5], ['prologue', 0.2], ['flat', 0.1], ['resistance', 0.1], ['bikeHandling', 0.1]]) },
     { specialization: 'Cobble', score: scoreProfile(skills, [['cobble', 0.4], ['flat', 0.2], ['resistance', 0.15], ['bikeHandling', 0.15], ['hill', 0.1]]) },
-    { specialization: 'Attacker', score: scoreProfile(skills, [['attack', 0.26], ['acceleration', 0.18], ['hill', 0.18], ['mediumMountain', 0.18], ['resistance', 0.18]]) },
+    { specialization: 'Attacker', score: scoreProfile(skills, [['attack', 0.26], ['acceleration', 0.18], ['hill', 0.18], ['mediumMountain', 0.18], ['resistance', 0.18]]) * 0.97 },
   ];
   return scores.sort((left, right) => right.score - left.score);
 }

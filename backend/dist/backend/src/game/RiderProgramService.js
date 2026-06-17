@@ -35,7 +35,7 @@ function resolveSkillScores(row) {
         3: row.skill_sprint * 0.4 + row.skill_acceleration * 0.25 + row.skill_flat * 0.15 + row.skill_bike_handling * 0.1 + row.skill_resistance * 0.1,
         4: row.skill_time_trial * 0.45 + row.skill_prologue * 0.25 + row.skill_flat * 0.15 + row.skill_stamina * 0.15,
         5: row.skill_cobble * 0.55 + row.skill_flat * 0.15 + row.skill_bike_handling * 0.15 + row.skill_resistance * 0.15,
-        6: row.skill_attack * 0.35 + row.skill_stamina * 0.2 + row.skill_resistance * 0.2 + row.skill_hill * 0.15 + row.skill_acceleration * 0.1,
+        6: (row.skill_attack * 0.35 + row.skill_stamina * 0.2 + row.skill_resistance * 0.2 + row.skill_hill * 0.15 + row.skill_acceleration * 0.1) * 0.97,
     };
 }
 function resolveBestSpecIds(row) {
@@ -215,6 +215,26 @@ class RiderProgramService {
         )
       ORDER BY riders.id ASC
     `).all(season, season, season);
+        const allPrograms = this.db.prepare('SELECT id, name FROM race_programs').all();
+        const top75Riders = new Set(this.db.prepare(`
+        SELECT id FROM riders
+        WHERE is_retired = 0
+        ORDER BY overall_rating DESC, id ASC
+        LIMIT 75
+      `).all().map((r) => r.id));
+        const assignmentCounts = {};
+        for (const p of allPrograms) {
+            assignmentCounts[p.id] = 0;
+        }
+        const existingCounts = this.db.prepare(`
+      SELECT program_id, COUNT(*) AS count
+      FROM rider_season_programs
+      WHERE season = ?
+      GROUP BY program_id
+    `).all(season);
+        for (const e of existingCounts) {
+            assignmentCounts[e.program_id] = e.count;
+        }
         const insert = this.db.prepare(`
       INSERT OR IGNORE INTO rider_season_programs (season, rider_id, program_id, assigned_on)
       VALUES (?, ?, ?, ?)
@@ -273,14 +293,28 @@ class RiderProgramService {
                         rulePool = selectRulePool(filteredRules, roleName, specs);
                     }
                 }
-                let programId = chooseProgramId(rulePool, `${season}|${rider.id}|${roleName}|${specs.join('|')}`);
-                if (programId == null && isBestRider) {
-                    programId = 1; // Giro_Tour_A fallback
+                const seed = `${season}|${rider.id}|${roleName}|${specs.join('|')}`;
+                let programId = chooseProgramId(rulePool, seed);
+                if (programId == null) {
+                    const isTop75 = top75Riders.has(rider.id);
+                    const allowedPrograms = allPrograms.filter(p => {
+                        if (isTop75) {
+                            const nameLower = p.name.toLowerCase();
+                            return nameLower.includes('tour') && !nameLower.includes('non_tour') && !nameLower.includes('non-tour');
+                        }
+                        return true;
+                    });
+                    const candidates = allowedPrograms.length > 0 ? allowedPrograms : allPrograms;
+                    const minCount = Math.min(...candidates.map(c => assignmentCounts[c.id] || 0));
+                    const bestCandidates = candidates.filter(c => (assignmentCounts[c.id] || 0) === minCount);
+                    const idx = Math.floor(deterministicUnit(seed) * bestCandidates.length);
+                    programId = bestCandidates[idx].id;
                 }
                 if (programId == null) {
                     continue;
                 }
                 insert.run(season, rider.id, programId, assignedDate);
+                assignmentCounts[programId] = (assignmentCounts[programId] || 0) + 1;
             }
         })();
         this.ensureLieutenants(season, assignedDate);

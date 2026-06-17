@@ -665,7 +665,37 @@ export async function refreshRaceProgramParticipants(showLoadingState = false): 
 }
 
 export async function openDashboardStageProfile(stageId: number, selectedClimb: StageEditorClimbOverviewRow | null = null): Promise<void> {
-  const location = findStageById(stageId);
+  let location = findStageById(stageId);
+  if (!location && state.stageEditorStageRows) {
+    const editorRow = state.stageEditorStageRows.find((r) => r.stageId === stageId);
+    if (editorRow) {
+      location = {
+        race: {
+          id: editorRow.raceId,
+          name: editorRow.raceName,
+          countryId: 0,
+          categoryId: 0,
+          isStageRace: true,
+          numberOfStages: 1,
+          startDate: '',
+          endDate: '',
+          prestige: 0,
+        } as any,
+        stage: {
+          id: editorRow.stageId,
+          raceId: editorRow.raceId,
+          stageNumber: editorRow.stageNumber,
+          date: '2026-01-01',
+          profile: editorRow.profile,
+          startElevation: 0,
+          detailsCsvFile: '',
+          distanceKm: editorRow.distanceKm,
+          elevationGainMeters: editorRow.elevationGainMeters,
+        } as any,
+      };
+    }
+  }
+
   if (!location) {
     return;
   }
