@@ -19,3 +19,11 @@ id,name,peak1_min,peak1_max,peak2_min,peak2_max,peak3_min,peak3_max
 18,Class_Ardenn_C,12,16,23,27,39,43
 19,Class_other_classic,9,13,20,24,36,40
 20,Class_other_stage,7,11,21,25,35,39
+21,ardennen_tour_klassiker_A,15,19,26,30,35,39
+22,ardennen_tour_klassiker_D,15,19,26,30,35,39
+23,cobble_tour_klassiker_C,12,16,26,30,36,40
+24,Klassiker_Tour_Klassiker_B,18,22,27,31,38,42
+25,ardennen_tour_klassiker_A_non_tour,15,19,26,30,35,39
+26,ardennen_tour_klassiker_D_non_tour,15,19,26,30,35,39
+27,cobble_tour_klassiker_C_non_tour,12,16,26,30,36,40
+28,Klassiker_Tour_Klassiker_B_non_tour,18,22,27,31,38,42

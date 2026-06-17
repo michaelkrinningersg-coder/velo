@@ -15,7 +15,7 @@ import {
   formatNonFinisherReason,
   renderSeasonFormPhaseIndicator,
 } from '../state';
-import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge } from './dashboard';
+import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge, openDashboardStageProfile } from './dashboard';
 import type { Rider, RiderStatsPayload } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
 import { renderStageEditorScoreBadge } from './stageEditor';
@@ -480,6 +480,17 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
   const specIcon2 = getSpecializationIcon(rider?.specialization2 ?? null);
   const specIcon3 = getSpecializationIcon(rider?.specialization3 ?? null);
 
+  let lieutenantPill = '';
+  if (payload?.lieutenantInfo) {
+    lieutenantPill = `
+      <span class="rider-stats-icon-pill" title="Leutnant">🎖️ <span>Leutnant: <a href="#" onclick="event.preventDefault(); openRiderStatsFromRiderStats(${payload.lieutenantInfo.id})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(payload.lieutenantInfo.name)}</a></span></span>
+    `;
+  } else if (payload?.leaderInfo) {
+    lieutenantPill = `
+      <span class="rider-stats-icon-pill" title="Kapitän/Sprinter">🛡️ <span>Fährt für: <a href="#" onclick="event.preventDefault(); openRiderStatsFromRiderStats(${payload.leaderInfo.id})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(payload.leaderInfo.name)}</a></span></span>
+    `;
+  }
+
   return `
     <div class="rider-stats-header-grid">
       <div class="rider-stats-header-col align-left">
@@ -487,6 +498,7 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
         <span class="rider-stats-icon-pill" title="Team">${resolvedTeamId ? renderMiniJersey(resolvedTeamId, resolvedTeamName) : ''} <span>${esc(resolvedTeamName)}</span></span>
         <span class="rider-stats-icon-pill" title="Rolle">${esc(resolvedRoleName)}</span>
         <span class="rider-stats-icon-pill" title="Formphase">${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)} <span>Form</span></span>
+        ${lieutenantPill}
       </div>
       <div class="rider-stats-header-col align-left">
         <span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;" title="Overall-Stärke">${renderRiderOverallRatingBadge(resolvedOverallRating)}</span>
@@ -1675,7 +1687,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
                           <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null)}</td>
                           <td>${esc(raceStageLabel)}</td>
                           <td class="status-cell">${renderStatusDotsColumn(row)}</td>
-                          <td>${isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–')}</td>
+                          <td>${isFinalRow ? '–' : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background: none; border: none; padding: 0; cursor: pointer; display: inline-flex;">${renderStageProfileBadge(row.profile)}</button>` : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
                           <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
                           <td>${esc(formatRiderStatsResultDetail(row))}</td>
@@ -1796,6 +1808,17 @@ export function initRiderStatsListeners(): void {
           const rider = findRiderById(state.riderStatsSelectedRiderId);
           $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
         }
+        return;
+      }
+
+      // Handle stage profile click
+      const profileLinkButton = (event.target as Element).closest<HTMLButtonElement>('button[data-stage-profile-id]');
+      if (profileLinkButton) {
+        const stageId = Number(profileLinkButton.dataset['stageProfileId']);
+        if (Number.isFinite(stageId)) {
+          void openDashboardStageProfile(stageId);
+        }
+        return;
       }
       return;
     }
@@ -2063,7 +2086,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
           stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
         }
 
-        const profileBadgeHtml = isFinalRow ? '–' : (row.profile ? renderStageProfileBadge(row.profile) : '–');
+        const profileBadgeHtml = isFinalRow ? '–' : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background: none; border: none; padding: 0; cursor: pointer; display: inline-flex;">${renderStageProfileBadge(row.profile)}</button>` : '–');
         const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
         const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null);
 
@@ -2220,6 +2243,11 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Erf. Ausreißer</div>
           <div style="font-size: 1.75rem; font-weight: bold; color: #2ecc71;">${stats.successfulBreakaways ?? 0}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Ausreißer-Kms</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #c084fc; line-height: 1.25;">${Math.round(stats.breakawayKms ?? 0)}</div>
+          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">km</div>
         </div>
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Attacken</div>
@@ -2487,3 +2515,5 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
     </section>
   `;
 }
+
+(window as any).openRiderStatsFromRiderStats = openRiderStats;

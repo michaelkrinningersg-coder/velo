@@ -885,6 +885,7 @@ export interface RiderCareerStats {
   homeAdvantageDays?: number;
   superHomeAdvantageDays?: number;
   homePressureDays?: number;
+  breakawayKms?: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;
@@ -979,6 +980,8 @@ export interface RiderStatsPayload {
   formHistory?: RiderFormHistoryEntry[];
   careerStats?: RiderCareerStats;
   fatigueHistory?: RiderFatigueHistoryEntry[];
+  lieutenantInfo?: { id: number; name: string } | null;
+  leaderInfo?: { id: number; name: string } | null;
 }
 
 export interface RiderFatigueHistoryEntry {

@@ -5,6 +5,7 @@ export interface StageScoreSegment {
   gradientPercent: number;
   markers: StageMarker[];
   endMarkers: StageMarker[];
+  terrain?: string;
 }
 
 export interface StageClimbScore {
@@ -24,6 +25,7 @@ interface PositionedScoreSegment {
   gradientPercent: number;
   markers: StageMarker[];
   endMarkers: StageMarker[];
+  terrain?: string;
 }
 
 interface OpenClimb {
@@ -76,6 +78,7 @@ function buildPositionedScoreSegments(segments: StageScoreSegment[], startElevat
       gradientPercent: segment.gradientPercent,
       markers: segment.markers,
       endMarkers: segment.endMarkers,
+      terrain: segment.terrain,
     };
     currentKm = endKm;
     currentElevation = endElevation;
@@ -83,7 +86,14 @@ function buildPositionedScoreSegments(segments: StageScoreSegment[], startElevat
   });
 }
 
-function calculateSegmentScore(lengthKm: number, gradientPercent: number, endKm: number, endElevation: number, totalDistanceKm: number): number {
+function calculateSegmentScore(
+  lengthKm: number,
+  gradientPercent: number,
+  endKm: number,
+  endElevation: number,
+  totalDistanceKm: number,
+  terrain?: string,
+): number {
   if (lengthKm <= 0 || totalDistanceKm <= 0) {
     return 0;
   }
@@ -93,10 +103,21 @@ function calculateSegmentScore(lengthKm: number, gradientPercent: number, endKm:
     : lengthKm * 0.1;
   const progress = endKm / totalDistanceKm;
   const positionMultiplier = 0.1 + (1.9 * (progress ** 1.8));
+
+  let terrainMultiplier = 1.0;
+  if (terrain) {
+    const norm = terrain.toLowerCase();
+    if (norm === 'cobble') {
+      terrainMultiplier = 3.0;
+    } else if (norm === 'cobble_hill' || norm === 'cobblehill') {
+      terrainMultiplier = 4.0;
+    }
+  }
+
   const distanceFactor = 0.5 + (0.25 * (endKm / 150));
   const altitudeFactor = 1 + (0.08 * ((endElevation / 1000) ** 2));
 
-  return (baseFactor * positionMultiplier * distanceFactor * altitudeFactor) / SCORE_CALIBRATION_DIVISOR;
+  return (baseFactor * positionMultiplier * terrainMultiplier * distanceFactor * altitudeFactor) / SCORE_CALIBRATION_DIVISOR;
 }
 
 function calculateScoreForRange(positionedSegments: PositionedScoreSegment[], totalDistanceKm: number, startKm: number, endKm: number): number {
@@ -117,7 +138,14 @@ function calculateScoreForRange(positionedSegments: PositionedScoreSegment[], to
       ? ((clippedEndElevation - clippedStartElevation) / (clippedLengthKm * 1000)) * 100
       : segment.gradientPercent;
 
-    return sum + calculateSegmentScore(clippedLengthKm, clippedGradientPercent, clippedEndKm, clippedEndElevation, totalDistanceKm);
+    return sum + calculateSegmentScore(
+      clippedLengthKm,
+      clippedGradientPercent,
+      clippedEndKm,
+      clippedEndElevation,
+      totalDistanceKm,
+      segment.terrain,
+    );
   }, 0);
 }
 

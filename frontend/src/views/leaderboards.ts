@@ -110,7 +110,7 @@ function setScope(scope: 'riders' | 'teams'): void {
   // Handle teams scope restrictions
   if (scope === 'teams') {
     // If active metric is a physis metric, reset it
-    if (isPhysisMetric(activeMetricKey)) {
+    if (isPhysisMetric(activeMetricKey) || activeMetricKey === 'strongest_lieutenants') {
       resetAllSelects();
       activeMetricKey = '';
     }
@@ -312,6 +312,7 @@ export async function renderLeaderboard(): Promise<void> {
 
   // Render headers
   const isLeadout = activeMetricKey === 'highest_leadout_bonus';
+  const isLieutenant = activeMetricKey === 'strongest_lieutenants';
   if (activeScope === 'riders') {
     theadEl.innerHTML = `
       <tr>
@@ -321,6 +322,7 @@ export async function renderLeaderboard(): Promise<void> {
         <th>Fahrer</th>
         <th>Team</th>
         ${isLeadout ? '<th>Rennen / Etappe / Jahr</th>' : ''}
+        ${isLieutenant ? '<th>Fährt für</th>' : ''}
         <th style="text-align: right; width: 180px;">Wert</th>
       </tr>
     `;
@@ -351,6 +353,28 @@ export async function renderLeaderboard(): Promise<void> {
       leadoutCell = `<td style="vertical-align: middle;">${esc(row.raceName ?? '–')} · ${esc(stageLabel)} · ${esc(String(row.season ?? '–'))}</td>`;
     }
 
+    let lieutenantCell = '';
+    if (isLieutenant) {
+      if (row.lieutenantDetails) {
+        const det = row.lieutenantDetails;
+        const leaderFlag = det.leaderNationality ? renderFlag(det.leaderNationality) : '';
+        const roleLabel = det.leaderRoleName ? ` (${det.leaderRoleName})` : '';
+        lieutenantCell = `
+          <td style="vertical-align: middle;">
+            <span style="display: inline-flex; align-items: center; gap: 0.25rem;">
+              ${leaderFlag}
+              <a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${det.leaderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">
+                ${esc(det.leaderFirstName)} ${esc(det.leaderLastName)}
+              </a>
+              <span class="text-muted" style="font-size: 0.85em;">${esc(roleLabel)}</span>
+            </span>
+          </td>
+        `;
+      } else {
+        lieutenantCell = `<td style="vertical-align: middle;">–</td>`;
+      }
+    }
+
     if (activeScope === 'riders') {
       const flagHtml = row.nationality ? renderFlag(row.nationality) : '—';
       const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
@@ -364,6 +388,7 @@ export async function renderLeaderboard(): Promise<void> {
           <td style="vertical-align: middle;">${riderName}</td>
           <td style="vertical-align: middle;">${teamHtml}</td>
           ${leadoutCell}
+          ${lieutenantCell}
           <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
         </tr>
       `;

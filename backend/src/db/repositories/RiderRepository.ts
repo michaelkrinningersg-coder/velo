@@ -632,6 +632,28 @@ export class RiderRepository {
       }
     }
 
+    const hasLieutenantsTable = tableExists(this.db, 'rider_lieutenants');
+    const lieutenantRow = hasLieutenantsTable
+      ? (this.db.prepare(`
+          SELECT rl.lieutenant_id, r.first_name, r.last_name
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.lieutenant_id
+          WHERE rl.leader_id = ? AND rl.season = ?
+        `).get(rider.id, currentSeason) as { lieutenant_id: number; first_name: string; last_name: string } | undefined)
+      : undefined;
+
+    const leaderRow = hasLieutenantsTable
+      ? (this.db.prepare(`
+          SELECT rl.leader_id, r.first_name, r.last_name
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.leader_id
+          WHERE rl.lieutenant_id = ? AND rl.season = ?
+        `).get(rider.id, currentSeason) as { leader_id: number; first_name: string; last_name: string } | undefined)
+      : undefined;
+
+    const lieutenantInfo = lieutenantRow ? { id: lieutenantRow.lieutenant_id, name: `${lieutenantRow.first_name} ${lieutenantRow.last_name}` } : null;
+    const leaderInfo = leaderRow ? { id: leaderRow.leader_id, name: `${leaderRow.first_name} ${leaderRow.last_name}` } : null;
+
     const fatigueHistory = !excludeFatigue && tableExists(this.db, 'rider_fatigue_history')
       ? (this.db.prepare(`
           SELECT id, rider_id AS riderId, date, type, race_name AS raceName,
@@ -646,6 +668,8 @@ export class RiderRepository {
       : [];
 
     return {
+      lieutenantInfo,
+      leaderInfo,
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
       age: rider.age ?? (new GameStateRepository(this.db).getCurrentSeason() - rider.birthYear),
@@ -1088,18 +1112,21 @@ export class RiderRepository {
     let homeAdvantageDays = 0;
     let superHomeAdvantageDays = 0;
     let homePressureDays = 0;
+    let breakawayKms = 0;
     if (tableExists(this.db, 'rider_season_stats')) {
       const row = this.db.prepare(`
         SELECT SUM(home_advantage_days) as home_adv,
                SUM(super_home_advantage_days) as super_home,
-               SUM(home_pressure_days) as home_press
+               SUM(home_pressure_days) as home_press,
+               SUM(breakaway_kms) as breakaway_kms
         FROM rider_season_stats
         WHERE rider_id = ?
-      `).get(riderId) as { home_adv: number | null; super_home: number | null; home_press: number | null } | undefined;
+      `).get(riderId) as { home_adv: number | null; super_home: number | null; home_press: number | null; breakaway_kms: number | null } | undefined;
       if (row) {
         homeAdvantageDays = row.home_adv ?? 0;
         superHomeAdvantageDays = row.super_home ?? 0;
         homePressureDays = row.home_press ?? 0;
+        breakawayKms = row.breakaway_kms ?? 0;
       }
     }
 
@@ -1502,6 +1529,7 @@ export class RiderRepository {
       homeAdvantageDays,
       superHomeAdvantageDays,
       homePressureDays,
+      breakawayKms,
       categories,
     };
   }

@@ -1100,6 +1100,22 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
         ON rider_season_programs(season, program_id);
+
+      CREATE TABLE IF NOT EXISTS rider_lieutenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        lieutenant_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        UNIQUE(season, leader_id),
+        UNIQUE(season, lieutenant_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS lieutenant_all_time_peaks (
+        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+        max_overall_rating INTEGER NOT NULL,
+        leader_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL
+      );
     `);
 
     if (!columnExists(db, 'race_programs', 'peak1_min')) {

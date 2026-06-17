@@ -529,6 +529,40 @@ export class GameStateService {
     }
 
     this.ensureRiderDailyStateRows(currentSeason);
+
+    if (this.isTable('rider_lieutenants')) {
+      this.db.prepare(`
+        UPDATE rider_daily_state
+        SET peak_dates_json = (
+          SELECT lds.peak_dates_json
+          FROM rider_lieutenants rl
+          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+        )
+        WHERE EXISTS (
+          SELECT 1
+          FROM rider_lieutenants rl
+          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+            AND lds.peak_dates_json IS NOT NULL AND lds.peak_dates_json != '[]'
+        )
+      `).run(currentSeason, currentSeason);
+
+      if (this.isTable('lieutenant_all_time_peaks')) {
+        this.db.prepare(`
+          INSERT INTO lieutenant_all_time_peaks (rider_id, max_overall_rating, leader_id, season)
+          SELECT rl.lieutenant_id, r.overall_rating, rl.leader_id, rl.season
+          FROM rider_lieutenants rl
+          JOIN riders r ON r.id = rl.lieutenant_id
+          WHERE rl.season = ?
+          ON CONFLICT(rider_id) DO UPDATE SET
+            leader_id = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.leader_id ELSE leader_id END,
+            season = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.season ELSE season END,
+            max_overall_rating = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.max_overall_rating ELSE max_overall_rating END
+        `).run(currentSeason);
+      }
+    }
+
     this.syncRiderLoadState(currentDate, currentSeason);
 
     const rows = this.db.prepare(`
@@ -1275,7 +1309,8 @@ export class GameStateService {
 
     const stageRow = this.db.prepare(`
       SELECT s.id, s.stage_score, s.stage_number, r.name AS race_name, s.date,
-             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max
+             s.rolled_weather_id, w.effekt_fatigue_min, w.effekt_fatigue_max,
+             r.category_id AS category_id
       FROM stages s
       JOIN races r ON r.id = s.race_id
       LEFT JOIN wetter w ON w.id = s.rolled_weather_id
@@ -1289,6 +1324,7 @@ export class GameStateService {
       rolled_weather_id: number | null;
       effekt_fatigue_min: number | null;
       effekt_fatigue_max: number | null;
+      category_id: number;
     } | undefined;
 
     if (!stageRow) {
@@ -1328,7 +1364,7 @@ export class GameStateService {
         rider_id, date, type, race_name, stage_number, stage_score,
         short_change, long_decayable_change, long_locked_change,
         short_after, long_after
-      ) VALUES (?, ?, 'race', ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.db.transaction(() => {
@@ -1344,6 +1380,35 @@ export class GameStateService {
         } | undefined;
 
         if (!row) continue;
+
+        let currentShort = row.short_term_fatigue ?? 0.0;
+        let currentLongDecayable = row.long_term_fatigue_decayable ?? 0.0;
+        const currentLongLocked = row.long_term_fatigue_locked ?? 0.0;
+
+        // Apply newly started race additions if stageNumber === 1
+        if (stageNumber === 1) {
+          const transferShortChange = 0.5;
+          const transferLongDecayableChange = 0.05;
+
+          currentShort = roundToTwoDecimals(currentShort + transferShortChange);
+          currentLongDecayable = roundToTwoDecimals(currentLongDecayable + transferLongDecayableChange);
+
+          stmtUpdate.run(currentShort, currentLongDecayable, currentLongLocked, riderId);
+
+          stmtInsertHistory.run(
+            riderId,
+            stageDate,
+            'transfer',
+            'Transfer',
+            null, // stageNumber
+            null, // stageScore
+            transferShortChange,
+            transferLongDecayableChange,
+            0.0,  // longLockedChange
+            currentShort,
+            roundToTwoDecimals(currentLongDecayable + currentLongLocked)
+          );
+        }
 
         const R = row.skill_recuperation;
         const multiplier = R >= 65
@@ -1382,6 +1447,37 @@ export class GameStateService {
           addedLongDecayable *= (1 + rolledEffektFatigue / 100);
         }
 
+        // Apply category multipliers
+        let shortMult = 1.0;
+        let longMult = 1.0;
+        const catId = stageRow.category_id;
+
+        if (catId === 6 || catId === 9) {
+          shortMult = 0.9;
+          longMult = 0.9;
+        } else if (catId === 5 || catId === 8) {
+          shortMult = 0.95;
+          longMult = 1.0;
+        } else if (catId === 4 || catId === 7) {
+          shortMult = 1.0;
+          longMult = 1.1;
+        } else if (catId === 3) {
+          shortMult = 1.15;
+          longMult = 1.25;
+        } else if (catId === 2) {
+          shortMult = 1.1;
+          longMult = 1.15;
+        } else if (catId === 1) {
+          shortMult = 1.15;
+          longMult = 1.3;
+        }
+
+        addedShort *= shortMult;
+        addedLongDecayable *= longMult;
+
+        // Limit short term fatigue buildup from a single stage/race to +4.0
+        addedShort = Math.min(4.0, addedShort);
+
         addedShort = roundToTwoDecimals(addedShort);
         addedLongDecayable = roundToTwoDecimals(addedLongDecayable);
         
@@ -1389,10 +1485,6 @@ export class GameStateService {
         // so it already includes the current stage!
         const n = row.season_race_days_total ?? 0;
         const addedLongLocked = resolveLockedFatigueAddition(n);
-
-        const currentShort = row.short_term_fatigue ?? 0.0;
-        const currentLongDecayable = row.long_term_fatigue_decayable ?? 0.0;
-        const currentLongLocked = row.long_term_fatigue_locked ?? 0.0;
 
         const newShort = roundToTwoDecimals(currentShort + addedShort);
         const newLongDecayable = roundToTwoDecimals(currentLongDecayable + addedLongDecayable);
@@ -1403,6 +1495,7 @@ export class GameStateService {
         stmtInsertHistory.run(
           riderId,
           stageDate,
+          'race',
           raceName,
           stageNumber,
           stageScore,

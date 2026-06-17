@@ -258,6 +258,7 @@ function readStageScoreSegments(detailsCsvFile: string, ctx: string): StageScore
     const segment: StageScoreSegment = {
       lengthKm,
       gradientPercent,
+      terrain: row['terrain']?.trim() || undefined,
       markers: parseStageDetailMarkers(row['marker_type'] ?? '', row['marker_name'] ?? '', row['marker_cat'] ?? '', rowCtx),
       endMarkers: parseStageDetailMarkers(row['end_marker_type'] ?? '', row['end_marker_name'] ?? '', row['end_marker_cat'] ?? '', rowCtx),
     };
