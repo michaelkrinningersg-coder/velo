@@ -295,7 +295,7 @@ export class RiderRepository {
   }
 
 
-  public getRiderStats(riderId: number): RiderStatsPayload | null {
+  public getRiderStats(riderId: number, excludeFatigue: boolean = false): RiderStatsPayload | null {
     const rider = this.getRiderById(riderId);
     if (!rider) {
       return null;
@@ -463,11 +463,12 @@ export class RiderRepository {
          WHEN ${RESULT_TYPE_IDS.points} THEN 'points_final'
          WHEN ${RESULT_TYPE_IDS.mountain} THEN 'mountain_final'
          WHEN ${RESULT_TYPE_IDS.youth} THEN 'youth_final'
+         WHEN ${RESULT_TYPE_IDS.breakaway} THEN 'breakaway_final'
        END
       WHERE results.rider_id = ?
         AND races.is_stage_race = 1
         AND stages.stage_number = races.number_of_stages
-        AND results.result_type_id IN (${RESULT_TYPE_IDS.gc}, ${RESULT_TYPE_IDS.points}, ${RESULT_TYPE_IDS.mountain}, ${RESULT_TYPE_IDS.youth})
+        AND results.result_type_id IN (${RESULT_TYPE_IDS.gc}, ${RESULT_TYPE_IDS.points}, ${RESULT_TYPE_IDS.mountain}, ${RESULT_TYPE_IDS.youth}, ${RESULT_TYPE_IDS.breakaway})
       ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
     `).all(riderId) as RiderStatsFinalDbRow[];
 
@@ -612,6 +613,7 @@ export class RiderRepository {
       points_final: 2,
       mountain_final: 3,
       youth_final: 4,
+      breakaway_final: 5,
     };
 
     for (const season of seasons.values()) {
@@ -630,7 +632,7 @@ export class RiderRepository {
       }
     }
 
-    const fatigueHistory = tableExists(this.db, 'rider_fatigue_history')
+    const fatigueHistory = !excludeFatigue && tableExists(this.db, 'rider_fatigue_history')
       ? (this.db.prepare(`
           SELECT id, rider_id AS riderId, date, type, race_name AS raceName,
                  stage_number AS stageNumber, stage_score AS stageScore,
@@ -684,7 +686,7 @@ export class RiderRepository {
         ? parsePeakDates((this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id) as { peak_dates_json: string } | undefined)?.peak_dates_json)
         : [],
       formHistory: tableExists(this.db, 'rider_form_history') 
-        ? (this.db.prepare('SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC').all(rider.id) as Array<{ date: string; sForm: number; rForm: number; totalForm: number }>)
+        ? (this.db.prepare(`SELECT date, s_form AS sForm, r_form AS rForm, total_form AS totalForm ${excludeFatigue ? ', 0.0 AS shortFatigue, 0.0 AS longFatigue, 0.0 AS combinedFatigue' : ', short_fatigue AS shortFatigue, long_fatigue AS longFatigue, combined_fatigue AS combinedFatigue'} FROM rider_form_history WHERE rider_id = ? ORDER BY date ASC`).all(rider.id) as Array<{ date: string; sForm: number; rForm: number; totalForm: number; shortFatigue: number; longFatigue: number; combinedFatigue: number }>)
         : [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory,
@@ -1593,6 +1595,8 @@ export class RiderRepository {
         return 'mountain_final';
       case RESULT_TYPE_IDS.youth:
         return 'youth_final';
+      case RESULT_TYPE_IDS.breakaway:
+        return 'breakaway_final';
       default:
         return null;
     }
@@ -1609,6 +1613,8 @@ export class RiderRepository {
         return 'Bergwertung';
       case 'youth_final':
         return 'Nachwuchswertung';
+      case 'breakaway_final':
+        return 'Ausreißerwertung';
       default:
         return 'Ergebnis';
     }

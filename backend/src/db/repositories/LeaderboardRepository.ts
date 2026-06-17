@@ -624,6 +624,8 @@ export class LeaderboardRepository {
         typeId = 4;
       } else if (jerseyType === 'youth') {
         typeId = 5;
+      } else if (jerseyType === 'breakaway') {
+        typeId = 7;
       }
       
       if (parts[2]) {
@@ -1191,6 +1193,8 @@ export class LeaderboardRepository {
         typeId = 4;
       } else if (jerseyType === 'youth') {
         typeId = 5;
+      } else if (jerseyType === 'breakaway') {
+        typeId = 7;
       }
       
       if (parts[2]) {

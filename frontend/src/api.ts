@@ -68,7 +68,7 @@ export const api = {
   getTeam:             (teamId: number) => call<Team & { riders: Rider[] }>('GET', `/api/teams/${teamId}`),
   getTeamStats:        (teamId: number) => call<TeamStatsPayload>('GET', `/api/teams/${teamId}/stats`),
   getRiders:           (teamId?: number) => call<Rider[]>('GET', `/api/riders${teamId != null ? `?teamId=${teamId}` : ''}`),
-  getRiderStats:       (riderId: number) => call<RiderStatsPayload>('GET', `/api/riders/${riderId}/stats`),
+  getRiderStats:       (riderId: number, excludeFatigue = false) => call<RiderStatsPayload>('GET', `/api/riders/${riderId}/stats${excludeFatigue ? '?excludeFatigue=true' : ''}`),
   getRiderProgramRaces: (riderId: number) => call<RiderProgramRaceSummary>('GET', `/api/riders/${riderId}/program-races`),
   getRiderTeamEditor:  () => call<RiderTeamEditorPayload>('GET', '/api/rider-team-editor'),
   saveRiderTeamEditor: (payload: RiderTeamEditorSaveRequest) => call<RiderTeamEditorPayload>('POST', '/api/rider-team-editor', payload),

@@ -786,19 +786,25 @@ export class StageResultCommitService {
     const homeAdvantageCounts = new Map<number, number>();
     const superHomeAdvantageCounts = new Map<number, number>();
     const homePressureCounts = new Map<number, number>();
+    const breakawayAttemptCounts = new Map<number, number>();
 
     for (const ev of events) {
       if (ev.riderId == null) continue;
       const rId = ev.riderId;
       const title = ev.title ?? '';
+      const detail = ev.detail ?? '';
       if (ev.type === 'attack') {
-        attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
+        if (title.toLowerCase().includes('ausreiß') || title.toLowerCase().includes('ausreiss')) {
+          breakawayAttemptCounts.set(rId, (breakawayAttemptCounts.get(rId) || 0) + 1);
+        } else {
+          attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
+        }
       } else if (ev.type === 'counter_attack') {
         counterAttackCounts.set(rId, (counterAttackCounts.get(rId) || 0) + 1);
-      } else if (ev.type === 'incident') {
-        if (ev.detail === 'Superform aktiv.') {
+      } else {
+        if (detail === 'Superform aktiv.') {
           superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
-        } else if (ev.detail === 'Supermalus aktiv.') {
+        } else if (detail === 'Supermalus aktiv.') {
           supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
         } else if (title.includes('Super-Heimvorteil')) {
           superHomeAdvantageCounts.set(rId, (superHomeAdvantageCounts.get(rId) || 0) + 1);
@@ -920,6 +926,7 @@ export class StageResultCommitService {
           if ((homeAdvantageCounts.get(riderId) ?? 0) > 0) eventParts.push(`7:${homeAdvantageCounts.get(riderId)}`);
           if ((superHomeAdvantageCounts.get(riderId) ?? 0) > 0) eventParts.push(`8:${superHomeAdvantageCounts.get(riderId)}`);
           if ((homePressureCounts.get(riderId) ?? 0) > 0) eventParts.push(`9:${homePressureCounts.get(riderId)}`);
+          if ((breakawayAttemptCounts.get(riderId) ?? 0) > 0) eventParts.push(`10:${breakawayAttemptCounts.get(riderId)}`);
           if (eventParts.length > 0) eventIdsStr = eventParts.join('|');
         }
         const breakawayKms = riderId != null ? (riderEscapeKms.get(riderId) ?? null) : null;
@@ -1019,7 +1026,10 @@ export class StageResultCommitService {
         if (event.riderId != null) {
           const inc = getOrCreateIncrement(event.riderId);
           if (event.type === 'attack' && event.title && event.title.includes('attackiert')) {
-            inc.attacks++;
+            const lowerTitle = event.title.toLowerCase();
+            if (!lowerTitle.includes('ausreiß') && !lowerTitle.includes('ausreiss')) {
+              inc.attacks++;
+            }
           } else if (event.type === 'counter_attack') {
             inc.counterAttacks++;
           }

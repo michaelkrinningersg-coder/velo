@@ -256,7 +256,8 @@ export function createRouter(dbService: DatabaseService): Router {
     try {
       const db = dbService.getActiveConnection();
       getGss().ensureState();
-      const payload = new RiderRepository(db).getRiderStats(riderId);
+      const excludeFatigue = req.query['excludeFatigue'] === 'true';
+      const payload = new RiderRepository(db).getRiderStats(riderId, excludeFatigue);
       if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
       ok<RiderStatsPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }

@@ -590,17 +590,18 @@ class StageResultCommitService {
                 continue;
             const rId = ev.riderId;
             const title = ev.title ?? '';
+            const detail = ev.detail ?? '';
             if (ev.type === 'attack') {
                 attackCounts.set(rId, (attackCounts.get(rId) || 0) + 1);
             }
             else if (ev.type === 'counter_attack') {
                 counterAttackCounts.set(rId, (counterAttackCounts.get(rId) || 0) + 1);
             }
-            else if (ev.type === 'incident') {
-                if (ev.detail === 'Superform aktiv.') {
+            else {
+                if (detail === 'Superform aktiv.') {
                     superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
                 }
-                else if (ev.detail === 'Supermalus aktiv.') {
+                else if (detail === 'Supermalus aktiv.') {
                     supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
                 }
                 else if (title.includes('Super-Heimvorteil')) {

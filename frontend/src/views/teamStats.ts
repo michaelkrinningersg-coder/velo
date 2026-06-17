@@ -806,12 +806,12 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                     }" title="Tage im Weißen Trikot (Nachwuchs)">
                       🎽 ${catData.youthJerseys || 0}
                     </span>
-                    <!-- Lila Trikot (Aktivste Fahrer) -->
+                    <!-- Ausreißertrikot (Aktivste Fahrer) -->
                     <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
                       (catData.breakawayJerseys || 0) === 0
                         ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
                         : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
-                    }" title="Tage im Lila Trikot (Aktivste Fahrer)">
+                    }" title="Tage im Ausreißertrikot (Aktivste Fahrer)">
                       🎽 ${catData.breakawayJerseys || 0}
                     </span>
                   </div>

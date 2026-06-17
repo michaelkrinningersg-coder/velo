@@ -441,9 +441,30 @@ export class GameStateService {
         s_form REAL NOT NULL,
         r_form REAL NOT NULL,
         total_form REAL NOT NULL,
+        short_fatigue REAL NOT NULL DEFAULT 0.0,
+        long_fatigue REAL NOT NULL DEFAULT 0.0,
+        combined_fatigue REAL NOT NULL DEFAULT 0.0,
         PRIMARY KEY (rider_id, date)
       )
     `).run();
+
+    const colExists = (tableName: string, colName: string): boolean => {
+      try {
+        const info = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+        return info.some((c) => c.name === colName);
+      } catch (e) {
+        return false;
+      }
+    };
+    if (!colExists('rider_form_history', 'short_fatigue')) {
+      this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN short_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!colExists('rider_form_history', 'long_fatigue')) {
+      this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN long_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
+    if (!colExists('rider_form_history', 'combined_fatigue')) {
+      this.db.prepare('ALTER TABLE rider_form_history ADD COLUMN combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
+    }
 
     this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_form_history_date
@@ -1039,7 +1060,9 @@ export class GameStateService {
     // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
     // in one statement instead of a per-rider JS loop.
     this.db.prepare(`
-      INSERT INTO rider_form_history (rider_id, date, s_form, r_form, total_form)
+      INSERT INTO rider_form_history (
+        rider_id, date, s_form, r_form, total_form, short_fatigue, long_fatigue, combined_fatigue
+      )
       SELECT
         rds.rider_id,
         @date AS date,
@@ -1047,16 +1070,22 @@ export class GameStateService {
         MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100) AS r_form,
         ROUND(MIN(@seasonFormMax, MAX(0, rds.form_bonus)) * 100) / 100
           + MIN(4.0, ROUND((COALESCE(SUM(rfe.amount), 0)) * 100) / 100)
-          AS total_form
+          AS total_form,
+        ROUND(rds.short_term_fatigue * 100) / 100 AS short_fatigue,
+        ROUND((rds.long_term_fatigue_decayable + rds.long_term_fatigue_locked) * 100) / 100 AS long_fatigue,
+        ROUND((rds.short_term_fatigue + rds.long_term_fatigue_decayable + rds.long_term_fatigue_locked) * 100) / 100 AS combined_fatigue
       FROM rider_daily_state rds
       JOIN riders ON riders.id = rds.rider_id
       LEFT JOIN rider_r_form_events rfe ON rfe.rider_id = rds.rider_id
       WHERE riders.active_team_id IS NOT NULL AND riders.is_retired = 0
-      GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus
+      GROUP BY rds.rider_id, rds.form_bonus, rds.race_form_bonus, rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked
       ON CONFLICT(rider_id, date) DO UPDATE SET
         s_form = excluded.s_form,
         r_form = excluded.r_form,
-        total_form = excluded.total_form
+        total_form = excluded.total_form,
+        short_fatigue = excluded.short_fatigue,
+        long_fatigue = excluded.long_fatigue,
+        combined_fatigue = excluded.combined_fatigue
     `).run({
       date: currentDate,
       seasonFormMax: SEASON_FORM_MAX_RAW,

@@ -83,6 +83,9 @@ export interface RiderFormSnapshot {
   totalForm: number;
   sForm: number;
   rForm: number;
+  shortFatigue?: number;
+  longFatigue?: number;
+  combinedFatigue?: number;
 }
 
 export interface RiderRaceFormSource {
@@ -795,9 +798,10 @@ export type SeasonPointAwardType =
   | 'gc_final'
   | 'points_final'
   | 'mountain_final'
-  | 'youth_final';
+  | 'youth_final'
+  | 'breakaway_final';
 
-export type RiderStatsRowType = 'stage_result' | 'gc_final' | 'points_final' | 'mountain_final' | 'youth_final';
+export type RiderStatsRowType = 'stage_result' | 'gc_final' | 'points_final' | 'mountain_final' | 'youth_final' | 'breakaway_final';
 
 export interface RiderStatsRow {
   rowType: RiderStatsRowType;

@@ -834,6 +834,36 @@ class DatabaseService {
         db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_season_stats_season ON rider_season_stats(season);
     `).run();
+        if (!columnExists(db, 'rider_season_stats', 'superform_days')) {
+            db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN superform_days INTEGER NOT NULL DEFAULT 0
+      `).run();
+        }
+        if (!columnExists(db, 'rider_season_stats', 'supermalus_days')) {
+            db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN supermalus_days INTEGER NOT NULL DEFAULT 0
+      `).run();
+        }
+        if (!columnExists(db, 'rider_season_stats', 'home_advantage_days')) {
+            db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN home_advantage_days INTEGER NOT NULL DEFAULT 0
+      `).run();
+        }
+        if (!columnExists(db, 'rider_season_stats', 'super_home_advantage_days')) {
+            db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN super_home_advantage_days INTEGER NOT NULL DEFAULT 0
+      `).run();
+        }
+        if (!columnExists(db, 'rider_season_stats', 'home_pressure_days')) {
+            db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN home_pressure_days INTEGER NOT NULL DEFAULT 0
+      `).run();
+        }
     }
     ensureRaceProgramSchema(db) {
         db.exec(`

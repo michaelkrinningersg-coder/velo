@@ -399,11 +399,12 @@ class RiderRepository {
          WHEN ${mappers_1.RESULT_TYPE_IDS.points} THEN 'points_final'
          WHEN ${mappers_1.RESULT_TYPE_IDS.mountain} THEN 'mountain_final'
          WHEN ${mappers_1.RESULT_TYPE_IDS.youth} THEN 'youth_final'
+         WHEN ${mappers_1.RESULT_TYPE_IDS.breakaway} THEN 'breakaway_final'
        END
       WHERE results.rider_id = ?
         AND races.is_stage_race = 1
         AND stages.stage_number = races.number_of_stages
-        AND results.result_type_id IN (${mappers_1.RESULT_TYPE_IDS.gc}, ${mappers_1.RESULT_TYPE_IDS.points}, ${mappers_1.RESULT_TYPE_IDS.mountain}, ${mappers_1.RESULT_TYPE_IDS.youth})
+        AND results.result_type_id IN (${mappers_1.RESULT_TYPE_IDS.gc}, ${mappers_1.RESULT_TYPE_IDS.points}, ${mappers_1.RESULT_TYPE_IDS.mountain}, ${mappers_1.RESULT_TYPE_IDS.youth}, ${mappers_1.RESULT_TYPE_IDS.breakaway})
       ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
     `).all(riderId);
         const seasons = new Map();
@@ -536,6 +537,7 @@ class RiderRepository {
             points_final: 2,
             mountain_final: 3,
             youth_final: 4,
+            breakaway_final: 5,
         };
         for (const season of seasons.values()) {
             season.raceBlocks.sort((left, right) => (left.startDate.localeCompare(right.startDate)
@@ -1442,6 +1444,8 @@ class RiderRepository {
                 return 'mountain_final';
             case mappers_1.RESULT_TYPE_IDS.youth:
                 return 'youth_final';
+            case mappers_1.RESULT_TYPE_IDS.breakaway:
+                return 'breakaway_final';
             default:
                 return null;
         }
@@ -1456,6 +1460,8 @@ class RiderRepository {
                 return 'Bergwertung';
             case 'youth_final':
                 return 'Nachwuchswertung';
+            case 'breakaway_final':
+                return 'Ausreißerwertung';
             default:
                 return 'Ergebnis';
         }

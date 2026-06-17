@@ -660,7 +660,7 @@ function renderLeaderDots(riderId: number | null): string {
   }
   // Purple Dot (Breakaway leader):
   if (riderId === breakawayLeader) {
-    dots.push('<span class="jersey-dot jersey-dot-purple" title="Lila Trikot (Aktivste Fahrer)"></span>');
+    dots.push('<span class="jersey-dot jersey-dot-purple" title="Ausreißertrikot (Aktivste Fahrer)"></span>');
   }
 
   if (dots.length === 0) return '';
@@ -1143,9 +1143,9 @@ export function renderResultsView(): void {
             badgeHtml = `<span class="event-badge event-badge-crash">Sturz</span>`;
           }
         } else if (row.title && row.title.includes('Super-Heimvorteil')) {
-          badgeHtml = `<span class="event-badge event-badge-superhome"><span class="event-icon">♥</span> Super-Heim</span>`;
+          badgeHtml = `<span class="event-badge event-badge-superhome"><span class="event-icon">♥</span> Heimbonus</span>`;
         } else if (row.title && row.title.includes('Heimdruck')) {
-          badgeHtml = `<span class="event-badge event-badge-homepressure"><span class="event-icon">♦</span> Heimdruck</span>`;
+          badgeHtml = `<span class="event-badge event-badge-homepressure"><span class="event-icon">♦</span> Heimmalus</span>`;
         } else if (row.title && row.title.includes('Heimvorteil')) {
           badgeHtml = `<span class="event-badge event-badge-normalhome"><span class="event-icon">♥</span> Heimvorteil</span>`;
         } else if (row.title && row.title.startsWith('Wetterbericht:')) {

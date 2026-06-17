@@ -31,6 +31,12 @@ let comparedRiders: Array<{
   currentSeasonRank: number | null;
 }> = [];
 let selectedCompareTeamId: number | null = null;
+let chartToggles = {
+  form: true,
+  combinedFatigue: true,
+  shortFatigue: false,
+  longFatigue: false
+};
 
 const COMPARE_COLORS = [
   '#3b82f6', // blue
@@ -188,6 +194,8 @@ export function resolveRiderStatsFinalTypeClassName(rowType: string): string {
       return 'is-mountain';
     case 'youth_final':
       return 'is-youth';
+    case 'breakaway_final':
+      return 'is-breakaway';
     default:
       return '';
   }
@@ -203,6 +211,8 @@ export function getRiderStatsRowTypeLabel(rowType: string): string {
       return 'Bergwertung';
     case 'youth_final':
       return 'Nachwuchs';
+    case 'breakaway_final':
+      return 'Ausreißer';
     default:
       return 'Etappe';
   }
@@ -1028,10 +1038,10 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   
-  // Scaled dimensions (width 1.3x, height 1.6x)
-  const chartW = 1300;
+  // Adjusted dimensions (width 1260, height 384, padL 40)
+  const chartW = 1260;
   const chartH = 384;
-  const padL = 30;
+  const padL = 40;
   const padT = 20;
 
   const pts = history.map((entry) => {
@@ -1046,20 +1056,78 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   let pointsHtml = '';
   let fillPath = '';
 
-  if (pts.length > 0) {
+  if (chartToggles.form && pts.length > 0) {
     pathData = `M ${pts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
     pointsHtml = pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="var(--accent-primary)" stroke-width="2"><title>${payload.riderName} (${p.date}): ${p.form}</title></circle>`).join('');
     fillPath = `${pathData} L ${pts[pts.length - 1].x},${padT + chartH} L ${pts[0].x},${padT + chartH} Z`;
+  }
+
+  // Combined Fatigue
+  let combinedFatiguePathHtml = '';
+  let combinedFatiguePointsHtml = '';
+  if (chartToggles.combinedFatigue && pts.length > 0) {
+    const cfPts = history.map((entry) => {
+      const entryDate = new Date(entry.date).getTime();
+      const dayOfYear = (entryDate - yearStart) / msPerDay;
+      const x = padL + (dayOfYear / 365) * chartW;
+      const val = entry.combinedFatigue ?? 0.0;
+      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      return { x, y, val, date: entry.date };
+    });
+    const cfPathData = `M ${cfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+    combinedFatiguePathHtml = `<path d="${cfPathData}" fill="none" stroke="#ef4444" stroke-width="2" />`;
+    combinedFatiguePointsHtml = cfPts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#ef4444" stroke-width="2"><title>Gesamtfatigue (${p.date}): ${p.val.toFixed(2)}</title></circle>`).join('');
+  }
+
+  // Short Fatigue
+  let shortFatiguePathHtml = '';
+  let shortFatiguePointsHtml = '';
+  if (chartToggles.shortFatigue && pts.length > 0) {
+    const sfPts = history.map((entry) => {
+      const entryDate = new Date(entry.date).getTime();
+      const dayOfYear = (entryDate - yearStart) / msPerDay;
+      const x = padL + (dayOfYear / 365) * chartW;
+      const val = entry.shortFatigue ?? 0.0;
+      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      return { x, y, val, date: entry.date };
+    });
+    const sfPathData = `M ${sfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+    shortFatiguePathHtml = `<path d="${sfPathData}" fill="none" stroke="#facc15" stroke-width="2" />`;
+    shortFatiguePointsHtml = sfPts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#facc15" stroke-width="2"><title>Kurzzeitfatigue (${p.date}): ${p.val.toFixed(2)}</title></circle>`).join('');
+  }
+
+  // Long Fatigue
+  let longFatiguePathHtml = '';
+  let longFatiguePointsHtml = '';
+  if (chartToggles.longFatigue && pts.length > 0) {
+    const lfPts = history.map((entry) => {
+      const entryDate = new Date(entry.date).getTime();
+      const dayOfYear = (entryDate - yearStart) / msPerDay;
+      const x = padL + (dayOfYear / 365) * chartW;
+      const val = entry.longFatigue ?? 0.0;
+      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      return { x, y, val, date: entry.date };
+    });
+    const lfPathData = `M ${lfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+    longFatiguePathHtml = `<path d="${lfPathData}" fill="none" stroke="#a855f7" stroke-width="2" />`;
+    longFatiguePointsHtml = lfPts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#a855f7" stroke-width="2"><title>Langzeitfatigue (${p.date}): ${p.val.toFixed(2)}</title></circle>`).join('');
   }
 
   // Draw area under curve ONLY for the original rider, in warm yellow
   const fillColor = 'rgba(251, 191, 36, 0.15)'; 
 
   let gridHtml = '';
+  // Left Axis: Form (0 to 8, steps of 2)
   for (let i = 0; i <= 8; i += 2) {
     const y = padT + chartH - (i / 8) * chartH;
     gridHtml += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border-primary)" stroke-dasharray="2,2" />`;
     gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="#ffffff" font-size="10" text-anchor="end">${i}</text>`;
+  }
+
+  // Right Axis: Fatigue (0 to 15, steps of 3) in #ef4444
+  for (let i = 0; i <= 15; i += 3) {
+    const y = padT + chartH - (i / 15) * chartH;
+    gridHtml += `<text x="${padL + chartW + 5}" y="${y + 4}" fill="#ef4444" font-size="10" text-anchor="start">${i}</text>`;
   }
 
   let xAxisHtml = '';
@@ -1197,6 +1265,32 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   const legendContainerHtml = `
     <div class="rider-stats-compare-legend" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary); max-height: 460px; overflow-y: auto; display: flex; flex-direction: column;">
       <h4 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; color: var(--text-100); font-weight: bold;">Legende</h4>
+      
+      <!-- Chart Line Toggle Checkboxes -->
+      <div class="chart-line-toggles" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-form" ${chartToggles.form ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: var(--accent-primary);" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: var(--accent-primary); border-radius: 50%;"></span>
+          Form (0-8)
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-combined-fatigue" ${chartToggles.combinedFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #ef4444;" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%;"></span>
+          Gesamtfatigue (0-15)
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-short-fatigue" ${chartToggles.shortFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #facc15;" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: #facc15; border-radius: 50%;"></span>
+          Kurzzeitfatigue (0-15)
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-long-fatigue" ${chartToggles.longFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #a855f7;" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: #a855f7; border-radius: 50%;"></span>
+          Langzeitfatigue (0-15)
+        </label>
+      </div>
+
+      <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-500); font-weight: bold; margin-bottom: 0.5rem; letter-spacing: 0.5px;">Fahrer</div>
       ${legendItemsHtml.join('')}
     </div>
   `;
@@ -1217,6 +1311,12 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
             ${fillPath ? `<path d="${fillPath}" fill="${fillColor}" />` : ''}
             ${pathData ? `<path d="${pathData}" fill="none" stroke="var(--accent-primary)" stroke-width="2" />` : ''}
             ${pointsHtml}
+            ${combinedFatiguePathHtml}
+            ${combinedFatiguePointsHtml}
+            ${shortFatiguePathHtml}
+            ${shortFatiguePointsHtml}
+            ${longFatiguePathHtml}
+            ${longFatiguePointsHtml}
             ${comparedPathsHtml}
             ${comparedPointsHtml}
           </svg>
@@ -1280,8 +1380,8 @@ const EVENT_LABELS: Record<string, string> = {
   '5': 'Attacken',
   '6': 'Konterattacken',
   '7': 'Heimvorteil',
-  '8': 'Superheimvorteil',
-  '9': 'Heimdruck',
+  '8': 'Heimbonus',
+  '9': 'Heimmalus',
 };
 
 const JERSEY_LABELS: Record<string, string> = {
@@ -1323,8 +1423,8 @@ export function renderStatusDotsColumn(row: any): string {
     { type: 'event', key: '1', label: 'Sturz', colorClass: 'event-dot-1' },
     { type: 'event', key: '2', label: 'Defekt', colorClass: 'event-dot-2' },
     { type: 'event', key: '7', label: 'Heimvorteil', colorClass: 'event-dot-7' },
-    { type: 'event', key: '8', label: 'Superheimvorteil', colorClass: 'event-dot-8' },
-    { type: 'event', key: '9', label: 'Heimdruck', colorClass: 'event-dot-9' },
+    { type: 'event', key: '8', label: 'Heimbonus', colorClass: 'event-dot-8' },
+    { type: 'event', key: '9', label: 'Heimmalus', colorClass: 'event-dot-9' },
     { type: 'event', key: '5', label: 'Attacken', colorClass: 'event-dot-5' },
     { type: 'event', key: '6', label: 'Konterattacken', colorClass: 'event-dot-6' }
   ];
@@ -1657,6 +1757,24 @@ export async function openRiderStats(riderId: number): Promise<void> {
 
 export function initRiderStatsListeners(): void {
   $('rider-stats-body').addEventListener('click', (event) => {
+    // Handle chart toggle checkbox changes
+    if (event.target && (event.target as Element).id && (event.target as Element).id.startsWith('toggle-chart-')) {
+      const targetId = (event.target as HTMLInputElement).id;
+      const checked = (event.target as HTMLInputElement).checked;
+      if (targetId === 'toggle-chart-form') {
+        chartToggles.form = checked;
+      } else if (targetId === 'toggle-chart-combined-fatigue') {
+        chartToggles.combinedFatigue = checked;
+      } else if (targetId === 'toggle-chart-short-fatigue') {
+        chartToggles.shortFatigue = checked;
+      } else if (targetId === 'toggle-chart-long-fatigue') {
+        chartToggles.longFatigue = checked;
+      }
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+      return;
+    }
+
     const tabButton = (event.target as Element).closest<HTMLButtonElement>('button[data-rider-stats-tab]');
     if (!tabButton) {
       // Handle remove click
@@ -1731,7 +1849,7 @@ export function initRiderStatsListeners(): void {
         }
         
         // Fetch rider stats
-        const res = await api.getRiderStats(riderId);
+        const res = await api.getRiderStats(riderId, true);
         if (res.success && res.data) {
           comparedRiders.push({
             riderId: res.data.riderId,
@@ -1851,13 +1969,14 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     }
   });
 
-  const itemsPerPage = 20;
-  const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
+  const itemsPerPage = 200;
+  const activeRows = filteredRows.slice(0, 1000);
+  const totalPages = Math.max(1, Math.ceil(activeRows.length / itemsPerPage));
   if (state.riderStatsTopResultsPage > totalPages) {
     state.riderStatsTopResultsPage = totalPages;
   }
   const startIndex = (state.riderStatsTopResultsPage - 1) * itemsPerPage;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedRows = activeRows.slice(startIndex, startIndex + itemsPerPage);
 
   const categoryOptionsHtml = categories.map(cat => {
     const isStage = cat.toLowerCase().includes('stage race') || cat.toLowerCase().includes('grand tour') || cat.toLowerCase().includes('tour de france');
@@ -1965,13 +2084,9 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 
   const paginationHtml = totalPages > 1
     ? `
-      <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 0.25rem; margin-top: 1rem; align-items: center;">
+      <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; align-items: center;">
         <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage - 1}" ${state.riderStatsTopResultsPage === 1 ? 'disabled' : ''}>&laquo; Zurück</button>
-        ${Array.from({ length: totalPages }).map((_, idx) => {
-          const pageNum = idx + 1;
-          const isActive = state.riderStatsTopResultsPage === pageNum;
-          return `<button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}" data-top-results-page="${pageNum}">${pageNum}</button>`;
-        }).join('')}
+        <span style="font-weight: 600; color: #ccc;">Seite ${state.riderStatsTopResultsPage} von ${totalPages}</span>
         <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage + 1}" ${state.riderStatsTopResultsPage === totalPages ? 'disabled' : ''}>Weiter &raquo;</button>
       </div>
     `
@@ -2286,12 +2401,12 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
                     }" title="Tage im Weißen Trikot (Nachwuchs)">
                       🎽 ${catData.youthJerseys || 0}
                     </span>
-                    <!-- Lila Trikot (Aktivste Fahrer) -->
+                    <!-- Ausreißertrikot (Aktivste Fahrer) -->
                     <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
                       (catData.breakawayJerseys || 0) === 0
                         ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
                         : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
-                    }" title="Tage im Lila Trikot (Aktivste Fahrer)">
+                    }" title="Tage im Ausreißertrikot (Aktivste Fahrer)">
                       🎽 ${catData.breakawayJerseys || 0}
                     </span>
                   </div>

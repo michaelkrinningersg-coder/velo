@@ -1571,6 +1571,11 @@ html, body {
   background: rgba(248, 250, 252, .12);
   color: #f8fafc;
 }
+.rider-stats-final-type.is-breakaway {
+  border-color: rgba(168, 85, 247, .42);
+  background: rgba(168, 85, 247, .14);
+  color: #e9d5ff;
+}
 .badge-classics { background: rgba(100,116,139,.2); color: var(--text-300); }
 .badge-u23      { background: rgba(22,163,74,.15); color: var(--success); }
 .badge-done     { background: rgba(34,197,94,.15); color: var(--success); }
@@ -5660,6 +5665,7 @@ tr.calendar-highlight {
 .event-dot-7 { background-color: #eab308; box-shadow: 0 0 5px rgba(234, 179, 8, 0.5); } /* Heimvorteil - Yellow */
 .event-dot-8 { background-color: #f59e0b; box-shadow: 0 0 5px rgba(245, 158, 11, 0.5); } /* Superheimvorteil - Gold */
 .event-dot-9 { background-color: #84cc16; box-shadow: 0 0 5px rgba(132, 204, 22, 0.5); } /* Heimdruck - Lime */
+.event-dot-10 { background-color: #8b5cf6; box-shadow: 0 0 5px rgba(139, 92, 246, 0.5); } /* Fluchtgruppe - Violet */
 
 /* Jersey Dot Colors in Results */
 .jersey-dot-yellow { background-color: #facc15; box-shadow: 0 0 5px rgba(250, 204, 21, 0.5); }
