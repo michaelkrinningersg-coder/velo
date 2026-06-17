@@ -699,11 +699,18 @@ export class GameStateService {
 
     const yesterday = addDaysIso(nextDate, -1);
     const racedYesterdayRow = this.db.prepare(`
-      SELECT se.rider_id FROM stage_entries se
+      SELECT se.rider_id, s.stage_score FROM stage_entries se
       JOIN stages s ON s.id = se.stage_id
       WHERE s.date = ? AND se.status IN ('finished', 'dnf')
-    `).all(yesterday) as Array<{ rider_id: number }>;
+    `).all(yesterday) as Array<{ rider_id: number; stage_score: number }>;
     const racedYesterdayRiderIds = new Set(racedYesterdayRow.map((r: any) => r.rider_id));
+    const racedYesterdayMap = new Map<number, number>();
+    for (const r of racedYesterdayRow) {
+      const currentScore = racedYesterdayMap.get(r.rider_id);
+      if (currentScore === undefined || r.stage_score > currentScore) {
+        racedYesterdayMap.set(r.rider_id, r.stage_score);
+      }
+    }
 
     // Bulk-load program windows for the current season ONCE instead of doing
     // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
@@ -908,6 +915,32 @@ export class GameStateService {
           recoveryShort = 0.2 * decayMultiplier;
           recoveryLong = 0.01 * decayMultiplier;
         }
+
+        let shortTermMult = 1.0;
+        let longTermMult = 1.0;
+
+        if (consecutiveNonRaceDays >= 1) {
+          shortTermMult = 1.25;
+          longTermMult = 1.15;
+        } else {
+          const stageScore = racedYesterdayMap.get(row.rider_id) ?? 0;
+          if (stageScore < 10) {
+            shortTermMult = 1.20;
+            longTermMult = 1.10;
+          } else if (stageScore < 25) {
+            shortTermMult = 1.15;
+            longTermMult = 1.05;
+          } else if (stageScore < 50) {
+            shortTermMult = 1.05;
+            longTermMult = 1.00;
+          } else {
+            shortTermMult = 1.00;
+            longTermMult = 1.00;
+          }
+        }
+
+        recoveryShort *= shortTermMult;
+        recoveryLong *= longTermMult;
 
         shortTermFatigue = Math.max(0.0, shortTermFatigue - recoveryShort);
         longTermDecayable = Math.max(0.0, longTermDecayable - recoveryLong);

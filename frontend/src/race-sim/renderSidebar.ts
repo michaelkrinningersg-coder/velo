@@ -766,9 +766,9 @@ function compareStandardLeaderboard(left: RealtimeRiderSnapshot, right: Realtime
 function buildEffectiveSkillLines(rider: RealtimeRiderSnapshot, sourceRider: Rider | null): string[] {
   const seasonForm = sourceRider?.formBonus ?? 0;
   const raceForm = sourceRider?.raceFormBonus ?? 0;
-  const fatigue = sourceRider?.fatigueMalus ?? 0;
-  const longTermFatigue = sourceRider?.longTermFatigueMalus ?? 0;
-  const shortTermFatigue = sourceRider?.shortTermFatigueMalus ?? 0;
+  const fatigue = (sourceRider?.fatigueMalus ?? 0) * 0.5;
+  const longTermFatigue = (sourceRider?.longTermFatigueMalus ?? 0) * 0.5;
+  const shortTermFatigue = (sourceRider?.shortTermFatigueMalus ?? 0) * 0.5;
   const teamBonus = rider.teamGroupBonus;
   const scaledMicroForm = Math.max(-2.5, Math.min(2.5, rider.microForm * 2.5));
   const attackBonus = rider.isAttacking ? 10 : 0;

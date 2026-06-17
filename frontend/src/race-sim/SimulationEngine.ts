@@ -572,9 +572,7 @@ function resolveBaseSkill(rider: Rider, skillName: TerrainSkillName): number {
 function resolveConditionFormBonus(rider: Rider): number {
   return (rider.formBonus ?? 0)
     + (rider.raceFormBonus ?? 0)
-    - (rider.fatigueMalus ?? 0)
-    - (rider.longTermFatigueMalus ?? 0)
-    - (rider.shortTermFatigueMalus ?? 0);
+    - ((rider.fatigueMalus ?? 0) + (rider.longTermFatigueMalus ?? 0) + (rider.shortTermFatigueMalus ?? 0)) * 0.5;
 }
 
 function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]): string {
@@ -591,9 +589,9 @@ function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]
 
   const seasonForm = rider.formBonus ?? 0;
   const raceForm = rider.raceFormBonus ?? 0;
-  const fatigue = rider.fatigueMalus ?? 0;
-  const longTermFatigue = rider.longTermFatigueMalus ?? 0;
-  const shortTermFatigue = rider.shortTermFatigueMalus ?? 0;
+  const fatigue = (rider.fatigueMalus ?? 0) * 0.5;
+  const longTermFatigue = (rider.longTermFatigueMalus ?? 0) * 0.5;
+  const shortTermFatigue = (rider.shortTermFatigueMalus ?? 0) * 0.5;
 
   parts.push(`S-Form ${seasonForm >= 0 ? '+' : ''}${seasonForm.toFixed(1).replace('.', ',')}`);
   parts.push(`R-Form ${raceForm >= 0 ? '+' : ''}${raceForm.toFixed(1).replace('.', ',')}`);
@@ -757,7 +755,7 @@ function resolveSpecializationTieBreakAdjustment(
 
   } else if (context === 'climb_top') {
     const role = rider?.role?.name;
-    
+
     if (markerCategory === '4') {
       if (spec1 === 'Sprint') adjustment -= 3;
       else if (spec2 === 'Sprint') adjustment -= 1.5;
@@ -1127,6 +1125,8 @@ export class SimulationEngine {
 
   private hasLoggedFinishSprintTieBreak = false;
 
+  private hasAppliedSprintLeadoutBonuses = false;
+
   constructor(
     private readonly bootstrap: RealtimeSimulationBootstrap,
     options?: { maxSubstepSeconds?: number },
@@ -1170,7 +1170,7 @@ export class SimulationEngine {
           const pickRandomSkills = (n: number): RiderSkillKey[] => {
             const keys = [...allowedPool];
             const result: RiderSkillKey[] = [];
-            
+
             if (isTimeTrial) {
               // TimeTrial skill is guaranteed to be one of the selected skills.
               result.push('timeTrial');
@@ -1674,6 +1674,11 @@ export class SimulationEngine {
   }
 
   private getOrderedRiders(): RiderState[] {
+    if (this.isFinished() && !this.hasAppliedSprintLeadoutBonuses) {
+      this.applySprintLeadoutBonuses();
+      this.hasAppliedSprintLeadoutBonuses = true;
+    }
+
     const ordered = this.isTimeTrialMode
       ? [...this.riders].sort(compareRiders)
       : orderRoadRiders(this.riders, this.resolveFinishMarkerType(), this.isClimberMalusStage());
@@ -1790,9 +1795,10 @@ export class SimulationEngine {
         rider.skillBreakdown = '';
         rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
         const specAdj = resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
-        const leadoutBonus = this.calculateSprintLeadoutBonus(rider);
-        rider.photoFinishScore += specAdj + leadoutBonus;
-        rider.leadoutBonus = leadoutBonus;
+        rider.photoFinishScore += specAdj;
+        rider.leadoutBonus = 0;
+        rider.leadoutRiderId = null;
+        rider.leadoutContributions = [];
         continue;
       }
 
@@ -1842,9 +1848,9 @@ export class SimulationEngine {
 
         const refV = rider.tempSpeedMps / 14;
         const dFull = Math.max(5, 50 * refV);
-  const segment = this.currentSegment(rider);
-  const baseDZero = Math.max(15, 150 * refV);
-  const dZero = Math.max(dFull, Math.min(baseDZero, resolveDraftDistanceCapMeters(segment?.terrain)));
+        const segment = this.currentSegment(rider);
+        const baseDZero = Math.max(15, 150 * refV);
+        const dZero = Math.max(dFull, Math.min(baseDZero, resolveDraftDistanceCapMeters(segment?.terrain)));
         const draftGroupWindow = resolveDraftGroupWindow(ordered, index, dZero);
         const draftGroupSize = draftGroupWindow.size;
         const draftPackFactor = resolveDraftPackFactor(draftGroupSize);
@@ -2011,9 +2017,10 @@ export class SimulationEngine {
         rider.finishTimeSeconds = activeStepStartSeconds + finishSeconds;
         rider.currentSpeedMps = 0;
         const specAdj = resolveSpecializationTieBreakAdjustment(rider, this.resolveFinishMarkerType(), this.isClimberMalusStage());
-        const leadoutBonus = this.calculateSprintLeadoutBonus(rider);
-        rider.photoFinishScore += specAdj + leadoutBonus;
-        rider.leadoutBonus = leadoutBonus;
+        rider.photoFinishScore += specAdj;
+        rider.leadoutBonus = 0;
+        rider.leadoutRiderId = null;
+        rider.leadoutContributions = [];
       } else {
         rider.distanceCoveredMeters = targetDistance;
         this.recordIntermediateSplits(rider, previousDistance, rider.distanceCoveredMeters, activeStepStartSeconds, rider.currentSpeedMps);
@@ -2052,13 +2059,13 @@ export class SimulationEngine {
       const activeNonBreakawayRiders = this.riders.filter(r => !breakawayRiderIds.has(r.rider.id) && !isRiderInactive(r));
 
       if (activeBreakawayRiders.length > 0 && activeNonBreakawayRiders.length > 0) {
-        const lastSurvivor = activeBreakawayRiders.reduce((best, r) => 
+        const lastSurvivor = activeBreakawayRiders.reduce((best, r) =>
           r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
-        , activeBreakawayRiders[0]);
+          , activeBreakawayRiders[0]);
 
-        const leadingChaser = activeNonBreakawayRiders.reduce((best, r) => 
+        const leadingChaser = activeNonBreakawayRiders.reduce((best, r) =>
           r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
-        , activeNonBreakawayRiders[0]);
+          , activeNonBreakawayRiders[0]);
 
         if (leadingChaser.distanceCoveredMeters >= lastSurvivor.distanceCoveredMeters) {
           if (lastSurvivor.distanceCoveredMeters >= 0.40 * this.stageDistanceMeters) {
@@ -2087,6 +2094,11 @@ export class SimulationEngine {
     }
 
     this.elapsedSeconds += deltaSeconds;
+
+    if (this.isFinished() && !this.hasAppliedSprintLeadoutBonuses) {
+      this.applySprintLeadoutBonuses();
+      this.hasAppliedSprintLeadoutBonuses = true;
+    }
 
     this.logFinishSprintTieBreakIfNeeded();
   }
@@ -2715,10 +2727,10 @@ export class SimulationEngine {
 
     rider.teamGroupBonus = this.resolveTeamGroupBonusValue(rider, teamGroupBonusByRiderId);
     const basePhysics = this.calculateBasePhysics(rider, segment, windZone);
-  rider.segmentStartKm = segment.start_km;
-  rider.segmentEndKm = segment.end_km;
-  rider.segmentStartElevation = segment.start_elevation;
-  rider.segmentEndElevation = segment.end_elevation;
+    rider.segmentStartKm = segment.start_km;
+    rider.segmentEndKm = segment.end_km;
+    rider.segmentStartElevation = segment.start_elevation;
+    rider.segmentEndElevation = segment.end_elevation;
     rider.activeTerrain = segment.terrain;
     rider.skillName = basePhysics.skillName;
     rider.skillBreakdown = basePhysics.attackSkillBonus > 0
@@ -3654,52 +3666,81 @@ export class SimulationEngine {
     return baseScore + specAdj;
   }
 
-  private calculateSprintLeadoutBonus(rider: RiderState): number {
+  private applySprintLeadoutBonuses(): void {
     const finishType = this.resolveFinishMarkerType();
     if (finishType !== 'finish_flat' && finishType !== 'finish_hill') {
-      return 0;
+      return;
     }
 
-    if (rider.rider.skills.sprint < 74) {
-      return 0;
+    if (this.isTimeTrialMode) {
+      return;
     }
 
-    const teamId = rider.rider.activeTeamId;
-    if (teamId == null) {
-      return 0;
+    // 1. Find the winner's group
+    const finishedRiders = this.riders
+      .filter(isClassifiedFinisher)
+      .sort((left, right) => (left.finishTimeSeconds ?? 0) - (right.finishTimeSeconds ?? 0));
+
+    if (finishedRiders.length === 0) {
+      return;
     }
 
-    // Find all team riders in the current race (starting roster)
-    const teamRiders = this.riders.filter((r) => r.rider.activeTeamId === teamId);
-    if (teamRiders.length === 0) {
-      return 0;
+    const firstFinishGroup: RiderState[] = [];
+    let previousTime: number | null = null;
+
+    for (const rider of finishedRiders) {
+      const finishTime = rider.finishTimeSeconds ?? 0;
+      if (firstFinishGroup.length === 0) {
+        firstFinishGroup.push(rider);
+        previousTime = finishTime;
+        continue;
+      }
+
+      if (previousTime != null && finishTime - previousTime <= TIME_TIE_THRESHOLD_SECONDS) {
+        firstFinishGroup.push(rider);
+        previousTime = finishTime;
+        continue;
+      }
+
+      break;
     }
 
-    // Filter to active team sprinters (sprint >= 74) who are finishing (not DNF/DNS/OTL)
-    const activeSprinters = teamRiders.filter((r) => 
-      r.finishStatus !== 'dnf' && 
-      (r.finishStatus as string) !== 'otl' && 
-      (r.finishStatus as string) !== 'dns' &&
-      r.rider.skills.sprint >= 74
-    );
+    const winnerGroupRiderIds = new Set(firstFinishGroup.map((r) => r.rider.id));
 
-    if (activeSprinters.length === 0) {
-      return 0;
+    // 2. Group finished sprinters (sprint >= 74) by team who finished in the winner group
+    const teamSprintersMap = new Map<number, RiderState[]>();
+    for (const rider of this.riders) {
+      if (
+        rider.finishStatus !== 'dnf' &&
+        (rider.finishStatus as string) !== 'otl' &&
+        (rider.finishStatus as string) !== 'dns' &&
+        rider.finishTimeSeconds != null &&
+        rider.rider.skills.sprint >= 73 &&
+        rider.rider.activeTeamId != null &&
+        winnerGroupRiderIds.has(rider.rider.id)
+      ) {
+        const teamId = rider.rider.activeTeamId;
+        const list = teamSprintersMap.get(teamId) ?? [];
+        list.push(rider);
+        teamSprintersMap.set(teamId, list);
+      }
     }
 
-    // Retrieve or calculate the best sprinter ID for this team
-    let bestSprinterId = this.teamBestSprinterRiderId.get(teamId);
-    if (bestSprinterId === undefined) {
+    // 3. For each team, find the best sprinter in the winner group and calculate their leadout bonus
+    for (const [teamId, sprinters] of teamSprintersMap.entries()) {
+      if (sprinters.length === 0) {
+        continue;
+      }
+
       let bestSprinter: RiderState | null = null;
       let maxScore = Number.NEGATIVE_INFINITY;
 
-      for (const r of activeSprinters) {
+      for (const r of sprinters) {
         const score = this.calculatePreLeadoutFinishScore(r);
         if (score > maxScore) {
           maxScore = score;
           bestSprinter = r;
         } else if (score === maxScore && bestSprinter !== null) {
-          // Tie breaker if scores are equal (by sprint skill, then by ID)
           if (r.rider.skills.sprint > bestSprinter.rider.skills.sprint) {
             bestSprinter = r;
           } else if (r.rider.skills.sprint === bestSprinter.rider.skills.sprint) {
@@ -3711,15 +3752,25 @@ export class SimulationEngine {
       }
 
       if (bestSprinter) {
-        bestSprinterId = bestSprinter.rider.id;
-        this.teamBestSprinterRiderId.set(teamId, bestSprinterId);
-      } else {
-        bestSprinterId = -1;
+        // Calculate the leadout bonus for this best sprinter
+        const leadoutBonus = this.calculateSprintLeadoutBonusForRider(bestSprinter);
+        if (leadoutBonus > 0) {
+          bestSprinter.leadoutBonus = leadoutBonus;
+          bestSprinter.photoFinishScore += leadoutBonus;
+        }
       }
     }
+  }
 
-    // Only the best sprinter in the team receives the leadout bonus
-    if (bestSprinterId !== rider.rider.id) {
+  private calculateSprintLeadoutBonusForRider(rider: RiderState): number {
+    const teamId = rider.rider.activeTeamId;
+    if (teamId == null) {
+      return 0;
+    }
+
+    // Find all team riders in the current race (starting roster)
+    const teamRiders = this.riders.filter((r) => r.rider.activeTeamId === teamId);
+    if (teamRiders.length === 0) {
       return 0;
     }
 
@@ -3923,17 +3974,17 @@ export class SimulationEngine {
       for (const victimId of incident.massCrashPotentialRiderIds) {
         const victimState = this.riders.find(r => r.rider.id === victimId);
         if (!victimState || isRiderInactive(victimState)) continue;
-        
+
         const distanceDiff = Math.abs(victimState.distanceCoveredMeters - rider.distanceCoveredMeters);
         if (distanceDiff <= 50) {
           actuallyCrashedRiders.push(victimId);
           const victimIncident = buildDynamicCrashIncident(
-            victimState.rider, 
-            this.bootstrap.riders, 
-            incident.triggerDistanceKm, 
+            victimState.rider,
+            this.bootstrap.riders,
+            incident.triggerDistanceKm,
             this.bootstrap.stageSummary.distanceKm
           );
-          
+
           this.applyIncident(victimState, victimIncident, eventTimeSeconds, true);
         }
       }
@@ -3955,17 +4006,17 @@ export class SimulationEngine {
           : `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} hat einen Defekt`),
       detail: incident.type === 'crash'
         ? (() => {
-            let severityLabel = 'Low';
-            let consequenceLabel = 'Regenerationsmalus auf den nächsten Etappen (-10, -5, -2 Form)';
-            if (incident.severity === 'medium') {
-              severityLabel = 'Middle';
-              consequenceLabel = 'Frischeverlust (-15 Frische) und verringerte Tagesform für den Rest der Etappe';
-            } else if (incident.severity === 'severe') {
-              severityLabel = 'High';
-              consequenceLabel = 'Fahrer musste die Etappe beenden (DNF)';
-            }
-            return `Auswirkung: ${severityLabel} · Folge: ${consequenceLabel} · Wartezeit: ${incident.waitDurationSeconds}s`;
-          })()
+          let severityLabel = 'Low';
+          let consequenceLabel = 'Regenerationsmalus auf den nächsten Etappen (-10, -5, -2 Form)';
+          if (incident.severity === 'medium') {
+            severityLabel = 'Middle';
+            consequenceLabel = 'Frischeverlust (-15 Frische) und verringerte Tagesform für den Rest der Etappe';
+          } else if (incident.severity === 'severe') {
+            severityLabel = 'High';
+            consequenceLabel = 'Fahrer musste die Etappe beenden (DNF)';
+          }
+          return `Auswirkung: ${severityLabel} · Folge: ${consequenceLabel} · Wartezeit: ${incident.waitDurationSeconds}s`;
+        })()
         : `Wartezeit: ${incident.waitDurationSeconds}s`,
     });
 

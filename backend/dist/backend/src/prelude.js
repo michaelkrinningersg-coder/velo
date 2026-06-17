@@ -40,26 +40,27 @@ const node_module_1 = __importDefault(require("node:module"));
 const path = __importStar(require("node:path"));
 const originalRequire = node_module_1.default.prototype.require;
 node_module_1.default.prototype.require = function (id) {
+    const self = this;
     if (id === 'bindings') {
         return function (name) {
             if (name === 'better_sqlite3.node') {
                 if (process.pkg) {
                     const externalAddonPath = path.join(path.dirname(process.execPath), 'better_sqlite3.node');
-                    return originalRequire.call(this, externalAddonPath);
+                    return originalRequire.call(self, externalAddonPath);
                 }
                 else {
                     try {
                         const sqliteModuleDir = path.dirname(require.resolve('better-sqlite3/package.json'));
                         const addonPath = path.join(sqliteModuleDir, 'build', 'Release', 'better_sqlite3.node');
-                        return originalRequire.call(this, addonPath);
+                        return originalRequire.call(self, addonPath);
                     }
                     catch (e) {
-                        // fallback if resolution fails
+                        console.error('[Prelude SQLite Native Load Error]:', e);
                     }
                 }
             }
-            const realBindings = originalRequire.call(this, 'bindings');
-            return realBindings.apply(this, arguments);
+            const realBindings = originalRequire.call(self, 'bindings');
+            return realBindings.apply(self, arguments);
         };
     }
     return originalRequire.apply(this, arguments);

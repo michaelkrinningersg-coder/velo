@@ -15,9 +15,7 @@ const WIND_FACTOR = 0.003;
 function resolveFormBonus(rider: Rider): number {
   return (rider.formBonus ?? 0)
     + (rider.raceFormBonus ?? 0)
-    - (rider.fatigueMalus ?? 0)
-    - (rider.longTermFatigueMalus ?? 0)
-    - (rider.shortTermFatigueMalus ?? 0);
+    - ((rider.fatigueMalus ?? 0) + (rider.longTermFatigueMalus ?? 0) + (rider.shortTermFatigueMalus ?? 0)) * 0.5;
 }
 
 export class TimeTrialSimulator {

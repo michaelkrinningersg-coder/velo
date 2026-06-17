@@ -37,6 +37,26 @@ We have successfully implemented the requested features:
    - In `StageResultCommitService`, during the SQLite stage simulation commit transaction, computed and incremented each rider's breakaway attempts, end-stage attacks, counter-attacks, crashes, and mechanical defects.
    - In `RiderRepository`, queried `rider_career_stats` and aggregated `results` to build the full `careerStats` payload for the frontend.
 
+3. **Database Schema & Real-Time Logging**:
+   - If a user attempts to manually select all 3 top sprinters in the roster editor, the backend validator in `applyRaceRosterSelection` will throw a descriptive validation error (`Der drittbeste Sprinter darf nicht aufgestellt werden...`), blocking the save action and prompting the user to correct their selection.
+
+### 10. Sprint Leadout Bonus Winner Group Logic Update
+- **Deferred Leadout Calculation**: Modified finish line loop processing in [SimulationEngine.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/race-sim/SimulationEngine.ts) to set initial/zero sprint leadout values when riders cross the finish line (leaving `photoFinishScore` with only base score and specialization adjustments).
+- **Winner Time Group Filtering**: Added `applySprintLeadoutBonuses()` to run once when the simulation is finished (`isFinished() === true`).
+  - Identifies the winner's time group (Group 1) by sorting finished riders by time ascending and grouping them within `TIME_TIE_THRESHOLD_SECONDS` (1.0 second).
+  - For each team, finds the best sprinter (sprint skill $\ge 74$, finished) within this winner's group using `calculatePreLeadoutFinishScore` (with standard tie-breakers).
+  - Calculates the team's sprint leadout bonus for this chosen sprinter, applying it to their `photoFinishScore`, `leadoutBonus`, and setting helper/contributor telemetry.
+  - If a team's top sprinter misses the winner's group but the second sprinter makes it, the second sprinter is awarded the leadout bonus (and the top sprinter can act as a helper).
+  - If no team sprinter finishes in the winner's group, no leadout bonus is awarded for that team.
+- **Double-Safe Hooks**: Call `applySprintLeadoutBonuses()` both in `advanceSubstep()` (before tie-break console logging) and in `getOrderedRiders()` (as a lazy fallback).
+
+### 11. Backend Native SQLite Binding Resolution Fix
+- **Module Context Bugfix**: Fixed a bug in [prelude.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/prelude.ts) where the overridden `require()` did not capture the caller's context `this` in a closure (`self = this`). This caused calls to the returned `bindings` wrapper function to lose their module instance reference, throwing `Cannot find module 'bindings'` errors.
+- **Precompiled SQLite Native Bindings**: Discovered the precompiled `better_sqlite3.node` binaries in the codebase:
+  - Root directory has binary for Node 20 (`NODE_MODULE_VERSION 115`).
+  - `backend/dist` directory has binary for Node 22 (`NODE_MODULE_VERSION 127`).
+  - Added copy instruction so that depending on the Node version configured on the local system, the corresponding binary is placed in `backend/node_modules/better-sqlite3/build/Release/better_sqlite3.node`.
+
 ---
 
 ## Technical Implementations
