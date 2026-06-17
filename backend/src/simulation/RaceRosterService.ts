@@ -675,7 +675,7 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
     const roster = getEligibleRiders(teamFullRoster, riderLocks);
     const programCandidates = orderProgramCandidates(roster.filter((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
-    const teamSelection = programCandidates.slice(0, riderLimit);
+    let teamSelection = programCandidates.slice(0, riderLimit);
     const selectedIds = new Set(teamSelection.map((rider: any) => rider.id));
 
     if (teamSelection.length < riderLimit) {
