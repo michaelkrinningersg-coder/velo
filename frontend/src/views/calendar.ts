@@ -13,6 +13,7 @@ import {
   raceCategoryNameBadge,
   openDashboardRaceStages,
   openRaceProgramParticipants,
+  startAutoProgress,
 } from './dashboard';
 import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type { Race } from '../../../shared/types';
@@ -48,6 +49,22 @@ function toDateStr(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function handleCalendarDateClick(dateStr: string): void {
+  const currentDate = state.gameState?.currentDate;
+  if (!currentDate) return;
+
+  if (dateStr <= currentDate) {
+    return;
+  }
+
+  const formattedTarget = formatDate(dateStr);
+  const ok = confirm(`Möchtest du automatisch bis zum ${formattedTarget} simulieren?`);
+  if (ok) {
+    state.autoProgressTargetDate = dateStr;
+    startAutoProgress();
+  }
 }
 
 function getCalendarWeeks(year: number, monthIndex: number): Date[][] {
@@ -109,13 +126,22 @@ export function initCalendarView(): void {
     renderCalendarRaceList();
   });
 
-  // Click handler on calendar weeks (event bars)
+  // Click handler on calendar weeks (event bars or day cells)
   $('calendar-weeks').addEventListener('click', (event) => {
     const bar = (event.target as Element).closest<HTMLElement>('.calendar-event-bar');
     if (bar) {
       const raceId = Number(bar.dataset['raceId']);
       if (Number.isFinite(raceId)) {
         void openDashboardRaceStages(raceId);
+      }
+      return;
+    }
+
+    const dayCell = (event.target as Element).closest<HTMLElement>('[data-calendar-date]');
+    if (dayCell) {
+      const dateStr = dayCell.dataset['calendarDate'];
+      if (dateStr) {
+        handleCalendarDateClick(dateStr);
       }
     }
   });
@@ -240,15 +266,17 @@ export function renderCalendar(): void {
       const dayStr = toDateStr(day);
       const isOtherMonth = day.getMonth() !== currentMonthIndex;
       const isToday = dayStr === currentDate;
+      const isFuture = dayStr > currentDate;
       const classes = [
         'calendar-day-cell',
         isOtherMonth ? 'other-month' : '',
         isToday ? 'today' : '',
+        isFuture ? 'is-future' : '',
       ].filter(Boolean).join(' ');
 
       return `
-        <div class="${classes}">
-          <span class="calendar-day-number">${day.getDate()}</span>
+        <div class="${classes}" data-calendar-date="${dayStr}">
+          <span class="calendar-day-number" data-calendar-date="${dayStr}">${day.getDate()}</span>
         </div>
       `;
     }).join('');

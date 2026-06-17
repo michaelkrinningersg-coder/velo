@@ -5459,6 +5459,24 @@ html, body {
   color: rgba(255, 255, 255, 0.35);
 }
 
+.calendar-day-cell.is-future {
+  pointer-events: auto;
+}
+
+.calendar-day-cell.is-future .calendar-day-number {
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.calendar-day-cell.is-future .calendar-day-number:hover {
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+.calendar-day-cell.is-future:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .calendar-day-cell.other-month {
   background: rgba(0, 0, 0, 0.08);
 }

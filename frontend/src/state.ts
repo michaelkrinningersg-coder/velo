@@ -176,6 +176,7 @@ export const state: {
   riderTeamEditorDirtyRiderIds: number[];
   riderTeamEditorSaving: boolean;
   riderTeamEditorExporting: boolean;
+  autoProgressTargetDate: string | null;
 } = {
   currentSave: null,
   gameState: null,
@@ -275,6 +276,7 @@ export const state: {
   riderTeamEditorDirtyRiderIds: [],
   riderTeamEditorSaving: false,
   riderTeamEditorExporting: false,
+  autoProgressTargetDate: null,
 };
 
 export let raceSimView: RaceSimView | null = null;

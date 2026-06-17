@@ -849,11 +849,18 @@ export function startAutoProgress(): void {
 export function stopAutoProgress(): void {
   if (!autoProgressActive) return;
   setAutoProgressActive(false);
+  state.autoProgressTargetDate = null;
   updateAutoProgressUI();
 }
 
 async function runAutoProgressLoop(): Promise<void> {
   while (autoProgressActive) {
+    const currentDate = state.gameState?.currentDate;
+    if (state.autoProgressTargetDate && currentDate && currentDate >= state.autoProgressTargetDate) {
+      stopAutoProgress();
+      break;
+    }
+
     const pendingStages = state.gameStatus?.pendingStages ?? [];
     let success = false;
     if (pendingStages.length > 0) {
@@ -864,7 +871,7 @@ async function runAutoProgressLoop(): Promise<void> {
     }
 
     if (!success) {
-      setAutoProgressActive(false);
+      stopAutoProgress();
       break;
     }
 
