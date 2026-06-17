@@ -1,121 +1,53 @@
 role_name;spec_1;spec_1_name;spec_2;spec_2_name;spec_3;spec_3_name;exists_in_rules;rider_count
 Co-Kapitaen;1;Berg;2;Hill;3;Sprint;true;3
 Co-Kapitaen;1;Berg;2;Hill;4;Timetrial;true;15
-Co-Kapitaen;1;Berg;2;Hill;5;Cobble;false;2
-Co-Kapitaen;1;Berg;2;Hill;6;Attacker;true;30
-Co-Kapitaen;1;Berg;3;Sprint;4;Timetrial;false;0
-Co-Kapitaen;1;Berg;3;Sprint;5;Cobble;false;0
-Co-Kapitaen;1;Berg;3;Sprint;6;Attacker;false;0
-Co-Kapitaen;1;Berg;4;Timetrial;5;Cobble;false;1
-Co-Kapitaen;1;Berg;4;Timetrial;6;Attacker;false;0
-Co-Kapitaen;1;Berg;5;Cobble;6;Attacker;false;0
-Co-Kapitaen;2;Hill;3;Sprint;4;Timetrial;false;1
+Co-Kapitaen;1;Berg;2;Hill;6;Attacker;true;31
 Co-Kapitaen;2;Hill;3;Sprint;5;Cobble;true;5
 Co-Kapitaen;2;Hill;3;Sprint;6;Attacker;true;3
-Co-Kapitaen;2;Hill;4;Timetrial;5;Cobble;false;5
 Co-Kapitaen;2;Hill;4;Timetrial;6;Attacker;true;0
 Co-Kapitaen;2;Hill;5;Cobble;6;Attacker;true;4
-Co-Kapitaen;3;Sprint;4;Timetrial;5;Cobble;true;4
-Co-Kapitaen;3;Sprint;4;Timetrial;6;Attacker;true;0
+Co-Kapitaen;3;Sprint;4;Timetrial;5;Cobble;true;2
 Co-Kapitaen;3;Sprint;5;Cobble;6;Attacker;true;1
 Co-Kapitaen;4;Timetrial;5;Cobble;6;Attacker;true;1
-Edelhelfer;1;Berg;2;Hill;3;Sprint;false;6
 Edelhelfer;1;Berg;2;Hill;4;Timetrial;true;21
-Edelhelfer;1;Berg;2;Hill;5;Cobble;false;5
-Edelhelfer;1;Berg;2;Hill;6;Attacker;true;30
-Edelhelfer;1;Berg;3;Sprint;4;Timetrial;false;0
-Edelhelfer;1;Berg;3;Sprint;5;Cobble;false;0
-Edelhelfer;1;Berg;3;Sprint;6;Attacker;false;0
-Edelhelfer;1;Berg;4;Timetrial;5;Cobble;false;1
-Edelhelfer;1;Berg;4;Timetrial;6;Attacker;false;0
-Edelhelfer;1;Berg;5;Cobble;6;Attacker;false;0
-Edelhelfer;2;Hill;3;Sprint;4;Timetrial;false;4
-Edelhelfer;2;Hill;3;Sprint;5;Cobble;true;20
-Edelhelfer;2;Hill;3;Sprint;6;Attacker;true;3
-Edelhelfer;2;Hill;4;Timetrial;5;Cobble;false;4
+Edelhelfer;1;Berg;2;Hill;6;Attacker;true;25
+Edelhelfer;2;Hill;3;Sprint;5;Cobble;true;18
+Edelhelfer;2;Hill;3;Sprint;6;Attacker;true;4
 Edelhelfer;2;Hill;4;Timetrial;6;Attacker;true;1
 Edelhelfer;2;Hill;5;Cobble;6;Attacker;true;6
-Edelhelfer;3;Sprint;4;Timetrial;5;Cobble;true;4
-Edelhelfer;3;Sprint;4;Timetrial;6;Attacker;true;0
+Edelhelfer;3;Sprint;4;Timetrial;5;Cobble;true;5
 Edelhelfer;3;Sprint;5;Cobble;6;Attacker;true;1
 Edelhelfer;4;Timetrial;5;Cobble;6;Attacker;true;0
-Kapitaen;1;Berg;2;Hill;3;Sprint;false;2
 Kapitaen;1;Berg;2;Hill;4;Timetrial;true;18
-Kapitaen;1;Berg;2;Hill;5;Cobble;false;5
 Kapitaen;1;Berg;2;Hill;6;Attacker;true;23
-Kapitaen;1;Berg;3;Sprint;4;Timetrial;false;0
-Kapitaen;1;Berg;3;Sprint;5;Cobble;false;0
-Kapitaen;1;Berg;3;Sprint;6;Attacker;false;0
-Kapitaen;1;Berg;4;Timetrial;5;Cobble;false;1
-Kapitaen;1;Berg;4;Timetrial;6;Attacker;false;0
-Kapitaen;1;Berg;5;Cobble;6;Attacker;false;0
-Kapitaen;2;Hill;3;Sprint;4;Timetrial;false;0
 Kapitaen;2;Hill;3;Sprint;5;Cobble;true;6
 Kapitaen;2;Hill;3;Sprint;6;Attacker;true;1
-Kapitaen;2;Hill;4;Timetrial;5;Cobble;false;4
 Kapitaen;2;Hill;4;Timetrial;6;Attacker;true;2
 Kapitaen;2;Hill;5;Cobble;6;Attacker;true;3
 Kapitaen;3;Sprint;4;Timetrial;5;Cobble;true;5
-Kapitaen;3;Sprint;4;Timetrial;6;Attacker;true;0
 Kapitaen;3;Sprint;5;Cobble;6;Attacker;true;1
 Kapitaen;4;Timetrial;5;Cobble;6;Attacker;true;4
-Sprinter;1;Berg;2;Hill;3;Sprint;false;0
-Sprinter;1;Berg;2;Hill;4;Timetrial;false;0
-Sprinter;1;Berg;2;Hill;5;Cobble;false;0
-Sprinter;1;Berg;2;Hill;6;Attacker;false;0
-Sprinter;1;Berg;3;Sprint;4;Timetrial;false;0
-Sprinter;1;Berg;3;Sprint;5;Cobble;false;0
-Sprinter;1;Berg;3;Sprint;6;Attacker;false;0
-Sprinter;1;Berg;4;Timetrial;5;Cobble;false;0
-Sprinter;1;Berg;4;Timetrial;6;Attacker;false;0
-Sprinter;1;Berg;5;Cobble;6;Attacker;false;0
-Sprinter;2;Hill;3;Sprint;4;Timetrial;false;1
-Sprinter;2;Hill;3;Sprint;5;Cobble;true;47
+Sprinter;2;Hill;3;Sprint;5;Cobble;true;53
 Sprinter;2;Hill;3;Sprint;6;Attacker;true;0
-Sprinter;2;Hill;4;Timetrial;5;Cobble;false;0
-Sprinter;2;Hill;4;Timetrial;6;Attacker;false;0
-Sprinter;2;Hill;5;Cobble;6;Attacker;false;0
-Sprinter;3;Sprint;4;Timetrial;5;Cobble;true;7
-Sprinter;3;Sprint;4;Timetrial;6;Attacker;true;0
-Sprinter;3;Sprint;5;Cobble;6;Attacker;true;6
-Sprinter;4;Timetrial;5;Cobble;6;Attacker;false;0
-Starke Helfer;1;Berg;2;Hill;3;Sprint;true;16
+Sprinter;3;Sprint;4;Timetrial;5;Cobble;true;8
+Sprinter;3;Sprint;5;Cobble;6;Attacker;true;8
+Starke Helfer;1;Berg;2;Hill;3;Sprint;true;15
 Starke Helfer;1;Berg;2;Hill;4;Timetrial;true;16
-Starke Helfer;1;Berg;2;Hill;5;Cobble;false;9
-Starke Helfer;1;Berg;2;Hill;6;Attacker;true;61
-Starke Helfer;1;Berg;3;Sprint;4;Timetrial;false;0
-Starke Helfer;1;Berg;3;Sprint;5;Cobble;false;0
-Starke Helfer;1;Berg;3;Sprint;6;Attacker;false;0
-Starke Helfer;1;Berg;4;Timetrial;5;Cobble;false;0
-Starke Helfer;1;Berg;4;Timetrial;6;Attacker;false;0
-Starke Helfer;1;Berg;5;Cobble;6;Attacker;false;0
-Starke Helfer;2;Hill;3;Sprint;4;Timetrial;false;3
-Starke Helfer;2;Hill;3;Sprint;5;Cobble;true;40
-Starke Helfer;2;Hill;3;Sprint;6;Attacker;true;12
-Starke Helfer;2;Hill;4;Timetrial;5;Cobble;false;7
+Starke Helfer;1;Berg;2;Hill;6;Attacker;true;64
+Starke Helfer;2;Hill;3;Sprint;5;Cobble;true;36
+Starke Helfer;2;Hill;3;Sprint;6;Attacker;true;11
 Starke Helfer;2;Hill;4;Timetrial;6;Attacker;true;2
 Starke Helfer;2;Hill;5;Cobble;6;Attacker;true;4
 Starke Helfer;3;Sprint;4;Timetrial;5;Cobble;true;7
-Starke Helfer;3;Sprint;4;Timetrial;6;Attacker;true;0
-Starke Helfer;3;Sprint;5;Cobble;6;Attacker;true;5
+Starke Helfer;3;Sprint;5;Cobble;6;Attacker;true;4
 Starke Helfer;4;Timetrial;5;Cobble;6;Attacker;true;0
-Wassertraeger;1;Berg;2;Hill;3;Sprint;true;32
+Wassertraeger;1;Berg;2;Hill;3;Sprint;true;33
 Wassertraeger;1;Berg;2;Hill;4;Timetrial;true;16
-Wassertraeger;1;Berg;2;Hill;5;Cobble;false;9
-Wassertraeger;1;Berg;2;Hill;6;Attacker;true;56
-Wassertraeger;1;Berg;3;Sprint;4;Timetrial;false;1
-Wassertraeger;1;Berg;3;Sprint;5;Cobble;false;0
-Wassertraeger;1;Berg;3;Sprint;6;Attacker;false;0
-Wassertraeger;1;Berg;4;Timetrial;5;Cobble;false;1
-Wassertraeger;1;Berg;4;Timetrial;6;Attacker;false;0
-Wassertraeger;1;Berg;5;Cobble;6;Attacker;false;0
-Wassertraeger;2;Hill;3;Sprint;4;Timetrial;false;11
+Wassertraeger;1;Berg;2;Hill;6;Attacker;true;57
 Wassertraeger;2;Hill;3;Sprint;5;Cobble;true;70
 Wassertraeger;2;Hill;3;Sprint;6;Attacker;true;41
-Wassertraeger;2;Hill;4;Timetrial;5;Cobble;false;9
 Wassertraeger;2;Hill;4;Timetrial;6;Attacker;true;9
 Wassertraeger;2;Hill;5;Cobble;6;Attacker;true;19
 Wassertraeger;3;Sprint;4;Timetrial;5;Cobble;true;11
-Wassertraeger;3;Sprint;4;Timetrial;6;Attacker;true;1
-Wassertraeger;3;Sprint;5;Cobble;6;Attacker;true;11
+Wassertraeger;3;Sprint;5;Cobble;6;Attacker;true;10
 Wassertraeger;4;Timetrial;5;Cobble;6;Attacker;true;4

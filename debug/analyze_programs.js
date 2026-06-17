@@ -328,7 +328,7 @@ function assignRolesForRoster(roster) {
   const leadershipRoster = [...roster].sort(compareLeadership);
   const leadershipCounts = resolveLeadershipRoleCounts(roster.length);
 
-  // Assign Captains
+  // Assign Captains first (from all riders)
   let assignedCaptains = 0;
   for (const rider of leadershipRoster) {
     if (assignedCaptains < leadershipCounts.captain) {
@@ -337,22 +337,22 @@ function assignRolesForRoster(roster) {
     }
   }
 
-  // 2. Sort sprinter candidates (sprint skill >= 74)
+  // 2. Sort sprinter candidates (sprint skill >= 73)
   const allSprinterCandidates = roster
-    .filter((rider) => rider.skill_sprint >= 74)
+    .filter((rider) => rider.skill_sprint >= 73)
     .sort(compareSprint);
 
-  // Assign Best Sprinter (first sprinter candidate who is not a Captain)
-  let bestSprinter = null;
+  // Assign up to 3 sprinters (skipping already assigned captains)
+  let assignedSprinters = 0;
   for (const sprinter of allSprinterCandidates) {
-    if (!assignments.has(sprinter.id)) {
+    if (assignments.has(sprinter.id)) continue;
+    if (assignedSprinters < 3) {
       assignments.set(sprinter.id, roleIds.sprinter.id);
-      bestSprinter = sprinter;
-      break;
+      assignedSprinters++;
     }
   }
 
-  // 3. Assign Co-Captains (next leadership counts, skipping already assigned)
+  // 3. Assign Co-Captains (next leadership counts, skipping already assigned captains and sprinters)
   let assignedCoCaptains = 0;
   for (const rider of leadershipRoster) {
     if (assignments.has(rider.id)) continue;
@@ -362,19 +362,7 @@ function assignRolesForRoster(roster) {
     }
   }
 
-  // 4. Assign 2nd and 3rd best sprinters (who are not Captains or Co-Captains)
-  let extraSprintersCount = 0;
-  for (const sprinter of allSprinterCandidates) {
-    if (bestSprinter && sprinter.id === bestSprinter.id) continue;
-    if (!assignments.has(sprinter.id)) {
-      if (extraSprintersCount < 2) {
-        assignments.set(sprinter.id, roleIds.sprinter.id);
-        extraSprintersCount++;
-      }
-    }
-  }
-
-  // 5. Assign helper roles to remaining unassigned riders
+  // 4. Assign helper roles to remaining unassigned riders
   const helperRoster = roster
     .filter((rider) => !assignments.has(rider.id))
     .sort(compareLeadership);
@@ -813,4 +801,7 @@ function main() {
   }
   console.log(`Number of riders with Attacker specialization in top 3: ${attackerCount}`);
 
-  console.log('Analysis completed successf
+  console.log('Analysis completed successfully!');
+}
+
+main();
