@@ -287,7 +287,7 @@ class StageResultCommitService {
         if (!tableExists(this.db, 'rider_daily_state')) {
             return [];
         }
-        const dnsRows = this.db.prepare(`
+        const deletedDnsRows = this.db.prepare(`
       SELECT r.id, r.first_name, r.last_name, rds.health_status, re.team_id
       FROM race_entries re
       JOIN riders r ON r.id = re.rider_id
@@ -297,21 +297,36 @@ class StageResultCommitService {
         AND re.rider_id NOT IN (
           SELECT DISTINCT se.rider_id
           FROM stage_entries se
+          WHERE se.race_id = ?
+            AND se.stage_id = ?
+        )
+        AND re.rider_id NOT IN (
+          SELECT DISTINCT se.rider_id
+          FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           WHERE se.race_id = ?
             AND s.stage_number < ?
             AND se.status IN ('dns', 'dnf')
         )
-    `).all(race.id, race.id, stage.stageNumber);
+    `).all(race.id, race.id, stage.id, race.id, stage.stageNumber);
+        const explicitDnsRows = this.db.prepare(`
+      SELECT r.id, r.first_name, r.last_name, se.status_reason, se.team_id
+      FROM stage_entries se
+      JOIN riders r ON r.id = se.rider_id
+      WHERE se.stage_id = ?
+        AND se.status = 'dns'
+    `).all(stage.id);
         const previousGcStandings = new ResultRepository_1.ResultRepository(this.db).getPreviousGcStandings(race.id, stage.stageNumber);
         const previousGcMap = new Map(previousGcStandings.map(s => [s.riderId, s.rank]));
-        return dnsRows.map((row, index) => {
+        const events = [];
+        let eventIndex = 0;
+        for (const row of deletedDnsRows) {
             const riderName = `${row.first_name} ${row.last_name}`;
             const gcRank = previousGcMap.get(row.id);
             const riderNameFormatted = gcRank != null ? `${riderName} (${gcRank}.)` : riderName;
             const reason = row.health_status === 'ill' ? 'Krankheitsbedingt' : 'Verletzungsbedingt';
-            return {
-                id: -1000 - index,
+            events.push({
+                id: -1000 - eventIndex,
                 elapsedSeconds: 0,
                 riderId: row.id,
                 riderName: riderName,
@@ -321,8 +336,29 @@ class StageResultCommitService {
                 title: `${riderNameFormatted} nicht am Start`,
                 detail: `${reason} nicht am Start der Etappe.`,
                 kmMark: 0,
-            };
-        });
+            });
+            eventIndex++;
+        }
+        for (const row of explicitDnsRows) {
+            const riderName = `${row.first_name} ${row.last_name}`;
+            const gcRank = previousGcMap.get(row.id);
+            const riderNameFormatted = gcRank != null ? `${riderName} (${gcRank}.)` : riderName;
+            const reason = row.status_reason ?? 'Erschöpfungsbedingt';
+            events.push({
+                id: -1000 - eventIndex,
+                elapsedSeconds: 0,
+                riderId: row.id,
+                riderName: riderName,
+                riderTeamId: row.team_id,
+                type: 'dnf',
+                tone: 'danger',
+                title: `${riderNameFormatted} nicht am Start`,
+                detail: `${reason} nicht am Start der Etappe.`,
+                kmMark: 0,
+            });
+            eventIndex++;
+        }
+        return events;
     }
     loadStageContext(stageId) {
         if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {

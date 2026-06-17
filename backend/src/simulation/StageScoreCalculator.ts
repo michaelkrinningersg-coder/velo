@@ -108,9 +108,9 @@ function calculateSegmentScore(
   if (terrain) {
     const norm = terrain.toLowerCase();
     if (norm === 'cobble') {
-      terrainMultiplier = 3.0;
+      terrainMultiplier = 2.0;
     } else if (norm === 'cobble_hill' || norm === 'cobblehill') {
-      terrainMultiplier = 4.0;
+      terrainMultiplier = 2.5;
     }
   }
 

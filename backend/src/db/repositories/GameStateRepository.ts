@@ -189,6 +189,20 @@ export class GameStateRepository {
         insertStageEntry.run(stage.id, stage.raceId, entry.team_id, entry.rider_id);
       }
     })();
+
+    if (tableExists(this.db, 'rider_daily_state')) {
+      this.db.prepare(`
+        UPDATE stage_entries
+        SET status = 'dns', status_reason = 'Erschöpfung'
+        WHERE stage_id = ?
+          AND status = 'scheduled'
+          AND rider_id IN (
+            SELECT rider_id
+            FROM rider_daily_state
+            WHERE (short_term_fatigue + long_term_fatigue_decayable + long_term_fatigue_locked) >= 25.0
+          )
+      `).run(stage.id);
+    }
   }
 
 

@@ -1508,8 +1508,21 @@ export class GameStateService {
         addedShort *= shortMult;
         addedLongDecayable *= longMult;
 
-        // Limit short term fatigue buildup from a single stage/race to +4.0
-        addedShort = Math.min(4.0, addedShort);
+        let shortLimit = 2.5;
+        let longLimit = 0.3;
+        if (catId === 1 || catId === 3) {
+          shortLimit = 3.0;
+          longLimit = 0.4;
+        } else if (catId === 2) {
+          shortLimit = 2.8;
+          longLimit = 0.35;
+        } else if (catId === 4 || catId === 7) {
+          shortLimit = 2.7;
+          longLimit = 0.33;
+        }
+
+        addedShort = Math.min(shortLimit, addedShort);
+        addedLongDecayable = Math.min(longLimit, addedLongDecayable);
 
         addedShort = roundToTwoDecimals(addedShort);
         addedLongDecayable = roundToTwoDecimals(addedLongDecayable);

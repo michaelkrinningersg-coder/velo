@@ -27,7 +27,7 @@ const RIDER_LOCK_MESSAGES = {
     'winter-break': 'Winterpause zur Erholung (15.10. - 15.02.).',
     'low-category-exclusion': 'Nicht startberechtigt für diese Rennkategorie aufgrund der Rolle (Kapitän / Co-Kapitän / Sprinter).',
     'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
-    'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Kurzzeit > 10 oder Gesamt > 11).',
+    'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Gesamt-Fatigue >= 16).',
 };
 function createDeterministicRandom(seed) {
     let state = seed >>> 0;
@@ -105,7 +105,7 @@ function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
         else {
             const shortTerm = rider.shortTermFatigueMalus ?? 0.0;
             const longTerm = rider.longTermFatigueMalus ?? 0.0;
-            if (!isContinuingStageRace && (shortTerm > 10.0 || (shortTerm + longTerm) > 11.0)) {
+            if (!isContinuingStageRace && (shortTerm + longTerm) >= 16.0) {
                 locks.set(rider.id, 'fatigue-exclusion');
             }
             else if (hasCobbleStage) {
