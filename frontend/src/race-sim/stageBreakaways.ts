@@ -1,5 +1,5 @@
-import type { ParsedStageSummary, Race, RealtimeClassificationStanding, RealtimeGcStanding, Rider, Stage } from '../../../shared/types';
-import type { FavoriteItem } from './stageFavorites';
+import type { ParsedStageSummary, Race, RealtimeClassificationStanding, RealtimeGcStanding, Rider, Stage, Team } from '../../../shared/types';
+import { calculateStageFavoriteRiderRanking, type FavoriteItem } from './stageFavorites';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
 export interface PrecalculatedStageBreakaway {
@@ -244,6 +244,7 @@ export function precalculateStageBreakaway(
   stageFavorites: FavoriteItem[],
   gcStandings: RealtimeGcStanding[],
   mountainStandings: RealtimeClassificationStanding[],
+  teams?: Team[],
 ): PrecalculatedStageBreakaway | null {
   if ((stage.profile === 'ITT' || stage.profile === 'TTT') || riders.length === 0 || stageSummary.distanceKm <= 0) {
     return null;
@@ -273,18 +274,20 @@ export function precalculateStageBreakaway(
   const protectedLeaderIds = new Set<number>();
 
   if (isSuperTeamEligible) {
-    const top20Favs = getTopFavoriteIds(stageFavorites, 20);
     const top10Gc = getTopGcIds(gcStandings, 10);
+    const resolvedTeams = teams ?? [];
+    const fullRiderRanking = calculateStageFavoriteRiderRanking(riders, resolvedTeams, stage, {
+      distanceKm: stageSummary.distanceKm,
+      elevationGainMeters: stageSummary.elevationGainMeters,
+    });
 
     let candidateTeams: number[] = [];
 
-    // Step A: check captains/co-captains in top 20 favs & top 10 gc
-    for (const favorite of stageFavorites) {
-      if (favorite.kind !== 'rider' || favorite.riderId == null) continue;
-      const riderId = favorite.riderId;
-      if (!top20Favs.has(riderId) || !top10Gc.has(riderId)) continue;
-      const rider = riders.find((r) => r.id === riderId);
-      if (!rider || rider.activeTeamId == null) continue;
+    // Step A: check captains/co-captains in the favorites list (going down until we have 5 unique teams)
+    for (const fav of fullRiderRanking) {
+      if (candidateTeams.length >= 5) break;
+      const rider = fav.rider;
+      if (rider.activeTeamId == null || !top10Gc.has(rider.id)) continue;
 
       const role = resolveRiderRoleName(rider);
       if (role === 'kapitaen' || role === 'co-kapitaen') {
@@ -296,12 +299,10 @@ export function precalculateStageBreakaway(
 
     // Step B: if no candidate teams found, expand search to Lieutenants (Edelhelfer)
     if (candidateTeams.length === 0) {
-      for (const favorite of stageFavorites) {
-        if (favorite.kind !== 'rider' || favorite.riderId == null) continue;
-        const riderId = favorite.riderId;
-        if (!top20Favs.has(riderId) || !top10Gc.has(riderId)) continue;
-        const rider = riders.find((r) => r.id === riderId);
-        if (!rider || rider.activeTeamId == null) continue;
+      for (const fav of fullRiderRanking) {
+        if (candidateTeams.length >= 5) break;
+        const rider = fav.rider;
+        if (rider.activeTeamId == null || !top10Gc.has(rider.id)) continue;
 
         const role = resolveRiderRoleName(rider);
         if (role === 'edelhelfer') {
@@ -310,10 +311,6 @@ export function precalculateStageBreakaway(
           }
         }
       }
-    }
-
-    if (candidateTeams.length > 5) {
-      candidateTeams = candidateTeams.slice(0, 5);
     }
 
     if (candidateTeams.length > 0 && Math.random() < 0.5) {

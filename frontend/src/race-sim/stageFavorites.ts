@@ -72,11 +72,11 @@ function calculateRoadScore(rider: Rider, stage: Stage, distanceKm: number, dail
 
   switch (stage.profile) {
     case 'Flat':
-      return (0.8 * rider.skills.sprint) + (0.2 * rider.skills.flat) + formContribution + staminaContribution;
+      return (0.8 * rider.skills.sprint) + (0.15 * rider.skills.acceleration) + (0.05 * rider.skills.flat) + formContribution + staminaContribution;
     case 'Rolling':
-      return (0.7 * rider.skills.sprint) + (0.2 * rider.skills.flat) + (0.1 * rider.skills.hill) + formContribution + staminaContribution;
+      return (0.7 * rider.skills.sprint) + (0.2 * rider.skills.acceleration) + (0.1 * rider.skills.hill) + formContribution + staminaContribution;
     case 'Hilly':
-      return (0.4 * rider.skills.sprint) + (0.2 * rider.skills.flat) + (0.4 * rider.skills.hill) + formContribution + staminaContribution;
+      return (0.45 * rider.skills.sprint) + (0.1 * rider.skills.flat) + (0.45 * rider.skills.hill) + formContribution + staminaContribution;
     case 'Hilly_Difficult':
       return (0.2 * rider.skills.sprint) + (0.1 * rider.skills.flat) + (0.7 * rider.skills.hill) + formContribution + staminaContribution;
     case 'Medium_Mountain':

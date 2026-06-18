@@ -1390,49 +1390,8 @@ export class SimulationEngine {
       this.stageFavorites,
       bootstrap.gcStandings,
       bootstrap.mountainStandings,
+      bootstrap.teams,
     );
-    if (this.breakawayPlan && this.breakawayPlan.superTeamId != null) {
-      this.superTeamId = this.breakawayPlan.superTeamId;
-      this.superTeamBonusAmount = randomInteger(2, 6);
-      this.superTeamMalusAmount = randomInteger(4, 9);
-      this.superTeamStartPercent = randomBetween(0.40, 0.60);
-      this.superTeamEndPercent = randomBetween(0.85, 0.95);
-
-      const normRole = (name: string | null | undefined) => (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      const teamRiders = bootstrap.riders.filter(r => r.activeTeamId === this.superTeamId);
-      const captains = teamRiders.filter(r => normRole(r.role?.name) === 'kapitaen');
-      const coCaptains = teamRiders.filter(r => normRole(r.role?.name) === 'co-kapitaen');
-
-      if (captains.length > 0) {
-        captains.forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
-        if (captains.length === 1 && coCaptains.length > 0) {
-          const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
-          this.superTeamProtectedLeaderIds.add(sortedCoCaptains[0].id);
-        }
-      } else if (coCaptains.length > 0) {
-        const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
-        sortedCoCaptains.slice(0, 2).forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
-      } else {
-        const edelhelfers = teamRiders.filter(r => normRole(r.role?.name) === 'edelhelfer');
-        if (edelhelfers.length > 0) {
-          const sortedEdelhelfers = [...edelhelfers].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
-          this.superTeamProtectedLeaderIds.add(sortedEdelhelfers[0].id);
-        }
-      }
-
-      const team = bootstrap.teams.find(t => t.id === this.superTeamId);
-      const teamName = team ? team.name : `Team ${this.superTeamId}`;
-      this.pushMessage({
-        elapsedSeconds: 0,
-        riderId: null,
-        riderName: null,
-        riderTeamId: this.superTeamId,
-        type: 'superteam',
-        tone: 'neutral',
-        title: `Superteam des Tages: ${teamName}`,
-        detail: `Dieses Team hat sich heute zusammengeschlossen, um seinen Leader zu unterstützen! Die Helfer erhalten zwischen ${(this.superTeamStartPercent * 100).toFixed(0)}% und ${(this.superTeamEndPercent * 100).toFixed(0)}% der Etappe einen Bonus von +${this.superTeamBonusAmount} auf Berg, Hill, Medium Mountain und Flat. Danach folgt ein Malus von -${this.superTeamMalusAmount} wegen Erschöpfung.`,
-      });
-    }
     const breakawayGapPenaltyConfig = this.buildBreakawayGapPenaltyConfig();
     this.breakawayGapPenaltyMarkers = breakawayGapPenaltyConfig.markers;
     this.breakawayGapPenaltyFallbackCheckpointsMeters = breakawayGapPenaltyConfig.fallbackCheckpointsMeters;
@@ -1475,6 +1434,49 @@ export class SimulationEngine {
     }));
 
     this.riders.forEach((rider) => this.syncRiderTelemetry(rider));
+
+    if (this.breakawayPlan && this.breakawayPlan.superTeamId != null) {
+      this.superTeamId = this.breakawayPlan.superTeamId;
+      this.superTeamBonusAmount = randomInteger(2, 6);
+      this.superTeamMalusAmount = randomInteger(4, 9);
+      this.superTeamStartPercent = randomBetween(0.40, 0.60);
+      this.superTeamEndPercent = randomBetween(0.85, 0.95);
+
+      const normRole = (name: string | null | undefined) => (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const teamRiders = bootstrap.riders.filter(r => r.activeTeamId === this.superTeamId);
+      const captains = teamRiders.filter(r => normRole(r.role?.name) === 'kapitaen');
+      const coCaptains = teamRiders.filter(r => normRole(r.role?.name) === 'co-kapitaen');
+
+      if (captains.length > 0) {
+        captains.forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
+        if (captains.length === 1 && coCaptains.length > 0) {
+          const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+          this.superTeamProtectedLeaderIds.add(sortedCoCaptains[0].id);
+        }
+      } else if (coCaptains.length > 0) {
+        const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+        sortedCoCaptains.slice(0, 2).forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
+      } else {
+        const edelhelfers = teamRiders.filter(r => normRole(r.role?.name) === 'edelhelfer');
+        if (edelhelfers.length > 0) {
+          const sortedEdelhelfers = [...edelhelfers].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+          this.superTeamProtectedLeaderIds.add(sortedEdelhelfers[0].id);
+        }
+      }
+
+      const team = bootstrap.teams.find(t => t.id === this.superTeamId);
+      const teamName = team ? team.name : `Team ${this.superTeamId}`;
+      this.pushMessage({
+        elapsedSeconds: 0,
+        riderId: null,
+        riderName: null,
+        riderTeamId: this.superTeamId,
+        type: 'superteam',
+        tone: 'neutral',
+        title: `Superteam des Tages: ${teamName}`,
+        detail: `Dieses Team hat sich heute zusammengeschlossen, um seinen Leader zu unterstützen! Die Helfer erhalten zwischen ${(this.superTeamStartPercent * 100).toFixed(0)}% und ${(this.superTeamEndPercent * 100).toFixed(0)}% der Etappe einen Bonus von +${this.superTeamBonusAmount} auf Berg, Hill, Medium Mountain und Flat. Danach folgt ein Malus von -${this.superTeamMalusAmount} wegen Erschöpfung.`,
+      });
+    }
 
     // Log special form states & form peaks at stage start (km 0)
     for (const r of this.riders) {
