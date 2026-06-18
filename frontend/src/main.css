@@ -5777,9 +5777,9 @@ tr.calendar-highlight {
   justify-content: space-between;
   gap: 2rem;
   width: 95%;
-  max-width: 1100px;
-  height: 600px;
-  max-height: 90vh;
+  max-width: 1200px;
+  height: 820px;
+  max-height: 95vh;
   background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -5896,16 +5896,17 @@ tr.calendar-highlight {
 }
 
 .instant-sim-rank-badge {
-  font-size: 0.75rem;
+  font-size: 0.88rem;
   font-weight: 800;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 1px 4px;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  padding: 1px 6px;
   border-radius: 4px;
 }
 
 .instant-sim-name {
-  font-size: 0.88rem;
+  font-size: 0.96rem;
   color: #fff;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -5916,7 +5917,7 @@ tr.calendar-highlight {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.74rem;
+  font-size: 0.80rem;
   color: #94a3b8;
 }
 
@@ -5926,7 +5927,8 @@ tr.calendar-highlight {
 }
 
 .instant-sim-gc-info {
-  font-weight: 600;
+  font-size: 0.86rem;
+  font-weight: 700;
   color: #fbbf24;
 }
 

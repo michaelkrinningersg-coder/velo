@@ -23,7 +23,7 @@
         </div>
         <div class="instant-sim-info-column">
           <div class="instant-sim-rider-header">
-            <span class="instant-sim-rank-badge">#${u.rank}</span>
+            <span class="instant-sim-rank-badge">${u.rank}</span>
             <span class="fi fi-${g} country-flag" style="font-size: 0.8rem;"></span>
             <span class="instant-sim-name">${S(m.firstName)} <strong>${S(m.lastName)}</strong></span>
           </div>
@@ -46,7 +46,7 @@
         </div>
         <div class="instant-sim-info-column">
           <div class="instant-sim-rider-header">
-            <span class="instant-sim-rank-badge">#${u.rank}</span>
+            <span class="instant-sim-rank-badge">${u.rank}</span>
             <span class="fi fi-${g} country-flag" style="font-size: 0.8rem;"></span>
             <span class="instant-sim-name">${S(m.firstName)} <strong>${S(m.lastName)}</strong></span>
           </div>

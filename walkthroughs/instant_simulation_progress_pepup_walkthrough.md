@@ -37,5 +37,9 @@ We have successfully refined the **Instant Simulation Progress Overlay** (Fortsc
   - Imported `calculateStageFavorites` from the simulation package.
   - Implemented `renderInstantSimPanel` to fetch favorites and GC stand rows, map flags and jerseys, format time gaps, and render cards.
   - Modified `showLoading`, `showInstantProgress`, and `updateInstantProgress` to handle state-conditional visibility and render trigger hooks.
+  - Removed the `#` prefix symbol from the rank badges inside the sidebar cards.
 - In [main.css](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/main.css):
   - Appended premium CSS classes for layout structures (`.instant-sim-panel`, `.instant-sim-sidebar`, `.instant-sim-center`), responsive layout limits, large jerseys, hover transitions, and badge chips.
+  - Increased `.instant-sim-panel` dimensions (`height: 820px; max-height: 95vh; max-width: 1200px;`) to fully display all 10 Stage Favorites and 10 GC riders simultaneously without requiring any vertical scrolling.
+  - Enlarged the font size of `.instant-sim-name` (to `0.96rem`) and `.instant-sim-gc-info` (to `0.86rem`).
+  - Styled `.instant-sim-rank-badge` to be larger (to `0.88rem`), colored in bright yellow (`#fbbf24`), and styled with a matching transparent yellow background and border.

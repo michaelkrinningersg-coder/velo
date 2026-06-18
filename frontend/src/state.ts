@@ -652,7 +652,7 @@ function renderInstantSimPanel(): void {
         </div>
         <div class="instant-sim-info-column">
           <div class="instant-sim-rider-header">
-            <span class="instant-sim-rank-badge">#${item.rank}</span>
+            <span class="instant-sim-rank-badge">${item.rank}</span>
             <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem;"></span>
             <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
           </div>
@@ -694,7 +694,7 @@ function renderInstantSimPanel(): void {
         </div>
         <div class="instant-sim-info-column">
           <div class="instant-sim-rider-header">
-            <span class="instant-sim-rank-badge">#${standing.rank}</span>
+            <span class="instant-sim-rank-badge">${standing.rank}</span>
             <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem;"></span>
             <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
           </div>
