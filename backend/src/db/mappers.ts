@@ -487,6 +487,8 @@ export interface RiderStatsStageDbRow {
   stage_score: number;
   rolled_weather_id?: number | null;
   rolled_wetter_name?: string | null;
+  super_team_id?: number | null;
+  team_id?: number | null;
 }
 
 export interface RiderStatsFinalDbRow {
@@ -506,6 +508,8 @@ export interface RiderStatsFinalDbRow {
   result_rank: number;
   final_points: number | null;
   stage_score: number;
+  super_team_id?: number | null;
+  team_id?: number | null;
 }
 
 export function emptyRiderStatsPointsByTerrain(): RiderStatsPointsByTerrain {

@@ -107,7 +107,7 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
     const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);
-    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation, leadoutContributions);
+    await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation, leadoutContributions, snapshot.superTeamId);
     return true;
   } catch (error) {
     alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
@@ -241,7 +241,7 @@ function loadRaceSimViewInstance(): RaceSimView {
       onFinishRequested: (snapshot, bootstrap) => {
         const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
         const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);
-        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, false, leadoutContributions);
+        void completeRealtimeStage(bootstrap.stage.id, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, false, leadoutContributions, snapshot.superTeamId);
       },
     });
     setRaceSimView(view);
@@ -387,6 +387,7 @@ export async function completeRealtimeStage(
   events?: RaceSimMessage[],
   skipViewActivation = false,
   leadoutContributions?: RealtimeLeadoutContribution[],
+  superTeamId?: number,
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -395,7 +396,14 @@ export async function completeRealtimeStage(
   setRealtimeCompletionInFlight(true);
   showLoading('Live-Ergebnis wird gespeichert...');
   try {
-    const res = await api.completeRealtimeSimulation(stageId, { entries, markerClassifications, incidents, events, leadoutContributions });
+    const res = await api.completeRealtimeSimulation(stageId, {
+      entries,
+      markerClassifications,
+      incidents,
+      events,
+      leadoutContributions,
+      superTeamId,
+    });
     if (!res.success) {
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;

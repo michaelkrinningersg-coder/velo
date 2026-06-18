@@ -265,9 +265,114 @@ export function precalculateStageBreakaway(
     : new Set<number>();
   const isHardStage = isHarderThanHillyStage(stage);
 
+  // Superteam selection logic
+  const isDifficultProfile = ['Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'].includes(stage.profile);
+  const isSuperTeamEligible = race.isStageRace && isDifficultProfile && stage.stageNumber >= 4;
+  let superTeamId: number | undefined;
+  const protectedLeaderIds = new Set<number>();
+
+  if (isSuperTeamEligible) {
+    const top20Favs = getTopFavoriteIds(stageFavorites, 20);
+    const top10Gc = getTopGcIds(gcStandings, 10);
+
+    let candidateTeams: number[] = [];
+
+    // Step A: check captains/co-captains in top 20 favs & top 10 gc
+    for (const favorite of stageFavorites) {
+      if (favorite.kind !== 'rider' || favorite.riderId == null) continue;
+      const riderId = favorite.riderId;
+      if (!top20Favs.has(riderId) || !top10Gc.has(riderId)) continue;
+      const rider = riders.find((r) => r.id === riderId);
+      if (!rider || rider.activeTeamId == null) continue;
+
+      const role = resolveRiderRoleName(rider);
+      if (role === 'kapitaen' || role === 'co-kapitaen') {
+        if (!candidateTeams.includes(rider.activeTeamId)) {
+          candidateTeams.push(rider.activeTeamId);
+        }
+      }
+    }
+
+    // Step B: if no candidate teams found, expand search to Lieutenants (Edelhelfer)
+    if (candidateTeams.length === 0) {
+      for (const favorite of stageFavorites) {
+        if (favorite.kind !== 'rider' || favorite.riderId == null) continue;
+        const riderId = favorite.riderId;
+        if (!top20Favs.has(riderId) || !top10Gc.has(riderId)) continue;
+        const rider = riders.find((r) => r.id === riderId);
+        if (!rider || rider.activeTeamId == null) continue;
+
+        const role = resolveRiderRoleName(rider);
+        if (role === 'edelhelfer') {
+          if (!candidateTeams.includes(rider.activeTeamId)) {
+            candidateTeams.push(rider.activeTeamId);
+          }
+        }
+      }
+    }
+
+    if (candidateTeams.length > 5) {
+      candidateTeams = candidateTeams.slice(0, 5);
+    }
+
+    if (candidateTeams.length > 0 && Math.random() < 0.5) {
+      const randomIndex = randomInteger(0, candidateTeams.length - 1);
+      superTeamId = candidateTeams[randomIndex];
+    }
+  }
+
+  // Identify leaders for the selected Superteam (to protect from breakaway and bonus/malus)
+  if (superTeamId != null) {
+    const teamRiders = riders.filter(r => r.activeTeamId === superTeamId);
+    const captains = teamRiders.filter(r => resolveRiderRoleName(r) === 'kapitaen');
+    const coCaptains = teamRiders.filter(r => resolveRiderRoleName(r) === 'co-kapitaen');
+
+    if (captains.length > 0) {
+      captains.forEach(r => protectedLeaderIds.add(r.id));
+      if (captains.length === 1 && coCaptains.length > 0) {
+        const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+        protectedLeaderIds.add(sortedCoCaptains[0].id);
+      }
+    } else if (coCaptains.length > 0) {
+      const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+      sortedCoCaptains.slice(0, 2).forEach(r => protectedLeaderIds.add(r.id));
+    } else {
+      // Fallback: use the best Edelhelfer by overall rating
+      const edelhelfers = teamRiders.filter(r => resolveRiderRoleName(r) === 'edelhelfer');
+      if (edelhelfers.length > 0) {
+        const sortedEdelhelfers = [...edelhelfers].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+        protectedLeaderIds.add(sortedEdelhelfers[0].id);
+      }
+    }
+  }
+
+  // Forced breakaway rider for selected Superteam
+  let forcedRider: Rider | undefined;
+  if (superTeamId != null) {
+    const teamRiders = riders.filter(r => r.activeTeamId === superTeamId);
+    const eligibleSuperteamRiders = teamRiders.filter(r => !protectedLeaderIds.has(r.id));
+    if (eligibleSuperteamRiders.length > 0) {
+      const sortedSupport = [...eligibleSuperteamRiders].sort(
+        (a, b) => b.skills.attack - a.skills.attack || b.overallRating - a.overallRating || b.id - a.id
+      );
+      forcedRider = sortedSupport[0];
+    }
+  }
+
   const eligibleRiders = riders.filter((rider) => {
     if (rider.activeTeamId == null || topFavoriteIds.has(rider.id) || topGcIds.has(rider.id)) {
       return false;
+    }
+
+    if (superTeamId != null && rider.activeTeamId === superTeamId) {
+      // Leader cannot go into breakaway
+      if (protectedLeaderIds.has(rider.id)) {
+        return false;
+      }
+      // Forced rider is already handled
+      if (forcedRider != null && rider.id === forcedRider.id) {
+        return false;
+      }
     }
 
     if (isEarlyStageRace && gcLeaderTeamId != null && rider.activeTeamId === gcLeaderTeamId) {
@@ -322,9 +427,12 @@ export function precalculateStageBreakaway(
 
   const selectedRiders = sampleWeightedWithoutReplacement(
     eligibleRiders,
-    Math.min(desiredBreakawaySize, eligibleRiders.length),
+    Math.max(0, Math.min(desiredBreakawaySize - (forcedRider ? 1 : 0), eligibleRiders.length)),
     (rider) => weightByRiderId.get(rider.id)?.finalWeight ?? 1,
   );
+  if (forcedRider) {
+    selectedRiders.push(forcedRider);
+  }
   if (selectedRiders.length === 0) {
     return null;
   }
@@ -371,5 +479,6 @@ export function precalculateStageBreakaway(
     phaseEndDistanceMeters,
     skillBonus,
     malusValue: randomInteger(5, 8),
+    superTeamId,
   };
 }

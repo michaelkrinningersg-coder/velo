@@ -305,6 +305,7 @@ export class StageResultCommitService {
     incidents: PrecalculatedRaceIncident[] = [],
     events: RaceSimMessage[] = [],
     leadoutContributions?: RealtimeLeadoutContribution[],
+    superTeamId?: number,
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
@@ -1219,6 +1220,30 @@ export class StageResultCommitService {
         `);
         for (const c of leadoutContributions) {
           insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
+        }
+      }
+
+      if (superTeamId != null) {
+        this.db.prepare('UPDATE stages SET super_team_id = ? WHERE id = ?').run(superTeamId, stage.id);
+        const startingTeamRiderRows = this.db.prepare(`
+          SELECT rider_id FROM stage_entries
+          WHERE stage_id = ? AND team_id = ? AND status != 'dns'
+        `).all(stage.id, superTeamId) as Array<{ rider_id: number }>;
+
+        for (const row of startingTeamRiderRows) {
+          const riderId = row.rider_id;
+          this.db.prepare(`
+            INSERT INTO rider_career_stats (rider_id, superteam_count)
+            VALUES (?, 1)
+            ON CONFLICT(rider_id) DO UPDATE SET superteam_count = superteam_count + 1
+          `).run(riderId);
+
+          insertSeasonStatsRowStmt.run(riderId, currentSeason);
+          this.db.prepare(`
+            UPDATE rider_season_stats
+            SET superteam_count = superteam_count + 1
+            WHERE rider_id = ? AND season = ?
+          `).run(riderId, currentSeason);
         }
       }
     })();

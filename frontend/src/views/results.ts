@@ -933,6 +933,7 @@ export function renderResultsView(): void {
       { key: 'exit', label: 'Ausgeschieden' },
       { key: 'home', label: 'Heimvorteil' },
       { key: 'weather', label: 'Wetter' },
+      { key: 'superteam', label: 'Superteam' },
     ];
     markerTabs.innerHTML = filters.map((filter) => `
       <button
@@ -1077,6 +1078,9 @@ export function renderResultsView(): void {
         if (selectedEventFilter === 'weather') {
           return !!(row.title && row.title.startsWith('Wetterbericht:'));
         }
+        if (selectedEventFilter === 'superteam') {
+          return row.type === 'superteam';
+        }
         return true;
       })
       .sort((a, b) => {
@@ -1113,8 +1117,10 @@ export function renderResultsView(): void {
             eventTitle = `Wetterbericht: ${weatherName}`;
           }
         }
-        const flagHtml = isWeatherReport ? '' : renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
-        const riderHtml = isWeatherReport ? '' : (riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–'));
+        const isSuperteam = row.type === 'superteam';
+        const isSuperTeamTeamEvent = isSuperteam && riderId == null;
+        const flagHtml = (isWeatherReport || isSuperTeamTeamEvent) ? '' : renderResultsFlagColumn(riderId != null ? resolveRiderCountryCode(riderId) : null);
+        const riderHtml = isWeatherReport ? '' : (isSuperTeamTeamEvent ? renderTeamNameLink(teamName || '–', teamId) : (riderId != null ? renderResultsParticipant(row.riderName ?? '', true, false, riderId, teamId) : esc(row.riderName || '–')));
 
         let badgeHtml = '';
         if (row.title && row.title.includes('guten Tag')) {
@@ -1150,6 +1156,8 @@ export function renderResultsView(): void {
           badgeHtml = `<span class="event-badge event-badge-normalhome"><span class="event-icon">♥</span> Heimvorteil</span>`;
         } else if (row.title && row.title.startsWith('Wetterbericht:')) {
           badgeHtml = `<span class="event-badge event-badge-weather"><span class="event-icon">🌤️</span> Wetter</span>`;
+        } else if (isSuperteam) {
+          badgeHtml = `<span class="event-badge event-badge-superteam"><span class="event-icon">⚡</span> Superteam</span>`;
         }
 
         return `

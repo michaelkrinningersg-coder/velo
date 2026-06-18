@@ -240,7 +240,9 @@ export class TeamRepository {
         spe.points_awarded AS season_points,
         stages.stage_score AS stage_score,
         results.event_ids AS event_ids,
-        results.jerseys_worn AS jerseys_worn
+        results.jerseys_worn AS jerseys_worn,
+        stages.super_team_id AS super_team_id,
+        spe.team_id AS team_id
       FROM season_point_events spe
       JOIN riders r ON r.id = spe.rider_id
       JOIN sta_country c ON c.id = r.country_id
@@ -272,6 +274,8 @@ export class TeamRepository {
       stage_score: number;
       event_ids: string | null;
       jerseys_worn: string | null;
+      super_team_id?: number | null;
+      team_id?: number | null;
     }>;
 
     const topResults: TeamStatsTopResult[] = topResultsRows.map((row) => {
@@ -302,6 +306,8 @@ export class TeamRepository {
         stageScore: row.stage_score,
         eventIds: row.event_ids,
         jerseysWorn: row.jerseys_worn,
+        superTeamId: row.super_team_id ?? null,
+        teamId: row.team_id ?? null,
       };
     });
 
@@ -319,7 +325,9 @@ export class TeamRepository {
         stages.profile AS profile,
         results.rank AS result_rank,
         stages.stage_score AS stage_score,
-        cat_bonus.points_stage AS points_stage
+        cat_bonus.points_stage AS points_stage,
+        stages.super_team_id AS super_team_id,
+        results.team_id AS team_id
       FROM results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
@@ -342,6 +350,8 @@ export class TeamRepository {
       result_rank: number;
       stage_score: number;
       points_stage: string;
+      super_team_id?: number | null;
+      team_id?: number | null;
     }>;
 
     for (const row of tttRows) {
@@ -367,6 +377,8 @@ export class TeamRepository {
           seasonPoints: points,
           season: row.season,
           stageScore: row.stage_score,
+          superTeamId: row.super_team_id ?? null,
+          teamId: row.team_id ?? null,
         });
       }
     }
@@ -462,6 +474,7 @@ export class TeamRepository {
         totalStageWins: 0,
         successfulBreakaways: 0,
         raceDays: 0,
+        superteamCount: 0,
         categories,
       };
     };
@@ -780,6 +793,24 @@ export class TeamRepository {
             catStats.climbWins4 += row.count;
           }
         }
+      }
+    }
+
+    // J. Query superteam counts from stages
+    if (tableExists(this.db, 'stages')) {
+      const superteamCountRows = this.db.prepare(`
+        SELECT CAST(substr(date, 1, 4) AS INTEGER) AS season, COUNT(*) AS count
+        FROM stages
+        WHERE super_team_id = ?
+        GROUP BY season
+      `).all(teamId) as Array<{ season: number; count: number }>;
+
+      for (const row of superteamCountRows) {
+        const yrStr = String(row.season);
+        if (successStats[yrStr]) {
+          successStats[yrStr].superteamCount = row.count;
+        }
+        successStats['all'].superteamCount += row.count;
       }
     }
 

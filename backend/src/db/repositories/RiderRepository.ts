@@ -400,7 +400,9 @@ export class RiderRepository {
         stage_entries.status_reason AS stage_entry_status_reason,
         stages.stage_score AS stage_score,
         stages.rolled_weather_id AS rolled_weather_id,
-        wetter.wetter_name AS rolled_wetter_name
+        wetter.wetter_name AS rolled_wetter_name,
+        stages.super_team_id AS super_team_id,
+        stage_entries.team_id AS team_id
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
@@ -450,7 +452,9 @@ export class RiderRepository {
         results.result_type_id AS result_type_id,
         results.rank AS result_rank,
         final_points.points_awarded AS final_points,
-        stages.stage_score AS stage_score
+        stages.stage_score AS stage_score,
+        stages.super_team_id AS super_team_id,
+        results.team_id AS team_id
       FROM results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
@@ -560,6 +564,8 @@ export class RiderRepository {
         rolledWetterName: row.rolled_wetter_name ?? null,
         eventIds: (row as any).event_ids ?? null,
         jerseysWorn: (row as any).jerseys_worn ?? null,
+        superTeamId: row.super_team_id ?? null,
+        teamId: row.team_id ?? null,
       } satisfies RiderStatsRow);
 
       const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
@@ -601,6 +607,8 @@ export class RiderRepository {
         elevationGainMeters: summary.elevationGainMeters,
         seasonPoints: finalPoints,
         stageScore: row.stage_score ?? 0,
+        superTeamId: row.super_team_id ?? null,
+        teamId: row.team_id ?? null,
       } satisfies RiderStatsRow);
 
       pointsByTerrain[resolveRiderStatsTerrainBucket(row.profile)] += finalPoints;
@@ -1103,10 +1111,10 @@ export class RiderRepository {
     const careerStatsRow = tableExists(this.db, 'rider_career_stats')
       ? this.db.prepare(`
           SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects,
-                 illnesses, illness_days, injuries, injury_days
+                 illnesses, illness_days, injuries, injury_days, superteam_count
           FROM rider_career_stats
           WHERE rider_id = ?
-        `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number; illnesses: number; illness_days: number; injuries: number; injury_days: number } | undefined
+        `).get(riderId) as { breakaway_attempts: number; attacks: number; counter_attacks: number; crashes: number; defects: number; illnesses: number; illness_days: number; injuries: number; injury_days: number; superteam_count: number } | undefined
       : undefined;
 
     let homeAdvantageDays = 0;
@@ -1139,6 +1147,7 @@ export class RiderRepository {
     const illnessDays = careerStatsRow?.illness_days ?? 0;
     const injuries = careerStatsRow?.injuries ?? 0;
     const injuryDays = careerStatsRow?.injury_days ?? 0;
+    const superteamCount = careerStatsRow?.superteam_count ?? 0;
 
     let dnsCount = 0;
     let dnfCount = 0;
@@ -1530,6 +1539,7 @@ export class RiderRepository {
       superHomeAdvantageDays,
       homePressureDays,
       breakawayKms,
+      superteamCount,
       categories,
     };
   }

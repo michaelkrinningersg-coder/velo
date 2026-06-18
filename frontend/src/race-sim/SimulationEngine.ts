@@ -198,6 +198,14 @@ interface RiderState {
   waitForCaptainRecovery: boolean;
   waitLogged: boolean;
   breakawayMalus: number;
+  originalSkills?: {
+    flat: number;
+    mountain: number;
+    mediumMountain: number;
+    hill: number;
+  };
+  superTeamActiveLogged?: boolean;
+  superTeamExhaustedLogged?: boolean;
   breakawayInitialMalus: number;
   breakawayRecoveryStartDistanceMeters: number | null;
   breakawayGapPenalty: number;
@@ -1123,6 +1131,13 @@ export class SimulationEngine {
 
   private nextMessageId = 1;
 
+  private superTeamId?: number;
+  private superTeamProtectedLeaderIds = new Set<number>();
+  private superTeamBonusAmount = 0;
+  private superTeamMalusAmount = 0;
+  private superTeamStartPercent = 0;
+  private superTeamEndPercent = 0;
+
   private hasLoggedFinishSprintTieBreak = false;
 
   private hasAppliedSprintLeadoutBonuses = false;
@@ -1369,6 +1384,48 @@ export class SimulationEngine {
       bootstrap.gcStandings,
       bootstrap.mountainStandings,
     );
+    if (this.breakawayPlan && this.breakawayPlan.superTeamId != null) {
+      this.superTeamId = this.breakawayPlan.superTeamId;
+      this.superTeamBonusAmount = randomInteger(2, 6);
+      this.superTeamMalusAmount = randomInteger(4, 9);
+      this.superTeamStartPercent = randomBetween(0.40, 0.60);
+      this.superTeamEndPercent = randomBetween(0.85, 0.95);
+
+      const normRole = (name: string | null | undefined) => (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const teamRiders = bootstrap.riders.filter(r => r.activeTeamId === this.superTeamId);
+      const captains = teamRiders.filter(r => normRole(r.role?.name) === 'kapitaen');
+      const coCaptains = teamRiders.filter(r => normRole(r.role?.name) === 'co-kapitaen');
+
+      if (captains.length > 0) {
+        captains.forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
+        if (captains.length === 1 && coCaptains.length > 0) {
+          const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+          this.superTeamProtectedLeaderIds.add(sortedCoCaptains[0].id);
+        }
+      } else if (coCaptains.length > 0) {
+        const sortedCoCaptains = [...coCaptains].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+        sortedCoCaptains.slice(0, 2).forEach(r => this.superTeamProtectedLeaderIds.add(r.id));
+      } else {
+        const edelhelfers = teamRiders.filter(r => normRole(r.role?.name) === 'edelhelfer');
+        if (edelhelfers.length > 0) {
+          const sortedEdelhelfers = [...edelhelfers].sort((a, b) => b.overallRating - a.overallRating || b.id - a.id);
+          this.superTeamProtectedLeaderIds.add(sortedEdelhelfers[0].id);
+        }
+      }
+
+      const team = bootstrap.teams.find(t => t.id === this.superTeamId);
+      const teamName = team ? team.name : `Team ${this.superTeamId}`;
+      this.pushMessage({
+        elapsedSeconds: 0,
+        riderId: null,
+        riderName: null,
+        riderTeamId: this.superTeamId,
+        type: 'superteam',
+        tone: 'neutral',
+        title: `Superteam des Tages: ${teamName}`,
+        detail: `Dieses Team hat sich heute zusammengeschlossen, um seinen Leader zu unterstützen! Die Helfer erhalten zwischen ${(this.superTeamStartPercent * 100).toFixed(0)}% und ${(this.superTeamEndPercent * 100).toFixed(0)}% der Etappe einen Bonus von +${this.superTeamBonusAmount} auf Berg, Hill, Medium Mountain und Flat. Danach folgt ein Malus von -${this.superTeamMalusAmount} wegen Erschöpfung.`,
+      });
+    }
     const breakawayGapPenaltyConfig = this.buildBreakawayGapPenaltyConfig();
     this.breakawayGapPenaltyMarkers = breakawayGapPenaltyConfig.markers;
     this.breakawayGapPenaltyFallbackCheckpointsMeters = breakawayGapPenaltyConfig.fallbackCheckpointsMeters;
@@ -1599,6 +1656,7 @@ export class SimulationEngine {
       stageFavorites: this.stageFavorites,
       breakawayPhaseActive: this.isBreakawayGroupPhaseActive(),
       breakawayGapStatus: this.breakawayGapStatus == null ? null : { ...this.breakawayGapStatus },
+      superTeamId: this.superTeamId,
     };
   }
 
@@ -1975,6 +2033,56 @@ export class SimulationEngine {
     for (const rider of this.riders) {
       if (isRiderInactive(rider)) {
         continue;
+      }
+
+      // Dynamic Superteam skill updates & logging
+      if (this.superTeamId != null && rider.rider.activeTeamId === this.superTeamId && !this.superTeamProtectedLeaderIds.has(rider.rider.id)) {
+        const distancePercent = rider.distanceCoveredMeters / this.stageDistanceMeters;
+        let targetMod = 0;
+
+        if (distancePercent >= this.superTeamStartPercent && distancePercent < this.superTeamEndPercent) {
+          targetMod = this.superTeamBonusAmount;
+          if (!rider.superTeamActiveLogged) {
+            rider.superTeamActiveLogged = true;
+            this.pushMessage({
+              elapsedSeconds: this.elapsedSeconds,
+              riderId: rider.rider.id,
+              riderName: rider.riderName,
+              type: 'superteam',
+              tone: 'neutral',
+              title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} leistet Führungsarbeit!`,
+              detail: `Der Edelhelfer investiert all seine Kraft für das Team und erhält vorübergehend +${this.superTeamBonusAmount} auf Berg-, Hügel- und Flachpassagen!`,
+            });
+          }
+        } else if (distancePercent >= this.superTeamEndPercent) {
+          targetMod = -this.superTeamMalusAmount;
+          if (!rider.superTeamExhaustedLogged) {
+            rider.superTeamExhaustedLogged = true;
+            this.pushMessage({
+              elapsedSeconds: this.elapsedSeconds,
+              riderId: rider.rider.id,
+              riderName: rider.riderName,
+              type: 'superteam',
+              tone: 'warning',
+              title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist erschöpft!`,
+              detail: `Die Führungsarbeit hat ihren Tribut gefordert. Der Fahrer erhält für den Rest der Etappe einen Malus von -${this.superTeamMalusAmount} auf Berg-, Hügel- und Flachpassagen.`,
+            });
+          }
+        }
+
+        if (!rider.originalSkills) {
+          rider.originalSkills = {
+            flat: rider.rider.skills.flat,
+            mountain: rider.rider.skills.mountain,
+            mediumMountain: rider.rider.skills.mediumMountain,
+            hill: rider.rider.skills.hill,
+          };
+        }
+
+        rider.rider.skills.flat = rider.originalSkills.flat + targetMod;
+        rider.rider.skills.mountain = rider.originalSkills.mountain + targetMod;
+        rider.rider.skills.mediumMountain = rider.originalSkills.mediumMountain + targetMod;
+        rider.rider.skills.hill = rider.originalSkills.hill + targetMod;
       }
 
       if (this.isTimeTrialMode && stepEndSeconds <= rider.startOffsetSeconds) {

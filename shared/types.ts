@@ -548,7 +548,7 @@ export interface RaceSimMessage {
   riderName: string | null;
   riderTeamId: number | null;
   secondaryRiders?: Array<{ riderName: string; riderTeamId: number | null }>;
-  type: 'incident' | 'support_wait' | 'support_resume' | 'dnf' | 'attack' | 'counter_attack';
+  type: 'incident' | 'support_wait' | 'support_resume' | 'dnf' | 'attack' | 'counter_attack' | 'superteam';
   tone: 'neutral' | 'warning' | 'danger';
   title: string;
   detail: string;
@@ -747,6 +747,7 @@ export interface RealtimeStageCommitRequest {
   incidents?: PrecalculatedRaceIncident[];
   events?: RaceSimMessage[];
   leadoutContributions?: RealtimeLeadoutContribution[];
+  superTeamId?: number;
 }
 
 export interface RaceRosterSelectionRequest {
@@ -823,6 +824,8 @@ export interface RiderStatsRow {
   distanceKm: number | null;
   elevationGainMeters: number | null;
   seasonPoints: number;
+  superTeamId?: number | null;
+  teamId?: number | null;
   stageScore: number;
   rolledWeatherId?: number | null;
   rolledWetterName?: string | null;
@@ -889,6 +892,7 @@ export interface RiderCareerStats {
   superHomeAdvantageDays?: number;
   homePressureDays?: number;
   breakawayKms?: number;
+  superteamCount: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;
@@ -1333,6 +1337,8 @@ export interface TeamStatsTopResult {
   stageScore: number;
   eventIds?: string | null;
   jerseysWorn?: string | null;
+  superTeamId?: number | null;
+  teamId?: number | null;
 }
 
 export interface TeamSuccessStats {
@@ -1352,6 +1358,7 @@ export interface TeamSuccessStats {
   totalStageWins: number;
   successfulBreakaways: number;
   raceDays: number;
+  superteamCount: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;

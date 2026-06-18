@@ -310,8 +310,10 @@ export function getRiderStatsFinalTypeSortOrder(rowType: string): number {
       return 2;
     case 'youth_final':
       return 3;
-    default:
+    case 'breakaway_final':
       return 4;
+    default:
+      return 5;
   }
 }
 
@@ -1470,6 +1472,16 @@ export function renderStatusDotsColumn(row: any): string {
     }
   }
 
+  if (row.superTeamId != null && row.teamId != null && row.superTeamId === row.teamId) {
+    renderedDots.push(`<span class="status-dot status-dot-superteam"></span>`);
+    tooltipRows.push(`
+      <div class="status-tooltip-row">
+        <span class="status-dot status-dot-superteam"></span>
+        <span>Superteam-Teilnahme</span>
+      </div>
+    `);
+  }
+
   if (renderedDots.length === 0) {
     return '';
   }
@@ -2171,6 +2183,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
     totalGcWins: 0,
     totalStageWins: 0,
     successfulBreakaways: 0,
+    superteamCount: 0,
     categories: {}
   };
 
@@ -2301,6 +2314,10 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimmalus</div>
           <div style="font-size: 1.75rem; font-weight: bold; color: #fb7185; line-height: 1.25;">${stats.homePressureDays ?? 0}</div>
           <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Superteam</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #6366f1;">${stats.superteamCount ?? 0}</div>
         </div>
       </div>
 

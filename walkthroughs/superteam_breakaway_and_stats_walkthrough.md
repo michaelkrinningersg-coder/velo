@@ -1,0 +1,57 @@
+# Walkthrough - Superteam Selection, Role fallbacks, and Stats/UI Integrations
+
+We have successfully integrated the **Superteam** (Captain Support) gameplay mechanics with role fallback logic, breakaway exclusions, career/season statistics, leaderboards, event subtabs, and UI indicators.
+
+## Core Features & Fallbacks Checked
+
+1. **Candidate Team Selection Rules:**
+   - Teams are only eligible if they have a Captain (Kapitän) or Co-Captain who is in the Top 10 GC and under the top 20 stage favorites.
+   - If no team matches this criteria, we fallback/expand to checking for teams with an Edelhelfer (Lieutenant) in the Top 10 GC and top 20 stage favorites.
+   - This prevents selecting any team that lacks high-ranking GC/favorite leaders.
+
+2. **Team Leader Protection (Breakaway & Modifiers):**
+   - If the selected team has neither Captain nor Co-Captain starting/active in the race, we fallback to designating their best Edelhelfer (highest overall rating) as the protected leader.
+   - The protected leader is strictly prevented from:
+     - Entering early breakaways.
+     - Receiving the helper bonus (random +2 to +6) and subsequent malus (random -4 to -9).
+   - This ensures the helper bonus/malus is reserved strictly for support riders, while the designated team leader is kept safe in the peloton.
+
+---
+
+## Detailed Changes Made
+
+### 1. Frontend Integration & Snapshot Passing
+In [liveRace.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/liveRace.ts):
+- Updated the `completeRealtimeStage` function signature and callers to pass `snapshot.superTeamId` under the commit request payload, allowing the backend to properly associate the stage's Superteam.
+
+### 2. Frontend Views & Statistics Panels
+- In [riderStats.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/riderStats.ts):
+  - Modified `renderStatusDotsColumn` to draw an Indigo status dot (`.status-dot-superteam`) with the tooltip "Superteam-Teilnahme" if `row.superTeamId === row.teamId`.
+  - Added the **Superteam** career stats card inside the grid under the "Karrierestatistiken" tab showing `stats.superteamCount`.
+- In [teamStats.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/teamStats.ts):
+  - Added the **Superteam** career stats card in the success stats grid showing the seasonal and all-time `stats.superteamCount` counts for the team.
+
+### 3. Events subtab & Jersey Rendering
+In [results.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/results.ts):
+- Added a dedicated **Superteam** filter subtab under Results -> Ereignisse.
+- When filtering by Superteam, rendered the team's jersey, a direct link to the team page as the main participant, and the custom event messages.
+- Generated the new `event-badge-superteam` badge styling for all superteam rows.
+
+### 4. Leaderboard Metric Option
+In [index.html](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/index.html):
+- Inserted `<option value="superteam_count">Superteambonus</option>` directly below the "Höchster Leadout-Bonus" choice inside the "Action & Taktik" dropdown.
+
+### 5. Custom Styling
+In [main.css](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/main.css):
+- Defined the styling rules for `.status-dot-superteam` using a vibrant indigo background (`#6366f1`) and soft shadow.
+- Defined the styling rules for `.event-badge-superteam` with custom background opacity, border, and indigo coloring.
+
+---
+
+## Verification Summary
+
+- Checked candidate team filtering: Step A first filters for Captains/Co-Captains meeting the GC and favorite criteria, and falls back to Step B (Edelhelfers) if empty.
+- Checked protected leader identification: Fallback logic successfully resolves the best Edelhelfer if no Captain/Co-Captain is present.
+- Checked breakaway eligible list: Protected leader (whether captain, co-captain, or edelhelfer) returns `false` when checked against `protectedLeaderIds.has(rider.id)`.
+- Checked modifier mutation: `!this.superTeamProtectedLeaderIds.has(rider.rider.id)` prevents protected leaders from being subjected to skill shifts.
+- Compiled frontend views and backend types successfully.

@@ -592,7 +592,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
   const stats = payload.successStats[selectedSeasonKey] || {
     breakawayAttempts: 0, attacks: 0, counterAttacks: 0, crashes: 0, defects: 0,
     illnesses: 0, illnessDays: 0, injuries: 0, injuryDays: 0, dnsCount: 0, dnfCount: 0, otlCount: 0,
-    totalGcWins: 0, totalStageWins: 0, successfulBreakaways: 0, raceDays: 0, categories: {}
+    totalGcWins: 0, totalStageWins: 0, successfulBreakaways: 0, raceDays: 0, superteamCount: 0, categories: {}
   };
 
   const isAllTime = selectedSeasonKey === 'all';
@@ -717,6 +717,10 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
           <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Verletzungen</div>
           <div style="font-size: 1.35rem; font-weight: bold; color: #f6ad55; line-height: 1.25;">${displayValDays(stats.injuries, stats.injuryDays)}</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Superteam</div>
+          <div style="font-size: 1.75rem; font-weight: bold; color: #6366f1;">${stats.superteamCount ?? 0}</div>
         </div>
       </div>
 

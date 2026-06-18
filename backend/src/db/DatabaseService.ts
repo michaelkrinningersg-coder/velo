@@ -459,6 +459,7 @@ export class DatabaseService {
       ['crash_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(crash_incident_multiplier > 0)'],
       ['mechanical_incident_multiplier', 'REAL NOT NULL DEFAULT 1 CHECK(mechanical_incident_multiplier > 0)'],
       ['stage_score', 'INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000)'],
+      ['super_team_id', 'INTEGER REFERENCES teams(id)'],
     ] as const;
 
     for (const [columnName, columnDefinition] of missingColumns) {
@@ -902,9 +903,14 @@ export class DatabaseService {
         illnesses INTEGER NOT NULL DEFAULT 0,
         illness_days INTEGER NOT NULL DEFAULT 0,
         injuries INTEGER NOT NULL DEFAULT 0,
-        injury_days INTEGER NOT NULL DEFAULT 0
+        injury_days INTEGER NOT NULL DEFAULT 0,
+        superteam_count INTEGER NOT NULL DEFAULT 0
       )
     `).run();
+
+    if (!columnExists(db, 'rider_career_stats', 'superteam_count')) {
+      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN superteam_count INTEGER NOT NULL DEFAULT 0').run();
+    }
 
     if (!columnExists(db, 'rider_career_stats', 'illnesses')) {
       db.prepare('ALTER TABLE rider_career_stats ADD COLUMN illnesses INTEGER NOT NULL DEFAULT 0').run();
@@ -1009,6 +1015,7 @@ export class DatabaseService {
         home_advantage_days INTEGER NOT NULL DEFAULT 0,
         super_home_advantage_days INTEGER NOT NULL DEFAULT 0,
         home_pressure_days INTEGER NOT NULL DEFAULT 0,
+        superteam_count INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (rider_id, season)
       )
     `).run();
@@ -1016,6 +1023,13 @@ export class DatabaseService {
     db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_season_stats_season ON rider_season_stats(season);
     `).run();
+
+    if (!columnExists(db, 'rider_season_stats', 'superteam_count')) {
+      db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN superteam_count INTEGER NOT NULL DEFAULT 0
+      `).run();
+    }
 
     if (!columnExists(db, 'rider_season_stats', 'superform_days')) {
       db.prepare(`

@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS stages (
   stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
   allowed_weather TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7',
   rolled_weather_id INTEGER REFERENCES wetter(id),
+  super_team_id INTEGER REFERENCES teams(id),
   UNIQUE(race_id, stage_number)
 );
 
