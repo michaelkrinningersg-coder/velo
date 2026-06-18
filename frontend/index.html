@@ -996,10 +996,23 @@
 
   <!-- ---- Loading Overlay ----------------------------------- -->
   <div id="loading-overlay" class="loading-overlay hidden">
-    <div class="spinner"></div>
-    <p id="loading-msg">Lade...</p>
-    <div id="loading-progress" class="loading-progress hidden">
-      <div id="loading-progress-bar" class="loading-progress-bar"></div>
+    <div id="default-loader" class="default-loader">
+      <div class="spinner"></div>
+      <p id="loading-msg">Lade...</p>
+      <div id="loading-progress" class="loading-progress hidden">
+        <div id="loading-progress-bar" class="loading-progress-bar"></div>
+      </div>
+    </div>
+    <div id="instant-sim-panel" class="instant-sim-panel hidden">
+      <div class="instant-sim-sidebar font-sans" id="instant-sim-favorites"></div>
+      <div class="instant-sim-center">
+        <div class="spinner"></div>
+        <p id="instant-loading-msg">Instant-Simulation läuft …</p>
+        <div class="loading-progress">
+          <div id="instant-loading-progress-bar" class="loading-progress-bar"></div>
+        </div>
+      </div>
+      <div class="instant-sim-sidebar font-sans" id="instant-sim-gc"></div>
     </div>
   </div>
 

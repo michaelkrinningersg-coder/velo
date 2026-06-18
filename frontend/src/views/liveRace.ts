@@ -104,6 +104,7 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
     }
 
     const bootstrap = res.data;
+    state.realtimeBootstrap = bootstrap;
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
     const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);

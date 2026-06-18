@@ -55,6 +55,7 @@ import type {
   RaceRosterPayload,
 } from '../../shared/types';
 import { RaceSimView } from './race-sim/RaceSimView';
+import { calculateStageFavorites } from './race-sim/stageFavorites';
 
 export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
 export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'fatigue';
@@ -595,10 +596,126 @@ export function hideModal(name: string): void {
   $(`modal-${name}`).classList.add('hidden');
 }
 
+function formatGcGap(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) {
+    return '—';
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  if (minutes > 0) {
+    return `+${minutes}:${String(remainder).padStart(2, '0')}`;
+  }
+  return `+${remainder}s`;
+}
+
+function renderInstantSimPanel(): void {
+  const bootstrap = state.realtimeBootstrap;
+  if (!bootstrap) return;
+
+  const fListEl = $('instant-sim-favorites');
+  const gcListEl = $('instant-sim-gc');
+  if (!fListEl || !gcListEl) return;
+
+  // 1. Calculate and display Stage Favorites 1-10
+  const favorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, { skillWeightRules: bootstrap.skillWeightRules });
+  const topFavs = favorites.slice(0, 10);
+  const gcByRiderId = new Map(bootstrap.gcStandings.map((s) => [s.riderId, s]));
+
+  let favsHtml = `
+    <h3>
+      <span>Etappen-Favoriten</span>
+      <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">Top 10</span>
+    </h3>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+  `;
+
+  for (const item of topFavs) {
+    const rider = bootstrap.riders.find((r) => r.id === item.riderId);
+    if (!rider) continue;
+
+    const flagCode = resolveRiderCountryCode(rider.id) ?? 'un';
+    const alpha2 = (FLAG_CODE_BY_CODE3 as Record<string, string>)[flagCode] ?? 'un';
+    const team = bootstrap.teams.find((t) => t.id === rider.activeTeamId);
+    const teamAbbr = team?.abbreviation ?? '—';
+    const gcStanding = gcByRiderId.get(rider.id);
+    const gcInfo = gcStanding 
+      ? `GC ${gcStanding.rank} (${gcStanding.rank === 1 ? 'Gelb' : formatGcGap(gcStanding.gapSeconds)})`
+      : 'GC –';
+
+    favsHtml += `
+      <div class="instant-sim-rider-card">
+        <div class="instant-sim-jersey-column">
+          <img src="/jersey/Jer_${rider.activeTeamId}.png" class="instant-sim-large-jersey" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';">
+        </div>
+        <div class="instant-sim-info-column">
+          <div class="instant-sim-rider-header">
+            <span class="instant-sim-rank-badge">#${item.rank}</span>
+            <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem;"></span>
+            <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
+          </div>
+          <div class="instant-sim-rider-meta">
+            <span class="instant-sim-team-abbr">${esc(teamAbbr)}</span>
+            <span class="instant-sim-gc-info">${gcInfo}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  favsHtml += '</div>';
+  fListEl.innerHTML = favsHtml;
+
+  // 2. Display GC Top 10
+  const topGc = bootstrap.gcStandings.slice(0, 10);
+  let gcHtml = `
+    <h3>
+      <span>Gesamtwertung (GC)</span>
+      <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">Top 10</span>
+    </h3>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+  `;
+
+  for (const standing of topGc) {
+    const rider = bootstrap.riders.find((r) => r.id === standing.riderId);
+    if (!rider) continue;
+
+    const flagCode = resolveRiderCountryCode(rider.id) ?? 'un';
+    const alpha2 = (FLAG_CODE_BY_CODE3 as Record<string, string>)[flagCode] ?? 'un';
+    const team = bootstrap.teams.find((t) => t.id === rider.activeTeamId);
+    const teamAbbr = team?.abbreviation ?? '—';
+    const gcInfo = standing.rank === 1 ? 'Gelb' : formatGcGap(standing.gapSeconds);
+
+    gcHtml += `
+      <div class="instant-sim-rider-card">
+        <div class="instant-sim-jersey-column">
+          <img src="/jersey/Jer_${rider.activeTeamId}.png" class="instant-sim-large-jersey" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';">
+        </div>
+        <div class="instant-sim-info-column">
+          <div class="instant-sim-rider-header">
+            <span class="instant-sim-rank-badge">#${standing.rank}</span>
+            <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem;"></span>
+            <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
+          </div>
+          <div class="instant-sim-rider-meta">
+            <span class="instant-sim-team-abbr">${esc(teamAbbr)}</span>
+            <span class="instant-sim-gc-info">${gcInfo}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  gcHtml += '</div>';
+  gcListEl.innerHTML = gcHtml;
+}
+
 export function showLoading(msg = 'Lade…'): void {
   const suffix = autoProgressActive ? ' (Leertaste zum Stoppen)' : '';
-  $('loading-msg').textContent = msg + suffix;
-  $('loading-progress').classList.add('hidden');
+  const defaultLoader = $('default-loader');
+  if (defaultLoader) {
+    $('loading-msg').textContent = msg + suffix;
+    $('loading-progress').classList.add('hidden');
+    defaultLoader.classList.remove('hidden');
+    $('instant-sim-panel')?.classList.add('hidden');
+  }
   $('loading-overlay').classList.remove('hidden');
 }
 
@@ -607,16 +724,41 @@ export function hideLoading(): void {
 }
 
 export function showInstantProgress(progress: number): void {
-  $('loading-progress').classList.remove('hidden');
+  $('default-loader')?.classList.add('hidden');
+  $('instant-sim-panel')?.classList.remove('hidden');
   $('loading-overlay').classList.remove('hidden');
+  if (state.realtimeBootstrap) {
+    renderInstantSimPanel();
+  } else {
+    const favs = $('instant-sim-favorites');
+    const gc = $('instant-sim-gc');
+    if (favs) favs.innerHTML = '';
+    if (gc) gc.innerHTML = '';
+  }
   updateInstantProgress(progress);
 }
 
 export function updateInstantProgress(progress: number): void {
   const percent = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   const suffix = autoProgressActive ? ' (Leertaste zum Stoppen)' : '';
-  $('loading-msg').textContent = `Instant-Simulation läuft … ${percent}%${suffix}`;
-  $<HTMLDivElement>('loading-progress-bar').style.width = `${percent}%`;
+  const msgText = `Instant-Simulation läuft … ${percent}%${suffix}`;
+  
+  const defaultMsg = $('loading-msg');
+  if (defaultMsg) defaultMsg.textContent = msgText;
+  
+  const defaultBar = $<HTMLDivElement>('loading-progress-bar');
+  if (defaultBar) defaultBar.style.width = `${percent}%`;
+  
+  const instantMsg = $('instant-loading-msg');
+  if (instantMsg) instantMsg.textContent = msgText;
+  
+  const instantBar = $<HTMLDivElement>('instant-loading-progress-bar');
+  if (instantBar) instantBar.style.width = `${percent}%`;
+
+  const fListEl = $('instant-sim-favorites');
+  if (fListEl && fListEl.innerHTML.trim() === '' && state.realtimeBootstrap) {
+    renderInstantSimPanel();
+  }
 }
 
 export function showError(elemId: string, msg: string): void {
