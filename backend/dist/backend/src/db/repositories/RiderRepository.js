@@ -337,7 +337,9 @@ class RiderRepository {
         stage_entries.status_reason AS stage_entry_status_reason,
         stages.stage_score AS stage_score,
         stages.rolled_weather_id AS rolled_weather_id,
-        wetter.wetter_name AS rolled_wetter_name
+        wetter.wetter_name AS rolled_wetter_name,
+        stages.super_team_id AS super_team_id,
+        stage_entries.team_id AS team_id
       FROM stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
@@ -386,7 +388,9 @@ class RiderRepository {
         results.result_type_id AS result_type_id,
         results.rank AS result_rank,
         final_points.points_awarded AS final_points,
-        stages.stage_score AS stage_score
+        stages.stage_score AS stage_score,
+        stages.super_team_id AS super_team_id,
+        results.team_id AS team_id
       FROM results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
@@ -488,6 +492,8 @@ class RiderRepository {
                 rolledWetterName: row.rolled_wetter_name ?? null,
                 eventIds: row.event_ids ?? null,
                 jerseysWorn: row.jerseys_worn ?? null,
+                superTeamId: row.super_team_id ?? null,
+                teamId: row.team_id ?? null,
             });
             const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
             pointsByTerrain[terrainBucket] += stagePoints;
@@ -527,6 +533,8 @@ class RiderRepository {
                 elevationGainMeters: summary.elevationGainMeters,
                 seasonPoints: finalPoints,
                 stageScore: row.stage_score ?? 0,
+                superTeamId: row.super_team_id ?? null,
+                teamId: row.team_id ?? null,
             });
             pointsByTerrain[(0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile)] += finalPoints;
             pointsByRaceFormat.stageRace += finalPoints;
@@ -954,7 +962,7 @@ class RiderRepository {
         const careerStatsRow = (0, mappers_1.tableExists)(this.db, 'rider_career_stats')
             ? this.db.prepare(`
           SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects,
-                 illnesses, illness_days, injuries, injury_days
+                 illnesses, illness_days, injuries, injury_days, superteam_count
           FROM rider_career_stats
           WHERE rider_id = ?
         `).get(riderId)
@@ -988,6 +996,7 @@ class RiderRepository {
         const illnessDays = careerStatsRow?.illness_days ?? 0;
         const injuries = careerStatsRow?.injuries ?? 0;
         const injuryDays = careerStatsRow?.injury_days ?? 0;
+        const superteamCount = careerStatsRow?.superteam_count ?? 0;
         let dnsCount = 0;
         let dnfCount = 0;
         let otlCount = 0;
@@ -1389,6 +1398,7 @@ class RiderRepository {
             superHomeAdvantageDays,
             homePressureDays,
             breakawayKms,
+            superteamCount,
             categories,
         };
     }

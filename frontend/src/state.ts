@@ -617,7 +617,10 @@ function renderInstantSimPanel(): void {
   if (!fListEl || !gcListEl) return;
 
   // 1. Calculate and display Stage Favorites 1-10
-  const favorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, { skillWeightRules: bootstrap.skillWeightRules });
+  const favorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, {
+    distanceKm: bootstrap.stageSummary?.distanceKm,
+    elevationGainMeters: bootstrap.stageSummary?.elevationGainMeters,
+  });
   const topFavs = favorites.slice(0, 10);
   const gcByRiderId = new Map(bootstrap.gcStandings.map((s) => [s.riderId, s]));
 

@@ -9,6 +9,7 @@ export interface PrecalculatedStageBreakaway {
   phaseEndDistanceMeters: number;
   skillBonus: number;
   malusValue: number;
+  superTeamId?: number;
 }
 
 function randomInteger(min: number, max: number): number {

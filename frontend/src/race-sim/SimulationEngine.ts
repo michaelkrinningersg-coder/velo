@@ -31,6 +31,12 @@ import {
   type PrecalculatedStageAttack,
 } from './stageAttacks';
 
+function randomInteger(min: number, max: number): number {
+  const normalizedMin = Math.ceil(Math.min(min, max));
+  const normalizedMax = Math.floor(Math.max(min, max));
+  return Math.floor(Math.random() * ((normalizedMax - normalizedMin) + 1)) + normalizedMin;
+}
+
 export type TerrainSkillName = 'Flat' | 'Hill' | 'Medium_Mountain' | 'Mountain' | 'Cobble' | 'Sprint' | 'Downhill';
 
 export interface WindZone {
@@ -130,6 +136,7 @@ export interface SimulationSnapshot extends SimulationFrameSnapshot {
   breakawayPhaseActive: boolean;
   breakawayGapStatus: BreakawayGapStatusSnapshot | null;
   allEvents?: RaceSimMessage[];
+  superTeamId?: number;
 }
 
 interface MarkerCrossing {

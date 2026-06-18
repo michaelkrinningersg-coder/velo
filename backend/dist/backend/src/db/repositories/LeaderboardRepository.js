@@ -799,7 +799,7 @@ class LeaderboardRepository {
             // 9. Season stats / Career stats (crashes, defects, breakaway kms etc.)
             const isCareerField = [
                 'breakaway_attempts', 'attacks', 'counter_attacks', 'crashes', 'defects',
-                'illnesses', 'illness_days', 'injuries', 'injury_days'
+                'illnesses', 'illness_days', 'injuries', 'injury_days', 'superteam_count'
             ].includes(metricKey);
             let selectExp = `rss.${metricKey}`;
             if (metricKey === 'superform_malus_days') {
@@ -898,6 +898,9 @@ class LeaderboardRepository {
             }
             else if (metricKey === 'defects') {
                 valueFormatter = (r) => `${r.val} Defekt${r.val !== 1 ? 'e' : ''}`;
+            }
+            else if (metricKey === 'superteam_count') {
+                valueFormatter = (r) => `${r.val}x`;
             }
             else {
                 valueFormatter = (r) => `${r.val}`;
@@ -1015,6 +1018,31 @@ class LeaderboardRepository {
                 }
             }
             valueFormatter = (r) => `${r.val} Sieg${r.val !== 1 ? 'e' : ''}`;
+        }
+        else if (metricKey === 'superteam_count') {
+            if (period === 'season') {
+                query = `
+          SELECT super_team_id AS team_id, COUNT(*) AS val
+          FROM stages
+          WHERE super_team_id IS NOT NULL
+            AND CAST(substr(date, 1, 4) AS INTEGER) = ?
+          GROUP BY super_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+                params.push(currentSeason);
+            }
+            else {
+                query = `
+          SELECT super_team_id AS team_id, COUNT(*) AS val
+          FROM stages
+          WHERE super_team_id IS NOT NULL
+          GROUP BY super_team_id
+          ORDER BY val DESC
+          LIMIT 100
+        `;
+            }
+            valueFormatter = (r) => `${r.val}x`;
         }
         else if (metricKey.startsWith('final_')) {
             // Final classification wins (GC, Points, Mountain, Youth) at end of stage races

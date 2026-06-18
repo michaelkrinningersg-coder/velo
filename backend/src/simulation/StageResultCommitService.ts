@@ -412,6 +412,7 @@ export class StageResultCommitService {
       breakawayRiderIds,
       events,
       leadoutContributions,
+      superTeamId,
     );
   }
 
@@ -664,6 +665,7 @@ export class StageResultCommitService {
     breakawayRiderIds: Set<number> = new Set(),
     events: RaceSimMessage[] = [],
     leadoutContributions?: RealtimeLeadoutContribution[],
+    superTeamId?: number,
   ): StageResultCommitResponse {
     const rankedPerformance = rankPerformanceEntries(performance, stage.profile);
 
