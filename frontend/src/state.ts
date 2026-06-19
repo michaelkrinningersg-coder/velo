@@ -625,7 +625,16 @@ function renderInstantSimPanel(): void {
 
   const fListEl = $('instant-sim-favorites');
   const gcListEl = $('instant-sim-gc');
-  if (!fListEl || !gcListEl) return;
+  const pointsListEl = $('instant-sim-points');
+  if (!fListEl || !gcListEl || !pointsListEl) return;
+
+  // Render stage metadata
+  const raceEl = $('instant-sim-race');
+  const stageDescEl = $('instant-sim-stage-desc');
+  const dateEl = $('instant-sim-date');
+  if (raceEl) raceEl.textContent = bootstrap.race.name;
+  if (stageDescEl) stageDescEl.textContent = `Etappe ${bootstrap.stage.stageNumber} · ${bootstrap.stage.profile}`;
+  if (dateEl) dateEl.textContent = formatDate(bootstrap.stage.date);
 
   // 1. Calculate and display Stage Favorites 1-10
   const favorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, {
@@ -706,7 +715,8 @@ function renderInstantSimPanel(): void {
         <div class="instant-sim-info-column">
           <div class="instant-sim-rider-header">
             <span class="instant-sim-rank-badge">${standing.rank}</span>
-            <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem;"></span>
+            ${renderRankDelta(standing.previousRank, standing.rankDelta)}
+            <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem; margin-left: 0.25rem;"></span>
             <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
           </div>
           <div class="instant-sim-rider-meta">
@@ -719,6 +729,50 @@ function renderInstantSimPanel(): void {
   }
   gcHtml += '</div>';
   gcListEl.innerHTML = gcHtml;
+
+  // 3. Display Points Top 10
+  const topPoints = bootstrap.pointsStandings.slice(0, 10);
+  let pointsHtml = `
+    <h3>
+      <span>Punktewertung</span>
+      <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">Top 10</span>
+    </h3>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+  `;
+
+  for (const standing of topPoints) {
+    if (standing.riderId == null) continue;
+    const rider = bootstrap.riders.find((r) => r.id === standing.riderId);
+    if (!rider) continue;
+
+    const flagCode = resolveRiderCountryCode(rider.id) ?? 'un';
+    const alpha2 = (FLAG_CODE_BY_CODE3 as Record<string, string>)[flagCode] ?? 'un';
+    const team = bootstrap.teams.find((t) => t.id === rider.activeTeamId);
+    const teamAbbr = team?.abbreviation ?? '—';
+    const pointsInfo = `${standing.points ?? 0} Punkte`;
+
+    pointsHtml += `
+      <div class="instant-sim-rider-card">
+        <div class="instant-sim-jersey-column">
+          <img src="/jersey/Jer_${rider.activeTeamId}.png" class="instant-sim-large-jersey" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';">
+        </div>
+        <div class="instant-sim-info-column">
+          <div class="instant-sim-rider-header">
+            <span class="instant-sim-rank-badge">${standing.rank}</span>
+            ${renderRankDelta(standing.previousRank, standing.rankDelta)}
+            <span class="fi fi-${alpha2} country-flag" style="font-size: 0.8rem; margin-left: 0.25rem;"></span>
+            <span class="instant-sim-name">${esc(rider.firstName)} <strong>${esc(rider.lastName)}</strong></span>
+          </div>
+          <div class="instant-sim-rider-meta">
+            <span class="instant-sim-team-abbr">${esc(teamAbbr)}</span>
+            <span class="instant-sim-gc-info">${pointsInfo}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  pointsHtml += '</div>';
+  pointsListEl.innerHTML = pointsHtml;
 }
 
 export function showLoading(msg = 'Lade…'): void {

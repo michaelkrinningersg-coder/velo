@@ -5777,7 +5777,7 @@ tr.calendar-highlight {
   justify-content: space-between;
   gap: 2rem;
   width: 95%;
-  max-width: 1200px;
+  max-width: 1600px;
   height: 820px;
   max-height: 95vh;
   background: rgba(15, 23, 42, 0.95);

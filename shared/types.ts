@@ -717,6 +717,8 @@ export interface RealtimeGcStanding {
   rank: number;
   timeSeconds: number;
   gapSeconds: number;
+  previousRank?: number | null;
+  rankDelta?: number | null;
 }
 
 export interface RealtimeClassificationStanding {
@@ -726,6 +728,8 @@ export interface RealtimeClassificationStanding {
   points: number | null;
   timeSeconds: number | null;
   gapSeconds: number | null;
+  previousRank?: number | null;
+  rankDelta?: number | null;
 }
 
 export interface RealtimeClassificationLeaders {

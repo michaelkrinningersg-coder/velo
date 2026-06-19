@@ -2250,7 +2250,7 @@ class GameRepository {
             return [];
         }
         const previousStage = this.db.prepare(`
-      SELECT stages.id AS stage_id
+      SELECT stages.id AS stage_id, stages.stage_number AS stage_number
       FROM stages
       JOIN results ON results.stage_id = stages.id
       WHERE stages.race_id = ?
@@ -2263,6 +2263,32 @@ class GameRepository {
         if (!previousStage) {
             return [];
         }
+        const prevPrevStage = this.db.prepare(`
+      SELECT stages.id AS stage_id
+      FROM stages
+      JOIN results ON results.stage_id = stages.id
+      WHERE stages.race_id = ?
+        AND stages.stage_number < ?
+        AND results.result_type_id = ?
+      GROUP BY stages.id, stages.stage_number
+      ORDER BY stages.stage_number DESC
+      LIMIT 1
+    `).get(raceId, previousStage.stage_number, RESULT_TYPE_IDS.gc);
+
+        const prevPrevRanks = new Map();
+        if (prevPrevStage) {
+            const pRows = this.db.prepare(`
+        SELECT rider_id, rank
+        FROM results
+        WHERE stage_id = ?
+          AND result_type_id = ?
+          AND rider_id IS NOT NULL
+      `).all(prevPrevStage.stage_id, RESULT_TYPE_IDS.gc);
+            for (const r of pRows) {
+                prevPrevRanks.set(r.rider_id, r.rank);
+            }
+        }
+
         const rows = this.db.prepare(`
       SELECT rider_id, rank, time_seconds
       FROM results
@@ -2272,12 +2298,17 @@ class GameRepository {
       ORDER BY rank ASC
     `).all(previousStage.stage_id, RESULT_TYPE_IDS.gc);
         const leaderTime = rows[0]?.time_seconds ?? 0;
-        return rows.map((row) => ({
-            riderId: row.rider_id,
-            rank: row.rank,
-            timeSeconds: row.time_seconds,
-            gapSeconds: row.time_seconds - leaderTime,
-        }));
+        return rows.map((row) => {
+            const prevRank = prevPrevRanks.get(row.rider_id) ?? null;
+            return {
+                riderId: row.rider_id,
+                rank: row.rank,
+                timeSeconds: row.time_seconds,
+                gapSeconds: row.time_seconds - leaderTime,
+                previousRank: prevRank,
+                rankDelta: prevRank != null ? prevRank - row.rank : null,
+            };
+        });
     }
     getPreviousGcStandingsForStage(stageId) {
         const stage = this.getStageById(stageId);
@@ -2957,7 +2988,7 @@ class GameRepository {
             return [];
         }
         const previousStage = this.db.prepare(`
-      SELECT stages.id AS stage_id
+      SELECT stages.id AS stage_id, stages.stage_number AS stage_number
       FROM stages
       JOIN results ON results.stage_id = stages.id
       WHERE stages.race_id = ?
@@ -2970,6 +3001,32 @@ class GameRepository {
         if (!previousStage) {
             return [];
         }
+        const prevPrevStage = this.db.prepare(`
+      SELECT stages.id AS stage_id
+      FROM stages
+      JOIN results ON results.stage_id = stages.id
+      WHERE stages.race_id = ?
+        AND stages.stage_number < ?
+        AND results.result_type_id = ?
+      GROUP BY stages.id, stages.stage_number
+      ORDER BY stages.stage_number DESC
+      LIMIT 1
+    `).get(raceId, previousStage.stage_number, resultTypeId);
+
+        const prevPrevRanks = new Map();
+        if (prevPrevStage) {
+            const pRows = this.db.prepare(`
+        SELECT rider_id, rank
+        FROM results
+        WHERE stage_id = ?
+          AND result_type_id = ?
+          AND rider_id IS NOT NULL
+      `).all(prevPrevStage.stage_id, resultTypeId);
+            for (const r of pRows) {
+                prevPrevRanks.set(r.rider_id, r.rank);
+            }
+        }
+
         const rows = this.db.prepare(`
       SELECT rider_id, rank, time_seconds, points
       FROM results
@@ -2979,13 +3036,18 @@ class GameRepository {
       ORDER BY rank ASC
     `).all(previousStage.stage_id, resultTypeId);
         const leaderTime = rows.find((row) => row.time_seconds != null)?.time_seconds ?? null;
-        return rows.map((row) => ({
-            riderId: row.rider_id,
-            rank: row.rank,
-            points: row.points,
-            timeSeconds: row.time_seconds,
-            gapSeconds: row.time_seconds != null && leaderTime != null ? Math.max(0, row.time_seconds - leaderTime) : null,
-        }));
+        return rows.map((row) => {
+            const prevRank = prevPrevRanks.get(row.rider_id) ?? null;
+            return {
+                riderId: row.rider_id,
+                rank: row.rank,
+                points: row.points,
+                timeSeconds: row.time_seconds,
+                gapSeconds: row.time_seconds != null && leaderTime != null ? Math.max(0, row.time_seconds - leaderTime) : null,
+                previousRank: prevRank,
+                rankDelta: prevRank != null ? prevRank - row.rank : null,
+            };
+        });
     }
 }
 exports.GameRepository = GameRepository;
