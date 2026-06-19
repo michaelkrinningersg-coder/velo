@@ -27,3 +27,7 @@ id,name,peak1_min,peak1_max,peak2_min,peak2_max,peak3_min,peak3_max
 26,ardennen_tour_klassiker_D_non_tour,15,19,26,30,35,39
 27,cobble_tour_klassiker_C_non_tour,12,16,26,30,36,40
 28,Klassiker_Tour_Klassiker_B_non_tour,18,22,27,31,38,42
+29,Class_other_classic_B,9,14,23,28,37,42
+30,Class_other_classic_C,13,18,27,32,40,44
+31,Class_other_stage_B,9,14,23,28,37,42
+32,Class_other_stage_C,13,18,27,32,40,44
