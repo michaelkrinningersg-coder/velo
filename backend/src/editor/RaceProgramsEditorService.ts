@@ -224,7 +224,7 @@ export class RaceProgramsEditorService {
         COUNT(*) as count
       FROM rider_season_programs
       JOIN riders ON riders.id = rider_season_programs.rider_id
-      WHERE season = (SELECT current_season FROM game_state LIMIT 1)
+      WHERE rider_season_programs.season = (SELECT season FROM game_state LIMIT 1)
       GROUP BY program_id, role_id, specialization_1_id, specialization_2_id, specialization_3_id
     `).all() as any[];
 

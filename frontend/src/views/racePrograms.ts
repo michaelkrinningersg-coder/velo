@@ -889,13 +889,31 @@ function renderTabRiderRole(payload: any): string {
       };
     }).sort((a: any, b: any) => b.count - a.count);
 
-    const programItemsHtml = programItems.map((item: any) => {
+    const filteredProgramItems = programItems.filter((item: any) => {
+      const inActive = isRaceInActivePhase(item.program, race);
+      return inActive || item.isAssigned;
+    });
+
+    const programItemsHtml = filteredProgramItems.map((item: any) => {
       const p = item.program;
       const inActive = isRaceInActivePhase(p, race);
       
       let warnHtml = '';
       if (!inActive) {
         warnHtml = `<span style="color: #fb923c; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; border-radius: 50%; font-size: 0.65rem;" title="Dieses Rennen liegt außerhalb der Peak- und Aufbauphase dieses Programms!">!</span>`;
+      }
+
+      let conflictHtml = '';
+      if (!item.isAssigned) {
+        const otherAssignments = raceProgramRaces.filter((m: any) => m.program_id === p.id && m.race_id !== race.id);
+        const overlappingRaces = otherAssignments
+          .map((m: any) => payload.races.find((r: any) => r.id === m.race_id))
+          .filter((r: any) => r && r.start_date <= race.end_date && r.end_date >= race.start_date);
+        
+        if (overlappingRaces.length > 0) {
+          const raceNames = overlappingRaces.map((r: any) => r.name).join(', ');
+          conflictHtml = `<span style="color: #ef4444; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 50%; font-size: 0.65rem;" title="Kollision: Dieses Programm ist bereits einem zeitlich parallelen Rennen zugewiesen: ${esc(raceNames)}!">!</span>`;
+        }
       }
 
       const activeStyle = item.isAssigned ? 'font-weight: bold; color: var(--text-100);' : 'color: var(--text-500);';
@@ -916,6 +934,7 @@ function renderTabRiderRole(payload: any): string {
               ${esc(p.name)}
             </span>
             ${warnHtml}
+            ${conflictHtml}
           </div>
           <div style="display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0;">
             <strong style="font-size: 0.8rem; color: var(--accent-h);">${item.count} Fahrer</strong>
