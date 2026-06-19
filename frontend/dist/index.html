@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-SeQPBc-t.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Dc9WKcev.css">
+  <script type="module" crossorigin src="/assets/index-DBAmdfxb.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CwH_KKhQ.css">
 </head>
 <body>
 
@@ -97,6 +97,9 @@
         </button>
         <button class="nav-btn" data-view="rider-team-editor">
           <span class="nav-icon">▥</span> Fahrereditor
+        </button>
+        <button class="nav-btn" data-view="race-programs">
+          <span class="nav-icon">🗓</span> Programm-Editor
         </button>
       </nav>
       <div class="sidebar-meta">
@@ -864,6 +867,16 @@
             <tbody id="stage-editor-climbs-body"></tbody>
           </table>
         </div>
+      </div>
+
+      <div id="view-race-programs" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Programm-Editor</h2>
+            <p id="race-programs-meta" class="text-muted">Peaks und Zuweisungen der Programme bearbeiten und exportieren.</p>
+          </div>
+        </div>
+        <div id="race-programs-root"></div>
       </div>
     </main>
   </div>

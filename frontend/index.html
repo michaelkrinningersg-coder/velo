@@ -97,6 +97,9 @@
         <button class="nav-btn" data-view="rider-team-editor">
           <span class="nav-icon">▥</span> Fahrereditor
         </button>
+        <button class="nav-btn" data-view="race-programs">
+          <span class="nav-icon">🗓</span> Programm-Editor
+        </button>
       </nav>
       <div class="sidebar-meta">
         <div id="meta-career"></div>
@@ -863,6 +866,16 @@
             <tbody id="stage-editor-climbs-body"></tbody>
           </table>
         </div>
+      </div>
+
+      <div id="view-race-programs" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Programm-Editor</h2>
+            <p id="race-programs-meta" class="text-muted">Peaks und Zuweisungen der Programme bearbeiten und exportieren.</p>
+          </div>
+        </div>
+        <div id="race-programs-root"></div>
       </div>
     </main>
   </div>

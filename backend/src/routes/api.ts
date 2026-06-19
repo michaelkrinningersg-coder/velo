@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../db/DatabaseService';
 import { RiderTeamEditorService } from '../editor/RiderTeamEditorService';
+import { RaceProgramsEditorService } from '../editor/RaceProgramsEditorService';
 import { GameRepository } from '../db/GameRepository';
 import { RiderRepository } from '../db/repositories/RiderRepository';
 import { ResultRepository } from '../db/repositories/ResultRepository';
@@ -128,6 +129,7 @@ export function createRouter(dbService: DatabaseService): Router {
   const router = Router();
   const routeImporter = new RouteImporter();
   const riderTeamEditorService = new RiderTeamEditorService();
+  const raceProgramsEditorService = new RaceProgramsEditorService();
 
   // Caches GameStateService per active connection
   let cachedGss: GameStateService | null = null;
@@ -278,6 +280,25 @@ export function createRouter(dbService: DatabaseService): Router {
   router.post('/rider-team-editor/export', (req: Request, res: Response) => {
     try {
       ok<RiderTeamEditorExportPayload>(res, riderTeamEditorService.export(req.body as RiderTeamEditorSaveRequest));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/race-programs-editor', (_req: Request, res: Response) => {
+    try {
+      ok(res, raceProgramsEditorService.load());
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/race-programs-editor/save', (req: Request, res: Response) => {
+    try {
+      let activeDb;
+      try {
+        activeDb = dbService.getActiveConnection();
+      } catch (e) {
+        // active connection may not exist (e.g. at start screen)
+      }
+      raceProgramsEditorService.save(req.body, activeDb);
+      ok(res, undefined);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

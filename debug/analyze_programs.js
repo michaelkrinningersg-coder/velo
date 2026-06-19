@@ -676,6 +676,31 @@ function main() {
     expectedAssignmentsMap[p.id] = 0;
   }
 
+  // Initialize detailed tracking
+  const expectedByRole = {};
+  const deterministicByRole = {};
+  const expectedByRoleSpec = {};
+  const deterministicByRoleSpec = {};
+
+  for (const prog of programsList) {
+    expectedByRole[prog.id] = {};
+    deterministicByRole[prog.id] = {};
+    expectedByRoleSpec[prog.id] = {};
+    deterministicByRoleSpec[prog.id] = {};
+
+    for (const role of roles) {
+      expectedByRole[prog.id][role] = 0;
+      deterministicByRole[prog.id][role] = 0;
+
+      expectedByRoleSpec[prog.id][role] = {};
+      deterministicByRoleSpec[prog.id][role] = {};
+      for (let s = 1; s <= 6; s++) {
+        expectedByRoleSpec[prog.id][role][s] = 0;
+        deterministicByRoleSpec[prog.id][role][s] = 0;
+      }
+    }
+  }
+
   for (const rider of riders) {
     const roleName = rider.role_name;
     const specs = rider.specs;
@@ -752,6 +777,9 @@ function main() {
         const p = Math.max(0, rule.probability) / totalWeight;
         expectedCounts[rule.program_id] = (expectedCounts[rule.program_id] || 0) + p;
         expectedAssignmentsMap[rule.program_id] += p;
+
+        expectedByRole[rule.program_id][roleName] = (expectedByRole[rule.program_id][roleName] || 0) + p;
+        expectedByRoleSpec[rule.program_id][roleName][specs[0]] = (expectedByRoleSpec[rule.program_id][roleName][specs[0]] || 0) + p;
       }
     } else {
       // Fallback
@@ -761,6 +789,9 @@ function main() {
       for (const c of bestCandidates) {
         expectedCounts[c.id] = (expectedCounts[c.id] || 0) + p;
         expectedAssignmentsMap[c.id] += p;
+
+        expectedByRole[c.id][roleName] = (expectedByRole[c.id][roleName] || 0) + p;
+        expectedByRoleSpec[c.id][roleName][specs[0]] = (expectedByRoleSpec[c.id][roleName][specs[0]] || 0) + p;
       }
     }
 
@@ -779,19 +810,125 @@ function main() {
     if (chosenId != null) {
       deterministicCounts[chosenId] = (deterministicCounts[chosenId] || 0) + 1;
       deterministicAssignmentsMap[chosenId] += 1;
+
+      deterministicByRole[chosenId][roleName] = (deterministicByRole[chosenId][roleName] || 0) + 1;
+      deterministicByRoleSpec[chosenId][roleName][specs[0]] = (deterministicByRoleSpec[chosenId][roleName][specs[0]] || 0) + 1;
     }
   }
 
   // CSV 2: Program Distribution
   const csv2Path = path.join(debugDir, 'program_distribution.csv');
-  let csv2Content = 'program_id;program_name;expected_rider_count;deterministic_rider_count\n';
+
+  const specNames = {
+    1: 'Berg',
+    2: 'Hill',
+    3: 'Sprint',
+    4: 'Timetrial',
+    5: 'Cobble',
+    6: 'Attacker'
+  };
+
+  const getCleanRole = (role) => role.replace(/\s+/g, '_').replace(/-/g, '_');
+
+  let headers = ['program_id', 'program_name', 'program_id', 'expected_rider_count', 'deterministic_rider_count'];
+
+  // Role headers
+  for (const role of roles) {
+    headers.push(`expected_role_${getCleanRole(role)}`);
+  }
+  for (const role of roles) {
+    headers.push(`deterministic_role_${getCleanRole(role)}`);
+  }
+
+  // Spec headers for all roles
+  const specRoles = roles;
+  for (const role of specRoles) {
+    for (let s = 1; s <= 6; s++) {
+      headers.push(`expected_${getCleanRole(role)}_spec1_${specNames[s]}`);
+    }
+  }
+  for (const role of specRoles) {
+    for (let s = 1; s <= 6; s++) {
+      headers.push(`deterministic_${getCleanRole(role)}_spec1_${specNames[s]}`);
+    }
+  }
+
+  let csv2Content = headers.join(';') + '\n';
   for (const prog of programsList) {
-    const expCount = (expectedCounts[prog.id] || 0).toFixed(2);
-    const detCount = deterministicCounts[prog.id] || 0;
-    csv2Content += `${prog.id};${prog.name};${expCount};${detCount}\n`;
+    const rowCells = [];
+    rowCells.push(prog.id);
+    rowCells.push(prog.name);
+    rowCells.push(prog.id);
+    rowCells.push(Math.floor(expectedCounts[prog.id] || 0));
+    rowCells.push(Math.floor(deterministicCounts[prog.id] || 0));
+
+    // Expected roles
+    for (const role of roles) {
+      rowCells.push(Math.floor(expectedByRole[prog.id][role] || 0));
+    }
+    // Deterministic roles
+    for (const role of roles) {
+      rowCells.push(Math.floor(deterministicByRole[prog.id][role] || 0));
+    }
+
+    // Expected spec roles
+    for (const role of specRoles) {
+      for (let s = 1; s <= 6; s++) {
+        rowCells.push(Math.floor(expectedByRoleSpec[prog.id][role][s] || 0));
+      }
+    }
+    // Deterministic spec roles
+    for (const role of specRoles) {
+      for (let s = 1; s <= 6; s++) {
+        rowCells.push(Math.floor(deterministicByRoleSpec[prog.id][role][s] || 0));
+      }
+    }
+
+    csv2Content += rowCells.join(';') + '\n';
   }
   fs.writeFileSync(csv2Path, csv2Content, 'utf8');
   console.log(`CSV 2 written to ${csv2Path}`);
+
+  // CSV 3: Deterministic Only Program Distribution
+  const csv3Path = path.join(debugDir, 'program_distribution_deterministic.csv');
+  let headersDet = ['program_id', 'program_name', 'program_id', 'deterministic_rider_count'];
+
+  // Role headers
+  for (const role of roles) {
+    headersDet.push(`deterministic_role_${getCleanRole(role)}`);
+  }
+
+  // Spec headers for Kapitaen, Co-Kapitaen, Edelhelfer
+  for (const role of specRoles) {
+    for (let s = 1; s <= 6; s++) {
+      headersDet.push(`deterministic_${getCleanRole(role)}_spec1_${specNames[s]}`);
+    }
+  }
+
+  let csv3Content = headersDet.join(';') + '\n';
+  for (const prog of programsList) {
+    const rowCells = [];
+    rowCells.push(prog.id);
+    rowCells.push(prog.name);
+    rowCells.push(prog.id);
+    rowCells.push(Math.floor(deterministicCounts[prog.id] || 0));
+
+    // Deterministic roles
+    for (const role of roles) {
+      rowCells.push(Math.floor(deterministicByRole[prog.id][role] || 0));
+    }
+
+    // Deterministic spec roles
+    for (const role of specRoles) {
+      for (let s = 1; s <= 6; s++) {
+        rowCells.push(Math.floor(deterministicByRoleSpec[prog.id][role][s] || 0));
+      }
+    }
+
+    csv3Content += rowCells.join(';') + '\n';
+  }
+  fs.writeFileSync(csv3Path, csv3Content, 'utf8');
+  console.log(`CSV 3 written to ${csv3Path}`);
 
   let attackerCount = 0;
   for (const rider of riders) {

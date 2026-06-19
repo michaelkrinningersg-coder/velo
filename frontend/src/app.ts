@@ -74,6 +74,10 @@ import {
   showCalendarView,
 } from './views/calendar';
 import { RaceSimView } from './race-sim/RaceSimView';
+import {
+  initRaceProgramsView,
+  loadRaceProgramsData,
+} from './views/racePrograms';
 
 (window as any).openTeamStats = openTeamStats;
 
@@ -122,6 +126,7 @@ function initAppListeners(): void {
       if (view === 'season-standings') void loadSeasonStandings(true);
       if (view === 'leaderboards') void showLeaderboardsView();
       if (view === 'calendar') showCalendarView();
+      if (view === 'race-programs') void loadRaceProgramsData();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
     });
   });
@@ -190,6 +195,7 @@ function initAppListeners(): void {
   initTeamStatsListeners();
   initSeasonStandingsListeners();
   initLeaderboardsView();
+  initRaceProgramsView();
 }
 
 // ============================================================

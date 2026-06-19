@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createRouter = createRouter;
 const express_1 = require("express");
 const RiderTeamEditorService_1 = require("../editor/RiderTeamEditorService");
+const RaceProgramsEditorService_1 = require("../editor/RaceProgramsEditorService");
 const GameRepository_1 = require("../db/GameRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
@@ -84,6 +85,7 @@ function createRouter(dbService) {
     const router = (0, express_1.Router)();
     const routeImporter = new RouteImporter_1.RouteImporter();
     const riderTeamEditorService = new RiderTeamEditorService_1.RiderTeamEditorService();
+    const raceProgramsEditorService = new RaceProgramsEditorService_1.RaceProgramsEditorService();
     // Caches GameStateService per active connection
     let cachedGss = null;
     let cachedDb = null;
@@ -271,6 +273,30 @@ function createRouter(dbService) {
     router.post('/rider-team-editor/export', (req, res) => {
         try {
             ok(res, riderTeamEditorService.export(req.body));
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/race-programs-editor', (_req, res) => {
+        try {
+            ok(res, raceProgramsEditorService.load());
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/race-programs-editor/save', (req, res) => {
+        try {
+            let activeDb;
+            try {
+                activeDb = dbService.getActiveConnection();
+            }
+            catch (e) {
+                // active connection may not exist (e.g. at start screen)
+            }
+            raceProgramsEditorService.save(req.body, activeDb);
+            ok(res, undefined);
         }
         catch (e) {
             fail(res, 400, e.message);

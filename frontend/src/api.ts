@@ -98,4 +98,6 @@ export const api = {
   getDraftHistory:     (season: number) => call<DraftHistoryPayload>('GET', `/api/draft/${season}`),
   getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
     call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),
+  getRaceProgramsEditor: () => call<any>('GET', '/api/race-programs-editor'),
+  saveRaceProgramsEditor: (payload: any) => call<void>('POST', '/api/race-programs-editor/save', payload),
 };

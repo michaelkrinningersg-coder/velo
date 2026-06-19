@@ -178,6 +178,10 @@ export const state: {
   riderTeamEditorSaving: boolean;
   riderTeamEditorExporting: boolean;
   autoProgressTargetDate: string | null;
+  raceProgramsPayload: any | null;
+  raceProgramsActiveTab: string;
+  raceProgramsDirty: boolean;
+  raceProgramsSaving: boolean;
 } = {
   currentSave: null,
   gameState: null,
@@ -278,6 +282,10 @@ export const state: {
   riderTeamEditorSaving: false,
   riderTeamEditorExporting: false,
   autoProgressTargetDate: null,
+  raceProgramsPayload: null,
+  raceProgramsActiveTab: 'calendar-cols',
+  raceProgramsDirty: false,
+  raceProgramsSaving: false,
 };
 
 export let raceSimView: RaceSimView | null = null;
@@ -571,7 +579,8 @@ export type ViewName =
   | 'stage-editor'
   | 'stage-editor-stages'
   | 'stage-editor-climbs'
-  | 'leaderboards';
+  | 'leaderboards'
+  | 'race-programs';
 
 interface ActiveViewListener {
   (viewName: ViewName): void;
