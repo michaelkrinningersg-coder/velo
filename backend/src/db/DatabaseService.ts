@@ -149,6 +149,49 @@ export class DatabaseService {
     }
   }
 
+  private ensureRaceCategoriesSchema(db: Database.Database): void {
+    if (!tableExists(db, 'race_categories')) {
+      return;
+    }
+
+    if (!columnExists(db, 'race_categories', 'home_selection_probability')) {
+      db.prepare(`
+        ALTER TABLE race_categories
+        ADD COLUMN home_selection_probability REAL NOT NULL DEFAULT 0.0 CHECK(home_selection_probability BETWEEN 0.0 AND 1.0)
+      `).run();
+    }
+
+    if (!fs.existsSync(this.masterDbPath)) {
+      return;
+    }
+
+    const masterDb = new Database(this.masterDbPath, { readonly: true });
+    try {
+      if (!tableExists(masterDb, 'race_categories') || !columnExists(masterDb, 'race_categories', 'home_selection_probability')) {
+        return;
+      }
+
+      const rows = masterDb.prepare(`
+        SELECT id, home_selection_probability
+        FROM race_categories
+      `).all() as Array<{ id: number; home_selection_probability: number }>;
+
+      const update = db.prepare(`
+        UPDATE race_categories
+        SET home_selection_probability = ?
+        WHERE id = ?
+      `);
+
+      db.transaction(() => {
+        for (const row of rows) {
+          update.run(row.home_selection_probability, row.id);
+        }
+      })();
+    } finally {
+      masterDb.close();
+    }
+  }
+
   private ensureRulesData(db: Database.Database): void {
     if (!tableExists(db, 'rules')) {
       return;
@@ -1352,6 +1395,7 @@ export class DatabaseService {
     this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureRaceCategoryBonusSchema(this.activeConnection);
+    this.ensureRaceCategoriesSchema(this.activeConnection);
     this.ensureRulesData(this.activeConnection);
     this.ensureSkillWeightsData(this.activeConnection);
     this.ensureStageSpreadData(this.activeConnection);
@@ -1420,6 +1464,7 @@ export class DatabaseService {
     this.applyLatestSchema(this.activeConnection);
     this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
+    this.ensureRaceCategoriesSchema(this.activeConnection);
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
     this.ensureRiderCareerStatsSchema(this.activeConnection);

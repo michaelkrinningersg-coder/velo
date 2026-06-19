@@ -668,8 +668,8 @@ function seedSkillWeights(db: Database.Database): void {
 function seedRaceCategories(db: Database.Database): void {
   const rows = readCsv('race_categories.csv');
   const insert = db.prepare(`
-    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id, home_selection_probability)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -683,6 +683,7 @@ function seedRaceCategories(db: Database.Database): void {
       int(req(row, 'number_of_teams', ctx), ctx),
       riderCount,
       int(req(row, 'bonus_system_id', ctx), ctx),
+      real(req(row, 'home_selection_probability', ctx), ctx),
     );
   }
 

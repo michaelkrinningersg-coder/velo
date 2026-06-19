@@ -466,6 +466,7 @@ export interface RaceCategory {
   numberOfRiders: number;
   bonusSystemId: number;
   bonusSystem?: RaceCategoryBonus;
+  homeSelectionProbability: number;
 }
 
 export interface RaceStageSummary {
@@ -1359,6 +1360,10 @@ export interface TeamSuccessStats {
   successfulBreakaways: number;
   raceDays: number;
   superteamCount: number;
+  homeAdvantageDays: number;
+  superHomeAdvantageDays: number;
+  homePressureDays: number;
+  breakawayKms: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;

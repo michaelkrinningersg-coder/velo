@@ -534,6 +534,7 @@ function mapRaceCategory(row) {
         numberOfRiders: row.category_number_of_riders,
         bonusSystemId: row.category_bonus_system_id,
         bonusSystem,
+        homeSelectionProbability: row.category_home_selection_probability,
     };
 }
 function mapStageScoringRule(row) {
@@ -712,6 +713,7 @@ function buildRaceSelect() {
            race_categories.number_of_teams AS category_number_of_teams,
            race_categories.number_of_riders AS category_number_of_riders,
            race_categories.bonus_system_id AS category_bonus_system_id,
+           race_categories.home_selection_probability AS category_home_selection_probability,
            race_categories_bonus.name AS bonus_name,
            race_categories_bonus.bonus_seconds_final,
            race_categories_bonus.bonus_seconds_intermediate,

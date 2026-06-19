@@ -1,5 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.orderProgramCandidates = orderProgramCandidates;
+exports.orderFillCandidates = orderFillCandidates;
 exports.previewRaceRoster = previewRaceRoster;
 exports.previewRaceRosterEditor = previewRaceRosterEditor;
 exports.applyRaceRosterSelection = applyRaceRosterSelection;
@@ -370,12 +372,19 @@ function resolveProgramPhasePriority(rider) {
 function isNeutralPhase(rider) {
     return rider.seasonFormPhase === 'neutral' || rider.seasonFormPhase == null;
 }
-function orderProgramCandidates(candidates) {
+function orderProgramCandidates(candidates, race, useHomePreference = false) {
     return [...candidates].sort((left, right) => {
         const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
         if (phaseCompare !== 0)
             return phaseCompare;
-        return right.overallRating - left.overallRating || left.id - right.id;
+        if (useHomePreference && race) {
+            const leftIsHome = left.countryId === race.countryId ? 1 : 0;
+            const rightIsHome = right.countryId === race.countryId ? 1 : 0;
+            if (leftIsHome !== rightIsHome) {
+                return rightIsHome - leftIsHome;
+            }
+        }
+        return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
     });
 }
 function hasActiveOrEarmarkedCollision(db, repo, rider, teamRiders, season, targetRace, riderLocks) {
@@ -455,7 +464,7 @@ function canFillRosterSlot(db, repo, rider, teamRiders, riderLocks, season, race
     }
     return !hasActiveOrEarmarkedCollision(db, repo, rider, teamRiders, season, race, riderLocks);
 }
-function orderFillCandidates(candidates, race) {
+function orderFillCandidates(candidates, race, useHomePreference = false) {
     const name = race.category?.name ?? '';
     const isMonumentOrGrandTour = name.includes('Monument') || name.includes('Grand Tour') || name.includes('Tour de France');
     const isHighCategory = name.includes('Stage Race High') || name.includes('One Day High');
@@ -468,6 +477,13 @@ function orderFillCandidates(candidates, race) {
             const pRight = idxRight === -1 ? 99 : idxRight;
             if (pLeft !== pRight) {
                 return pLeft - pRight;
+            }
+            if (useHomePreference) {
+                const leftIsHome = left.countryId === race.countryId ? 1 : 0;
+                const rightIsHome = right.countryId === race.countryId ? 1 : 0;
+                if (leftIsHome !== rightIsHome) {
+                    return rightIsHome - leftIsHome;
+                }
             }
             return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
         });
@@ -482,6 +498,13 @@ function orderFillCandidates(candidates, race) {
             if (pLeft !== pRight) {
                 return pLeft - pRight;
             }
+            if (useHomePreference) {
+                const leftIsHome = left.countryId === race.countryId ? 1 : 0;
+                const rightIsHome = right.countryId === race.countryId ? 1 : 0;
+                if (leftIsHome !== rightIsHome) {
+                    return rightIsHome - leftIsHome;
+                }
+            }
             return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
         });
     }
@@ -494,6 +517,13 @@ function orderFillCandidates(candidates, race) {
         const pRight = idxRight === -1 ? 99 : idxRight;
         if (pLeft !== pRight) {
             return pLeft - pRight;
+        }
+        if (useHomePreference) {
+            const leftIsHome = left.countryId === race.countryId ? 1 : 0;
+            const rightIsHome = right.countryId === race.countryId ? 1 : 0;
+            if (leftIsHome !== rightIsHome) {
+                return rightIsHome - leftIsHome;
+            }
         }
         if (left.roleId === 6) {
             // Sprinters: weak to strong overall rating
@@ -530,10 +560,18 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
         .filter((team) => team.division === targetDivision)
         .filter((team) => (ridersByTeamId.get(team.id) ?? []).some((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
         .slice(0, teamLimit);
+    // Deterministic check for home rider preference based on season and race ID
+    const seedStr = `${season}:${race.id}:home_preference`;
+    const seedHash = hashString(seedStr);
+    const randomValue = (seedHash % 10000) / 10000;
+    const useHomePreference = randomValue < (race.category?.homeSelectionProbability ?? 0);
+    if (enableDebug && useHomePreference && (race.category?.homeSelectionProbability ?? 0) > 0) {
+        console.log(`[RaceRoster] ${race.name} | Heimauswahl aktiv (Wahrscheinlichkeit: ${race.category?.homeSelectionProbability})`);
+    }
     const selected = selectedTeams.flatMap((team) => {
         const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
         const roster = getEligibleRiders(teamFullRoster, riderLocks);
-        const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)));
+        const programCandidates = orderProgramCandidates(roster.filter((rider) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)), race, useHomePreference);
         let teamSelection = programCandidates.slice(0, riderLimit);
         const selectedIds = new Set(teamSelection.map((rider) => rider.id));
         if (teamSelection.length < riderLimit) {
@@ -544,7 +582,7 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
                     .sort((a, b) => b.skills.cobble - a.skills.cobble || a.id - b.id);
             }
             else {
-                fillCandidates = orderFillCandidates(roster.filter((rider) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race)), race);
+                fillCandidates = orderFillCandidates(roster.filter((rider) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race)), race, useHomePreference);
             }
             for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
                 teamSelection.push(rider);

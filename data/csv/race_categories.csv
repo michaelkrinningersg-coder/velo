@@ -1,11 +1,11 @@
-id,name,tier,number_of_teams,number_of_riders,bonus_system_id
-1,World Tour - Tour de France,1,25,8,1
-2,World Tour - Grand Tour,1,25,8,2
-3,World Tour - Monument,1,25,8,3
-4,World Tour - Stage Race High,1,25,8,4
-5,World Tour - Stage Race Middle,1,25,8,5
-6,World Tour - Stage Race Low,1,25,8,6
-7,World Tour - One Day High,1,25,8,7
-8,World Tour - One Day Middle,1,25,8,8
-9,World Tour - One Day Low,1,25,8,9
+id,name,tier,number_of_teams,number_of_riders,bonus_system_id,home_selection_probability
+1,World Tour - Tour de France,1,25,8,1,0.01
+2,World Tour - Grand Tour,1,25,8,2,0.02
+3,World Tour - Monument,1,25,8,3,0.02
+4,World Tour - Stage Race High,1,25,8,4,0.50
+5,World Tour - Stage Race Middle,1,25,8,5,1.00
+6,World Tour - Stage Race Low,1,25,8,6,1.00
+7,World Tour - One Day High,1,25,8,7,0.50
+8,World Tour - One Day Middle,1,25,8,8,1.00
+9,World Tour - One Day Low,1,25,8,9,1.00
 

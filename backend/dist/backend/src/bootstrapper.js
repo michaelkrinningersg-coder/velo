@@ -519,13 +519,13 @@ function seedSkillWeights(db) {
 function seedRaceCategories(db) {
     const rows = readCsv('race_categories.csv');
     const insert = db.prepare(`
-    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO race_categories (id, name, tier, number_of_teams, number_of_riders, bonus_system_id, home_selection_probability)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `race_categories.csv Zeile ${index + 2}`;
         const riderCount = int(req(row, 'number_of_riders', ctx), ctx);
-        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), int(req(row, 'tier', ctx), ctx), int(req(row, 'number_of_teams', ctx), ctx), riderCount, int(req(row, 'bonus_system_id', ctx), ctx));
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), int(req(row, 'tier', ctx), ctx), int(req(row, 'number_of_teams', ctx), ctx), riderCount, int(req(row, 'bonus_system_id', ctx), ctx), real(req(row, 'home_selection_probability', ctx), ctx));
     }
     console.log(`  ${rows.length} Rennkategorien eingefuegt.`);
 }

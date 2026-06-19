@@ -247,6 +247,7 @@ class RiderProgramService {
                 const isBestRider = teamRiders[0]?.id === rider.id;
                 const isBestSprinter = bestSprinterByTeam.get(rider.team_id) === rider.id;
                 let rulePool;
+                const excludedProgramIds = new Set();
                 if (isBestSprinter) {
                     rulePool = [
                         { id: -1, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 2, probability: 50 },
@@ -254,7 +255,6 @@ class RiderProgramService {
                     ];
                 }
                 else {
-                    const excludedProgramIds = new Set();
                     if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
                         [14, 15, 17, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
                     }
@@ -298,13 +298,16 @@ class RiderProgramService {
                 if (programId == null) {
                     const isTop75 = top75Riders.has(rider.id);
                     const allowedPrograms = allPrograms.filter(p => {
+                        if (excludedProgramIds.has(p.id)) {
+                            return false;
+                        }
                         if (isTop75) {
                             const nameLower = p.name.toLowerCase();
                             return nameLower.includes('tour') && !nameLower.includes('non_tour') && !nameLower.includes('non-tour');
                         }
                         return true;
                     });
-                    const candidates = allowedPrograms.length > 0 ? allowedPrograms : allPrograms;
+                    const candidates = allowedPrograms.length > 0 ? allowedPrograms : allPrograms.filter(p => !excludedProgramIds.has(p.id));
                     const minCount = Math.min(...candidates.map(c => assignmentCounts[c.id] || 0));
                     const bestCandidates = candidates.filter(c => (assignmentCounts[c.id] || 0) === minCount);
                     const idx = Math.floor(deterministicUnit(seed) * bestCandidates.length);

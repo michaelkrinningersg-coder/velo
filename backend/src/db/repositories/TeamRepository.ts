@@ -475,6 +475,10 @@ export class TeamRepository {
         successfulBreakaways: 0,
         raceDays: 0,
         superteamCount: 0,
+        homeAdvantageDays: 0,
+        superHomeAdvantageDays: 0,
+        homePressureDays: 0,
+        breakawayKms: 0,
         categories,
       };
     };
@@ -811,6 +815,37 @@ export class TeamRepository {
           successStats[yrStr].superteamCount = row.count;
         }
         successStats['all'].superteamCount += row.count;
+      }
+    }
+
+    // K. Query home advantage and breakaway kms from rider_season_stats
+    if (tableExists(this.db, 'rider_season_stats')) {
+      const seasonStatsRows = this.db.prepare(`
+        SELECT
+          season,
+          SUM(home_advantage_days) AS home_adv,
+          SUM(super_home_advantage_days) AS super_home,
+          SUM(home_pressure_days) AS home_press,
+          SUM(breakaway_kms) AS breakaway_kms
+        FROM rider_season_stats
+        WHERE rider_id IN (SELECT id FROM riders WHERE active_team_id = ? AND is_retired = 0)
+        GROUP BY season
+      `).all(teamId) as Array<{
+        season: number;
+        home_adv: number | null;
+        super_home: number | null;
+        home_press: number | null;
+        breakaway_kms: number | null;
+      }>;
+
+      for (const row of seasonStatsRows) {
+        const statsList = [successStats['all'], successStats[String(row.season)]].filter(Boolean);
+        for (const stats of statsList) {
+          stats.homeAdvantageDays += row.home_adv ?? 0;
+          stats.superHomeAdvantageDays += row.super_home ?? 0;
+          stats.homePressureDays += row.home_press ?? 0;
+          stats.breakawayKms += row.breakaway_kms ?? 0;
+        }
       }
     }
 
