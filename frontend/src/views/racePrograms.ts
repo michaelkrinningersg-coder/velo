@@ -76,6 +76,32 @@ function toggleProgramRaceDirect(programId: number, raceId: number): void {
   );
 
   if (idx === -1) {
+    const targetRace = payload.races.find((r: any) => r.id === raceId);
+    if (targetRace) {
+      const start = targetRace.start_date;
+      const end = targetRace.end_date;
+
+      // Find all overlapping assignments for this program (excluding the same race)
+      const toRemove: number[] = [];
+      payload.raceProgramRaces.forEach((m: any, index: number) => {
+        if (m.program_id === programId && m.race_id !== raceId) {
+          const otherRace = payload.races.find((r: any) => r.id === m.race_id);
+          if (otherRace) {
+            const overlap = otherRace.start_date <= end && otherRace.end_date >= start;
+            if (overlap) {
+              toRemove.push(index);
+            }
+          }
+        }
+      });
+
+      // Remove overlapping assignments in reverse order
+      toRemove.sort((a, b) => b - a).forEach((index) => {
+        payload.raceProgramRaces.splice(index, 1);
+      });
+    }
+
+    // Add new assignment
     payload.raceProgramRaces.push({
       program_id: programId,
       race_id: raceId,
@@ -241,6 +267,9 @@ export function initRaceProgramsView(): void {
     const progToggle = target.closest<HTMLElement>('.popover-program-toggle');
     if (progToggle) {
       event.stopPropagation();
+      if (progToggle.classList.contains('disabled')) {
+        return;
+      }
       const programId = parseInt(progToggle.dataset['programId'] ?? '0', 10);
       const raceId = parseInt(progToggle.dataset['raceId'] ?? '0', 10);
       toggleProgramRaceDirect(programId, raceId);
@@ -862,21 +891,24 @@ function renderTabRiderRole(payload: any): string {
 
     const programItemsHtml = programItems.map((item: any) => {
       const p = item.program;
+      const inActive = isRaceInActivePhase(p, race);
+      
       let warnHtml = '';
-      if (item.isAssigned) {
-        const inActive = isRaceInActivePhase(p, race);
-        if (!inActive) {
-          warnHtml = `<span style="color: #fb923c; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; border-radius: 50%; font-size: 0.65rem;" title="Dieses Rennen liegt außerhalb der Peak- und Aufbauphase dieses Programms!">!</span>`;
-        }
+      if (!inActive) {
+        warnHtml = `<span style="color: #fb923c; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; border-radius: 50%; font-size: 0.65rem;" title="Dieses Rennen liegt außerhalb der Peak- und Aufbauphase dieses Programms!">!</span>`;
       }
 
       const activeStyle = item.isAssigned ? 'font-weight: bold; color: var(--text-100);' : 'color: var(--text-500);';
       const checkboxText = item.isAssigned ? '☑' : '☐';
 
+      const isSelectable = inActive || item.isAssigned;
+      const pointerStyle = isSelectable ? 'cursor: pointer;' : 'cursor: not-allowed; opacity: 0.4; pointer-events: none;';
+      const extraClass = isSelectable ? '' : ' disabled';
+
       return `
-        <div class="popover-program-toggle" data-program-id="${p.id}" data-race-id="${race.id}" 
-             style="cursor: pointer; padding: 0.45rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background-color 0.15s; white-space: nowrap;"
-             onmouseover="this.style.backgroundColor='rgba(99, 102, 241, 0.08)'"
+        <div class="popover-program-toggle${extraClass}" data-program-id="${p.id}" data-race-id="${race.id}" 
+             style="${pointerStyle} padding: 0.45rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background-color 0.15s; white-space: nowrap;"
+             onmouseover="${isSelectable ? "this.style.backgroundColor='rgba(99, 102, 241, 0.08)'" : ''}"
              onmouseout="this.style.backgroundColor='transparent'">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; overflow: hidden;">
             <span style="font-size: 1.15rem; line-height: 1; user-select: none; color: ${item.isAssigned ? 'var(--accent-h)' : 'var(--text-500)'};">${checkboxText}</span>
@@ -1080,54 +1112,44 @@ function renderTabRiderRole(payload: any): string {
 
     const comboMap = new Map<string, number>();
     for (const item of roleSpecCombosFiltered) {
-      const specParts = [];
-      if (item.spec1) specParts.push(item.spec1);
-      if (item.spec2) specParts.push(item.spec2);
-      if (item.spec3) specParts.push(item.spec3);
-      const specsStr = specParts.join(' / ');
-      const key = `${item.role}|${specsStr}`;
+      const spec2Val = item.spec2 || '—';
+      const key = `${item.role}|${item.spec1}|${spec2Val}`;
       comboMap.set(key, (comboMap.get(key) || 0) + item.count);
     }
 
     const sortedCombos = [...comboMap.entries()].map(([key, count]) => {
-      const [role, specs] = key.split('|');
-      return { role, specs, count };
+      const [role, spec1, spec2] = key.split('|');
+      return { role, spec1, spec2, count };
     }).sort((a, b) => {
       const roleDiff = sortedRoles.indexOf(a.role) - sortedRoles.indexOf(b.role);
       if (roleDiff !== 0) return roleDiff;
 
-      const aSpec1 = a.specs.split(' / ')[0];
-      const bSpec1 = b.specs.split(' / ')[0];
-      const specDiff = specSortOrder.indexOf(aSpec1) - specSortOrder.indexOf(bSpec1);
+      const specDiff = specSortOrder.indexOf(a.spec1) - specSortOrder.indexOf(b.spec1);
       if (specDiff !== 0) return specDiff;
 
       return b.count - a.count;
     });
 
-    const translateSpecs = (specsStr: string) => {
-      return specsStr.split(' / ').map(s => specLabels[s] ?? s).join(' / ');
+    const translateSpecs = (spec1: string, spec2: string) => {
+      const s1 = specLabels[spec1] ?? spec1;
+      const s2 = spec2 !== '—' ? (specLabels[spec2] ?? spec2) : '—';
+      return `${s1} / ${s2}`;
     };
 
     for (const combo of sortedCombos) {
       if (combo.count > 0) {
-        const isOrange = combo.specs.includes('Berg') && combo.specs.includes('Cobble');
+        const isOrange = (combo.spec1 === 'Berg' && combo.spec2 === 'Cobble') || (combo.spec1 === 'Cobble' && combo.spec2 === 'Berg');
         const itemStyle = isOrange
           ? 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem; background: rgba(249, 115, 22, 0.12); color: #f97316;'
           : 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem;';
         const textStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--text-100);';
         const countStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--accent-h);';
 
-        const cleanKey = `${combo.role}_${combo.specs.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const cleanKey = `${combo.role}_${combo.spec1}_${combo.spec2.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
         // Find which programs these riders belong to
         const origins = roleSpecCombosFiltered.filter((c: any) => {
-          const specParts = [];
-          if (c.spec1) specParts.push(c.spec1);
-          if (c.spec2) specParts.push(c.spec2);
-          if (c.spec3) specParts.push(c.spec3);
-          const specsStr = specParts.join(' / ');
-          const key = `${c.role}|${specsStr}`;
-          return key === `${combo.role}|${combo.specs}`;
+          return c.role === combo.role && c.spec1 === combo.spec1 && (c.spec2 || '—') === combo.spec2;
         });
 
         const originDetails = origins.map((c: any) => {
@@ -1137,7 +1159,7 @@ function renderTabRiderRole(payload: any): string {
 
         combinationRows.push(`
           <div style="${itemStyle}">
-            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.specs)})</span></span>
+            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.spec1, combo.spec2)})</span></span>
             <strong style="${countStyle} cursor: pointer; text-decoration: underline;" class="combo-origin-trigger" data-race-id="${race.id}" data-combo-key="${cleanKey}">
               ${combo.count} Fahrer
             </strong>
@@ -1334,7 +1356,18 @@ function renderTabProgramRoles(payload: any): string {
     const sortedRoles = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
     const specSortOrder = ['Berg', 'Hill', 'Sprint', 'Cobble', 'Timetrial', 'Attacker'];
 
-    const sortedCombos = [...progCombos].sort((a: any, b: any) => {
+    // Group and sum combinations by role, spec1, and spec2
+    const comboMap5 = new Map<string, number>();
+    for (const item of progCombos) {
+      const spec2Val = item.spec2 || '—';
+      const key = `${item.role}|${item.spec1}|${spec2Val}`;
+      comboMap5.set(key, (comboMap5.get(key) || 0) + item.count);
+    }
+
+    const sortedCombos = [...comboMap5.entries()].map(([key, count]) => {
+      const [role, spec1, spec2] = key.split('|');
+      return { role, spec1, spec2, count };
+    }).sort((a, b) => {
       const roleDiff = sortedRoles.indexOf(a.role) - sortedRoles.indexOf(b.role);
       if (roleDiff !== 0) return roleDiff;
 
@@ -1344,30 +1377,27 @@ function renderTabProgramRoles(payload: any): string {
       return b.count - a.count;
     });
 
-    const translateSpecs = (spec1: string, spec2: string | null, spec3: string | null) => {
-      const parts = [specLabels[spec1] ?? spec1];
-      if (spec2) parts.push(specLabels[spec2] ?? spec2);
-      if (spec3) parts.push(specLabels[spec3] ?? spec3);
-      return parts.join(' / ');
+    const translateSpecs = (spec1: string, spec2: string) => {
+      const s1 = specLabels[spec1] ?? spec1;
+      const s2 = spec2 !== '—' ? (specLabels[spec2] ?? spec2) : '—';
+      return `${s1} / ${s2}`;
     };
 
     const combinationRows: string[] = [];
     for (const combo of sortedCombos) {
       if (combo.count > 0) {
-        const specsList = [combo.spec1, combo.spec2, combo.spec3].filter(Boolean);
-        const isOrange = specsList.includes('Berg') && specsList.includes('Cobble');
+        const isOrange = (combo.spec1 === 'Berg' && combo.spec2 === 'Cobble') || (combo.spec1 === 'Cobble' && combo.spec2 === 'Berg');
         const itemStyle = isOrange
           ? 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem; background: rgba(249, 115, 22, 0.12); color: #f97316;'
           : 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem;';
         const textStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--text-100);';
         const countStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--accent-h);';
 
-        const specsKey = specsList.join('_');
-        const cleanKey = `${combo.role}_${specsKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const cleanKey = `${combo.role}_${combo.spec1}_${combo.spec2.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
         combinationRows.push(`
           <div style="${itemStyle}">
-            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.spec1, combo.spec2, combo.spec3)})</span></span>
+            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.spec1, combo.spec2)})</span></span>
             <strong style="${countStyle} cursor: pointer; text-decoration: underline;" class="combo-origin-trigger" data-race-id="prog-${prog.id}" data-combo-key="${cleanKey}">
               ${combo.count} Fahrer
             </strong>
