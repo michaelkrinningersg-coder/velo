@@ -213,6 +213,7 @@ interface RiderState {
   };
   superTeamActiveLogged?: boolean;
   superTeamExhaustedLogged?: boolean;
+  superTeamMalusAmount?: number;
   breakawayInitialMalus: number;
   breakawayRecoveryStartDistanceMeters: number | null;
   breakawayGapPenalty: number;
@@ -1144,6 +1145,8 @@ export class SimulationEngine {
   private superTeamMalusAmount = 0;
   private superTeamStartPercent = 0;
   private superTeamEndPercent = 0;
+  private superTeamBreakawayRiderId?: number;
+  private superTeamBreakawayRiderCaught = false;
 
   private hasLoggedFinishSprintTieBreak = false;
 
@@ -1438,9 +1441,9 @@ export class SimulationEngine {
     if (this.breakawayPlan && this.breakawayPlan.superTeamId != null) {
       this.superTeamId = this.breakawayPlan.superTeamId;
       this.superTeamBonusAmount = randomInteger(2, 6);
-      this.superTeamMalusAmount = randomInteger(4, 9);
+      this.superTeamMalusAmount = randomInteger(4, 8);
       this.superTeamStartPercent = randomBetween(0.40, 0.60);
-      this.superTeamEndPercent = randomBetween(0.85, 0.95);
+      this.superTeamEndPercent = randomBetween(0.86, 0.96);
 
       const normRole = (name: string | null | undefined) => (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const teamRiders = bootstrap.riders.filter(r => r.activeTeamId === this.superTeamId);
@@ -1474,8 +1477,15 @@ export class SimulationEngine {
         type: 'superteam',
         tone: 'neutral',
         title: `Superteam des Tages: ${teamName}`,
-        detail: `Dieses Team hat sich heute zusammengeschlossen, um seinen Leader zu unterstützen! Die Helfer erhalten zwischen ${(this.superTeamStartPercent * 100).toFixed(0)}% und ${(this.superTeamEndPercent * 100).toFixed(0)}% der Etappe einen Bonus von +${this.superTeamBonusAmount} auf Berg, Hill, Medium Mountain und Flat. Danach folgt ein Malus von -${this.superTeamMalusAmount} wegen Erschöpfung.`,
+        detail: `Dieses Team hat sich heute zusammengeschlossen, um seinen Leader zu unterstützen! Die Helfer erhalten zwischen ${(this.superTeamStartPercent * 100).toFixed(0)}% und ${(this.superTeamEndPercent * 100).toFixed(0)}% der Etappe einen Bonus von +${this.superTeamBonusAmount} auf Berg, Hill, Medium Mountain und Flat. Danach folgt ein individueller Malus von -4 bis -8 wegen Erschöpfung.`,
       });
+
+      const superTeamBreakawayRider = this.riders.find(
+        r => r.rider.activeTeamId === this.superTeamId && this.breakawayPlan?.riderIds.includes(r.rider.id)
+      );
+      if (superTeamBreakawayRider) {
+        this.superTeamBreakawayRiderId = superTeamBreakawayRider.rider.id;
+      }
     }
 
     // Log special form states & form peaks at stage start (km 0)
@@ -1800,6 +1810,34 @@ export class SimulationEngine {
 
     this.updateBreakawayPhaseState();
 
+    if (this.superTeamId != null && this.superTeamBreakawayRiderId != null && !this.superTeamBreakawayRiderCaught) {
+      const breakawayRiderState = this.riders.find(r => r.rider.id === this.superTeamBreakawayRiderId);
+      if (breakawayRiderState && !isRiderInactive(breakawayRiderState)) {
+        const leaders = this.riders.filter(r => this.superTeamProtectedLeaderIds.has(r.rider.id) && !isRiderInactive(r));
+        const leaderCaughtHim = leaders.some(l => l.distanceCoveredMeters >= breakawayRiderState.distanceCoveredMeters);
+        if (leaderCaughtHim) {
+          this.superTeamBreakawayRiderCaught = true;
+          breakawayRiderState.breakawayMalus = 0;
+          this.pushMessage({
+            elapsedSeconds: this.elapsedSeconds,
+            riderId: breakawayRiderState.rider.id,
+            riderName: breakawayRiderState.riderName,
+            type: 'superteam',
+            tone: 'neutral',
+            title: `${this.formatRiderWithPreStageGc(breakawayRiderState.rider.id, breakawayRiderState.riderName)} von Leader eingeholt!`,
+            detail: `Der Ausreißer wurde von seinem Kapitän eingeholt und unterstützt das Team ab jetzt mit frischen Kräften!`,
+          });
+        }
+      }
+    }
+
+    if (this.superTeamBreakawayRiderCaught && this.superTeamBreakawayRiderId != null) {
+      const breakawayRiderState = this.riders.find(r => r.rider.id === this.superTeamBreakawayRiderId);
+      if (breakawayRiderState) {
+        breakawayRiderState.breakawayMalus = 0;
+      }
+    }
+
     for (const rider of this.riders) {
       if (isRiderInactive(rider)) {
         rider.nextDistanceCoveredMeters = null;
@@ -2046,52 +2084,76 @@ export class SimulationEngine {
 
       // Dynamic Superteam skill updates & logging
       if (this.superTeamId != null && rider.rider.activeTeamId === this.superTeamId && !this.superTeamProtectedLeaderIds.has(rider.rider.id)) {
-        const distancePercent = rider.distanceCoveredMeters / this.stageDistanceMeters;
-        let targetMod = 0;
+        const isSuperteamBreakawayRider = rider.rider.id === this.superTeamBreakawayRiderId;
+        if (!isSuperteamBreakawayRider || this.superTeamBreakawayRiderCaught) {
+          const distancePercent = rider.distanceCoveredMeters / this.stageDistanceMeters;
+          let targetMod = 0;
+          let isBonusActive = false;
+          let isMalusActive = false;
 
-        if (distancePercent >= this.superTeamStartPercent && distancePercent < this.superTeamEndPercent) {
-          targetMod = this.superTeamBonusAmount;
-          if (!rider.superTeamActiveLogged) {
-            rider.superTeamActiveLogged = true;
-            this.pushMessage({
-              elapsedSeconds: this.elapsedSeconds,
-              riderId: rider.rider.id,
-              riderName: rider.riderName,
-              type: 'superteam',
-              tone: 'neutral',
-              title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} leistet Führungsarbeit!`,
-              detail: `Der Edelhelfer investiert all seine Kraft für das Team und erhält vorübergehend +${this.superTeamBonusAmount} auf Berg-, Hügel- und Flachpassagen!`,
-            });
+          if (isSuperteamBreakawayRider) {
+            if (distancePercent < this.superTeamEndPercent) {
+              isBonusActive = true;
+            } else if (rider.superTeamActiveLogged) {
+              isMalusActive = true;
+            }
+          } else {
+            if (distancePercent >= this.superTeamStartPercent && distancePercent < this.superTeamEndPercent) {
+              isBonusActive = true;
+            } else if (distancePercent >= this.superTeamEndPercent && rider.superTeamActiveLogged) {
+              isMalusActive = true;
+            }
           }
-        } else if (distancePercent >= this.superTeamEndPercent) {
-          targetMod = -this.superTeamMalusAmount;
-          if (!rider.superTeamExhaustedLogged) {
-            rider.superTeamExhaustedLogged = true;
-            this.pushMessage({
-              elapsedSeconds: this.elapsedSeconds,
-              riderId: rider.rider.id,
-              riderName: rider.riderName,
-              type: 'superteam',
-              tone: 'warning',
-              title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist erschöpft!`,
-              detail: `Die Führungsarbeit hat ihren Tribut gefordert. Der Fahrer erhält für den Rest der Etappe einen Malus von -${this.superTeamMalusAmount} auf Berg-, Hügel- und Flachpassagen.`,
-            });
+
+          if (isBonusActive) {
+            targetMod = this.superTeamBonusAmount;
+            if (!rider.superTeamActiveLogged) {
+              rider.superTeamActiveLogged = true;
+              this.pushMessage({
+                elapsedSeconds: this.elapsedSeconds,
+                riderId: rider.rider.id,
+                riderName: rider.riderName,
+                type: 'superteam',
+                tone: 'neutral',
+                title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} leistet Führungsarbeit!`,
+                detail: isSuperteamBreakawayRider
+                  ? `Der eingeholte Ausreißer investiert all seine Kraft für das Team und erhält vorübergehend +${this.superTeamBonusAmount} auf Berg-, Hügel- und Flachpassagen!`
+                  : `Der Edelhelfer investiert all seine Kraft für das Team und erhält vorübergehend +${this.superTeamBonusAmount} auf Berg-, Hügel- und Flachpassagen!`,
+              });
+            }
+          } else if (isMalusActive) {
+            if (rider.superTeamMalusAmount == null) {
+              rider.superTeamMalusAmount = randomInteger(4, 8);
+            }
+            targetMod = -rider.superTeamMalusAmount;
+            if (!rider.superTeamExhaustedLogged) {
+              rider.superTeamExhaustedLogged = true;
+              this.pushMessage({
+                elapsedSeconds: this.elapsedSeconds,
+                riderId: rider.rider.id,
+                riderName: rider.riderName,
+                type: 'superteam',
+                tone: 'warning',
+                title: `${this.formatRiderWithPreStageGc(rider.rider.id, rider.riderName)} ist erschöpft!`,
+                detail: `Die Führungsarbeit hat ihren Tribut gefordert. Der Fahrer erhält für den Rest der Etappe einen Malus von -${rider.superTeamMalusAmount} auf Berg-, Hügel- und Flachpassagen.`,
+              });
+            }
           }
-        }
 
-        if (!rider.originalSkills) {
-          rider.originalSkills = {
-            flat: rider.rider.skills.flat,
-            mountain: rider.rider.skills.mountain,
-            mediumMountain: rider.rider.skills.mediumMountain,
-            hill: rider.rider.skills.hill,
-          };
-        }
+          if (!rider.originalSkills) {
+            rider.originalSkills = {
+              flat: rider.rider.skills.flat,
+              mountain: rider.rider.skills.mountain,
+              mediumMountain: rider.rider.skills.mediumMountain,
+              hill: rider.rider.skills.hill,
+            };
+          }
 
-        rider.rider.skills.flat = rider.originalSkills.flat + targetMod;
-        rider.rider.skills.mountain = rider.originalSkills.mountain + targetMod;
-        rider.rider.skills.mediumMountain = rider.originalSkills.mediumMountain + targetMod;
-        rider.rider.skills.hill = rider.originalSkills.hill + targetMod;
+          rider.rider.skills.flat = rider.originalSkills.flat + targetMod;
+          rider.rider.skills.mountain = rider.originalSkills.mountain + targetMod;
+          rider.rider.skills.mediumMountain = rider.originalSkills.mediumMountain + targetMod;
+          rider.rider.skills.hill = rider.originalSkills.hill + targetMod;
+        }
       }
 
       if (this.isTimeTrialMode && stepEndSeconds <= rider.startOffsetSeconds) {
