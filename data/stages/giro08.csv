@@ -1,0 +1,48 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+0.85,2.200,Flat,5,5,start,Start,null,,,
+0.87,5.100,Hill,5,5,,,,,,
+7.04,1.500,Flat,5,5,,,,,,
+0.61,4.600,Hill,5,5,,,,,,
+0.38,-2.900,Flat,5,5,,,,,,
+0.88,3.200,Hill,5,5,,,,,,
+2.22,-3.400,Abfahrt,5,5,,,,,,
+1.33,2.900,Hill,5,5,,,,,,
+2.30,-4.100,Abfahrt,5,5,,,,,,
+8.53,-0.700,Flat,5,5,,,,,,
+0.62,2.400,Flat,5,5,,,,,,
+0.86,5.700,Hill,5,5,,,,sprint_intermediate,Sprint 1,Sprint
+1.37,-5.900,Abfahrt,5,5,,,,,,
+73.50,0.000,Flat,5,5,,,,,,
+0.70,7.700,Hill,5,5,climb_start,Montefiore Dellaso,null,sprint_intermediate,Sprint 2,Sprint
+7.05,3.600,Hill,5,5,,,,climb_top,Montefiore Dellaso,3
+0.81,-3.000,Abfahrt,5,5,,,,,,
+0.80,-7.600,Abfahrt,5,5,,,,,,
+3.93,-4.400,Abfahrt,5,5,,,,,,
+1.88,0.000,Flat,5,5,,,,,,
+4.52,6.000,Hill,5,5,climb_start,Monterubbiano,null,climb_top,Monterubbiano,4
+6.85,-4.900,Abfahrt,5,5,,,,,,
+0.76,4.300,Hill,5,5,climb_start,Fermo,null,,,
+0.80,7.100,Hill,5,5,,,,,,
+0.73,1.100,Hill,5,5,,,,,,
+1.10,6.100,Hill,5,5,,,,climb_top,Fermo,4
+1.07,-2.200,Abfahrt,5,5,,,,,,
+0.74,-5.900,Abfahrt,5,5,,,,,,
+1.95,4.200,Hill,5,5,,,,,,
+0.67,-3.900,Abfahrt,5,5,,,,,,
+0.62,-8.500,Abfahrt,5,5,,,,,,
+10.41,-1.300,Flat,5,5,,,,,,
+0.59,5.600,Hill,5,5,climb_start,Capodarco,null,,,
+0.44,1.400,Hill,5,5,,,,,,
+0.67,4.500,Hill,5,5,,,,,,
+0.65,9.100,Medium_Mountain,5,5,,,,,,
+1.73,5.000,Medium_Mountain,5,5,,,,climb_top,Capodarco,3
+0.39,-2.100,Abfahrt,5,5,,,,,,
+1.11,-6.400,Abfahrt,5,5,,,,,,
+0.44,-0.500,Flat,5,5,,,,,,
+0.89,-4.200,Abfahrt,5,5,,,,,,
+0.62,-0.200,Flat,5,5,,,,,,
+0.50,8.200,Medium_Mountain,5,5,climb_start,Muro di via Reputolu,null,,,
+0.42,18.800,Medium_Mountain,5,5,,,,,,
+1.12,0.800,Medium_Mountain,5,5,,,,,,
+0.75,7.600,Medium_Mountain,5,5,,,,,,
+0.67,4.000,Medium_Mountain,5,5,,,,finish_mountain,Muro di via Reputolu,3

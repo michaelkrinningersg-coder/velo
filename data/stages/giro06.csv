@@ -1,0 +1,28 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+35.85,0.000,Flat,5,5,start,Start,null,,,
+0.61,4.400,Hill,5,5,climb_start,Cava die Tireni,null,,,
+0.40,-1.200,Hill,5,5,,,,,,
+0.40,8.300,Hill,5,5,,,,,,
+0.44,4.300,Hill,5,5,,,,,,
+0.88,-1.800,Hill,5,5,,,,,,
+0.56,1.100,Hill,5,5,,,,,,
+0.48,9.400,Hill,5,5,,,,,,
+2.15,3.500,Hill,5,5,,,,climb_top,Cava die Tireni,4
+7.55,-2.100,Abfahrt,5,5,,,,,,
+0.53,3.000,Hill,5,5,,,,,,
+17.13,-0.100,Flat,5,5,,,,sprint_intermediate,Sprint 1,Sprint
+0.52,4.200,Hill,5,5,,,,,,
+0.61,-3.400,Abfahrt,5,5,,,,,,
+70.92,-0.100,Flat,5,5,,,,sprint_intermediate,Sprint 2,Sprint
+0.48,4.200,Hill,5,5,,,,,,
+0.65,0.900,Flat,5,5,,,,,,
+0.45,5.600,Hill,5,5,,,,,,
+2.77,1.500,Flat,5,5,,,,,,
+0.43,-9.300,Abfahrt,5,5,,,,,,
+0.38,0.500,Flat,5,5,,,,,,
+0.44,-10.200,Abfahrt,5,5,,,,,,
+4.87,0.200,Flat,5,5,,,,,,
+2.71,3.000,Hill,5,5,climb_start,Napoli,null,,,
+1.01,8.400,Hill,5,5,,,,climb_top,Napoli,4
+3.55,-4.300,Abfahrt,5,5,,,,,,
+3.49,-1.000,Flat,5,5,,,,finish_flat,Ziel,null
