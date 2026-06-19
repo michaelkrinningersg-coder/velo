@@ -122,6 +122,7 @@ export const state: {
   stageEditorStageRows: StageEditorStageOverviewRow[];
   stageEditorClimbRows: StageEditorClimbOverviewRow[];
   stageEditorPrograms?: Array<{ id: number; name: string }>;
+  stageEditorHideBoringSegments: boolean;
   stageEditorStagesSort: {
     key: StageEditorStagesSortKey;
     direction: 'asc' | 'desc';
@@ -226,6 +227,7 @@ export const state: {
   stageEditorStageRows: [],
   stageEditorClimbRows: [],
   stageEditorPrograms: [],
+  stageEditorHideBoringSegments: true,
   stageEditorStagesSort: {
     key: 'stageId',
     direction: 'asc',

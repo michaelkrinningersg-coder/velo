@@ -729,11 +729,11 @@ export function addStageEditorMarker(segmentIndex: number, scope: 'start' | 'end
   if (!segment) return;
   const nextMarker: StageMarker = scope === 'start'
     ? (segmentIndex === 0 && !segment.markers.some((marker) => marker.type === 'start')
-        ? { type: 'start', name: 'Start', cat: null }
-        : { type: 'climb_start', name: null, cat: null })
+      ? { type: 'start', name: 'Start', cat: null }
+      : { type: 'climb_start', name: null, cat: null })
     : (segmentIndex === state.stageEditorDraft.segments.length - 1 && !segment.endMarkers.some((marker) => isFinishMarkerType(marker.type))
-        ? { type: 'finish_flat', name: 'Ziel', cat: null }
-        : { type: 'sprint_intermediate', name: null, cat: 'Sprint' as StageMarkerCategory });
+      ? { type: 'finish_flat', name: 'Ziel', cat: null }
+      : { type: 'sprint_intermediate', name: null, cat: 'Sprint' as StageMarkerCategory });
   if (scope === 'start') {
     segment.markers.push(nextMarker);
     segment.markers = sortStageMarkers(segment.markers);
@@ -1606,6 +1606,70 @@ export function getIntermediateSprints(draft: StageEditorDraft): IntermediateSpr
   return sprints;
 }
 
+export function getSegmentsInClimbsIndices(draft: StageEditorDraft): Set<number> {
+  const indices = new Set<number>();
+  const openClimbs: Array<{ name: string; segmentIndex: number }> = [];
+
+  let currentKm = 0;
+  draft.segments.forEach((segment, segmentIndex) => {
+    const segmentStartKm = currentKm;
+    const segmentEndKm = roundStageEditorKm(segmentStartKm + segment.lengthKm);
+
+    segment.markers.forEach((marker) => {
+      if (marker.type === 'climb_start' && marker.name) {
+        openClimbs.push({
+          name: marker.name,
+          segmentIndex,
+        });
+      }
+    });
+
+    if (openClimbs.length > 0) {
+      indices.add(segmentIndex);
+    }
+
+    segment.endMarkers.forEach((marker) => {
+      if (isMountainClassificationMarkerType(marker.type, marker.cat) && marker.name) {
+        let matchingIndex = -1;
+        for (let i = openClimbs.length - 1; i >= 0; i--) {
+          if (openClimbs[i].name === marker.name) {
+            matchingIndex = i;
+            break;
+          }
+        }
+        if (matchingIndex >= 0) {
+          openClimbs.splice(matchingIndex, 1);
+        }
+      }
+    });
+
+    currentKm = segmentEndKm;
+  });
+
+  return indices;
+}
+
+export function shouldHideStageEditorSegment(draft: StageEditorDraft, index: number, climbIndices: Set<number>): boolean {
+  const segment = draft.segments[index];
+  if (!segment) return false;
+
+  // 1. Must not lie in an assigned Climb
+  if (climbIndices.has(index)) {
+    return false;
+  }
+
+  // 2. Must not have any marker on it
+  if (segment.markers.length > 0 || segment.endMarkers.length > 0) {
+    return false;
+  }
+
+  // 3. Terrain Flat and Gradient -3 to +1.5%, OR Terrain Abfahrt and Gradient <= -3%
+  const isFlatMatch = segment.terrain === 'Flat' && segment.gradientPercent >= -3.0 && segment.gradientPercent <= 1.5;
+  const isAbfahrtMatch = segment.terrain === 'Abfahrt' && segment.gradientPercent <= -3.0;
+
+  return isFlatMatch || isAbfahrtMatch;
+}
+
 export function renderStageEditor(): void {
   renderStageEditorExistingStages();
   const draft = state.stageEditorDraft;
@@ -1714,11 +1778,19 @@ export function renderStageEditor(): void {
     `;
   }
 
+  const hideBoringCheckbox = $<HTMLInputElement>('stage-editor-hide-boring-segments-checkbox');
+  if (hideBoringCheckbox) {
+    hideBoringCheckbox.checked = state.stageEditorHideBoringSegments;
+  }
+
   climbs.innerHTML = sidebarContent;
 
   chart.innerHTML = renderStageEditorChart(draft);
-  tbody.innerHTML = draft.segments.map((segment, index) => `
-    <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}" style="height: 3.5rem;">
+  const climbIndices = getSegmentsInClimbsIndices(draft);
+  tbody.innerHTML = draft.segments.map((segment, index) => {
+    const isHidden = state.stageEditorHideBoringSegments && shouldHideStageEditorSegment(draft, index, climbIndices);
+    return `
+    <tr data-segment-index="${index}" class="${getStageEditorSegmentIssuesAt(draft, index).length > 0 ? 'stage-editor-segment-row-invalid' : ''}" style="height: 3.5rem;${isHidden ? ' display: none;' : ''}">
       <td class="stage-editor-cell-nr text-muted" style="text-align:center; font-weight:700;">${index + 1}</td>
       <td class="stage-editor-cell-length"><input type="number" step="0.01" min="0.2" value="${segment.lengthKm.toFixed(2)}" data-field="segmentLengthKm" class="${stageEditorFieldErrorClass(segment.lengthKm < STAGE_EDITOR_MIN_SEGMENT_KM)}"></td>
       <td class="stage-editor-cell-gradient"><input type="number" step="0.1" value="${segment.gradientPercent.toFixed(1)}" data-field="segmentGradientPercent"></td>
@@ -1738,7 +1810,8 @@ export function renderStageEditor(): void {
           ${draft.segments.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" data-segment-action="delete" data-segment-index="${index}">✕</button>` : ''}
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   exportButton.disabled = alertItems.length > 0;
   exportHint.textContent = alertItems.length > 0
@@ -1820,8 +1893,8 @@ export function renderStageEditorAutomaticClimbs(draft: StageEditorDraft): strin
     </div>
     <div class="stage-editor-sidebar-climb-list">
       ${climbs.map((climb, index) => {
-        const catNode = climb.category ? `<span class="badge badge-live">Kat. ${climb.category}</span>` : '';
-        return `
+    const catNode = climb.category ? `<span class="badge badge-live">Kat. ${climb.category}</span>` : '';
+    return `
           <div class="stage-editor-sidebar-climb-item">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
@@ -1845,7 +1918,7 @@ export function renderStageEditorAutomaticClimbs(draft: StageEditorDraft): strin
               </div>
             </div>
           </div>`;
-      }).join('')}
+  }).join('')}
     </div>`;
 }
 
@@ -2410,4 +2483,13 @@ export function initStageEditorListeners(): void {
       renderStageEditor();
     });
   }
+
+  const hideBoringCheckbox = $<HTMLInputElement>('stage-editor-hide-boring-segments-checkbox');
+  if (hideBoringCheckbox) {
+    hideBoringCheckbox.addEventListener('change', () => {
+      state.stageEditorHideBoringSegments = hideBoringCheckbox.checked;
+      renderStageEditor();
+    });
+  }
 }
+

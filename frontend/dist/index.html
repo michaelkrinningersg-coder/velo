@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-i5kB-t-D.js"></script>
+  <script type="module" crossorigin src="/assets/index-CsYDZ_lC.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-CwH_KKhQ.css">
 </head>
 <body>
@@ -602,10 +602,16 @@
 
       <!-- Stage Editor -->
       <div id="view-stage-editor" class="view">
-        <div class="view-header view-header-stack">
+        <div class="view-header view-header-stack" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h2>Stage Editor</h2>
             <p class="text-muted">GPX oder TCX importieren, Segmente justieren und beide CSV-Zieldateien direkt herunterladen.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.05); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <label style="display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; color: #fff; font-size: 0.85rem; font-weight: 500; user-select: none; margin: 0;">
+              <input type="checkbox" id="stage-editor-hide-boring-segments-checkbox" checked style="accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer;" />
+              Unnötige Segmente ausblenden
+            </label>
           </div>
         </div>
 
