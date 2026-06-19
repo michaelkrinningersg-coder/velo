@@ -1,6 +1,7 @@
 id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spread_start_percent,final_push_start_percent,final_spread_difficulty_multiplier,crash_incident_multiplier,mechanical_incident_multiplier,allowed_weather
 1,1,5,2026-01-15,ITT,11,santos_tour_down_under_st1.csv,70,90,1,1,1,1|3
 2,23,2,2026-05-09,Hilly_Difficult,42,giro02.csv,70,80,1.5,2,1.5,1
+82,1,2,2026-02-12,Mountain,100,santos_tour_down_under_st2,60,75,1.7,2,2.5,1
 3,1,3,2026-01-13,Rolling,30,santos_tour_down_under_st3.csv,70,90,1,1,1,1|3
 4,1,4,2026-01-14,Rolling,36,santos_tour_down_under_st4.csv,70,90,1,1,1,1|3
 5,1,1,2026-01-11,TTT,36,santos_tour_down_under_st5.csv,70,90,1,1,1,1|3
