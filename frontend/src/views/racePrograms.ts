@@ -465,6 +465,31 @@ export function renderRacePrograms(): void {
     return;
   }
 
+  // Save scroll positions
+  const savedWindowX = window.scrollX;
+  const savedWindowY = window.scrollY;
+
+  const scrollPositions: Record<string, { scrollTop: number; scrollLeft: number }> = {};
+
+  const tableScroll = document.querySelector('.team-detail-table-scroll');
+  if (tableScroll) {
+    scrollPositions['table'] = {
+      scrollTop: tableScroll.scrollTop,
+      scrollLeft: tableScroll.scrollLeft
+    };
+  }
+
+  const popoverScrolls = document.querySelectorAll('.popover-program-list-scroll');
+  popoverScrolls.forEach((el) => {
+    const raceId = el.getAttribute('data-race-id');
+    if (raceId) {
+      scrollPositions[`popover-${raceId}`] = {
+        scrollTop: el.scrollTop,
+        scrollLeft: el.scrollLeft
+      };
+    }
+  });
+
   const dirtyCount = state.raceProgramsDirty;
   const isSaving = state.raceProgramsSaving;
   const activeTab = state.raceProgramsActiveTab;
@@ -504,6 +529,24 @@ export function renderRacePrograms(): void {
 
   html += `</div>`;
   root.innerHTML = html;
+
+  // Restore scroll positions
+  const newTableScroll = document.querySelector('.team-detail-table-scroll');
+  if (newTableScroll && scrollPositions['table']) {
+    newTableScroll.scrollTop = scrollPositions['table'].scrollTop;
+    newTableScroll.scrollLeft = scrollPositions['table'].scrollLeft;
+  }
+
+  const newPopoverScrolls = document.querySelectorAll('.popover-program-list-scroll');
+  newPopoverScrolls.forEach((el) => {
+    const raceId = el.getAttribute('data-race-id');
+    if (raceId && scrollPositions[`popover-${raceId}`]) {
+      el.scrollTop = scrollPositions[`popover-${raceId}`].scrollTop;
+      el.scrollLeft = scrollPositions[`popover-${raceId}`].scrollLeft;
+    }
+  });
+
+  window.scrollTo(savedWindowX, savedWindowY);
 }
 
 // 1. Tab: Calendar Programs (Columns)
@@ -881,11 +924,15 @@ function renderTabRiderRole(payload: any): string {
       if (sprint > 0) rolesDesc.push(`${sprint} Sprinter`);
       const rolesStr = rolesDesc.length > 0 ? `(${rolesDesc.join(', ')})` : '';
 
+      const stats = calculateProgramDays(p, payload);
+      const totalDays = stats.peak + stats.prep + stats.none;
+
       return {
         program: p,
         isAssigned,
         count,
         rolesStr,
+        totalDays,
       };
     }).sort((a: any, b: any) => b.count - a.count);
 
@@ -930,8 +977,8 @@ function renderTabRiderRole(payload: any): string {
              onmouseout="this.style.backgroundColor='transparent'">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; overflow: hidden;">
             <span style="font-size: 1.15rem; line-height: 1; user-select: none; color: ${item.isAssigned ? 'var(--accent-h)' : 'var(--text-500)'};">${checkboxText}</span>
-            <span style="${activeStyle} font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;" title="${esc(p.name)}">
-              ${esc(p.name)}
+            <span style="${activeStyle} font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;" title="${esc(p.name)} (${item.totalDays} Renntage)">
+              ${esc(p.name)} (${item.totalDays} RT)
             </span>
             ${warnHtml}
             ${conflictHtml}
@@ -1034,7 +1081,7 @@ function renderTabRiderRole(payload: any): string {
           ${popoverTitleHtml}
           <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-500);">Klicken zum Aktivieren</span>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 0.2rem; max-height: 350px; overflow-y: auto;">
+        <div class="popover-program-list-scroll" data-race-id="${race.id}" style="display: flex; flex-direction: column; gap: 0.2rem; max-height: 350px; overflow-y: auto;">
           ${programItemsHtml}
         </div>
       </div>
