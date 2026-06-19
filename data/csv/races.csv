@@ -19,3 +19,4 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 20,Ronde van Brugge,4,7,0,1,2026-03-25,2026-03-25,70
 21,E3 Saxo Classic,4,7,0,1,2026-03-27,2026-03-27,84
 22,Muscat Classic,68,8,0,1,2026-02-06,2026-02-06,60
+23,Giro di Italia,2,2,1,21,2026-05-08,2026-05-31,95
