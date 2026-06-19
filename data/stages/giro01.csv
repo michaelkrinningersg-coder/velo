@@ -1,0 +1,16 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+60.03,0.000,Flat,5,5,start,Start,null,,,
+2.04,3.000,Hill,5,5,climb_start,Cape Agalina,null,climb_top,Cape Agalina,4
+15.44,-0.400,Flat,5,5,,,,sprint_intermediate,Sprint 1,Sprint
+1.76,2.500,Hill,5,5,climb_start,Cape Agalina,null,climb_top,Cape Agalina,4
+0.59,-1.600,Flat,5,5,,,,,,
+0.65,-5.400,Abfahrt,5,5,,,,,,
+28.80,0.000,Flat,5,5,,,,sprint_intermediate,Sprint 2,Sprint
+0.56,4.900,Hill,5,5,,,,,,
+3.80,-0.400,Flat,5,5,,,,,,
+0.61,-3.400,Abfahrt,5,5,,,,,,
+11.32,0.100,Flat,5,5,,,,,,
+1.17,3.700,Hill,5,5,,,,,,
+0.93,-1.300,Flat,5,5,,,,,,
+0.46,-4.900,Abfahrt,5,5,,,,,,
+27.63,0.000,Flat,5,5,,,,finish_flat,Ziel,null
