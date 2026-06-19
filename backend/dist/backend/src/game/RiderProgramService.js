@@ -256,21 +256,21 @@ class RiderProgramService {
                 else {
                     const excludedProgramIds = new Set();
                     if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
-                        [14, 15, 17, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
+                        [14, 15, 17, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
                     }
                     const nonLeaderRiders = teamRiders.filter(r => normalizeRoleName(r.role_name) !== 'Kapitaen' && normalizeRoleName(r.role_name) !== 'Co-Kapitaen');
                     const nonLeaderIndex = nonLeaderRiders.findIndex(r => r.id === rider.id);
                     if (nonLeaderIndex >= 0 && nonLeaderIndex <= 3) {
-                        [15, 18, 19, 20].forEach(id => excludedProgramIds.add(id));
+                        [15, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
                     }
                     // Non-Tour versions (25-28) can only be assigned to Wassertraeger and Starke Helfer
                     if (roleName !== 'Wassertraeger' && roleName !== 'Starke Helfer') {
                         [25, 26, 27, 28].forEach(id => excludedProgramIds.add(id));
                     }
                     if (isBestRider) {
-                        // Best rider is only allowed program IDs in [1-8, 13-19, 21-24]
-                        // We exclude 9, 10, 11, 12, 20, 25, 26, 27, 28
-                        const bestRiderExclusions = [9, 10, 11, 12, 20, 25, 26, 27, 28];
+                        // Best rider is only allowed program IDs in [1-8, 13-19, 21-24, 29, 30]
+                        // We exclude 9, 10, 11, 12, 20, 25, 26, 27, 28, 31, 32
+                        const bestRiderExclusions = [9, 10, 11, 12, 20, 25, 26, 27, 28, 31, 32];
                         const combinedExclusions = new Set([...excludedProgramIds, ...bestRiderExclusions]);
                         const filteredRules = rules.filter(r => !combinedExclusions.has(r.program_id));
                         const tempRulePool = selectRulePool(filteredRules, roleName, specs);
