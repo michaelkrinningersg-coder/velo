@@ -1,6 +1,8 @@
-# Walkthrough - Rennen Programm-Editor (Programmübersicht)
+# Walkthrough - Rennen Programm-Editor (Programmübersicht & Analyse-Indikatoren)
 
-Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) als eigenständigen Menüpunkt am Ende der Sidebar implementiert. Diese Ansicht bietet 5 spezialisierte Tabs zur Verwaltung und zum Export der Rennprogramme, Peak-Wochen, Rennzuweisungen und Rollenstatistiken.
+Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) als eigenständigen Menüpunkt am Ende der Sidebar implementiert. Diese Ansicht bietet 5 spezialisierte Tabs zur Verwaltung und zum Export der Rennprogramme, Peak-Wochen, Rennzuweisungen und Rollenstatistiken. Zudem wurden vertiefte Analysemethoden und farbliche Warnindikatoren integriert.
+
+---
 
 ## Durchgeführte Änderungen
 
@@ -31,26 +33,30 @@ Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) a
 
 - **Tab 4: Rider-Role Programme**
   - Listet alle Rennen chronologisch nach Datum auf.
-  - **Eintagesrennen:** Zeigt das Streckenprofil (z. B. Flat, Cobble, Rolling) in einer eigenen Spalte an.
-  - **Rundfahrten:** Durch Klicken auf den Rennnamen öffnet sich ein kleines, absolut positioniertes Hover-Fenster (im Stil der Season-Standings) mit der Übersicht aller Etappenprofile und einer aggregierten, absteigend sortierten Liste der Profile (z. B. "Flat: 3x", "Rolling: 2x").
-  - **Programm-Verwaltung per Klick auf Fahreranzahl:** Durch Klick auf die Gesamtfahreranzahl eines Rennens öffnet sich ein weiteres absolut positioniertes Hover-Fenster:
-    - Listet alle Programme absteigend sortiert nach ihrer Fahreranzahl auf.
-    - Zeigt für jedes Programm die Rollenverteilung der Fahrer (z. B. `(5 Kap., 2 Edel.)`).
-    - Ermöglicht es, das Programm direkt für dieses Rennen an- oder abzuwählen (Toggle).
-    - Zeigt ein **orangefarbenes Ausrufezeichen-Icon `!`** (im Kreis) neben dem Programm an, wenn das Rennen für dieses Programm weder in dessen Peak- noch in dessen Aufbauwoche liegt (Fehlplanungs-Indikator).
-  - **Erweiterte Accordion-Details:** Jedes Rennen kann per Klick auf `▶` aufgeklappt werden, um die genaue Kombination aus Rolle, Spezialisierung 1 (Spec 1) und Spezialisierung 2 (Spec 2) sortiert nach den Profilvorgaben des Rennens aufzulisten (z. B. `Kapitän (Berg / Hill) - 1 Fahrer`).
+  - **Streckenprofile:** Zeigt bei Eintagesrennen das Profil (z. B. Flat, Cobble, Rolling) in einer eigenen Spalte an. Bei Rundfahrten öffnet ein Klick auf das Rennen ein Popover mit der Etappenübersicht.
+  - **Sprinter-Defizit bei flachen Rundfahrten:** Sind bei Rundfahrten mit $\ge 2$ flachen/hügeligen Etappen (`Flat` / `Rolling`) $< 10$ Sprinter zugewiesen, wird die Zahl farblich hervorgehoben: Gelb bei 8-9 Sprintern, Rot bei $\le 7$ Sprintern.
+  - **Cobble-Defizit bei Klassikern:** Sind bei Eintagesrennen mit Kopfsteinpflaster (`Cobble` / `Cobble_Hill`) $< 20$ Fahrer mit Pflasterspezialität (`Cobble` in `spec1`, `spec2` oder `spec3`) zugewiesen, leuchtet die Gesamtteilnehmerzahl im Tabellenfeld sowie im Header des Zuweisungs-Popovers rot auf.
+  - **Zuweisungs-Popover per Klick auf Fahreranzahl:**
+    - Ermöglicht das Aktivieren/Deaktivieren von Programmen für das Rennen.
+    - Zeigt ein **orangefarbenes Ausrufezeichen-Icon `!`** neben Programmen, wenn das Rennen außerhalb deren Peak- und Aufbauphase liegt.
+  - **Accordion-Details (Optimiert & Spec 3):**
+    - Zeigt Kombinationen aus Rolle, Spezialisierung 1, 2 und 3 (z. B. `Kapitän (Berg / Hügel / Cobble)`).
+    - Kombinationen, die sowohl `Berg` als auch `Cobble` in einem beliebigen Spezialisierungsslot besitzen, werden orange hervorgehoben.
+    - Ein Klick auf die Fahreranzahl klappt die genaue **Programmherkunft** (welches Programm wie viele Fahrer beiträgt) einzeilig auf.
 
-- **Tab 5: Programm-Rollen (Neu)**
-  - Ein neuer fünfter Tab, der eine Übersicht über alle Programme und deren detaillierte Rollenverteilung liefert.
-  - Zeigt in Tabellenform für jedes Programm die Anzahl der zugewiesenen Fahrer insgesamt sowie die Anzahl der Fahrer pro Rolle (Kapitän, Co-Kapitän, Sprinter, Edelhelfer, Starke Helfer, Wasserträger) an.
-  - Bietet einen schnellen Überblick über die Zusammensetzung der Kader der einzelnen Programme.
+- **Tab 5: Programm-Rollen (Erweitert & Sortierbar)**
+  - Listet alle Programme mit Gesamtanzahl an Fahrern, Renntagen und Aufteilung nach Hauptrollen auf.
+  - **Spalte "Renntage" (Neu):** Berechnet die Summe aller Renntage der zugewiesenen Rennen.
+  - **Interaktive Sortierung:** Alle Spalten (ID, Name, Gesamt, Renntage und jede einzelne Rolle) sind sortierbar.
+  - **Ausklappbare Detailansicht (Accordion mit Spec 3):**
+    - Listet alle Rollen- und Spezialisierungskombinationen (Spec 1 / 2 / 3) für das jeweilige Programm auf.
+    - Berg/Cobble-Kombinationen werden orange hervorgehoben.
+    - Klick auf die Anzahl klappt die Zuweisungsherkunft (das Programm selbst) einzeilig auf.
 
 ### 3. Backend & Datenspeicherung ([RaceProgramsEditorService.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/backend/src/editor/RaceProgramsEditorService.ts))
 
-- Der Service lädt alle CSVs aus `data/csv/` und `debug/`.
-- **Echte Kombinationsabfrage aus der SQLite DB:** Wenn eine aktive Savegame-Verbindung geladen ist, fragt der Service die tatsächlichen Zuweisungen und Fahrerdaten (Rolle, Spec 1, Spec 2) direkt per SQL-Abfrage aus der Datenbank ab. Andernfalls fällt er sicher auf die CSV-Statistiken zurück.
-- Beim Klick auf **"Änderungen exportieren"** werden die Zuweisungen mit fortlaufenden IDs versehen und direkt in `data/csv/race_program_races.csv` und `data/csv/race_programs.csv` zurückgeschrieben.
-- Die Änderungen werden live in die aktive SQLite-Datenbank der laufenden Karriere geschrieben, um eine sofortige Auswirkung im Spiel ohne Neustart zu garantieren.
+- **Erweiterte SQL-Abfrage:** Die Methode `getRoleSpecCombinationsFromDb` selektiert und gruppiert nun zusätzlich nach `specialization_3_id`, um alle drei Spezialisierungen der Fahrer vollumfänglich zu unterstützen.
+- Beim Klick auf **"Änderungen exportieren"** werden die Zuweisungen mit fortlaufenden IDs in `data/csv/race_program_races.csv` und `data/csv/race_programs.csv` zurückgeschrieben und live in die aktive SQLite-Datenbank synchronisiert.
 
 ---
 
@@ -58,18 +64,3 @@ Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) a
 
 ### Automatische Tests / Build
 - Das Projekt kompiliert vollständig und fehlerfrei via Vite und tsc. Der `npm run build` Befehl wurde erfolgreich ausgeführt.
-
-```
-vite v5.4.21 building for production...
-✓ 43 modules transformed.
-dist/index.html                  56.51 kB │ gzip:   9.11 kB
-dist/assets/index-CwH_KKhQ.css   98.76 kB │ gzip:  17.88 kB
-dist/assets/index-BQhW7eqC.js   581.49 kB │ gzip: 141.38 kB
-✓ built in 1.62s
-```
-
-### Manuelle Tests / Gameplay-Verhalten
-1. Der **Programm-Editor** lässt sich über die Sidebar öffnen.
-2. Der neue Tab **Programm-Rollen** stellt alle Programmnamen mit den Riderzahlen je Rolle sauber in einer Tabelle dar.
-3. Im Tab 4 (Rider Role) werden beim Aufklappen der Details nun sowohl Spec 1 als auch Spec 2 mit der Rolle kombiniert dargestellt (z. B. `Kapitän (Berg / Hill) 5 fahrer`).
-4. Der "Änderungen exportieren"-Button speichert die Werte persistent ab und synchronisiert sie direkt mit der SQLite-Verbindung.

@@ -157,6 +157,7 @@ class RaceProgramsEditorService {
                                 role,
                                 spec1: spec,
                                 spec2: null,
+                                spec3: null,
                                 count,
                             });
                         }
@@ -197,17 +198,19 @@ class RaceProgramsEditorService {
         role_id,
         specialization_1_id,
         specialization_2_id,
+        specialization_3_id,
         COUNT(*) as count
       FROM rider_season_programs
       JOIN riders ON riders.id = rider_season_programs.rider_id
       WHERE season = (SELECT current_season FROM game_state LIMIT 1)
-      GROUP BY program_id, role_id, specialization_1_id, specialization_2_id
+      GROUP BY program_id, role_id, specialization_1_id, specialization_2_id, specialization_3_id
     `).all();
         return rows.map((row) => ({
             program_id: row.program_id,
             role: rolesMap[row.role_id] ?? 'Wassertraeger',
             spec1: specsMap[row.specialization_1_id] ?? 'Flat',
             spec2: specsMap[row.specialization_2_id] ?? null,
+            spec3: specsMap[row.specialization_3_id] ?? null,
             count: row.count,
         }));
     }

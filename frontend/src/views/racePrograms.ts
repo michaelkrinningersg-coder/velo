@@ -9,6 +9,8 @@ import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 
 let activePopupRaceId: number | null = null;
 let activeRiderCountPopupRaceId: number | null = null;
+let programRolesSortKey = 'id';
+let programRolesSortAsc = true;
 
 // Helpers
 function getWeekNumber(dateStr: string): number {
@@ -163,6 +165,44 @@ export function initRaceProgramsView(): void {
       if (detailsRow) {
         detailsRow.classList.toggle('hidden');
         expandBtn.textContent = detailsRow.classList.contains('hidden') ? '▶' : '▼';
+      }
+      return;
+    }
+
+    // Expandable program row details
+    const progExpandBtn = target.closest<HTMLElement>('.program-row-expand-btn');
+    if (progExpandBtn) {
+      const programId = progExpandBtn.dataset['programId'];
+      const detailsRow = $(`program-details-row-${programId}`);
+      if (detailsRow) {
+        detailsRow.classList.toggle('hidden');
+        progExpandBtn.textContent = detailsRow.classList.contains('hidden') ? '▶' : '▼';
+      }
+      return;
+    }
+
+    // Click on sort headers in Tab 5 (Programm-Rollen)
+    const sortHeader = target.closest<HTMLElement>('.program-roles-sort-header');
+    if (sortHeader) {
+      const key = sortHeader.dataset['sortKey']!;
+      if (programRolesSortKey === key) {
+        programRolesSortAsc = !programRolesSortAsc;
+      } else {
+        programRolesSortKey = key;
+        programRolesSortAsc = key === 'name' || key === 'id'; // default asc for name/id, desc for counts
+      }
+      renderRacePrograms();
+      return;
+    }
+
+    // Click on combo count to toggle origin info
+    const originTrigger = target.closest<HTMLElement>('.combo-origin-trigger');
+    if (originTrigger) {
+      const raceId = originTrigger.dataset['raceId'];
+      const comboKey = originTrigger.dataset['comboKey'];
+      const detailsEl = $(`combo-origin-${raceId}-${comboKey}`);
+      if (detailsEl) {
+        detailsEl.classList.toggle('hidden');
       }
       return;
     }
@@ -804,12 +844,12 @@ function renderTabRiderRole(payload: any): string {
       const sprint = dist ? parseInt(dist.deterministic_role_Sprinter || '0', 10) : 0;
 
       const rolesDesc: string[] = [];
-      if (capt > 0) rolesDesc.push(`${capt} Kap.`);
-      if (coCapt > 0) rolesDesc.push(`${coCapt} Co-Kap.`);
-      if (elite > 0) rolesDesc.push(`${elite} Edel.`);
-      if (strong > 0) rolesDesc.push(`${strong} St. H.`);
-      if (water > 0) rolesDesc.push(`${water} Wasser.`);
-      if (sprint > 0) rolesDesc.push(`${sprint} Sprint.`);
+      if (capt > 0) rolesDesc.push(`${capt} Kapitän`);
+      if (coCapt > 0) rolesDesc.push(`${coCapt} Co-Kapitän`);
+      if (elite > 0) rolesDesc.push(`${elite} Edelhelfer`);
+      if (strong > 0) rolesDesc.push(`${strong} Starke Helfer`);
+      if (water > 0) rolesDesc.push(`${water} Wasserträger`);
+      if (sprint > 0) rolesDesc.push(`${sprint} Sprinter`);
       const rolesStr = rolesDesc.length > 0 ? `(${rolesDesc.join(', ')})` : '';
 
       return {
@@ -835,37 +875,25 @@ function renderTabRiderRole(payload: any): string {
 
       return `
         <div class="popover-program-toggle" data-program-id="${p.id}" data-race-id="${race.id}" 
-             style="cursor: pointer; padding: 0.35rem 0.5rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background-color 0.15s;"
+             style="cursor: pointer; padding: 0.45rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background-color 0.15s; white-space: nowrap;"
              onmouseover="this.style.backgroundColor='rgba(99, 102, 241, 0.08)'"
              onmouseout="this.style.backgroundColor='transparent'">
-          <div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; overflow: hidden;">
             <span style="font-size: 1.15rem; line-height: 1; user-select: none; color: ${item.isAssigned ? 'var(--accent-h)' : 'var(--text-500)'};">${checkboxText}</span>
-            <span style="${activeStyle} font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(p.name)}">
+            <span style="${activeStyle} font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;" title="${esc(p.name)}">
               ${esc(p.name)}
             </span>
             ${warnHtml}
           </div>
-          <div style="text-align: right; min-width: 100px;">
-            <strong style="font-size: 0.75rem; color: var(--accent-h);">${item.count} Fahrer</strong>
-            <div style="font-size: 0.62rem; color: var(--text-500); font-weight: normal; margin-top: 0.05rem;" title="${esc(item.rolesStr)}">${esc(item.rolesStr)}</div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0;">
+            <strong style="font-size: 0.8rem; color: var(--accent-h);">${item.count} Fahrer</strong>
+            <span style="font-size: 0.72rem; color: var(--text-500); font-weight: normal;" title="${esc(item.rolesStr)}">${esc(item.rolesStr)}</span>
           </div>
         </div>
       `;
     }).join('');
 
     const isRiderPopupActive = activeRiderCountPopupRaceId === race.id;
-    const riderCountPopupHtml = `
-      <div class="race-rider-programs-popover-card ${isRiderPopupActive ? '' : 'hidden'}"
-           style="position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 120; min-width: 335px; max-width: 400px; padding: 0.8rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-md); background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%); box-shadow: var(--shadow); text-align: left; font-weight: normal;">
-        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
-          <strong>Rennprogramme verwalten</strong>
-          <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-500);">Klicken zum Aktivieren</span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 0.2rem; max-height: 220px; overflow-y: auto;">
-          ${programItemsHtml}
-        </div>
-      </div>
-    `;
 
     // 2. Sum up counts
     let riderCount = 0;
@@ -908,9 +936,78 @@ function renderTabRiderRole(payload: any): string {
       }
     }
 
+    // Check stage race flat/rolling count
+    let flatRollingStagesCount = 0;
+    if (race.is_stage_race === 1) {
+      const raceStages = stages.filter((s: any) => s.race_id === race.id);
+      flatRollingStagesCount = raceStages.filter((s: any) => {
+        const p = (s.profile || '').toLowerCase();
+        return p === 'flat' || p === 'rolling';
+      }).length;
+    }
+
+    // Check one-day cobble count
+    let isCobbleRace = false;
+    let cobbleRidersCount = 0;
+    if (race.is_stage_race === 0) {
+      const singleStage = stages.find((s: any) => s.race_id === race.id);
+      const profile = (singleStage?.profile || '').toLowerCase();
+      isCobbleRace = profile === 'cobble' || profile === 'cobble_hill';
+
+      if (isCobbleRace) {
+        // Count assigned riders with spec1, spec2 or spec3 === 'Cobble'
+        const roleSpecCombosFiltered = (payload.roleSpecCombinations || []).filter((c: any) => assignedProgramIds.has(c.program_id));
+        cobbleRidersCount = roleSpecCombosFiltered
+          .filter((c: any) => c.spec1 === 'Cobble' || c.spec2 === 'Cobble' || c.spec3 === 'Cobble')
+          .reduce((sum: number, c: any) => sum + c.count, 0);
+      }
+    }
+
+    // Header for rider program popover including warning for cobble count
+    let popoverTitleHtml = '<strong>Rennprogramme verwalten</strong>';
+    if (race.is_stage_race === 0 && isCobbleRace) {
+      const totalRidersColor = cobbleRidersCount < 20 ? '#ef4444' : 'var(--accent-h)';
+      popoverTitleHtml = `
+        <strong>Rennprogramme verwalten 
+          (<span style="color: ${totalRidersColor}; font-weight: bold;" title="Kopfsteinpflaster-Spezialisten: ${cobbleRidersCount} / min. 20">Gesamtfahrer: ${riderCount}</span>)
+        </strong>
+      `;
+    } else {
+      popoverTitleHtml = `<strong>Rennprogramme verwalten (Gesamtfahrer: ${riderCount})</strong>`;
+    }
+
+    const riderCountPopupHtml = `
+      <div class="race-rider-programs-popover-card ${isRiderPopupActive ? '' : 'hidden'}"
+           style="position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 120; min-width: 600px; max-width: 750px; padding: 0.8rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-md); background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%); box-shadow: var(--shadow); text-align: left; font-weight: normal;">
+        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
+          ${popoverTitleHtml}
+          <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-500);">Klicken zum Aktivieren</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.2rem; max-height: 350px; overflow-y: auto;">
+          ${programItemsHtml}
+        </div>
+      </div>
+    `;
+
+    let sprinterCellStyle = 'text-align: center; font-variant-numeric: tabular-nums;';
+    if (race.is_stage_race === 1 && flatRollingStagesCount >= 2) {
+      if (sprinterCount <= 7) {
+        sprinterCellStyle += ' background-color: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: bold;';
+      } else if (sprinterCount > 7 && sprinterCount < 10) {
+        sprinterCellStyle += ' background-color: rgba(234, 179, 8, 0.2); color: #eab308; font-weight: bold;';
+      }
+    }
+
+    let riderCountCellStyle = 'position: relative; text-align: center; font-variant-numeric: tabular-nums; vertical-align: middle;';
+    let riderCountBtnStyle = 'font-weight: bold; border: none; background: transparent; padding: 0.15rem 0.4rem; cursor: pointer; color: var(--accent-h); text-decoration: underline;';
+    if (race.is_stage_race === 0 && isCobbleRace && cobbleRidersCount < 20) {
+      riderCountCellStyle += ' background-color: rgba(239, 68, 68, 0.2);';
+      riderCountBtnStyle += ' color: #ef4444; font-weight: bold;';
+    }
+
     const riderCountTrigger = `
       <button type="button" class="race-rider-count-trigger btn-link" data-race-id="${race.id}" 
-              style="font-weight: bold; border: none; background: transparent; padding: 0.15rem 0.4rem; cursor: pointer; color: var(--accent-h); text-decoration: underline;">
+              style="${riderCountBtnStyle}">
         ${riderCount}
       </button>
     `;
@@ -983,8 +1080,12 @@ function renderTabRiderRole(payload: any): string {
 
     const comboMap = new Map<string, number>();
     for (const item of roleSpecCombosFiltered) {
-      const spec2Str = item.spec2 ? ` / ${item.spec2}` : '';
-      const key = `${item.role}|${item.spec1}${spec2Str}`;
+      const specParts = [];
+      if (item.spec1) specParts.push(item.spec1);
+      if (item.spec2) specParts.push(item.spec2);
+      if (item.spec3) specParts.push(item.spec3);
+      const specsStr = specParts.join(' / ');
+      const key = `${item.role}|${specsStr}`;
       comboMap.set(key, (comboMap.get(key) || 0) + item.count);
     }
 
@@ -1009,10 +1110,40 @@ function renderTabRiderRole(payload: any): string {
 
     for (const combo of sortedCombos) {
       if (combo.count > 0) {
+        const isOrange = combo.specs.includes('Berg') && combo.specs.includes('Cobble');
+        const itemStyle = isOrange
+          ? 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem; background: rgba(249, 115, 22, 0.12); color: #f97316;'
+          : 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem;';
+        const textStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--text-100);';
+        const countStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--accent-h);';
+
+        const cleanKey = `${combo.role}_${combo.specs.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        // Find which programs these riders belong to
+        const origins = roleSpecCombosFiltered.filter((c: any) => {
+          const specParts = [];
+          if (c.spec1) specParts.push(c.spec1);
+          if (c.spec2) specParts.push(c.spec2);
+          if (c.spec3) specParts.push(c.spec3);
+          const specsStr = specParts.join(' / ');
+          const key = `${c.role}|${specsStr}`;
+          return key === `${combo.role}|${combo.specs}`;
+        });
+
+        const originDetails = origins.map((c: any) => {
+          const prog = payload.programs.find((p: any) => p.id === c.program_id);
+          return `<span style="white-space: nowrap; margin-right: 0.8rem;">${esc(prog?.name ?? 'Unbekannt')}: <strong>${c.count}</strong></span>`;
+        }).join(' ');
+
         combinationRows.push(`
-          <div style="display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem;">
-            <span style="color: var(--text-100);">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.specs)})</span></span>
-            <strong style="color: var(--accent-h);">${combo.count} fahrer</strong>
+          <div style="${itemStyle}">
+            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.specs)})</span></span>
+            <strong style="${countStyle} cursor: pointer; text-decoration: underline;" class="combo-origin-trigger" data-race-id="${race.id}" data-combo-key="${cleanKey}">
+              ${combo.count} Fahrer
+            </strong>
+          </div>
+          <div id="combo-origin-${race.id}-${cleanKey}" class="hidden" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; color: var(--text-400); background: rgba(0, 0, 0, 0.18); border-left: 2px solid var(--accent-h); text-align: left; line-height: 1.4;">
+            Herkunft: ${originDetails}
           </div>
         `);
       }
@@ -1033,13 +1164,13 @@ function renderTabRiderRole(payload: any): string {
           ${popupHtml}
         </td>
         <td style="font-weight: bold; color: var(--accent-h); text-align: center;">${oneDayProfile}</td>
-        <td class="race-programs-popup-anchor" style="position: relative; text-align: center; font-variant-numeric: tabular-nums; vertical-align: middle;">
+        <td class="race-programs-popup-anchor" style="${riderCountCellStyle}">
           ${riderCountTrigger}
           ${riderCountPopupHtml}
         </td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${captainCount}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${coCaptainCount}</td>
-        <td style="text-align: center; font-variant-numeric: tabular-nums;">${sprinterCount}</td>
+        <td style="${sprinterCellStyle}">${sprinterCount}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${eliteHelperCount}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${strongHelperCount}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${waterCarrierCount}</td>
@@ -1083,6 +1214,35 @@ function renderTabRiderRole(payload: any): string {
   `;
 }
 
+function getProgramRolesSortIndicator(key: string): string {
+  if (programRolesSortKey !== key) return '<span style="opacity:0.35; margin-left:4px;">↕</span>';
+  return `<span style="color:var(--accent-h); margin-left:4px; font-weight:bold;">${programRolesSortAsc ? '↑' : '↓'}</span>`;
+}
+
+function renderSortHeader(key: string, label: string, extraStyle = ''): string {
+  const activeClass = programRolesSortKey === key ? 'sort-active' : '';
+  return `
+    <th style="cursor: pointer; user-select: none; ${extraStyle}" class="program-roles-sort-header ${activeClass}" data-sort-key="${key}">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
+        <span>${esc(label)}</span>
+        ${getProgramRolesSortIndicator(key)}
+      </div>
+    </th>
+  `;
+}
+
+function renderSortHeaderLeft(key: string, label: string, extraStyle = ''): string {
+  const activeClass = programRolesSortKey === key ? 'sort-active' : '';
+  return `
+    <th style="cursor: pointer; user-select: none; ${extraStyle}" class="program-roles-sort-header ${activeClass}" data-sort-key="${key}">
+      <div style="display: flex; align-items: center; justify-content: flex-start; gap: 2px;">
+        <span>${esc(label)}</span>
+        ${getProgramRolesSortIndicator(key)}
+      </div>
+    </th>
+  `;
+}
+
 // 5. Tab: Program Roles Info
 function renderTabProgramRoles(payload: any): string {
   const programs = payload.programs;
@@ -1097,7 +1257,17 @@ function renderTabProgramRoles(payload: any): string {
     Wassertraeger: 'Wasserträger',
   };
 
-  const rows = programs.map((prog: any) => {
+  const specLabels: Record<string, string> = {
+    Berg: 'Berg',
+    Hill: 'Hügel',
+    Sprint: 'Sprint',
+    Cobble: 'Cobble',
+    Timetrial: 'Timetrial',
+    Attacker: 'Attacker',
+  };
+
+  // Pre-calculate counts, filter combinations and calculate race days per program
+  const programDataList = programs.map((prog: any) => {
     const progCombos = roleSpecCombinations.filter((c: any) => c.program_id === prog.id);
     
     let totalRiders = 0;
@@ -1117,17 +1287,125 @@ function renderTabProgramRoles(payload: any): string {
       }
     }
 
+    const stats = calculateProgramDays(prog, payload);
+    const raceDays = stats.peak + stats.prep + stats.none;
+
+    return {
+      program: prog,
+      totalRiders,
+      roleCounts,
+      progCombos,
+      raceDays,
+    };
+  });
+
+  // Sort programDataList based on programRolesSortKey & programRolesSortAsc
+  programDataList.sort((a: any, b: any) => {
+    let comparison = 0;
+    if (programRolesSortKey === 'id') {
+      comparison = a.program.id - b.program.id;
+    } else if (programRolesSortKey === 'name') {
+      comparison = a.program.name.localeCompare(b.program.name);
+    } else if (programRolesSortKey === 'total') {
+      comparison = a.totalRiders - b.totalRiders;
+    } else if (programRolesSortKey === 'raceDays') {
+      comparison = a.raceDays - b.raceDays;
+    } else {
+      // It's a role count key: Kapitaen, Co_Kapitaen, etc.
+      comparison = (a.roleCounts[programRolesSortKey] || 0) - (b.roleCounts[programRolesSortKey] || 0);
+    }
+
+    if (comparison === 0) {
+      // secondary sort by id
+      comparison = a.program.id - b.program.id;
+    }
+
+    return programRolesSortAsc ? comparison : -comparison;
+  });
+
+  const rows = programDataList.map((item: any) => {
+    const prog = item.program;
+    const progCombos = item.progCombos;
+    const totalRiders = item.totalRiders;
+    const roleCounts = item.roleCounts;
+    const raceDays = item.raceDays;
+
+    // Sort combinations by role and then by spec1
+    const sortedRoles = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
+    const specSortOrder = ['Berg', 'Hill', 'Sprint', 'Cobble', 'Timetrial', 'Attacker'];
+
+    const sortedCombos = [...progCombos].sort((a: any, b: any) => {
+      const roleDiff = sortedRoles.indexOf(a.role) - sortedRoles.indexOf(b.role);
+      if (roleDiff !== 0) return roleDiff;
+
+      const specDiff = specSortOrder.indexOf(a.spec1) - specSortOrder.indexOf(b.spec1);
+      if (specDiff !== 0) return specDiff;
+
+      return b.count - a.count;
+    });
+
+    const translateSpecs = (spec1: string, spec2: string | null, spec3: string | null) => {
+      const parts = [specLabels[spec1] ?? spec1];
+      if (spec2) parts.push(specLabels[spec2] ?? spec2);
+      if (spec3) parts.push(specLabels[spec3] ?? spec3);
+      return parts.join(' / ');
+    };
+
+    const combinationRows: string[] = [];
+    for (const combo of sortedCombos) {
+      if (combo.count > 0) {
+        const specsList = [combo.spec1, combo.spec2, combo.spec3].filter(Boolean);
+        const isOrange = specsList.includes('Berg') && specsList.includes('Cobble');
+        const itemStyle = isOrange
+          ? 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem; background: rgba(249, 115, 22, 0.12); color: #f97316;'
+          : 'display: flex; justify-content: space-between; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); font-size: 0.8rem;';
+        const textStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--text-100);';
+        const countStyle = isOrange ? 'color: #f97316; font-weight: bold;' : 'color: var(--accent-h);';
+
+        const specsKey = specsList.join('_');
+        const cleanKey = `${combo.role}_${specsKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        combinationRows.push(`
+          <div style="${itemStyle}">
+            <span style="${textStyle}">${roleLabels[combo.role] || combo.role} <span class="text-muted">(${translateSpecs(combo.spec1, combo.spec2, combo.spec3)})</span></span>
+            <strong style="${countStyle} cursor: pointer; text-decoration: underline;" class="combo-origin-trigger" data-race-id="prog-${prog.id}" data-combo-key="${cleanKey}">
+              ${combo.count} Fahrer
+            </strong>
+          </div>
+          <div id="combo-origin-prog-${prog.id}-${cleanKey}" class="hidden" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; color: var(--text-400); background: rgba(0, 0, 0, 0.18); border-left: 2px solid var(--accent-h); text-align: left; line-height: 1.4;">
+            Herkunft: <span style="white-space: nowrap; margin-right: 0.8rem;">${esc(prog.name)}: <strong>${combo.count}</strong></span>
+          </div>
+        `);
+      }
+    }
+
+    const detailBox = combinationRows.length > 0
+      ? combinationRows.join('')
+      : `<div class="text-muted" style="padding: 0.5rem; font-size: 0.8rem;">Keine Fahrer zugewiesen.</div>`;
+
     return `
-      <tr>
+      <tr style="position: relative;">
+        <td style="text-align: center; vertical-align: middle;">
+          <button type="button" class="btn btn-sm btn-ghost program-row-expand-btn" data-program-id="${prog.id}" style="padding: 0.15rem 0.4rem;">▶</button>
+        </td>
         <td style="font-weight: bold; color: var(--text-100);">${prog.id}</td>
         <td style="font-weight: bold; min-width: 150px;">${esc(prog.name)}</td>
         <td style="text-align: center; font-weight: bold; color: var(--accent-h); font-variant-numeric: tabular-nums;">${totalRiders}</td>
+        <td style="text-align: center; font-weight: bold; color: var(--text-100); font-variant-numeric: tabular-nums;">${raceDays}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Kapitaen || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Co_Kapitaen || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Sprinter || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Edelhelfer || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Starke_Helfer || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Wassertraeger || '—'}</td>
+      </tr>
+      <tr id="program-details-row-${prog.id}" class="hidden" style="background: rgba(15, 23, 42, 0.45);">
+        <td colspan="11" style="padding: 0.5rem 1.5rem;">
+          <div style="max-width: 450px; background: var(--bg-800); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
+            <div style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.8rem; font-weight: bold; background: rgba(99,102,241,0.08); color: var(--text-100);">Zusammensetzung (Rolle / Spezialisierung)</div>
+            ${detailBox}
+          </div>
+        </td>
       </tr>
     `;
   });
@@ -1138,15 +1416,17 @@ function renderTabProgramRoles(payload: any): string {
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width: 50px;">ID</th>
-              <th>Programm</th>
-              <th style="text-align: center; font-weight: bold; width: 110px;">Fahrer gesamt</th>
-              <th style="text-align: center; width: 90px;">Kapitän</th>
-              <th style="text-align: center; width: 90px;">Co-Kapitän</th>
-              <th style="text-align: center; width: 90px;">Sprinter</th>
-              <th style="text-align: center; width: 90px;">Edelhelfer</th>
-              <th style="text-align: center; width: 100px;">Starke Helfer</th>
-              <th style="text-align: center; width: 100px;">Wasserträger</th>
+              <th style="width: 40px;"></th>
+              ${renderSortHeader('id', 'ID', 'width: 50px;')}
+              ${renderSortHeaderLeft('name', 'Programm')}
+              ${renderSortHeader('total', 'Fahrer gesamt', 'width: 110px; text-align: center; font-weight: bold;')}
+              ${renderSortHeader('raceDays', 'Renntage', 'width: 100px; text-align: center; font-weight: bold;')}
+              ${renderSortHeader('Kapitaen', 'Kapitän', 'width: 90px; text-align: center;')}
+              ${renderSortHeader('Co_Kapitaen', 'Co-Kapitän', 'width: 90px; text-align: center;')}
+              ${renderSortHeader('Sprinter', 'Sprinter', 'width: 90px; text-align: center;')}
+              ${renderSortHeader('Edelhelfer', 'Edelhelfer', 'width: 90px; text-align: center;')}
+              ${renderSortHeader('Starke_Helfer', 'Starke Helfer', 'width: 100px; text-align: center;')}
+              ${renderSortHeader('Wassertraeger', 'Wasserträger', 'width: 100px; text-align: center;')}
             </tr>
           </thead>
           <tbody>
