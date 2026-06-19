@@ -1814,7 +1814,10 @@ export class SimulationEngine {
       const breakawayRiderState = this.riders.find(r => r.rider.id === this.superTeamBreakawayRiderId);
       if (breakawayRiderState && !isRiderInactive(breakawayRiderState)) {
         const leaders = this.riders.filter(r => this.superTeamProtectedLeaderIds.has(r.rider.id) && !isRiderInactive(r));
-        const leaderCaughtHim = leaders.some(l => l.distanceCoveredMeters >= breakawayRiderState.distanceCoveredMeters);
+        const leaderCaughtHim = leaders.some(l => 
+          l.distanceCoveredMeters >= 0.40 * this.stageDistanceMeters &&
+          l.distanceCoveredMeters >= breakawayRiderState.distanceCoveredMeters
+        );
         if (leaderCaughtHim) {
           this.superTeamBreakawayRiderCaught = true;
           breakawayRiderState.breakawayMalus = 0;

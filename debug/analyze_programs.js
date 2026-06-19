@@ -711,6 +711,7 @@ function main() {
     const isBestSprinter = bestSprinterByTeam.get(teamId) === rider.id;
 
     let rulePool;
+    const excludedProgramIds = new Set();
 
     if (isBestSprinter) {
       rulePool = [
@@ -718,7 +719,6 @@ function main() {
         { id: -2, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 6, probability: 50 },
       ];
     } else {
-      const excludedProgramIds = new Set();
       if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
         [14, 15, 17, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
       }
@@ -763,13 +763,16 @@ function main() {
 
     // Filter candidate programs for fallback
     const allowedPrograms = programsList.filter(p => {
+      if (excludedProgramIds.has(p.id)) {
+        return false;
+      }
       if (isTop75) {
         const nameLower = p.name.toLowerCase();
         return nameLower.includes('tour') && !nameLower.includes('non_tour') && !nameLower.includes('non-tour');
       }
       return true;
     });
-    const fallbackCandidates = allowedPrograms.length > 0 ? allowedPrograms : programsList;
+    const fallbackCandidates = allowedPrograms.length > 0 ? allowedPrograms : programsList.filter(p => !excludedProgramIds.has(p.id));
 
     // Expected assignment distribution
     if (totalWeight > 0) {
