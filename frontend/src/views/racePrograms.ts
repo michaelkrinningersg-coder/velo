@@ -67,6 +67,138 @@ function isRaceInActivePhase(program: any, race: any): boolean {
   return false;
 }
 
+function isWeekInPeakOr6WeeksAnstieg(program: any, W: number): boolean {
+  const isPeak =
+    (W >= program.peak1_min && W <= program.peak1_max) ||
+    (W >= program.peak2_min && W <= program.peak2_max) ||
+    (W >= program.peak3_min && W <= program.peak3_max);
+
+  if (isPeak) return true;
+
+  const checkAnstieg = (peak_min: number) => {
+    const start = peak_min - 6;
+    const end = peak_min - 1;
+    if (start >= 1) {
+      return W >= start && W <= end;
+    } else {
+      const wrappedStart = start + 53;
+      return W >= wrappedStart || W <= end;
+    }
+  };
+
+  return checkAnstieg(program.peak1_min) || checkAnstieg(program.peak2_min) || checkAnstieg(program.peak3_min);
+}
+
+function isRaceInPeakOr6WeeksAnstieg(program: any, race: any): boolean {
+  const start = new Date(race.start_date);
+  const end = new Date(race.end_date);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const kw = getWeekNumber(dateStr);
+    if (isWeekInPeakOr6WeeksAnstieg(program, kw)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getProgramDaysPerPhase(program: any, assignedRaceIds: Set<number>, payload: any): { phase1: number; phase2: number; phase3: number; phase4: number } {
+  const peaks = [
+    { min: program.peak1_min, max: program.peak1_max },
+    { min: program.peak2_min, max: program.peak2_max },
+    { min: program.peak3_min, max: program.peak3_max }
+  ].sort((a, b) => a.min - b.min);
+
+  let phase1 = 0;
+  let phase2 = 0;
+  let phase3 = 0;
+  let phase4 = 0;
+
+  const assignedRaces = payload.races.filter((r: any) => assignedRaceIds.has(r.id));
+
+  for (const race of assignedRaces) {
+    const start = new Date(race.start_date);
+    const end = new Date(race.end_date);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const kw = getWeekNumber(dateStr);
+
+      if (kw <= peaks[0].max) {
+        phase1++;
+      } else if (kw <= peaks[1].max) {
+        phase2++;
+      } else if (kw <= peaks[2].max) {
+        phase3++;
+      } else {
+        phase4++;
+      }
+    }
+  }
+
+  return { phase1, phase2, phase3, phase4 };
+}
+
+function checkCanAssignProgram(program: any, race: any, payload: any): boolean {
+  const assignedRaceIds = new Set<number>(
+    payload.raceProgramRaces
+      .filter((m: any) => m.program_id === program.id && m.race_id !== race.id)
+      .map((m: any) => m.race_id)
+  );
+
+  const daysPerPhase = getProgramDaysPerPhase(program, assignedRaceIds, payload);
+
+  const touchedPhases = new Set<string>();
+  const start = new Date(race.start_date);
+  const end = new Date(race.end_date);
+  
+  const peaks = [
+    { min: program.peak1_min, max: program.peak1_max },
+    { min: program.peak2_min, max: program.peak2_max },
+    { min: program.peak3_min, max: program.peak3_max }
+  ].sort((a, b) => a.min - b.min);
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const kw = getWeekNumber(dateStr);
+
+    if (kw <= peaks[0].max) {
+      touchedPhases.add('phase1');
+    } else if (kw <= peaks[1].max) {
+      touchedPhases.add('phase2');
+    } else if (kw <= peaks[2].max) {
+      touchedPhases.add('phase3');
+    } else {
+      touchedPhases.add('phase4');
+    }
+  }
+
+  const isStageRace = race.is_stage_race === 1;
+
+  for (const phase of touchedPhases) {
+    if (phase === 'phase1') {
+      if (isStageRace && daysPerPhase.phase1 > 35) return false;
+      if (!isStageRace && daysPerPhase.phase1 > 36) return false;
+    } else if (phase === 'phase2') {
+      if (isStageRace && daysPerPhase.phase2 > 35) return false;
+      if (!isStageRace && daysPerPhase.phase2 > 36) return false;
+    } else if (phase === 'phase3') {
+      if (isStageRace && daysPerPhase.phase3 > 35) return false;
+      if (!isStageRace && daysPerPhase.phase3 > 36) return false;
+    }
+  }
+
+  return true;
+}
+
 function toggleProgramRaceDirect(programId: number, raceId: number): void {
   const payload = state.raceProgramsPayload;
   if (!payload) return;
@@ -934,7 +1066,12 @@ function renderTabRiderRole(payload: any): string {
         rolesStr,
         totalDays,
       };
-    }).sort((a: any, b: any) => b.count - a.count);
+    }).sort((a: any, b: any) => {
+      if (a.isAssigned !== b.isAssigned) {
+        return a.isAssigned ? -1 : 1;
+      }
+      return b.count - a.count;
+    });
 
     const filteredProgramItems = programItems.filter((item: any) => {
       const inActive = isRaceInActivePhase(item.program, race);
@@ -948,6 +1085,18 @@ function renderTabRiderRole(payload: any): string {
       let warnHtml = '';
       if (!inActive) {
         warnHtml = `<span style="color: #fb923c; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; border-radius: 50%; font-size: 0.65rem;" title="Dieses Rennen liegt außerhalb der Peak- und Aufbauphase dieses Programms!">!</span>`;
+      }
+
+      let purpleWarnHtml = '';
+      const inPeakOr6Weeks = isRaceInPeakOr6WeeksAnstieg(p, race);
+      if (!inPeakOr6Weeks) {
+        purpleWarnHtml = `<span style="color: #c084fc; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(192, 132, 252, 0.15); border: 1px solid #c084fc; border-radius: 50%; font-size: 0.65rem;" title="Dieses Rennen liegt außerhalb des Peakbereichs und der 6-wöchigen Anstiegsphase dieses Programms!">!</span>`;
+      }
+
+      let blueWarnHtml = '';
+      const canAssign = checkCanAssignProgram(p, race, payload);
+      if (!canAssign) {
+        blueWarnHtml = `<span style="color: #38bdf8; font-weight: bold; margin-left: 0.35rem; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; border-radius: 50%; font-size: 0.65rem;" title="Achtung: Dieses Programm hat in diesem Saisonabschnitt bereits das Limit an Renntagen erreicht (max. 36 Tage bzw. 35 Tage für Rundfahrten)!">!</span>`;
       }
 
       let conflictHtml = '';
@@ -981,6 +1130,8 @@ function renderTabRiderRole(payload: any): string {
               ${esc(p.name)} (${item.totalDays} RT)
             </span>
             ${warnHtml}
+            ${purpleWarnHtml}
+            ${blueWarnHtml}
             ${conflictHtml}
           </div>
           <div style="display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0;">
@@ -1418,6 +1569,11 @@ function renderTabProgramRoles(payload: any): string {
     const roleCounts = item.roleCounts;
     const raceDays = item.raceDays;
 
+    const assignedRaceIds = new Set<number>(
+      payload.raceProgramRaces.filter((m: any) => m.program_id === prog.id).map((m: any) => m.race_id)
+    );
+    const phaseDays = getProgramDaysPerPhase(prog, assignedRaceIds, payload);
+
     // Sort combinations by role and then by spec1
     const sortedRoles = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
     const specSortOrder = ['Berg', 'Hill', 'Sprint', 'Cobble', 'Timetrial', 'Attacker'];
@@ -1487,7 +1643,9 @@ function renderTabProgramRoles(payload: any): string {
         <td style="font-weight: bold; color: var(--text-100);">${prog.id}</td>
         <td style="font-weight: bold; min-width: 150px;">${esc(prog.name)}</td>
         <td style="text-align: center; font-weight: bold; color: var(--accent-h); font-variant-numeric: tabular-nums;">${totalRiders}</td>
-        <td style="text-align: center; font-weight: bold; color: var(--text-100); font-variant-numeric: tabular-nums;">${raceDays}</td>
+        <td style="text-align: center; font-weight: bold; color: var(--text-100); font-variant-numeric: tabular-nums;" title="Abschnitts-Renntage:\nStart bis Peak 1: ${phaseDays.phase1} Tage\nPeak 1 bis Peak 2: ${phaseDays.phase2} Tage\nPeak 2 bis Peak 3: ${phaseDays.phase3} Tage\nJenseits Peak 3: ${phaseDays.phase4} Tage">
+          ${raceDays} <span style="font-size: 0.72rem; color: var(--text-500); font-weight: normal; display: block; margin-top: 0.15rem;">${phaseDays.phase1} / ${phaseDays.phase2} / ${phaseDays.phase3} / ${phaseDays.phase4}</span>
+        </td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Kapitaen || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Co_Kapitaen || '—'}</td>
         <td style="text-align: center; font-variant-numeric: tabular-nums;">${roleCounts.Sprinter || '—'}</td>

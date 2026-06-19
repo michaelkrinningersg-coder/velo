@@ -1,0 +1,28 @@
+length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,marker_cat,end_marker_type,end_marker_name,end_marker_cat
+96.99,0.800,Flat,5,5,start,Start,null,sprint_intermediate,Sprint 1,Sprint
+3.90,5.800,Medium_Mountain,5,5,climb_start,Borovets Pass,null,,,
+0.49,10.200,Medium_Mountain,5,5,,,,,,
+0.84,3.700,Medium_Mountain,5,5,,,,,,
+0.59,8.500,Medium_Mountain,5,5,,,,,,
+0.99,4.600,Medium_Mountain,5,5,,,,climb_top,Borovets Pass,2
+1.87,-0.400,Flat,5,5,,,,,,
+1.81,-4.400,Abfahrt,5,5,,,,,,
+0.38,-9.200,Abfahrt,5,5,,,,,,
+0.64,-3.100,Abfahrt,5,5,,,,,,
+0.70,-8.000,Abfahrt,5,5,,,,,,
+29.96,-1.000,Flat,5,5,,,,sprint_intermediate,Sprint 2,Sprint
+1.11,2.300,Flat,5,5,,,,,,
+0.70,-1.600,Flat,5,5,,,,,,
+1.96,-5.400,Abfahrt,5,5,,,,,,
+1.74,-1.200,Flat,5,5,,,,,,
+0.56,1.800,Flat,5,5,,,,,,
+0.98,-1.100,Flat,5,5,,,,,,
+0.58,2.400,Flat,5,5,,,,,,
+0.48,-4.800,Abfahrt,5,5,,,,,,
+0.92,-0.300,Flat,5,5,,,,,,
+0.41,5.400,Hill,5,5,,,,,,
+4.13,-1.200,Flat,5,5,,,,,,
+0.47,3.000,Flat,5,5,,,,,,
+1.85,-1.600,Flat,5,5,,,,,,
+0.37,-5.900,Abfahrt,5,5,,,,,,
+19.99,-0.400,Flat,5,5,,,,finish_flat,Ziel,null
