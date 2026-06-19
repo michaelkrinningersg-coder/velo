@@ -125,13 +125,45 @@ class RaceProgramsEditorService {
         this.dataCsvDir = resolveDataCsvDir();
         this.debugDir = resolveDebugDir();
     }
-    load() {
+    load(activeDb) {
         const programs = this.loadPrograms();
         const races = this.loadRaces();
         const raceProgramRaces = this.loadRaceProgramRaces();
         const raceCategories = this.loadRaceCategories();
         const stages = this.loadStages();
         const programDistribution = this.loadProgramDistribution();
+        let roleSpecCombinations = [];
+        if (activeDb) {
+            try {
+                roleSpecCombinations = this.getRoleSpecCombinationsFromDb(activeDb);
+            }
+            catch (e) {
+                console.error('Error fetching role/spec combinations from DB:', e);
+            }
+        }
+        // Fallback: build combinations from programDistribution (only has spec1)
+        if (roleSpecCombinations.length === 0 && programDistribution.length > 0) {
+            const rolesList = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
+            const specsList = ['Berg', 'Hill', 'Sprint', 'Timetrial', 'Cobble', 'Attacker'];
+            for (const dist of programDistribution) {
+                const programId = dist.program_id;
+                for (const role of rolesList) {
+                    for (const spec of specsList) {
+                        const key = `deterministic_${role}_spec1_${spec}`;
+                        const count = parseInt(dist[key] || '0', 10);
+                        if (count > 0) {
+                            roleSpecCombinations.push({
+                                program_id: programId,
+                                role,
+                                spec1: spec,
+                                spec2: null,
+                                count,
+                            });
+                        }
+                    }
+                }
+            }
+        }
         return {
             programs,
             races,
@@ -139,7 +171,45 @@ class RaceProgramsEditorService {
             raceCategories,
             stages,
             programDistribution,
+            roleSpecCombinations,
         };
+    }
+    getRoleSpecCombinationsFromDb(activeDb) {
+        const rolesMap = {
+            1: 'Kapitaen',
+            2: 'Co_Kapitaen',
+            3: 'Edelhelfer',
+            4: 'Starke_Helfer',
+            5: 'Wassertraeger',
+            6: 'Sprinter'
+        };
+        const specsMap = {
+            1: 'Berg',
+            2: 'Hill',
+            3: 'Sprint',
+            4: 'Timetrial',
+            5: 'Cobble',
+            6: 'Attacker'
+        };
+        const rows = activeDb.prepare(`
+      SELECT
+        program_id,
+        role_id,
+        specialization_1_id,
+        specialization_2_id,
+        COUNT(*) as count
+      FROM rider_season_programs
+      JOIN riders ON riders.id = rider_season_programs.rider_id
+      WHERE season = (SELECT current_season FROM game_state LIMIT 1)
+      GROUP BY program_id, role_id, specialization_1_id, specialization_2_id
+    `).all();
+        return rows.map((row) => ({
+            program_id: row.program_id,
+            role: rolesMap[row.role_id] ?? 'Wassertraeger',
+            spec1: specsMap[row.specialization_1_id] ?? 'Flat',
+            spec2: specsMap[row.specialization_2_id] ?? null,
+            count: row.count,
+        }));
     }
     save(payload, activeDb) {
         // 1. Assign continuous IDs (1, 2, ...) to the race-program mapping

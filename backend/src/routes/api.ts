@@ -285,7 +285,13 @@ export function createRouter(dbService: DatabaseService): Router {
 
   router.get('/race-programs-editor', (_req: Request, res: Response) => {
     try {
-      ok(res, raceProgramsEditorService.load());
+      let activeDb;
+      try {
+        activeDb = dbService.getActiveConnection();
+      } catch (e) {
+        // active connection may not exist
+      }
+      ok(res, raceProgramsEditorService.load(activeDb));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

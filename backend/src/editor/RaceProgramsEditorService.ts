@@ -141,13 +141,47 @@ export class RaceProgramsEditorService {
   private readonly dataCsvDir = resolveDataCsvDir();
   private readonly debugDir = resolveDebugDir();
 
-  public load(): any {
+  public load(activeDb?: Database): any {
     const programs = this.loadPrograms();
     const races = this.loadRaces();
     const raceProgramRaces = this.loadRaceProgramRaces();
     const raceCategories = this.loadRaceCategories();
     const stages = this.loadStages();
     const programDistribution = this.loadProgramDistribution();
+
+    let roleSpecCombinations: any[] = [];
+    if (activeDb) {
+      try {
+        roleSpecCombinations = this.getRoleSpecCombinationsFromDb(activeDb);
+      } catch (e) {
+        console.error('Error fetching role/spec combinations from DB:', e);
+      }
+    }
+
+    // Fallback: build combinations from programDistribution (only has spec1)
+    if (roleSpecCombinations.length === 0 && programDistribution.length > 0) {
+      const rolesList = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
+      const specsList = ['Berg', 'Hill', 'Sprint', 'Timetrial', 'Cobble', 'Attacker'];
+      
+      for (const dist of programDistribution) {
+        const programId = dist.program_id;
+        for (const role of rolesList) {
+          for (const spec of specsList) {
+            const key = `deterministic_${role}_spec1_${spec}`;
+            const count = parseInt(dist[key] || '0', 10);
+            if (count > 0) {
+              roleSpecCombinations.push({
+                program_id: programId,
+                role,
+                spec1: spec,
+                spec2: null,
+                count,
+              });
+            }
+          }
+        }
+      }
+    }
 
     return {
       programs,
@@ -156,7 +190,49 @@ export class RaceProgramsEditorService {
       raceCategories,
       stages,
       programDistribution,
+      roleSpecCombinations,
     };
+  }
+
+  private getRoleSpecCombinationsFromDb(activeDb: Database): any[] {
+    const rolesMap: Record<number, string> = {
+      1: 'Kapitaen',
+      2: 'Co_Kapitaen',
+      3: 'Edelhelfer',
+      4: 'Starke_Helfer',
+      5: 'Wassertraeger',
+      6: 'Sprinter'
+    };
+
+    const specsMap: Record<number, string> = {
+      1: 'Berg',
+      2: 'Hill',
+      3: 'Sprint',
+      4: 'Timetrial',
+      5: 'Cobble',
+      6: 'Attacker'
+    };
+
+    const rows = activeDb.prepare(`
+      SELECT
+        program_id,
+        role_id,
+        specialization_1_id,
+        specialization_2_id,
+        COUNT(*) as count
+      FROM rider_season_programs
+      JOIN riders ON riders.id = rider_season_programs.rider_id
+      WHERE season = (SELECT current_season FROM game_state LIMIT 1)
+      GROUP BY program_id, role_id, specialization_1_id, specialization_2_id
+    `).all() as any[];
+
+    return rows.map((row) => ({
+      program_id: row.program_id,
+      role: rolesMap[row.role_id] ?? 'Wassertraeger',
+      spec1: specsMap[row.specialization_1_id] ?? 'Flat',
+      spec2: specsMap[row.specialization_2_id] ?? null,
+      count: row.count,
+    }));
   }
 
   public save(
