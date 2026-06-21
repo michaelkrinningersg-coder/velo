@@ -101,24 +101,24 @@ class RiderProgramService {
         const missingCount = this.db.prepare(`
       SELECT COUNT(*) AS count
       FROM riders
-      LEFT JOIN contracts current_contract
-        ON current_contract.id = (
-          SELECT contracts.id
-          FROM contracts
-          WHERE contracts.rider_id = riders.id
-            AND contracts.start_season <= ?
-            AND contracts.end_season >= ?
-          ORDER BY contracts.start_season DESC, contracts.id DESC
-          LIMIT 1
-        )
       WHERE riders.is_retired = 0
-        AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
           FROM rider_season_programs existing_program
           WHERE existing_program.season = ?
             AND existing_program.rider_id = riders.id
         )
+        AND COALESCE(
+          (
+            SELECT team_id FROM contracts
+            WHERE contracts.rider_id = riders.id
+              AND contracts.start_season <= ?
+              AND contracts.end_season >= ?
+            ORDER BY contracts.start_season DESC, contracts.id DESC
+            LIMIT 1
+          ),
+          riders.active_team_id
+        ) IS NOT NULL
     `).get(season, season, season)?.count ?? 0;
         if (missingCount === 0) {
             return;

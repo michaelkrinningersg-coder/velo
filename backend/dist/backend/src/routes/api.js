@@ -212,10 +212,11 @@ function createRouter(dbService) {
     // ---- Riders -------------------------------------------
     router.get('/riders', (req, res) => {
         const teamId = req.query['teamId'] ? Number(req.query['teamId']) : undefined;
+        const onlyWithTeam = req.query['onlyWithTeam'] === 'true';
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId));
+            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId, false, onlyWithTeam));
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -650,10 +651,12 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
-    router.get('/season-standings', (_req, res) => {
+    router.get('/season-standings', (req, res) => {
         try {
             const db = dbService.getActiveConnection();
-            ok(res, new GameRepository_1.GameRepository(db).getSeasonStandings());
+            const seasonQuery = req.query['season'];
+            const season = seasonQuery ? Number(seasonQuery) : undefined;
+            ok(res, new ResultRepository_1.ResultRepository(db).getSeasonStandings(season));
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -766,13 +769,16 @@ function createRouter(dbService) {
           t.name AS teamName,
           
           ot.id AS oldTeamId,
-          ot.name AS oldTeamName
+          ot.name AS oldTeamName,
+          
+          spec.display_name AS riderSpecialization
           
         FROM draft_history d
         JOIN riders r ON d.rider_id = r.id
         JOIN sta_country c ON r.country_id = c.id
         JOIN teams t ON d.team_id = t.id
         LEFT JOIN teams ot ON d.old_team_id = ot.id
+        LEFT JOIN type_rider spec ON r.specialization_1_id = spec.id
         WHERE d.season = ?
         ORDER BY d.pick_number ASC
       `).all(season);
@@ -788,7 +794,7 @@ function createRouter(dbService) {
           r.overall_rating AS overallRating,
           r.pot_overall AS potential,
           r.birth_year AS birthYear,
-          spec.name AS specialization,
+          spec.display_name AS specialization,
           c.code_3 AS countryCode,
           (
             SELECT cont.team_id 
@@ -805,7 +811,7 @@ function createRouter(dbService) {
           ) AS oldTeamName
         FROM draft_picks_pool p
         JOIN riders r ON p.rider_id = r.id
-        LEFT JOIN sta_specialization spec ON r.specialization_1_id = spec.id
+        LEFT JOIN type_rider spec ON r.specialization_1_id = spec.id
         JOIN sta_country c ON r.country_id = c.id
         WHERE p.season = ?
         ORDER BY p.pick_number ASC, p.probability DESC

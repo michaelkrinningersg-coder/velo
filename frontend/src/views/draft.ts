@@ -199,6 +199,19 @@ export function initDraftListeners(): void {
       }
     }
   });
+
+  const replayBtn = $('draft-replay-btn');
+  if (replayBtn) {
+    replayBtn.addEventListener('click', () => {
+      const select = $('draft-season-select') as HTMLSelectElement | null;
+      if (select) {
+        const season = Number(select.value);
+        if (!isNaN(season)) {
+          void startDraftPresentation(season);
+        }
+      }
+    });
+  }
 }
 
 // ============================================================

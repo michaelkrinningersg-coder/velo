@@ -293,9 +293,12 @@ class RiderDevelopmentService {
              riders.skill_attack, riders.skill_stamina, riders.skill_resistance, riders.skill_recuperation, riders.skill_bike_handling,
              riders.pot_flat, riders.pot_mountain, riders.pot_medium_mountain, riders.pot_hill, riders.pot_time_trial,
              riders.pot_prologue, riders.pot_cobble, riders.pot_sprint, riders.pot_acceleration, riders.pot_downhill,
-             riders.pot_attack, riders.pot_stamina, riders.pot_resistance, riders.pot_recuperation, riders.pot_bike_handling
+             riders.pot_attack, riders.pot_stamina, riders.pot_resistance, riders.pot_recuperation, riders.pot_bike_handling,
+             dt.tier AS team_tier
       FROM riders
       JOIN type_rider ON type_rider.id = riders.rider_type_id
+      LEFT JOIN teams t ON t.id = riders.active_team_id
+      LEFT JOIN division_teams dt ON dt.id = t.division_id
     `).all();
         const mentorsByTeam = new Map();
         for (const row of rows) {
@@ -330,7 +333,13 @@ class RiderDevelopmentService {
       INSERT OR IGNORE INTO rider_peak_awards (rider_id, season, peak_date)
       VALUES (?, ?, ?)
     `);
+        const isFirstOfMonth = currentDate.endsWith('-01');
         for (const row of rows) {
+            const isTier1 = row.active_team_id != null && row.team_tier === 1;
+            if (!isTier1 && !isFirstOfMonth) {
+                continue;
+            }
+            const activeDayMultiplier = isTier1 ? boundedDayMultiplier : 30;
             const age = season - row.birth_year;
             const context = contextByRiderId.get(row.id);
             const currentSkills = buildCurrentSkillsFromDailyRow(row);
@@ -358,7 +367,7 @@ class RiderDevelopmentService {
                         peakBoostMultiplier = 30;
                     }
                 }
-                const localDayMultiplier = boundedDayMultiplier + peakBoostMultiplier;
+                const localDayMultiplier = activeDayMultiplier + peakBoostMultiplier;
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
                     if (skillKey === 'bikeHandling')
                         continue;
@@ -391,7 +400,7 @@ class RiderDevelopmentService {
                 for (const [skillKey] of RIDER_SKILL_COLUMNS) {
                     if (skillKey === 'bikeHandling')
                         continue;
-                    const dailyDecline = Math.min(DAILY_DECLINE_CAP * boundedDayMultiplier, 0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25) * declineMultiplier);
+                    const dailyDecline = Math.min(DAILY_DECLINE_CAP * activeDayMultiplier, 0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * activeDayMultiplier * randomNoise(0.75, 1.25) * declineMultiplier);
                     if (dailyDecline <= 0)
                         continue;
                     const applied = currentSkills[skillKey] - clamp(currentSkills[skillKey] - dailyDecline);

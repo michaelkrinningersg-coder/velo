@@ -195,6 +195,30 @@ class GameStateService {
                 catch (e) {
                     console.error('Fehler beim Erstellen des Season Standings Snapshots:', e);
                 }
+                // Ergebnisse der abgelaufenen Saison in die Historie verschieben
+                try {
+                    this.db.prepare(`
+            INSERT INTO results_history (
+              race_id, stage_id, rider_id, team_id, result_type_id, rank, 
+              time_seconds, points, is_breakaway, leadout_rider_id, 
+              leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+            )
+            SELECT 
+              race_id, stage_id, rider_id, team_id, result_type_id, rank, 
+              time_seconds, points, is_breakaway, leadout_rider_id, 
+              leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+            FROM results
+            WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
+          `).run(`${currentRow.season}-%`);
+                    this.db.prepare(`
+            DELETE FROM results
+            WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
+          `).run(`${currentRow.season}-%`);
+                    console.log(`Ergebnisse der Saison ${currentRow.season} erfolgreich archiviert.`);
+                }
+                catch (e) {
+                    console.error('Fehler beim Archivieren der Saisonergebnisse:', e);
+                }
                 // Duplicate calendar dates (stages and races) to the new season's year
                 this.duplicateCalendarForSeason(currentRow.season, nextSeason);
                 new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason, true);
@@ -205,6 +229,7 @@ class GameStateService {
                 new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
                 // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
                 new RiderNewgenService_1.RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
+                new RiderDevelopmentService_1.RiderDevelopmentService(this.db).initializeRiders(nextSeason);
                 // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
                 this.db.prepare(`
           UPDATE riders
@@ -557,8 +582,13 @@ class GameStateService {
         }
         this.syncRiderLoadState(currentDate, currentSeason);
         const rows = this.db.prepare(`
-      SELECT rider_id, season, form_bonus, race_form_bonus, peak_s_form, peak_r_form, active_peak_date, peak_dates_json, health_status, unavailable_until, unavailable_days_remaining, season_race_days_total, rolling_30d_race_days
-      FROM rider_daily_state
+      SELECT rds.rider_id, rds.season, rds.form_bonus, rds.race_form_bonus, rds.peak_s_form, rds.peak_r_form, rds.active_peak_date, rds.peak_dates_json, rds.health_status, rds.unavailable_until, rds.unavailable_days_remaining, rds.season_race_days_total, rds.rolling_30d_race_days,
+             r.active_team_id,
+             dt.tier AS team_tier
+      FROM rider_daily_state rds
+      JOIN riders r ON r.id = rds.rider_id
+      LEFT JOIN teams t ON t.id = r.active_team_id
+      LEFT JOIN division_teams dt ON dt.id = t.division_id
     `).all();
         const updateState = this.db.prepare(`
       UPDATE rider_daily_state
@@ -572,6 +602,10 @@ class GameStateService {
         // Bulk-load program windows once, then look up per rider from the in-memory map.
         const programWindows = this.getProgramWindowsForSeason(currentSeason);
         for (const row of rows) {
+            const isTier1 = row.active_team_id != null && row.team_tier === 1;
+            if (!isTier1) {
+                continue;
+            }
             const seasonChanged = row.season !== currentSeason;
             const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
             const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), currentSeason, windows);
@@ -632,9 +666,13 @@ class GameStateService {
         const rows = this.db.prepare(`
       SELECT rds.rider_id, rds.season, rds.form_bonus, rds.race_form_bonus, rds.peak_s_form, rds.peak_r_form, rds.active_peak_date, rds.peak_dates_json, rds.health_status, rds.unavailable_until, rds.unavailable_days_remaining, rds.season_race_days_total, rds.rolling_30d_race_days,
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked, rds.consecutive_non_race_days,
-             r.skill_recuperation, r.birth_year
+             r.skill_recuperation, r.birth_year,
+             r.active_team_id,
+             dt.tier AS team_tier
       FROM rider_daily_state rds
       JOIN riders r ON r.id = rds.rider_id
+      LEFT JOIN teams t ON t.id = r.active_team_id
+      LEFT JOIN division_teams dt ON dt.id = t.division_id
     `).all();
         const updateState = this.db.prepare(`
       UPDATE rider_daily_state
@@ -691,6 +729,10 @@ class GameStateService {
       WHERE rider_id = ?
     `);
         for (const row of rows) {
+            const isTier1 = row.active_team_id != null && row.team_tier === 1;
+            if (!isTier1) {
+                continue;
+            }
             const seasonChanged = row.season !== nextSeason;
             const riderProgramWindows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
             const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), nextSeason, riderProgramWindows);
@@ -923,6 +965,9 @@ class GameStateService {
             }
             if (this.isTable('rider_form_history')) {
                 this.db.prepare('DELETE FROM rider_form_history').run();
+            }
+            if (this.isTable('rider_fatigue_history')) {
+                this.db.prepare('DELETE FROM rider_fatigue_history').run();
             }
         }
         this.syncDailyFormHistory(nextDate);

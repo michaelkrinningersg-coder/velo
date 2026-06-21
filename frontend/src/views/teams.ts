@@ -549,7 +549,8 @@ export function renderTeamTableCell(rider: Rider, column: TeamTableColumn): stri
 export async function refreshTeamsViewData(): Promise<void> {
   showLoading('Teams/Fahrer werden aktualisiert...');
   try {
-    const res = await api.getRiders();
+    const onlyWithTeam = !isActiveView('riders');
+    const res = await api.getRiders(undefined, onlyWithTeam);
     if (res.success) {
       state.riders = res.data ?? [];
     }

@@ -109,7 +109,7 @@ class TeamRepository {
       JOIN stages ON stages.id = spe.stage_id
       JOIN races ON races.id = spe.race_id
       JOIN race_categories cat ON cat.id = races.category_id
-      LEFT JOIN results ON results.stage_id = spe.stage_id AND results.rider_id = spe.rider_id AND results.result_type_id = 1
+      LEFT JOIN all_results results ON results.stage_id = spe.stage_id AND results.rider_id = spe.rider_id AND results.result_type_id = 1
       WHERE spe.team_id = ?
         AND spe.points_awarded > 0
         AND spe.award_type IN ('stage_result', 'one_day_result', 'gc_final', 'points_final', 'mountain_final', 'youth_final')
@@ -168,7 +168,7 @@ class TeamRepository {
         cat_bonus.points_stage AS points_stage,
         stages.super_team_id AS super_team_id,
         results.team_id AS team_id
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
@@ -404,7 +404,7 @@ class TeamRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS count
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE results.team_id = ? AND results.result_type_id = 1 AND results.is_breakaway = 1
       GROUP BY season
@@ -420,13 +420,13 @@ class TeamRepository {
       SELECT
         CAST(substr(s.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS count
-      FROM results r1
+      FROM all_results r1
       JOIN stages s ON s.id = r1.stage_id
       WHERE r1.team_id = ?
         AND r1.result_type_id = 1
         AND r1.is_breakaway = 1
         AND NOT EXISTS (
-          SELECT 1 FROM results r2
+          SELECT 1 FROM all_results r2
           WHERE r2.stage_id = r1.stage_id
             AND r2.result_type_id = 1
             AND r2.rank < r1.rank
@@ -452,7 +452,7 @@ class TeamRepository {
         stages.profile AS profile,
         cat.name AS category_name,
         stages.rolled_weather_id AS rolled_weather_id
-      FROM results r
+      FROM all_results r
       JOIN stages ON stages.id = r.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
@@ -554,7 +554,7 @@ class TeamRepository {
         cat.name AS category_name,
         r.result_type_id,
         COUNT(*) AS count
-      FROM results r
+      FROM all_results r
       JOIN stages ON stages.id = r.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id

@@ -598,6 +598,8 @@ class DatabaseService {
         }
         db.transaction(() => {
             db.exec(`
+        DROP VIEW IF EXISTS all_results;
+
         CREATE TABLE results_new (
           id               INTEGER PRIMARY KEY AUTOINCREMENT,
           race_id          INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
@@ -638,6 +640,55 @@ class DatabaseService {
           WHERE rider_id IS NOT NULL;
       `);
         })();
+    }
+    ensureResultsHistorySchema(db) {
+        db.prepare(`
+      CREATE TABLE IF NOT EXISTS results_history (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        race_id          INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        stage_id         INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+        rider_id         INTEGER REFERENCES riders(id) ON DELETE CASCADE,
+        team_id          INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        result_type_id   INTEGER NOT NULL REFERENCES result_types(id),
+        rank             INTEGER NOT NULL CHECK(rank > 0),
+        time_seconds     INTEGER,
+        points           INTEGER,
+        is_breakaway     INTEGER NOT NULL DEFAULT 0 CHECK(is_breakaway IN (0, 1)),
+        leadout_rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+        leadout_bonus    REAL,
+        breakaway_kms    REAL,
+        event_ids        TEXT,
+        jerseys_worn     TEXT,
+        CHECK(
+          (result_type_id = 1 AND team_id IS NOT NULL)
+          OR
+          (result_type_id = 6 AND rider_id IS NULL AND team_id IS NOT NULL)
+          OR
+          (result_type_id NOT IN (1, 6) AND rider_id IS NOT NULL AND team_id IS NOT NULL)
+        )
+      )
+    `).run();
+        // Create indices on results_history
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_results_hist_rider_type
+        ON results_history(rider_id, result_type_id)
+        WHERE rider_id IS NOT NULL;
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_results_hist_stage_team_type_null 
+        ON results_history(stage_id, team_id, result_type_id) 
+        WHERE rider_id IS NULL;
+    `).run();
+        db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_results_hist_team_id 
+        ON results_history(team_id);
+    `).run();
+        db.prepare(`
+      CREATE VIEW IF NOT EXISTS all_results AS
+      SELECT * FROM results
+      UNION ALL
+      SELECT * FROM results_history;
+    `).run();
     }
     ensureRiderFormSchema(db) {
         if (tableExists(db, 'rider_daily_state')) {
@@ -1220,6 +1271,7 @@ class DatabaseService {
         this.ensureRiderWeatherProfileSchema(this.activeConnection);
         this.ensureWeatherSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
+        this.ensureResultsHistorySchema(this.activeConnection);
         this.ensureRaceCategoryBonusSchema(this.activeConnection);
         this.ensureRaceCategoriesSchema(this.activeConnection);
         this.ensureRulesData(this.activeConnection);
@@ -1290,6 +1342,7 @@ class DatabaseService {
         this.ensureRiderWeatherProfileSchema(this.activeConnection);
         this.ensureWeatherSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
+        this.ensureResultsHistorySchema(this.activeConnection);
         this.ensureRaceCategoriesSchema(this.activeConnection);
         this.ensureStageRaceStateSchema(this.activeConnection);
         this.ensureRaceProgramSchema(this.activeConnection);

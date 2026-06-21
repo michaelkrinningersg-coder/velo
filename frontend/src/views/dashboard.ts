@@ -846,7 +846,7 @@ export async function executeDayAdvance(): Promise<boolean> {
       const { startDraftPresentation } = await import('./draft');
       const { activateView } = await import('../state');
       activateView('draft');
-      void startDraftPresentation(newSeason);
+      await startDraftPresentation(newSeason);
     }
 
     return true;

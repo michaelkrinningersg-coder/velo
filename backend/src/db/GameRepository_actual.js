@@ -2250,30 +2250,26 @@ class GameRepository {
             return [];
         }
         const previousStage = this.db.prepare(`
-      SELECT stages.id AS stage_id, stages.stage_number AS stage_number
+      SELECT id AS stage_id, stage_number
       FROM stages
-      JOIN results ON results.stage_id = stages.id
-      WHERE stages.race_id = ?
-        AND stages.stage_number < ?
-        AND results.result_type_id = ?
-      GROUP BY stages.id, stages.stage_number
-      ORDER BY stages.stage_number DESC
+      WHERE race_id = ?
+        AND stage_number < ?
+        AND date < (SELECT current_date FROM game_state WHERE id = 1)
+      ORDER BY stage_number DESC
       LIMIT 1
-    `).get(raceId, stageNumber, RESULT_TYPE_IDS.gc);
+    `).get(raceId, stageNumber);
         if (!previousStage) {
             return [];
         }
         const prevPrevStage = this.db.prepare(`
-      SELECT stages.id AS stage_id
+      SELECT id AS stage_id
       FROM stages
-      JOIN results ON results.stage_id = stages.id
-      WHERE stages.race_id = ?
-        AND stages.stage_number < ?
-        AND results.result_type_id = ?
-      GROUP BY stages.id, stages.stage_number
-      ORDER BY stages.stage_number DESC
+      WHERE race_id = ?
+        AND stage_number < ?
+        AND date < (SELECT current_date FROM game_state WHERE id = 1)
+      ORDER BY stage_number DESC
       LIMIT 1
-    `).get(raceId, previousStage.stage_number, RESULT_TYPE_IDS.gc);
+    `).get(raceId, previousStage.stage_number);
 
         const prevPrevRanks = new Map();
         if (prevPrevStage) {
@@ -2959,16 +2955,14 @@ class GameRepository {
             return null;
         }
         const previousStage = this.db.prepare(`
-      SELECT stages.id AS stage_id
+      SELECT id AS stage_id
       FROM stages
-      JOIN results ON results.stage_id = stages.id
-      WHERE stages.race_id = ?
-        AND stages.stage_number < ?
-        AND results.result_type_id = ?
-      GROUP BY stages.id, stages.stage_number
-      ORDER BY stages.stage_number DESC
+      WHERE race_id = ?
+        AND stage_number < ?
+        AND date < (SELECT current_date FROM game_state WHERE id = 1)
+      ORDER BY stage_number DESC
       LIMIT 1
-    `).get(raceId, stageNumber, resultTypeId);
+    `).get(raceId, stageNumber);
         if (!previousStage) {
             return null;
         }
@@ -2988,30 +2982,26 @@ class GameRepository {
             return [];
         }
         const previousStage = this.db.prepare(`
-      SELECT stages.id AS stage_id, stages.stage_number AS stage_number
+      SELECT id AS stage_id, stage_number
       FROM stages
-      JOIN results ON results.stage_id = stages.id
-      WHERE stages.race_id = ?
-        AND stages.stage_number < ?
-        AND results.result_type_id = ?
-      GROUP BY stages.id, stages.stage_number
-      ORDER BY stages.stage_number DESC
+      WHERE race_id = ?
+        AND stage_number < ?
+        AND date < (SELECT current_date FROM game_state WHERE id = 1)
+      ORDER BY stage_number DESC
       LIMIT 1
-    `).get(raceId, stageNumber, resultTypeId);
+    `).get(raceId, stageNumber);
         if (!previousStage) {
             return [];
         }
         const prevPrevStage = this.db.prepare(`
-      SELECT stages.id AS stage_id
+      SELECT id AS stage_id
       FROM stages
-      JOIN results ON results.stage_id = stages.id
-      WHERE stages.race_id = ?
-        AND stages.stage_number < ?
-        AND results.result_type_id = ?
-      GROUP BY stages.id, stages.stage_number
-      ORDER BY stages.stage_number DESC
+      WHERE race_id = ?
+        AND stage_number < ?
+        AND date < (SELECT current_date FROM game_state WHERE id = 1)
+      ORDER BY stage_number DESC
       LIMIT 1
-    `).get(raceId, previousStage.stage_number, resultTypeId);
+    `).get(raceId, previousStage.stage_number);
 
         const prevPrevRanks = new Map();
         if (prevPrevStage) {

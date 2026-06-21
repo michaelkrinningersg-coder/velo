@@ -11,7 +11,7 @@ class RiderRepository {
     constructor(db) {
         this.db = db;
     }
-    getRidersQuery(useContracts, filterByTeam) {
+    getRidersQuery(useContracts, filterByTeam, onlyWithTeam = false) {
         const useDailyState = (0, mappers_1.tableExists)(this.db, 'rider_daily_state');
         const useFreeRaceForm = (0, mappers_1.tableExists)(this.db, 'rider_r_form_events');
         const countrySelect = `
@@ -47,9 +47,13 @@ class RiderRepository {
         const riderStateJoin = useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : '';
         const freeRaceFormJoin = useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : '';
         if (!useContracts) {
-            return filterByTeam
-                ? `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`
-                : `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE is_retired = 0 ORDER BY overall_rating DESC`;
+            if (filterByTeam) {
+                return `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE active_team_id = ? AND is_retired = 0 ORDER BY overall_rating DESC`;
+            }
+            else {
+                const teamFilter = onlyWithTeam ? 'AND active_team_id IS NOT NULL' : '';
+                return `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE is_retired = 0 ${teamFilter} ORDER BY overall_rating DESC`;
+            }
         }
         const activeContractJoin = `
       LEFT JOIN contracts current_contract
@@ -82,11 +86,15 @@ class RiderRepository {
       ${riderStateJoin}
       ${activeContractJoin}
     `;
-        return filterByTeam
-            ? `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE COALESCE(current_contract.team_id, riders.active_team_id) = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`
-            : `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
+        if (filterByTeam) {
+            return `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE COALESCE(current_contract.team_id, riders.active_team_id) = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
+        }
+        else {
+            const teamFilter = onlyWithTeam ? 'AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL' : '';
+            return `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ${teamFilter} ORDER BY riders.overall_rating DESC`;
+        }
     }
-    getRiders(teamId, includeFormDebug = false) {
+    getRiders(teamId, includeFormDebug = false, onlyWithTeam = false) {
         const season = new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason();
         const currentDate = new GameStateRepository_1.GameStateRepository(this.db).getCurrentDate();
         const useContracts = (0, mappers_1.tableExists)(this.db, 'contracts');
@@ -95,8 +103,8 @@ class RiderRepository {
                 ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, true)).all(season, season, teamId)
                 : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, true)).all(teamId))
             : (useContracts
-                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, false)).all(season, season)
-                : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, false)).all());
+                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, false, onlyWithTeam)).all(season, season)
+                : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, false, onlyWithTeam)).all());
         const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(season);
         const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
         const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
@@ -149,21 +157,25 @@ class RiderRepository {
         });
     }
     loadYearlyBaselinesByRiderId(riderIds, season) {
-        if (riderIds.length === 0 || !(0, mappers_1.tableExists)(this.db, 'rider_skill_yearly_baseline')) {
-            return new Map();
-        }
-        const placeholders = riderIds.map(() => '?').join(', ');
-        const rows = this.db.prepare(`
-      SELECT rider_id, skill_key, baseline_value
-      FROM rider_skill_yearly_baseline
-      WHERE season = ? AND rider_id IN (${placeholders})
-    `).all(season, ...riderIds);
         const map = new Map();
-        for (const row of rows) {
-            if (!map.has(row.rider_id)) {
-                map.set(row.rider_id, {});
+        if (riderIds.length === 0 || !(0, mappers_1.tableExists)(this.db, 'rider_skill_yearly_baseline')) {
+            return map;
+        }
+        const chunkSize = 500;
+        for (let i = 0; i < riderIds.length; i += chunkSize) {
+            const chunk = riderIds.slice(i, i + chunkSize);
+            const placeholders = chunk.map(() => '?').join(', ');
+            const rows = this.db.prepare(`
+        SELECT rider_id, skill_key, baseline_value
+        FROM rider_skill_yearly_baseline
+        WHERE season = ? AND rider_id IN (${placeholders})
+      `).all(season, ...chunk);
+            for (const row of rows) {
+                if (!map.has(row.rider_id)) {
+                    map.set(row.rider_id, {});
+                }
+                map.get(row.rider_id)[row.skill_key] = row.baseline_value;
             }
-            map.get(row.rider_id)[row.skill_key] = row.baseline_value;
         }
         return map;
     }
@@ -172,22 +184,41 @@ class RiderRepository {
             return riders;
         }
         const riderIds = riders.map((rider) => rider.id);
-        const placeholders = riderIds.map(() => '?').join(', ');
-        const programRows = this.db.prepare(`
-      SELECT rider_season_programs.rider_id,
-             rider_season_programs.program_id,
-             race_programs.name AS program_name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
-      FROM rider_season_programs
-      JOIN race_programs ON race_programs.id = rider_season_programs.program_id
-      WHERE rider_season_programs.season = ?
-        AND rider_season_programs.rider_id IN (${placeholders})
-    `).all(season, ...riderIds);
+        const programRows = [];
+        const raceRows = [];
+        const chunkSize = 500;
+        for (let i = 0; i < riderIds.length; i += chunkSize) {
+            const chunk = riderIds.slice(i, i + chunkSize);
+            const placeholders = chunk.map(() => '?').join(', ');
+            const chunkPrograms = this.db.prepare(`
+        SELECT rider_season_programs.rider_id,
+               rider_season_programs.program_id,
+               race_programs.name AS program_name,
+               race_programs.peak1_min,
+               race_programs.peak1_max,
+               race_programs.peak2_min,
+               race_programs.peak2_max,
+               race_programs.peak3_min,
+               race_programs.peak3_max
+        FROM rider_season_programs
+        JOIN race_programs ON race_programs.id = rider_season_programs.program_id
+        WHERE rider_season_programs.season = ?
+          AND rider_season_programs.rider_id IN (${placeholders})
+      `).all(season, ...chunk);
+            programRows.push(...chunkPrograms);
+            if ((0, mappers_1.tableExists)(this.db, 'race_program_races')) {
+                const chunkRaces = this.db.prepare(`
+          SELECT rider_season_programs.rider_id,
+                 race_program_races.race_id
+          FROM rider_season_programs
+          JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+          WHERE rider_season_programs.season = ?
+            AND rider_season_programs.rider_id IN (${placeholders})
+          ORDER BY race_program_races.race_id ASC
+        `).all(season, ...chunk);
+                raceRows.push(...chunkRaces);
+            }
+        }
         const programByRiderId = new Map(programRows.map((row) => [row.rider_id, {
                 id: row.program_id,
                 name: row.program_name,
@@ -198,17 +229,6 @@ class RiderRepository {
                 peak3Min: row.peak3_min,
                 peak3Max: row.peak3_max,
             }]));
-        const raceRows = (0, mappers_1.tableExists)(this.db, 'race_program_races')
-            ? this.db.prepare(`
-          SELECT rider_season_programs.rider_id,
-                 race_program_races.race_id
-          FROM rider_season_programs
-          JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
-          WHERE rider_season_programs.season = ?
-            AND rider_season_programs.rider_id IN (${placeholders})
-          ORDER BY race_program_races.race_id ASC
-        `).all(season, ...riderIds)
-            : [];
         const raceIdsByRiderId = new Map();
         for (const row of raceRows) {
             const raceIds = raceIdsByRiderId.get(row.rider_id) ?? [];
@@ -345,17 +365,17 @@ class RiderRepository {
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
       LEFT JOIN wetter ON wetter.id = stages.rolled_weather_id
-      LEFT JOIN results rider_stage_results
+      LEFT JOIN all_results rider_stage_results
         ON rider_stage_results.stage_id = stages.id
        AND rider_stage_results.rider_id = stage_entries.rider_id
        AND rider_stage_results.result_type_id = ${mappers_1.RESULT_TYPE_IDS.stage}
-      LEFT JOIN results team_stage_results
+      LEFT JOIN all_results team_stage_results
         ON team_stage_results.stage_id = stages.id
        AND team_stage_results.team_id = stage_entries.team_id
        AND team_stage_results.rider_id IS NULL
        AND team_stage_results.result_type_id = ${mappers_1.RESULT_TYPE_IDS.stage}
        AND stages.profile = 'TTT'
-      LEFT JOIN results gc_results
+      LEFT JOIN all_results gc_results
         ON gc_results.stage_id = stages.id
        AND gc_results.rider_id = stage_entries.rider_id
        AND gc_results.result_type_id = ?
@@ -391,7 +411,7 @@ class RiderRepository {
         stages.stage_score AS stage_score,
         stages.super_team_id AS super_team_id,
         results.team_id AS team_id
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
@@ -693,7 +713,7 @@ class RiderRepository {
         // 2. Individual Stage Wins
         const individualWinsRows = this.db.prepare(`
       SELECT results.rider_id AS rider_id, COUNT(*) AS wins
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
         AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
@@ -708,7 +728,7 @@ class RiderRepository {
         // 3. TTT Stage Wins
         const tttWinsRows = this.db.prepare(`
       SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
       WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NULL
@@ -725,7 +745,7 @@ class RiderRepository {
         // 4. GC Wins
         const gcWinsRows = this.db.prepare(`
       SELECT results.rider_id AS rider_id, COUNT(*) AS wins
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
@@ -747,19 +767,32 @@ class RiderRepository {
             return sourcesByRiderId;
         }
         const labelsByDate = this.loadRaceFormSourceLabelsByDate(season);
-        const placeholders = riderIds.map(() => '?').join(', ');
         const seasonStart = `${season}-01-01`;
         const seasonEnd = `${season}-12-31`;
         if ((0, mappers_1.tableExists)(this.db, 'rider_r_form_daily_awards')) {
-            const awardRows = this.db.prepare(`
-        SELECT rider_id, award_date, award_type
-        FROM rider_r_form_daily_awards
-        WHERE rider_id IN (${placeholders})
-          AND award_date >= ?
-          AND award_date <= ?
-          AND award_type = 'build'
-        ORDER BY award_date ASC
-      `).all(...riderIds, seasonStart, seasonEnd);
+            let awardRows;
+            if (riderIds.length > 500) {
+                awardRows = this.db.prepare(`
+          SELECT rider_id, award_date, award_type
+          FROM rider_r_form_daily_awards
+          WHERE award_date >= ?
+            AND award_date <= ?
+            AND award_type = 'build'
+          ORDER BY award_date ASC
+        `).all(seasonStart, seasonEnd);
+            }
+            else {
+                const placeholders = riderIds.map(() => '?').join(', ');
+                awardRows = this.db.prepare(`
+          SELECT rider_id, award_date, award_type
+          FROM rider_r_form_daily_awards
+          WHERE rider_id IN (${placeholders})
+            AND award_date >= ?
+            AND award_date <= ?
+            AND award_type = 'build'
+          ORDER BY award_date ASC
+        `).all(...riderIds, seasonStart, seasonEnd);
+            }
             for (const row of awardRows) {
                 const sources = sourcesByRiderId.get(row.rider_id) ?? [];
                 sources.push({
@@ -772,15 +805,29 @@ class RiderRepository {
             }
         }
         if ((0, mappers_1.tableExists)(this.db, 'rider_r_form_events')) {
-            const eventRows = this.db.prepare(`
-        SELECT rider_id, source_date, amount
-        FROM rider_r_form_events
-        WHERE rider_id IN (${placeholders})
-          AND source_date >= ?
-          AND source_date <= ?
-          AND expires_on > ?
-        ORDER BY source_date ASC
-      `).all(...riderIds, seasonStart, seasonEnd, currentDate);
+            let eventRows;
+            if (riderIds.length > 500) {
+                eventRows = this.db.prepare(`
+          SELECT rider_id, source_date, amount
+          FROM rider_r_form_events
+          WHERE source_date >= ?
+            AND source_date <= ?
+            AND expires_on > ?
+          ORDER BY source_date ASC
+        `).all(seasonStart, seasonEnd, currentDate);
+            }
+            else {
+                const placeholders = riderIds.map(() => '?').join(', ');
+                eventRows = this.db.prepare(`
+          SELECT rider_id, source_date, amount
+          FROM rider_r_form_events
+          WHERE rider_id IN (${placeholders})
+            AND source_date >= ?
+            AND source_date <= ?
+            AND expires_on > ?
+          ORDER BY source_date ASC
+        `).all(...riderIds, seasonStart, seasonEnd, currentDate);
+            }
             for (const row of eventRows) {
                 const sources = sourcesByRiderId.get(row.rider_id) ?? [];
                 sources.push({
@@ -1143,7 +1190,7 @@ class RiderRepository {
           stages.profile AS profile,
           cat.name AS category_name,
           stages.rolled_weather_id AS rolled_weather_id
-        FROM results r
+        FROM all_results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
@@ -1160,7 +1207,7 @@ class RiderRepository {
           stages.profile AS profile,
           cat.name AS category_name,
           stages.rolled_weather_id AS rolled_weather_id
-        FROM results r
+        FROM all_results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
@@ -1317,7 +1364,7 @@ class RiderRepository {
         if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
             const leaderJerseyRows = this.db.prepare(`
         SELECT cat.name AS category_name, r.result_type_id, COUNT(*) AS count
-        FROM results r
+        FROM all_results r
         JOIN stages ON stages.id = r.stage_id
         JOIN races ON races.id = stages.race_id
         JOIN race_categories cat ON cat.id = races.category_id
@@ -1389,13 +1436,13 @@ class RiderRepository {
         if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
             const breakRow = this.db.prepare(`
         SELECT COUNT(*) as count
-        FROM results r1
+        FROM all_results r1
         JOIN stages s ON s.id = r1.stage_id
         WHERE r1.rider_id = ?
           AND r1.result_type_id = 1
           AND r1.is_breakaway = 1
           AND NOT EXISTS (
-            SELECT 1 FROM results r2
+            SELECT 1 FROM all_results r2
             WHERE r2.stage_id = r1.stage_id
               AND r2.result_type_id = 1
               AND r2.rank < r1.rank
@@ -1441,12 +1488,12 @@ class RiderRepository {
         const row = this.db.prepare(`
       SELECT SUM(CASE WHEN rank = 1 THEN 1 ELSE 0 END) AS wins
       FROM (
-        SELECT rank FROM results
+        SELECT rank FROM all_results
         WHERE result_type_id = ? AND rider_id = ?
         
         UNION ALL
         
-        SELECT results.rank FROM results
+        SELECT results.rank FROM all_results results
         JOIN stage_entries ON stage_entries.stage_id = results.stage_id
         WHERE results.result_type_id = ?
           AND results.rider_id IS NULL
@@ -1455,7 +1502,7 @@ class RiderRepository {
           
         UNION ALL
         
-        SELECT results.rank FROM results
+        SELECT results.rank FROM all_results results
         JOIN stages ON stages.id = results.stage_id
         JOIN races ON races.id = stages.race_id
         WHERE results.result_type_id = ? 
@@ -1472,7 +1519,7 @@ class RiderRepository {
         }
         const row = this.db.prepare(`
       SELECT COUNT(*) AS attempts
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE results.result_type_id = ?
         AND results.rider_id = ?
@@ -1551,10 +1598,10 @@ class RiderRepository {
                 selectedStage = orderedStages[0];
             }
             else {
-                const completedStageIds = (0, mappers_1.tableExists)(this.db, 'results')
+                const completedStageIds = (0, mappers_1.tableExists)(this.db, 'all_results')
                     ? new Set(this.db.prepare(`
             SELECT DISTINCT stage_id
-            FROM results
+            FROM all_results
             WHERE result_type_id = ?
               AND stage_id IN (${orderedStages.map(() => '?').join(', ')})
           `).all(mappers_1.RESULT_TYPE_IDS.stage, ...orderedStages.map((stage) => stage.id)).map((row) => row.stage_id))

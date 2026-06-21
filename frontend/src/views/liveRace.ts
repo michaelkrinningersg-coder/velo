@@ -419,7 +419,9 @@ export async function completeRealtimeStage(
     await loadStageResults(stageId, false);
     await loadGameState();
     await loadRaces();
-    await refreshTeamsViewData();
+    if (isActiveView('teams') || isActiveView('riders')) {
+      await refreshTeamsViewData();
+    }
     renderRealtimeRaceView();
     if (!skipViewActivation) {
       activateView('results');

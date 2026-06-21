@@ -1684,7 +1684,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       <h3 style="margin: 0; font-size: 1rem; color: #fff;">Rennergebnisse</h3>
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <label for="rider-stats-results-season-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500; margin: 0;">Saison filtern:</label>
-        <select id="rider-stats-results-season-select" class="form-control" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;">
+        <select id="rider-stats-results-season-select" class="form-control" style="background: #222; border: 1px solid #444; color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;">
           ${availableYears.map(yr => `<option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
         </select>
       </div>

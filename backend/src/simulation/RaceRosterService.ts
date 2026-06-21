@@ -210,7 +210,7 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
 
   const sameDayRows = db.prepare(`
     SELECT DISTINCT results.rider_id AS rider_id
-    FROM results
+    FROM all_results results
     JOIN stages ON stages.id = results.stage_id
     WHERE results.result_type_id = 1
       AND results.rider_id IS NOT NULL
@@ -237,7 +237,7 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders 
           AND remaining_stage.date >= ?
           AND NOT EXISTS (
             SELECT 1
-            FROM results remaining_result
+            FROM all_results remaining_result
             WHERE remaining_result.stage_id = remaining_stage.id
               AND remaining_result.result_type_id = 1
           )
@@ -575,7 +575,8 @@ function canFillRosterSlot(
   teamRiders: Rider[],
   riderLocks: Map<number, RiderLockReason>,
   season: number,
-  race: Race
+  race: Race,
+  teamCollisionRiderIds?: Set<number>
 ): boolean {
   if (rider.roleId == null) {
     return false;
@@ -602,6 +603,9 @@ function canFillRosterSlot(
     }
   }
 
+  if (teamCollisionRiderIds) {
+    return !teamCollisionRiderIds.has(rider.id);
+  }
   return !hasActiveOrEarmarkedCollision(db, repo, rider, teamRiders, season, race, riderLocks);
 }
 
@@ -724,6 +728,27 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     console.log(`[RaceRoster] ${race.name} | Heimauswahl aktiv (Wahrscheinlichkeit: ${race.category?.homeSelectionProbability})`);
   }
 
+  // Precalculate overlapping races once per buildRaceRoster call
+  const overlappingRaces = db.prepare(`
+    SELECT id, name, category_id AS categoryId, start_date AS startDate, end_date AS endDate
+    FROM races
+    WHERE id != ?
+      AND start_date <= ?
+      AND end_date >= ?
+  `).all(race.id, race.endDate, race.startDate) as Race[];
+
+  const cachedLimits = new Map<number, number>();
+  const cachedPrograms = new Map<number, any[]>();
+  for (const overlapRace of overlappingRaces) {
+    const categoryRow = db.prepare(`
+      SELECT number_of_riders
+      FROM race_categories
+      WHERE id = ?
+    `).get(overlapRace.categoryId) as { number_of_riders: number } | undefined;
+    cachedLimits.set(overlapRace.categoryId, categoryRow?.number_of_riders ?? 8);
+    cachedPrograms.set(overlapRace.id, repo.getRaceProgramsForRace(overlapRace.id));
+  }
+
   const selected = selectedTeams.flatMap((team: any) => {
     const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
     const roster = getEligibleRiders(teamFullRoster, riderLocks);
@@ -736,14 +761,47 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     const selectedIds = new Set(teamSelection.map((rider: any) => rider.id));
 
     if (teamSelection.length < riderLimit) {
+      // Build collision set for the current team
+      const teamCollisionRiderIds = new Set<number>();
+      for (const overlapRace of overlappingRaces) {
+        const teamEntries = db.prepare(`
+          SELECT rider_id
+          FROM race_entries
+          WHERE race_id = ? AND team_id = ?
+        `).all(overlapRace.id, team.id) as Array<{ rider_id: number }>;
+
+        if (teamEntries.length > 0) {
+          for (const entry of teamEntries) {
+            teamCollisionRiderIds.add(entry.rider_id);
+          }
+        } else {
+          const overlapPrograms = cachedPrograms.get(overlapRace.id) ?? [];
+          if (overlapPrograms.length > 0) {
+            const overlapProgIds = new Set(overlapPrograms.map((p: any) => p.id));
+            const overlapRoster = teamFullRoster.filter((r: any) => {
+              return r.seasonProgram != null && overlapProgIds.has(r.seasonProgram.id) && !r.isUnavailable;
+            });
+
+            if (overlapRoster.length > 0) {
+              const orderedCandidates = orderProgramCandidates(overlapRoster);
+              const limit = cachedLimits.get(overlapRace.categoryId) ?? 8;
+              const earmarked = orderedCandidates.slice(0, limit);
+              for (const r of earmarked) {
+                teamCollisionRiderIds.add(r.id);
+              }
+            }
+          }
+        }
+      }
+
       let fillCandidates: Rider[];
       if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
         fillCandidates = roster
-          .filter((rider: any) => !selectedIds.has(rider.id) && !hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks))
+          .filter((rider: any) => !selectedIds.has(rider.id) && !teamCollisionRiderIds.has(rider.id))
           .sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
       } else {
         fillCandidates = orderFillCandidates(
-          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race)),
+          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race, teamCollisionRiderIds)),
           race,
           useHomePreference
         );

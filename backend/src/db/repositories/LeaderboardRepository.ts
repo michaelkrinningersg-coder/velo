@@ -140,7 +140,7 @@ export class LeaderboardRepository {
             ra.category_id,
             (CAST(substr(s.date, 1, 4) AS INTEGER) - r.birth_year) AS age_at_win,
             ROW_NUMBER() OVER (PARTITION BY res.rider_id ORDER BY (CAST(substr(s.date, 1, 4) AS INTEGER) - r.birth_year) ASC) as rn
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -193,7 +193,7 @@ export class LeaderboardRepository {
             SELECT 
               res.rider_id AS rider_id,
               s.id AS stage_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             WHERE res.rank = 1 
               AND res.result_type_id = 1 
@@ -204,7 +204,7 @@ export class LeaderboardRepository {
             SELECT 
               se.rider_id AS rider_id,
               s.id AS stage_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
             WHERE res.rank = 1 
@@ -249,7 +249,7 @@ export class LeaderboardRepository {
             SELECT 
               res.rider_id AS rider_id,
               s.id AS stage_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             WHERE res.rank = 1 
               AND res.result_type_id = 1 
@@ -259,7 +259,7 @@ export class LeaderboardRepository {
             SELECT 
               se.rider_id AS rider_id,
               s.id AS stage_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
             WHERE res.rank = 1 
@@ -335,7 +335,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -364,7 +364,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -498,7 +498,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results r1
+          FROM all_results r1
           JOIN stages s ON s.id = r1.stage_id
           JOIN riders r ON r.id = r1.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -508,7 +508,7 @@ export class LeaderboardRepository {
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
             AND r.is_retired = 0
             AND NOT EXISTS (
-              SELECT 1 FROM results r2
+              SELECT 1 FROM all_results r2
               WHERE r2.stage_id = r1.stage_id
                 AND r2.result_type_id = 1
                 AND r2.rank < r1.rank
@@ -532,7 +532,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results r1
+          FROM all_results r1
           JOIN stages s ON s.id = r1.stage_id
           JOIN riders r ON r.id = r1.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -540,7 +540,7 @@ export class LeaderboardRepository {
           WHERE r1.result_type_id = 1
             AND r1.is_breakaway = 1
             AND NOT EXISTS (
-              SELECT 1 FROM results r2
+              SELECT 1 FROM all_results r2
               WHERE r2.stage_id = r1.stage_id
                 AND r2.result_type_id = 1
                 AND r2.rank < r1.rank
@@ -658,7 +658,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -686,7 +686,7 @@ export class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -1000,7 +1000,7 @@ export class LeaderboardRepository {
           SELECT team_id, COUNT(*) AS val
           FROM (
             SELECT r.active_team_id AS team_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN riders r ON r.id = res.rider_id
             WHERE res.rank = 1 AND res.result_type_id = 1
@@ -1008,7 +1008,7 @@ export class LeaderboardRepository {
               ${extraFilter}
             UNION ALL
             SELECT res.team_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             WHERE res.rank = 1 AND res.result_type_id = 1 AND res.rider_id IS NULL
               AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
@@ -1032,14 +1032,14 @@ export class LeaderboardRepository {
           SELECT team_id, COUNT(*) AS val
           FROM (
             SELECT r.active_team_id AS team_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN riders r ON r.id = res.rider_id
             WHERE res.rank = 1 AND res.result_type_id = 1
               ${extraFilter}
             UNION ALL
             SELECT res.team_id
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             WHERE res.rank = 1 AND res.result_type_id = 1 AND res.rider_id IS NULL
               ${extraFilter}
@@ -1113,7 +1113,7 @@ export class LeaderboardRepository {
             SELECT team_id, COUNT(*) AS val
             FROM (
               SELECT r.active_team_id AS team_id
-              FROM results res
+              FROM all_results res
               JOIN stages s ON s.id = res.stage_id
               JOIN races ra ON ra.id = s.race_id
               JOIN riders r ON r.id = res.rider_id
@@ -1123,7 +1123,7 @@ export class LeaderboardRepository {
                 ${categoryFilter}
               UNION ALL
               SELECT res.team_id
-              FROM results res
+              FROM all_results res
               JOIN stages s ON s.id = res.stage_id
               JOIN races ra ON ra.id = s.race_id
               WHERE res.rank = 1 AND res.result_type_id = 6 AND res.rider_id IS NULL
@@ -1142,7 +1142,7 @@ export class LeaderboardRepository {
             SELECT team_id, COUNT(*) AS val
             FROM (
               SELECT r.active_team_id AS team_id
-              FROM results res
+              FROM all_results res
               JOIN stages s ON s.id = res.stage_id
               JOIN races ra ON ra.id = s.race_id
               JOIN riders r ON r.id = res.rider_id
@@ -1151,7 +1151,7 @@ export class LeaderboardRepository {
                 ${categoryFilter}
               UNION ALL
               SELECT res.team_id
-              FROM results res
+              FROM all_results res
               JOIN stages s ON s.id = res.stage_id
               JOIN races ra ON ra.id = s.race_id
               WHERE res.rank = 1 AND res.result_type_id = 6 AND res.rider_id IS NULL
@@ -1168,7 +1168,7 @@ export class LeaderboardRepository {
         if (period === 'season') {
           query = `
             SELECT r.active_team_id AS team_id, COUNT(*) AS val
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN races ra ON ra.id = s.race_id
             JOIN riders r ON r.id = res.rider_id
@@ -1184,7 +1184,7 @@ export class LeaderboardRepository {
         } else {
           query = `
             SELECT r.active_team_id AS team_id, COUNT(*) AS val
-            FROM results res
+            FROM all_results res
             JOIN stages s ON s.id = res.stage_id
             JOIN races ra ON ra.id = s.race_id
             JOIN riders r ON r.id = res.rider_id
@@ -1322,7 +1322,7 @@ export class LeaderboardRepository {
       if (period === 'season') {
         query = `
           SELECT r.active_team_id AS team_id, COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -1337,7 +1337,7 @@ export class LeaderboardRepository {
       } else {
         query = `
           SELECT r.active_team_id AS team_id, COUNT(*) AS val
-          FROM results res
+          FROM all_results res
           JOIN stages s ON s.id = res.stage_id
           JOIN races ra ON ra.id = s.race_id
           JOIN riders r ON r.id = res.rider_id
@@ -1465,7 +1465,7 @@ export class LeaderboardRepository {
           SELECT 
             r.active_team_id AS team_id,
             COUNT(*) AS val
-          FROM results r1
+          FROM all_results r1
           JOIN stages s ON s.id = r1.stage_id
           JOIN riders r ON r.id = r1.rider_id
           WHERE r1.result_type_id = 1
@@ -1473,7 +1473,7 @@ export class LeaderboardRepository {
             AND r.active_team_id IS NOT NULL
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
             AND NOT EXISTS (
-              SELECT 1 FROM results r2
+              SELECT 1 FROM all_results r2
               WHERE r2.stage_id = r1.stage_id
                 AND r2.result_type_id = 1
                 AND r2.rank < r1.rank
@@ -1489,14 +1489,14 @@ export class LeaderboardRepository {
           SELECT 
             r.active_team_id AS team_id,
             COUNT(*) AS val
-          FROM results r1
+          FROM all_results r1
           JOIN stages s ON s.id = r1.stage_id
           JOIN riders r ON r.id = r1.rider_id
           WHERE r1.result_type_id = 1
             AND r1.is_breakaway = 1
             AND r.active_team_id IS NOT NULL
             AND NOT EXISTS (
-              SELECT 1 FROM results r2
+              SELECT 1 FROM all_results r2
               WHERE r2.stage_id = r1.stage_id
                 AND r2.result_type_id = 1
                 AND r2.rank < r1.rank
