@@ -943,13 +943,45 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
   const selectedYear = state.teamStatsSelectedRosterYear;
   const rosterForYear = historyRosters[selectedYear] || [];
 
+  const sortedRoster = [...rosterForYear];
+  const sortKey = state.teamStatsRosterSort.key;
+  const sortDir = state.teamStatsRosterSort.direction;
+  sortedRoster.sort((a, b) => {
+    let comparison = 0;
+    if (sortKey === 'nationality') {
+      const valA = a.nationality || '';
+      const valB = b.nationality || '';
+      comparison = valA.localeCompare(valB, 'de');
+    } else if (sortKey === 'name') {
+      const valA = `${a.lastName || ''}, ${a.firstName || ''}`;
+      const valB = `${b.lastName || ''}, ${b.firstName || ''}`;
+      comparison = valA.localeCompare(valB, 'de');
+    } else if (sortKey === 'overallRating') {
+      comparison = (a.overallRating || 0) - (b.overallRating || 0);
+    } else if (sortKey === 'potential') {
+      comparison = (a.potential || 0) - (b.potential || 0);
+    } else if (sortKey === 'roleName') {
+      const valA = a.roleName || '';
+      const valB = b.roleName || '';
+      comparison = valA.localeCompare(valB, 'de');
+    } else if (sortKey === 'contractEndSeason') {
+      comparison = (a.contractEndSeason || 0) - (b.contractEndSeason || 0);
+    }
+    return sortDir === 'asc' ? comparison : -comparison;
+  });
+
   const yearOptionsHtml = years.map(yr => `
     <option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Kader ${yr}</option>
   `).join('');
 
-  const tableRowsHtml = rosterForYear.length === 0
+  const getSortIcon = (key: string) => {
+    if (state.teamStatsRosterSort.key !== key) return ' <span style="opacity: 0.3; font-size: 0.75rem;">↕</span>';
+    return state.teamStatsRosterSort.direction === 'asc' ? ' <span style="font-size: 0.75rem;">▲</span>' : ' <span style="font-size: 0.75rem;">▼</span>';
+  };
+
+  const tableRowsHtml = sortedRoster.length === 0
     ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Fahrer für dieses Jahr unter Vertrag.</td></tr>`
-    : rosterForYear.map(rider => {
+    : sortedRoster.map(rider => {
         const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
         const flagHtml = flagAlpha2
           ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(rider.nationality)}"></span>`
@@ -1014,12 +1046,12 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
           </colgroup>
           <thead>
             <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02);">
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Nat</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: left;">Fahrer</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Gesamtstärke</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Pot. Gesamtstärke</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Rolle</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Vertragsende</th>
+              <th data-team-roster-sort="nationality" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Nat${getSortIcon('nationality')}</th>
+              <th data-team-roster-sort="name" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: left;">Fahrer${getSortIcon('name')}</th>
+              <th data-team-roster-sort="overallRating" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Gesamtstärke${getSortIcon('overallRating')}</th>
+              <th data-team-roster-sort="potential" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Pot. Gesamtstärke${getSortIcon('potential')}</th>
+              <th data-team-roster-sort="roleName" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Rolle${getSortIcon('roleName')}</th>
+              <th data-team-roster-sort="contractEndSeason" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Vertragsende${getSortIcon('contractEndSeason')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1094,6 +1126,10 @@ export async function openTeamStats(teamId: number): Promise<void> {
   state.teamStatsTopResultsFilterSeason = null;
   state.teamStatsSelectedSeason = 'all';
   state.teamStatsSelectedRosterYear = state.gameState?.season ?? 2026;
+  state.teamStatsRosterSort = {
+    key: 'overallRating',
+    direction: 'desc',
+  };
   state.teamStatsTopResultsPage = 1;
 
   const team = state.teams.find(t => t.id === teamId);
@@ -1156,6 +1192,24 @@ export function initTeamStatsListeners(): void {
       const newPage = Number(pageButton.dataset['teamTopResultsPage']);
       if (!isNaN(newPage) && newPage >= 1) {
         state.teamStatsTopResultsPage = newPage;
+        if (state.teamStatsPayload) {
+          $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+        }
+      }
+      return;
+    }
+
+    // Roster sorting headers
+    const sortHeader = target.closest<HTMLTableCellElement>('th[data-team-roster-sort]');
+    if (sortHeader) {
+      const key = sortHeader.dataset['teamRosterSort'] as any;
+      if (key) {
+        if (state.teamStatsRosterSort.key === key) {
+          state.teamStatsRosterSort.direction = state.teamStatsRosterSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.teamStatsRosterSort.key = key;
+          state.teamStatsRosterSort.direction = (key === 'overallRating' || key === 'potential' || key === 'contractEndSeason') ? 'desc' : 'asc';
+        }
         if (state.teamStatsPayload) {
           $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
         }

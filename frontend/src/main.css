@@ -1076,6 +1076,17 @@ html, body {
   text-align: center;
 }
 
+.rider-stats-table thead th[data-team-roster-sort] {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.rider-stats-table thead th[data-team-roster-sort]:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
 .rider-stats-breakaway-col {
   width: 1%;
   white-space: nowrap;

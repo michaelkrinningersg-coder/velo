@@ -164,6 +164,10 @@ export const state: {
   teamStatsTab: 'topResults' | 'career' | 'contracts';
   teamStatsSelectedTeamId: number | null;
   teamStatsSelectedRosterYear: number | null;
+  teamStatsRosterSort: {
+    key: 'nationality' | 'name' | 'overallRating' | 'potential' | 'roleName' | 'contractEndSeason';
+    direction: 'asc' | 'desc';
+  };
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
   teamStatsTopResultsFilterSeason: number | null;
@@ -276,6 +280,10 @@ export const state: {
   teamStatsTab: 'topResults',
   teamStatsSelectedTeamId: null,
   teamStatsSelectedRosterYear: null,
+  teamStatsRosterSort: {
+    key: 'overallRating',
+    direction: 'desc',
+  },
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
   teamStatsTopResultsFilterSeason: null,
