@@ -7,6 +7,7 @@ import {
   isActiveView,
 } from '../state';
 import { openRiderStats } from './riderStats';
+import { openTeamStats } from './teamStats';
 
 let activeScope: 'riders' | 'teams' = 'riders';
 let activePeriod: 'season' | 'alltime' | 'live' = 'season';
@@ -78,6 +79,7 @@ export function initLeaderboardsView(): void {
 
   // Expose global callback for openRiderStats from leaderboard links
   (window as any).openRiderStatsFromLeaderboard = openRiderStats;
+  (window as any).openTeamStatsFromLeaderboard = openTeamStats;
 
   // Setup listeners for checkboxes
   const wtCheckbox = $('leaderboard-filter-wt');
@@ -378,7 +380,9 @@ export async function renderLeaderboard(): Promise<void> {
     if (activeScope === 'riders') {
       const flagHtml = row.nationality ? renderFlag(row.nationality) : '—';
       const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
-      const teamHtml = row.teamAbbr ? `<span class="text-muted" title="${esc(row.teamName ?? '')}">${esc(row.teamAbbr)}</span>` : '—';
+      const teamHtml = (row.teamAbbr && row.teamId != null)
+        ? `<a href="#" onclick="event.preventDefault(); openTeamStatsFromLeaderboard(${row.teamId})" style="color: #94a3b8; text-decoration: none; hover: text-decoration: underline;" title="${esc(row.teamName ?? '')}">${esc(row.teamAbbr)}</a>`
+        : (row.teamAbbr ? `<span class="text-muted" title="${esc(row.teamName ?? '')}">${esc(row.teamAbbr)}</span>` : '—');
 
       html += `
         <tr>
@@ -399,7 +403,11 @@ export async function renderLeaderboard(): Promise<void> {
         const sprinterFlag = det.sprinterNationality ? renderFlag(det.sprinterNationality) : '';
         
         teamNameHtml = `
-          <div style="font-weight: bold; font-size: 0.95rem; color: #fff;">${esc(row.teamName.split(' (Sprinter:')[0])}</div>
+          <div style="font-weight: bold; font-size: 0.95rem; color: #fff;">
+            <a href="#" onclick="event.preventDefault(); openTeamStatsFromLeaderboard(${row.teamId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">
+              ${esc(row.teamName.split(' (Sprinter:')[0])}
+            </a>
+          </div>
           <div style="margin-top: 0.3rem; padding-left: 0.75rem; border-left: 2px solid rgba(255, 255, 255, 0.15); display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.825rem;">
             <div style="color: #94a3b8; display: flex; align-items: center; gap: 0.35rem;">
               <span>Sprinter:</span>
@@ -425,7 +433,7 @@ export async function renderLeaderboard(): Promise<void> {
           </div>
         `;
       } else {
-        teamNameHtml = `<strong>${esc(row.teamName ?? '')}</strong>`;
+        teamNameHtml = `<strong><a href="#" onclick="event.preventDefault(); openTeamStatsFromLeaderboard(${row.teamId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.teamName ?? '')}</a></strong>`;
       }
 
       html += `

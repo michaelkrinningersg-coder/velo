@@ -1118,6 +1118,40 @@ export class DatabaseService {
     }
   }
 
+  private ensureRiderSeasonRolesSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_season_roles (
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        season   INTEGER NOT NULL,
+        role_id  INTEGER REFERENCES sta_role(id),
+        PRIMARY KEY (rider_id, season)
+      )
+    `).run();
+
+    // Initial befüllen mit den aktuellen Rollen für das aktuelle Jahr
+    try {
+      const stateRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
+      if (stateRow) {
+        db.prepare(`
+          INSERT OR IGNORE INTO rider_season_roles (rider_id, season, role_id)
+          SELECT id, ?, role_id FROM riders WHERE role_id IS NOT NULL AND is_retired = 0
+        `).run(stateRow.season);
+      }
+    } catch (e) {
+      // Ignorieren falls game_state noch nicht existiert (z.B. frische master DB)
+    }
+  }
+
+  private ensureSeasonStandingsSnapshotsSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS season_standings_snapshots (
+        season       INTEGER PRIMARY KEY,
+        payload_json TEXT NOT NULL
+      )
+    `).run();
+  }
+
+
 
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
@@ -1415,9 +1449,10 @@ export class DatabaseService {
     this.ensureStageRaceStateSchema(this.activeConnection);
     this.ensureRiderFormSchema(this.activeConnection);
     this.ensureRaceProgramSchema(this.activeConnection);
-    this.ensureRiderCareerStatsSchema(this.activeConnection);
     this.ensureRiderSeasonStatsSchema(this.activeConnection);
     this.ensureStageLeadoutsSchema(this.activeConnection);
+    this.ensureRiderSeasonRolesSchema(this.activeConnection);
+    this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     this.ensureDayChangeIndexes(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
@@ -1484,6 +1519,8 @@ export class DatabaseService {
     this.ensureRiderCareerStatsSchema(this.activeConnection);
     this.ensureStageSpreadData(this.activeConnection);
     this.ensureStageLeadoutsSchema(this.activeConnection);
+    this.ensureRiderSeasonRolesSchema(this.activeConnection);
+    this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
 
     return this.activeConnection;
   }

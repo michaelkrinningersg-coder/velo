@@ -1,0 +1,15 @@
+{
+  "extends": "../backend/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "baseUrl": "..",
+    "paths": {
+      "*": ["*", "backend/node_modules/*"]
+    },
+    "typeRoots": [
+      "backend/node_modules/@types"
+    ],
+    "noImplicitAny": false
+  },
+  "include": ["**/*", "../backend/src/**/*", "../shared/**/*"]
+}

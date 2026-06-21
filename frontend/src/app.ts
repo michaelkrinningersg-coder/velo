@@ -42,6 +42,7 @@ import {
 } from './views/results';
 import {
   loadDraftHistory,
+  initDraftListeners,
 } from './views/draft';
 import {
   loadInjuries,
@@ -95,6 +96,8 @@ export async function enterGameScreen(): Promise<void> {
   }
   showScreen('game');
   $('meta-career').textContent = state.currentSave?.careerName ?? '';
+  state.seasonStandingsSelectedSeason = null;
+  state.riderStatsSelectedSeason = null;
   activateView('dashboard');
   showLoading('Spiel wird geladen…');
   try {
@@ -196,6 +199,7 @@ function initAppListeners(): void {
   initSeasonStandingsListeners();
   initLeaderboardsView();
   initRaceProgramsView();
+  initDraftListeners();
 }
 
 // ============================================================

@@ -308,6 +308,7 @@ export class TeamRepository {
         jerseysWorn: row.jerseys_worn,
         superTeamId: row.super_team_id ?? null,
         teamId: row.team_id ?? null,
+        isStageRace: row.is_stage_race === 1,
       };
     });
 
@@ -871,6 +872,107 @@ export class TeamRepository {
       riders: teamRiders,
       topResults,
       successStats,
+      historyRosters: this.getTeamHistoryRosters(teamId),
     };
+  }
+
+  public getTeamHistoryRosters(teamId: number): Record<number, Array<{
+    riderId: number;
+    firstName: string;
+    lastName: string;
+    nationality: string | null;
+    roleName: string | null;
+    overallRating: number;
+    potential: number | null;
+    contractEndSeason: number | null;
+  }>> {
+    const db = this.db;
+    const currentSeason = new GameStateRepository(db).getCurrentSeason();
+    
+    // 1. Alle Verträge dieses Teams abfragen
+    const contracts = db.prepare(`
+      SELECT c.rider_id, c.start_season, c.end_season, r.first_name, r.last_name, co.code_3 AS nationality, r.overall_rating, r.pot_overall AS potential
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      LEFT JOIN sta_country co ON r.country_id = co.id
+      WHERE c.team_id = ?
+    `).all(teamId) as any[];
+
+    if (contracts.length === 0) {
+      return {};
+    }
+
+    // Min und Max Jahr ermitteln
+    let minYear = currentSeason;
+    let maxYear = currentSeason;
+    for (const c of contracts) {
+      if (c.start_season < minYear) minYear = c.start_season;
+      if (c.end_season > maxYear) maxYear = c.end_season;
+    }
+
+    // Historische Rollen laden
+    const seasonRolesRows = db.prepare(`
+      SELECT sr.rider_id, sr.season, role.name AS roleName
+      FROM rider_season_roles sr
+      JOIN sta_role role ON sr.role_id = role.id
+      WHERE sr.rider_id IN (
+        SELECT DISTINCT rider_id FROM contracts WHERE team_id = ?
+      )
+    `).all(teamId) as Array<{ rider_id: number; season: number; roleName: string }>;
+
+    // Map für schnellen Zugriff auf historische Rollen: riderId -> season -> roleName
+    const roleMap = new Map<number, Map<number, string>>();
+    for (const row of seasonRolesRows) {
+      if (!roleMap.has(row.rider_id)) {
+        roleMap.set(row.rider_id, new Map<number, string>());
+      }
+      roleMap.get(row.rider_id)!.set(row.season, row.roleName);
+    }
+
+    // Aktuelle Rollen laden (falls y === currentSeason)
+    const currentRolesRows = db.prepare(`
+      SELECT r.id AS rider_id, role.name AS roleName
+      FROM riders r
+      JOIN sta_role role ON r.role_id = role.id
+      WHERE r.active_team_id = ? AND r.is_retired = 0
+    `).all(teamId) as Array<{ rider_id: number; roleName: string }>;
+    const currentRoleMap = new Map<number, string>(currentRolesRows.map(r => [r.rider_id, r.roleName]));
+
+    const historyRosters: Record<number, any[]> = {};
+
+    for (let y = minYear; y <= maxYear; y++) {
+      const rosterForYear: any[] = [];
+      for (const c of contracts) {
+        if (c.start_season <= y && c.end_season >= y) {
+          let roleName: string | null = null;
+          if (y === currentSeason) {
+            roleName = currentRoleMap.get(c.rider_id) ?? null;
+          } else if (y < currentSeason) {
+            roleName = roleMap.get(c.rider_id)?.get(y) ?? null;
+          } else {
+            roleName = null; // Zukünftig
+          }
+
+          rosterForYear.push({
+            riderId: c.rider_id,
+            firstName: c.first_name,
+            lastName: c.last_name,
+            nationality: c.nationality,
+            roleName: roleName,
+            overallRating: c.overall_rating,
+            potential: c.potential,
+            contractEndSeason: c.end_season,
+          });
+        }
+      }
+
+      if (rosterForYear.length > 0) {
+        // Sortiere Kader nach Nachname, Vorname
+        rosterForYear.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+        historyRosters[y] = rosterForYear;
+      }
+    }
+
+    return historyRosters;
   }
 }

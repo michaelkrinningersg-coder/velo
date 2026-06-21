@@ -825,6 +825,7 @@ export function initDashboardListeners(): void {
 
 export async function executeDayAdvance(): Promise<boolean> {
   showLoading('Tag wird fortgeschrieben...');
+  const oldSeason = state.gameState?.season;
   try {
     const res = await api.advanceDay();
     if (!res.success) {
@@ -838,6 +839,16 @@ export async function executeDayAdvance(): Promise<boolean> {
       const { refreshTeamsViewData } = await import('./teams');
       await refreshTeamsViewData();
     }
+
+    const newSeason = state.gameState?.season;
+    if (oldSeason && newSeason && newSeason > oldSeason) {
+      stopAutoProgress(); // Auto-Progress des Tageswechsels stoppen
+      const { startDraftPresentation } = await import('./draft');
+      const { activateView } = await import('../state');
+      activateView('draft');
+      void startDraftPresentation(newSeason);
+    }
+
     return true;
   } catch (e) {
     alert('Unerwarteter Fehler beim Tageswechsel: ' + (e as Error).message);

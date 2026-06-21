@@ -468,7 +468,10 @@ export function precalculateStageBreakaway(
     Math.min(phaseEndDistanceMeters - 1000, phaseEndDistanceMeters - groupPhaseLeadOutMeters),
   );
   const breakawayBonus = stage.rolledBreakawayBonus ?? 0;
-  const skillBonus = randomInteger(3 + breakawayBonus, 8 + breakawayBonus);
+  const skillBonus = (stage.profile === 'Flat' || stage.profile === 'Rolling')
+    ? randomInteger(2, 4)
+    : randomInteger(3 + breakawayBonus, 8 + breakawayBonus);
+
 
   return {
     riderIds: selectedRiders.map((rider) => rider.id),
@@ -476,7 +479,9 @@ export function precalculateStageBreakaway(
     groupPhaseEndDistanceMeters,
     phaseEndDistanceMeters,
     skillBonus,
-    malusValue: randomInteger(5, 8),
+    malusValue: (stage.profile === 'Flat' || stage.profile === 'Rolling')
+      ? randomInteger(6, 10)
+      : randomInteger(5, 8),
     superTeamId,
   };
 }

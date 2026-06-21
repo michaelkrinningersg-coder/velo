@@ -29,7 +29,31 @@ class ResultRepository {
     `).get(season, riderId);
         return row?.rank ?? null;
     }
+    getAvailableStandingsSeasons(currentSeason) {
+        const seasons = [];
+        for (let yr = 2026; yr <= currentSeason; yr++) {
+            seasons.push(yr);
+        }
+        return seasons;
+    }
     getSeasonStandings(season = new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason()) {
+        const currentSeason = new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason();
+        // Prüfen, ob wir einen Snapshot für ein historisches Jahr haben
+        if (season < currentSeason && (0, mappers_1.tableExists)(this.db, 'season_standings_snapshots')) {
+            const snapshotRow = this.db.prepare(`
+        SELECT payload_json FROM season_standings_snapshots WHERE season = ?
+      `).get(season);
+            if (snapshotRow) {
+                try {
+                    const payload = JSON.parse(snapshotRow.payload_json);
+                    payload.availableSeasons = this.getAvailableStandingsSeasons(currentSeason);
+                    return payload;
+                }
+                catch (e) {
+                    // Fallback falls parsen fehlschlägt
+                }
+            }
+        }
         new GameStateRepository_1.GameStateRepository(this.db).syncSeasonPointEventsForSeason(season);
         if (!(0, mappers_1.tableExists)(this.db, 'season_point_events')) {
             return {
@@ -37,6 +61,7 @@ class ResultRepository {
                 riderStandings: [],
                 teamStandings: [],
                 countryStandings: [],
+                availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
             };
         }
         const riderRows = this.db.prepare(`
@@ -88,6 +113,7 @@ class ResultRepository {
             riderStandings: this.mapRiderSeasonStandings(riderRows),
             teamStandings: this.mapTeamSeasonStandings(teamRows),
             countryStandings: this.mapCountrySeasonStandings(countryRows, riderRows),
+            availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
         };
     }
     getPreviousGcStandings(raceId, stageNumber) {

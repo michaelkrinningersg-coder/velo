@@ -158,6 +158,19 @@ export class RiderRoleService {
           updateRole.run(assignment.roleId, assignment.riderId);
         }
       }
+
+      // Rollen-Historie abspeichern
+      try {
+        const stateRow = this.db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
+        if (stateRow) {
+          this.db.prepare(`
+            INSERT OR REPLACE INTO rider_season_roles (rider_id, season, role_id)
+            SELECT id, ?, role_id FROM riders WHERE role_id IS NOT NULL AND is_retired = 0
+          `).run(stateRow.season);
+        }
+      } catch (e) {
+        // Ignorieren falls game_state nicht existiert
+      }
     })();
   }
 

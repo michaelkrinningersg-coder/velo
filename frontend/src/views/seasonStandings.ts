@@ -115,7 +115,8 @@ export function renderSeasonTeamNameCell(
 }
 
 export async function loadSeasonStandings(silent: boolean): Promise<void> {
-  const res = await api.getSeasonStandings();
+  const selectedSeason = state.seasonStandingsSelectedSeason ?? undefined;
+  const res = await api.getSeasonStandings(selectedSeason);
   if (!res.success) {
     state.seasonStandings = null;
     if (isActiveView('season-standings')) {
@@ -148,6 +149,15 @@ export function renderSeasonStandingsView(): void {
   meta.textContent = season != null
     ? `Saison ${season} · Ergebnis- und Trikotpunkte kumuliert`
     : 'Noch keine Saisonwertung geladen.';
+
+  const yearSelect = $('season-standings-year-select') as HTMLSelectElement | null;
+  if (yearSelect) {
+    const seasons = state.seasonStandings?.availableSeasons || [];
+    const selected = state.seasonStandingsSelectedSeason ?? state.gameState?.season ?? 2026;
+    yearSelect.innerHTML = seasons.map(yr => `
+      <option value="${yr}" ${yr === selected ? 'selected' : ''}>Saison ${yr}</option>
+    `).join('');
+  }
 
   tabs.innerHTML = `
     <button
@@ -237,4 +247,13 @@ export function initSeasonStandingsListeners(): void {
     state.selectedSeasonStandingScope = scope;
     renderSeasonStandingsView();
   });
+
+  const yearSelect = $('season-standings-year-select');
+  if (yearSelect) {
+    yearSelect.addEventListener('change', (event) => {
+      const select = event.target as HTMLSelectElement;
+      state.seasonStandingsSelectedSeason = Number(select.value);
+      void loadSeasonStandings(false);
+    });
+  }
 }

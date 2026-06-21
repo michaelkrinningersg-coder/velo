@@ -43,7 +43,34 @@ export class ResultRepository {
     return row?.rank ?? null;
   }
 
+  private getAvailableStandingsSeasons(currentSeason: number): number[] {
+    const seasons: number[] = [];
+    for (let yr = 2026; yr <= currentSeason; yr++) {
+      seasons.push(yr);
+    }
+    return seasons;
+  }
+
   public getSeasonStandings(season = new GameStateRepository(this.db).getCurrentSeason()): SeasonStandingsPayload {
+    const currentSeason = new GameStateRepository(this.db).getCurrentSeason();
+    
+    // Prüfen, ob wir einen Snapshot für ein historisches Jahr haben
+    if (season < currentSeason && tableExists(this.db, 'season_standings_snapshots')) {
+      const snapshotRow = this.db.prepare(`
+        SELECT payload_json FROM season_standings_snapshots WHERE season = ?
+      `).get(season) as { payload_json: string } | undefined;
+      
+      if (snapshotRow) {
+        try {
+          const payload = JSON.parse(snapshotRow.payload_json) as SeasonStandingsPayload;
+          payload.availableSeasons = this.getAvailableStandingsSeasons(currentSeason);
+          return payload;
+        } catch (e) {
+          // Fallback falls parsen fehlschlägt
+        }
+      }
+    }
+
     new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season);
     if (!tableExists(this.db, 'season_point_events')) {
       return {
@@ -51,6 +78,7 @@ export class ResultRepository {
         riderStandings: [],
         teamStandings: [],
         countryStandings: [],
+        availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
       };
     }
 
@@ -106,6 +134,7 @@ export class ResultRepository {
       riderStandings: this.mapRiderSeasonStandings(riderRows),
       teamStandings: this.mapTeamSeasonStandings(teamRows),
       countryStandings: this.mapCountrySeasonStandings(countryRows, riderRows),
+      availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
     };
   }
 

@@ -85,7 +85,7 @@ export const api = {
   completeRealtimeSimulation: (stageId: number, payload: RealtimeStageCommitRequest) => call<StageResultCommitResponse>('POST', `/api/simulation/realtime/${stageId}/complete`, payload),
   advanceDay:          () => call<GameState>('POST', '/api/state/advance'),
   getStageResults:     (stageId: number) => call<StageResultsPayload>('GET', `/api/results/${stageId}`),
-  getSeasonStandings:  () => call<SeasonStandingsPayload>('GET', '/api/season-standings'),
+  getSeasonStandings:  (season?: number) => call<SeasonStandingsPayload>('GET', `/api/season-standings${season ? `?season=${season}` : ''}`),
   listStageEditorStages: () => call<StageEditorExistingStageListResponse>('GET', '/api/stage-editor/stages'),
   listStageEditorCountries: () => call<Array<{ id: number; name: string; code3: string }>>('GET', '/api/stage-editor/countries'),
   listStageEditorRaceCategories: () => call<Array<{ id: number; name: string }>>('GET', '/api/stage-editor/race-categories'),
@@ -96,6 +96,7 @@ export const api = {
   exportStageRoute:    (payload: StageEditorExportRequest) => call<StageEditorExportPayload>('POST', '/api/stage-editor/export', payload),
   getInjuries:         () => call<InjuryRow[]>('GET', '/api/injuries'),
   getDraftHistory:     (season: number) => call<DraftHistoryPayload>('GET', `/api/draft/${season}`),
+  getDraftDetails:     (season: number) => call<any>('GET', `/api/draft/${season}/details`),
   getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
     call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),
   getRaceProgramsEditor: () => call<any>('GET', '/api/race-programs-editor'),

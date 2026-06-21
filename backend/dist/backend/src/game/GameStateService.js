@@ -183,7 +183,21 @@ class GameStateService {
             const nextDate = addDaysIso(currentRow.current_date, 1);
             const nextSeason = resolveSeason(nextDate, currentRow.season);
             if (nextSeason !== currentRow.season) {
-                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason);
+                // Standings-Snapshot für die abgelaufene Saison sichern
+                try {
+                    const resultRepo = new ResultRepository_1.ResultRepository(this.db);
+                    const standings = resultRepo.getSeasonStandings(currentRow.season);
+                    this.db.prepare(`
+            INSERT OR REPLACE INTO season_standings_snapshots (season, payload_json)
+            VALUES (?, ?)
+          `).run(currentRow.season, JSON.stringify(standings));
+                }
+                catch (e) {
+                    console.error('Fehler beim Erstellen des Season Standings Snapshots:', e);
+                }
+                // Duplicate calendar dates (stages and races) to the new season's year
+                this.duplicateCalendarForSeason(currentRow.season, nextSeason);
+                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason, true);
                 new RiderDraftService_1.RiderDraftService(this.db).executeDraft(nextSeason);
                 new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason); // activate new draft contracts
                 new RiderDevelopmentService_1.RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
@@ -237,6 +251,84 @@ class GameStateService {
     onDayAdvanced(listener) {
         this.events.on('dayAdvanced', listener);
         return () => this.events.off('dayAdvanced', listener);
+    }
+    duplicateCalendarForSeason(oldYear, newYear) {
+        const oldYearStr = String(oldYear);
+        const newYearStr = String(newYear);
+        // 1. Duplicate races
+        const oldRaces = this.db.prepare(`
+      SELECT * FROM races WHERE start_date LIKE ?
+    `).all(`${oldYearStr}-%`);
+        const insertRace = this.db.prepare(`
+      INSERT INTO races (
+        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+        const raceMap = new Map();
+        for (const r of oldRaces) {
+            const newStartDate = r.start_date.replace(oldYearStr, newYearStr);
+            const newEndDate = r.end_date.replace(oldYearStr, newYearStr);
+            const res = insertRace.run(r.name, r.country_id, r.category_id, r.is_stage_race, r.number_of_stages, newStartDate, newEndDate, r.prestige);
+            raceMap.set(r.id, res.lastInsertRowid);
+        }
+        // 2. Duplicate stages
+        const oldStages = this.db.prepare(`
+      SELECT * FROM stages WHERE date LIKE ?
+    `).all(`${oldYearStr}-%`);
+        const insertStage = this.db.prepare(`
+      INSERT INTO stages (
+        race_id, stage_number, date, profile, start_elevation, details_csv_file,
+        final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
+        crash_incident_multiplier, mechanical_incident_multiplier, stage_score, allowed_weather
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+        const stageMap = new Map();
+        for (const s of oldStages) {
+            const newRaceId = raceMap.get(s.race_id);
+            if (newRaceId === undefined)
+                continue;
+            const newDate = s.date.replace(oldYearStr, newYearStr);
+            const res = insertStage.run(newRaceId, s.stage_number, newDate, s.profile, s.start_elevation, s.details_csv_file, s.final_spread_start_percent, s.final_push_start_percent, s.final_spread_difficulty_multiplier, s.crash_incident_multiplier, s.mechanical_incident_multiplier, s.stage_score, s.allowed_weather);
+            stageMap.set(s.id, res.lastInsertRowid);
+        }
+        // 3. Duplicate stage climb scores
+        if (this.isTable('stage_climb_scores')) {
+            const oldClimbs = this.db.prepare(`
+        SELECT scs.* FROM stage_climb_scores scs
+        JOIN stages s ON s.id = scs.stage_id
+        WHERE s.date LIKE ?
+      `).all(`${oldYearStr}-%`);
+            const insertClimb = this.db.prepare(`
+        INSERT INTO stage_climb_scores (
+          stage_id, climb_index, name, category, start_km, end_km, climb_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+            for (const c of oldClimbs) {
+                const newStageId = stageMap.get(c.stage_id);
+                if (newStageId === undefined)
+                    continue;
+                insertClimb.run(newStageId, c.climb_index, c.name, c.category, c.start_km, c.end_km, c.climb_score);
+            }
+        }
+        // 4. Duplicate race program races
+        if (this.isTable('race_program_races')) {
+            const oldProgramRaces = this.db.prepare(`
+        SELECT rpr.* FROM race_program_races rpr
+        JOIN races r ON r.id = rpr.race_id
+        WHERE r.start_date LIKE ?
+      `).all(`${oldYearStr}-%`);
+            const insertProgramRace = this.db.prepare(`
+        INSERT OR IGNORE INTO race_program_races (
+          program_id, race_id
+        ) VALUES (?, ?)
+      `);
+            for (const pr of oldProgramRaces) {
+                const newRaceId = raceMap.get(pr.race_id);
+                if (newRaceId === undefined)
+                    continue;
+                insertProgramRace.run(pr.program_id, newRaceId);
+            }
+        }
     }
     refreshRiderLoadState(currentDate, currentSeason) {
         this.ensureRiderDailyStateTable();
@@ -785,6 +877,12 @@ class GameStateService {
                 }
                 recoveryShort *= shortTermMult;
                 recoveryLong *= longTermMult;
+                // Double fatigue recovery in November and December
+                const month = nextDate.slice(5, 7);
+                if (month === '11' || month === '12') {
+                    recoveryShort *= 2.0;
+                    recoveryLong *= 2.0;
+                }
                 shortTermFatigue = Math.max(0.0, shortTermFatigue - recoveryShort);
                 longTermDecayable = Math.max(0.0, longTermDecayable - recoveryLong);
                 shortTermFatigue = roundToThreeDecimals(shortTermFatigue);

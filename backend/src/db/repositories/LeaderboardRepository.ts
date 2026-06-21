@@ -114,7 +114,7 @@ export class LeaderboardRepository {
         JOIN rider_daily_state rds ON rds.rider_id = r.id
         LEFT JOIN teams t ON t.id = r.active_team_id
         ${freeRaceFormJoin}
-        WHERE rds.season = ?
+        WHERE rds.season = ? AND r.is_retired = 0
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
       `;
@@ -230,6 +230,7 @@ export class LeaderboardRepository {
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
           JOIN individual_wins iw ON iw.rider_id = r.id
+          WHERE r.is_retired = 0
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -343,6 +344,7 @@ export class LeaderboardRepository {
           WHERE res.rank = 1 AND res.result_type_id = ?
             AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND r.is_retired = 0
             ${categoryFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -398,7 +400,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = spe.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE spe.season = ?
+          WHERE spe.season = ? AND r.is_retired = 0
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -450,6 +452,7 @@ export class LeaderboardRepository {
           LEFT JOIN teams t ON t.id = r.active_team_id
           WHERE se.status = 'finished'
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND r.is_retired = 0
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
@@ -503,6 +506,7 @@ export class LeaderboardRepository {
           WHERE r1.result_type_id = 1
             AND r1.is_breakaway = 1
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND r.is_retired = 0
             AND NOT EXISTS (
               SELECT 1 FROM results r2
               WHERE r2.stage_id = r1.stage_id
@@ -578,6 +582,7 @@ export class LeaderboardRepository {
           LEFT JOIN teams t ON t.id = r.active_team_id
           WHERE se.status != 'dns'
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND r.is_retired = 0
             ${extraFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -661,6 +666,7 @@ export class LeaderboardRepository {
           LEFT JOIN teams t ON t.id = r.active_team_id
           WHERE res.rank = 1 AND res.result_type_id = ?
             AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+            AND r.is_retired = 0
             ${categoryFilter}
           GROUP BY r.id
           ORDER BY val DESC, r.last_name ASC
@@ -748,7 +754,8 @@ export class LeaderboardRepository {
         LEFT JOIN teams t ON t.id = r.active_team_id
         JOIN races ra ON ra.id = sl.race_id
         JOIN stages st ON st.id = sl.stage_id
-        ${period === 'season' ? 'WHERE sl.season = ?' : ''}
+        WHERE 1=1
+        ${period === 'season' ? 'AND sl.season = ? AND r.is_retired = 0' : ''}
         GROUP BY r.id
         ORDER BY val DESC, r.last_name ASC
         LIMIT 100
@@ -788,7 +795,7 @@ export class LeaderboardRepository {
           JOIN riders leader ON leader.id = rl.leader_id
           JOIN sta_country leader_c ON leader_c.id = leader.country_id
           LEFT JOIN sta_role leader_role ON leader_role.id = leader.role_id
-          WHERE rl.season = ?
+          WHERE rl.season = ? AND r.is_retired = 0
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;
@@ -862,7 +869,7 @@ export class LeaderboardRepository {
           JOIN riders r ON r.id = rss.rider_id
           JOIN sta_country c ON c.id = r.country_id
           LEFT JOIN teams t ON t.id = r.active_team_id
-          WHERE rss.season = ? AND val > 0
+          WHERE rss.season = ? AND val > 0 AND r.is_retired = 0
           ORDER BY val DESC, r.last_name ASC
           LIMIT 100
         `;

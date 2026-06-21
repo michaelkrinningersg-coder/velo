@@ -1,0 +1,332 @@
+Round;Pick;Rider ID;First Name;Last Name;Age;Overall;Potential;Draft Value;Old Team;New Team;Contract Length
+1;1;6770;Remco;Evenepoel;27;78.22;78.22;78.22;Decathlon - Renault;Decathlon - Renault;2
+1;2;3763;Daniel Felipe;Martínez;31;75.27;75.27;75.27;Toyota - Lapierre;Falke - Scott;1
+1;3;5793;Neilson;Powless;30;74.95;74.95;74.95;Google - Pinarello;Google - Pinarello;2
+1;4;7382;Lennert;Van Eetvelt;25;75.00;78.75;75.00;VW - Continental - Rose;ING - Schwalbe;2
+1;5;7192;Mattias;Skjelmose;26;76.07;79.15;76.07;ING - Schwalbe;Novartis - SRM;1
+2;6;6501;Tom;Pidcock;27;75.92;78.53;75.92;Spotify - Cervelo;Decathlon - Renault;2
+2;7;6324;Jasper;Philipsen;29;75.67;75.67;75.67;Philips - Santander;Falke - Scott;2
+2;8;7406;Jonathan;Milan;26;75.73;75.73;75.73;Google - Pinarello;Google - Pinarello;3
+2;9;5304;Laurens;De Plus;31;74.44;74.44;74.44;ING - Schwalbe;ING - Schwalbe;2
+2;10;14395;Romain;Grégoire;24;74.49;78.38;75.27;VW - Continental - Rose;Novartis - SRM;2
+3;11;5978;Wout;van Aert;32;77.54;77.54;77.54;VW - Continental - Rose;SAP - Canyon;1
+3;12;7224;Florian;Lipowitz;26;74.41;78.41;74.41;AXA - Lindt;AXA - Lindt;3
+3;13;7394;Antonio;Tiberi;26;74.42;77.66;74.42;SAP - Canyon;Nintendo - Colnago;3
+3;14;6028;Felix;Gall;29;74.32;74.32;74.32;Michelin - Look;Toyota - Lapierre;2
+3;15;14321;Max;Poole;24;73.96;78.36;74.84;Toyota - Lapierre;Philips - Santander;1
+4;16;3687;Tiesj;Benoot;33;74.31;74.31;74.31;Novartis - SRM;Decathlon - Renault;3
+4;17;5672;Egan;Bernal;30;74.32;74.32;74.32;Falke - Scott;Falke - Scott;3
+4;18;7091;Carlos;Rodríguez;26;74.79;74.79;74.79;Google - Pinarello;Google - Pinarello;1
+4;19;3365;Julian;Alaphilippe;35;74.72;74.72;74.72;Decathlon - Renault;ING - Schwalbe;1
+4;20;4;Valentin;Madouas;30;73.87;73.87;73.87;Novartis - SRM;Novartis - SRM;3
+5;21;8365;Jakob;Söderqvist;24;73.19;76.63;73.88;VW - Continental - Rose;SAP - Canyon;2
+5;22;9151;Joe;Blackmore;24;73.58;77.02;74.27;Spotify - Cervelo;AXA - Lindt;2
+5;23;7498;Oscar;Onley;24;73.56;76.70;74.19;Generali - Mammut;Nintendo - Colnago;2
+5;24;6327;Pavel;Sivakov;29;74.17;74.17;74.17;Samsung - Cube;Toyota - Lapierre;2
+5;25;5303;Steff;Cras;31;73.74;73.74;73.74;Ikea - Adidas;Philips - Santander;3
+6;26;4967;Isaac;del Toro;23;74.43;77.52;75.05;VW - Continental - Rose;Spotify - Cervelo;2
+6;27;7300;Finn;Fisher-Black;25;73.78;73.78;73.78;Spotify - Cervelo;Orange - Ridley;2
+6;28;14393;Alec;Segaert;24;72.59;78.14;73.70;Philips - Santander;Ferrero - Giro;3
+6;29;3564;Mads;Pedersen;31;77.12;77.12;77.12;Google - Pinarello;Samsung - Cube;3
+6;30;5958;Dorian;Godon;31;73.58;73.58;73.58;Decathlon - Renault;Ikea - Adidas;2
+7;31;6390;Mikkel;Bjerg;28;73.54;73.54;73.54;Danone - Fizik;Decathlon - Renault;3
+7;32;7425;Mathias;Vacek;25;73.98;77.16;73.98;Michelin - Look;Falke - Scott;1
+7;33;15381;Tibor;del Grosso;23;72.47;77.76;73.53;Zalando - Continental;Google - Pinarello;3
+7;34;5807;Stephen;Williams;31;73.40;73.40;73.40;Microsoft - Tacx;ING - Schwalbe;1
+7;35;6569;Thymen;Arensman;27;73.82;78.83;73.82;Danone - Fizik;Novartis - SRM;2
+8;36;3700;Marc;Soler;33;74.14;74.14;74.14;Zalando - Continental;SAP - Canyon;2
+8;37;4885;Junior;Lecerf;24;72.98;76.42;73.67;Toyota - Lapierre;AXA - Lindt;3
+8;38;7107;Christian;Scaroni;29;73.63;73.63;73.63;Orange - Ridley;Nintendo - Colnago;1
+8;39;9652;Pablo;Torres;21;72.13;78.00;73.30;SAP - Canyon;Toyota - Lapierre;3
+8;40;7397;Javier;Romo;28;73.27;73.27;73.27;Generali - Mammut;Philips - Santander;3
+9;41;14407;Igor;Arrieta;24;72.31;77.28;73.30;Toyota - Lapierre;Spotify - Cervelo;1
+9;42;6393;Michael;Storer;30;73.29;73.29;73.29;Orange - Ridley;Orange - Ridley;3
+9;43;7110;Biniam;Girmay;27;74.55;77.28;74.55;Swiss Re - BMC;Ferrero - Giro;2
+9;44;14999;Alessandro;Pinarello;23;72.05;78.37;73.31;VW - Continental - Rose;Samsung - Cube;3
+9;45;15205;Arnaud;De Lie;25;73.04;73.04;73.04;Google - Pinarello;Ikea - Adidas;2
+10;46;5750;Kasper;Asgreen;32;72.92;72.92;72.92;Samsung - Cube;Lego - Bianchi;1
+10;47;7303;Olav;Kooij;25;73.49;77.50;73.49;Zalando - Continental;Swiss Re - BMC;1
+10;48;6896;Kaden;Groves;28;73.09;73.09;73.09;Novartis - SRM;Danone - Fizik;1
+10;49;7494;Tobias;Lund Andresen;24;71.90;76.57;72.83;Google - Pinarello;Michelin - Look;3
+10;50;7014;Attila;Valter;29;73.32;73.32;73.32;Zalando - Continental;VW - Continental - Rose;2
+11;51;3140;Felix;Großschartner;33;73.83;73.83;73.83;Decathlon - Renault;Decathlon - Renault;2
+11;52;6766;Gianni;Vermeersch;34;72.80;72.80;72.80;Ferrero - Giro;Falke - Scott;1
+11;53;6056;Sergio;Higuita;29;72.89;72.89;72.89;Generali - Mammut;Google - Pinarello;2
+11;54;7422;Clément;Berthet;29;72.86;72.86;72.86;Samsung - Cube;ING - Schwalbe;3
+11;55;7761;Louis;Barré;27;72.82;72.82;72.82;Ikea - Adidas;Novartis - SRM;3
+12;56;14573;Ben;Turner;28;73.26;73.26;73.26;Falke - Scott;SAP - Canyon;1
+12;57;14996;Alexander;Hajek;23;71.52;77.74;72.76;Generali - Mammut;AXA - Lindt;2
+12;58;6253;Sepp;Kuss;32;73.83;73.83;73.83;ING - Schwalbe;Nintendo - Colnago;3
+12;59;15408;Brieuc;Rolland;23;71.59;77.21;72.71;Microsoft - Tacx;Toyota - Lapierre;3
+12;60;7424;Jay;Vine;31;73.23;73.23;73.23;Generali - Mammut;Philips - Santander;1
+13;61;7495;Pavel;Bittner;24;71.74;76.67;72.73;Novartis - SRM;Spotify - Cervelo;2
+13;62;4047;Søren;Kragh Andersen;32;73.52;73.52;73.52;Lego - Bianchi;Orange - Ridley;1
+13;63;14249;Luke;Plapp;26;72.73;76.60;72.73;Shimano - Tissot;Ferrero - Giro;2
+13;64;3925;Rúben;Guerreiro;33;72.64;72.64;72.64;Toyota - Lapierre;Samsung - Cube;2
+13;65;7420;Pelayo;Sánchez;27;72.71;77.65;72.71;ING - Schwalbe;Ikea - Adidas;2
+14;66;4839;Pablo;Castrillo;26;72.76;76.16;72.76;Michelin - Look;Lego - Bianchi;3
+14;67;5804;Markus;Hoelgaard;32;72.63;72.63;72.63;Lego - Bianchi;Swiss Re - BMC;1
+14;68;5939;Pascal;Ackermann;33;72.83;72.83;72.83;Toyota - Lapierre;Danone - Fizik;3
+14;69;7372;Natnael;Tesfazion;28;72.63;72.63;72.63;Michelin - Look;Michelin - Look;1
+14;70;6230;Chris;Harper;32;72.83;72.83;72.83;ING - Schwalbe;VW - Continental - Rose;1
+15;71;7400;Giovanni;Aleotti;28;72.67;72.67;72.67;Novartis - SRM;Allianz - Giant;3
+15;72;3041;Bob;Jungels;34;72.48;72.48;72.48;Shimano - Tissot;Microsoft - Tacx;2
+15;73;5106;Iván;García Cortina;31;72.52;72.52;72.52;Philips - Santander;Zalando - Continental;1
+15;74;6201;Andreas;Kron;29;72.46;72.46;72.46;Falke - Scott;Generali - Mammut;3
+15;75;7064;Einer;Rubio;29;72.52;72.52;72.52;Shimano - Tissot;Shimano - Tissot;3
+16;76;3957;Bruno;Armirail;33;72.43;72.43;72.43;Lego - Bianchi;Decathlon - Renault;3
+16;77;4938;Léo;Bisiaux;22;71.20;76.28;72.22;VW - Continental - Rose;Falke - Scott;2
+16;78;9820;Davide;Donati;22;70.88;78.42;72.39;Samsung - Cube;Google - Pinarello;1
+16;79;7033;Paul;Lapeira;27;72.20;72.20;72.20;SAP - Canyon;ING - Schwalbe;2
+16;80;7305;Archie;Ryan;25;72.68;78.02;72.68;Allianz - Giant;Novartis - SRM;1
+17;81;7226;Georg;Steinhauser;25;72.45;72.45;72.45;Spotify - Cervelo;Decathlon - Renault;3
+17;82;6838;Harry;Sweeny;29;72.20;72.20;72.20;Generali - Mammut;Falke - Scott;3
+17;83;6904;Rick;Pluimers;26;72.33;72.33;72.33;Danone - Fizik;Google - Pinarello;3
+17;84;7161;Carlos;Canal;26;72.18;72.18;72.18;Shimano - Tissot;ING - Schwalbe;2
+17;85;5512;Rémy;Rochas;31;72.56;72.56;72.56;Michelin - Look;Novartis - SRM;2
+18;86;3779;Oliver;Naesen;36;72.10;72.10;72.10;Orange - Ridley;SAP - Canyon;3
+18;87;5970;Ryan;Gibbons;32;72.16;72.16;72.16;Ferrero - Giro;AXA - Lindt;1
+18;88;6972;Connor;Swift;31;72.61;72.61;72.61;VW - Continental - Rose;Nintendo - Colnago;3
+18;89;3386;Damien;Howson;34;72.04;72.04;72.04;Spotify - Cervelo;Toyota - Lapierre;1
+18;90;2853;Carlos;Verona;34;72.08;72.08;72.08;Spotify - Cervelo;Philips - Santander;3
+19;91;4261;Tijmen;Graat;24;70.87;77.32;72.16;Orange - Ridley;Decathlon - Renault;1
+19;92;9391;Albert;Withen Philipsen;20;71.56;75.88;72.42;Falke - Scott;Falke - Scott;2
+19;93;2897;Nikias;Arndt;35;71.95;71.96;71.95;Nintendo - Colnago;Google - Pinarello;2
+19;94;15510;Thibaud;Gruel;23;71.17;75.42;72.02;Ikea - Adidas;ING - Schwalbe;2
+19;95;7100;Matîs;Louvel;27;71.99;71.99;71.99;Danone - Fizik;Novartis - SRM;2
+20;96;4957;Andrew;August;21;71.18;75.63;72.07;SAP - Canyon;SAP - Canyon;1
+20;97;12674;Harold Martín;López;26;72.11;75.22;72.11;Michelin - Look;AXA - Lindt;1
+20;98;5507;Victor;Lafay;31;71.91;71.91;71.91;VW - Continental - Rose;Nintendo - Colnago;1
+20;99;6971;Juan Pedro;López;29;71.92;71.92;71.92;Falke - Scott;Toyota - Lapierre;3
+20;100;15360;Rasmus;Søjberg Pedersen;24;71.10;75.77;72.03;Lego - Bianchi;Philips - Santander;2
+21;101;5966;James;Shaw;31;71.94;71.94;71.94;Nintendo - Colnago;Spotify - Cervelo;1
+21;102;12774;Luke;Lamperti;24;71.06;75.11;71.87;Ikea - Adidas;Orange - Ridley;1
+21;103;3984;Benjamin;Thomas;31;71.85;71.85;71.85;Allianz - Giant;Ferrero - Giro;3
+21;104;15390;Darren;Rafferty;24;71.10;74.85;71.85;Samsung - Cube;Samsung - Cube;3
+21;105;14183;Timo;Kielich;27;71.78;71.78;71.78;Orange - Ridley;Ikea - Adidas;1
+22;106;3716;Emanuel;Buchmann;34;72.40;72.40;72.40;Microsoft - Tacx;Decathlon - Renault;3
+22;107;7126;Marco;Frigo;27;71.78;71.78;71.78;Google - Pinarello;Falke - Scott;1
+22;108;6350;Mathieu;Burgaudeau;28;71.86;75.35;71.86;Allianz - Giant;Google - Pinarello;3
+22;109;7050;Samuele;Battistella;28;71.67;71.67;71.67;ING - Schwalbe;ING - Schwalbe;3
+22;110;5986;Nick;Schultz;32;71.72;71.72;71.72;VW - Continental - Rose;Novartis - SRM;2
+23;111;15233;Rainer;Kepplinger;29;71.84;71.84;71.84;SAP - Canyon;SAP - Canyon;3
+23;112;6811;Kevin;Vermaerke;26;72.39;72.39;72.39;Zalando - Continental;AXA - Lindt;1
+23;113;3461;Owain;Doull;34;71.63;71.63;71.63;Samsung - Cube;Nintendo - Colnago;1
+23;114;3713;Anthony;Turgis;33;71.63;71.63;71.63;Nintendo - Colnago;Toyota - Lapierre;2
+23;115;6311;Stan;Dewulf;29;71.71;71.71;71.71;Shimano - Tissot;Philips - Santander;1
+24;116;7278;Lewis;Askey;26;71.83;74.64;71.83;Ikea - Adidas;Spotify - Cervelo;1
+24;117;3190;Aaron;Gate;36;71.62;71.62;71.62;Orange - Ridley;Orange - Ridley;3
+24;118;15513;Menno;Huising;23;70.61;75.95;71.68;Lego - Bianchi;Ferrero - Giro;1
+24;119;7361;Casper;van Uden;25;71.54;76.21;71.54;Falke - Scott;Samsung - Cube;3
+24;120;7040;Laurenz;Rex;27;71.53;71.53;71.53;Ikea - Adidas;Ikea - Adidas;1
+25;121;6000;Iván;Sosa;29;71.61;71.61;71.61;Allianz - Giant;Lego - Bianchi;1
+25;122;15315;Thomas;Gachignard;26;71.90;77.49;71.90;Swiss Re - BMC;Swiss Re - BMC;3
+25;123;15034;Pietro;Mattio;23;70.09;77.70;71.61;Spotify - Cervelo;Danone - Fizik;3
+25;124;7062;Filippo;Fiorelli;32;71.51;71.51;71.51;AXA - Lindt;Michelin - Look;1
+25;125;7109;Simon;Carr;28;71.58;71.58;71.58;VW - Continental - Rose;VW - Continental - Rose;2
+26;126;7113;Orluis;Aular;30;71.89;71.89;71.89;Generali - Mammut;Falke - Scott;3
+26;127;4157;Florian Samuel;Kajamini;24;70.80;73.86;71.41;Samsung - Cube;Google - Pinarello;2
+26;128;3932;Will;Barta;31;71.44;71.44;71.44;Spotify - Cervelo;ING - Schwalbe;1
+26;129;14256;Ethan;Vernon;26;71.62;76.70;71.62;Google - Pinarello;Novartis - SRM;1
+27;130;6689;Harm;Vanhoucke;30;71.31;71.31;71.31;Toyota - Lapierre;SAP - Canyon;1
+27;131;4868;Jaume;Guardeño;24;70.51;75.12;71.43;Generali - Mammut;AXA - Lindt;2
+27;132;6806;Pier-André;Côté;30;71.24;71.24;71.24;Generali - Mammut;Nintendo - Colnago;3
+27;133;15604;Noah;Hobbs;22;70.09;77.45;71.56;Philips - Santander;Toyota - Lapierre;2
+27;134;7370;Henok;Mulubrhan;27;71.50;71.50;71.50;Philips - Santander;Philips - Santander;3
+28;135;15592;Oliver;Peace;22;69.76;77.73;71.35;Bosch - Deuter;Spotify - Cervelo;1
+28;136;3702;Pierre;Latour;33;71.15;71.15;71.15;Nintendo - Colnago;Orange - Ridley;2
+28;137;13471;Cian;Uijtdebroeks;24;70.40;75.72;71.46;Ikea - Adidas;Ferrero - Giro;1
+28;138;10151;Sam;Maisonobe;23;70.09;75.88;71.25;Swiss Re - BMC;Samsung - Cube;3
+28;139;7284;Hugo;Page;25;71.18;71.18;71.18;Shimano - Tissot;Ikea - Adidas;1
+29;140;8634;Luca;Vergallito;29;71.40;71.40;71.40;Allianz - Giant;Lego - Bianchi;1
+29;141;13451;Anders;Halland Johannessen;27;71.19;71.19;71.19;Samsung - Cube;Swiss Re - BMC;1
+29;142;7067;Simon;Guglielmi;30;71.20;71.20;71.20;Samsung - Cube;Danone - Fizik;2
+29;143;15021;Adrien;Maire;26;71.15;76.77;71.15;Spotify - Cervelo;Michelin - Look;3
+29;144;15811;Luca;Paletti;23;69.93;75.70;71.08;Samsung - Cube;VW - Continental - Rose;3
+30;145;15000;Nahom;Zerai;24;70.04;75.01;71.03;Vattenfall - Focus;Allianz - Giant;1
+30;146;6189;Anthon;Charmig;29;71.09;71.09;71.09;Novartis - SRM;Microsoft - Tacx;1
+30;147;12991;Riley;Sheehan;27;71.48;71.48;71.48;Zalando - Continental;Zalando - Continental;2
+30;148;6027;Nils;Eekhoff;29;71.00;71.00;71.00;Zalando - Continental;Generali - Mammut;3
+30;149;3586;Odd Christian;Eiking;32;71.11;71.11;71.11;Generali - Mammut;Shimano - Tissot;1
+31;150;6309;Sander;De Pestel;28;71.00;75.80;71.00;Falke - Scott;Falke - Scott;3
+31;151;14998;Alessandro;Romele;23;70.17;75.25;71.19;Spotify - Cervelo;Google - Pinarello;3
+31;152;7285;Paul;Penhoët;25;70.94;76.68;70.94;ING - Schwalbe;ING - Schwalbe;3
+31;153;7431;Mats;Wenzel;24;70.39;73.96;71.10;Orange - Ridley;Novartis - SRM;3
+32;154;15503;Tobias;Svarre;22;69.53;76.78;70.98;Dassault - Time;Falke - Scott;2
+32;155;6874;Stefano;Oldani;29;70.98;70.98;70.98;VW - Continental - Rose;ING - Schwalbe;3
+32;156;3902;Cees;Bol;31;71.04;71.04;71.04;Zalando - Continental;Novartis - SRM;2
+33;157;6131;Óscar;Rodríguez;32;70.98;70.98;70.98;Philips - Santander;SAP - Canyon;2
+33;158;7130;Stan;Van Tricht;27;70.96;76.79;70.96;Allianz - Giant;AXA - Lindt;2
+33;159;5635;Hugo;Hofstetter;33;71.14;71.14;71.14;Nintendo - Colnago;Nintendo - Colnago;2
+33;160;3905;Hartthijs;de Vries;30;70.85;70.85;70.85;Ikea - Adidas;Toyota - Lapierre;2
+33;161;15478;Kamiel;Bonneu;27;70.82;70.82;70.82;Falke - Scott;Philips - Santander;2
+34;162;6748;Arne;Marit;28;70.86;70.86;70.86;ING - Schwalbe;Falke - Scott;2
+34;163;6913;Kim;Heiduk;27;70.88;75.66;70.88;Swiss Re - BMC;ING - Schwalbe;3
+34;164;15475;Milan;Vader;31;70.83;70.83;70.83;Microsoft - Tacx;Novartis - SRM;2
+35;165;7402;Ben;Zwiehoff;33;70.80;70.80;70.80;AXA - Lindt;AXA - Lindt;1
+35;166;12431;Luká;Kubi;27;71.89;75.95;71.89;Falke - Scott;Nintendo - Colnago;1
+35;167;6773;Robert;Stannard;28;70.78;70.78;70.78;Generali - Mammut;Toyota - Lapierre;3
+36;168;14574;Max;Walker;25;70.69;75.09;70.69;Generali - Mammut;Spotify - Cervelo;3
+36;169;6248;Rui;Oliveira;30;71.02;71.02;71.02;Spotify - Cervelo;Orange - Ridley;1
+36;170;7604;Luca;Van Boven;27;70.81;76.12;70.81;Zalando - Continental;Ferrero - Giro;3
+36;171;14362;Lorenzo;Quartucci;28;70.60;70.60;70.60;Zalando - Continental;Samsung - Cube;2
+36;172;14398;Jorge;Gutiérrez;24;69.65;74.92;70.70;Ericsson - Thule;Ikea - Adidas;2
+37;173;4262;Jesse;Kramer;23;69.33;75.38;70.54;Falke - Scott;Falke - Scott;3
+37;174;7622;Nicola;Marcerou;24;69.21;75.82;70.53;Microsoft - Tacx;ING - Schwalbe;1
+38;175;7094;Mattia;Bais;30;70.55;70.55;70.55;Spotify - Cervelo;AXA - Lindt;1
+38;176;14212;Clément;Braz Afonso;27;70.58;74.63;70.58;Swiss Re - BMC;Nintendo - Colnago;2
+38;177;4856;Axel;Huens;25;70.53;75.19;70.53;Danone - Fizik;Toyota - Lapierre;3
+39;178;11325;Nicolò;Parisini;27;70.81;74.31;70.81;Danone - Fizik;Spotify - Cervelo;3
+39;179;7667;Afonso;Eulálio;25;70.49;70.49;70.49;Allianz - Giant;Orange - Ridley;2
+39;180;6313;Gerben;Thijssen;29;70.49;70.49;70.49;AXA - Lindt;Ferrero - Giro;2
+39;181;10120;Alessandro;Borgo;22;69.35;74.98;70.48;Danone - Fizik;Samsung - Cube;3
+39;182;7299;Lars;Boven;25;70.55;70.55;70.55;Allianz - Giant;Ikea - Adidas;2
+40;183;3235;Hugh;Carthy;33;70.73;70.73;70.73;Lego - Bianchi;Lego - Bianchi;1
+40;184;6414;Fernando;Barceló;31;70.48;70.48;70.48;SAP - Canyon;Swiss Re - BMC;3
+40;185;9115;Pierre-Henry;Basset;23;69.38;74.90;70.48;AXA - Lindt;Danone - Fizik;1
+40;186;4891;Clément;Alleno;26;70.59;73.72;70.59;Michelin - Look;Michelin - Look;1
+40;187;6690;Luca;Covili;30;70.45;70.45;70.45;VW - Continental - Rose;VW - Continental - Rose;3
+41;188;15749;Alexy;Faure-Prost;23;69.24;74.89;70.37;Alstom - Ghost;Falke - Scott;1
+41;189;7496;Pepijn;Reinderink;25;70.43;76.79;70.43;ING - Schwalbe;ING - Schwalbe;2
+42;190;15359;Anders;Foldager;25;70.70;75.69;70.70;Swiss Re - BMC;Nintendo - Colnago;2
+42;191;14925;Iker;Mintegi;24;69.19;74.89;70.33;Siemens - Wahoo;Toyota - Lapierre;3
+43;192;15514;Artem;Shmidt;23;69.02;75.56;70.33;Microsoft - Tacx;Spotify - Cervelo;2
+43;193;5711;Dion;Smith;34;70.31;70.31;70.31;Orange - Ridley;Orange - Ridley;3
+43;194;7523;Sean;Flynn;27;70.33;70.33;70.33;Nintendo - Colnago;Ferrero - Giro;3
+43;195;6342;Valentin;Ferron;29;70.44;70.44;70.44;Decathlon - Renault;Samsung - Cube;3
+43;196;8590;Callum;Thornley;23;69.47;75.83;70.74;Toyota - Lapierre;Ikea - Adidas;2
+44;197;15389;Robin;Donzé;23;69.17;74.77;70.29;Deutsche Bahn - Stevens;Lego - Bianchi;3
+44;198;15433;Jente;Michels;24;69.32;74.11;70.28;Swiss Re - BMC;Swiss Re - BMC;2
+44;199;15528;Henrik;Pedersen;22;69.04;75.06;70.24;Danone - Fizik;Danone - Fizik;3
+44;200;4304;Adrien;Boichis;24;69.02;75.22;70.26;VW - Continental - Rose;Michelin - Look;3
+44;201;7304;Gijs;Leemreize;27;70.42;74.52;70.42;Lego - Bianchi;VW - Continental - Rose;3
+45;202;7464;Ibon;Ruiz;28;70.27;70.27;70.27;ING - Schwalbe;Allianz - Giant;1
+45;203;7078;Nickolas;Zukowsky;29;70.28;70.28;70.28;VW - Continental - Rose;Microsoft - Tacx;1
+45;204;5748;Andreas;Stokbro;30;70.41;70.41;70.41;Allianz - Giant;Zalando - Continental;2
+45;205;5637;Fernando;Gaviria;32;70.55;70.55;70.55;Generali - Mammut;Generali - Mammut;1
+45;206;15284;Simon;Dalby;24;69.35;73.61;70.20;Ferrero - Giro;Shimano - Tissot;1
+46;207;5897;Chris;Hamilton;32;70.23;70.23;70.23;Falke - Scott;Falke - Scott;2
+46;208;6779;Alexis;Guérin;35;70.41;70.41;70.41;Decathlon - Renault;ING - Schwalbe;2
+47;209;6374;Lucas;Hamilton;31;70.07;70.07;70.07;Spotify - Cervelo;Falke - Scott;2
+47;210;5960;Élie;Gesbert;32;70.06;70.06;70.06;Spotify - Cervelo;ING - Schwalbe;2
+48;211;7513;Morten;Nørtoft;24;68.90;75.41;70.20;Microsoft - Tacx;Nintendo - Colnago;1
+51;212;8499;Tomá;Pridal;23;69.11;73.79;70.05;Patagonia - Fuji;Spotify - Cervelo;1
+51;213;15345;Mattéo;Vercher;26;70.02;70.02;70.02;Danone - Fizik;Orange - Ridley;1
+51;214;3778;Floris;De Tier;35;70.01;70.01;70.01;Spotify - Cervelo;Samsung - Cube;1
+51;215;15394;Haimar;Etxeberria;23;68.99;74.16;70.02;VW - Continental - Rose;Ikea - Adidas;3
+54;216;4916;Pavel;Novák;22;69.10;74.12;70.10;Oatly - Shimano;Spotify - Cervelo;3
+54;217;4276;Axel;Mariault;29;69.96;69.96;69.96;Danone - Fizik;Orange - Ridley;1
+54;218;9410;Jonas;Høydahl;21;68.45;76.05;69.97;Barilla - Zwift;Samsung - Cube;1
+54;219;9234;Héctor;Álvarez;20;68.38;76.48;70.00;Statkraft - Colnago;Ikea - Adidas;2
+55;220;9799;Eliott;Boulet;20;68.37;76.32;69.96;GLS Bank - Wahoo;Lego - Bianchi;2
+55;221;6497;James;Fouché;29;69.97;69.97;69.97;VW - Continental - Rose;Swiss Re - BMC;3
+55;222;14918;Unai;Iribar;28;69.99;69.99;69.99;VW - Continental - Rose;Danone - Fizik;1
+55;223;7410;Santiago;Umba;24;68.94;74.56;70.06;Barilla - Zwift;Michelin - Look;2
+55;224;6738;Luca;Mozzato;29;69.84;69.84;69.84;Nintendo - Colnago;VW - Continental - Rose;2
+58;225;6422;Maikel;Zijlaard;28;70.25;73.88;70.25;Orange - Ridley;Spotify - Cervelo;1
+58;226;14206;Gerben;Kuypers;27;69.83;69.83;69.83;Orange - Ridley;Orange - Ridley;2
+58;227;6845;Filippo;Conca;28;69.96;69.96;69.96;Generali - Mammut;Samsung - Cube;2
+58;228;15398;Pierre;Thierry;24;68.84;73.77;69.83;Ikea - Adidas;Ikea - Adidas;1
+59;229;9255;Filippo;Turconi;21;68.76;74.04;69.82;Bosch - Deuter;Lego - Bianchi;1
+59;230;7780;Walter;Calzoni;25;69.82;74.85;69.82;Swiss Re - BMC;Swiss Re - BMC;2
+59;231;12719;Fernando;Tercero;25;69.83;77.20;69.83;Danone - Fizik;Danone - Fizik;1
+59;232;7331;Marcin;Budzinski;29;70.06;70.06;70.06;Generali - Mammut;Michelin - Look;3
+59;233;10007;Luke;Tuckwell;23;68.91;75.98;70.32;Oatly - Shimano;VW - Continental - Rose;2
+60;234;7450;Jon;Agirre;29;69.74;69.74;69.74;Ferrero - Giro;Allianz - Giant;1
+60;235;14314;Jack;Rootkin-Gray;24;68.41;75.31;69.79;Google - Pinarello;Microsoft - Tacx;3
+60;236;4498;Alexandre;Kess;23;68.10;77.05;69.89;Leica - Trek;Zalando - Continental;2
+60;237;7499;Loe;van Belle;25;69.82;74.22;69.82;Decathlon - Renault;Generali - Mammut;2
+60;238;8417;Cesare;Chesini;23;68.38;74.98;69.70;Haribo - Specialized;Shimano - Tissot;1
+66;239;6640;Juri;Hollmann;27;69.79;69.79;69.79;Google - Pinarello;Spotify - Cervelo;1
+66;240;15017;Maxime;Jarnet;28;69.68;69.68;69.68;Novartis - SRM;Orange - Ridley;3
+66;241;9258;Luca;Giaimi;22;68.32;75.33;69.72;Ortlieb - Sony;Samsung - Cube;3
+69;242;7249;Alessandro;Fancellu;27;69.64;74.88;69.64;Novartis - SRM;Spotify - Cervelo;1
+69;243;15257;Elias;Maris;27;69.64;69.64;69.64;ING - Schwalbe;Orange - Ridley;2
+70;244;5996;Piet;Allegaert;32;69.62;69.62;69.62;Ferrero - Giro;Lego - Bianchi;2
+70;245;6190;Magnus;Bak Klaris;31;69.81;69.81;69.81;Swiss Re - BMC;Swiss Re - BMC;2
+70;246;6572;Tobias;Bayer;27;69.74;74.05;69.74;Michelin - Look;Danone - Fizik;3
+70;247;7549;Reuben;Thompson;26;69.75;73.28;69.75;Nintendo - Colnago;Michelin - Look;3
+70;248;8433;Lorenzo;Nespoli;22;68.32;75.27;69.71;Barilla - Zwift;VW - Continental - Rose;1
+73;249;4878;Samuel;Fernández;23;68.91;73.78;69.88;Bosch - Deuter;Spotify - Cervelo;2
+73;250;9257;Ludovico;Mellano;20;67.95;76.22;69.60;Sennheiser - Michelin;Orange - Ridley;2
+74;251;13661;Filippo;Magli;28;69.59;74.79;69.59;Microsoft - Tacx;Lego - Bianchi;3
+74;252;9428;Milan;Donie;22;68.35;74.63;69.61;Lavazza - Pirelli;Swiss Re - BMC;3
+74;253;7452;Kiko;Galván;29;69.72;69.72;69.72;Michelin - Look;Danone - Fizik;2
+74;254;7791;Jonathan;Vervenne;24;68.29;74.71;69.57;Haribo - Specialized;Michelin - Look;1
+74;255;7407;Anton;Palzer;34;69.53;69.53;69.53;Toyota - Lapierre;VW - Continental - Rose;1
+75;256;6755;Thomas;Champion;27;69.61;73.62;69.61;Generali - Mammut;Allianz - Giant;1
+75;257;13854;Logan;Currie;26;69.52;72.72;69.52;Danone - Fizik;Microsoft - Tacx;2
+75;258;9758;Enea;Sambinello;21;67.73;77.10;69.60;Logitech - SRAM;Zalando - Continental;1
+75;259;15383;Alberto;Bruttomesso;23;68.46;75.29;69.83;Carl Zeiss - Felt;Generali - Mammut;3
+75;260;7097;Théo;Delacroix;28;69.53;69.53;69.53;Orange - Ridley;Shimano - Tissot;1
+81;261;7453;Carlos;García Pierna;27;69.52;74.92;69.52;Swiss Re - BMC;Spotify - Cervelo;1
+81;262;15139;Germán Dario;Gómez;26;69.51;69.51;69.51;Michelin - Look;Orange - Ridley;3
+84;263;7416;Mario;Aparicio;27;69.46;69.46;69.46;BASF - Selle Italia;Spotify - Cervelo;1
+85;264;2697;Luke;Durbridge;36;69.60;69.60;69.60;Toyota - Lapierre;Lego - Bianchi;2
+85;265;9429;Peter;Øxenberg;21;68.04;75.00;69.43;Alstom - Ghost;Swiss Re - BMC;3
+85;266;8034;Sergi;Darder;24;67.70;76.30;69.42;Leica - Trek;Danone - Fizik;2
+85;267;5432;Toon;Aerts;33;69.56;69.56;69.56;Ferrero - Giro;Michelin - Look;2
+85;268;6791;David;González;31;69.66;69.66;69.66;Microsoft - Tacx;VW - Continental - Rose;3
+88;269;12123;Pim;Ronhaar;25;69.41;69.41;69.41;Novartis - SRM;Spotify - Cervelo;1
+89;270;15876;Victor;Vaneeckhoutte;21;67.81;75.86;69.42;Siemens - Wahoo;Swiss Re - BMC;3
+89;271;7002;Rémi;Capron;27;69.37;69.37;69.37;Nintendo - Colnago;Danone - Fizik;1
+89;272;6820;Antonio Jesús;Soto;32;69.36;69.36;69.36;Shimano - Tissot;Michelin - Look;2
+89;273;10071;Nicolas;Halter;21;67.58;77.67;69.60;Free Agent;VW - Continental - Rose;1
+90;274;6584;Mathias;Norsgaard;30;69.38;69.38;69.38;Shimano - Tissot;Allianz - Giant;1
+90;275;15554;Oscar;Chamberlain;22;68.62;73.33;69.56;AXA - Lindt;Microsoft - Tacx;1
+90;276;10446;Stefano;Viezzi;21;67.74;75.78;69.35;Carl Zeiss - Felt;Zalando - Continental;3
+90;277;15438;Leander;Van Hautegem;24;68.48;72.47;69.28;Danone - Fizik;Generali - Mammut;1
+90;278;15310;Manuele;Tarozzi;29;69.28;69.28;69.28;Shimano - Tissot;Shimano - Tissot;2
+96;279;7153;Tord;Gudmestad;26;69.51;74.13;69.51;Zalando - Continental;Spotify - Cervelo;1
+99;280;5631;Antonio;Pedrero;35;69.45;69.45;69.45;AXA - Lindt;Spotify - Cervelo;3
+100;281;3926;Michele;Gazzoli;28;69.42;69.42;69.42;Philips - Santander;Swiss Re - BMC;3
+100;282;7458;Jordi;López;28;69.26;69.26;69.26;Shimano - Tissot;Danone - Fizik;2
+100;283;6613;Robin;Froidevaux;28;69.31;69.31;69.31;Michelin - Look;Michelin - Look;3
+100;284;14455;Sergio;Meris;26;69.20;74.88;69.20;Lego - Bianchi;VW - Continental - Rose;2
+104;285;4899;Brady;Gilmore;26;69.21;69.21;69.21;Generali - Mammut;Danone - Fizik;1
+104;286;6790;Xavier;Cañellas;30;69.24;69.24;69.24;VW - Continental - Rose;VW - Continental - Rose;1
+105;287;6417;Sergio;Samitier;31;69.46;69.46;69.46;Philips - Santander;Allianz - Giant;3
+105;288;6751;Aaron;Van Poucke;29;69.17;69.17;69.17;Allianz - Giant;Microsoft - Tacx;3
+105;289;14995;Marco;Schrettl;23;68.11;73.39;69.17;SMA Solar - Bell;Zalando - Continental;2
+105;290;7501;Darren;van Bekkum;25;69.21;69.21;69.21;SMA Solar - Bell;Generali - Mammut;1
+105;291;14259;Kyrylo;Tsarenko;26;69.20;69.20;69.20;Shimano - Tissot;Shimano - Tissot;1
+115;292;15683;Benjamin;Eckerstorfer;23;67.54;76.35;69.30;Deutsche Bahn - Stevens;Danone - Fizik;2
+115;293;14279;Asbjørn;Hellemose;28;69.09;69.09;69.09;Novartis - SRM;VW - Continental - Rose;2
+119;294;7279;Alexandre;Balmer;27;69.07;73.38;69.07;Falke - Scott;VW - Continental - Rose;2
+120;295;7060;Iñigo;Elosegui;29;69.01;69.01;69.01;Allianz - Giant;Allianz - Giant;2
+120;296;8536;Márk;Valent;23;67.83;75.58;69.38;Statkraft - Colnago;Microsoft - Tacx;1
+120;297;9200;Tars;Poelvoorde;21;67.00;77.26;69.05;Lavazza - Pirelli;Zalando - Continental;3
+120;298;9426;Tore;Troelsen;22;67.58;75.60;69.18;Leica - Trek;Generali - Mammut;3
+120;299;8550;Cedrik;Christophersen;25;69.14;76.12;69.14;Bosch - Deuter;Shimano - Tissot;3
+130;300;9385;Pavel;umpík;20;67.30;75.71;68.98;Bosch - Deuter;VW - Continental - Rose;3
+134;301;12027;Martín;Herreño;20;66.94;77.12;68.98;Free Agent;VW - Continental - Rose;2
+135;302;6926;Jonas;Hvideberg;28;69.01;69.01;69.01;Orange - Ridley;Allianz - Giant;2
+135;303;7019;Jensen;Plowright;27;68.92;72.51;68.92;Toyota - Lapierre;Microsoft - Tacx;1
+135;304;15385;Marco;Andreaus;23;67.20;75.57;68.87;Statkraft - Colnago;Zalando - Continental;3
+135;305;15608;Tobias;Müller;23;68.29;72.82;69.20;Vattenfall - Focus;Generali - Mammut;3
+135;306;12728;Julen;Arriola-Bengoa;26;68.85;68.85;68.85;Endura - Vittoria;Shimano - Tissot;1
+145;307;3792;Kamil;Malecki;31;68.91;68.91;68.91;SAP - Canyon;VW - Continental - Rose;1
+149;308;15437;Maxence;Place;23;67.92;72.78;68.89;Deutsche Bahn - Stevens;VW - Continental - Rose;2
+150;309;15517;Léandre;Lozouet;22;67.59;74.02;68.88;Dassault - Time;Allianz - Giant;2
+150;310;9675;Cas;van der Veen;22;67.14;75.61;68.83;Free Agent;Microsoft - Tacx;1
+150;311;4144;Riccardo;Perani;23;67.12;75.80;68.86;Free Agent;Zalando - Continental;3
+150;312;6617;Joel;Suter;28;68.97;68.97;68.97;Nintendo - Colnago;Generali - Mammut;2
+150;313;7383;Henri;Vandenabeele;27;68.75;73.98;68.75;GLS Bank - Wahoo;Shimano - Tissot;2
+160;314;4942;Kevin David;Castillo;25;68.74;74.23;68.74;Danone - Fizik;VW - Continental - Rose;2
+165;315;8658;Blake;Agnoletto;24;67.93;73.72;69.09;SMA Solar - Bell;Allianz - Giant;3
+165;316;9771;Daniel;Cavia Sanz;25;69.20;74.66;69.20;BASF - Selle Italia;Microsoft - Tacx;3
+165;317;4101;Federico;Biagini;24;67.75;73.01;68.80;Ericsson - Thule;Zalando - Continental;1
+165;318;15419;Alexander;Arnt Hansen;24;67.60;73.41;68.76;Endura - Vittoria;Generali - Mammut;2
+165;319;9756;Ulrik;Tvedt;24;66.98;75.91;68.77;Free Agent;Shimano - Tissot;1
+180;320;4848;Diego;Uriarte;25;68.70;68.70;68.70;Dassault - Time;Allianz - Giant;2
+180;321;15228;Robin;Orins;25;68.66;72.07;68.66;Orange - Ridley;Generali - Mammut;3
+180;322;7532;Mads;Andersen;26;68.71;74.60;68.71;Michelin - Look;Shimano - Tissot;3
+195;323;15319;Dillon;Corkery;28;68.97;68.97;68.97;Falke - Scott;Allianz - Giant;1
+195;324;14937;Luca;Colnaghi;28;68.68;68.68;68.68;Falke - Scott;Generali - Mammut;2
+195;325;4564;Sebastian;Putz;23;67.62;73.01;68.70;Leica - Trek;Shimano - Tissot;1
+210;326;15707;Edinson Alejandro;Callejas;26;68.85;75.04;68.85;Haribo - Specialized;Allianz - Giant;1
+210;327;6792;Mathijs;Paasschens;31;68.63;68.63;68.63;Ferrero - Giro;Generali - Mammut;1
+210;328;15539;Duarte;Marivoet;22;67.33;73.70;68.60;GLS Bank - Wahoo;Shimano - Tissot;1
+225;329;15502;Thomas;Capra;22;67.02;75.07;68.63;Free Agent;Generali - Mammut;2
+240;330;15681;Ugo;Fabries;21;67.14;74.26;68.56;GLS Bank - Wahoo;Generali - Mammut;1
+255;331;14922;Xabier;Isasa;25;68.61;73.41;68.61;Allianz - Giant;Generali - Mammut;2

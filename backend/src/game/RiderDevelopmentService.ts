@@ -303,14 +303,10 @@ function resolveDevelopmentBlockReason(row: DailyDevelopmentRow, context: RiderD
       canGrow = false;
       reason = 'in_race';
     }
-    canDecline = false;
   }
   if (context?.formPhase === 'decline') {
     canGrow = false;
     reason = 'form_decline';
-  }
-  if (context?.formPhase === 'build') {
-    canDecline = false;
   }
   if (isOffseasonDevelopmentBlocked(currentDate)) {
     canGrow = false;
@@ -327,7 +323,7 @@ function resolveDevelopmentBlockReason(row: DailyDevelopmentRow, context: RiderD
 function resolveAgeGrowthFactor(age: number, peakAge: number): number {
   if (age >= peakAge) return 0;
   const yearsUntilPeak = Math.max(0, peakAge - age);
-  return Math.max(0.18, Math.min(1.15, yearsUntilPeak / 7));
+  return Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
 }
 
 function resolveSkillDevelopmentFactor(skillDevelopment: number): number {
@@ -495,11 +491,22 @@ export class RiderDevelopmentService {
       if (block.canDecline && row.is_retired !== 1 && age >= row.decline_age) {
         const yearsAfterDecline = Math.max(0, age - row.decline_age + 1);
         const ageDeclineFactor = Math.min(2.4, 0.35 + yearsAfterDecline * 0.22);
+
+        let declineMultiplier = 1.0;
+        if (context?.isInRaceToday) {
+          declineMultiplier *= 0.5;
+        }
+        if (context?.formPhase === 'build') {
+          declineMultiplier *= 0.5;
+        } else if (context?.formPhase === 'decline') {
+          declineMultiplier *= 3.0;
+        }
+
         for (const [skillKey] of RIDER_SKILL_COLUMNS) {
           if (skillKey === 'bikeHandling') continue;
           const dailyDecline = Math.min(
             DAILY_DECLINE_CAP * boundedDayMultiplier,
-            0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25),
+            0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * boundedDayMultiplier * randomNoise(0.75, 1.25) * declineMultiplier,
           );
           if (dailyDecline <= 0) continue;
           const applied = currentSkills[skillKey] - clamp(currentSkills[skillKey] - dailyDecline);

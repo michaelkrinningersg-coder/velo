@@ -329,7 +329,7 @@ export function renderTeamStatsTabs(): string {
     <div class="team-detail-page-tabs rider-stats-tabs" role="tablist" aria-label="Teamstats Tabs">
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'topResults' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="topResults" aria-selected="${state.teamStatsTab === 'topResults' ? 'true' : 'false'}">Top - Results</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="career" aria-selected="${state.teamStatsTab === 'career' ? 'true' : 'false'}">Erfolgsbilanz</button>
-      <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="contracts" aria-selected="${state.teamStatsTab === 'contracts' ? 'true' : 'false'}">Auslaufende Verträge</button>
+      <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="contracts" aria-selected="${state.teamStatsTab === 'contracts' ? 'true' : 'false'}">Kader & Verträge</button>
     </div>`;
 }
 
@@ -348,7 +348,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       if (r.rowType === 'youth_final') return state.teamStatsTopResultsFilters.youth;
       return true;
     } else {
-      if (r.profile === 'TTT' || (r as any).isStageRace || r.stageNumber != null) { // Stage race stage result
+      if (r.isStageRace) { // Stage race stage result
         return state.teamStatsTopResultsFilters.stage;
       } else {
         return state.teamStatsTopResultsFilters.oneDay;
@@ -477,7 +477,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
           ? `${row.raceName} · ${row.rowType === 'gc_final' ? 'Gesamtwertung' : row.rowType === 'points_final' ? 'Punktewertung' : row.rowType === 'mountain_final' ? 'Bergwertung' : 'Nachwuchs'}`
-          : (row.stageNumber ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
+          : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
 
         let stagePlacementHtml = '–';
         let gcPlacementHtml = '–';
@@ -918,79 +918,108 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
 }
 
 export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
-  const currentSeason = state.gameState?.season ?? new Date().getFullYear();
+  const historyRosters = payload.historyRosters || {};
+  const years = Object.keys(historyRosters).map(Number).sort((a, b) => a - b);
 
-  // Sort: expiring contracts first
-  const sortedRiders = [...payload.riders].sort((a, b) => {
-    const endA = a.contractEndSeason ?? 9999;
-    const endB = b.contractEndSeason ?? 9999;
-    if (endA !== endB) return endA - endB;
-    return b.overallRating - a.overallRating;
-  });
+  if (years.length === 0) {
+    return `
+      <section class="rider-stats-placeholder">
+        <h3>Keine Kader- und Vertragsdaten vorhanden</h3>
+        <p>Für dieses Team wurden keine Verträge in der Datenbank erfasst.</p>
+      </section>
+    `;
+  }
 
-  const tableRowsHtml = sortedRiders.length === 0
-    ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Vertragsdaten verfügbar.</td></tr>`
-    : sortedRiders.map(rider => {
+  // Aktuelles Jahr validieren
+  if (state.teamStatsSelectedRosterYear === null || !years.includes(state.teamStatsSelectedRosterYear)) {
+    const currentSeason = state.gameState?.season ?? 2026;
+    if (years.includes(currentSeason)) {
+      state.teamStatsSelectedRosterYear = currentSeason;
+    } else {
+      state.teamStatsSelectedRosterYear = years[0];
+    }
+  }
+
+  const selectedYear = state.teamStatsSelectedRosterYear;
+  const rosterForYear = historyRosters[selectedYear] || [];
+
+  const yearOptionsHtml = years.map(yr => `
+    <option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Kader ${yr}</option>
+  `).join('');
+
+  const tableRowsHtml = rosterForYear.length === 0
+    ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Fahrer für dieses Jahr unter Vertrag.</td></tr>`
+    : rosterForYear.map(rider => {
         const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
         const flagHtml = flagAlpha2
           ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(rider.nationality)}"></span>`
           : '–';
 
         const nameLink = renderRiderNameLink(`${rider.firstName} ${rider.lastName}`, {
-          riderId: rider.id,
+          riderId: rider.riderId,
           teamId: payload.teamId,
           strong: true,
           linkClassName: 'results-rider-link',
           labelClassName: 'results-participant-label',
         });
 
-        // Resolve potential overall rating (which is on state.riders since payload only has overallRating)
-        const fullRider = state.riders.find(r => r.id === rider.id);
         const overallRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.overallRating)}" title="Stärke: ${rider.overallRating.toFixed(2)}">${rider.overallRating.toFixed(1)}</span>`;
         
         let potentialRatingHtml = '–';
-        if (fullRider && fullRider.potential != null) {
-          potentialRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(fullRider.potential)}" title="Potential: ${fullRider.potential.toFixed(2)}">${fullRider.potential.toFixed(1)}</span>`;
+        if (rider.potential != null) {
+          potentialRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.potential)}" title="Potential: ${rider.potential.toFixed(2)}">${rider.potential.toFixed(1)}</span>`;
         }
 
-        const isExpiringThisSeason = rider.contractEndSeason === currentSeason;
+        const roleText = esc(rider.roleName || '-');
+
         const endText = rider.contractEndSeason ? `Saison ${rider.contractEndSeason}` : 'Ohne Vertrag';
-        const contractCellHtml = isExpiringThisSeason
+        const isExpiring = rider.contractEndSeason === selectedYear;
+        const contractCellHtml = isExpiring
           ? `<span class="badge badge-race-category" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold; animation: pulse 2s infinite;" title="Vertrag läuft in dieser Saison aus!">${esc(endText)}</span>`
           : `<span style="font-weight: 500;">${esc(endText)}</span>`;
 
         return `
           <tr class="rider-stats-row">
-            <td>${flagHtml}</td>
-            <td style="white-space: nowrap;">${nameLink}</td>
-            <td>${rider.age}</td>
-            <td>${overallRatingHtml}</td>
-            <td>${potentialRatingHtml}</td>
-            <td>${contractCellHtml}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${flagHtml}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;">${nameLink}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${overallRatingHtml}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${potentialRatingHtml}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center; color: #ccc;">${roleText}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${contractCellHtml}</td>
           </tr>
         `;
       }).join('');
 
   return `
     <section class="rider-stats-contracts" style="margin-top: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3 style="margin: 0; font-size: 1.15rem; font-weight: bold; color: #fff;">Kaderzusammensetzung</h3>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <label for="team-stats-roster-year-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500;">Jahr auswählen:</label>
+          <select id="team-stats-roster-year-select" class="form-control" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;">
+            ${yearOptionsHtml}
+          </select>
+        </div>
+      </div>
+      
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table rider-stats-table">
+        <table class="data-table rider-stats-table" style="width: 100%; border-collapse: collapse; text-align: left;">
           <colgroup>
             <col style="width: 8%;">
             <col style="width: 32%;">
-            <col style="width: 10%;">
             <col style="width: 15%;">
             <col style="width: 15%;">
-            <col style="width: 20%;">
+            <col style="width: 15%;">
+            <col style="width: 15%;">
           </colgroup>
           <thead>
-            <tr>
-              <th>Nat</th>
-              <th>Fahrer</th>
-              <th>Alter</th>
-              <th>Gesamtstärke</th>
-              <th>Pot. Gesamtstärke</th>
-              <th>Vertragsende</th>
+            <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02);">
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Nat</th>
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: left;">Fahrer</th>
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Gesamtstärke</th>
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Pot. Gesamtstärke</th>
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Rolle</th>
+              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Vertragsende</th>
             </tr>
           </thead>
           <tbody>
@@ -1064,6 +1093,7 @@ export async function openTeamStats(teamId: number): Promise<void> {
   state.teamStatsTopResultsFilterCategory = null;
   state.teamStatsTopResultsFilterSeason = null;
   state.teamStatsSelectedSeason = 'all';
+  state.teamStatsSelectedRosterYear = state.gameState?.season ?? 2026;
   state.teamStatsTopResultsPage = 1;
 
   const team = state.teams.find(t => t.id === teamId);
@@ -1162,6 +1192,12 @@ export function initTeamStatsListeners(): void {
     } else if (target.id === 'team-stats-success-season-select') {
       const select = target as HTMLSelectElement;
       state.teamStatsSelectedSeason = select.value === 'all' ? 'all' : Number(select.value);
+      if (state.teamStatsPayload) {
+        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+      }
+    } else if (target.id === 'team-stats-roster-year-select') {
+      const select = target as HTMLSelectElement;
+      state.teamStatsSelectedRosterYear = Number(select.value);
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
       }

@@ -566,6 +566,7 @@ export class RiderRepository {
         jerseysWorn: (row as any).jerseys_worn ?? null,
         superTeamId: row.super_team_id ?? null,
         teamId: row.team_id ?? null,
+        isStageRace: row.is_stage_race === 1,
       } satisfies RiderStatsRow);
 
       const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
@@ -609,6 +610,7 @@ export class RiderRepository {
         stageScore: row.stage_score ?? 0,
         superTeamId: row.super_team_id ?? null,
         teamId: row.team_id ?? null,
+        isStageRace: true,
       } satisfies RiderStatsRow);
 
       pointsByTerrain[resolveRiderStatsTerrainBucket(row.profile)] += finalPoints;
@@ -723,7 +725,35 @@ export class RiderRepository {
         : [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory,
+      contracts: this.getRiderContracts(rider.id),
+      seasonRoles: this.getRiderSeasonRoles(rider.id),
     } satisfies RiderStatsPayload;
+  }
+
+  public getRiderContracts(riderId: number): Array<{ startSeason: number; endSeason: number; teamId: number | null; teamName: string | null; teamAbbreviation: string | null; status: string }> {
+    if (!tableExists(this.db, 'contracts')) {
+      return [];
+    }
+    return this.db.prepare(`
+      SELECT c.start_season AS startSeason, c.end_season AS endSeason, c.team_id AS teamId, t.name AS teamName, t.abbreviation AS teamAbbreviation, c.status AS status
+      FROM contracts c
+      LEFT JOIN teams t ON c.team_id = t.id
+      WHERE c.rider_id = ?
+      ORDER BY c.start_season DESC, c.id DESC
+    `).all(riderId) as any[];
+  }
+
+  public getRiderSeasonRoles(riderId: number): Array<{ season: number; roleName: string }> {
+    if (!tableExists(this.db, 'rider_season_roles') || !tableExists(this.db, 'sta_role')) {
+      return [];
+    }
+    return this.db.prepare(`
+      SELECT sr.season, role.name AS roleName
+      FROM rider_season_roles sr
+      JOIN sta_role role ON sr.role_id = role.id
+      WHERE sr.rider_id = ?
+      ORDER BY sr.season DESC
+    `).all(riderId) as any[];
   }
 
 
@@ -1106,6 +1136,8 @@ export class RiderRepository {
       seasons: [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory: [],
+      contracts: this.getRiderContracts(rider.id),
+      seasonRoles: this.getRiderSeasonRoles(rider.id),
     };
   }
 

@@ -124,12 +124,12 @@ export function getTeamAverage(teamId: number): number | null {
 
 export function formatTeamTopAverage(teamId: number): string {
   const average = getTeamTopAverage(teamId);
-  return average == null ? '–' : average.toFixed(1).replace('.', ',');
+  return average == null ? '–' : average.toFixed(2).replace('.', ',');
 }
 
 export function formatTeamAverage(teamId: number): string {
   const average = getTeamAverage(teamId);
-  return average == null ? '–' : average.toFixed(1).replace('.', ',');
+  return average == null ? '–' : average.toFixed(2).replace('.', ',');
 }
 
 export function compareStrings(left: string, right: string): number {
@@ -476,7 +476,7 @@ export function renderTeamTableCell(rider: Rider, column: TeamTableColumn): stri
     case 'roleName':
       return `<td class="team-table-wrap-cell">${esc(getRiderRoleName(rider))}</td>`;
     case 'overallRating':
-      return `<td><span style="font-weight:bold">${rider.overallRating}</span></td>`;
+      return `<td><span style="font-weight:bold">${rider.overallRating.toFixed(2)}</span></td>`;
     case 'potOverall':
       return `<td>${rider.potential != null ? rider.potential.toFixed(2) : '-'}</td>`;
     case 'birthYear':

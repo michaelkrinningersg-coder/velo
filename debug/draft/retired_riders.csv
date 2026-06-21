@@ -1,0 +1,275 @@
+Rider ID;First Name;Last Name;Birth Year;Age in 2027;Retirement Age;Role;Old Team;Overall;Potential;Retirement Reason
+1948;Elia;Viviani;1989;38;32;Kapitaen;GLS Bank - Wahoo;68.73;68.74;Retirement Age Reached
+1978;David;de la Cruz;1989;38;35;Co-Kapitaen;Nintendo - Colnago;72.43;72.44;Retirement Age Reached
+2046;Nairo;Quintana;1990;37;35;Edelhelfer;Samsung - Cube;72.18;72.18;Retirement Age Reached
+2123;Christopher;Juul-Jensen;1989;38;38;Wassertraeger;Orange - Ridley;69.74;69.74;Retirement Age Reached
+2268;Jan;Tratnik;1990;37;35;Co-Kapitaen;ING - Schwalbe;73.56;73.60;Retirement Age Reached
+2318;Julien;Vermote;1990;37;35;Wassertraeger;Ikea - Adidas;69.16;69.16;Retirement Age Reached
+2319;Michael;Matthews;1991;36;33;Co-Kapitaen;Falke - Scott;75.27;75.27;Retirement Age Reached
+2327;Giacomo;Nizzolo;1989;38;34;Sprinter;Samsung - Cube;70.92;70.92;Retirement Age Reached
+2333;Adrien;Petit;1991;36;32;Wassertraeger;ING - Schwalbe;68.25;68.26;Retirement Age Reached
+2386;Guillaume;Boivin;1989;38;38;Starke Helfer;Microsoft - Tacx;70.42;70.42;Retirement Age Reached
+2389;Hugo;Houle;1991;36;33;Co-Kapitaen;Swiss Re - BMC;72.42;72.43;Retirement Age Reached
+2412;Rafal;Majka;1990;37;32;Co-Kapitaen;Falke - Scott;73.36;73.39;Retirement Age Reached
+2463;Pieter;Serry;1989;38;34;Starke Helfer;Nintendo - Colnago;70.80;70.83;Retirement Age Reached
+2531;Michael;Vink;1992;35;38;Wassertraeger;ING - Schwalbe;68.44;68.44;Early Retirement (2.5% Chance for Wassertraeger/Starker Helfer >= 29, rounded up)
+2543;Romain;Bardet;1991;36;35;Kapitaen;Spotify - Cervelo;75.17;75.18;Retirement Age Reached
+2550;Salvatore;Puccio;1990;37;32;Wassertraeger;Microsoft - Tacx;69.46;69.46;Retirement Age Reached
+2554;Wilco;Kelderman;1991;36;35;Co-Kapitaen;Ikea - Adidas;74.12;74.12;Retirement Age Reached
+2590;Loïc;Vliegen;1994;33;33;Co-Kapitaen;Dassault - Time;67.23;67.23;Retirement Age Reached
+2628;Rick;Ottema;1992;35;34;Wassertraeger;ING - Schwalbe;67.89;67.89;Retirement Age Reached
+2636;Yoeri;Havik;1991;36;33;null;Free Agent;65.59;65.59;Retirement Age Reached
+2713;Tim;Declercq;1989;38;32;Wassertraeger;Spotify - Cervelo;69.33;69.34;Retirement Age Reached
+2716;Gijs;Van Hoecke;1992;35;32;Wassertraeger;Danone - Fizik;68.96;68.96;Retirement Age Reached
+2799;Filippo;Fortin;1989;38;35;null;Free Agent;66.53;66.53;Retirement Age Reached
+3001;Patrick;Konrad;1992;35;35;Kapitaen;AXA - Lindt;73.43;73.44;Retirement Age Reached
+3022;Warren;Barguil;1992;35;35;Co-Kapitaen;Orange - Ridley;72.45;72.45;Retirement Age Reached
+3026;Larry;Warbasse;1990;37;35;Starke Helfer;Shimano - Tissot;71.41;71.41;Retirement Age Reached
+3030;Tim;Wellens;1991;36;36;Kapitaen;Novartis - SRM;74.42;74.42;Retirement Age Reached
+3048;Mattia;Cattaneo;1991;36;34;Co-Kapitaen;AXA - Lindt;73.09;73.09;Retirement Age Reached
+3056;Eduardo;Sepúlveda;1991;36;35;Wassertraeger;Decathlon - Renault;70.40;70.40;Retirement Age Reached
+3059;Natnael;Berhane;1991;36;36;Starke Helfer;Haribo - Specialized;66.33;66.33;Retirement Age Reached
+3060;Bryan;Coquard;1992;35;35;Sprinter;Shimano - Tissot;71.54;71.54;Retirement Age Reached
+3098;Rubén;Fernández;1991;36;35;Starke Helfer;Swiss Re - BMC;69.99;69.99;Retirement Age Reached
+3168;João;Matias;1991;36;35;null;Free Agent;64.71;64.71;Retirement Age Reached
+3227;Jesús;del Pino;1991;36;32;Starke Helfer;Vattenfall - Focus;66.64;66.64;Retirement Age Reached
+3270;Pedro;Paulinho;1990;37;36;null;Free Agent;63.47;63.47;Retirement Age Reached
+3295;Tom;Thill;1990;37;34;null;Free Agent;60.51;60.51;Retirement Age Reached
+3324;Gonçalo;Amado;1994;33;32;null;Free Agent;64.06;64.06;Retirement Age Reached
+3369;Olivier;Le Gac;1994;33;37;Wassertraeger;Spotify - Cervelo;69.49;69.49;Early Retirement (2.5% Chance for Wassertraeger/Starker Helfer >= 29, rounded up)
+3373;Heiner;Parra;1992;35;35;null;Free Agent;63.76;63.76;Retirement Age Reached
+3387;Caleb;Ewan;1995;32;32;Sprinter;Spotify - Cervelo;70.51;70.51;Retirement Age Reached
+3401;Yonder;Godoy;1993;34;34;null;Free Agent;62.73;62.73;Retirement Age Reached
+3404;Christophe;Laporte;1993;34;32;Sprinter;Decathlon - Renault;74.00;74.00;Retirement Age Reached
+3445;Edward;Theuns;1991;36;36;Edelhelfer;AXA - Lindt;71.85;71.85;Retirement Age Reached
+3533;Darijus;Dervus;1991;36;34;null;Free Agent;58.78;58.78;Retirement Age Reached
+3577;Willie;Smit;1993;34;34;Starke Helfer;Siemens - Wahoo;67.21;67.21;Retirement Age Reached
+3581;Shiki;Kuroeda;1992;35;34;null;Free Agent;61.87;61.87;Retirement Age Reached
+3583;Genki;Yamamoto;1992;35;33;null;Free Agent;62.34;62.34;Retirement Age Reached
+3617;Phil;Bauhaus;1994;33;33;Sprinter;Google - Pinarello;71.85;71.85;Retirement Age Reached
+3625;Lucas;Liß;1992;35;34;null;Free Agent;60.00;60.00;Retirement Age Reached
+3678;Simone;Petilli;1993;34;34;Edelhelfer;Vattenfall - Focus;67.10;67.10;Retirement Age Reached
+3715;Jack;Haig;1994;33;33;Co-Kapitaen;Shimano - Tissot;73.05;73.05;Retirement Age Reached
+3732;Alessandro;Tonelli;1992;35;32;Wassertraeger;AXA - Lindt;70.16;70.16;Retirement Age Reached
+3761;Jakub;Mareczko;1994;33;33;null;Free Agent;66.15;66.15;Retirement Age Reached
+3780;Bert;Van Lerberghe;1993;34;34;Sprinter;Allianz - Giant;70.23;70.23;Retirement Age Reached
+3795;Patryk;Stosz;1995;32;32;Starke Helfer;Bosch - Deuter;66.60;66.60;Retirement Age Reached
+3820;Dries;De Bondt;1991;36;33;Starke Helfer;Novartis - SRM;71.49;71.49;Retirement Age Reached
+3882;Pawel;Bernas;1990;37;37;Wassertraeger;GLS Bank - Wahoo;65.31;65.31;Retirement Age Reached
+3892;Matti;Manninen;1993;34;32;null;Free Agent;59.74;59.74;Retirement Age Reached
+4060;Timmy;Bauer;1992;35;32;null;Free Agent;57.43;57.43;Retirement Age Reached
+4192;Sean;Hollenbeck;1994;33;33;null;Free Agent;62.13;62.13;Retirement Age Reached
+4251;Marien;Bogerd;1994;33;32;null;Free Agent;64.32;64.32;Retirement Age Reached
+4269;Julien;Amadori;1993;34;32;null;Free Agent;62.36;62.36;Retirement Age Reached
+4395;Keisuke;Aso;1992;35;33;null;Free Agent;63.36;63.36;Retirement Age Reached
+4433;Arturas;Kazakevicius;1993;34;32;null;Free Agent;55.20;55.20;Retirement Age Reached
+4442;James;Williamson;1989;38;36;null;Free Agent;60.47;60.47;Retirement Age Reached
+4458;Franco;Vecchi;1993;34;34;null;Free Agent;62.72;62.72;Retirement Age Reached
+4551;Chaz;Turmon;1991;36;36;null;Free Agent;58.51;58.51;Retirement Age Reached
+4835;Eamon;Franck;1993;34;32;null;Free Agent;61.43;61.43;Retirement Age Reached
+5063;Denis;Heredia;1994;33;33;null;Free Agent;60.46;60.46;Retirement Age Reached
+5132;Christian;Tamayo;1991;36;35;null;Free Agent;61.35;61.35;Retirement Age Reached
+5155;Fernando;Briceño;1990;37;37;null;Free Agent;62.86;62.86;Retirement Age Reached
+5175;Carlos Andres;Parra;1993;34;33;null;Free Agent;62.39;62.39;Retirement Age Reached
+5201;Jorge Martin;Gonzalez;1991;36;33;null;Free Agent;59.58;59.62;Retirement Age Reached
+5210;Yosymar;Jerez;1990;37;36;null;Free Agent;58.98;58.98;Retirement Age Reached
+5270;Mauricio;Moyano;1989;38;35;null;Free Agent;54.43;54.43;Retirement Age Reached
+5404;Pedro;Sequera;1991;36;32;null;Free Agent;63.24;63.25;Retirement Age Reached
+5411;Jasper;Plender;1992;35;34;null;Free Agent;58.94;58.94;Retirement Age Reached
+5419;Antoine;Magaud;1990;37;37;null;Free Agent;61.70;61.72;Retirement Age Reached
+5433;Matteo;Spreafico;1993;34;33;null;Free Agent;64.42;64.42;Retirement Age Reached
+5435;Philipp;Lang;1993;34;34;null;Free Agent;56.59;56.59;Retirement Age Reached
+5484;Vincent;Augustin;1991;36;35;null;Free Agent;52.06;52.06;Retirement Age Reached
+5510;Nans;Peters;1994;33;33;Edelhelfer;Lego - Bianchi;71.57;71.57;Retirement Age Reached
+5644;Rodrigo;Contreras;1994;33;33;Wassertraeger;Orange - Ridley;69.60;69.60;Retirement Age Reached
+5687;Martin;Laas;1994;33;32;null;Free Agent;67.15;67.15;Retirement Age Reached
+5699;Colin;Stüssi;1993;34;32;Wassertraeger;Nintendo - Colnago;69.93;69.93;Retirement Age Reached
+5733;Kazushige;Kuboki;1989;38;36;null;Free Agent;64.09;64.09;Retirement Age Reached
+5840;Luis;Mora;1995;32;32;null;Free Agent;64.83;64.83;Retirement Age Reached
+5862;Ángel;Sánchez;1993;34;34;null;Free Agent;64.54;64.54;Retirement Age Reached
+5892;Oleksandr;Prevar;1990;37;34;null;Free Agent;63.93;63.93;Retirement Age Reached
+5934;Matthew;Zenovich;1994;33;33;null;Free Agent;60.29;60.29;Retirement Age Reached
+5957;Richard;Carapaz;1993;34;33;Kapitaen;Falke - Scott;75.84;75.84;Retirement Age Reached
+5979;Tim;Merlier;1993;34;33;Sprinter;Spotify - Cervelo;73.07;73.07;Retirement Age Reached
+6024;Rick;van Breda;1990;37;34;null;Free Agent;59.50;59.50;Retirement Age Reached
+6433;Samuel;Leroux;1995;32;32;Wassertraeger;VW - Continental - Rose;70.41;70.41;Retirement Age Reached
+6440;Sam;Brand;1991;36;34;null;Free Agent;63.67;63.69;Retirement Age Reached
+6441;Hugo Ángel;Velázquez;1993;34;33;null;Free Agent;62.15;62.15;Retirement Age Reached
+6473;Kohei;Yokotsuka;1995;32;32;null;Free Agent;63.48;63.48;Retirement Age Reached
+6526;Bryan;Gómez;1995;32;32;null;Free Agent;64.81;64.81;Retirement Age Reached
+6527;Brayan;Sánchez;1994;33;33;Wassertraeger;Vattenfall - Focus;66.09;66.09;Retirement Age Reached
+6562;Dominic;Schils;1992;35;35;null;Free Agent;60.76;60.76;Retirement Age Reached
+6566;Gianni;Marchand;1990;37;32;Wassertraeger;Philips - Santander;68.36;68.36;Retirement Age Reached
+6582;Johannes;Hirschbichler;1993;34;34;null;Free Agent;60.13;60.13;Retirement Age Reached
+6631;Brendon;Davids;1993;34;32;null;Free Agent;64.08;64.08;Retirement Age Reached
+6650;Maris;Bogdanovics;1992;35;34;Co-Kapitaen;Sennheiser - Michelin;67.15;67.15;Retirement Age Reached
+6651;Jan-André;Freuler;1992;35;34;null;Free Agent;61.26;61.26;Retirement Age Reached
+6813;Omar Alberto;Mendoza;1990;37;37;null;Free Agent;64.27;64.29;Retirement Age Reached
+6934;Jeroen;Eyskens;1993;34;33;null;Free Agent;64.33;64.33;Retirement Age Reached
+7074;Shotaro;Iribe;1990;37;35;null;Free Agent;62.39;62.39;Retirement Age Reached
+7151;Frederik;Muff;1994;33;32;Wassertraeger;Ricola - Simplon;66.02;66.02;Retirement Age Reached
+7168;Francesco;Lamon;1994;33;33;null;Free Agent;62.11;62.11;Retirement Age Reached
+7230;Jonas;Goeman;1993;34;33;null;Free Agent;62.50;62.50;Retirement Age Reached
+7277;Eric;Valiente;1992;35;34;null;Free Agent;61.85;61.85;Retirement Age Reached
+7323;Timon;Loderer;1991;36;33;null;Free Agent;65.05;65.05;Retirement Age Reached
+7340;Hannes;Bergström Frisk;1995;32;32;null;Free Agent;60.45;60.45;Retirement Age Reached
+7357;Sandro;Jennewein;1992;35;34;null;Free Agent;58.43;58.43;Retirement Age Reached
+7418;Ander;Okamika;1993;34;34;Wassertraeger;Lego - Bianchi;68.92;68.92;Retirement Age Reached
+7447;John;Archibald;1991;36;32;null;Free Agent;64.52;64.53;Retirement Age Reached
+7455;Logan;Phippen;1992;35;34;null;Free Agent;60.19;60.19;Retirement Age Reached
+7653;Florenz;Knauer;1989;38;38;null;Free Agent;62.30;62.31;Retirement Age Reached
+7677;Ulises;Castillo;1992;35;34;null;Free Agent;64.32;64.32;Retirement Age Reached
+7768;Edgaras;Kovaliovas;1989;38;34;null;Free Agent;59.33;59.33;Retirement Age Reached
+7943;Jim;Maddock;1992;35;32;null;Free Agent;56.20;56.21;Retirement Age Reached
+7944;Greg;Talpey;1992;35;33;null;Free Agent;61.52;61.52;Retirement Age Reached
+7945;Aleix;Espargaró;1990;37;33;null;Free Agent;57.54;57.54;Retirement Age Reached
+7974;Sam;Van de Mieroop;1992;35;35;null;Free Agent;60.43;60.44;Retirement Age Reached
+8066;Riku;Övermark;1989;38;33;null;Free Agent;59.39;59.40;Retirement Age Reached
+8134;Brian;Megens;1990;37;33;null;Free Agent;60.68;60.70;Retirement Age Reached
+8362;Aklilu;Gebrehiwet;1992;35;33;null;Free Agent;62.71;62.71;Retirement Age Reached
+8556;Tomá;Nagy;1989;38;37;null;Free Agent;56.41;56.44;Retirement Age Reached
+8561;John;Heinlein;1989;38;33;null;Free Agent;59.49;59.49;Retirement Age Reached
+8566;Kristian;Klevgård;1994;33;32;null;Free Agent;64.42;64.42;Retirement Age Reached
+8574;Sjors;Handgraaf;1991;36;32;null;Free Agent;59.47;59.47;Retirement Age Reached
+8578;Mark;Prinsen;1994;33;32;null;Free Agent;59.22;59.22;Retirement Age Reached
+8612;Julian;Gerhardt;1991;36;35;null;Free Agent;55.22;55.29;Retirement Age Reached
+8704;Kento;Himuro;1990;37;37;null;Free Agent;56.51;56.51;Retirement Age Reached
+8706;Yu;Takei;1991;36;34;null;Free Agent;57.88;57.88;Retirement Age Reached
+8860;Alan;Ramirez;1990;37;35;null;Free Agent;61.62;61.62;Retirement Age Reached
+8952;Federico Javier;López;1994;33;33;null;Free Agent;59.83;59.83;Retirement Age Reached
+9022;Alex;Heaney;1994;33;32;null;Free Agent;63.49;63.49;Retirement Age Reached
+9024;Patrick;Lechner;1989;38;36;null;Free Agent;57.83;57.83;Retirement Age Reached
+9038;David;Büschler;1992;35;34;null;Free Agent;60.18;60.18;Retirement Age Reached
+9102;Franco German;Lopez;1989;38;36;null;Free Agent;60.92;60.92;Retirement Age Reached
+9223;James;Somerfield;1989;38;36;null;Free Agent;56.95;56.97;Retirement Age Reached
+9279;Yorman;Fuentes;1993;34;32;null;Free Agent;60.78;60.78;Retirement Age Reached
+9292;Daniel;Estévez;1990;37;36;null;Free Agent;61.71;61.71;Retirement Age Reached
+9357;Carlos Leonardo;Calvimonte;1992;35;34;null;Free Agent;60.37;60.37;Retirement Age Reached
+9517;Alvaro;Duarte;1991;36;36;null;Free Agent;64.40;64.40;Retirement Age Reached
+9806;Anton;Benedix;1994;33;32;null;Free Agent;59.69;59.69;Retirement Age Reached
+9856;Asbjørn;Fjellvåg;1993;34;34;null;Free Agent;60.08;60.08;Retirement Age Reached
+9906;Tim;Diederich;1989;38;37;null;Free Agent;61.84;61.84;Retirement Age Reached
+9994;Oleksiy;Kmets;1990;37;32;null;Free Agent;61.03;61.05;Retirement Age Reached
+10142;Emiliano;Contreras;1994;33;33;null;Free Agent;62.79;62.79;Retirement Age Reached
+10157;Tyler;Stites;1998;29;33;Starke Helfer;Swiss Re - BMC;69.96;69.96;Early Retirement (2.5% Chance for Wassertraeger/Starker Helfer >= 29, rounded up)
+10166;Kota;Sumiyoshi;1991;36;36;null;Free Agent;60.82;60.82;Retirement Age Reached
+10236;Manabu;Ishibashi;1993;34;33;null;Free Agent;64.03;64.03;Retirement Age Reached
+10267;Hikaru;Kosaka;1989;38;36;null;Free Agent;58.34;58.38;Retirement Age Reached
+10297;Ignacio;Prado;1994;33;33;null;Free Agent;63.20;63.20;Retirement Age Reached
+10299;Efrén;Santos;1992;35;34;null;Free Agent;63.40;63.40;Retirement Age Reached
+10353;Guillaume;Gaboriaud;1993;34;34;null;Free Agent;63.10;63.10;Retirement Age Reached
+10361;Jens;Vandenbogaerde;1992;35;33;null;Free Agent;63.31;63.31;Retirement Age Reached
+10363;Carlos;Torres;1993;34;34;null;Free Agent;63.52;63.52;Retirement Age Reached
+10413;Juan Javier;Melivillo;1989;38;36;null;Free Agent;60.76;60.76;Retirement Age Reached
+10417;José Martin;Reyes;1993;34;34;null;Free Agent;57.81;57.81;Retirement Age Reached
+10461;Andris;Vosekalns;1992;35;34;null;Free Agent;61.90;61.90;Retirement Age Reached
+10500;Yudai;Arashiro;1995;32;32;null;Free Agent;62.78;62.78;Retirement Age Reached
+10575;Higiño;Lucero;1991;36;36;null;Free Agent;61.34;61.35;Retirement Age Reached
+10823;Ryosuke;Hashimoto;1992;35;33;null;Free Agent;51.20;51.21;Retirement Age Reached
+10832;Thomas;Gibbons;1990;37;37;null;Free Agent;61.70;61.70;Retirement Age Reached
+10866;Jimmy;Carlsson;1990;37;36;null;Free Agent;62.82;62.82;Retirement Age Reached
+10896;Miguel;Santillanes;1993;34;32;null;Free Agent;60.42;60.42;Retirement Age Reached
+10939;Karl;Michelin-Beard;1995;32;32;null;Free Agent;58.72;58.72;Retirement Age Reached
+10987;Dario;Alvarez;1990;37;36;null;Free Agent;62.69;62.69;Retirement Age Reached
+11043;Jason;Paez;1990;37;35;null;Free Agent;58.70;58.70;Retirement Age Reached
+11178;Denis;Rugovac;1993;34;32;null;Free Agent;57.82;57.82;Retirement Age Reached
+11204;Ryohei;Komori;1989;38;32;null;Free Agent;61.41;61.41;Retirement Age Reached
+11210;Daiki;Yasuhara;1992;35;35;null;Free Agent;61.64;61.64;Retirement Age Reached
+11411;Dzmitry;Prudnikau;1991;36;34;null;Free Agent;60.88;60.88;Retirement Age Reached
+11447;Thomas;Hartog;1991;36;35;null;Free Agent;57.67;57.67;Retirement Age Reached
+11530;Reynard;Butler;1989;38;36;null;Free Agent;61.55;61.55;Retirement Age Reached
+11628;Patrick;Byukusenge;1991;36;35;null;Free Agent;64.35;64.35;Retirement Age Reached
+11693;Jhon Fredy;Avila;1993;34;34;null;Free Agent;60.26;60.26;Retirement Age Reached
+11945;Alejandro;Saquilan;1991;36;34;null;Free Agent;62.12;62.12;Retirement Age Reached
+11990;Taavi;Kannimäe;1991;36;35;null;Free Agent;58.37;58.37;Retirement Age Reached
+11994;Kristers;Kovgers;1993;34;32;null;Free Agent;55.87;55.87;Retirement Age Reached
+11995;János;Pelikán;1995;32;32;null;Free Agent;62.12;62.12;Retirement Age Reached
+12006;Martin;Geretschnig;1989;38;33;null;Free Agent;60.30;60.33;Retirement Age Reached
+12210;Omar;Azzem;1993;34;33;null;Free Agent;59.77;59.77;Retirement Age Reached
+12277;Maximiliano;Navarrete;1991;36;33;null;Free Agent;63.77;63.77;Retirement Age Reached
+12279;Rubén Gabriel;Ramos;1993;34;33;null;Free Agent;63.52;63.52;Retirement Age Reached
+12358;Matthew;Holmes;1994;33;33;Edelhelfer;Dassault - Time;67.13;67.13;Retirement Age Reached
+12433;Loïc;Desriac;1990;37;37;null;Free Agent;63.53;63.54;Retirement Age Reached
+12516;Alejandro Antonio;Durán;1991;36;32;null;Free Agent;64.28;64.30;Retirement Age Reached
+12517;Matias Alberto;Lisa;1991;36;32;null;Free Agent;60.10;60.10;Retirement Age Reached
+12657;José Alfredo;Santoyo;1995;32;32;null;Free Agent;56.03;56.03;Retirement Age Reached
+12675;Sebastian Leonidas;Novoa;1993;34;34;null;Free Agent;62.91;62.91;Retirement Age Reached
+12676;Anderson Timoteo;Paredes;1995;32;32;null;Free Agent;63.84;63.84;Retirement Age Reached
+12677;Cristián;Pita;1995;32;32;null;Free Agent;63.54;63.54;Retirement Age Reached
+12781;Tijmen;Eising;1991;36;36;null;Free Agent;63.07;63.07;Retirement Age Reached
+12803;Marko;Pavlic;1993;34;34;null;Free Agent;63.44;63.44;Retirement Age Reached
+12870;Michel;Tientcheu;1993;34;32;null;Free Agent;62.04;62.04;Retirement Age Reached
+12871;Clovis;Kamzong;1992;35;35;null;Free Agent;63.80;63.80;Retirement Age Reached
+13239;Trond;Larsen;1990;37;36;null;Free Agent;60.15;60.26;Retirement Age Reached
+13260;Márton;Solymosi;1990;37;34;null;Free Agent;61.94;61.95;Retirement Age Reached
+13355;Robert;Jenko;1990;37;32;null;Free Agent;62.28;62.28;Retirement Age Reached
+13357;Jure;Rupnik;1994;33;32;null;Free Agent;60.03;60.03;Retirement Age Reached
+13396;Will;Cooper;1989;38;33;null;Free Agent;61.97;61.98;Retirement Age Reached
+13400;Taylor;Warren;1993;34;33;null;Free Agent;60.13;60.13;Retirement Age Reached
+13404;John;Purvis;1989;38;34;null;Free Agent;59.21;59.29;Retirement Age Reached
+13407;Tanner;Ward;1994;33;33;null;Free Agent;60.59;60.59;Retirement Age Reached
+13414;Vincent;Louiche;1993;34;34;null;Free Agent;62.78;62.78;Retirement Age Reached
+13492;Franco;Buchanan;1993;34;34;null;Free Agent;64.15;64.15;Retirement Age Reached
+13502;Leandro;Mignacco;1989;38;33;null;Free Agent;58.15;58.15;Retirement Age Reached
+14011;Rasmus;Mikiver;1989;38;33;null;Free Agent;58.21;58.22;Retirement Age Reached
+14111;Jorge;Abreu;1990;37;34;null;Free Agent;63.64;63.64;Retirement Age Reached
+14157;Andrei;Vrabii;1992;35;33;null;Free Agent;58.39;58.39;Retirement Age Reached
+14173;Tim;Savre;1990;37;34;null;Free Agent;59.85;59.87;Retirement Age Reached
+14193;Adrien;Alidor;1990;37;32;null;Free Agent;60.34;60.34;Retirement Age Reached
+14209;Mathias;Flückiger;1989;38;36;null;Free Agent;64.84;64.85;Retirement Age Reached
+14384;Maksym;Vasilyev;1990;37;34;null;Free Agent;63.45;63.45;Retirement Age Reached
+14414;Dietmar;Ledegen;1993;34;34;null;Free Agent;60.72;60.72;Retirement Age Reached
+14422;Salvador;Moreno;1991;36;35;null;Free Agent;62.21;62.21;Retirement Age Reached
+14485;Daniel;Reiter;1992;35;34;null;Free Agent;60.07;60.07;Retirement Age Reached
+14537;Thomas;Armstrong;1995;32;32;null;Free Agent;64.01;64.01;Retirement Age Reached
+14549;Julien;Pierrat;1991;36;34;null;Free Agent;56.89;56.89;Retirement Age Reached
+14589;Carlos Johan;Gálviz;1990;37;32;null;Free Agent;63.30;63.31;Retirement Age Reached
+14648;Nicolas;Traico;1992;35;34;null;Free Agent;63.16;63.16;Retirement Age Reached
+14657;Marco;König;1995;32;32;null;Free Agent;59.76;59.76;Retirement Age Reached
+14789;Kenny;Nijssen;1991;36;32;null;Free Agent;64.33;64.34;Retirement Age Reached
+14797;Clever;Martínez;1991;36;35;null;Free Agent;63.15;63.15;Retirement Age Reached
+14830;Ivan;Marojevic;1990;37;35;null;Free Agent;54.84;54.84;Retirement Age Reached
+14900;Gadji;Yaou;1994;33;32;null;Free Agent;60.31;60.31;Retirement Age Reached
+14931;Niels;Verdijck;1994;33;33;null;Free Agent;59.77;59.77;Retirement Age Reached
+14936;Brandon;Downes;1991;36;35;null;Free Agent;64.10;64.13;Retirement Age Reached
+15041;Roy;Eefting-Bloem;1990;37;36;null;Free Agent;63.60;63.60;Retirement Age Reached
+15061;Cristhian;Montoya;1990;37;34;Wassertraeger;Barilla - Zwift;65.20;65.21;Retirement Age Reached
+15077;James;Harvey;1990;37;33;null;Free Agent;61.78;61.80;Retirement Age Reached
+15090;Daniel;Bichlmann;1989;38;35;null;Free Agent;64.17;64.17;Retirement Age Reached
+15122;Jack;Rees;1989;38;37;null;Free Agent;58.52;58.52;Retirement Age Reached
+15144;Valentin;Midey;1990;37;36;null;Free Agent;64.34;64.34;Retirement Age Reached
+15146;Daniel;Teklehaimanot;1989;38;32;null;Free Agent;61.55;61.60;Retirement Age Reached
+15154;Benjamin;Hill;1990;37;33;null;Free Agent;62.75;62.77;Retirement Age Reached
+15219;Richard;Larsén;1990;37;33;null;Free Agent;61.21;61.21;Retirement Age Reached
+15462;Joel Levi;Burbano;1989;38;36;null;Free Agent;63.91;63.92;Retirement Age Reached
+15469;Anthony;Rallé;1993;34;32;null;Free Agent;63.80;63.80;Retirement Age Reached
+15871;Allan;Schroeder;1992;35;34;null;Free Agent;61.14;61.14;Retirement Age Reached
+15955;José;Borges;1990;37;33;null;Free Agent;61.77;61.77;Retirement Age Reached
+16043;Alejandro;Ruiz;1995;32;32;null;Free Agent;62.16;62.16;Retirement Age Reached
+16044;Luis Miguel;Martínez;1993;34;33;null;Free Agent;60.91;60.91;Retirement Age Reached
+16046;Ángel;Rivas;1990;37;32;null;Free Agent;62.29;62.29;Retirement Age Reached
+16058;Juan Pablo;Rendón;1989;38;36;null;Free Agent;61.41;61.41;Retirement Age Reached
+16105;John;Borstelmann;1991;36;34;null;Free Agent;62.96;62.96;Retirement Age Reached
+16113;Ruben;Flores;1989;38;36;null;Free Agent;61.51;61.51;Retirement Age Reached
+16125;Nelson;Camargo;1990;37;36;null;Free Agent;62.72;62.72;Retirement Age Reached
+16129;Jonathan;Camargo;1989;38;34;null;Free Agent;62.46;62.47;Retirement Age Reached
+16131;Isaac Simón;Yaguaro Flores;1993;34;34;null;Free Agent;59.77;59.77;Retirement Age Reached
+16155;Jordan;Miller;1994;33;32;null;Free Agent;59.59;59.59;Retirement Age Reached
+16174;James;Schurman;1991;36;35;null;Free Agent;60.27;60.27;Retirement Age Reached
+16198;Roman;Mastrangelo;1989;38;38;null;Free Agent;61.23;61.23;Retirement Age Reached
+16213;Cristian;Romero;1992;35;32;null;Free Agent;59.44;59.44;Retirement Age Reached
+16277;Jose;Astiasaran;1989;38;32;null;Free Agent;57.10;57.11;Retirement Age Reached
+16345;Jörgen;Matt;1992;35;33;null;Free Agent;57.01;57.01;Retirement Age Reached
+16350;Paul;Hopfgartner;1990;37;33;null;Free Agent;56.45;56.46;Retirement Age Reached
+16356;Fabian;Stockmeyer;1991;36;34;null;Free Agent;55.75;55.76;Retirement Age Reached
+16395;Olivier;Leroy;1989;38;32;null;Free Agent;63.49;63.50;Retirement Age Reached
+16627;Morten;Gadgaard;1991;36;33;null;Free Agent;62.28;62.28;Retirement Age Reached
+16665;Michael;Chadwick;1989;38;38;null;Free Agent;62.42;62.42;Retirement Age Reached
+16671;Dean;Watson;1990;37;33;null;Free Agent;61.20;61.21;Retirement Age Reached
+16679;William;Scott;1992;35;33;null;Free Agent;58.33;58.33;Retirement Age Reached
+16710;Mario;Boll;1992;35;34;null;Free Agent;59.79;59.79;Retirement Age Reached
+16723;Anders;Bjørgeengen;1992;35;33;null;Free Agent;56.17;56.17;Retirement Age Reached
+16755;Bérenger;Brossel;1994;33;33;null;Free Agent;60.59;60.59;Retirement Age Reached
+16758;Alexandre;Join;1991;36;35;null;Free Agent;63.29;63.29;Retirement Age Reached
+16776;Maxime;Renault;1990;37;34;null;Free Agent;62.07;62.11;Retirement Age Reached
+16968;Carlos;Guerra;1991;36;36;null;Free Agent;57.68;57.69;Retirement Age Reached

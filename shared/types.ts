@@ -817,6 +817,7 @@ export interface RiderStatsRow {
   raceId: number;
   raceName: string;
   raceCategoryName: string | null;
+  isStageRace?: boolean;
   stageId: number | null;
   stageNumber: number | null;
   stageName: string | null;
@@ -997,6 +998,18 @@ export interface RiderStatsPayload {
   fatigueHistory?: RiderFatigueHistoryEntry[];
   lieutenantInfo?: { id: number; name: string } | null;
   leaderInfo?: { id: number; name: string } | null;
+  contracts?: Array<{
+    startSeason: number;
+    endSeason: number;
+    teamId: number | null;
+    teamName: string | null;
+    teamAbbreviation: string | null;
+    status: string;
+  }>;
+  seasonRoles?: Array<{
+    season: number;
+    roleName: string;
+  }>;
 }
 
 export interface RiderFatigueHistoryEntry {
@@ -1048,6 +1061,7 @@ export interface SeasonStandingsPayload {
   riderStandings: SeasonStandingRow[];
   teamStandings: SeasonStandingRow[];
   countryStandings: SeasonStandingCountryRow[];
+  availableSeasons?: number[];
 }
 
 // ------ Generische API-Response ------------------------------
@@ -1330,6 +1344,7 @@ export interface TeamStatsTopResult {
   riderName: string;
   riderCountryCode: string | null;
   rowType: RiderStatsRowType;
+  isStageRace?: boolean;
   date: string;
   raceId: number;
   raceName: string;
@@ -1433,4 +1448,14 @@ export interface TeamStatsPayload {
   successStats: {
     [seasonOrAll: string]: TeamSuccessStats;
   };
+  historyRosters?: Record<number, Array<{
+    riderId: number;
+    firstName: string;
+    lastName: string;
+    nationality: string | null;
+    roleName: string | null;
+    overallRating: number;
+    potential: number | null;
+    contractEndSeason: number | null;
+  }>>;
 }

@@ -58,7 +58,7 @@ import { RaceSimView } from './race-sim/RaceSimView';
 import { calculateStageFavorites } from './race-sim/stageFavorites';
 
 export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
-export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'fatigue';
+export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'fatigue' | 'contracts';
 export type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
 export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonFormPhase' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
@@ -99,9 +99,14 @@ export const state: {
   stageResults: StageResultsPayload | null;
   resultsRoster: RaceRosterPayload | null;
   seasonStandings: SeasonStandingsPayload | null;
+  seasonStandingsSelectedSeason: number | null;
   draftHistory: DraftHistoryPayload | null;
   injuries: InjuryRow[] | null;
   draftSelectedSeason: number | null;
+  draftOverlayActive: boolean;
+  draftOverlayAuto: boolean;
+  draftOverlayPicks: any[] | null;
+  draftOverlayCurrentIndex: number;
   selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
   teamTableSort: {
     key: TeamTableSortKey;
@@ -143,6 +148,7 @@ export const state: {
   riderStatsPayload: RiderStatsPayload | null;
   riderStatsTab: RiderStatsTab;
   riderStatsSelectedRiderId: number | null;
+  riderStatsSelectedSeason: number | null;
   riderStatsTopResultsFilterCategory: string | null;
   riderStatsTopResultsFilterSeason: number | null;
   riderStatsTopResultsPage: number;
@@ -157,6 +163,7 @@ export const state: {
   teamStatsPayload: TeamStatsPayload | null;
   teamStatsTab: 'topResults' | 'career' | 'contracts';
   teamStatsSelectedTeamId: number | null;
+  teamStatsSelectedRosterYear: number | null;
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
   teamStatsTopResultsFilterSeason: number | null;
@@ -204,9 +211,14 @@ export const state: {
   stageResults: null,
   resultsRoster: null,
   seasonStandings: null,
+  seasonStandingsSelectedSeason: null,
   draftHistory: null,
   injuries: null,
   draftSelectedSeason: null,
+  draftOverlayActive: false,
+  draftOverlayAuto: true,
+  draftOverlayPicks: null,
+  draftOverlayCurrentIndex: 0,
   selectedSeasonStandingScope: 'riders',
   teamTableSort: {
     key: 'name',
@@ -248,6 +260,7 @@ export const state: {
   riderStatsPayload: null,
   riderStatsTab: 'results',
   riderStatsSelectedRiderId: null,
+  riderStatsSelectedSeason: null,
   riderStatsTopResultsFilterCategory: null,
   riderStatsTopResultsFilterSeason: null,
   riderStatsTopResultsPage: 1,
@@ -262,6 +275,7 @@ export const state: {
   teamStatsPayload: null,
   teamStatsTab: 'topResults',
   teamStatsSelectedTeamId: null,
+  teamStatsSelectedRosterYear: null,
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
   teamStatsTopResultsFilterSeason: null,

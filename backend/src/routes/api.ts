@@ -714,6 +714,129 @@ export function createRouter(dbService: DatabaseService): Router {
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
+  router.get('/draft/:season/details', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+      
+      // UCI-Ranks für das Vorjahr ermitteln
+      const uciPointsRows = db.prepare(`
+        SELECT rider_id, SUM(points_awarded) AS points
+        FROM season_point_events
+        WHERE season = ?
+        GROUP BY rider_id
+        ORDER BY points DESC
+      `).all(season - 1) as Array<{ rider_id: number, points: number }>;
+      
+      const uciRanks = new Map<number, number>();
+      uciPointsRows.forEach((row, index) => {
+        uciRanks.set(row.rider_id, index + 1);
+      });
+
+      // Draft-Historie abfragen
+      const rows = db.prepare(`
+        SELECT 
+          d.draft_round AS draftRound,
+          d.pick_number AS pickNumber,
+          d.contract_length AS contractLength,
+          d.overall_at_draft AS overallAtDraft,
+          d.pot_overall_at_draft AS potOverallAtDraft,
+          d.draft_value AS draftValue,
+          
+          r.id AS riderId,
+          r.first_name AS riderFirstName,
+          r.last_name AS riderLastName,
+          r.birth_year AS riderBirthYear,
+          
+          c.code_3 AS countryCode,
+          
+          t.id AS teamId,
+          t.name AS teamName,
+          
+          ot.id AS oldTeamId,
+          ot.name AS oldTeamName
+          
+        FROM draft_history d
+        JOIN riders r ON d.rider_id = r.id
+        JOIN sta_country c ON r.country_id = c.id
+        JOIN teams t ON d.team_id = t.id
+        LEFT JOIN teams ot ON d.old_team_id = ot.id
+        WHERE d.season = ?
+        ORDER BY d.pick_number ASC
+      `).all(season) as any[];
+
+      // Kandidaten-Pools abfragen
+      const candidatesRaw = db.prepare(`
+        SELECT 
+          p.pick_number AS pickNumber,
+          p.rider_id AS riderId,
+          p.weight AS weight,
+          p.probability AS probability,
+          r.first_name AS firstName,
+          r.last_name AS lastName,
+          r.overall_rating AS overallRating,
+          r.pot_overall AS potential,
+          r.birth_year AS birthYear,
+          spec.name AS specialization,
+          c.code_3 AS countryCode,
+          (
+            SELECT cont.team_id 
+            FROM contracts cont 
+            WHERE cont.rider_id = r.id AND cont.status = 'expired' AND cont.end_season = ? 
+            ORDER BY cont.end_season DESC LIMIT 1
+          ) AS oldTeamId,
+          (
+            SELECT tm.name 
+            FROM contracts cont 
+            LEFT JOIN teams tm ON cont.team_id = tm.id
+            WHERE cont.rider_id = r.id AND cont.status = 'expired' AND cont.end_season = ? 
+            ORDER BY cont.end_season DESC LIMIT 1
+          ) AS oldTeamName
+        FROM draft_picks_pool p
+        JOIN riders r ON p.rider_id = r.id
+        LEFT JOIN sta_specialization spec ON r.specialization_1_id = spec.id
+        JOIN sta_country c ON r.country_id = c.id
+        WHERE p.season = ?
+        ORDER BY p.pick_number ASC, p.probability DESC
+      `).all(season - 1, season - 1, season) as any[];
+
+      const candidatesByPick = new Map<number, any[]>();
+      for (const cand of candidatesRaw) {
+        const uciRank = uciRanks.get(cand.riderId) ?? null;
+        const candidateObj = {
+          riderId: cand.riderId,
+          firstName: cand.firstName,
+          lastName: cand.lastName,
+          countryCode: cand.countryCode,
+          specialization: cand.specialization || 'Allrounder',
+          overallRating: cand.overallRating,
+          potential: cand.potential,
+          probability: cand.probability,
+          oldTeamId: cand.oldTeamId,
+          oldTeamName: cand.oldTeamName,
+          uciRank
+        };
+        
+        if (!candidatesByPick.has(cand.pickNumber)) {
+          candidatesByPick.set(cand.pickNumber, []);
+        }
+        candidatesByPick.get(cand.pickNumber)!.push(candidateObj);
+      }
+      
+      const picksWithCandidates = rows.map(r => {
+        return {
+          ...r,
+          candidates: candidatesByPick.get(r.pickNumber) ?? []
+        };
+      });
+
+      ok(res, {
+        season,
+        picks: picksWithCandidates
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   
   router.get('/injuries', (_req: Request, res: Response) => {
       try {

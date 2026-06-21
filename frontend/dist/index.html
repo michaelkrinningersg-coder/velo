@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velo – Radsport Director</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.3.2/css/flag-icons.min.css" />
-  <script type="module" crossorigin src="/assets/index-kzYv_rsy.js"></script>
+  <script type="module" crossorigin src="/assets/index-3aocdiPt.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-Do55zjmP.css">
 </head>
 <body>
@@ -360,10 +360,14 @@
 
       <!-- Season Standings -->
       <div id="view-season-standings" class="view">
-        <div class="view-header view-header-stack">
+        <div class="view-header view-header-stack" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div>
             <h2>Season Standings</h2>
             <p id="season-standings-meta" class="text-muted">Noch keine Saisonwertung geladen.</p>
+          </div>
+          <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            <label for="season-standings-year-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500; margin: 0; white-space: nowrap;">Saison:</label>
+            <select id="season-standings-year-select" class="form-control" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;"></select>
           </div>
         </div>
         <div id="season-standings-scope-tabs" class="results-type-tabs"></div>
