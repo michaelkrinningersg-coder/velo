@@ -227,11 +227,19 @@ function resolveBreakawaySizeBounds(race: Race, stage: Stage, riderCount: number
 }
 
 function resolveBreakawayPhaseEndRange(race: Race, stage: Stage): { min: number; max: number } {
+  const isFlatOrRolling = stage.profile === 'Flat' || stage.profile === 'Rolling';
+
   if (!race.isStageRace || stage.stageNumber <= 8) {
     return { min: 0.45, max: 0.6 };
   }
   if (stage.stageNumber <= 15) {
+    if (isFlatOrRolling) {
+      return { min: 0.45, max: 0.65 };
+    }
     return { min: 0.45, max: 0.75 };
+  }
+  if (isFlatOrRolling) {
+    return { min: 0.5, max: 0.75 };
   }
   return { min: 0.5, max: 0.85 };
 }
