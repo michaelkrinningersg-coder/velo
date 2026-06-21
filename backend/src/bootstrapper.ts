@@ -328,14 +328,14 @@ function shuffleDeterministically<T>(items: T[], seed: number): T[] {
 }
 
 function seedStaCountry(db: Database.Database): void {
-  const rows = readCsv('sta_country.csv');
+  const rows = readCsv('country.csv');
   const insert = db.prepare(`
     INSERT INTO sta_country (id, name, code_3, continent, regen_rating, number_regen_min, number_regen_max)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
-    const ctx = `sta_country.csv Zeile ${index + 2}`;
+    const ctx = `country.csv Zeile ${index + 2}`;
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
@@ -372,11 +372,11 @@ function seedTypeRider(db: Database.Database): void {
 }
 
 function seedStaRole(db: Database.Database): void {
-  const rows = readCsv('sta_role.csv');
+  const rows = readCsv('role.csv');
   const insert = db.prepare('INSERT INTO sta_role (id, name, weighting) VALUES (?, ?, ?)');
 
   for (const [index, row] of rows.entries()) {
-    const ctx = `sta_role.csv Zeile ${index + 2}`;
+    const ctx = `role.csv Zeile ${index + 2}`;
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),

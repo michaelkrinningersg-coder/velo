@@ -302,13 +302,13 @@ function shuffleDeterministically(items, seed) {
     return shuffled;
 }
 function seedStaCountry(db) {
-    const rows = readCsv('sta_country.csv');
+    const rows = readCsv('country.csv');
     const insert = db.prepare(`
     INSERT INTO sta_country (id, name, code_3, continent, regen_rating, number_regen_min, number_regen_max)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
-        const ctx = `sta_country.csv Zeile ${index + 2}`;
+        const ctx = `country.csv Zeile ${index + 2}`;
         insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), req(row, 'code_3', ctx), req(row, 'continent', ctx), int(req(row, 'regen_rating', ctx), ctx), int(req(row, 'number_regen_min', ctx), ctx), int(req(row, 'number_regen_max', ctx), ctx));
     }
     console.log(`  ${rows.length} Laender eingefuegt.`);
@@ -326,10 +326,10 @@ function seedTypeRider(db) {
     console.log(`  ${rows.length} Fahrertypen eingefuegt.`);
 }
 function seedStaRole(db) {
-    const rows = readCsv('sta_role.csv');
+    const rows = readCsv('role.csv');
     const insert = db.prepare('INSERT INTO sta_role (id, name, weighting) VALUES (?, ?, ?)');
     for (const [index, row] of rows.entries()) {
-        const ctx = `sta_role.csv Zeile ${index + 2}`;
+        const ctx = `role.csv Zeile ${index + 2}`;
         insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), int(req(row, 'weighting', ctx), ctx));
     }
     console.log(`  ${rows.length} Rollen eingefuegt.`);

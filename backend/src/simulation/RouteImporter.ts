@@ -1355,7 +1355,7 @@ export class RouteImporter {
   }
 
   public loadCountriesList(): Array<{ id: number; name: string; code3: string }> {
-    const countriesPath = resolve(this.dataRoot, 'csv', 'sta_country.csv');
+    const countriesPath = resolve(this.dataRoot, 'csv', 'country.csv');
     if (!existsSync(countriesPath)) return [];
     const rows = parseCsvRows(readFileSync(countriesPath, 'utf8'));
     const [header, ...dataRows] = rows;
@@ -1584,7 +1584,7 @@ export class RouteImporter {
   }
 
   private loadCountryCodes(): Map<number, Nationality> {
-    const countriesPath = resolve(this.dataRoot, 'csv', 'sta_country.csv');
+    const countriesPath = resolve(this.dataRoot, 'csv', 'country.csv');
     if (!existsSync(countriesPath)) return new Map();
     const rows = parseCsvRows(readFileSync(countriesPath, 'utf8'));
     const [header, ...dataRows] = rows;

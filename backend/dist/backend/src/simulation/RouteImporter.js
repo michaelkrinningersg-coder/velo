@@ -1143,7 +1143,7 @@ class RouteImporter {
         };
     }
     loadCountriesList() {
-        const countriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'sta_country.csv');
+        const countriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'country.csv');
         if (!(0, fs_1.existsSync)(countriesPath))
             return [];
         const rows = parseCsvRows((0, fs_1.readFileSync)(countriesPath, 'utf8'));
@@ -1351,7 +1351,7 @@ class RouteImporter {
         return result;
     }
     loadCountryCodes() {
-        const countriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'sta_country.csv');
+        const countriesPath = (0, path_1.resolve)(this.dataRoot, 'csv', 'country.csv');
         if (!(0, fs_1.existsSync)(countriesPath))
             return new Map();
         const rows = parseCsvRows((0, fs_1.readFileSync)(countriesPath, 'utf8'));

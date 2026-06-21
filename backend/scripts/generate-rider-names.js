@@ -2,7 +2,7 @@
  * generate-rider-names.js
  *
  * LLM-ähnliches Skript zur Generierung realistischer Vor- und Nachnamen
- * für alle in sta_country.csv enthaltenen Nationen.
+ * für alle in country.csv enthaltenen Nationen.
  *
  * Aufruf:  node backend/scripts/generate-rider-names.js
  *
@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CSV_DIR = path.resolve(__dirname, '..', '..', 'data', 'csv');
-const COUNTRIES_CSV = path.join(CSV_DIR, 'sta_country.csv');
+const COUNTRIES_CSV = path.join(CSV_DIR, 'country.csv');
 const OUTPUT_CSV = path.join(CSV_DIR, 'rider_names.csv');
 
 function parseCsvLine(line) {
