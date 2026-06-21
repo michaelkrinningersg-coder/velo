@@ -508,11 +508,12 @@ function calculateElevationGain(points: ProfilePoint[]): number {
   return Math.round(gain);
 }
 
-function calculateClimbOverviewMetrics(segments: StageEditorSegment[], climb: StageClimbScore): Pick<StageEditorClimbOverviewRow, 'gainMeters' | 'distanceKm' | 'avgGradient' | 'maxGradient'> {
+function calculateClimbOverviewMetrics(segments: StageEditorSegment[], climb: StageClimbScore): Pick<StageEditorClimbOverviewRow, 'gainMeters' | 'elevationAtTop' | 'distanceKm' | 'avgGradient' | 'maxGradient'> {
   let currentKm = 0;
   let distanceKm = 0;
   let netGainMeters = 0;
   let maxGradient = 0;
+  let elevationAtTop = 0;
 
   for (const segment of segments) {
     const segmentStartKm = currentKm;
@@ -530,11 +531,17 @@ function calculateClimbOverviewMetrics(segments: StageEditorSegment[], climb: St
     const clippedGainMeters = (clippedLengthKm * 1000) * (segment.gradientPercent / 100);
     netGainMeters += clippedGainMeters;
     maxGradient = Math.max(maxGradient, segment.gradientPercent);
+
+    if (Math.abs(clippedEndKm - climb.endKm) < 1e-5) {
+      const offsetKm = climb.endKm - segmentStartKm;
+      elevationAtTop = Math.round(segment.startElevation + (offsetKm * 1000) * (segment.gradientPercent / 100));
+    }
   }
 
   const avgGradient = distanceKm > 0 ? netGainMeters / (distanceKm * 10) : 0;
   return {
     gainMeters: Math.round(Math.max(0, netGainMeters)),
+    elevationAtTop,
     distanceKm: round2(distanceKm),
     avgGradient: round1(avgGradient),
     maxGradient: round1(maxGradient),

@@ -266,6 +266,7 @@ export interface Rider {
   unavailableDaysRemaining?: number;
   healthStatusLabel?: string | null;
   isUnavailable?: boolean;
+  weatherProfileId?: number;
 }
 
 // ------ Team -------------------------------------------------
@@ -792,6 +793,7 @@ export interface RealtimeSimulationBootstrap {
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
   stageScoringRules: StageScoringRule[];
+  lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
 }
 
 export type SeasonPointAwardType =
@@ -954,6 +956,7 @@ export interface RiderStatsPayload {
   age?: number;
   teamId: number | null;
   teamName: string | null;
+  weatherProfileId?: number;
   countryCode: Nationality | null;
   roleName: string | null;
   mentorName?: string | null;
@@ -1159,6 +1162,7 @@ export interface StageEditorClimbOverviewRow {
   raceName: string;
   stageNumber: number;
   gainMeters: number;
+  elevationAtTop: number;
   distanceKm: number;
   avgGradient: number;
   maxGradient: number;

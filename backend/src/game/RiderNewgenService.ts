@@ -46,12 +46,14 @@ export class RiderNewgenService {
           first_name, last_name, country_id, birth_year,
           is_retired, skill_development, rider_type_id,
           overall_rating, pot_overall,
+          weather_profile_id,
           ${skillColumns},
           ${potColumns}
         ) VALUES (
           ?, ?, ?, ?,
           0, ?, ?,
           ?, ?,
+          ?,
           ${valuePlaceholders},
           ${valuePlaceholders}
         )
@@ -141,6 +143,7 @@ export class RiderNewgenService {
 
           const overallRating = calcOverall(startValues);
           const potOverall = calcOverall(potValues);
+          const weatherProfileId = this.getRandomInt(1, 7);
 
           const insertParams = [
             firstNameObj.value,
@@ -150,7 +153,8 @@ export class RiderNewgenService {
             skillDev,
             typeMap.get(startPreset.type_key) || 1,
             overallRating,
-            potOverall
+            potOverall,
+            weatherProfileId
           ];
 
           for (const key of skillKeys) insertParams.push(startValues[key]);

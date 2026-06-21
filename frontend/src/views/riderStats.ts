@@ -51,6 +51,26 @@ const COMPARE_COLORS = [
   '#a855f7', // purple-light
 ];
 
+const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
+  1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
+  2: { pref: [3, 5], malus: [2, 7], neutral: [1, 4, 6] },
+  3: { pref: [4, 7], malus: [2, 5], neutral: [1, 3, 6] },
+  4: { pref: [6, 7], malus: [2, 5], neutral: [1, 3, 4] },
+  5: { pref: [1, 5], malus: [6, 7], neutral: [2, 3, 4] },
+  6: { pref: [1, 3], malus: [4, 7], neutral: [2, 5, 6] },
+  7: { pref: [3, 4], malus: [2, 7], neutral: [1, 5, 6] },
+};
+
+const WEATHER_NAMES: Record<number, string> = {
+  1: 'Sonnig',
+  2: 'Extreme Hitze',
+  3: 'Leichter Regen',
+  4: 'Starkregen',
+  5: 'Starker Wind',
+  6: 'Dichter Nebel',
+  7: 'Schnee/Eis',
+};
+
 export function renderWeatherIcon(weatherId: number | null | undefined, weatherName: string | null | undefined): string {
   if (weatherId == null) return '';
   const title = weatherName ? esc(weatherName) : 'Wetter';
@@ -482,6 +502,13 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
   const specIcon2 = getSpecializationIcon(rider?.specialization2 ?? null);
   const specIcon3 = getSpecializationIcon(rider?.specialization3 ?? null);
 
+  const profileId = rider?.weatherProfileId ?? payload?.weatherProfileId ?? 1;
+  const weatherProfile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
+  const pref1Id = weatherProfile.pref[0];
+  const pref2Id = weatherProfile.pref[1];
+  const pref1Name = WEATHER_NAMES[pref1Id];
+  const pref2Name = WEATHER_NAMES[pref2Id];
+
   let lieutenantPill = '';
   if (payload?.lieutenantInfo) {
     lieutenantPill = `
@@ -524,7 +551,7 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
         <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:124;--rider-stats-pill-border-alpha:0.44;--rider-stats-pill-bg-alpha:0.26; font-weight: 500;" title="Spezialisierung 1">${specIcon1} ${esc(specLabel1)}</span>
         <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:41;--rider-stats-pill-border-alpha:0.31;--rider-stats-pill-bg-alpha:0.18; font-weight: 500;" title="Spezialisierung 2">${specIcon2} ${esc(specLabel2)}</span>
         <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:6;--rider-stats-pill-border-alpha:0.26;--rider-stats-pill-bg-alpha:0.14; font-weight: 500;" title="Spezialisierung 3">${specIcon3} ${esc(specLabel3)}</span>
-        <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
+        <span class="rider-stats-icon-pill" title="Wetterpräferenzen" style="display: inline-flex; align-items: center; gap: 4px; padding: 0.2rem 0.6rem;">🌤️ ${renderWeatherIcon(pref1Id, pref1Name)} ${renderWeatherIcon(pref2Id, pref2Name)}</span>
       </div>
       <div class="rider-stats-header-col align-left">
         ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.stageRace, 'Rundfahrten Punkte', formatPoints.stageRace, maxFormat)}
@@ -1084,8 +1111,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       const entryDate = new Date(entry.date).getTime();
       const dayOfYear = (entryDate - yearStart) / msPerDay;
       const x = padL + (dayOfYear / 365) * chartW;
-      const val = entry.combinedFatigue ?? 0.0;
-      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      const val = (entry.shortFatigue ?? 0.0) + (entry.longFatigue ?? 0.0);
+      const y = padT + chartH - (Math.min(25, Math.max(0, val)) / 25) * chartH;
       return { x, y, val, date: entry.date };
     });
     const cfPathData = `M ${cfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
@@ -1102,7 +1129,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       const dayOfYear = (entryDate - yearStart) / msPerDay;
       const x = padL + (dayOfYear / 365) * chartW;
       const val = entry.shortFatigue ?? 0.0;
-      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      const y = padT + chartH - (Math.min(25, Math.max(0, val)) / 25) * chartH;
       return { x, y, val, date: entry.date };
     });
     const sfPathData = `M ${sfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
@@ -1119,7 +1146,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       const dayOfYear = (entryDate - yearStart) / msPerDay;
       const x = padL + (dayOfYear / 365) * chartW;
       const val = entry.longFatigue ?? 0.0;
-      const y = padT + chartH - (Math.min(15, Math.max(0, val)) / 15) * chartH;
+      const y = padT + chartH - (Math.min(25, Math.max(0, val)) / 25) * chartH;
       return { x, y, val, date: entry.date };
     });
     const lfPathData = `M ${lfPts.map((p) => `${p.x},${p.y}`).join(' L ')}`;
@@ -1138,9 +1165,9 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
     gridHtml += `<text x="${padL - 5}" y="${y + 4}" fill="#ffffff" font-size="10" text-anchor="end">${i}</text>`;
   }
 
-  // Right Axis: Fatigue (0 to 15, steps of 3) in #ef4444
-  for (let i = 0; i <= 15; i += 3) {
-    const y = padT + chartH - (i / 15) * chartH;
+  // Right Axis: Fatigue (0 to 25, steps of 5) in #ef4444
+  for (let i = 0; i <= 25; i += 5) {
+    const y = padT + chartH - (i / 25) * chartH;
     gridHtml += `<text x="${padL + chartW + 5}" y="${y + 4}" fill="#ef4444" font-size="10" text-anchor="start">${i}</text>`;
   }
 
@@ -1290,17 +1317,17 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
           <input type="checkbox" id="toggle-chart-combined-fatigue" ${chartToggles.combinedFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #ef4444;" />
           <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%;"></span>
-          Gesamtfatigue (0-15)
+          Gesamtfatigue (0-25)
         </label>
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
           <input type="checkbox" id="toggle-chart-short-fatigue" ${chartToggles.shortFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #facc15;" />
           <span style="display: inline-block; width: 8px; height: 8px; background: #facc15; border-radius: 50%;"></span>
-          Kurzzeitfatigue (0-15)
+          Kurzzeitfatigue (0-25)
         </label>
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
           <input type="checkbox" id="toggle-chart-long-fatigue" ${chartToggles.longFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #a855f7;" />
           <span style="display: inline-block; width: 8px; height: 8px; background: #a855f7; border-radius: 50%;"></span>
-          Langzeitfatigue (0-15)
+          Langzeitfatigue (0-25)
         </label>
       </div>
 

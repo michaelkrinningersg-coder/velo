@@ -454,8 +454,10 @@ function createRouter(dbService) {
             }
             const riders = (0, RaceRosterService_1.ensureRaceEntries)(db, repo, race, stage);
             if (riders.length === 0) {
-                return fail(res, 400, 'FÃ¼r diese Etappe konnte keine Startliste bestimmt werden.');
+                return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
             }
+            const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get();
+            const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026);
             ok(res, {
                 race,
                 stage,
@@ -470,6 +472,7 @@ function createRouter(dbService) {
                 teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
                 skillWeightRules: repo.getSkillWeightRules(),
                 stageScoringRules: repo.getStageScoringRules(),
+                lieutenants,
             });
         }
         catch (e) {
@@ -589,6 +592,8 @@ function createRouter(dbService) {
                     }
                 }
             }
+            const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get();
+            const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026);
             ok(res, {
                 race,
                 stage,
@@ -603,6 +608,7 @@ function createRouter(dbService) {
                 teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
                 skillWeightRules: repo.getSkillWeightRules(),
                 stageScoringRules: repo.getStageScoringRules(),
+                lieutenants,
             });
         }
         catch (e) {

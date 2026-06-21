@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS riders (
   non_favorite_races TEXT   NOT NULL DEFAULT '',
   active_team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
   active_contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
-  is_retired        INTEGER NOT NULL DEFAULT 0 CHECK(is_retired IN (0, 1))
+  is_retired        INTEGER NOT NULL DEFAULT 0 CHECK(is_retired IN (0, 1)),
+  weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7)
 );
 
 CREATE INDEX IF NOT EXISTS idx_riders_active_team ON riders(active_team_id);

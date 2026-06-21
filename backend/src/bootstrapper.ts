@@ -990,13 +990,14 @@ function seedRiders(db: Database.Database): void {
       skill_flat, skill_mountain, skill_medium_mountain, skill_hill, skill_time_trial,
       skill_prologue, skill_cobble, skill_sprint, skill_acceleration, skill_downhill,
       skill_attack, skill_stamina, skill_resistance, skill_recuperation,
-      active_team_id, favorite_races, non_favorite_races
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      active_team_id, favorite_races, non_favorite_races, weather_profile_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `riders.csv Zeile ${index + 2}`;
     const seededTeamId = optionalInt(row['team_id']);
+    const weatherProfileId = Math.floor(Math.random() * 7) + 1;
     insert.run(
       int(req(row, 'rider_id', ctx), ctx),
       req(row, 'first_name', ctx),
@@ -1022,6 +1023,7 @@ function seedRiders(db: Database.Database): void {
       seededTeamId,
       row['favorite_races']?.trim() ?? '',
       row['non_favorite_races']?.trim() ?? '',
+      weatherProfileId,
     );
   }
 

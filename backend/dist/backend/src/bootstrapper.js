@@ -732,13 +732,14 @@ function seedRiders(db) {
       skill_flat, skill_mountain, skill_medium_mountain, skill_hill, skill_time_trial,
       skill_prologue, skill_cobble, skill_sprint, skill_acceleration, skill_downhill,
       skill_attack, skill_stamina, skill_resistance, skill_recuperation,
-      active_team_id, favorite_races, non_favorite_races
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      active_team_id, favorite_races, non_favorite_races, weather_profile_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `riders.csv Zeile ${index + 2}`;
         const seededTeamId = optionalInt(row['team_id']);
-        insert.run(int(req(row, 'rider_id', ctx), ctx), req(row, 'first_name', ctx), req(row, 'last_name', ctx), int(req(row, 'country_id', ctx), ctx), DEFAULT_RIDER_TYPE_ID, int(req(row, 'birth_year', ctx), ctx), provisionalOverall(row, ctx), int(req(row, 'skill_flat', ctx), ctx), int(req(row, 'skill_mountain', ctx), ctx), int(req(row, 'skill_medium_mountain', ctx), ctx), int(req(row, 'skill_hill', ctx), ctx), int(req(row, 'skill_time_trial', ctx), ctx), int(req(row, 'skill_prologue', ctx), ctx), int(req(row, 'skill_cobble', ctx), ctx), int(req(row, 'skill_sprint', ctx), ctx), int(req(row, 'skill_acceleration', ctx), ctx), int(req(row, 'skill_downhill', ctx), ctx), int(req(row, 'skill_attack', ctx), ctx), int(req(row, 'skill_stamina', ctx), ctx), int(req(row, 'skill_resistance', ctx), ctx), int(req(row, 'skill_recuperation', ctx), ctx), seededTeamId, row['favorite_races']?.trim() ?? '', row['non_favorite_races']?.trim() ?? '');
+        const weatherProfileId = Math.floor(Math.random() * 7) + 1;
+        insert.run(int(req(row, 'rider_id', ctx), ctx), req(row, 'first_name', ctx), req(row, 'last_name', ctx), int(req(row, 'country_id', ctx), ctx), DEFAULT_RIDER_TYPE_ID, int(req(row, 'birth_year', ctx), ctx), provisionalOverall(row, ctx), int(req(row, 'skill_flat', ctx), ctx), int(req(row, 'skill_mountain', ctx), ctx), int(req(row, 'skill_medium_mountain', ctx), ctx), int(req(row, 'skill_hill', ctx), ctx), int(req(row, 'skill_time_trial', ctx), ctx), int(req(row, 'skill_prologue', ctx), ctx), int(req(row, 'skill_cobble', ctx), ctx), int(req(row, 'skill_sprint', ctx), ctx), int(req(row, 'skill_acceleration', ctx), ctx), int(req(row, 'skill_downhill', ctx), ctx), int(req(row, 'skill_attack', ctx), ctx), int(req(row, 'skill_stamina', ctx), ctx), int(req(row, 'skill_resistance', ctx), ctx), int(req(row, 'skill_recuperation', ctx), ctx), seededTeamId, row['favorite_races']?.trim() ?? '', row['non_favorite_races']?.trim() ?? '', weatherProfileId);
     }
     console.log(`  ${rows.length} Fahrer eingefuegt.`);
 }

@@ -486,6 +486,23 @@ function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
+export const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
+  1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
+  2: { pref: [3, 5], malus: [2, 7], neutral: [1, 4, 6] },
+  3: { pref: [4, 7], malus: [2, 5], neutral: [1, 3, 6] },
+  4: { pref: [6, 7], malus: [2, 5], neutral: [1, 3, 4] },
+  5: { pref: [1, 5], malus: [6, 7], neutral: [2, 3, 4] },
+  6: { pref: [1, 3], malus: [4, 7], neutral: [2, 5, 6] },
+  7: { pref: [3, 4], malus: [2, 7], neutral: [1, 5, 6] },
+};
+
+export function getWeatherRelation(profileId: number, weatherId: number): 'pref' | 'malus' | 'neutral' {
+  const profile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
+  if (profile.pref.includes(weatherId)) return 'pref';
+  if (profile.malus.includes(weatherId)) return 'malus';
+  return 'neutral';
+}
+
 function chooseOne<T>(values: T[]): T {
   return values[Math.floor(Math.random() * values.length)] as T;
 }
@@ -1248,6 +1265,56 @@ export class SimulationEngine {
         return originalRider;
       });
     }
+
+    // Apply Weather Profile modifications
+    const weatherId = bootstrap.stage.rolledWeatherId || 1;
+    bootstrap.riders = bootstrap.riders.map((originalRider) => {
+      const profileId = originalRider.weatherProfileId || 1;
+      const relation = getWeatherRelation(profileId, weatherId);
+
+      if (relation === 'neutral') {
+        return originalRider;
+      }
+
+      const clonedRider = {
+        ...originalRider,
+        skills: { ...originalRider.skills },
+      };
+
+      const skillsToModify: RiderSkillKey[] = ['flat', 'mountain', 'stamina', 'bikeHandling', 'recuperation', 'downhill'];
+
+      if (relation === 'pref') {
+        for (const skill of skillsToModify) {
+          const mod = randomBetween(0.2, 1.0);
+          clonedRider.skills[skill] = Math.min(100, clonedRider.skills[skill] + mod);
+        }
+      } else if (relation === 'malus') {
+        // Check if there is a lieutenant starting the race who has this weather as a preference
+        let reduction = 0;
+        if (bootstrap.lieutenants) {
+          const relationObj = bootstrap.lieutenants.find((l) => l.leaderId === originalRider.id);
+          if (relationObj) {
+            const hasLtStarting = bootstrap.riders.some((r) => r.id === relationObj.lieutenantId);
+            if (hasLtStarting) {
+              const ltRider = bootstrap.riders.find((r) => r.id === relationObj.lieutenantId);
+              const ltProfileId = ltRider?.weatherProfileId || 1;
+              const ltRelation = getWeatherRelation(ltProfileId, weatherId);
+              if (ltRelation === 'pref') {
+                reduction = randomBetween(0.40, 0.75);
+              }
+            }
+          }
+        }
+
+        for (const skill of skillsToModify) {
+          const mod = randomBetween(0.2, 1.0) * (1 - reduction);
+          clonedRider.skills[skill] = Math.max(0, clonedRider.skills[skill] - mod);
+        }
+      }
+
+      return clonedRider;
+    });
+
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.isTeamTimeTrial = bootstrap.stage.profile === 'TTT';

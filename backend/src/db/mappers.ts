@@ -160,6 +160,7 @@ export interface RiderRow {
   short_term_fatigue: number | null;
   long_term_fatigue_decayable: number | null;
   long_term_fatigue_locked: number | null;
+  weather_profile_id?: number | null;
 }
 
 export interface RiderSeasonRaceStats {
@@ -821,6 +822,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
+    weatherProfileId: row.weather_profile_id ?? 1,
     nationality: country.code3,
     countryId: country.id,
     country,

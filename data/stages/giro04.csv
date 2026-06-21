@@ -19,12 +19,12 @@ length_km,gradient_percent,terrain,tech_level,wind_exp,marker_type,marker_name,m
 0.46,2.400,Flat,5,5,,,,,,
 0.72,7.100,Hill,5,5,,,,,,
 1.29,4.300,Hill,5,5,,,,,,
-0.44,9.300,Hill,5,5,,,,,,
-0.41,6.600,Hill,5,5,,,,,,
-0.56,2.500,Flat,5,5,,,,,,
-0.68,8.200,Hill,5,5,,,,,,
+0.44,9.300,Medium_Mountain,5,5,,,,,,
+0.41,6.600,Medium_Mountain,5,5,,,,,,
+0.56,2.500,Hill,5,5,,,,,,
+0.68,8.200,Medium_Mountain,5,5,,,,,,
 0.57,1.200,Flat,5,5,,,,,,
-2.87,5.700,Hill,5,5,,,,climb_top,Cozzo Tunno,2
+2.87,5.700,Medium_Mountain,5,5,,,,climb_top,Cozzo Tunno,2
 0.48,1.500,Flat,5,5,,,,,,
 0.45,-2.200,Flat,5,5,,,,,,
 0.43,5.300,Hill,5,5,,,,,,

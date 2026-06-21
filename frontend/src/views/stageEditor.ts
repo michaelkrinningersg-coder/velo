@@ -1098,7 +1098,7 @@ export function getDefaultStageEditorStagesSortDirection(sortKey: StageEditorSta
 }
 
 export function getDefaultStageEditorClimbsSortDirection(sortKey: StageEditorClimbsSortKey): 'asc' | 'desc' {
-  return ['gainMeters', 'distanceKm', 'avgGradient', 'maxGradient', 'climbScore'].includes(sortKey) ? 'desc' : 'asc';
+  return ['gainMeters', 'elevationAtTop', 'distanceKm', 'avgGradient', 'maxGradient', 'climbScore'].includes(sortKey) ? 'desc' : 'asc';
 }
 
 export function renderStageEditorScoreBadge(score: number, minScore: number, maxScore: number): string {
@@ -1340,6 +1340,7 @@ export function renderStageEditorClimbsOverview(): void {
       ${renderStageEditorOverviewHeader('Rennen', 'raceName', ck, cd, 'climbs')}
       ${renderStageEditorOverviewHeader('Etappe', 'stageNumber', ck, cd, 'climbs')}
       ${renderStageEditorOverviewHeader('Höhenmeter', 'gainMeters', ck, cd, 'climbs')}
+      ${renderStageEditorOverviewHeader('Höhe (Top)', 'elevationAtTop', ck, cd, 'climbs')}
       ${renderStageEditorOverviewHeader('Distanz', 'distanceKm', ck, cd, 'climbs')}
       ${renderStageEditorOverviewHeader('Ø Steigung', 'avgGradient', ck, cd, 'climbs')}
       ${renderStageEditorOverviewHeader('Max Steigung', 'maxGradient', ck, cd, 'climbs')}
@@ -1357,6 +1358,7 @@ export function renderStageEditorClimbsOverview(): void {
       <td><strong>${esc(row.raceName)}</strong></td>
       <td><strong>${esc(getStageDisplayName({ stageNumber: row.stageNumber } as any))}</strong></td>
       <td>${formatElevationGain(row.gainMeters)}</td>
+      <td>${Math.round(row.elevationAtTop).toLocaleString('de-DE')} m</td>
       <td>${formatKm(row.distanceKm)}</td>
       <td>${row.avgGradient.toFixed(1).replace('.', ',')}%</td>
       <td>${row.maxGradient.toFixed(1).replace('.', ',')}%</td>
@@ -1493,6 +1495,9 @@ export function sortStageEditorClimbRows(rows: StageEditorClimbOverviewRow[]): S
         break;
       case 'gainMeters':
         comparison = left.gainMeters - right.gainMeters;
+        break;
+      case 'elevationAtTop':
+        comparison = left.elevationAtTop - right.elevationAtTop;
         break;
       case 'distanceKm':
         comparison = left.distanceKm - right.distanceKm;

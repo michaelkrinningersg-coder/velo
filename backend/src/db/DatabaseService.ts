@@ -637,6 +637,18 @@ export class DatabaseService {
     }
   }
 
+  private ensureRiderWeatherProfileSchema(db: Database.Database): void {
+    if (!columnExists(db, 'riders', 'weather_profile_id')) {
+      db.prepare(`
+        ALTER TABLE riders
+        ADD COLUMN weather_profile_id INTEGER NOT NULL DEFAULT 1
+      `).run();
+      db.prepare(`
+        UPDATE riders SET weather_profile_id = (ABS(RANDOM()) % 7) + 1
+      `).run();
+    }
+  }
+
   private ensureStageRaceStateSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_stage_race_state (
@@ -1392,6 +1404,7 @@ export class DatabaseService {
     this.activeConnection.pragma('synchronous = NORMAL');
     this.activeConnection.pragma('foreign_keys = ON');
     this.applyLatestSchema(this.activeConnection);
+    this.ensureRiderWeatherProfileSchema(this.activeConnection);
     this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureRaceCategoryBonusSchema(this.activeConnection);
@@ -1462,6 +1475,7 @@ export class DatabaseService {
     }
 
     this.applyLatestSchema(this.activeConnection);
+    this.ensureRiderWeatherProfileSchema(this.activeConnection);
     this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureRaceCategoriesSchema(this.activeConnection);

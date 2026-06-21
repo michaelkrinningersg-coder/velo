@@ -409,6 +409,7 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
         id: row.id,
         firstName: row.first_name,
         lastName: row.last_name,
+        weatherProfileId: row.weather_profile_id ?? 1,
         nationality: country.code3,
         countryId: country.id,
         country,
