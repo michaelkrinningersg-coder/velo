@@ -10,6 +10,10 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/jersey-large': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
     },
   },
 });

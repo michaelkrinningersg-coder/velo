@@ -873,7 +873,174 @@ export class TeamRepository {
       topResults,
       successStats,
       historyRosters: this.getTeamHistoryRosters(teamId),
+      transfers: this.getTeamTransfers(teamId),
     };
+  }
+
+  public getTeamTransfers(teamId: number): Record<number, {
+    incoming: Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      nationality: string | null;
+      specialization1: string | null;
+      specialization2: string | null;
+      specialization3: string | null;
+      roleName: string | null;
+      overallRating: number;
+      fromTeamId?: number | null;
+      fromTeamName?: string | null;
+    }>;
+    outgoing: Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      nationality: string | null;
+      specialization1: string | null;
+      specialization2: string | null;
+      specialization3: string | null;
+      roleName: string | null;
+      overallRating: number;
+      isRetired: boolean;
+      toTeamId?: number | null;
+      toTeamName?: string | null;
+    }>;
+  }> {
+    const db = this.db;
+    const currentSeason = new GameStateRepository(db).getCurrentSeason();
+    
+    // Find all seasons that have transfers for this team
+    const seasonsSet = new Set<number>();
+    const contractSeasons = db.prepare(`
+      SELECT DISTINCT start_season, end_season FROM contracts WHERE team_id = ?
+    `).all(teamId) as Array<{ start_season: number; end_season: number }>;
+    
+    for (const row of contractSeasons) {
+      seasonsSet.add(row.start_season);
+      seasonsSet.add(row.end_season + 1);
+    }
+
+    // Min and max years
+    let minYear = currentSeason;
+    let maxYear = currentSeason;
+    for (const yr of seasonsSet) {
+      if (yr < minYear) minYear = yr;
+      if (yr > maxYear) maxYear = yr;
+    }
+
+    const transfers: Record<number, { incoming: any[]; outgoing: any[] }> = {};
+
+    const incomingStmt = db.prepare(`
+      SELECT 
+        r.id,
+        r.first_name AS firstName,
+        r.last_name AS lastName,
+        co.code_3 AS nationality,
+        spec1.type_key AS specialization1,
+        spec2.type_key AS specialization2,
+        spec3.type_key AS specialization3,
+        COALESCE(role.name, curr_role.name, 'Helfer') AS roleName,
+        r.overall_rating AS overallRating,
+        dh.old_team_id AS fromTeamId,
+        prev_t.name AS fromTeamName
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      LEFT JOIN sta_country co ON r.country_id = co.id
+      LEFT JOIN type_rider spec1 ON r.specialization_1_id = spec1.id
+      LEFT JOIN type_rider spec2 ON r.specialization_2_id = spec2.id
+      LEFT JOIN type_rider spec3 ON r.specialization_3_id = spec3.id
+      LEFT JOIN rider_season_roles rsr ON rsr.rider_id = r.id AND rsr.season = :season
+      LEFT JOIN sta_role role ON rsr.role_id = role.id
+      LEFT JOIN sta_role curr_role ON r.role_id = curr_role.id
+      LEFT JOIN draft_history dh ON dh.rider_id = r.id AND dh.season = :season AND dh.team_id = :teamId
+      LEFT JOIN teams prev_t ON dh.old_team_id = prev_t.id
+      WHERE c.team_id = :teamId AND c.start_season = :season
+    `);
+
+    const outgoingStmt = db.prepare(`
+      SELECT 
+        r.id,
+        r.first_name AS firstName,
+        r.last_name AS lastName,
+        co.code_3 AS nationality,
+        spec1.type_key AS specialization1,
+        spec2.type_key AS specialization2,
+        spec3.type_key AS specialization3,
+        COALESCE(role.name, curr_role.name, 'Helfer') AS roleName,
+        r.overall_rating AS overallRating,
+        r.is_retired AS isRetired,
+        dh.team_id AS toTeamId,
+        next_t.name AS toTeamName
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      LEFT JOIN sta_country co ON r.country_id = co.id
+      LEFT JOIN type_rider spec1 ON r.specialization_1_id = spec1.id
+      LEFT JOIN type_rider spec2 ON r.specialization_2_id = spec2.id
+      LEFT JOIN type_rider spec3 ON r.specialization_3_id = spec3.id
+      LEFT JOIN rider_season_roles rsr ON rsr.rider_id = r.id AND rsr.season = :roleSeason
+      LEFT JOIN sta_role role ON rsr.role_id = role.id
+      LEFT JOIN sta_role curr_role ON r.role_id = curr_role.id
+      LEFT JOIN draft_history dh ON dh.rider_id = r.id AND dh.season = :nextSeason AND dh.old_team_id = :teamId
+      LEFT JOIN teams next_t ON dh.team_id = next_t.id
+      WHERE c.team_id = :teamId AND c.end_season = :endSeason
+    `);
+
+    for (let y = minYear; y <= maxYear; y++) {
+      const incomingRaw = incomingStmt.all({
+        season: y,
+        prevSeason: y - 1,
+        teamId: teamId
+      }) as any[];
+
+      const outgoingRaw = outgoingStmt.all({
+        roleSeason: y - 1,
+        teamId: teamId,
+        endSeason: y - 1,
+        nextSeason: y
+      }) as any[];
+
+      const incoming = incomingRaw
+        .filter(r => r.fromTeamId !== teamId)
+        .map((r: any) => ({
+          id: r.id,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          nationality: r.nationality,
+          specialization1: r.specialization1,
+          specialization2: r.specialization2,
+          specialization3: r.specialization3,
+          roleName: r.roleName,
+          overallRating: r.overallRating,
+          fromTeamId: r.fromTeamId ?? null,
+          fromTeamName: r.fromTeamName ?? null,
+        }));
+
+      const outgoing = outgoingRaw
+        .filter(r => r.toTeamId !== teamId)
+        .map((r: any) => ({
+          id: r.id,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          nationality: r.nationality,
+          specialization1: r.specialization1,
+          specialization2: r.specialization2,
+          specialization3: r.specialization3,
+          roleName: r.roleName,
+          overallRating: r.overallRating,
+          isRetired: r.isRetired === 1,
+          toTeamId: r.toTeamId ?? null,
+          toTeamName: r.toTeamName ?? null,
+        }));
+
+      if (incoming.length > 0 || outgoing.length > 0) {
+        transfers[y] = {
+          incoming,
+          outgoing
+        };
+      }
+    }
+
+    return transfers;
   }
 
   public getTeamHistoryRosters(teamId: number): Record<number, Array<{

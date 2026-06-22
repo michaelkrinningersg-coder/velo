@@ -649,6 +649,18 @@ export class DatabaseService {
     }
   }
 
+  private ensureDraftPicksPoolSchema(db: Database.Database): void {
+    if (tableExists(db, 'draft_picks_pool')) {
+      if (!columnExists(db, 'draft_picks_pool', 'old_team_id')) {
+        db.prepare(`
+          ALTER TABLE draft_picks_pool
+          ADD COLUMN old_team_id INTEGER
+        `).run();
+      }
+    }
+  }
+
+
   private ensureStageRaceStateSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_stage_race_state (
@@ -1207,6 +1219,41 @@ export class DatabaseService {
     `).run();
   }
 
+  private ensureTeamPreferencesData(db: Database.Database): void {
+    if (!tableExists(db, 'team_preferences')) {
+      return;
+    }
+
+    if (!fs.existsSync(this.masterDbPath)) {
+      return;
+    }
+
+    const masterDb = new Database(this.masterDbPath, { readonly: true });
+    try {
+      if (!tableExists(masterDb, 'team_preferences')) {
+        return;
+      }
+
+      const rows = masterDb.prepare(`
+        SELECT id_pref, team_id, country_id, weight
+        FROM team_preferences
+      `).all() as Array<{ id_pref: number; team_id: number; country_id: number; weight: number }>;
+
+      db.transaction(() => {
+        db.prepare('DELETE FROM team_preferences').run();
+        const insert = db.prepare(`
+          INSERT OR REPLACE INTO team_preferences (id_pref, team_id, country_id, weight)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const row of rows) {
+          insert.run(row.id_pref, row.team_id, row.country_id, row.weight);
+        }
+      })();
+    } finally {
+      masterDb.close();
+    }
+  }
+
 
 
   private ensureRaceProgramSchema(db: Database.Database): void {
@@ -1495,6 +1542,7 @@ export class DatabaseService {
     this.activeConnection.pragma('foreign_keys = ON');
     this.applyLatestSchema(this.activeConnection);
     this.ensureRiderWeatherProfileSchema(this.activeConnection);
+    this.ensureDraftPicksPoolSchema(this.activeConnection);
     this.ensureWeatherSchema(this.activeConnection);
     this.ensureResultsSchema(this.activeConnection);
     this.ensureResultsHistorySchema(this.activeConnection);
@@ -1510,8 +1558,10 @@ export class DatabaseService {
     this.ensureStageLeadoutsSchema(this.activeConnection);
     this.ensureRiderSeasonRolesSchema(this.activeConnection);
     this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
+    this.ensureTeamPreferencesData(this.activeConnection);
     this.ensureReferenceData(this.activeConnection);
     this.ensureDayChangeIndexes(this.activeConnection);
+    this.ensurePerformanceIndexes(this.activeConnection);
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
@@ -1561,6 +1611,22 @@ export class DatabaseService {
     `);
   }
 
+  private ensurePerformanceIndexes(db: Database.Database): void {
+    const createIfTable = (table: string, sql: string): void => {
+      if (!tableExists(db, table)) return;
+      try {
+        db.exec(sql);
+      } catch {
+        // Ignore
+      }
+    };
+
+    createIfTable('contracts', `CREATE INDEX IF NOT EXISTS idx_contracts_team ON contracts(team_id);`);
+    createIfTable('stage_entries', `CREATE INDEX IF NOT EXISTS idx_stage_entries_team ON stage_entries(team_id);`);
+    createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_team ON results_history(team_id);`);
+    createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_stage ON results_history(stage_id, result_type_id, rank);`);
+  }
+
   public getActiveConnection(): Database.Database {
     if (!this.activeConnection) {
       throw new Error('Kein Savegame geladen. Bitte zuerst ein Savegame laden.');
@@ -1579,6 +1645,8 @@ export class DatabaseService {
     this.ensureStageLeadoutsSchema(this.activeConnection);
     this.ensureRiderSeasonRolesSchema(this.activeConnection);
     this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
+    this.ensureTeamPreferencesData(this.activeConnection);
+    this.ensurePerformanceIndexes(this.activeConnection);
 
     return this.activeConnection;
   }

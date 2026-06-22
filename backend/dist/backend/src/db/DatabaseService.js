@@ -504,6 +504,16 @@ class DatabaseService {
       `).run();
         }
     }
+    ensureDraftPicksPoolSchema(db) {
+        if (tableExists(db, 'draft_picks_pool')) {
+            if (!columnExists(db, 'draft_picks_pool', 'old_team_id')) {
+                db.prepare(`
+          ALTER TABLE draft_picks_pool
+          ADD COLUMN old_team_id INTEGER
+        `).run();
+            }
+        }
+    }
     ensureStageRaceStateSchema(db) {
         db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_stage_race_state (
@@ -1019,6 +1029,37 @@ class DatabaseService {
       )
     `).run();
     }
+    ensureTeamPreferencesData(db) {
+        if (!tableExists(db, 'team_preferences')) {
+            return;
+        }
+        if (!fs.existsSync(this.masterDbPath)) {
+            return;
+        }
+        const masterDb = new better_sqlite3_1.default(this.masterDbPath, { readonly: true });
+        try {
+            if (!tableExists(masterDb, 'team_preferences')) {
+                return;
+            }
+            const rows = masterDb.prepare(`
+        SELECT id_pref, team_id, country_id, weight
+        FROM team_preferences
+      `).all();
+            db.transaction(() => {
+                db.prepare('DELETE FROM team_preferences').run();
+                const insert = db.prepare(`
+          INSERT OR REPLACE INTO team_preferences (id_pref, team_id, country_id, weight)
+          VALUES (?, ?, ?, ?)
+        `);
+                for (const row of rows) {
+                    insert.run(row.id_pref, row.team_id, row.country_id, row.weight);
+                }
+            })();
+        }
+        finally {
+            masterDb.close();
+        }
+    }
     ensureRaceProgramSchema(db) {
         db.exec(`
       CREATE TABLE IF NOT EXISTS race_programs (
@@ -1269,6 +1310,7 @@ class DatabaseService {
         this.activeConnection.pragma('foreign_keys = ON');
         this.applyLatestSchema(this.activeConnection);
         this.ensureRiderWeatherProfileSchema(this.activeConnection);
+        this.ensureDraftPicksPoolSchema(this.activeConnection);
         this.ensureWeatherSchema(this.activeConnection);
         this.ensureResultsSchema(this.activeConnection);
         this.ensureResultsHistorySchema(this.activeConnection);
@@ -1284,6 +1326,7 @@ class DatabaseService {
         this.ensureStageLeadoutsSchema(this.activeConnection);
         this.ensureRiderSeasonRolesSchema(this.activeConnection);
         this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
+        this.ensureTeamPreferencesData(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         this.ensureDayChangeIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
@@ -1351,6 +1394,7 @@ class DatabaseService {
         this.ensureStageLeadoutsSchema(this.activeConnection);
         this.ensureRiderSeasonRolesSchema(this.activeConnection);
         this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
+        this.ensureTeamPreferencesData(this.activeConnection);
         return this.activeConnection;
     }
     getMasterConnection() {

@@ -1030,6 +1030,26 @@ function seedRiders(db: Database.Database): void {
   console.log(`  ${rows.length} Fahrer eingefuegt.`);
 }
 
+function seedTeamPreferences(db: Database.Database): void {
+  const rows = readCsv('team_preferences.csv');
+  const insert = db.prepare(`
+    INSERT INTO team_preferences (id_pref, team_id, country_id, weight)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `team_preferences.csv Zeile ${index + 2}`;
+    insert.run(
+      int(req(row, 'ID_Pref', ctx), ctx),
+      int(req(row, 'Team_ID', ctx), ctx),
+      int(req(row, 'Country_ID', ctx), ctx),
+      int(req(row, 'Weight', ctx), ctx)
+    );
+  }
+
+  console.log(`  ${rows.length} Team-Praeferenzen eingefuegt.`);
+}
+
 function seedContracts(db: Database.Database): void {
   const currentSeason = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
   if (!currentSeason) {
@@ -1343,6 +1363,7 @@ export function bootstrap(force = false): void {
     seedWetter(db);
     seedStages(db);
     seedRiders(db);
+    seedTeamPreferences(db);
     const currentSeason = seedGameState(db);
 
     new RiderNewgenService(db).createYearStartNewgens(currentSeason);

@@ -713,3 +713,11 @@ CREATE TABLE IF NOT EXISTS draft_history (
   pot_overall_at_draft REAL NOT NULL,
   draft_value REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS team_preferences (
+  id_pref INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  country_id INTEGER NOT NULL REFERENCES sta_country(id) ON DELETE CASCADE,
+  weight INTEGER NOT NULL,
+  UNIQUE(team_id, country_id)
+);

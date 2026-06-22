@@ -40,6 +40,24 @@ const app = express();
 app.use(cors({ origin: process.env['CORS_ORIGIN'] ?? 'http://localhost:5173' }));
 app.use(express.json({ limit: '8mb' }));
 
+// Serve large high-resolution jerseys (check cwd and relative paths robustly)
+function resolveJerseyDir(): string {
+  const candidates = [
+    path.join(process.cwd(), 'data', 'Jersey'),
+    path.join(process.cwd(), '..', 'data', 'Jersey'),
+    path.resolve(__dirname, '..', '..', 'data', 'Jersey'),
+    path.resolve(__dirname, '..', '..', '..', 'data', 'Jersey'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'data', 'Jersey'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(process.cwd(), 'data', 'Jersey'); // fallback
+}
+app.use('/jersey-large', express.static(resolveJerseyDir()));
+
 // 4. Routes
 app.use('/api', createRouter(dbService));
 

@@ -1458,4 +1458,33 @@ export interface TeamStatsPayload {
     potential: number | null;
     contractEndSeason: number | null;
   }>>;
+  transfers?: Record<number, {
+    incoming: Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      nationality: string | null;
+      specialization1: string | null;
+      specialization2: string | null;
+      specialization3: string | null;
+      roleName: string | null;
+      overallRating: number;
+      fromTeamId?: number | null;
+      fromTeamName?: string | null;
+    }>;
+    outgoing: Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      nationality: string | null;
+      specialization1: string | null;
+      specialization2: string | null;
+      specialization3: string | null;
+      roleName: string | null;
+      overallRating: number;
+      isRetired: boolean;
+      toTeamId?: number | null;
+      toTeamName?: string | null;
+    }>;
+  }>;
 }

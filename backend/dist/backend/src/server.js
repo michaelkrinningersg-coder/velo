@@ -37,6 +37,23 @@ const app = (0, express_1.default)();
 // 3. Middleware
 app.use((0, cors_1.default)({ origin: process.env['CORS_ORIGIN'] ?? 'http://localhost:5173' }));
 app.use(express_1.default.json({ limit: '8mb' }));
+// Serve large high-resolution jerseys (check cwd and relative paths robustly)
+function resolveJerseyDir() {
+    const candidates = [
+        node_path_1.default.join(process.cwd(), 'data', 'Jersey'),
+        node_path_1.default.join(process.cwd(), '..', 'data', 'Jersey'),
+        node_path_1.default.resolve(__dirname, '..', '..', 'data', 'Jersey'),
+        node_path_1.default.resolve(__dirname, '..', '..', '..', 'data', 'Jersey'),
+        node_path_1.default.resolve(__dirname, '..', '..', '..', '..', 'data', 'Jersey'),
+    ];
+    for (const candidate of candidates) {
+        if (node_fs_1.default.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return node_path_1.default.join(process.cwd(), 'data', 'Jersey'); // fallback
+}
+app.use('/jersey-large', express_1.default.static(resolveJerseyDir()));
 // 4. Routes
 app.use('/api', (0, api_1.createRouter)(dbService));
 // 5. Health-Check

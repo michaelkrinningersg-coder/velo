@@ -80,5 +80,8 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 78,23,17,2026-05-27,Hilly_Difficult,153,giro17.csv,75,85,1.6,1.8,1.4,1|3|4
 79,23,18,2026-05-28,Rolling,246,giro18.csv,75,85,1,1.8,1.4,1
 80,23,19,2026-05-29,High_Mountain,332,giro19.csv,60,80,2,2.5,2,1|3
-81,23,21,2026-05-31,Rolling,19,giro21.csv,80,95,0.7,1,1,"1|2"
-83,23,20,2026-05-30,Mountain,226,giro20.csv,62,82,2.2,1.5,1.5,"1|2"
+81,23,21,2026-05-31,Rolling,19,giro21.csv,80,95,0.7,1,1,1|2
+83,23,20,2026-05-30,Mountain,226,giro20.csv,62,82,2.2,1.5,1.5,1|2
+84,24,1,2026-05-17,Hilly,48,RuK.csv,60,65,2.5,1.5,1.5,1|3
+85,46,1,2026-04-01,Cobble_Hill,26,DDV.csv,50,65,2.5,3.5,3,"1|3|5"
+86,45,1,2026-03-30,Cobble_Hill,45,GentWevelgem.csv,50,60,2,3.5,3,"1|3|5"

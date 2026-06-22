@@ -2,22 +2,35 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RiderDraftService = void 0;
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
+function hasMetQuota(specId, counts) {
+    const s1 = counts.spec1;
+    const s23 = counts.spec23;
+    if (specId === 4) { // Zeitfahren
+        return s1 >= 4 || (s1 >= 2 && s23 >= 2);
+    }
+    if (specId === 5) { // Cobble
+        return s1 >= 4 || (s1 >= 3 && s23 >= 2);
+    }
+    // Other specializations only count the rider's primary specialization
+    return s1 >= 4;
+}
 class RiderDraftService {
     constructor(db) {
         this.db = db;
     }
     executeDraft(season) {
+        this.db.prepare(`DROP TABLE IF EXISTS draft_picks_pool`).run();
         this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS draft_picks_pool (
+      CREATE TABLE draft_picks_pool (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         season INTEGER NOT NULL,
         pick_number INTEGER NOT NULL,
         rider_id INTEGER NOT NULL,
         weight REAL NOT NULL,
-        probability REAL NOT NULL
+        probability REAL NOT NULL,
+        old_team_id INTEGER
       )
     `).run();
-        this.db.prepare('DELETE FROM draft_picks_pool WHERE season = ?').run(season);
         const resultRepo = new ResultRepository_1.ResultRepository(this.db);
         // 1. Teams nach Vorjahres-Standings holen (bestes Team auf Platz 1)
         const standings = resultRepo.getSeasonStandings(season - 1);
@@ -45,11 +58,13 @@ class RiderDraftService {
         r.overall_rating, 
         r.pot_overall,
         r.specialization_1_id,
+        r.specialization_2_id,
+        r.specialization_3_id,
         r.country_id,
         (
           SELECT c.team_id 
           FROM contracts c 
-          WHERE c.rider_id = r.id AND c.status = 'expired' AND c.end_season = ? 
+          WHERE c.rider_id = r.id AND c.end_season = ? 
           ORDER BY c.end_season DESC LIMIT 1
         ) AS old_team_id
       FROM riders r
@@ -94,6 +109,46 @@ class RiderDraftService {
       `).get(teamId).c;
             teamCountsMap.set(teamId, count);
         }
+        // 4b. Initialisierung der teamSpecCounts für Quota-Prüfungen
+        const teamSpecCounts = new Map();
+        const initTeamCounts = (teamId) => {
+            const map = new Map();
+            for (let sId = 1; sId <= 5; sId++) {
+                map.set(sId, { spec1: 0, spec23: 0 });
+            }
+            teamSpecCounts.set(teamId, map);
+            return map;
+        };
+        const initialRosters = this.db.prepare(`
+      SELECT 
+        c.team_id,
+        r.specialization_1_id,
+        r.specialization_2_id,
+        r.specialization_3_id
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      WHERE c.status IN ('active', 'future')
+    `).all();
+        for (const r of initialRosters) {
+            let teamMap = teamSpecCounts.get(r.team_id);
+            if (!teamMap) {
+                teamMap = initTeamCounts(r.team_id);
+            }
+            if (r.specialization_1_id && r.specialization_1_id >= 1 && r.specialization_1_id <= 5) {
+                teamMap.get(r.specialization_1_id).spec1++;
+            }
+            if (r.specialization_2_id && r.specialization_2_id >= 1 && r.specialization_2_id <= 5) {
+                teamMap.get(r.specialization_2_id).spec23++;
+            }
+            if (r.specialization_3_id && r.specialization_3_id >= 1 && r.specialization_3_id <= 5) {
+                teamMap.get(r.specialization_3_id).spec23++;
+            }
+        }
+        for (const teamId of rankedTeamIds) {
+            if (!teamSpecCounts.has(teamId)) {
+                initTeamCounts(teamId);
+            }
+        }
         // 5. Draft Loop Setup
         // Draft Sequenzen (0-basiert, bezogen auf das Array rankedTeamIds)
         // Runde 1-15 (danach im Loop)
@@ -118,8 +173,8 @@ class RiderDraftService {
         let pickNumber = 1;
         let top1PassedOverCount = 0;
         const insertPoolCandidate = this.db.prepare(`
-      INSERT INTO draft_picks_pool (season, pick_number, rider_id, weight, probability)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO draft_picks_pool (season, pick_number, rider_id, weight, probability, old_team_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
         const insertContract = this.db.prepare(`
       INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
@@ -128,7 +183,7 @@ class RiderDraftService {
         const extendContract = this.db.prepare(`
       UPDATE contracts 
       SET end_season = end_season + ?, status = 'active'
-      WHERE rider_id = ? AND team_id = ? AND status = 'expired' AND end_season = ?
+      WHERE rider_id = ? AND team_id = ? AND end_season = ?
     `);
         const insertHistory = this.db.prepare(`
       INSERT INTO draft_history (
@@ -143,8 +198,6 @@ class RiderDraftService {
             const currentChunk = draftSequenceChunks[sequenceIndex % draftSequenceChunks.length];
             const startRank = currentChunk[0];
             const endRank = currentChunk[1];
-            const numTeamsInChunk = endRank - startRank + 1;
-            const xPoolSize = numTeamsInChunk * 2;
             let pickMadeInChunk = false;
             let allTeamsFull = true;
             // Jeder Team im Chunk darf genau 1 mal ziehen
@@ -161,27 +214,26 @@ class RiderDraftService {
                 // Bester verfügbarer Free Agent
                 if (freeAgents.length === 0)
                     break;
-                // Poolgröße x ermitteln und Kandidaten heraussuchen
-                const poolSize = Math.min(xPoolSize, freeAgents.length);
+                // Poolgröße auf 20 erweitern
+                const poolSize = Math.min(20, freeAgents.length);
                 const pool = freeAgents.slice(0, poolSize);
                 const top1RiderId = freeAgents[0].id;
-                // Nationalitäten des Teams aus Roster abfragen
-                const rosterCountries = this.db.prepare(`
-          SELECT r.country_id, COUNT(*) as count
-          FROM riders r
-          JOIN contracts c ON c.rider_id = r.id
-          WHERE c.team_id = ? AND c.status IN ('active', 'future')
-          GROUP BY r.country_id
-          ORDER BY count DESC
+                // Nationalitäten-Präferenzen des Teams abfragen
+                const preferences = this.db.prepare(`
+          SELECT country_id, weight
+          FROM team_preferences
+          WHERE team_id = ?
         `).all(teamId);
-                const top1Country = rosterCountries[0]?.country_id ?? null;
-                const top2Country = rosterCountries[1]?.country_id ?? null;
-                const top3Country = rosterCountries[2]?.country_id ?? null;
                 // AI Focus des Teams holen
                 const teamDetails = teamDetailsMap.get(teamId);
                 const aiFocus1 = teamDetails?.ai_focus_1 ?? null;
                 const aiFocus2 = teamDetails?.ai_focus_2 ?? null;
                 const aiFocus3 = teamDetails?.ai_focus_3 ?? null;
+                // Spec Counts des Teams holen
+                let teamMap = teamSpecCounts.get(teamId);
+                if (!teamMap) {
+                    teamMap = initTeamCounts(teamId);
+                }
                 // Gewichte berechnen und Faktoren tracken (additiv statt multiplikativ)
                 const poolDetails = pool.map((rider) => {
                     let weight = 1.0;
@@ -201,19 +253,12 @@ class RiderDraftService {
                             factors.push(`AI Focus 3 (+1)`);
                         }
                     }
-                    // Nationalitäten Additive Gewichte
+                    // Nationalitäten-Präferenzen Additive Gewichte
                     if (rider.country_id !== null) {
-                        if (rider.country_id === top1Country) {
-                            weight += 4.0;
-                            factors.push(`Nation 1 (+4)`);
-                        }
-                        else if (rider.country_id === top2Country) {
-                            weight += 2.0;
-                            factors.push(`Nation 2 (+2)`);
-                        }
-                        else if (rider.country_id === top3Country) {
-                            weight += 1.0;
-                            factors.push(`Nation 3 (+1)`);
+                        const pref = preferences.find(p => p.country_id === rider.country_id);
+                        if (pref) {
+                            weight += pref.weight;
+                            factors.push(`Nation Pref (+${pref.weight})`);
                         }
                     }
                     // Loyalitäts Additives Gewicht
@@ -221,12 +266,31 @@ class RiderDraftService {
                         weight += 9.0;
                         factors.push(`Loyalty (+9)`);
                     }
-                    // Top-1 Schutz Additives Gewicht
+                    // Top-1 Schutz Additives Gewicht (nun 0.05 statt 0.1)
                     if (rider.id === top1RiderId) {
                         if (top1PassedOverCount > 0) {
-                            const bonus = top1PassedOverCount * 0.1;
+                            const bonus = top1PassedOverCount * 0.05;
                             weight += bonus;
-                            factors.push(`Top1 Protect (+${bonus.toFixed(1)})`);
+                            factors.push(`Top1 Protect (+${bonus.toFixed(2)})`);
+                        }
+                    }
+                    // Quota Spec Quota Additive Bonus (+15.0)
+                    for (let sId = 1; sId <= 5; sId++) {
+                        const counts = teamMap.get(sId);
+                        const quotaMet = hasMetQuota(sId, counts);
+                        if (!quotaMet) {
+                            let helps = false;
+                            if (sId === 4 || sId === 5) { // Zeitfahren or Cobble
+                                helps = (rider.specialization_1_id === sId || rider.specialization_2_id === sId || rider.specialization_3_id === sId);
+                            }
+                            else { // Berg, Hügel, Sprint
+                                helps = (rider.specialization_1_id === sId);
+                            }
+                            if (helps) {
+                                weight += 15.0;
+                                const specLabel = sId === 1 ? 'Berg' : sId === 2 ? 'Hügel' : sId === 3 ? 'Sprint' : sId === 4 ? 'ZF' : 'Cobble';
+                                factors.push(`${specLabel} Quota (+15)`);
+                            }
                         }
                     }
                     return { rider, weight, factors };
@@ -252,7 +316,7 @@ class RiderDraftService {
                     const teamName = teamId === 25 ? 'Falke - Scott' : teamId === 7 ? 'Philips - Santander' : 'Decathlon - Renault';
                     console.log(`[DRAFT DEBUG] ${teamName} (ID ${teamId}) picks in Round ${draftRound}, Pick #${pickNumber}:`);
                     console.log(`  Team AI Focus: 1=${aiFocus1}, 2=${aiFocus2}, 3=${aiFocus3}`);
-                    console.log(`  Team Top Nations: 1=${top1Country}, 2=${top2Country}, 3=${top3Country}`);
+                    console.log(`  Team National Prefs: ${preferences.map(p => `${p.country_id}(+${p.weight})`).join(', ') || 'None'}`);
                     console.log(`  Candidate Pool (Pool Size: ${pool.length}, Top 1 ID: ${top1RiderId}):`);
                     poolDetails.forEach((p, idx) => {
                         const isSelected = idx === selectedIdx ? '==>' : '   ';
@@ -282,10 +346,20 @@ class RiderDraftService {
                 // Kandidaten-Pool in DB speichern
                 for (const p of poolDetails) {
                     const prob = totalWeight > 0 ? (p.weight / totalWeight * 100) : 0;
-                    insertPoolCandidate.run(season, pickNumber, p.rider.id, p.weight, prob);
+                    insertPoolCandidate.run(season, pickNumber, p.rider.id, p.weight, prob, p.rider.old_team_id);
                 }
                 // Kadergröße aktualisieren
                 teamCountsMap.set(teamId, currentCount + 1);
+                // teamSpecCounts für Quotas aktualisieren
+                if (draftedRider.specialization_1_id && draftedRider.specialization_1_id >= 1 && draftedRider.specialization_1_id <= 5) {
+                    teamMap.get(draftedRider.specialization_1_id).spec1++;
+                }
+                if (draftedRider.specialization_2_id && draftedRider.specialization_2_id >= 1 && draftedRider.specialization_2_id <= 5) {
+                    teamMap.get(draftedRider.specialization_2_id).spec23++;
+                }
+                if (draftedRider.specialization_3_id && draftedRider.specialization_3_id >= 1 && draftedRider.specialization_3_id <= 5) {
+                    teamMap.get(draftedRider.specialization_3_id).spec23++;
+                }
                 // Top-1 Schutz-Zähler aktualisieren
                 if (draftedRider.id === top1RiderId) {
                     top1PassedOverCount = 0; // Reset

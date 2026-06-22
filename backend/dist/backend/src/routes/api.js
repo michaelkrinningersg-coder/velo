@@ -213,10 +213,11 @@ function createRouter(dbService) {
     router.get('/riders', (req, res) => {
         const teamId = req.query['teamId'] ? Number(req.query['teamId']) : undefined;
         const onlyWithTeam = req.query['onlyWithTeam'] === 'true';
+        const season = req.query['season'] ? Number(req.query['season']) : undefined;
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId, false, onlyWithTeam));
+            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId, false, onlyWithTeam, season));
         }
         catch (e) {
             fail(res, 400, e.message);
@@ -748,6 +749,27 @@ function createRouter(dbService) {
             uciPointsRows.forEach((row, index) => {
                 uciRanks.set(row.rider_id, index + 1);
             });
+            // Karrieresiege fuer alle Fahrer abfragen
+            const winsRows = db.prepare(`
+        SELECT rider_id, COUNT(*) AS wins
+        FROM (
+          SELECT rider_id FROM all_results WHERE result_type_id = 1 AND rank = 1
+          UNION ALL
+          SELECT stage_entries.rider_id AS rider_id FROM all_results results
+          JOIN stage_entries ON stage_entries.stage_id = results.stage_id
+          WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL AND stage_entries.team_id = results.team_id
+          UNION ALL
+          SELECT results.rider_id AS rider_id FROM all_results results
+          JOIN stages ON stages.id = results.stage_id
+          JOIN races ON races.id = stages.race_id
+          WHERE results.result_type_id = 2 AND results.rank = 1 AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
+        )
+        GROUP BY rider_id
+      `).all();
+            const winsMap = new Map();
+            for (const row of winsRows) {
+                winsMap.set(row.rider_id, row.wins);
+            }
             // Draft-Historie abfragen
             const rows = db.prepare(`
         SELECT 
@@ -789,48 +811,58 @@ function createRouter(dbService) {
           p.rider_id AS riderId,
           p.weight AS weight,
           p.probability AS probability,
+          COALESCE(p.old_team_id, (
+            SELECT team_id FROM contracts 
+            WHERE rider_id = p.rider_id AND end_season = ? - 1
+            ORDER BY end_season DESC LIMIT 1
+          )) AS oldTeamId,
+          COALESCE(ot.name, (
+            SELECT name FROM teams 
+            WHERE id = (
+              SELECT team_id FROM contracts 
+              WHERE rider_id = p.rider_id AND end_season = ? - 1
+              ORDER BY end_season DESC LIMIT 1
+            )
+          )) AS oldTeamName,
           r.first_name AS firstName,
           r.last_name AS lastName,
           r.overall_rating AS overallRating,
           r.pot_overall AS potential,
           r.birth_year AS birthYear,
-          spec.display_name AS specialization,
-          c.code_3 AS countryCode,
-          (
-            SELECT cont.team_id 
-            FROM contracts cont 
-            WHERE cont.rider_id = r.id AND cont.status = 'expired' AND cont.end_season = ? 
-            ORDER BY cont.end_season DESC LIMIT 1
-          ) AS oldTeamId,
-          (
-            SELECT tm.name 
-            FROM contracts cont 
-            LEFT JOIN teams tm ON cont.team_id = tm.id
-            WHERE cont.rider_id = r.id AND cont.status = 'expired' AND cont.end_season = ? 
-            ORDER BY cont.end_season DESC LIMIT 1
-          ) AS oldTeamName
+          spec1.display_name AS specialization1,
+          spec2.display_name AS specialization2,
+          spec3.display_name AS specialization3,
+          c.code_3 AS countryCode
         FROM draft_picks_pool p
         JOIN riders r ON p.rider_id = r.id
-        LEFT JOIN type_rider spec ON r.specialization_1_id = spec.id
+        LEFT JOIN teams ot ON p.old_team_id = ot.id
+        LEFT JOIN type_rider spec1 ON r.specialization_1_id = spec1.id
+        LEFT JOIN type_rider spec2 ON r.specialization_2_id = spec2.id
+        LEFT JOIN type_rider spec3 ON r.specialization_3_id = spec3.id
         JOIN sta_country c ON r.country_id = c.id
         WHERE p.season = ?
         ORDER BY p.pick_number ASC, p.probability DESC
-      `).all(season - 1, season - 1, season);
+      `).all(season, season, season);
             const candidatesByPick = new Map();
             for (const cand of candidatesRaw) {
                 const uciRank = uciRanks.get(cand.riderId) ?? null;
+                const wins = winsMap.get(cand.riderId) ?? 0;
                 const candidateObj = {
                     riderId: cand.riderId,
                     firstName: cand.firstName,
                     lastName: cand.lastName,
                     countryCode: cand.countryCode,
-                    specialization: cand.specialization || 'Allrounder',
+                    specialization1: cand.specialization1 || null,
+                    specialization2: cand.specialization2 || null,
+                    specialization3: cand.specialization3 || null,
                     overallRating: cand.overallRating,
                     potential: cand.potential,
                     probability: cand.probability,
                     oldTeamId: cand.oldTeamId,
                     oldTeamName: cand.oldTeamName,
-                    uciRank
+                    birthYear: cand.birthYear,
+                    uciRank,
+                    wins
                 };
                 if (!candidatesByPick.has(cand.pickNumber)) {
                     candidatesByPick.set(cand.pickNumber, []);

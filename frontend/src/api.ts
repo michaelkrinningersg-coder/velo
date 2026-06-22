@@ -67,10 +67,11 @@ export const api = {
   getTeams:            () => call<Team[]>('GET', '/api/teams'),
   getTeam:             (teamId: number) => call<Team & { riders: Rider[] }>('GET', `/api/teams/${teamId}`),
   getTeamStats:        (teamId: number) => call<TeamStatsPayload>('GET', `/api/teams/${teamId}/stats`),
-  getRiders:           (teamId?: number, onlyWithTeam = false) => {
+  getRiders:           (teamId?: number, onlyWithTeam = false, season?: number) => {
     const params = new URLSearchParams();
     if (teamId != null) params.set('teamId', String(teamId));
     if (onlyWithTeam) params.set('onlyWithTeam', 'true');
+    if (season != null) params.set('season', String(season));
     const qs = params.toString();
     return call<Rider[]>('GET', `/api/riders${qs ? `?${qs}` : ''}`);
   },

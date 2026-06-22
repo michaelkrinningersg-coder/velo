@@ -18,6 +18,7 @@ import {
   renderDashboard,
   initDashboardListeners,
 } from './views/dashboard';
+import { api } from './api';
 import {
   refreshTeamsViewData,
   initTeamsListeners,
@@ -102,6 +103,15 @@ export async function enterGameScreen(): Promise<void> {
   showLoading('Spiel wird geladen…');
   try {
     await loadGameState();
+    
+    // Initial fetch of teams and riders so dashboard components (jerseys, names) load correctly
+    const [teamsRes, ridersRes] = await Promise.all([
+      api.getTeams(),
+      api.getRiders(undefined, false)
+    ]);
+    if (teamsRes.success) state.teams = teamsRes.data ?? [];
+    if (ridersRes.success) state.riders = ridersRes.data ?? [];
+
     await loadRaces();
     renderDashboard();
   } catch (e) {
@@ -131,6 +141,7 @@ function initAppListeners(): void {
       if (view === 'calendar') showCalendarView();
       if (view === 'race-programs') void loadRaceProgramsData();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
+      if (view === 'stage-editor') void loadStageEditorExistingStages();
     });
   });
 

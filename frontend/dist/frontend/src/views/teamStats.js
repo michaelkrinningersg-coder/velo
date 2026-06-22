@@ -1,186 +1,172 @@
 import { api } from '../api';
-import {
-  $,
-  esc,
-  state,
-  renderFlag,
-  renderMiniJersey,
-  resolveTeamJerseyAssetPath,
-  showModal,
-  findRiderById,
-  resolveRaceCategoryBadgeStyle,
-  buildRaceCategoryBadgeCssVariables,
-  renderRiderNameLink,
-  formatDate,
-  FLAG_CODE_BY_CODE3,
-} from '../state';
+import { $, esc, state, renderFlag, renderMiniJersey, resolveTeamJerseyAssetPath, showModal, renderRiderNameLink, FLAG_CODE_BY_CODE3, } from '../state';
 import { renderStageProfileBadge } from './dashboard';
-import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
-import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn } from './riderStats';
+import { RIDER_STATS_ICONS, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
-
-function getCategoryPriority(categoryName: string | null | undefined): number {
-  const norm = (categoryName ?? '').toLowerCase();
-  if (norm.includes('tour de france')) return 0;
-  if (norm.includes('grand tour')) return 1;
-  if (norm.includes('monument')) return 2;
-  if (norm.includes('stage race high')) return 3;
-  if (norm.includes('one day high')) return 4;
-  if (norm.includes('stage race middle')) return 5;
-  if (norm.includes('one day middle')) return 6;
-  if (norm.includes('stage race low')) return 7;
-  if (norm.includes('one day low')) return 8;
-  return 9;
+function getCategoryPriority(categoryName) {
+    const norm = (categoryName ?? '').toLowerCase();
+    if (norm.includes('tour de france'))
+        return 0;
+    if (norm.includes('grand tour'))
+        return 1;
+    if (norm.includes('monument'))
+        return 2;
+    if (norm.includes('stage race high'))
+        return 3;
+    if (norm.includes('one day high'))
+        return 4;
+    if (norm.includes('stage race middle'))
+        return 5;
+    if (norm.includes('one day middle'))
+        return 6;
+    if (norm.includes('stage race low'))
+        return 7;
+    if (norm.includes('one day low'))
+        return 8;
+    return 9;
 }
-
-function getTopRidersBySpecialization(riders: TeamStatsRider[]) {
-  const getGCScore = (r: TeamStatsRider) => r.skills.mountain * 0.7 + r.skills.timeTrial * 0.3;
-  const getSprintScore = (r: TeamStatsRider) => r.skills.sprint * 0.7 + r.skills.acceleration * 0.3;
-
-  const gc = [...riders].map(r => ({ rider: r, score: getGCScore(r) })).sort((a, b) => b.score - a.score).slice(0, 10);
-  const sprinter = [...riders].map(r => ({ rider: r, score: getSprintScore(r) })).sort((a, b) => b.score - a.score).slice(0, 10);
-  const climber = [...riders].map(r => ({ rider: r, score: r.skills.mountain })).sort((a, b) => b.score - a.score).slice(0, 10);
-  const puncheur = [...riders].map(r => ({ rider: r, score: r.skills.hill })).sort((a, b) => b.score - a.score).slice(0, 10);
-  const cobbler = [...riders].map(r => ({ rider: r, score: r.skills.cobble })).sort((a, b) => b.score - a.score).slice(0, 10);
-  const attacker = [...riders].map(r => ({ rider: r, score: r.skills.attack })).sort((a, b) => b.score - a.score).slice(0, 10);
-
-  return {
-    'Gesamtklassement': gc,
-    'Sprinter': sprinter,
-    'Bergfahrer': climber,
-    'Hügelspezialist': puncheur,
-    'Pflasterspezialist': cobbler,
-    'Angreifer': attacker
-  };
+function getTopRidersBySpecialization(riders) {
+    const getGCScore = (r) => r.skills.mountain * 0.7 + r.skills.timeTrial * 0.3;
+    const getSprintScore = (r) => r.skills.sprint * 0.7 + r.skills.acceleration * 0.3;
+    const gc = [...riders].map(r => ({ rider: r, score: getGCScore(r) })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const sprinter = [...riders].map(r => ({ rider: r, score: getSprintScore(r) })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const climber = [...riders].map(r => ({ rider: r, score: r.skills.mountain })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const puncheur = [...riders].map(r => ({ rider: r, score: r.skills.hill })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const cobbler = [...riders].map(r => ({ rider: r, score: r.skills.cobble })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const attacker = [...riders].map(r => ({ rider: r, score: r.skills.attack })).sort((a, b) => b.score - a.score).slice(0, 10);
+    return {
+        'Gesamtklassement': gc,
+        'Sprinter': sprinter,
+        'Bergfahrer': climber,
+        'Hügelspezialist': puncheur,
+        'Pflasterspezialist': cobbler,
+        'Angreifer': attacker
+    };
 }
-
-function getTeamSpecializationAverage(teamId: number, specKey: string): number {
-  const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
-  if (teamRiders.length === 0) return 0;
-
-  const getGCScore = (r: any) => r.skills.mountain * 0.7 + r.skills.timeTrial * 0.3;
-  const getSprintScore = (r: any) => r.skills.sprint * 0.7 + r.skills.acceleration * 0.3;
-
-  let scores: number[] = [];
-  if (specKey === 'Gesamtklassement') {
-    scores = teamRiders.map(r => getGCScore(r));
-  } else if (specKey === 'Sprinter') {
-    scores = teamRiders.map(r => getSprintScore(r));
-  } else if (specKey === 'Bergfahrer') {
-    scores = teamRiders.map(r => r.skills.mountain);
-  } else if (specKey === 'Hügelspezialist') {
-    scores = teamRiders.map(r => r.skills.hill);
-  } else if (specKey === 'Pflasterspezialist') {
-    scores = teamRiders.map(r => r.skills.cobble);
-  } else if (specKey === 'Angreifer') {
-    scores = teamRiders.map(r => r.skills.attack);
-  }
-
-  // Sort descending and take top 8
-  scores.sort((a, b) => b - a);
-  const top8 = scores.slice(0, 8);
-  if (top8.length === 0) return 0;
-  return top8.reduce((sum, s) => sum + s, 0) / top8.length;
+function getTeamSpecializationAverage(teamId, specKey) {
+    const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
+    if (teamRiders.length === 0)
+        return 0;
+    const getGCScore = (r) => r.skills.mountain * 0.7 + r.skills.timeTrial * 0.3;
+    const getSprintScore = (r) => r.skills.sprint * 0.7 + r.skills.acceleration * 0.3;
+    let scores = [];
+    if (specKey === 'Gesamtklassement') {
+        scores = teamRiders.map(r => getGCScore(r));
+    }
+    else if (specKey === 'Sprinter') {
+        scores = teamRiders.map(r => getSprintScore(r));
+    }
+    else if (specKey === 'Bergfahrer') {
+        scores = teamRiders.map(r => r.skills.mountain);
+    }
+    else if (specKey === 'Hügelspezialist') {
+        scores = teamRiders.map(r => r.skills.hill);
+    }
+    else if (specKey === 'Pflasterspezialist') {
+        scores = teamRiders.map(r => r.skills.cobble);
+    }
+    else if (specKey === 'Angreifer') {
+        scores = teamRiders.map(r => r.skills.attack);
+    }
+    // Sort descending and take top 8
+    scores.sort((a, b) => b - a);
+    const top8 = scores.slice(0, 8);
+    if (top8.length === 0)
+        return 0;
+    return top8.reduce((sum, s) => sum + s, 0) / top8.length;
 }
-
-function getTeamSpecializationRank(teamId: number, specKey: string): { rank: number; total: number; average: number } {
-  const tier1Teams = state.teams.filter(t => t.division === 'WorldTour' || t.divisionName === 'WorldTour');
-  const teamScores = tier1Teams.map(t => ({
-    teamId: t.id,
-    avgScore: getTeamSpecializationAverage(t.id, specKey)
-  }));
-
-  // Sort descending
-  teamScores.sort((a, b) => b.avgScore - a.avgScore);
-
-  const rank = teamScores.findIndex(x => x.teamId === teamId) + 1;
-  const ourScore = teamScores.find(x => x.teamId === teamId)?.avgScore ?? 0;
-  return {
-    rank,
-    total: teamScores.length,
-    average: ourScore
-  };
+function getTeamSpecializationRank(teamId, specKey) {
+    const tier1Teams = state.teams.filter(t => t.division === 'WorldTour' || t.divisionName === 'WorldTour');
+    const teamScores = tier1Teams.map(t => ({
+        teamId: t.id,
+        avgScore: getTeamSpecializationAverage(t.id, specKey)
+    }));
+    // Sort descending
+    teamScores.sort((a, b) => b.avgScore - a.avgScore);
+    const rank = teamScores.findIndex(x => x.teamId === teamId) + 1;
+    const ourScore = teamScores.find(x => x.teamId === teamId)?.avgScore ?? 0;
+    return {
+        rank,
+        total: teamScores.length,
+        average: ourScore
+    };
 }
-
-function getTeamOverallAverage(teamId: number): number {
-  const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
-  if (teamRiders.length === 0) return 0;
-
-  const scores = teamRiders.map(r => r.overallRating ?? 0);
-  scores.sort((a, b) => b - a);
-  const top10 = scores.slice(0, 10);
-  if (top10.length === 0) return 0;
-  return top10.reduce((sum, s) => sum + s, 0) / top10.length;
+function getTeamOverallAverage(teamId) {
+    const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
+    if (teamRiders.length === 0)
+        return 0;
+    const scores = teamRiders.map(r => r.overallRating ?? 0);
+    scores.sort((a, b) => b - a);
+    const top10 = scores.slice(0, 10);
+    if (top10.length === 0)
+        return 0;
+    return top10.reduce((sum, s) => sum + s, 0) / top10.length;
 }
-
-function getTeamOverallRank(teamId: number): { rank: number; total: number; average: number } {
-  const tier1Teams = state.teams.filter(t => t.division === 'WorldTour' || t.divisionName === 'WorldTour');
-  const teamScores = tier1Teams.map(t => ({
-    teamId: t.id,
-    avgScore: getTeamOverallAverage(t.id)
-  }));
-
-  // Sort descending
-  teamScores.sort((a, b) => b.avgScore - a.avgScore);
-
-  const rank = teamScores.findIndex(x => x.teamId === teamId) + 1;
-  const ourScore = teamScores.find(x => x.teamId === teamId)?.avgScore ?? 0;
-  return {
-    rank,
-    total: teamScores.length,
-    average: ourScore
-  };
+function getTeamOverallRank(teamId) {
+    const tier1Teams = state.teams.filter(t => t.division === 'WorldTour' || t.divisionName === 'WorldTour');
+    const teamScores = tier1Teams.map(t => ({
+        teamId: t.id,
+        avgScore: getTeamOverallAverage(t.id)
+    }));
+    // Sort descending
+    teamScores.sort((a, b) => b.avgScore - a.avgScore);
+    const rank = teamScores.findIndex(x => x.teamId === teamId) + 1;
+    const ourScore = teamScores.find(x => x.teamId === teamId)?.avgScore ?? 0;
+    return {
+        rank,
+        total: teamScores.length,
+        average: ourScore
+    };
 }
-
-function getRoleStyle(roleId: number | null): { color: string; bg: string } {
-  if (roleId === 1) return { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' }; // Kapitän: Gelb
-  if (roleId === 2) return { color: '#cbd5e1', bg: 'rgba(203, 213, 225, 0.1)' }; // Co-Kapitän: Silber
-  if (roleId === 6) return { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.1)' }; // Sprinter: Grün
-  if (roleId === 3) return { color: '#c084fc', bg: 'rgba(192, 132, 252, 0.1)' }; // Edelhelfer: Violett
-  if (roleId === 4) return { color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.1)' }; // Starker Helfer: Hellblau
-  if (roleId === 5) return { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.1)' }; // Wasserträger: Orange
-  return { color: 'var(--text-200)', bg: 'rgba(255, 255, 255, 0.05)' };
+function getRoleStyle(roleId) {
+    if (roleId === 1)
+        return { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' }; // Kapitän: Gelb
+    if (roleId === 2)
+        return { color: '#cbd5e1', bg: 'rgba(203, 213, 225, 0.1)' }; // Co-Kapitän: Silber
+    if (roleId === 6)
+        return { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.1)' }; // Sprinter: Grün
+    if (roleId === 3)
+        return { color: '#c084fc', bg: 'rgba(192, 132, 252, 0.1)' }; // Edelhelfer: Violett
+    if (roleId === 4)
+        return { color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.1)' }; // Starker Helfer: Hellblau
+    if (roleId === 5)
+        return { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.1)' }; // Wasserträger: Orange
+    return { color: 'var(--text-200)', bg: 'rgba(255, 255, 255, 0.05)' };
 }
-
-export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
-  const resolvedCountryFlag = payload.countryCode ? renderFlag(payload.countryCode) : '';
-  const specs = getTopRidersBySpecialization(payload.riders);
-
-  // Sorting form-strong: sForm + rForm desc
-  const formRiders = [...payload.riders]
-    .map(r => ({ rider: r, formValue: r.formBonus + r.raceFormBonus }))
-    .sort((a, b) => b.formValue - a.formValue)
-    .slice(0, 10);
-
-  // Sorting best UCI standings desc
-  const uciRiders = [...payload.riders]
-    .map(r => ({ rider: r, uciRank: resolveCurrentSeasonRank(r.id) }))
-    .filter(x => x.uciRank !== null)
-    .sort((a, b) => (a.uciRank as number) - (b.uciRank as number))
-    .slice(0, 10);
-
-  // Specialization cards grid
-  const specsHtml = Object.entries(specs).map(([specName, list]) => {
-    const stats = getTeamSpecializationRank(payload.teamId, specName);
-    const avgText = stats.average.toFixed(1).replace('.', ',');
-    const listHtml = list.map(({ rider, score }) => {
-      const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
-      const link = renderRiderNameLink(nameText, {
-        riderId: rider.id,
-        teamId: payload.teamId,
-        strong: true,
-        linkClassName: 'results-rider-link',
-        labelClassName: 'results-participant-label',
-      });
-      const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-      const flagHtml = flagAlpha2
-        ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
-        : '';
-
-      const fullRider = state.riders.find(r => r.id === rider.id);
-      const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
-
-      return `
+export function renderTeamStatsHeader(payload) {
+    const resolvedCountryFlag = payload.countryCode ? renderFlag(payload.countryCode) : '';
+    const specs = getTopRidersBySpecialization(payload.riders);
+    // Sorting form-strong: sForm + rForm desc
+    const formRiders = [...payload.riders]
+        .map(r => ({ rider: r, formValue: r.formBonus + r.raceFormBonus }))
+        .sort((a, b) => b.formValue - a.formValue)
+        .slice(0, 10);
+    // Sorting best UCI standings desc
+    const uciRiders = [...payload.riders]
+        .map(r => ({ rider: r, uciRank: resolveCurrentSeasonRank(r.id) }))
+        .filter(x => x.uciRank !== null)
+        .sort((a, b) => a.uciRank - b.uciRank)
+        .slice(0, 10);
+    // Specialization cards grid
+    const specsHtml = Object.entries(specs).map(([specName, list]) => {
+        const stats = getTeamSpecializationRank(payload.teamId, specName);
+        const avgText = stats.average.toFixed(1).replace('.', ',');
+        const listHtml = list.map(({ rider, score }) => {
+            const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
+            const link = renderRiderNameLink(nameText, {
+                riderId: rider.id,
+                teamId: payload.teamId,
+                strong: true,
+                linkClassName: 'results-rider-link',
+                labelClassName: 'results-participant-label',
+            });
+            const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+            const flagHtml = flagAlpha2
+                ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+                : '';
+            const fullRider = state.riders.find(r => r.id === rider.id);
+            const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+            return `
         <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
           <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; display: flex; align-items: center; color: ${roleStyle.color};">
             ${flagHtml}
@@ -189,9 +175,8 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
           <span style="font-weight: 700; color: var(--text-300); font-size: 0.8rem;">${score.toFixed(0)}</span>
         </li>
       `;
-    }).join('');
-
-    return `
+        }).join('');
+        return `
       <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.5rem 0.75rem; border-radius: 6px;">
         <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: var(--accent-primary); border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.25rem;">
           ${specName}
@@ -200,32 +185,28 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
         <ul style="margin: 0; padding: 0; list-style: none;">${listHtml}</ul>
       </div>
     `;
-  }).join('');
-
-  // Stärkste Column
-  const overallRiders = [...payload.riders]
-    .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0))
-    .slice(0, 10);
-
-  const overallHtml = overallRiders.map((rider) => {
-    const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
-    const link = renderRiderNameLink(nameText, {
-      riderId: rider.id,
-      teamId: payload.teamId,
-      strong: true,
-      linkClassName: 'results-rider-link',
-      labelClassName: 'results-participant-label',
-    });
-    const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-    const flagHtml = flagAlpha2
-      ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
-      : '';
-    const valText = rider.overallRating.toFixed(0);
-
-    const fullRider = state.riders.find(r => r.id === rider.id);
-    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
-
-    return `
+    }).join('');
+    // Stärkste Column
+    const overallRiders = [...payload.riders]
+        .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0))
+        .slice(0, 10);
+    const overallHtml = overallRiders.map((rider) => {
+        const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
+        const link = renderRiderNameLink(nameText, {
+            riderId: rider.id,
+            teamId: payload.teamId,
+            strong: true,
+            linkClassName: 'results-rider-link',
+            labelClassName: 'results-participant-label',
+        });
+        const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+        const flagHtml = flagAlpha2
+            ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+            : '';
+        const valText = rider.overallRating.toFixed(0);
+        const fullRider = state.riders.find(r => r.id === rider.id);
+        const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+        return `
       <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
           ${flagHtml}
@@ -234,29 +215,26 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
         <span style="font-weight: 700; color: var(--text-300); font-size: 0.8rem;">${valText}</span>
       </li>
     `;
-  }).join('');
-
-  // Formstärkste Column
-  const formHtml = formRiders.map(({ rider, formValue }) => {
-    const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
-    const link = renderRiderNameLink(nameText, {
-      riderId: rider.id,
-      teamId: payload.teamId,
-      strong: true,
-      linkClassName: 'results-rider-link',
-      labelClassName: 'results-participant-label',
-    });
-    const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-    const flagHtml = flagAlpha2
-      ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
-      : '';
-    const valText = (formValue >= 0 ? '+' : '') + formValue.toFixed(1).replace('.', ',');
-    const tooltip = `S-Form: ${rider.formBonus >= 0 ? '+' : ''}${rider.formBonus.toFixed(1)} / R-Form: ${rider.raceFormBonus >= 0 ? '+' : ''}${rider.raceFormBonus.toFixed(1)}`;
-
-    const fullRider = state.riders.find(r => r.id === rider.id);
-    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
-
-    return `
+    }).join('');
+    // Formstärkste Column
+    const formHtml = formRiders.map(({ rider, formValue }) => {
+        const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
+        const link = renderRiderNameLink(nameText, {
+            riderId: rider.id,
+            teamId: payload.teamId,
+            strong: true,
+            linkClassName: 'results-rider-link',
+            labelClassName: 'results-participant-label',
+        });
+        const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+        const flagHtml = flagAlpha2
+            ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+            : '';
+        const valText = (formValue >= 0 ? '+' : '') + formValue.toFixed(1).replace('.', ',');
+        const tooltip = `S-Form: ${rider.formBonus >= 0 ? '+' : ''}${rider.formBonus.toFixed(1)} / R-Form: ${rider.raceFormBonus >= 0 ? '+' : ''}${rider.raceFormBonus.toFixed(1)}`;
+        const fullRider = state.riders.find(r => r.id === rider.id);
+        const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+        return `
       <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
           ${flagHtml}
@@ -265,32 +243,32 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
         <span style="font-weight: 700; color: #fbbf24;" title="${tooltip}">${valText}</span>
       </li>
     `;
-  }).join('');
-
-  // UCI Weltrangliste Column
-  const uciHtml = uciRiders.map(({ rider, uciRank }) => {
-    const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
-    const link = renderRiderNameLink(nameText, {
-      riderId: rider.id,
-      teamId: payload.teamId,
-      strong: true,
-      linkClassName: 'results-rider-link',
-      labelClassName: 'results-participant-label',
-    });
-    const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-    const flagHtml = flagAlpha2
-      ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
-      : '';
-    let rankClass = 'rider-stats-rank-badge-gc';
-    if (uciRank === 1) rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-1';
-    else if (uciRank === 2) rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-2';
-    else if (uciRank === 3) rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-3';
-    const badgeHtml = `<span class="rider-stats-rank-badge ${rankClass}" style="margin: 0; font-size: 0.75rem; padding: 0; min-width: 2rem; height: 1.35rem; display: inline-flex; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; line-height: 1;" title="UCI Weltrangliste: Platz ${uciRank}">${uciRank}</span>`;
-
-    const fullRider = state.riders.find(r => r.id === rider.id);
-    const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
-
-    return `
+    }).join('');
+    // UCI Weltrangliste Column
+    const uciHtml = uciRiders.map(({ rider, uciRank }) => {
+        const nameText = `${rider.firstName.charAt(0)}. ${rider.lastName}`;
+        const link = renderRiderNameLink(nameText, {
+            riderId: rider.id,
+            teamId: payload.teamId,
+            strong: true,
+            linkClassName: 'results-rider-link',
+            labelClassName: 'results-participant-label',
+        });
+        const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+        const flagHtml = flagAlpha2
+            ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+            : '';
+        let rankClass = 'rider-stats-rank-badge-gc';
+        if (uciRank === 1)
+            rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-1';
+        else if (uciRank === 2)
+            rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-2';
+        else if (uciRank === 3)
+            rankClass = 'rider-stats-rank-badge-place rider-stats-rank-badge-top-3';
+        const badgeHtml = `<span class="rider-stats-rank-badge ${rankClass}" style="margin: 0; font-size: 0.75rem; padding: 0; min-width: 2rem; height: 1.35rem; display: inline-flex; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; line-height: 1;" title="UCI Weltrangliste: Platz ${uciRank}">${uciRank}</span>`;
+        const fullRider = state.riders.find(r => r.id === rider.id);
+        const roleStyle = getRoleStyle(fullRider?.roleId ?? null);
+        return `
       <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.85rem;">
         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%; display: flex; align-items: center; color: ${roleStyle.color};">
           ${flagHtml}
@@ -299,9 +277,8 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
         ${badgeHtml}
       </li>
     `;
-  }).join('');
-
-  return `
+    }).join('');
+    return `
     <div style="background: var(--bg-secondary); border: 1px solid var(--border-primary); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
       <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
         ${specsHtml}
@@ -323,9 +300,8 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
     </div>
   `;
 }
-
-export function renderTeamStatsTabs(): string {
-  return `
+export function renderTeamStatsTabs() {
+    return `
     <div class="team-detail-page-tabs rider-stats-tabs" role="tablist" aria-label="Teamstats Tabs">
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'topResults' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="topResults" aria-selected="${state.teamStatsTab === 'topResults' ? 'true' : 'false'}">Top - Results</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="career" aria-selected="${state.teamStatsTab === 'career' ? 'true' : 'false'}">Erfolgsbilanz</button>
@@ -333,100 +309,100 @@ export function renderTeamStatsTabs(): string {
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'transfers' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="transfers" aria-selected="${state.teamStatsTab === 'transfers' ? 'true' : 'false'}">Transfers</button>
     </div>`;
 }
-
-export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string {
-  const categories = Array.from(new Set(payload.topResults.map(r => r.raceCategoryName).filter(Boolean))) as string[];
-  categories.sort((a, b) => a.localeCompare(b, 'de'));
-
-  const seasonsList = Array.from(new Set(payload.topResults.map(r => r.season))).sort((a, b) => b - a);
-
-  let filteredRows = payload.topResults.filter(r => {
-    const isFinalRow = r.rowType !== 'stage_result';
-    if (isFinalRow) {
-      if (r.rowType === 'gc_final') return state.teamStatsTopResultsFilters.gc;
-      if (r.rowType === 'mountain_final') return state.teamStatsTopResultsFilters.mountain;
-      if (r.rowType === 'points_final') return state.teamStatsTopResultsFilters.points;
-      if (r.rowType === 'youth_final') return state.teamStatsTopResultsFilters.youth;
-      return true;
-    } else {
-      if (r.isStageRace) { // Stage race stage result
-        return state.teamStatsTopResultsFilters.stage;
-      } else {
-        return state.teamStatsTopResultsFilters.oneDay;
-      }
+export function renderTeamStatsTopResultsTab(payload) {
+    const categories = Array.from(new Set(payload.topResults.map(r => r.raceCategoryName).filter(Boolean)));
+    categories.sort((a, b) => a.localeCompare(b, 'de'));
+    const seasonsList = Array.from(new Set(payload.topResults.map(r => r.season))).sort((a, b) => b - a);
+    let filteredRows = payload.topResults.filter(r => {
+        const isFinalRow = r.rowType !== 'stage_result';
+        if (isFinalRow) {
+            if (r.rowType === 'gc_final')
+                return state.teamStatsTopResultsFilters.gc;
+            if (r.rowType === 'mountain_final')
+                return state.teamStatsTopResultsFilters.mountain;
+            if (r.rowType === 'points_final')
+                return state.teamStatsTopResultsFilters.points;
+            if (r.rowType === 'youth_final')
+                return state.teamStatsTopResultsFilters.youth;
+            return true;
+        }
+        else {
+            if (r.isStageRace) { // Stage race stage result
+                return state.teamStatsTopResultsFilters.stage;
+            }
+            else {
+                return state.teamStatsTopResultsFilters.oneDay;
+            }
+        }
+    });
+    if (state.teamStatsTopResultsFilterCategory) {
+        const filterVal = state.teamStatsTopResultsFilterCategory;
+        if (filterVal.endsWith('-etappen')) {
+            const catName = filterVal.substring(0, filterVal.length - '-etappen'.length);
+            filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType === 'stage_result');
+        }
+        else if (filterVal.endsWith('-gc')) {
+            const catName = filterVal.substring(0, filterVal.length - '-gc'.length);
+            filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType !== 'stage_result');
+        }
+        else {
+            filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
+        }
     }
-  });
-
-  if (state.teamStatsTopResultsFilterCategory) {
-    const filterVal = state.teamStatsTopResultsFilterCategory;
-    if (filterVal.endsWith('-etappen')) {
-      const catName = filterVal.substring(0, filterVal.length - '-etappen'.length);
-      filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType === 'stage_result');
-    } else if (filterVal.endsWith('-gc')) {
-      const catName = filterVal.substring(0, filterVal.length - '-gc'.length);
-      filteredRows = filteredRows.filter(r => r.raceCategoryName === catName && r.rowType !== 'stage_result');
-    } else {
-      filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
+    if (state.teamStatsTopResultsFilterSeason != null) {
+        filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
     }
-  }
-  if (state.teamStatsTopResultsFilterSeason != null) {
-    filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
-  }
-
-  filteredRows.sort((a, b) => {
-    if (b.seasonPoints !== a.seasonPoints) {
-      return b.seasonPoints - a.seasonPoints;
+    filteredRows.sort((a, b) => {
+        if (b.seasonPoints !== a.seasonPoints) {
+            return b.seasonPoints - a.seasonPoints;
+        }
+        const aIsFinal = a.rowType !== 'stage_result';
+        const bIsFinal = b.rowType !== 'stage_result';
+        const rankA = a.resultRank ?? 9999;
+        const rankB = b.resultRank ?? 9999;
+        if (!state.teamStatsTopResultsFilterCategory) {
+            const prioA = getCategoryPriority(a.raceCategoryName);
+            const prioB = getCategoryPriority(b.raceCategoryName);
+            if (prioA !== prioB) {
+                return prioA - prioB;
+            }
+            if (aIsFinal !== bIsFinal) {
+                return aIsFinal ? -1 : 1;
+            }
+            return rankA - rankB;
+        }
+        else {
+            if (rankA !== rankB) {
+                return rankA - rankB;
+            }
+            if (aIsFinal !== bIsFinal) {
+                return aIsFinal ? -1 : 1;
+            }
+            return 0;
+        }
+    });
+    const itemsPerPage = 20;
+    const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
+    if (state.teamStatsTopResultsPage > totalPages) {
+        state.teamStatsTopResultsPage = totalPages;
     }
-
-    const aIsFinal = a.rowType !== 'stage_result';
-    const bIsFinal = b.rowType !== 'stage_result';
-    const rankA = a.resultRank ?? 9999;
-    const rankB = b.resultRank ?? 9999;
-
-    if (!state.teamStatsTopResultsFilterCategory) {
-      const prioA = getCategoryPriority(a.raceCategoryName);
-      const prioB = getCategoryPriority(b.raceCategoryName);
-      if (prioA !== prioB) {
-        return prioA - prioB;
-      }
-      if (aIsFinal !== bIsFinal) {
-        return aIsFinal ? -1 : 1;
-      }
-      return rankA - rankB;
-    } else {
-      if (rankA !== rankB) {
-        return rankA - rankB;
-      }
-      if (aIsFinal !== bIsFinal) {
-        return aIsFinal ? -1 : 1;
-      }
-      return 0;
-    }
-  });
-
-  const itemsPerPage = 20;
-  const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
-  if (state.teamStatsTopResultsPage > totalPages) {
-    state.teamStatsTopResultsPage = totalPages;
-  }
-  const startIndex = (state.teamStatsTopResultsPage - 1) * itemsPerPage;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
-
-  const categoryOptionsHtml = categories.map(cat => {
-    const isStage = cat.toLowerCase().includes('stage race') || cat.toLowerCase().includes('grand tour') || cat.toLowerCase().includes('tour de france');
-    if (isStage) {
-      const valEtappen = `${cat}-etappen`;
-      const valGc = `${cat}-gc`;
-      return `
+    const startIndex = (state.teamStatsTopResultsPage - 1) * itemsPerPage;
+    const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
+    const categoryOptionsHtml = categories.map(cat => {
+        const isStage = cat.toLowerCase().includes('stage race') || cat.toLowerCase().includes('grand tour') || cat.toLowerCase().includes('tour de france');
+        if (isStage) {
+            const valEtappen = `${cat}-etappen`;
+            const valGc = `${cat}-gc`;
+            return `
         <option value="${esc(valEtappen)}" ${state.teamStatsTopResultsFilterCategory === valEtappen ? 'selected' : ''}>${esc(cat)} - Etappen</option>
         <option value="${esc(valGc)}" ${state.teamStatsTopResultsFilterCategory === valGc ? 'selected' : ''}>${esc(cat)} - GC</option>
       `;
-    } else {
-      return `<option value="${esc(cat)}" ${state.teamStatsTopResultsFilterCategory === cat ? 'selected' : ''}>${esc(cat)}</option>`;
-    }
-  }).join('');
-
-  const filtersHtml = `
+        }
+        else {
+            return `<option value="${esc(cat)}" ${state.teamStatsTopResultsFilterCategory === cat ? 'selected' : ''}>${esc(cat)}</option>`;
+        }
+    }).join('');
+    const filtersHtml = `
     <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
         <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Rennklasse:</label>
@@ -471,50 +447,47 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       </div>
     </div>
   `;
-
-  const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="11" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
-    : paginatedRows.map(row => {
-        const isFinalRow = row.rowType !== 'stage_result';
-        const raceStageLabel = isFinalRow
-          ? `${row.raceName} · ${row.rowType === 'gc_final' ? 'Gesamtwertung' : row.rowType === 'points_final' ? 'Punktewertung' : row.rowType === 'mountain_final' ? 'Bergwertung' : 'Nachwuchs'}`
-          : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
-
-        let stagePlacementHtml = '–';
-        let gcPlacementHtml = '–';
-
-        if (row.finishStatus === 'otl') {
-          stagePlacementHtml = renderRiderStatsRankBadge('OTL', 'place');
-        } else if (row.finishStatus === 'dnf') {
-          stagePlacementHtml = renderRiderStatsRankBadge('DNF', 'place');
-        } else if (row.resultRank == null) {
-          // Keep -
-        } else if (isFinalRow) {
-          const className = row.rowType === 'gc_final' ? 'is-gc' : row.rowType === 'points_final' ? 'is-points' : row.rowType === 'mountain_final' ? 'is-mountain' : 'is-youth';
-          gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
-        } else {
-          const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
-          stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
-        }
-
-        const profileBadgeHtml = row.profile ? renderStageProfileBadge(row.profile) : '–';
-        const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
-        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, true, null); // uses visual formatting helper
-
-        const flagAlpha2 = row.riderCountryCode ? FLAG_CODE_BY_CODE3[row.riderCountryCode] ?? row.riderCountryCode.slice(0, 2).toLowerCase() : null;
-        const flagHtml = flagAlpha2
-          ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(row.riderCountryCode ?? '')}"></span>`
-          : '–';
-
-        const nameLink = renderRiderNameLink(row.riderName, {
-          riderId: row.riderId,
-          teamId: payload.teamId,
-          strong: true,
-          linkClassName: 'results-rider-link',
-          labelClassName: 'results-participant-label',
-        });
-
-        return `
+    const tableRowsHtml = paginatedRows.length === 0
+        ? `<tr><td colspan="11" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+        : paginatedRows.map(row => {
+            const isFinalRow = row.rowType !== 'stage_result';
+            const raceStageLabel = isFinalRow
+                ? `${row.raceName} · ${row.rowType === 'gc_final' ? 'Gesamtwertung' : row.rowType === 'points_final' ? 'Punktewertung' : row.rowType === 'mountain_final' ? 'Bergwertung' : 'Nachwuchs'}`
+                : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
+            let stagePlacementHtml = '–';
+            let gcPlacementHtml = '–';
+            if (row.finishStatus === 'otl') {
+                stagePlacementHtml = renderRiderStatsRankBadge('OTL', 'place');
+            }
+            else if (row.finishStatus === 'dnf') {
+                stagePlacementHtml = renderRiderStatsRankBadge('DNF', 'place');
+            }
+            else if (row.resultRank == null) {
+                // Keep -
+            }
+            else if (isFinalRow) {
+                const className = row.rowType === 'gc_final' ? 'is-gc' : row.rowType === 'points_final' ? 'is-points' : row.rowType === 'mountain_final' ? 'is-mountain' : 'is-youth';
+                gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
+            }
+            else {
+                const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
+                stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+            }
+            const profileBadgeHtml = row.profile ? renderStageProfileBadge(row.profile) : '–';
+            const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
+            const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, true, null); // uses visual formatting helper
+            const flagAlpha2 = row.riderCountryCode ? FLAG_CODE_BY_CODE3[row.riderCountryCode] ?? row.riderCountryCode.slice(0, 2).toLowerCase() : null;
+            const flagHtml = flagAlpha2
+                ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(row.riderCountryCode ?? '')}"></span>`
+                : '–';
+            const nameLink = renderRiderNameLink(row.riderName, {
+                riderId: row.riderId,
+                teamId: payload.teamId,
+                strong: true,
+                linkClassName: 'results-rider-link',
+                labelClassName: 'results-participant-label',
+            });
+            return `
           <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
             <td>${stagePlacementHtml}</td>
             <td>${gcPlacementHtml}</td>
@@ -529,23 +502,21 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
             <td><strong>${row.seasonPoints}</strong></td>
           </tr>
         `;
-      }).join('');
-
-  const paginationHtml = totalPages > 1
-    ? `
+        }).join('');
+    const paginationHtml = totalPages > 1
+        ? `
       <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 0.25rem; margin-top: 1rem; align-items: center;">
         <button type="button" class="btn btn-secondary btn-sm" data-team-top-results-page="${state.teamStatsTopResultsPage - 1}" ${state.teamStatsTopResultsPage === 1 ? 'disabled' : ''}>&laquo; Zurück</button>
         ${Array.from({ length: totalPages }).map((_, idx) => {
-          const pageNum = idx + 1;
-          const isActive = state.teamStatsTopResultsPage === pageNum;
-          return `<button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}" data-team-top-results-page="${pageNum}">${pageNum}</button>`;
+            const pageNum = idx + 1;
+            const isActive = state.teamStatsTopResultsPage === pageNum;
+            return `<button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}" data-team-top-results-page="${pageNum}">${pageNum}</button>`;
         }).join('')}
         <button type="button" class="btn btn-secondary btn-sm" data-team-top-results-page="${state.teamStatsTopResultsPage + 1}" ${state.teamStatsTopResultsPage === totalPages ? 'disabled' : ''}>Weiter &raquo;</button>
       </div>
     `
-    : '';
-
-  return `
+        : '';
+    return `
     <section class="rider-stats-top-results" style="margin-top: 1.5rem;">
       ${filtersHtml}
       <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
@@ -587,81 +558,76 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     </section>
   `;
 }
-
-export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
-  const selectedSeasonKey = String(state.teamStatsSelectedSeason);
-  const stats = payload.successStats[selectedSeasonKey] || {
-    breakawayAttempts: 0, attacks: 0, counterAttacks: 0, crashes: 0, defects: 0,
-    illnesses: 0, illnessDays: 0, injuries: 0, injuryDays: 0, dnsCount: 0, dnfCount: 0, otlCount: 0,
-    totalGcWins: 0, totalStageWins: 0, successfulBreakaways: 0, raceDays: 0, superteamCount: 0, categories: {}
-  };
-
-  const isAllTime = selectedSeasonKey === 'all';
-  const displayVal = (val: number) => isAllTime ? val : `–`;
-  const displayValDays = (count: number, days: number) => isAllTime ? `${count} / ${days} T` : `–`;
-  const isSeasonalClassifiedTooltip = !isAllTime ? ' title="Dieser Wert wird systemweit nur all-time erfasst."' : '';
-
-  // Helper function to render badge
-  const renderTeamCareerBadge = (
-    displayValue: string | number,
-    type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple',
-    title: string,
-    value?: number
-  ): string => {
-    const checkVal = value !== undefined ? value : (typeof displayValue === 'number' ? displayValue : parseFloat(String(displayValue)) || 0);
-    let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
-    if (checkVal === 0) {
-      style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
-    } else {
-      if (type === 'gold') {
-        style += 'background: linear-gradient(135deg, #ffd700, #ffa500); color: #000; box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); text-shadow: 0 0 1px rgba(255,255,255,0.3);';
-      } else if (type === 'silver') {
-        style += 'background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; box-shadow: 0 0 5px rgba(229, 231, 235, 0.4);';
-      } else if (type === 'bronze') {
-        style += 'background: linear-gradient(135deg, #d35400, #a04000); color: #fff; box-shadow: 0 0 5px rgba(211, 84, 0, 0.4);';
-      } else if (type === 'purple') {
-        style += 'background: linear-gradient(135deg, #a855f7, #7e22ce); color: #fff; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4);';
-      } else if (type === 'green') {
-        style += 'background: #2ecc71; color: #fff; box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);';
-      } else if (type === 'red') {
-        style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
-      } else if (type === 'white') {
-        style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
-      }
-    }
-    return `<span style="${style}" title="${esc(title)}: ${checkVal} Siege">${displayValue}</span>`;
-  };
-
-  const categoriesToShow = [
-    { key: 'World Tour - Tour de France', name: 'Tour de France', isStage: true },
-    { key: 'World Tour - Grand Tour', name: 'Grand Tour', isStage: true },
-    { key: 'World Tour - Monument', name: 'Monumente', isStage: false },
-    { key: 'World Tour - Stage Race High', name: 'Stage Race (High)', isStage: true },
-    { key: 'World Tour - Stage Race Middle', name: 'Stage Race (Middle)', isStage: true },
-    { key: 'World Tour - Stage Race Low', name: 'Stage Race (Low)', isStage: true },
-    { key: 'World Tour - One Day High', name: 'One Day (High)', isStage: false },
-    { key: 'World Tour - One Day Middle', name: 'One Day (Middle)', isStage: false },
-    { key: 'World Tour - One Day Low', name: 'One Day (Low)', isStage: false }
-  ];
-
-  const seasonDropdownHtml = `
+export function renderTeamStatsCareerTab(payload) {
+    const selectedSeasonKey = String(state.teamStatsSelectedSeason);
+    const stats = payload.successStats[selectedSeasonKey] || {
+        breakawayAttempts: 0, attacks: 0, counterAttacks: 0, crashes: 0, defects: 0,
+        illnesses: 0, illnessDays: 0, injuries: 0, injuryDays: 0, dnsCount: 0, dnfCount: 0, otlCount: 0,
+        totalGcWins: 0, totalStageWins: 0, successfulBreakaways: 0, raceDays: 0, superteamCount: 0, categories: {}
+    };
+    const isAllTime = selectedSeasonKey === 'all';
+    const displayVal = (val) => isAllTime ? val : `–`;
+    const displayValDays = (count, days) => isAllTime ? `${count} / ${days} T` : `–`;
+    const isSeasonalClassifiedTooltip = !isAllTime ? ' title="Dieser Wert wird systemweit nur all-time erfasst."' : '';
+    // Helper function to render badge
+    const renderTeamCareerBadge = (displayValue, type, title, value) => {
+        const checkVal = value !== undefined ? value : (typeof displayValue === 'number' ? displayValue : parseFloat(String(displayValue)) || 0);
+        let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
+        if (checkVal === 0) {
+            style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
+        }
+        else {
+            if (type === 'gold') {
+                style += 'background: linear-gradient(135deg, #ffd700, #ffa500); color: #000; box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); text-shadow: 0 0 1px rgba(255,255,255,0.3);';
+            }
+            else if (type === 'silver') {
+                style += 'background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; box-shadow: 0 0 5px rgba(229, 231, 235, 0.4);';
+            }
+            else if (type === 'bronze') {
+                style += 'background: linear-gradient(135deg, #d35400, #a04000); color: #fff; box-shadow: 0 0 5px rgba(211, 84, 0, 0.4);';
+            }
+            else if (type === 'purple') {
+                style += 'background: linear-gradient(135deg, #a855f7, #7e22ce); color: #fff; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4);';
+            }
+            else if (type === 'green') {
+                style += 'background: #2ecc71; color: #fff; box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);';
+            }
+            else if (type === 'red') {
+                style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
+            }
+            else if (type === 'white') {
+                style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
+            }
+        }
+        return `<span style="${style}" title="${esc(title)}: ${checkVal} Siege">${displayValue}</span>`;
+    };
+    const categoriesToShow = [
+        { key: 'World Tour - Tour de France', name: 'Tour de France', isStage: true },
+        { key: 'World Tour - Grand Tour', name: 'Grand Tour', isStage: true },
+        { key: 'World Tour - Monument', name: 'Monumente', isStage: false },
+        { key: 'World Tour - Stage Race High', name: 'Stage Race (High)', isStage: true },
+        { key: 'World Tour - Stage Race Middle', name: 'Stage Race (Middle)', isStage: true },
+        { key: 'World Tour - Stage Race Low', name: 'Stage Race (Low)', isStage: true },
+        { key: 'World Tour - One Day High', name: 'One Day (High)', isStage: false },
+        { key: 'World Tour - One Day Middle', name: 'One Day (Middle)', isStage: false },
+        { key: 'World Tour - One Day Low', name: 'One Day (Low)', isStage: false }
+    ];
+    const seasonDropdownHtml = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h3 style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #fff;">Karrierestatistiken (Team)</h3>
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <label for="team-stats-success-season-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500;">Saison filtern:</label>
         <select id="team-stats-success-season-select" class="form-control" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer;">
           <option value="all" ${isAllTime ? 'selected' : ''}>Ewig (All-Time)</option>
-          ${Object.keys(payload.successStats).filter(k => k !== 'all').sort((a,b) => b.localeCompare(a)).map(yr => `
+          ${Object.keys(payload.successStats).filter(k => k !== 'all').sort((a, b) => b.localeCompare(a)).map(yr => `
             <option value="${yr}" ${String(state.teamStatsSelectedSeason) === yr ? 'selected' : ''}>Saison ${yr}</option>
           `).join('')}
         </select>
       </div>
     </div>
   `;
-
-  const totalWins = stats.totalGcWins + stats.totalStageWins;
-
-  return `
+    const totalWins = stats.totalGcWins + stats.totalStageWins;
+    return `
     <section class="rider-stats-career" style="margin-top: 1.5rem;">
       ${seasonDropdownHtml}
       
@@ -750,7 +716,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
       
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 1.25rem;">
         ${categoriesToShow.map(cat => {
-          const catData = stats.categories[cat.key] || {
+        const catData = stats.categories[cat.key] || {
             gcWins: 0, gcSecond: 0, gcThird: 0, gcTopTen: 0,
             stageWins: 0, stageSecond: 0, stageThird: 0, stageTopTen: 0,
             oneDayWins: 0, oneDaySecond: 0, oneDayThird: 0, oneDayTopTen: 0,
@@ -758,9 +724,8 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
             leaderJerseys: 0, pointsJerseys: 0, mountainJerseys: 0, youthJerseys: 0, breakawayJerseys: 0, sprintWins: 0, climbWinsHC: 0, climbWins1: 0, climbWins2: 0, climbWins3: 0, climbWins4: 0,
             winFlat: 0, winRolling: 0, winHilly: 0, winHillyDifficult: 0, winMediumMountain: 0, winMountain: 0, winHighMountain: 0, winCobble: 0, winCobbleHill: 0, winITT: 0, winTTT: 0,
             winWeather1: 0, winWeather2: 0, winWeather3: 0, winWeather4: 0, winWeather5: 0, winWeather6: 0, winWeather7: 0,
-          };
-
-          return `
+        };
+        return `
             <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
                 <span style="font-weight: 600; font-size: 0.9rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
@@ -800,43 +765,33 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                   <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
                     <!-- Gelbes Trikot (GC) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.leaderJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);'
-                    }" title="Tage im Gelben Trikot (GC)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${(catData.leaderJerseys || 0) === 0
+            ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+            : 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);'}" title="Tage im Gelben Trikot (GC)">
                       🎽 ${catData.leaderJerseys || 0}
                     </span>
                     <!-- Grünes Trikot (Punkte) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.pointsJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #bbf7d0, #4ade80); color: #14532d; border: 1px solid #22c55e; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);'
-                    }" title="Tage im Grünen Trikot (Punkte)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${(catData.pointsJerseys || 0) === 0
+            ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+            : 'background: linear-gradient(135deg, #bbf7d0, #4ade80); color: #14532d; border: 1px solid #22c55e; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);'}" title="Tage im Grünen Trikot (Punkte)">
                       🎽 ${catData.pointsJerseys || 0}
                     </span>
                     <!-- Rotes Trikot (Berg) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.mountainJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #fecaca, #f87171); color: #7f1d1d; border: 1px solid #ef4444; box-shadow: 0 0 4px rgba(248, 113, 113, 0.4);'
-                    }" title="Tage im Berg- / Roten Trikot (Berg)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${(catData.mountainJerseys || 0) === 0
+            ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+            : 'background: linear-gradient(135deg, #fecaca, #f87171); color: #7f1d1d; border: 1px solid #ef4444; box-shadow: 0 0 4px rgba(248, 113, 113, 0.4);'}" title="Tage im Berg- / Roten Trikot (Berg)">
                       🎽 ${catData.mountainJerseys || 0}
                     </span>
                     <!-- Weißes Trikot (Nachwuchs) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.youthJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'
-                    }" title="Tage im Weißen Trikot (Nachwuchs)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${(catData.youthJerseys || 0) === 0
+            ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+            : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'}" title="Tage im Weißen Trikot (Nachwuchs)">
                       🎽 ${catData.youthJerseys || 0}
                     </span>
                     <!-- Ausreißertrikot (Aktivste Fahrer) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.breakawayJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
-                    }" title="Tage im Ausreißertrikot (Aktivste Fahrer)">
+                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${(catData.breakawayJerseys || 0) === 0
+            ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
+            : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'}" title="Tage im Ausreißertrikot (Aktivste Fahrer)">
                       🎽 ${catData.breakawayJerseys || 0}
                     </span>
                   </div>
@@ -912,106 +867,99 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
               </div>
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
     </section>
   `;
 }
-
-export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
-  const historyRosters = payload.historyRosters || {};
-  const years = Object.keys(historyRosters).map(Number).sort((a, b) => a - b);
-
-  if (years.length === 0) {
-    return `
+export function renderTeamStatsContractsTab(payload) {
+    const historyRosters = payload.historyRosters || {};
+    const years = Object.keys(historyRosters).map(Number).sort((a, b) => a - b);
+    if (years.length === 0) {
+        return `
       <section class="rider-stats-placeholder">
         <h3>Keine Kader- und Vertragsdaten vorhanden</h3>
         <p>Für dieses Team wurden keine Verträge in der Datenbank erfasst.</p>
       </section>
     `;
-  }
-
-  // Aktuelles Jahr validieren
-  if (state.teamStatsSelectedRosterYear === null || !years.includes(state.teamStatsSelectedRosterYear)) {
-    const currentSeason = state.gameState?.season ?? 2026;
-    if (years.includes(currentSeason)) {
-      state.teamStatsSelectedRosterYear = currentSeason;
-    } else {
-      state.teamStatsSelectedRosterYear = years[0];
     }
-  }
-
-  const selectedYear = state.teamStatsSelectedRosterYear;
-  const rosterForYear = historyRosters[selectedYear] || [];
-
-  const sortedRoster = [...rosterForYear];
-  const sortKey = state.teamStatsRosterSort.key;
-  const sortDir = state.teamStatsRosterSort.direction;
-  sortedRoster.sort((a, b) => {
-    let comparison = 0;
-    if (sortKey === 'nationality') {
-      const valA = a.nationality || '';
-      const valB = b.nationality || '';
-      comparison = valA.localeCompare(valB, 'de');
-    } else if (sortKey === 'name') {
-      const valA = `${a.lastName || ''}, ${a.firstName || ''}`;
-      const valB = `${b.lastName || ''}, ${b.firstName || ''}`;
-      comparison = valA.localeCompare(valB, 'de');
-    } else if (sortKey === 'overallRating') {
-      comparison = (a.overallRating || 0) - (b.overallRating || 0);
-    } else if (sortKey === 'potential') {
-      comparison = (a.potential || 0) - (b.potential || 0);
-    } else if (sortKey === 'roleName') {
-      const valA = a.roleName || '';
-      const valB = b.roleName || '';
-      comparison = valA.localeCompare(valB, 'de');
-    } else if (sortKey === 'contractEndSeason') {
-      comparison = (a.contractEndSeason || 0) - (b.contractEndSeason || 0);
+    // Aktuelles Jahr validieren
+    if (state.teamStatsSelectedRosterYear === null || !years.includes(state.teamStatsSelectedRosterYear)) {
+        const currentSeason = state.gameState?.season ?? 2026;
+        if (years.includes(currentSeason)) {
+            state.teamStatsSelectedRosterYear = currentSeason;
+        }
+        else {
+            state.teamStatsSelectedRosterYear = years[0];
+        }
     }
-    return sortDir === 'asc' ? comparison : -comparison;
-  });
-
-  const yearOptionsHtml = years.map(yr => `
+    const selectedYear = state.teamStatsSelectedRosterYear;
+    const rosterForYear = historyRosters[selectedYear] || [];
+    const sortedRoster = [...rosterForYear];
+    const sortKey = state.teamStatsRosterSort.key;
+    const sortDir = state.teamStatsRosterSort.direction;
+    sortedRoster.sort((a, b) => {
+        let comparison = 0;
+        if (sortKey === 'nationality') {
+            const valA = a.nationality || '';
+            const valB = b.nationality || '';
+            comparison = valA.localeCompare(valB, 'de');
+        }
+        else if (sortKey === 'name') {
+            const valA = `${a.lastName || ''}, ${a.firstName || ''}`;
+            const valB = `${b.lastName || ''}, ${b.firstName || ''}`;
+            comparison = valA.localeCompare(valB, 'de');
+        }
+        else if (sortKey === 'overallRating') {
+            comparison = (a.overallRating || 0) - (b.overallRating || 0);
+        }
+        else if (sortKey === 'potential') {
+            comparison = (a.potential || 0) - (b.potential || 0);
+        }
+        else if (sortKey === 'roleName') {
+            const valA = a.roleName || '';
+            const valB = b.roleName || '';
+            comparison = valA.localeCompare(valB, 'de');
+        }
+        else if (sortKey === 'contractEndSeason') {
+            comparison = (a.contractEndSeason || 0) - (b.contractEndSeason || 0);
+        }
+        return sortDir === 'asc' ? comparison : -comparison;
+    });
+    const yearOptionsHtml = years.map(yr => `
     <option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Kader ${yr}</option>
   `).join('');
-
-  const getSortIcon = (key: string) => {
-    if (state.teamStatsRosterSort.key !== key) return ' <span style="opacity: 0.3; font-size: 0.75rem;">↕</span>';
-    return state.teamStatsRosterSort.direction === 'asc' ? ' <span style="font-size: 0.75rem;">▲</span>' : ' <span style="font-size: 0.75rem;">▼</span>';
-  };
-
-  const tableRowsHtml = sortedRoster.length === 0
-    ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Fahrer für dieses Jahr unter Vertrag.</td></tr>`
-    : sortedRoster.map(rider => {
-        const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-        const flagHtml = flagAlpha2
-          ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(rider.nationality)}"></span>`
-          : '–';
-
-        const nameLink = renderRiderNameLink(`${rider.firstName} ${rider.lastName}`, {
-          riderId: rider.riderId,
-          teamId: payload.teamId,
-          strong: true,
-          linkClassName: 'results-rider-link',
-          labelClassName: 'results-participant-label',
-        });
-
-        const overallRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.overallRating)}" title="Stärke: ${rider.overallRating.toFixed(2)}">${rider.overallRating.toFixed(1)}</span>`;
-        
-        let potentialRatingHtml = '–';
-        if (rider.potential != null) {
-          potentialRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.potential)}" title="Potential: ${rider.potential.toFixed(2)}">${rider.potential.toFixed(1)}</span>`;
-        }
-
-        const roleText = esc(rider.roleName || '-');
-
-        const endText = rider.contractEndSeason ? `Saison ${rider.contractEndSeason}` : 'Ohne Vertrag';
-        const isExpiring = rider.contractEndSeason === selectedYear;
-        const contractCellHtml = isExpiring
-          ? `<span class="badge badge-race-category" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold; animation: pulse 2s infinite;" title="Vertrag läuft in dieser Saison aus!">${esc(endText)}</span>`
-          : `<span style="font-weight: 500;">${esc(endText)}</span>`;
-
-        return `
+    const getSortIcon = (key) => {
+        if (state.teamStatsRosterSort.key !== key)
+            return ' <span style="opacity: 0.3; font-size: 0.75rem;">↕</span>';
+        return state.teamStatsRosterSort.direction === 'asc' ? ' <span style="font-size: 0.75rem;">▲</span>' : ' <span style="font-size: 0.75rem;">▼</span>';
+    };
+    const tableRowsHtml = sortedRoster.length === 0
+        ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Fahrer für dieses Jahr unter Vertrag.</td></tr>`
+        : sortedRoster.map(rider => {
+            const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+            const flagHtml = flagAlpha2
+                ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(rider.nationality)}"></span>`
+                : '–';
+            const nameLink = renderRiderNameLink(`${rider.firstName} ${rider.lastName}`, {
+                riderId: rider.riderId,
+                teamId: payload.teamId,
+                strong: true,
+                linkClassName: 'results-rider-link',
+                labelClassName: 'results-participant-label',
+            });
+            const overallRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.overallRating)}" title="Stärke: ${rider.overallRating.toFixed(2)}">${rider.overallRating.toFixed(1)}</span>`;
+            let potentialRatingHtml = '–';
+            if (rider.potential != null) {
+                potentialRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.potential)}" title="Potential: ${rider.potential.toFixed(2)}">${rider.potential.toFixed(1)}</span>`;
+            }
+            const roleText = esc(rider.roleName || '-');
+            const endText = rider.contractEndSeason ? `Saison ${rider.contractEndSeason}` : 'Ohne Vertrag';
+            const isExpiring = rider.contractEndSeason === selectedYear;
+            const contractCellHtml = isExpiring
+                ? `<span class="badge badge-race-category" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold; animation: pulse 2s infinite;" title="Vertrag läuft in dieser Saison aus!">${esc(endText)}</span>`
+                : `<span style="font-weight: 500;">${esc(endText)}</span>`;
+            return `
           <tr class="rider-stats-row">
             <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${flagHtml}</td>
             <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;">${nameLink}</td>
@@ -1021,9 +969,8 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
             <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${contractCellHtml}</td>
           </tr>
         `;
-      }).join('');
-
-  return `
+        }).join('');
+    return `
     <section class="rider-stats-contracts" style="margin-top: 1.5rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h3 style="margin: 0; font-size: 1.15rem; font-weight: bold; color: #fff;">Kaderzusammensetzung</h3>
@@ -1063,124 +1010,141 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
     </section>
   `;
 }
-
-function getSkillColorForRating(value: number): string {
-  if (value >= 85) return '#22c55e';
-  if (value >= 78) return '#86efac';
-  if (value >= 72) return '#fbbf24';
-  if (value >= 66) return '#fb923c';
-  if (value >= 60) return '#f87171';
-  return '#94a3b8';
+function getSkillColorForRating(value) {
+    if (value >= 85)
+        return '#22c55e';
+    if (value >= 78)
+        return '#86efac';
+    if (value >= 72)
+        return '#fbbf24';
+    if (value >= 66)
+        return '#fb923c';
+    if (value >= 60)
+        return '#f87171';
+    return '#94a3b8';
 }
-
-function formatSpecName(spec: string | null): string | null {
-  if (!spec) return null;
-  const norm = spec.toLowerCase();
-  if (norm === 'berg' || norm === 'climber') return 'Berg';
-  if (norm === 'hill' || norm === 'puncher') return 'Hügel';
-  if (norm === 'sprint' || norm === 'sprinter') return 'Sprint';
-  if (norm === 'timetrial' || norm === 'time_trial' || norm === 'time trialist' || norm === 'zf') return 'Zeitfahren';
-  if (norm === 'cobble' || norm === 'classic' || norm === 'pave') return 'Cobble';
-  return spec;
+function formatSpecName(spec) {
+    if (!spec)
+        return null;
+    const norm = spec.toLowerCase();
+    if (norm === 'berg' || norm === 'climber')
+        return 'Berg';
+    if (norm === 'hill' || norm === 'puncher')
+        return 'Hügel';
+    if (norm === 'sprint' || norm === 'sprinter')
+        return 'Sprint';
+    if (norm === 'timetrial' || norm === 'time_trial' || norm === 'time trialist' || norm === 'zf')
+        return 'Zeitfahren';
+    if (norm === 'cobble' || norm === 'classic' || norm === 'pave')
+        return 'Cobble';
+    return spec;
 }
-
-function getRolePriority(role: string | null | undefined): number {
-  if (!role) return 99;
-  const norm = role.toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ');
-  if (norm === 'kapitaen' || norm === 'kapitän') return 1;
-  if (norm === 'co kapitaen' || norm === 'co kapitän') return 2;
-  if (norm === 'sprinter') return 3;
-  if (norm === 'edelhelfer') return 4;
-  if (norm === 'starke helfer' || norm === 'starker helfer') return 5;
-  if (norm === 'wassertraeger' || norm === 'wasserträger') return 6;
-  return 98;
+function getRolePriority(role) {
+    if (!role)
+        return 99;
+    const norm = role.toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ');
+    if (norm === 'kapitaen' || norm === 'kapitän')
+        return 1;
+    if (norm === 'co kapitaen' || norm === 'co kapitän')
+        return 2;
+    if (norm === 'sprinter')
+        return 3;
+    if (norm === 'edelhelfer')
+        return 4;
+    if (norm === 'starke helfer' || norm === 'starker helfer')
+        return 5;
+    if (norm === 'wassertraeger' || norm === 'wasserträger')
+        return 6;
+    return 98;
 }
-
-function translateRoleName(role: string | null | undefined): string {
-  if (!role) return 'Helfer';
-  const norm = role.toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ');
-  if (norm === 'kapitaen' || norm === 'kapitän') return 'Kapitän';
-  if (norm === 'co kapitaen' || norm === 'co kapitän') return 'Co-Kapitän';
-  if (norm === 'sprinter') return 'Sprinter';
-  if (norm === 'edelhelfer') return 'Edelhelfer';
-  if (norm === 'starke helfer' || norm === 'starker helfer') return 'Starker Helfer';
-  if (norm === 'wassertraeger' || norm === 'wasserträger') return 'Wasserträger';
-  return role;
+function translateRoleName(role) {
+    if (!role)
+        return 'Helfer';
+    const norm = role.toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ');
+    if (norm === 'kapitaen' || norm === 'kapitän')
+        return 'Kapitän';
+    if (norm === 'co kapitaen' || norm === 'co kapitän')
+        return 'Co-Kapitän';
+    if (norm === 'sprinter')
+        return 'Sprinter';
+    if (norm === 'edelhelfer')
+        return 'Edelhelfer';
+    if (norm === 'starke helfer' || norm === 'starker helfer')
+        return 'Starker Helfer';
+    if (norm === 'wassertraeger' || norm === 'wasserträger')
+        return 'Wasserträger';
+    return role;
 }
-
-export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
-  const transfers = payload.transfers || {};
-  const seasons = Object.keys(transfers).map(Number).sort((a, b) => b - a);
-
-  if (seasons.length === 0) {
-    return `
+export function renderTeamStatsTransfersTab(payload) {
+    const transfers = payload.transfers || {};
+    const seasons = Object.keys(transfers).map(Number).sort((a, b) => b - a);
+    if (seasons.length === 0) {
+        return `
       <section class="rider-stats-placeholder">
         <h3>Keine Transferdaten vorhanden</h3>
         <p>Für dieses Team wurden keine Transfers erfasst.</p>
       </section>
     `;
-  }
-
-  let activeSeason = typeof state.teamStatsSelectedSeason === 'number' ? state.teamStatsSelectedSeason : (state.gameState?.season ?? 2026);
-  if (!seasons.includes(activeSeason)) {
-    activeSeason = seasons[0];
-  }
-
-  const seasonOptionsHtml = seasons.map(yr => `
+    }
+    let activeSeason = typeof state.teamStatsSelectedSeason === 'number' ? state.teamStatsSelectedSeason : (state.gameState?.season ?? 2026);
+    if (!seasons.includes(activeSeason)) {
+        activeSeason = seasons[0];
+    }
+    const seasonOptionsHtml = seasons.map(yr => `
     <option value="${yr}" ${yr === activeSeason ? 'selected' : ''}>Saison ${yr}</option>
   `).join('');
-
-  const activeTransfers = transfers[activeSeason] || { incoming: [], outgoing: [] };
-
-  const formatSpecs = (rider: any) => {
-    const list: string[] = [];
-    const s1 = formatSpecName(rider.specialization1);
-    const s2 = formatSpecName(rider.specialization2);
-    const s3 = formatSpecName(rider.specialization3);
-    if (s1) list.push(s1);
-    if (s2) list.push(s2);
-    if (s3) list.push(s3);
-    return list.length > 0 ? list.join(' · ') : 'Allrounder';
-  };
-
-  const renderTransferCard = (rider: any, type: 'incoming' | 'outgoing') => {
-    const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
-    const flagHtml = flagAlpha2
-      ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
-      : '';
-    const specText = formatSpecs(rider);
-    const link = renderRiderNameLink(`${rider.firstName} ${rider.lastName}`, {
-      riderId: rider.id,
-      teamId: payload.teamId,
-      strong: true,
-      linkClassName: 'results-rider-link',
-      labelClassName: 'results-participant-label',
-    });
-
-    let teamInfoHtml = '';
-    if (type === 'incoming') {
-      const fromTeam = rider.fromTeamName ? esc(rider.fromTeamName) : 'Freier Fahrer';
-      teamInfoHtml = `<span style="color: #64748b; font-size: 0.8rem; font-weight: normal; margin-left: 0.35rem;">(${fromTeam})</span>`;
-    } else {
-      if (rider.toTeamId && rider.toTeamName) {
-        teamInfoHtml = `
+    const activeTransfers = transfers[activeSeason] || { incoming: [], outgoing: [] };
+    const formatSpecs = (rider) => {
+        const list = [];
+        const s1 = formatSpecName(rider.specialization1);
+        const s2 = formatSpecName(rider.specialization2);
+        const s3 = formatSpecName(rider.specialization3);
+        if (s1)
+            list.push(s1);
+        if (s2)
+            list.push(s2);
+        if (s3)
+            list.push(s3);
+        return list.length > 0 ? list.join(' · ') : 'Allrounder';
+    };
+    const renderTransferCard = (rider, type) => {
+        const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
+        const flagHtml = flagAlpha2
+            ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right: 0.25rem;" title="${esc(rider.nationality)}"></span>`
+            : '';
+        const specText = formatSpecs(rider);
+        const link = renderRiderNameLink(`${rider.firstName} ${rider.lastName}`, {
+            riderId: rider.id,
+            teamId: payload.teamId,
+            strong: true,
+            linkClassName: 'results-rider-link',
+            labelClassName: 'results-participant-label',
+        });
+        let teamInfoHtml = '';
+        if (type === 'incoming') {
+            const fromTeam = rider.fromTeamName ? esc(rider.fromTeamName) : 'Freier Fahrer';
+            teamInfoHtml = `<span style="color: #64748b; font-size: 0.8rem; font-weight: normal; margin-left: 0.35rem;">(${fromTeam})</span>`;
+        }
+        else {
+            if (rider.toTeamId && rider.toTeamName) {
+                teamInfoHtml = `
           <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; color: #64748b; margin-top: 0.15rem;">
             <span>zu:</span>
             ${renderMiniJersey(rider.toTeamId, rider.toTeamName)}
             <span style="font-weight: 500;">${esc(rider.toTeamName)}</span>
           </div>
         `;
-      } else {
-        const statusText = rider.isRetired ? 'Karriereende' : 'Freier Fahrer';
-        teamInfoHtml = `
+            }
+            else {
+                const statusText = rider.isRetired ? 'Karriereende' : 'Freier Fahrer';
+                teamInfoHtml = `
           <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.15rem; font-style: italic;">
             ${statusText}
           </div>
         `;
-      }
-    }
-
-    return `
+            }
+        }
+        return `
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); margin-bottom: 0.5rem;">
         <div style="display: flex; align-items: center; gap: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">
           <div>
@@ -1200,31 +1164,26 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
         </div>
       </div>
     `;
-  };
-
-  const sortTransfers = (list: any[]) => {
-    return [...list].sort((a, b) => {
-      const priorityA = getRolePriority(a.roleName);
-      const priorityB = getRolePriority(b.roleName);
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-      return (b.overallRating || 0) - (a.overallRating || 0);
-    });
-  };
-
-  const sortedIncoming = sortTransfers(activeTransfers.incoming);
-  const sortedOutgoing = sortTransfers(activeTransfers.outgoing);
-
-  const incomingHtml = sortedIncoming.length === 0
-    ? '<div style="color: #64748b; font-style: italic; text-align: center; padding: 2rem;">Keine Zugänge in dieser Saison.</div>'
-    : sortedIncoming.map(r => renderTransferCard(r, 'incoming')).join('');
-
-  const outgoingHtml = sortedOutgoing.length === 0
-    ? '<div style="color: #64748b; font-style: italic; text-align: center; padding: 2rem;">Keine Abgänge in dieser Saison.</div>'
-    : sortedOutgoing.map(r => renderTransferCard(r, 'outgoing')).join('');
-
-  return `
+    };
+    const sortTransfers = (list) => {
+        return [...list].sort((a, b) => {
+            const priorityA = getRolePriority(a.roleName);
+            const priorityB = getRolePriority(b.roleName);
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+            return (b.overallRating || 0) - (a.overallRating || 0);
+        });
+    };
+    const sortedIncoming = sortTransfers(activeTransfers.incoming);
+    const sortedOutgoing = sortTransfers(activeTransfers.outgoing);
+    const incomingHtml = sortedIncoming.length === 0
+        ? '<div style="color: #64748b; font-style: italic; text-align: center; padding: 2rem;">Keine Zugänge in dieser Saison.</div>'
+        : sortedIncoming.map(r => renderTransferCard(r, 'incoming')).join('');
+    const outgoingHtml = sortedOutgoing.length === 0
+        ? '<div style="color: #64748b; font-style: italic; text-align: center; padding: 2rem;">Keine Abgänge in dieser Saison.</div>'
+        : sortedOutgoing.map(r => renderTransferCard(r, 'outgoing')).join('');
+    return `
     <section class="rider-stats-transfers" style="margin-top: 1.5rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h3 style="margin: 0; font-size: 1.15rem; font-weight: bold; color: #fff;">Saison-Transfers</h3>
@@ -1260,47 +1219,41 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
     </section>
   `;
 }
-
-export function renderTeamStatsBody(payload: TeamStatsPayload): string {
-  if (state.teamStatsTab === 'career') {
-    return `
+export function renderTeamStatsBody(payload) {
+    if (state.teamStatsTab === 'career') {
+        return `
       ${renderTeamStatsHeader(payload)}
       ${renderTeamStatsTabs()}
       ${renderTeamStatsCareerTab(payload)}
     `;
-  }
-
-  if (state.teamStatsTab === 'contracts') {
-    return `
+    }
+    if (state.teamStatsTab === 'contracts') {
+        return `
       ${renderTeamStatsHeader(payload)}
       ${renderTeamStatsTabs()}
       ${renderTeamStatsContractsTab(payload)}
     `;
-  }
-
-  if (state.teamStatsTab === 'transfers') {
-    return `
+    }
+    if (state.teamStatsTab === 'transfers') {
+        return `
       ${renderTeamStatsHeader(payload)}
       ${renderTeamStatsTabs()}
       ${renderTeamStatsTransfersTab(payload)}
     `;
-  }
-
-  // Default: 'topResults'
-  return `
+    }
+    // Default: 'topResults'
+    return `
     ${renderTeamStatsHeader(payload)}
     ${renderTeamStatsTabs()}
     ${renderTeamStatsTopResultsTab(payload)}
   `;
 }
-
-function renderLargeJersey(teamId: number | null | undefined, teamName: string | null | undefined): string {
-  if (teamId == null) {
-    return '<span class="results-team-jersey-placeholder" style="width: 54px; height: 54px; display: inline-block;" aria-hidden="true"></span>';
-  }
-
-  const resolvedTeamName = teamName ?? state.teams.find((team) => team.id === teamId)?.name ?? `Team ${teamId}`;
-  return `
+function renderLargeJersey(teamId, teamName) {
+    if (teamId == null) {
+        return '<span class="results-team-jersey-placeholder" style="width: 54px; height: 54px; display: inline-block;" aria-hidden="true"></span>';
+    }
+    const resolvedTeamName = teamName ?? state.teams.find((team) => team.id === teamId)?.name ?? `Team ${teamId}`;
+    return `
     <span class="results-team-jersey large-jersey" title="${esc(resolvedTeamName)}" aria-label="${esc(resolvedTeamName)}" style="width: 54px; height: 54px; display: inline-block;">
       <img
         class="results-team-jersey-img"
@@ -1315,149 +1268,143 @@ function renderLargeJersey(teamId: number | null | undefined, teamName: string |
       >
     </span>`;
 }
-
-export async function openTeamStats(teamId: number): Promise<void> {
-  state.teamStatsSelectedTeamId = teamId;
-  state.teamStatsTab = 'topResults';
-  state.teamStatsTopResultsFilterCategory = null;
-  state.teamStatsTopResultsFilterSeason = null;
-  state.teamStatsSelectedSeason = 'all';
-  state.teamStatsSelectedRosterYear = state.gameState?.season ?? 2026;
-  state.teamStatsRosterSort = {
-    key: 'overallRating',
-    direction: 'desc',
-  };
-  state.teamStatsTopResultsPage = 1;
-
-  const team = state.teams.find(t => t.id === teamId);
-
-  $('team-stats-title').innerHTML = team ? `Team <strong>${esc(team.name)}</strong>` : 'Teamstatistik';
-  $('team-stats-jersey').innerHTML = renderLargeJersey(teamId, team?.name ?? '');
-  const overallRank = getTeamOverallRank(teamId);
-  const avgText = overallRank.average.toFixed(2).replace('.', ',');
-  $('team-stats-meta').innerHTML = team
-    ? `${esc(team.abbreviation)} · ${esc(team.divisionName || team.division || '–')} · <strong>Overall-Stärke (Top 10):</strong> Platz ${overallRank.rank}/${overallRank.total} (Ø ${avgText})`
-    : 'Daten werden geladen';
-  $('team-stats-body').innerHTML = `
+export async function openTeamStats(teamId) {
+    state.teamStatsSelectedTeamId = teamId;
+    state.teamStatsTab = 'topResults';
+    state.teamStatsTopResultsFilterCategory = null;
+    state.teamStatsTopResultsFilterSeason = null;
+    state.teamStatsSelectedSeason = 'all';
+    state.teamStatsSelectedRosterYear = state.gameState?.season ?? 2026;
+    state.teamStatsRosterSort = {
+        key: 'overallRating',
+        direction: 'desc',
+    };
+    state.teamStatsTopResultsPage = 1;
+    const team = state.teams.find(t => t.id === teamId);
+    $('team-stats-title').innerHTML = team ? `Team <strong>${esc(team.name)}</strong>` : 'Teamstatistik';
+    $('team-stats-jersey').innerHTML = renderLargeJersey(teamId, team?.name ?? '');
+    const overallRank = getTeamOverallRank(teamId);
+    const avgText = overallRank.average.toFixed(2).replace('.', ',');
+    $('team-stats-meta').innerHTML = team
+        ? `${esc(team.abbreviation)} · ${esc(team.divisionName || team.division || '–')} · <strong>Overall-Stärke (Top 10):</strong> Platz ${overallRank.rank}/${overallRank.total} (Ø ${avgText})`
+        : 'Daten werden geladen';
+    $('team-stats-body').innerHTML = `
     <section class="rider-stats-placeholder">
       <h3>Statistiken werden geladen</h3>
       <p>Die Teamergebnisse und Fahrerdaten werden zusammengestellt.</p>
     </section>
   `;
-  showModal('teamStats');
-
-  const res = await api.getTeamStats(teamId);
-  if (state.teamStatsSelectedTeamId !== teamId) {
-    return;
-  }
-
-  if (!res.success || !res.data) {
-    $('team-stats-body').innerHTML = `
+    showModal('teamStats');
+    const res = await api.getTeamStats(teamId);
+    if (state.teamStatsSelectedTeamId !== teamId) {
+        return;
+    }
+    if (!res.success || !res.data) {
+        $('team-stats-body').innerHTML = `
       <section class="rider-stats-placeholder">
         <h3>Statistiken konnten nicht geladen werden</h3>
         <p>${esc(res.error ?? 'Unbekannter Fehler')}</p>
       </section>
     `;
-    return;
-  }
-
-  state.teamStatsPayload = res.data;
-  $('team-stats-body').innerHTML = renderTeamStatsBody(res.data);
+        return;
+    }
+    state.teamStatsPayload = res.data;
+    $('team-stats-body').innerHTML = renderTeamStatsBody(res.data);
 }
-
-export function initTeamStatsListeners(): void {
-  // Tabs switching, pagination buttons and dropdowns
-  $('team-stats-body').addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-
-    // Tab buttons
-    const tabButton = target.closest<HTMLButtonElement>('button[data-team-stats-tab]');
-    if (tabButton) {
-      const nextTab = tabButton.dataset['teamStatsTab'] as any;
-      if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers') {
-        state.teamStatsTab = nextTab;
-        if (state.teamStatsPayload) {
-          $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+export function initTeamStatsListeners() {
+    // Tabs switching, pagination buttons and dropdowns
+    $('team-stats-body').addEventListener('click', (event) => {
+        const target = event.target;
+        // Tab buttons
+        const tabButton = target.closest('button[data-team-stats-tab]');
+        if (tabButton) {
+            const nextTab = tabButton.dataset['teamStatsTab'];
+            if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers') {
+                state.teamStatsTab = nextTab;
+                if (state.teamStatsPayload) {
+                    $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+                }
+            }
+            return;
         }
-      }
-      return;
-    }
-
-    // Pagination buttons
-    const pageButton = target.closest<HTMLButtonElement>('button[data-team-top-results-page]');
-    if (pageButton) {
-      const newPage = Number(pageButton.dataset['teamTopResultsPage']);
-      if (!isNaN(newPage) && newPage >= 1) {
-        state.teamStatsTopResultsPage = newPage;
-        if (state.teamStatsPayload) {
-          $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+        // Pagination buttons
+        const pageButton = target.closest('button[data-team-top-results-page]');
+        if (pageButton) {
+            const newPage = Number(pageButton.dataset['teamTopResultsPage']);
+            if (!isNaN(newPage) && newPage >= 1) {
+                state.teamStatsTopResultsPage = newPage;
+                if (state.teamStatsPayload) {
+                    $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+                }
+            }
+            return;
         }
-      }
-      return;
-    }
-
-    // Roster sorting headers
-    const sortHeader = target.closest<HTMLTableCellElement>('th[data-team-roster-sort]');
-    if (sortHeader) {
-      const key = sortHeader.dataset['teamRosterSort'] as any;
-      if (key) {
-        if (state.teamStatsRosterSort.key === key) {
-          state.teamStatsRosterSort.direction = state.teamStatsRosterSort.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-          state.teamStatsRosterSort.key = key;
-          state.teamStatsRosterSort.direction = (key === 'overallRating' || key === 'potential' || key === 'contractEndSeason') ? 'desc' : 'asc';
+        // Roster sorting headers
+        const sortHeader = target.closest('th[data-team-roster-sort]');
+        if (sortHeader) {
+            const key = sortHeader.dataset['teamRosterSort'];
+            if (key) {
+                if (state.teamStatsRosterSort.key === key) {
+                    state.teamStatsRosterSort.direction = state.teamStatsRosterSort.direction === 'asc' ? 'desc' : 'asc';
+                }
+                else {
+                    state.teamStatsRosterSort.key = key;
+                    state.teamStatsRosterSort.direction = (key === 'overallRating' || key === 'potential' || key === 'contractEndSeason') ? 'desc' : 'asc';
+                }
+                if (state.teamStatsPayload) {
+                    $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+                }
+            }
+            return;
         }
-        if (state.teamStatsPayload) {
-          $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+    });
+    $('team-stats-body').addEventListener('change', (event) => {
+        const target = event.target;
+        if (target.id === 'team-stats-filter-category') {
+            const select = target;
+            state.teamStatsTopResultsFilterCategory = select.value === 'all' ? null : select.value;
+            state.teamStatsTopResultsPage = 1;
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
         }
-      }
-      return;
-    }
-  });
-
-  $('team-stats-body').addEventListener('change', (event) => {
-    const target = event.target as HTMLElement;
-
-    if (target.id === 'team-stats-filter-category') {
-      const select = target as HTMLSelectElement;
-      state.teamStatsTopResultsFilterCategory = select.value === 'all' ? null : select.value;
-      state.teamStatsTopResultsPage = 1;
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    } else if (target.id === 'team-stats-filter-season') {
-      const select = target as HTMLSelectElement;
-      state.teamStatsTopResultsFilterSeason = select.value === 'all' ? null : Number(select.value);
-      state.teamStatsTopResultsPage = 1;
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    } else if (target.classList.contains('team-stats-filter-checkbox')) {
-      const checkbox = target as HTMLInputElement;
-      const type = checkbox.dataset['filterType'] as 'gc' | 'mountain' | 'points' | 'youth' | 'oneDay' | 'stage';
-      state.teamStatsTopResultsFilters[type] = checkbox.checked;
-      state.teamStatsTopResultsPage = 1;
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    } else if (target.id === 'team-stats-success-season-select') {
-      const select = target as HTMLSelectElement;
-      state.teamStatsSelectedSeason = select.value === 'all' ? 'all' : Number(select.value);
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    } else if (target.id === 'team-stats-roster-year-select') {
-      const select = target as HTMLSelectElement;
-      state.teamStatsSelectedRosterYear = Number(select.value);
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    } else if (target.id === 'team-stats-transfers-season-select') {
-      const select = target as HTMLSelectElement;
-      state.teamStatsSelectedSeason = Number(select.value);
-      if (state.teamStatsPayload) {
-        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
-      }
-    }
-  });
+        else if (target.id === 'team-stats-filter-season') {
+            const select = target;
+            state.teamStatsTopResultsFilterSeason = select.value === 'all' ? null : Number(select.value);
+            state.teamStatsTopResultsPage = 1;
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
+        }
+        else if (target.classList.contains('team-stats-filter-checkbox')) {
+            const checkbox = target;
+            const type = checkbox.dataset['filterType'];
+            state.teamStatsTopResultsFilters[type] = checkbox.checked;
+            state.teamStatsTopResultsPage = 1;
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
+        }
+        else if (target.id === 'team-stats-success-season-select') {
+            const select = target;
+            state.teamStatsSelectedSeason = select.value === 'all' ? 'all' : Number(select.value);
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
+        }
+        else if (target.id === 'team-stats-roster-year-select') {
+            const select = target;
+            state.teamStatsSelectedRosterYear = Number(select.value);
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
+        }
+        else if (target.id === 'team-stats-transfers-season-select') {
+            const select = target;
+            state.teamStatsSelectedSeason = Number(select.value);
+            if (state.teamStatsPayload) {
+                $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+            }
+        }
+    });
 }

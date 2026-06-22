@@ -104,33 +104,36 @@ export class RiderRepository {
   }
 
 
-  public getRiders(teamId?: number, includeFormDebug = false, onlyWithTeam = false): Rider[] {
-    const season = new GameStateRepository(this.db).getCurrentSeason();
-    const currentDate = new GameStateRepository(this.db).getCurrentDate();
+  public getRiders(teamId?: number, includeFormDebug = false, onlyWithTeam = false, season?: number): Rider[] {
+    const gameStateRepo = new GameStateRepository(this.db);
+    const activeSeason = season ?? gameStateRepo.getCurrentSeason();
+    const currentDate = gameStateRepo.getCurrentDate();
     const useContracts = tableExists(this.db, 'contracts');
     const rows: RiderRow[] = teamId != null
       ? (useContracts
-        ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, true)).all(season, season, teamId)
-        : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, true)).all(teamId)
+        ? this.db.prepare(this.getRidersQuery(true, true)).all(activeSeason, activeSeason, teamId)
+        : this.db.prepare(this.getRidersQuery(false, true)).all(teamId)
       ) as RiderRow[]
       : (useContracts
-        ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, false, onlyWithTeam)).all(season, season)
-        : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, false, onlyWithTeam)).all()
+        ? this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam)).all(activeSeason, activeSeason)
+        : this.db.prepare(this.getRidersQuery(false, false, onlyWithTeam)).all()
       ) as RiderRow[];
-    const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(season);
-    const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
-    const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
-    const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), season);
+    
+    const riderIdsForStats = teamId != null ? rows.map(row => row.id) : undefined;
+    const seasonPointsByRiderId = this.getSeasonPointsByRiderId(activeSeason);
+    const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate);
+    const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats);
+    const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason);
     const riders = rows.map((row) => ({
-      ...mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+      ...mapRider(row, activeSeason, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
       yearStartSkills: yearStartSkillsByRiderId.get(row.id),
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
       seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
       seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
     }));
-    const ridersWithPrograms = this.attachProgramData(riders, season);
+    const ridersWithPrograms = this.attachProgramData(riders, activeSeason);
     const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
-    return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, season, currentDate) : ridersWithMentors;
+    return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, activeSeason, currentDate) : ridersWithMentors;
   }
 
 
@@ -312,7 +315,7 @@ export class RiderRepository {
       program: mapRaceProgram(programRow),
       races: raceRows.map((row) => {
         const stages = stagesByRaceId.get(row.id) ?? [];
-        return mapRaceWithSummary(row, stages, new RiderRepository(this.db).getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
+        return mapRaceWithSummary(row, stages, this.getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
       }),
     };
   }
@@ -373,8 +376,8 @@ export class RiderRepository {
 
     const currentSeason = new GameStateRepository(this.db).getCurrentSeason();
     const currentSeasonRank = new ResultRepository(this.db).getSeasonRankForRider(currentSeason, rider.id);
-    const currentSeasonPoints = new RiderRepository(this.db).getSeasonPointsByRiderId(currentSeason).get(rider.id) ?? 0;
-    const currentSeasonRaceStats = this.getSeasonRaceStatsByRiderId(currentSeason, rider.id).get(rider.id) ?? { raceDays: 0, wins: 0 };
+    const currentSeasonPoints = this.getSeasonPointsByRiderId(currentSeason).get(rider.id) ?? 0;
+    const currentSeasonRaceStats = this.getSeasonRaceStatsByRiderId(currentSeason, [rider.id]).get(rider.id) ?? { raceDays: 0, wins: 0 };
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
@@ -780,19 +783,23 @@ export class RiderRepository {
   }
 
 
-  private getSeasonRaceStatsByRiderId(season: number, riderId?: number): Map<number, RiderSeasonRaceStats> {
+  private getSeasonRaceStatsByRiderId(season: number, riderIds?: number[]): Map<number, RiderSeasonRaceStats> {
     const statsByRiderId = new Map<number, RiderSeasonRaceStats>();
     if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
       return statsByRiderId;
     }
 
-    const riderFilterStageEntries = riderId != null ? 'AND stage_entries.rider_id = ?' : '';
-    const riderFilterResults = riderId != null ? 'AND results.rider_id = ?' : '';
-    const riderFilterStageEntriesResults = riderId != null ? 'AND stage_entries.rider_id = ?' : '';
+    if (riderIds && riderIds.length === 0) {
+      return statsByRiderId;
+    }
 
-    const argsStageEntries = riderId != null ? [season, riderId] : [season];
-    const argsResults = riderId != null ? [RESULT_TYPE_IDS.stage, season, riderId] : [RESULT_TYPE_IDS.stage, season];
-    const argsResultsGc = riderId != null ? [RESULT_TYPE_IDS.gc, season, riderId] : [RESULT_TYPE_IDS.gc, season];
+    const riderFilterStageEntries = riderIds ? `AND stage_entries.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
+    const riderFilterResults = riderIds ? `AND results.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
+    const riderFilterStageEntriesResults = riderIds ? `AND stage_entries.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
+
+    const argsStageEntries = riderIds ? [season, ...riderIds] : [season];
+    const argsResults = riderIds ? [RESULT_TYPE_IDS.stage, season, ...riderIds] : [RESULT_TYPE_IDS.stage, season];
+    const argsResultsGc = riderIds ? [RESULT_TYPE_IDS.gc, season, ...riderIds] : [RESULT_TYPE_IDS.gc, season];
 
     // 1. Race Days
     const raceDaysRows = this.db.prepare(`

@@ -94,31 +94,31 @@ class RiderRepository {
             return `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ${teamFilter} ORDER BY riders.overall_rating DESC`;
         }
     }
-    getRiders(teamId, includeFormDebug = false, onlyWithTeam = false) {
-        const season = new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason();
+    getRiders(teamId, includeFormDebug = false, onlyWithTeam = false, season) {
+        const activeSeason = season ?? new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason();
         const currentDate = new GameStateRepository_1.GameStateRepository(this.db).getCurrentDate();
         const useContracts = (0, mappers_1.tableExists)(this.db, 'contracts');
         const rows = teamId != null
             ? (useContracts
-                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, true)).all(season, season, teamId)
+                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, true)).all(activeSeason, activeSeason, teamId)
                 : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, true)).all(teamId))
             : (useContracts
-                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, false, onlyWithTeam)).all(season, season)
+                ? this.db.prepare(new RiderRepository(this.db).getRidersQuery(true, false, onlyWithTeam)).all(activeSeason, activeSeason)
                 : this.db.prepare(new RiderRepository(this.db).getRidersQuery(false, false, onlyWithTeam)).all());
-        const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(season);
-        const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), season, currentDate);
-        const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(season);
-        const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), season);
+        const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(activeSeason);
+        const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate);
+        const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(activeSeason);
+        const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason);
         const riders = rows.map((row) => ({
-            ...(0, mappers_1.mapRider)(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+            ...(0, mappers_1.mapRider)(row, activeSeason, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
             yearStartSkills: yearStartSkillsByRiderId.get(row.id),
             raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
             seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
             seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
         }));
-        const ridersWithPrograms = this.attachProgramData(riders, season);
+        const ridersWithPrograms = this.attachProgramData(riders, activeSeason);
         const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
-        return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, season, currentDate) : ridersWithMentors;
+        return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, activeSeason, currentDate) : ridersWithMentors;
     }
     attachMentorData(riders) {
         const ridersByTeam = new Map();

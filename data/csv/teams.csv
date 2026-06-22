@@ -1,51 +1,26 @@
 team_id,name,abbreviation,division_name,is_player_team,country_id,color_primary,color_secondary,ai_focus_1,ai_focus_2,ai_focus_3
 1,SAP - Canyon,SAP,WorldTour,0,7,#008FD3,#000000,4,6,1
 2,Decathlon - Renault,DRE,WorldTour,1,3,#0082C3,#FFCC00,4,6,5
-3,Allianz - Giant,ALZ,WorldTour,0,84,#003781,#000000,5,1,4
+3,Allianz - Giant,ALZ,WorldTour,0,5,#003781,#000000,5,1,4
 4,Spotify - Cervelo,SPO,WorldTour,0,22,#1DB954,#191414,4,1,5
-5,Lego - Bianchi,LGB,WorldTour,0,2,#D01012,#00BFB2,4,6,1
-6,Orange - Ridley,ORG,WorldTour,0,4,#FF7900,#000000,2,3,4
-7,Philips - Santander,PHS,WorldTour,0,8,#0B5EAA,#EC0000,6,4,2
+5,Lego - Bianchi,LGB,WorldTour,0,10,#D01012,#00BFB2,4,6,1
+6,Orange - Ridley,ORG,WorldTour,0,6,#FF7900,#000000,2,3,4
+7,Philips - Santander,PHS,WorldTour,0,5,#0B5EAA,#EC0000,6,4,2
 8,Generali - Mammut,GEN,WorldTour,0,2,#C8102E,#000000,4,3,2
 9,Zalando - Continental,ZAL,WorldTour,0,7,#FF6900,#FFA500,5,6,4
 10,Ferrero - Giro,FER,WorldTour,0,2,#8A543A,#000000,4,2,1
-11,Danone - Fizik,DAN,WorldTour,0,3,#005AA0,#E1000F,3,2,6
+11,Danone - Fizik,DAN,WorldTour,0,2,#005AA0,#E1000F,3,2,6
 12,Novartis - SRM,NOV,WorldTour,0,17,#E74A21,#00509B,2,6,3
 13,Shimano - Tissot,SHT,WorldTour,0,17,#0055A5,#E3000F,2,1,5
 14,AXA - Lindt,AXA,WorldTour,0,17,#00008F,#D4AF37,2,3,1
 15,ING - Schwalbe,ING,WorldTour,0,5,#FF6200,#0000A0,2,4,3
 16,Ikea - Adidas,IKE,WorldTour,0,32,#0051BA,#43B02A,3,6,4
 17,Swiss Re - BMC,SRB,WorldTour,0,17,#005596,#E3000F,6,4,2
-18,Google - Pinarello,GOO,WorldTour,0,2,#4285F4,#DB4437,2,1,3
-19,Microsoft - Tacx,MST,WorldTour,0,5,#F25022,#00A4EF,4,1,2
-20,Nintendo - Colnago,NIN,WorldTour,0,2,#E60012,#000000,4,2,5
+18,Google - Pinarello,GOO,WorldTour,0,6,#4285F4,#DB4437,2,1,3
+19,Microsoft - Tacx,MST,WorldTour,0,6,#F25022,#00A4EF,4,1,2
+20,Nintendo - Colnago,NIN,WorldTour,0,20,#E60012,#000000,4,2,5
 21,VW - Continental - Rose,VWC,WorldTour,0,7,#FFA500,#000000,1,4,2
-22,Samsung - Cube,SAM,WorldTour,0,79,#1428A0,#E3000F,2,3,4
+22,Samsung - Cube,SAM,WorldTour,0,34,#1428A0,#E3000F,2,3,4
 23,Michelin - Look,MIC,WorldTour,0,3,#27509B,#FFDD00,4,3,2
 24,Toyota - Lapierre,TOY,WorldTour,0,3,#EB0A1E,#000000,4,1,5
-25,Falke - Scott,FAL,WorldTour,0,17,#000000,#FFD100,3,1,2
-26,Oatly - Shimano,OAT,ProTour,0,32,#A4C8E1,#0055A5,4,1,5
-27,Carl Zeiss - Felt,CZF,ProTour,0,6,#004B87,#DA291C,1,4,5
-28,Vaude - Garmin,VAU,ProTour,0,6,#A4B02B,#007CC3,2,3,6
-29,Logitech - SRAM,LOG,ProTour,0,6,#00B8FC,#E3000F,4,6,1
-30,Deutsche Bahn - Stevens,DBS,ProTour,0,7,#F01414,#000000,3,6,4
-31,Barilla - Zwift,BAR,ProTour,0,2,#003366,#FC6719,4,2,3
-32,Statkraft - Colnago,STC,ProTour,0,2,#0055A5,#E3000F,4,2,6
-33,Volvic - Corratec,VOL,ProTour,0,3,#00A160,#00519E,4,1,3
-34,Alstom - Ghost,ALG,ProTour,0,3,#004289,#E1001A,1,4,2
-35,Sennheiser - Michelin,SEN,ProTour,0,3,#0096D6,#27509B,4,5,2
-36,Ortlieb - Sony,ORT,ProTour,0,21,#E4002B,#000000,2,1,4
-37,Dassault - Time,DST,ProTour,0,3,#00558C,#E3001B,1,5,4
-38,Ricola - Simplon,RIC,ProTour,0,17,#F2A900,#000000,2,3,1
-39,SMA Solar - Bell,SMA,ProTour,0,6,#005C8A,#E31837,3,1,6
-40,BASF - Selle Italia,BSI,ProTour,0,2,#004A96,#E3000F,1,2,5
-41,Endura - Vittoria,END,ProTour,0,18,#000000,#DA291C,2,3,4
-42,Patagonia - Fuji,PAT,ProTour,0,6,#211E26,#E3000F,3,1,5
-43,Bosch - Deuter,BOS,ProTour,0,7,#C1272D,#00539F,2,1,3
-44,Ericsson - Thule,ERI,ProTour,0,32,#002561,#000000,4,5,3
-45,GLS Bank - Wahoo,GLS,ProTour,0,6,#00833F,#00B2E2,4,1,2
-46,Siemens - Wahoo,SIE,ProTour,0,6,#009999,#00B2E2,5,1,4
-47,Leica - Trek,LEI,ProTour,0,6,#ED1C24,#000000,6,3,1
-48,Haribo - Specialized,HAR,ProTour,0,6,#005B9F,#E3000F,5,3,2
-49,Vattenfall - Focus,VAT,ProTour,0,32,#0055A5,#FFD100,1,4,2
-50,Lavazza - Pirelli,LAV,ProTour,0,2,#003A70,#FFD100,1,4,5
+25,Falke - Scott,FAL,WorldTour,0,37,#000000,#FFD100,3,1,2

@@ -178,8 +178,6 @@ export class GameStateService {
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
       this.syncDailyFormHistory(state.currentDate);
-      this.syncedStateDate = state.currentDate;
-    }
 
       // Lazily populate rider_skill_yearly_baseline for current season if missing
       const baselineCount = (this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season) as any).c;
@@ -201,6 +199,9 @@ export class GameStateService {
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
         `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
       }
+
+      this.syncedStateDate = state.currentDate;
+    }
 
     this.db.prepare(`
       INSERT INTO career_meta (key, value) VALUES ('current_season', ?)

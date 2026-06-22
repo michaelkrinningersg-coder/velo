@@ -768,11 +768,12 @@ export async function initializeStageEditorForm(): Promise<void> {
   $('stage-editor-chart').innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
   $('stage-editor-climbs').innerHTML = '<p class="text-muted">Climb-Vorschläge erscheinen nach dem Import.</p>';
 
-  // Load countries, categories, and programs dynamically from backend
+  // Load countries, categories, programs, and existing stages dynamically from backend
   const [countriesRes, categoriesRes, programsRes] = await Promise.all([
     api.listStageEditorCountries(),
     api.listStageEditorRaceCategories(),
     api.listStageEditorRacePrograms(),
+    loadStageEditorExistingStages(),
   ]);
 
   if (countriesRes.success && countriesRes.data) {
@@ -894,6 +895,55 @@ export function findNextFreeRaceId(startId: number, direction: number): number {
   return candidate;
 }
 
+export function updateRaceDatesFromStageDate(): void {
+  const stageDateInput = $<HTMLInputElement>('stage-editor-date');
+  if (!stageDateInput) return;
+  const stageDate = stageDateInput.value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(stageDate)) {
+    return;
+  }
+
+  const newRaceCb = document.getElementById('stage-editor-new-race-checkbox') as HTMLInputElement | null;
+  if (!newRaceCb || !newRaceCb.checked) {
+    return;
+  }
+
+  const isStageRaceSelect = document.getElementById('stage-editor-race-is-stage-race') as HTMLSelectElement | null;
+  if (!isStageRaceSelect) return;
+  const isStageRace = Number(isStageRaceSelect.value) === 1;
+  const startDateInput = $<HTMLInputElement>('stage-editor-race-start-date');
+  const endDateInput = $<HTMLInputElement>('stage-editor-race-end-date');
+
+  if (!startDateInput || !endDateInput) return;
+
+  if (!isStageRace) {
+    startDateInput.value = stageDate;
+    endDateInput.value = stageDate;
+  } else {
+    startDateInput.value = stageDate;
+    const numStagesInput = document.getElementById('stage-editor-race-num-stages') as HTMLInputElement | null;
+    const numStages = numStagesInput ? (Number(numStagesInput.value) || 1) : 1;
+
+    const [year, month, day] = stageDate.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+
+    let extraDays = 0;
+    if (numStages === 21) {
+      extraDays = 2;
+    } else if (numStages >= 14) {
+      extraDays = 1;
+    }
+    const totalDays = numStages + extraDays;
+
+    d.setDate(d.getDate() + totalDays - 1);
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    endDateInput.value = `${yyyy}-${mm}-${dd}`;
+  }
+}
+
 export function setStageEditorDefaults(draft: StageEditorDraft): void {
   const profileSelect = $<HTMLSelectElement>('stage-editor-profile');
   profileSelect.innerHTML = stageProfileOptionsHtml(draft.suggestedProfile);
@@ -920,6 +970,8 @@ export function setStageEditorDefaults(draft: StageEditorDraft): void {
   checkboxes.forEach((cb) => {
     cb.checked = true;
   });
+
+  updateRaceDatesFromStageDate();
 }
 
 export function setStageEditorMetadataFields(metadata: StageEditorMetadata): void {
@@ -944,6 +996,8 @@ export function setStageEditorMetadataFields(metadata: StageEditorMetadata): voi
   checkboxes.forEach((cb) => {
     cb.checked = allowed.includes(cb.value);
   });
+
+  updateRaceDatesFromStageDate();
 }
 
 export function getStageEditorIssues(draft: StageEditorDraft | null): string[] {
@@ -1808,7 +1862,10 @@ export function renderStageEditor(): void {
       </td>
       <td class="stage-editor-row-actions">
         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-          <div class="text-muted" style="min-width:3.5rem;">${getStageEditorSegmentEndElevation(segment)} m</div>
+          <div style="display: flex; flex-direction: column; min-width: 3.5rem; justify-content: center; line-height: 1.2;">
+            <span class="text-muted" style="font-size: 0.85rem;">${getStageEditorSegmentEndElevation(segment)} m</span>
+            <span style="font-size: 0.7rem; color: #888; font-weight: normal;">${formatKm(getStageEditorSegmentStartKm(draft, index) + segment.lengthKm)}</span>
+          </div>
           ${renderStageEditorSegmentIssues(draft, index)}
           <button type="button" class="btn btn-secondary btn-xs" data-segment-action="insert" data-segment-index="${index}">+</button>
           ${index === draft.segments.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" data-segment-action="append" data-segment-index="${index}">+ Ende</button>` : ''}
@@ -2322,7 +2379,12 @@ export function initStageEditorListeners(): void {
   ['stage-editor-stage-id', 'stage-editor-race-id', 'stage-editor-stage-number', 'stage-editor-date', 'stage-editor-details-file', 'stage-editor-profile'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) {
-      el.addEventListener('change', () => renderStageEditor());
+      el.addEventListener('change', () => {
+        if (id === 'stage-editor-date') {
+          updateRaceDatesFromStageDate();
+        }
+        renderStageEditor();
+      });
     }
   });
 
@@ -2352,6 +2414,7 @@ export function initStageEditorListeners(): void {
             programDetails.style.display = 'block';
           }
         }
+        updateRaceDatesFromStageDate();
       } else {
         if (newRaceDetails) {
           newRaceDetails.classList.add('hidden');
@@ -2359,6 +2422,54 @@ export function initStageEditorListeners(): void {
         }
       }
       renderStageEditor();
+    });
+  }
+
+  const isStageRaceSelect = document.getElementById('stage-editor-race-is-stage-race');
+  if (isStageRaceSelect) {
+    isStageRaceSelect.addEventListener('change', () => {
+      updateRaceDatesFromStageDate();
+    });
+  }
+
+  const numStagesInput = document.getElementById('stage-editor-race-num-stages');
+  if (numStagesInput) {
+    numStagesInput.addEventListener('input', () => {
+      updateRaceDatesFromStageDate();
+    });
+  }
+
+  const startDateInput = document.getElementById('stage-editor-race-start-date');
+  if (startDateInput) {
+    startDateInput.addEventListener('change', () => {
+      const startDate = (startDateInput as HTMLInputElement).value.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+        const isStageRaceSel = document.getElementById('stage-editor-race-is-stage-race') as HTMLSelectElement | null;
+        const isStageRace = isStageRaceSel ? Number(isStageRaceSel.value) === 1 : false;
+        const endDateInput = $<HTMLInputElement>('stage-editor-race-end-date');
+        if (endDateInput) {
+          if (!isStageRace) {
+            endDateInput.value = startDate;
+          } else {
+            const numStagesIn = document.getElementById('stage-editor-race-num-stages') as HTMLInputElement | null;
+            const numStages = numStagesIn ? (Number(numStagesIn.value) || 1) : 1;
+            const [year, month, day] = startDate.split('-').map(Number);
+            const d = new Date(year, month - 1, day);
+            let extraDays = 0;
+            if (numStages === 21) {
+              extraDays = 2;
+            } else if (numStages >= 14) {
+              extraDays = 1;
+            }
+            const totalDays = numStages + extraDays;
+            d.setDate(d.getDate() + totalDays - 1);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            endDateInput.value = `${yyyy}-${mm}-${dd}`;
+          }
+        }
+      }
     });
   }
 
@@ -2429,7 +2540,10 @@ export function initStageEditorListeners(): void {
   if (stageIdInput && raceIdInput) {
     [stageIdInput, raceIdInput].forEach(input => {
       input.addEventListener('keydown', (e) => {
-        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          isTyping = false;
+          if (typingTimeout) clearTimeout(typingTimeout);
+        } else {
           isTyping = true;
           if (typingTimeout) clearTimeout(typingTimeout);
         }
@@ -2441,6 +2555,9 @@ export function initStageEditorListeners(): void {
             isTyping = false;
           }, 150);
         }
+      });
+      input.addEventListener('mousedown', () => {
+        isTyping = false;
       });
       input.addEventListener('blur', () => {
         isTyping = false;

@@ -107,6 +107,8 @@ export const state: {
   draftOverlayAuto: boolean;
   draftOverlayPicks: any[] | null;
   draftOverlayCurrentIndex: number;
+  draftSpeedMultiplier: number;
+  draftPaused: boolean;
   selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
   teamTableSort: {
     key: TeamTableSortKey;
@@ -161,7 +163,7 @@ export const state: {
     stage: boolean;
   };
   teamStatsPayload: TeamStatsPayload | null;
-  teamStatsTab: 'topResults' | 'career' | 'contracts';
+  teamStatsTab: 'topResults' | 'career' | 'contracts' | 'transfers';
   teamStatsSelectedTeamId: number | null;
   teamStatsSelectedRosterYear: number | null;
   teamStatsRosterSort: {
@@ -223,6 +225,8 @@ export const state: {
   draftOverlayAuto: true,
   draftOverlayPicks: null,
   draftOverlayCurrentIndex: 0,
+  draftSpeedMultiplier: 1,
+  draftPaused: false,
   selectedSeasonStandingScope: 'riders',
   teamTableSort: {
     key: 'name',
