@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { $, esc, state, renderFlag, renderCountry, renderRiderAvailabilityMarker, formatRiderName, getRiderCountryCode, getRiderRoleName, renderSkillValueWithDelta, renderRaceFormBonusValue, renderSeasonFormValue, renderLoadMalusValue, renderSeasonFormPhase, renderRiderProgramButton, isActiveView, showLoading, hideLoading, getRiderSpecializationLabel, } from '../state';
+import { $, esc, state, renderFlag, renderCountry, renderRiderAvailabilityMarker, formatRiderName, getRiderCountryCode, getRiderRoleName, renderSkillValueWithDelta, renderRaceFormBonusValue, renderSeasonFormValue, renderLoadMalusValue, renderSeasonFormPhase, renderRiderProgramButton, isActiveView, showLoading, hideLoading, getRiderSpecializationLabel, getRidersByTeam, } from '../state';
 import { renderRiderNameLink } from '../riderStatsUi';
 // Dynamically or directly imported view functions
 import { openRiderProgram } from './dashboard';
@@ -568,7 +568,7 @@ export function renderTeamDetail(teamId) {
         detail.innerHTML = '';
         return;
     }
-    const riders = sortTeamRiders(state.riders.filter(r => r.activeTeamId === teamId));
+    const riders = sortTeamRiders(getRidersByTeam(teamId));
     const divBadge = team.division === 'U23' ? 'badge-u23' : 'badge-classics';
     const activeColumns = getActiveTeamTableColumns();
     detail.innerHTML = `

@@ -22,6 +22,7 @@ import {
   showLoading,
   hideLoading,
   getRiderSpecializationLabel,
+  getRidersByTeam,
 } from '../state';
 import type { Team, Rider } from '../../../shared/types';
 import type { TeamDetailPage, TeamTableSortKey, TeamTableColumn } from '../state';
@@ -603,7 +604,7 @@ export function renderTeamDetail(teamId: number | null): void {
   }
   const team = state.teams.find(t => t.id === teamId);
   if (!team) { detail.innerHTML = ''; return; }
-  const riders = sortTeamRiders(state.riders.filter(r => r.activeTeamId === teamId));
+  const riders = sortTeamRiders(getRidersByTeam(teamId));
   const divBadge = team.division === 'U23' ? 'badge-u23' : 'badge-classics';
   const activeColumns = getActiveTeamTableColumns();
   detail.innerHTML = `

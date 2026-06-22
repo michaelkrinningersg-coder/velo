@@ -1284,6 +1284,7 @@ export class GameStateService {
 
     const raceRepo = new RaceRepository(this.db); const riderRepo = new RiderRepository(this.db); const teamRepo = new TeamRepository(this.db);
     const gsRepo = new GameStateRepository(this.db);
+    const allRiders = riderRepo.getRiders();
     for (const row of rows) {
       const race = raceRepo.getRaceById(row.race_id);
       const stage = raceRepo.getStageById(row.stage_id);
@@ -1294,7 +1295,7 @@ export class GameStateService {
       const compositeRepo = {
         getCurrentSeason: () => gsRepo.getCurrentSeason(),
         getCurrentDate: () => gsRepo.getCurrentDate(),
-        getRiders: (teamId?: number) => (riderRepo as any).getRiders(teamId),
+        getRiders: (teamId?: number) => teamId != null ? (riderRepo as any).getRiders(teamId) : allRiders,
         getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
         getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
         getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),

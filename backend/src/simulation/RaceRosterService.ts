@@ -107,7 +107,7 @@ function groupRidersByTeam(riders: Rider[]): Map<number, Rider[]> {
   return ridersByTeamId;
 }
 
-function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders = repo.getRiders()): Map<number, RiderLockReason> {
+function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders: Rider[]): Map<number, RiderLockReason> {
   const currentDate = repo.getCurrentDate();
   const locks = new Map<number, RiderLockReason>();
 
@@ -873,7 +873,7 @@ export function previewRaceRoster(db: Database.Database, repo: any, race: Race, 
 }
 
 export function previewRaceRosterEditor(db: Database.Database, repo: any, race: Race, stage: Stage): RaceRosterEditorPayload {
-  const riderLocks = buildRiderLockMap(db, repo, race);
+  const riderLocks = buildRiderLockMap(db, repo, race, repo.getRiders());
   const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider: any) => rider.id));
   const playerTeam = getPlayerTeam(repo);
   const teams = [{
@@ -902,7 +902,7 @@ export function applyRaceRosterSelection(db: Database.Database, repo: any, race:
     throw new Error('Das Starterfeld kann für dieses Rennen jetzt nicht mehr bearbeitet werden.');
   }
 
-  const riderLocks = buildRiderLockMap(db, repo, race);
+  const riderLocks = buildRiderLockMap(db, repo, race, repo.getRiders());
   const selectedRiderIds = new Set(riderIds.filter((riderId: any) => Number.isInteger(riderId)));
   const playerTeam = getPlayerTeam(repo);
   const riderLimit = race.category?.numberOfRiders ?? 0;

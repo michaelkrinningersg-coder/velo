@@ -123,12 +123,10 @@ class GameStateService {
         if (this.syncedStateDate !== state.currentDate) {
             this.syncCurrentSeasonFormState(state.currentDate, state.season);
             this.syncDailyFormHistory(state.currentDate);
-            this.syncedStateDate = state.currentDate;
-        }
-        // Lazily populate rider_skill_yearly_baseline for current season if missing
-        const baselineCount = this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season).c;
-        if (baselineCount === 0) {
-            this.db.prepare(`
+            // Lazily populate rider_skill_yearly_baseline for current season if missing
+            const baselineCount = this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season).c;
+            if (baselineCount === 0) {
+                this.db.prepare(`
           INSERT OR IGNORE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
           SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
@@ -144,6 +142,8 @@ class GameStateService {
           UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
         `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+            }
+            this.syncedStateDate = state.currentDate;
         }
         this.db.prepare(`
       INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
@@ -1031,6 +1031,7 @@ class GameStateService {
         const riderRepo = new RiderRepository_1.RiderRepository(this.db);
         const teamRepo = new TeamRepository_1.TeamRepository(this.db);
         const gsRepo = new GameStateRepository_1.GameStateRepository(this.db);
+        const allRiders = riderRepo.getRiders();
         for (const row of rows) {
             const race = raceRepo.getRaceById(row.race_id);
             const stage = raceRepo.getStageById(row.stage_id);
@@ -1041,7 +1042,7 @@ class GameStateService {
             const compositeRepo = {
                 getCurrentSeason: () => gsRepo.getCurrentSeason(),
                 getCurrentDate: () => gsRepo.getCurrentDate(),
-                getRiders: (teamId) => riderRepo.getRiders(teamId),
+                getRiders: (teamId) => teamId != null ? riderRepo.getRiders(teamId) : allRiders,
                 getTeams: (teamId) => teamRepo.getTeams(teamId),
                 getRaceRiders: (raceId) => raceRepo.getRaceRiders(raceId),
                 getRaceProgramsForRace: (raceId) => raceRepo.getRaceProgramsForRace(raceId),

@@ -512,6 +512,32 @@ export function formatMarkerLabel(markerType: StageMarkerType, label: string): s
   return label;
 }
 
+// ============================================================
+// Memoization & Caching
+// ============================================================
+
+let cachedRidersByTeam = new Map<number, Rider[]>();
+let lastRidersRef: Rider[] | null = null;
+
+export function getRidersByTeam(teamId: number): Rider[] {
+  if (state.riders !== lastRidersRef) {
+    cachedRidersByTeam.clear();
+    lastRidersRef = state.riders;
+    for (let i = 0; i < state.riders.length; i++) {
+      const r = state.riders[i];
+      if (r.activeTeamId != null) {
+        let list = cachedRidersByTeam.get(r.activeTeamId);
+        if (!list) {
+          list = [];
+          cachedRidersByTeam.set(r.activeTeamId, list);
+        }
+        list.push(r);
+      }
+    }
+  }
+  return cachedRidersByTeam.get(teamId) || [];
+}
+
 export const FLAG_CODE_BY_CODE3: Record<string, string> = {
   BEL: 'be',
   FRA: 'fr',

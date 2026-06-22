@@ -120,7 +120,7 @@ export class RiderRepository {
       ) as RiderRow[];
     
     const riderIdsForStats = teamId != null ? rows.map(row => row.id) : undefined;
-    const seasonPointsByRiderId = this.getSeasonPointsByRiderId(activeSeason);
+    const seasonPointsByRiderId = this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats);
     const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate);
     const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats);
     const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason);
@@ -1799,17 +1799,38 @@ export class RiderRepository {
   }
 
 
-  public getSeasonPointsByRiderId(season: number): Map<number, number> {
+  public getSeasonPointsByRiderId(season: number, riderIds?: number[]): Map<number, number> {
     if (!tableExists(this.db, 'season_point_events')) {
       return new Map();
     }
 
-    const rows = this.db.prepare(`
-      SELECT rider_id, SUM(points_awarded) AS points_total
-      FROM season_point_events
-      WHERE season = ?
-      GROUP BY rider_id
-    `).all(season) as Array<{ rider_id: number; points_total: number }>;
+    let sql: string;
+    let args: any[];
+
+    if (riderIds && riderIds.length === 0) {
+      return new Map();
+    }
+
+    if (riderIds && riderIds.length <= 500) {
+      const placeholders = riderIds.map(() => '?').join(',');
+      sql = `
+        SELECT rider_id, SUM(points_awarded) AS points_total
+        FROM season_point_events
+        WHERE season = ? AND rider_id IN (${placeholders})
+        GROUP BY rider_id
+      `;
+      args = [season, ...riderIds];
+    } else {
+      sql = `
+        SELECT rider_id, SUM(points_awarded) AS points_total
+        FROM season_point_events
+        WHERE season = ?
+        GROUP BY rider_id
+      `;
+      args = [season];
+    }
+
+    const rows = this.db.prepare(sql).all(...args) as Array<{ rider_id: number; points_total: number }>;
 
     return new Map(rows.map((row) => [row.rider_id, row.points_total]));
   }

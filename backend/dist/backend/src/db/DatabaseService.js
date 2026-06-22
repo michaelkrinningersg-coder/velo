@@ -1329,6 +1329,7 @@ class DatabaseService {
         this.ensureTeamPreferencesData(this.activeConnection);
         this.ensureReferenceData(this.activeConnection);
         this.ensureDayChangeIndexes(this.activeConnection);
+        this.ensurePerformanceIndexes(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
         new RiderProgramService_1.RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
         new ContractService_1.ContractService(this.activeConnection).checkContractStatuses(gameState.season);
@@ -1377,6 +1378,22 @@ class DatabaseService {
         ON season_point_events(rider_id);
     `);
     }
+    ensurePerformanceIndexes(db) {
+        const createIfTable = (table, sql) => {
+            if (!tableExists(db, table))
+                return;
+            try {
+                db.exec(sql);
+            }
+            catch {
+                // Ignore
+            }
+        };
+        createIfTable('contracts', `CREATE INDEX IF NOT EXISTS idx_contracts_team ON contracts(team_id);`);
+        createIfTable('stage_entries', `CREATE INDEX IF NOT EXISTS idx_stage_entries_team ON stage_entries(team_id);`);
+        createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_team ON results_history(team_id);`);
+        createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_stage ON results_history(stage_id, result_type_id, rank);`);
+    }
     getActiveConnection() {
         if (!this.activeConnection) {
             throw new Error('Kein Savegame geladen. Bitte zuerst ein Savegame laden.');
@@ -1395,6 +1412,7 @@ class DatabaseService {
         this.ensureRiderSeasonRolesSchema(this.activeConnection);
         this.ensureSeasonStandingsSnapshotsSchema(this.activeConnection);
         this.ensureTeamPreferencesData(this.activeConnection);
+        this.ensurePerformanceIndexes(this.activeConnection);
         return this.activeConnection;
     }
     getMasterConnection() {

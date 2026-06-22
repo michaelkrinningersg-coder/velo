@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { $, esc, state, formatDate, formatRaceTime, formatRaceGap, renderMiniJersey, renderResultsJerseyColumn, renderResultsFlagColumn, resolveRiderCountryCode, findRiderById, findRaceById, findStageById, renderResultsParticipant, renderRiderNameLink, renderTeamNameLink, renderNonFinisherStatusBadge, formatNonFinisherReason, renderRankDelta, formatMarkerLabel, FLAG_CODE_BY_CODE3, GC_RESULT_TYPE_ID, POINTS_RESULT_TYPE_ID, MOUNTAIN_RESULT_TYPE_ID, } from '../state';
+import { $, esc, state, formatDate, formatRaceTime, formatRaceGap, renderMiniJersey, renderResultsJerseyColumn, renderResultsFlagColumn, resolveRiderCountryCode, findRiderById, findRaceById, findStageById, renderResultsParticipant, renderRiderNameLink, renderTeamNameLink, renderNonFinisherStatusBadge, formatNonFinisherReason, renderRankDelta, formatMarkerLabel, FLAG_CODE_BY_CODE3, GC_RESULT_TYPE_ID, POINTS_RESULT_TYPE_ID, MOUNTAIN_RESULT_TYPE_ID, getRidersByTeam, } from '../state';
 import { renderWeatherIcon } from './riderStats';
 export const RESULTS_STAGE_OVERVIEW_KEY = '__stage_overview__';
 export const RESULTS_NON_FINISHERS_KEY = '__non_finishers__';
@@ -230,7 +230,7 @@ function renderRaceRoster() {
     const getTeamTop10Average = (teamId) => {
         if (teamId == null)
             return 0;
-        const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
+        const teamRiders = getRidersByTeam(teamId);
         if (teamRiders.length === 0)
             return 0;
         const scores = teamRiders.map(r => r.overallRating ?? 0);

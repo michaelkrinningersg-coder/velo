@@ -30,6 +30,7 @@ import {
   showLoading,
   hideLoading,
   getRiderSpecializationLabel,
+  getRidersByTeam,
 } from '../state';
 import type {
   StageResultsPayload,
@@ -294,7 +295,7 @@ function renderRaceRoster(): string {
 
   const getTeamTop10Average = (teamId: number | null): number => {
     if (teamId == null) return 0;
-    const teamRiders = state.riders.filter(r => r.activeTeamId === teamId);
+    const teamRiders = getRidersByTeam(teamId);
     if (teamRiders.length === 0) return 0;
 
     const scores = teamRiders.map(r => r.overallRating ?? 0);

@@ -77,7 +77,7 @@ function groupRidersByTeam(riders) {
     }
     return ridersByTeamId;
 }
-function buildRiderLockMap(db, repo, race, riders = repo.getRiders()) {
+function buildRiderLockMap(db, repo, race, riders) {
     const currentDate = repo.getCurrentDate();
     const locks = new Map();
     let hasCobbleStage = false;
@@ -673,7 +673,7 @@ function previewRaceRoster(db, repo, race, stage) {
     return selected;
 }
 function previewRaceRosterEditor(db, repo, race, stage) {
-    const riderLocks = buildRiderLockMap(db, repo, race);
+    const riderLocks = buildRiderLockMap(db, repo, race, repo.getRiders());
     const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider) => rider.id));
     const playerTeam = getPlayerTeam(repo);
     const teams = [{
@@ -699,7 +699,7 @@ function applyRaceRosterSelection(db, repo, race, stage, riderIds) {
     if (!canCustomizeRoster(race, stage)) {
         throw new Error('Das Starterfeld kann für dieses Rennen jetzt nicht mehr bearbeitet werden.');
     }
-    const riderLocks = buildRiderLockMap(db, repo, race);
+    const riderLocks = buildRiderLockMap(db, repo, race, repo.getRiders());
     const selectedRiderIds = new Set(riderIds.filter((riderId) => Number.isInteger(riderId)));
     const playerTeam = getPlayerTeam(repo);
     const riderLimit = race.category?.numberOfRiders ?? 0;
