@@ -903,6 +903,7 @@ export class GameStateService {
       DELETE FROM rider_r_form_events
       WHERE rider_id = ?
     `);
+    const updates: any[][] = [];
 
     for (const row of rows) {
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
@@ -1183,7 +1184,7 @@ export class GameStateService {
         || row.long_term_fatigue_locked !== longTermLocked
         || row.consecutive_non_race_days !== consecutiveNonRaceDays
       ) {
-        updateState.run(
+        updates.push([
           nextSeason,
           roundedFormBonus,
           raceFormBonus,
@@ -1199,8 +1200,16 @@ export class GameStateService {
           longTermLocked,
           consecutiveNonRaceDays,
           row.rider_id,
-        );
+        ]);
       }
+    }
+
+    if (updates.length > 0) {
+      this.db.transaction(() => {
+        for (const u of updates) {
+          updateState.run(...u);
+        }
+      })();
     }
 
     if (seasonChangedRiderIds.length > 0) {

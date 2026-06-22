@@ -568,7 +568,20 @@ export function renderTeamDetail(teamId) {
         detail.innerHTML = '';
         return;
     }
-    const riders = sortTeamRiders(getRidersByTeam(teamId));
+    const teamRiders = getRidersByTeam(teamId);
+    const needsDetails = teamRiders.some(r => r.yearStartSkills === undefined);
+    if (needsDetails) {
+        detail.innerHTML = '<p class="text-muted" style="padding:1rem 0">Lade Team-Daten...</p>';
+        api.getRiders(teamId, false, false).then(res => {
+            if (res.success && res.data) {
+                const detailedById = new Map(res.data.map(r => [r.id, r]));
+                state.riders = state.riders.map(r => detailedById.get(r.id) || r);
+                renderTeamDetail(teamId);
+            }
+        }).catch(console.error);
+        return;
+    }
+    const riders = sortTeamRiders(teamRiders);
     const divBadge = team.division === 'U23' ? 'badge-u23' : 'badge-classics';
     const activeColumns = getActiveTeamTableColumns();
     detail.innerHTML = `

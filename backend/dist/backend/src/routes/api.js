@@ -214,10 +214,11 @@ function createRouter(dbService) {
         const teamId = req.query['teamId'] ? Number(req.query['teamId']) : undefined;
         const onlyWithTeam = req.query['onlyWithTeam'] === 'true';
         const season = req.query['season'] ? Number(req.query['season']) : undefined;
+        const summary = req.query['summary'] === 'true';
         try {
             const db = dbService.getActiveConnection();
             getGss().ensureState();
-            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId, false, onlyWithTeam, season));
+            ok(res, new RiderRepository_1.RiderRepository(db).getRiders(teamId, false, onlyWithTeam, season, !summary));
         }
         catch (e) {
             fail(res, 400, e.message);

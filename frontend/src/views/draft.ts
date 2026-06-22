@@ -947,7 +947,7 @@ export async function startDraftPresentation(season: number): Promise<void> {
   try {
     const [res, ridersRes, teamsRes] = await Promise.all([
       api.getDraftDetails(season),
-      api.getRiders(undefined, false, season),
+      api.getRiders(undefined, false, true, season),
       api.getTeams(),
     ]);
 

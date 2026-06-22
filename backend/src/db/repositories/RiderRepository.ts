@@ -104,7 +104,7 @@ export class RiderRepository {
   }
 
 
-  public getRiders(teamId?: number, includeFormDebug = false, onlyWithTeam = false, season?: number): Rider[] {
+  public getRiders(teamId?: number, includeFormDebug = false, onlyWithTeam = false, season?: number, includeDetailedStats = true): Rider[] {
     const gameStateRepo = new GameStateRepository(this.db);
     const activeSeason = season ?? gameStateRepo.getCurrentSeason();
     const currentDate = gameStateRepo.getCurrentDate();
@@ -120,10 +120,10 @@ export class RiderRepository {
       ) as RiderRow[];
     
     const riderIdsForStats = teamId != null ? rows.map(row => row.id) : undefined;
-    const seasonPointsByRiderId = this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats);
-    const raceFormSourcesByRiderId = this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate);
-    const seasonRaceStatsByRiderId = this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats);
-    const yearStartSkillsByRiderId = this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason);
+    const seasonPointsByRiderId = includeDetailedStats ? this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats) : new Map();
+    const raceFormSourcesByRiderId = includeDetailedStats ? this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate) : new Map();
+    const seasonRaceStatsByRiderId = includeDetailedStats ? this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats) : new Map();
+    const yearStartSkillsByRiderId = includeDetailedStats ? this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason) : new Map();
     const riders = rows.map((row) => ({
       ...mapRider(row, activeSeason, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
       yearStartSkills: yearStartSkillsByRiderId.get(row.id),
@@ -131,7 +131,7 @@ export class RiderRepository {
       seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
       seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
     }));
-    const ridersWithPrograms = this.attachProgramData(riders, activeSeason);
+    const ridersWithPrograms = includeDetailedStats ? this.attachProgramData(riders, activeSeason) : riders;
     const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
     return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, activeSeason, currentDate) : ridersWithMentors;
   }
@@ -885,19 +885,12 @@ export class RiderRepository {
     const seasonEnd = `${season}-12-31`;
 
     if (tableExists(this.db, 'rider_r_form_daily_awards')) {
-      let awardRows: Array<{ rider_id: number; award_date: string; award_type: 'build' }>;
-      if (riderIds.length > 500) {
-        awardRows = this.db.prepare(`
-          SELECT rider_id, award_date, award_type
-          FROM rider_r_form_daily_awards
-          WHERE award_date >= ?
-            AND award_date <= ?
-            AND award_type = 'build'
-          ORDER BY award_date ASC
-        `).all(seasonStart, seasonEnd) as any;
-      } else {
-        const placeholders = riderIds.map(() => '?').join(', ');
-        awardRows = this.db.prepare(`
+      const chunkSize = 500;
+      let awardRows: Array<{ rider_id: number; award_date: string; award_type: 'build' }> = [];
+      for (let i = 0; i < riderIds.length; i += chunkSize) {
+        const chunk = riderIds.slice(i, i + chunkSize);
+        const placeholders = chunk.map(() => '?').join(', ');
+        const chunkRows = this.db.prepare(`
           SELECT rider_id, award_date, award_type
           FROM rider_r_form_daily_awards
           WHERE rider_id IN (${placeholders})
@@ -905,7 +898,8 @@ export class RiderRepository {
             AND award_date <= ?
             AND award_type = 'build'
           ORDER BY award_date ASC
-        `).all(...riderIds, seasonStart, seasonEnd) as any;
+        `).all(...chunk, seasonStart, seasonEnd) as any;
+        awardRows = awardRows.concat(chunkRows);
       }
 
       for (const row of awardRows) {
@@ -921,19 +915,12 @@ export class RiderRepository {
     }
 
     if (tableExists(this.db, 'rider_r_form_events')) {
-      let eventRows: Array<{ rider_id: number; source_date: string; amount: number }>;
-      if (riderIds.length > 500) {
-        eventRows = this.db.prepare(`
-          SELECT rider_id, source_date, amount
-          FROM rider_r_form_events
-          WHERE source_date >= ?
-            AND source_date <= ?
-            AND expires_on > ?
-          ORDER BY source_date ASC
-        `).all(seasonStart, seasonEnd, currentDate) as any;
-      } else {
-        const placeholders = riderIds.map(() => '?').join(', ');
-        eventRows = this.db.prepare(`
+      const chunkSize = 500;
+      let eventRows: Array<{ rider_id: number; source_date: string; amount: number }> = [];
+      for (let i = 0; i < riderIds.length; i += chunkSize) {
+        const chunk = riderIds.slice(i, i + chunkSize);
+        const placeholders = chunk.map(() => '?').join(', ');
+        const chunkRows = this.db.prepare(`
           SELECT rider_id, source_date, amount
           FROM rider_r_form_events
           WHERE rider_id IN (${placeholders})
@@ -941,7 +928,8 @@ export class RiderRepository {
             AND source_date <= ?
             AND expires_on > ?
           ORDER BY source_date ASC
-        `).all(...riderIds, seasonStart, seasonEnd, currentDate) as any;
+        `).all(...chunk, seasonStart, seasonEnd, currentDate) as any;
+        eventRows = eventRows.concat(chunkRows);
       }
 
       for (const row of eventRows) {

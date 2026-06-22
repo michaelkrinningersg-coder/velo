@@ -728,6 +728,7 @@ class GameStateService {
       DELETE FROM rider_r_form_events
       WHERE rider_id = ?
     `);
+        const updates = [];
         for (const row of rows) {
             const isTier1 = row.active_team_id != null && row.team_tier === 1;
             if (!isTier1) {
@@ -954,8 +955,31 @@ class GameStateService {
                 || row.long_term_fatigue_decayable !== longTermDecayable
                 || row.long_term_fatigue_locked !== longTermLocked
                 || row.consecutive_non_race_days !== consecutiveNonRaceDays) {
-                updateState.run(nextSeason, roundedFormBonus, raceFormBonus, roundedPeakSForm, peakRForm, activePeakDate, peakDatesJson, healthStatus, unavailableUntil, remainingDays, shortTermFatigue, longTermDecayable, longTermLocked, consecutiveNonRaceDays, row.rider_id);
+                updates.push([
+                    nextSeason,
+                    roundedFormBonus,
+                    raceFormBonus,
+                    roundedPeakSForm,
+                    peakRForm,
+                    activePeakDate,
+                    peakDatesJson,
+                    healthStatus,
+                    unavailableUntil,
+                    remainingDays,
+                    shortTermFatigue,
+                    longTermDecayable,
+                    longTermLocked,
+                    consecutiveNonRaceDays,
+                    row.rider_id,
+                ]);
             }
+        }
+        if (updates.length > 0) {
+            this.db.transaction(() => {
+                for (const u of updates) {
+                    updateState.run(...u);
+                }
+            })();
         }
         if (seasonChangedRiderIds.length > 0) {
             // Use one prepared statement inside a tight loop instead of building a
