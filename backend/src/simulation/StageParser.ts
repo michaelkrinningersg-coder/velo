@@ -456,15 +456,23 @@ export class StageParser {
     return StageParser.summarizeStageProfile(filename, initialStartElevation).segments;
   }
 
+  private static summaryCache = new Map<string, ParsedStageSummary>();
+
   public static summarizeStageProfile(filename: string, initialStartElevation: number): ParsedStageSummary {
-    const stageSegments = readStageSegments(filename, initialStartElevation);
-    const points = derivePoints(stageSegments, filename);
-    return {
-      distanceKm: points[points.length - 1]?.kmMark ?? 0,
-      elevationGainMeters: calculateElevationGain(points),
-      points,
-      segments: stageSegments.map((segment, index) => createParsedSegment(segment, points[index]?.kmMark ?? 0, index)),
-    };
+    const cacheKey = `${filename}:${initialStartElevation}`;
+    let summary = StageParser.summaryCache.get(cacheKey);
+    if (!summary) {
+      const stageSegments = readStageSegments(filename, initialStartElevation);
+      const points = derivePoints(stageSegments, filename);
+      summary = {
+        distanceKm: points[points.length - 1]?.kmMark ?? 0,
+        elevationGainMeters: calculateElevationGain(points),
+        points,
+        segments: stageSegments.map((segment, index) => createParsedSegment(segment, points[index]?.kmMark ?? 0, index)),
+      };
+      StageParser.summaryCache.set(cacheKey, summary);
+    }
+    return summary;
   }
 }
 

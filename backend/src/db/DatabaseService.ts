@@ -1625,6 +1625,8 @@ export class DatabaseService {
     createIfTable('stage_entries', `CREATE INDEX IF NOT EXISTS idx_stage_entries_team ON stage_entries(team_id);`);
     createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_team ON results_history(team_id);`);
     createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_stage ON results_history(stage_id, result_type_id, rank);`);
+    createIfTable('results', `CREATE INDEX IF NOT EXISTS idx_results_race_id ON results(race_id);`);
+    createIfTable('riders', `CREATE INDEX IF NOT EXISTS idx_riders_active_team ON riders(active_team_id);`);
   }
 
   public getActiveConnection(): Database.Database {
