@@ -17,7 +17,7 @@ export class RiderRepository {
   }
 
 
-  private getRidersQuery(useContracts: boolean, filterByTeam: boolean, onlyWithTeam = false): string {
+  private getRidersQuery(useContracts: boolean, filterByTeam: boolean, onlyWithTeam = false, isCurrentSeason = true): string {
     const useDailyState = tableExists(this.db, 'rider_daily_state');
     const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
     const countrySelect = `
@@ -44,6 +44,8 @@ export class RiderRepository {
       ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
       ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
       ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+      ${useDailyState ? 'rider_state.season_points' : '0'} AS season_points,
+      ${useDailyState ? 'rider_state.season_wins' : '0'} AS season_wins,
       ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
       ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
       ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
@@ -59,6 +61,36 @@ export class RiderRepository {
       } else {
         const teamFilter = onlyWithTeam ? 'AND active_team_id IS NOT NULL' : '';
         return `SELECT ${countrySelect}, NULL AS contract_end_season FROM riders JOIN sta_country country ON country.id = riders.country_id LEFT JOIN sta_role role ON role.id = riders.role_id LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id ${riderStateJoin} ${freeRaceFormJoin} WHERE is_retired = 0 ${teamFilter} ORDER BY overall_rating DESC`;
+      }
+    }
+
+    if (isCurrentSeason) {
+      const activeContractJoin = `
+        LEFT JOIN contracts current_contract
+          ON current_contract.id = riders.active_contract_id
+      `;
+
+      const selectWithResolvedContract = `
+        SELECT ${countrySelect},
+               riders.active_team_id AS active_team_id,
+               riders.active_contract_id AS active_contract_id,
+               current_contract.end_season AS contract_end_season
+        FROM riders
+        JOIN sta_country country ON country.id = riders.country_id
+        LEFT JOIN sta_role role ON role.id = riders.role_id
+        LEFT JOIN type_rider rider_type ON rider_type.id = riders.rider_type_id
+        LEFT JOIN type_rider specialization_1 ON specialization_1.id = riders.specialization_1_id
+        LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
+        LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
+        ${riderStateJoin}
+        ${activeContractJoin}
+      `;
+
+      if (filterByTeam) {
+        return `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.active_team_id = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
+      } else {
+        const teamFilter = onlyWithTeam ? 'AND riders.active_team_id IS NOT NULL' : '';
+        return `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ${teamFilter} ORDER BY riders.overall_rating DESC`;
       }
     }
 
@@ -109,27 +141,42 @@ export class RiderRepository {
     const activeSeason = season ?? gameStateRepo.getCurrentSeason();
     const currentDate = gameStateRepo.getCurrentDate();
     const useContracts = tableExists(this.db, 'contracts');
-    const rows: RiderRow[] = teamId != null
-      ? (useContracts
-        ? this.db.prepare(this.getRidersQuery(true, true)).all(activeSeason, activeSeason, teamId)
-        : this.db.prepare(this.getRidersQuery(false, true)).all(teamId)
-      ) as RiderRow[]
-      : (useContracts
-        ? this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam)).all(activeSeason, activeSeason)
-        : this.db.prepare(this.getRidersQuery(false, false, onlyWithTeam)).all()
-      ) as RiderRow[];
+    const isCurrentSeason = activeSeason === gameStateRepo.getCurrentSeason();
+
+    let rows: RiderRow[];
+    if (teamId != null) {
+      if (useContracts) {
+        if (isCurrentSeason) {
+          rows = this.db.prepare(this.getRidersQuery(true, true, false, true)).all(teamId) as RiderRow[];
+        } else {
+          rows = this.db.prepare(this.getRidersQuery(true, true, false, false)).all(activeSeason, activeSeason, teamId) as RiderRow[];
+        }
+      } else {
+        rows = this.db.prepare(this.getRidersQuery(false, true, false)).all(teamId) as RiderRow[];
+      }
+    } else {
+      if (useContracts) {
+        if (isCurrentSeason) {
+          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, true)).all() as RiderRow[];
+        } else {
+          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, false)).all(activeSeason, activeSeason) as RiderRow[];
+        }
+      } else {
+        rows = this.db.prepare(this.getRidersQuery(false, false, onlyWithTeam)).all() as RiderRow[];
+      }
+    }
     
     const riderIdsForStats = teamId != null ? rows.map(row => row.id) : undefined;
-    const seasonPointsByRiderId = includeDetailedStats ? this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats) : new Map();
+    const seasonPointsByRiderId = (includeDetailedStats && !isCurrentSeason) ? this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats) : new Map();
     const raceFormSourcesByRiderId = includeDetailedStats ? this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate) : new Map();
-    const seasonRaceStatsByRiderId = includeDetailedStats ? this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats) : new Map();
+    const seasonRaceStatsByRiderId = (includeDetailedStats && !isCurrentSeason) ? this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats, isCurrentSeason) : new Map();
     const yearStartSkillsByRiderId = includeDetailedStats ? this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason) : new Map();
     const riders = rows.map((row) => ({
-      ...mapRider(row, activeSeason, currentDate, seasonPointsByRiderId.get(row.id) ?? 0),
+      ...mapRider(row, activeSeason, currentDate, isCurrentSeason ? (row.season_points ?? 0) : (seasonPointsByRiderId.get(row.id) ?? 0)),
       yearStartSkills: yearStartSkillsByRiderId.get(row.id),
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
-      seasonRaceDays: seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0,
-      seasonWins: seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0,
+      seasonRaceDays: isCurrentSeason ? (row.season_race_days_total ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0),
+      seasonWins: isCurrentSeason ? (row.season_wins ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0),
     }));
     const ridersWithPrograms = includeDetailedStats ? this.attachProgramData(riders, activeSeason) : riders;
     const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
@@ -376,8 +423,8 @@ export class RiderRepository {
 
     const currentSeason = new GameStateRepository(this.db).getCurrentSeason();
     const currentSeasonRank = new ResultRepository(this.db).getSeasonRankForRider(currentSeason, rider.id);
-    const currentSeasonPoints = this.getSeasonPointsByRiderId(currentSeason).get(rider.id) ?? 0;
-    const currentSeasonRaceStats = this.getSeasonRaceStatsByRiderId(currentSeason, [rider.id]).get(rider.id) ?? { raceDays: 0, wins: 0 };
+    const currentSeasonPoints = rider.seasonPoints ?? 0;
+    const currentSeasonRaceStats = { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 };
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
@@ -783,9 +830,9 @@ export class RiderRepository {
   }
 
 
-  private getSeasonRaceStatsByRiderId(season: number, riderIds?: number[]): Map<number, RiderSeasonRaceStats> {
+  private getSeasonRaceStatsByRiderId(season: number, riderIds?: number[], skipRaceDays = false): Map<number, RiderSeasonRaceStats> {
     const statsByRiderId = new Map<number, RiderSeasonRaceStats>();
-    if (!tableExists(this.db, 'results') || !tableExists(this.db, 'stages')) {
+    if (!tableExists(this.db, 'results') || (!skipRaceDays && !tableExists(this.db, 'stages'))) {
       return statsByRiderId;
     }
 
@@ -802,17 +849,19 @@ export class RiderRepository {
     const argsResultsGc = riderIds ? [RESULT_TYPE_IDS.gc, season, ...riderIds] : [RESULT_TYPE_IDS.gc, season];
 
     // 1. Race Days
-    const raceDaysRows = this.db.prepare(`
-      SELECT stage_entries.rider_id AS rider_id, COUNT(DISTINCT stage_entries.stage_id) AS race_days
-      FROM stage_entries
-      JOIN stages ON stages.id = stage_entries.stage_id
-      WHERE stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-        ${riderFilterStageEntries}
-      GROUP BY stage_entries.rider_id
-    `).all(...argsStageEntries) as Array<{ rider_id: number; race_days: number }>;
+    if (!skipRaceDays) {
+      const raceDaysRows = this.db.prepare(`
+        SELECT stage_entries.rider_id AS rider_id, COUNT(DISTINCT stage_entries.stage_id) AS race_days
+        FROM stage_entries
+        JOIN stages ON stages.id = stage_entries.stage_id
+        WHERE stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+          ${riderFilterStageEntries}
+        GROUP BY stage_entries.rider_id
+      `).all(...argsStageEntries) as Array<{ rider_id: number; race_days: number }>;
 
-    for (const row of raceDaysRows) {
-      statsByRiderId.set(row.rider_id, { raceDays: row.race_days, wins: 0 });
+      for (const row of raceDaysRows) {
+        statsByRiderId.set(row.rider_id, { raceDays: row.race_days, wins: 0 });
+      }
     }
 
     // 2. Individual Stage Wins
@@ -1012,6 +1061,8 @@ export class RiderRepository {
              ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
              ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
+             ${useDailyState ? 'rider_state.season_points' : '0'} AS season_points,
+             ${useDailyState ? 'rider_state.season_wins' : '0'} AS season_wins,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
              ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,

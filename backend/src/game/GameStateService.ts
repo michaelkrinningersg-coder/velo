@@ -140,6 +140,7 @@ export class GameStateService {
     this.knownTables.add('rider_form_history');
     this.knownTables.add('rider_r_form_daily_awards');
     this.knownTables.add('rider_peak_awards');
+    this.knownColumns.add('rider_daily_state.season_points');
     this.knownColumns.add('rider_daily_state.season_race_days_total');
     this.knownColumns.add('rider_daily_state.rolling_30d_race_days');
     this.knownColumns.add('rider_daily_state.race_form_bonus');
@@ -506,6 +507,8 @@ export class GameStateService {
         health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
         unavailable_until TEXT,
         unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
+        season_points INTEGER NOT NULL DEFAULT 0,
+        season_wins INTEGER NOT NULL DEFAULT 0,
         season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0),
         rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0),
         short_term_fatigue REAL NOT NULL DEFAULT 0.0,
@@ -519,6 +522,75 @@ export class GameStateService {
       this.db.prepare(`
         ALTER TABLE rider_daily_state
         ADD COLUMN season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0)
+      `).run();
+    }
+
+    if (!columnExists(this.db, 'rider_daily_state', 'season_points')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN season_points INTEGER NOT NULL DEFAULT 0
+      `).run();
+
+      // Migrate existing points
+      this.db.prepare(`
+        UPDATE rider_daily_state
+        SET season_points = COALESCE((
+          SELECT SUM(points_awarded)
+          FROM season_point_events
+          WHERE season_point_events.rider_id = rider_daily_state.rider_id
+            AND season_point_events.season = rider_daily_state.season
+        ), 0)
+      `).run();
+    }
+
+    if (!columnExists(this.db, 'rider_daily_state', 'season_wins')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN season_wins INTEGER NOT NULL DEFAULT 0
+      `).run();
+
+      // Migrate existing wins
+      this.db.prepare(`
+        WITH individual_wins AS (
+          SELECT results.rider_id AS rider_id, COUNT(*) AS wins
+          FROM results
+          JOIN stages ON stages.id = results.stage_id
+          WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NOT NULL
+          GROUP BY results.rider_id
+        ),
+        ttt_wins AS (
+          SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
+          FROM results
+          JOIN stages ON stages.id = results.stage_id
+          JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+          WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
+            AND stage_entries.status = 'finished'
+          GROUP BY stage_entries.rider_id
+        ),
+        gc_wins AS (
+          SELECT results.rider_id AS rider_id, COUNT(*) AS wins
+          FROM results
+          JOIN stages ON stages.id = results.stage_id
+          JOIN races ON races.id = stages.race_id
+          WHERE results.result_type_id = 2 AND results.rank = 1 AND results.rider_id IS NOT NULL
+            AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
+          GROUP BY results.rider_id
+        ),
+        total_wins AS (
+          SELECT rider_id, SUM(wins) AS wins
+          FROM (
+            SELECT rider_id, wins FROM individual_wins
+            UNION ALL
+            SELECT rider_id, wins FROM ttt_wins
+            UNION ALL
+            SELECT rider_id, wins FROM gc_wins
+          )
+          GROUP BY rider_id
+        )
+        UPDATE rider_daily_state
+        SET season_wins = COALESCE((
+          SELECT wins FROM total_wins WHERE total_wins.rider_id = rider_daily_state.rider_id
+        ), 0)
       `).run();
     }
 
@@ -1270,6 +1342,53 @@ export class GameStateService {
       season: currentSeason,
       currentDate,
       rollingStart: rollingWindowStart,
+    });
+
+    this.db.prepare(`
+      WITH individual_wins AS (
+        SELECT results.rider_id, COUNT(*) AS wins
+        FROM results
+        JOIN stages ON stages.id = results.stage_id
+        WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NOT NULL
+          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
+        GROUP BY results.rider_id
+      ),
+      ttt_wins AS (
+        SELECT stage_entries.rider_id, COUNT(*) AS wins
+        FROM results
+        JOIN stages ON stages.id = results.stage_id
+        JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+        WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
+          AND stage_entries.status = 'finished'
+          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
+        GROUP BY stage_entries.rider_id
+      ),
+      gc_wins AS (
+        SELECT results.rider_id, COUNT(*) AS wins
+        FROM results
+        JOIN stages ON stages.id = results.stage_id
+        JOIN races ON races.id = stages.race_id
+        WHERE results.result_type_id = 2 AND results.rank = 1 AND results.rider_id IS NOT NULL
+          AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
+          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
+        GROUP BY results.rider_id
+      ),
+      total_wins AS (
+        SELECT rider_id, SUM(wins) AS season_wins
+        FROM (
+          SELECT rider_id, wins FROM individual_wins
+          UNION ALL
+          SELECT rider_id, wins FROM ttt_wins
+          UNION ALL
+          SELECT rider_id, wins FROM gc_wins
+        )
+        GROUP BY rider_id
+      )
+      UPDATE rider_daily_state
+      SET season_wins = COALESCE((SELECT season_wins FROM total_wins WHERE total_wins.rider_id = rider_daily_state.rider_id), 0)
+      WHERE season = @season
+    `).run({
+      season: currentSeason,
     });
   }
 

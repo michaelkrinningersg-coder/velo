@@ -726,6 +726,18 @@ class DatabaseService {
           ADD COLUMN active_peak_date TEXT
         `).run();
             }
+            if (!columnExists(db, 'rider_daily_state', 'season_points')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN season_points INTEGER NOT NULL DEFAULT 0
+        `).run();
+            }
+            if (!columnExists(db, 'rider_daily_state', 'season_wins')) {
+                db.prepare(`
+          ALTER TABLE rider_daily_state
+          ADD COLUMN season_wins INTEGER NOT NULL DEFAULT 0
+        `).run();
+            }
             if (!columnExists(db, 'rider_daily_state', 'season_race_days_total')) {
                 db.prepare(`
           ALTER TABLE rider_daily_state
@@ -1376,6 +1388,36 @@ class DatabaseService {
         createIfTable('season_point_events', `
       CREATE INDEX IF NOT EXISTS idx_season_points_rider
         ON season_point_events(rider_id);
+      
+      CREATE TRIGGER IF NOT EXISTS trg_season_points_insert
+      AFTER INSERT ON season_point_events
+      FOR EACH ROW
+      WHEN (SELECT 1 FROM sqlite_master WHERE type='table' AND name='rider_daily_state') IS NOT NULL
+      BEGIN
+        UPDATE rider_daily_state
+        SET season_points = season_points + NEW.points_awarded
+        WHERE rider_id = NEW.rider_id AND season = NEW.season;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_season_points_delete
+      AFTER DELETE ON season_point_events
+      FOR EACH ROW
+      WHEN (SELECT 1 FROM sqlite_master WHERE type='table' AND name='rider_daily_state') IS NOT NULL
+      BEGIN
+        UPDATE rider_daily_state
+        SET season_points = season_points - OLD.points_awarded
+        WHERE rider_id = OLD.rider_id AND season = OLD.season;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_season_points_update
+      AFTER UPDATE OF points_awarded ON season_point_events
+      FOR EACH ROW
+      WHEN (SELECT 1 FROM sqlite_master WHERE type='table' AND name='rider_daily_state') IS NOT NULL
+      BEGIN
+        UPDATE rider_daily_state
+        SET season_points = season_points - OLD.points_awarded + NEW.points_awarded
+        WHERE rider_id = NEW.rider_id AND season = NEW.season;
+      END;
     `);
     }
     ensurePerformanceIndexes(db) {

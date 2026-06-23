@@ -576,6 +576,13 @@ CREATE TABLE IF NOT EXISTS rider_daily_state (
   health_status           TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
   unavailable_until       TEXT,
   unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
+  season_points           INTEGER NOT NULL DEFAULT 0,
+  season_wins             INTEGER NOT NULL DEFAULT 0,
+  season_race_days_total  INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0),
+  rolling_30d_race_days   INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0),
+  short_term_fatigue      REAL NOT NULL DEFAULT 0.0,
+  long_term_fatigue_decayable REAL NOT NULL DEFAULT 0.0,
+  long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0,
   consecutive_non_race_days INTEGER NOT NULL DEFAULT 0
 );
 

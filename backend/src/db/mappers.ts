@@ -148,6 +148,8 @@ export interface RiderRow {
   health_status: RiderHealthStatus | null;
   unavailable_until: string | null;
   unavailable_days_remaining: number | null;
+  season_points?: number | null;
+  season_wins?: number | null;
   season_race_days_total: number | null;
   rolling_30d_race_days: number | null;
   accumulated_random_fatigue: number | null;
@@ -856,7 +858,8 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     activeTeamId: row.active_team_id,
     activeContractId: row.active_contract_id,
     contractEndSeason: row.contract_end_season,
-    seasonPoints,
+    seasonPoints: row.season_points ?? seasonPoints,
+    seasonWins: row.season_wins ?? 0,
     seasonRaceDaysTotal: row.season_race_days_total ?? 0,
     rolling30dRaceDays: row.rolling_30d_race_days ?? 0,
     formBonus: resolveEffectiveSeasonForm(row.form_bonus ?? 0),
