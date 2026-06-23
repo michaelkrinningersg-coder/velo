@@ -341,7 +341,7 @@ class TeamRepository {
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         stage_entries.status,
         stage_entries.status_reason
-      FROM stage_entries
+      FROM all_stage_entries stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       WHERE stage_entries.team_id = ? AND stage_entries.status IN ('dns', 'dnf')
     `).all(teamId);
@@ -366,7 +366,7 @@ class TeamRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         COUNT(DISTINCT se.stage_id) AS race_days
-      FROM stage_entries se
+      FROM all_stage_entries se
       JOIN stages ON stages.id = se.stage_id
       WHERE se.team_id = ? AND se.status != 'dns'
       GROUP BY season
@@ -383,7 +383,7 @@ class TeamRepository {
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         cat.name AS category_name,
         COUNT(DISTINCT se.stage_id) AS race_days
-      FROM stage_entries se
+      FROM all_stage_entries se
       JOIN stages ON stages.id = se.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id

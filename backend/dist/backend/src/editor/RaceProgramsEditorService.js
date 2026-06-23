@@ -229,9 +229,14 @@ class RaceProgramsEditorService {
             activeDb.transaction(() => {
                 // Clear and refill race_program_races
                 activeDb.prepare('DELETE FROM race_program_races').run();
+                // Fetch existing races and programs in the database to prevent foreign key errors
+                const existingRaces = new Set(activeDb.prepare('SELECT id FROM races').all().map((r) => r.id));
+                const existingPrograms = new Set(activeDb.prepare('SELECT id FROM race_programs').all().map((p) => p.id));
                 const insertMapping = activeDb.prepare('INSERT INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
                 for (const row of newRaceProgramRaces) {
-                    insertMapping.run(row.id, row.program_id, row.race_id);
+                    if (existingRaces.has(row.race_id) && existingPrograms.has(row.program_id)) {
+                        insertMapping.run(row.id, row.program_id, row.race_id);
+                    }
                 }
                 // Update race_programs
                 const updateProgram = activeDb.prepare(`

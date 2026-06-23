@@ -153,12 +153,15 @@ export const state: {
   riderStatsSelectedSeason: number | null;
   riderStatsTopResultsFilterCategory: string | null;
   riderStatsTopResultsFilterSeason: number | null;
+  riderStatsTopResultsFilterRank: number | null;
+  riderStatsTopResultsFilterProfile: string | null;
   riderStatsTopResultsPage: number;
   riderStatsTopResultsFilters: {
     gc: boolean;
     mountain: boolean;
     points: boolean;
     youth: boolean;
+    breakaway: boolean;
     oneDay: boolean;
     stage: boolean;
   };
@@ -173,12 +176,15 @@ export const state: {
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
   teamStatsTopResultsFilterSeason: number | null;
+  teamStatsTopResultsFilterRank: number | null;
+  teamStatsTopResultsFilterProfile: string | null;
   teamStatsTopResultsPage: number;
   teamStatsTopResultsFilters: {
     gc: boolean;
     mountain: boolean;
     points: boolean;
     youth: boolean;
+    breakaway: boolean;
     oneDay: boolean;
     stage: boolean;
   };
@@ -271,12 +277,15 @@ export const state: {
   riderStatsSelectedSeason: null,
   riderStatsTopResultsFilterCategory: null,
   riderStatsTopResultsFilterSeason: null,
+  riderStatsTopResultsFilterRank: null,
+  riderStatsTopResultsFilterProfile: null,
   riderStatsTopResultsPage: 1,
   riderStatsTopResultsFilters: {
     gc: true,
     mountain: true,
     points: true,
     youth: true,
+    breakaway: true,
     oneDay: true,
     stage: true,
   },
@@ -291,12 +300,15 @@ export const state: {
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
   teamStatsTopResultsFilterSeason: null,
+  teamStatsTopResultsFilterRank: null,
+  teamStatsTopResultsFilterProfile: null,
   teamStatsTopResultsPage: 1,
   teamStatsTopResultsFilters: {
     gc: true,
     mountain: true,
     points: true,
     youth: true,
+    breakaway: true,
     oneDay: true,
     stage: true,
   },

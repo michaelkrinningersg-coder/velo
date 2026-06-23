@@ -120,6 +120,7 @@ function createRouter(dbService) {
             ok(res, undefined);
         }
         catch (e) {
+            console.error('ERROR IN CREATE SAVE:', e);
             fail(res, 400, e.message);
         }
     });
@@ -843,7 +844,7 @@ function createRouter(dbService) {
               SELECT rider_id FROM all_results WHERE result_type_id = 1 AND rank = 1 AND rider_id IN (${placeholders})
               UNION ALL
               SELECT stage_entries.rider_id AS rider_id FROM all_results results
-              JOIN stage_entries ON stage_entries.stage_id = results.stage_id
+              JOIN all_stage_entries stage_entries ON stage_entries.stage_id = results.stage_id
               WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL AND stage_entries.team_id = results.team_id
                 AND stage_entries.rider_id IN (${placeholders})
               UNION ALL

@@ -156,14 +156,6 @@ export function initCalendarView(): void {
       }
       return;
     }
-
-    const partBtn = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-participants-id]');
-    if (partBtn) {
-      const raceId = Number(partBtn.dataset['dashboardRaceParticipantsId']);
-      if (Number.isFinite(raceId)) {
-        void openRaceProgramParticipants(raceId);
-      }
-    }
   });
 
   // Hover highlighting (Cross-Highlighting)
@@ -377,7 +369,6 @@ export function renderCalendarRaceList(): void {
         </td>
         <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
         <td>${raceCategoryNameBadge(race)}</td>
-        <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
         <td>${distance}</td>
         <td>${elevation}</td>
         <td>${statusBadge}</td>

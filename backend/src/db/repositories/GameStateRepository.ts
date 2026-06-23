@@ -268,16 +268,22 @@ export class GameStateRepository {
       return [];
     }
 
+    // Check if we should read from stage_entries or stage_entries_history
+    const hasEntries = (this.db.prepare(`
+      SELECT COUNT(*) AS c FROM stage_entries WHERE race_id = ?
+    `).get(raceId) as { c: number })?.c > 0;
+    const tableName = hasEntries ? 'stage_entries' : 'stage_entries_history';
+
     const rows = this.db.prepare(`
-      SELECT stage_entries.rider_id AS rider_id
-      FROM stage_entries
-      JOIN stages ON stages.id = stage_entries.stage_id
-      WHERE stage_entries.race_id = ?
+      SELECT ${tableName}.rider_id AS rider_id
+      FROM ${tableName}
+      JOIN stages ON stages.id = ${tableName}.stage_id
+      WHERE ${tableName}.race_id = ?
         AND stages.stage_number <= ?
-      GROUP BY stage_entries.rider_id
+      GROUP BY ${tableName}.rider_id
       HAVING COUNT(*) = ?
-        AND SUM(CASE WHEN stage_entries.status = 'finished' THEN 1 ELSE 0 END) = ?
-        AND SUM(CASE WHEN stage_entries.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
+        AND SUM(CASE WHEN ${tableName}.status = 'finished' THEN 1 ELSE 0 END) = ?
+        AND SUM(CASE WHEN ${tableName}.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
     `).all(raceId, upToStageNumber, expectedStageCount, expectedStageCount) as Array<{ rider_id: number }>;
 
     return rows.map((row) => row.rider_id);

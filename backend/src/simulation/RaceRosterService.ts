@@ -126,11 +126,18 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
     : undefined;
   const currentStageNumber = currentStageRow?.stage_number ?? 1;
 
+  const activeRaceRiderIds = new Set<number>();
+  if (race && race.isStageRace && currentStageNumber > 1) {
+    const rows = db.prepare('SELECT rider_id FROM race_entries WHERE race_id = ?').all(race.id) as Array<{ rider_id: number }>;
+    for (const r of rows) {
+      activeRaceRiderIds.add(r.rider_id);
+    }
+  }
+
   for (const rider of riders) {
     let isContinuingStageRace = false;
     if (race && race.isStageRace && currentStageNumber > 1) {
-      const hasEntry = db.prepare('SELECT 1 FROM race_entries WHERE race_id = ? AND rider_id = ?').get(race.id, rider.id);
-      if (hasEntry) {
+      if (activeRaceRiderIds.has(rider.id)) {
         isContinuingStageRace = true;
       }
     }

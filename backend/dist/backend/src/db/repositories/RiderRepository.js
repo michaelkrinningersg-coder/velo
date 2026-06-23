@@ -413,7 +413,7 @@ class RiderRepository {
         wetter.wetter_name AS rolled_wetter_name,
         stages.super_team_id AS super_team_id,
         stage_entries.team_id AS team_id
-      FROM stage_entries
+      FROM all_stage_entries stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
@@ -742,80 +742,42 @@ class RiderRepository {
     }
     getSeasonRaceStatsByRiderId(season, riderIds, skipRaceDays = false) {
         const statsByRiderId = new Map();
-        if (!(0, mappers_1.tableExists)(this.db, 'results') || (!skipRaceDays && !(0, mappers_1.tableExists)(this.db, 'stages'))) {
+        if (!(0, mappers_1.tableExists)(this.db, 'rider_season_stats') || !(0, mappers_1.tableExists)(this.db, 'rider_season_category_stats')) {
             return statsByRiderId;
         }
         if (riderIds && riderIds.length === 0) {
             return statsByRiderId;
         }
-        const riderFilterStageEntries = riderIds ? `AND stage_entries.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
-        const riderFilterResults = riderIds ? `AND results.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
-        const riderFilterStageEntriesResults = riderIds ? `AND stage_entries.rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
-        const argsStageEntries = riderIds ? [season, ...riderIds] : [season];
-        const argsResults = riderIds ? [mappers_1.RESULT_TYPE_IDS.stage, season, ...riderIds] : [mappers_1.RESULT_TYPE_IDS.stage, season];
-        const argsResultsGc = riderIds ? [mappers_1.RESULT_TYPE_IDS.gc, season, ...riderIds] : [mappers_1.RESULT_TYPE_IDS.gc, season];
-        // 1. Race Days
+        const riderFilter = riderIds ? `AND rider_id IN (${riderIds.map(() => '?').join(',')})` : '';
+        const args = riderIds ? [season, ...riderIds] : [season];
         if (!skipRaceDays) {
             const raceDaysRows = this.db.prepare(`
-        SELECT stage_entries.rider_id AS rider_id, COUNT(DISTINCT stage_entries.stage_id) AS race_days
-        FROM stage_entries
-        JOIN stages ON stages.id = stage_entries.stage_id
-        WHERE stage_entries.status != 'dns' AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-          ${riderFilterStageEntries}
-        GROUP BY stage_entries.rider_id
-      `).all(...argsStageEntries);
+        SELECT rider_id, race_days
+        FROM rider_season_stats
+        WHERE season = ? ${riderFilter}
+      `).all(...args);
             for (const row of raceDaysRows) {
                 statsByRiderId.set(row.rider_id, { raceDays: row.race_days, wins: 0 });
             }
         }
-        // 2. Individual Stage Wins
-        const individualWinsRows = this.db.prepare(`
-      SELECT results.rider_id AS rider_id, COUNT(*) AS wins
-      FROM all_results results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-        ${riderFilterResults}
-      GROUP BY results.rider_id
-    `).all(...argsResults);
-        for (const row of individualWinsRows) {
-            if (statsByRiderId.has(row.rider_id)) {
-                statsByRiderId.get(row.rider_id).wins += row.wins;
+        else if (riderIds) {
+            for (const rId of riderIds) {
+                statsByRiderId.set(rId, { raceDays: 0, wins: 0 });
             }
         }
-        // 3. TTT Stage Wins
-        const tttWinsRows = this.db.prepare(`
-      SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
-      FROM all_results results
-      JOIN stages ON stages.id = results.stage_id
-      JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
-      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NULL
-        AND stage_entries.status = 'finished'
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-        ${riderFilterStageEntriesResults}
-      GROUP BY stage_entries.rider_id
-    `).all(...argsResults);
-        for (const row of tttWinsRows) {
-            if (statsByRiderId.has(row.rider_id)) {
-                statsByRiderId.get(row.rider_id).wins += row.wins;
+        const winsRows = this.db.prepare(`
+      SELECT rider_id, SUM(gc_wins + stage_wins + one_day_wins) AS wins
+      FROM rider_season_category_stats
+      WHERE season = ? ${riderFilter}
+      GROUP BY rider_id
+    `).all(...args);
+        for (const row of winsRows) {
+            let entry = statsByRiderId.get(row.rider_id);
+            if (!entry) {
+                entry = { raceDays: 0, wins: 0 };
+                statsByRiderId.set(row.rider_id, entry);
             }
-        }
-        // 4. GC Wins
-        const gcWinsRows = this.db.prepare(`
-      SELECT results.rider_id AS rider_id, COUNT(*) AS wins
-      FROM all_results results
-      JOIN stages ON stages.id = results.stage_id
-      JOIN races ON races.id = stages.race_id
-      WHERE results.result_type_id = ? AND results.rank = 1 AND results.rider_id IS NOT NULL
-        AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-        ${riderFilterResults}
-      GROUP BY results.rider_id
-    `).all(...argsResultsGc);
-        for (const row of gcWinsRows) {
-            if (statsByRiderId.has(row.rider_id)) {
-                statsByRiderId.get(row.rider_id).wins += row.wins;
-            }
+            entry.wins = row.wins;
         }
         return statsByRiderId;
     }
@@ -1087,31 +1049,14 @@ class RiderRepository {
         const careerStatsRow = (0, mappers_1.tableExists)(this.db, 'rider_career_stats')
             ? this.db.prepare(`
           SELECT breakaway_attempts, attacks, counter_attacks, crashes, defects,
-                 illnesses, illness_days, injuries, injury_days, superteam_count
+                 illnesses, illness_days, injuries, injury_days, superteam_count,
+                 dns_count, dnf_count, otl_count, breakaway_kms, successful_breakaways,
+                 race_days, superform_days, supermalus_days, home_advantage_days,
+                 super_home_advantage_days, home_pressure_days
           FROM rider_career_stats
           WHERE rider_id = ?
         `).get(riderId)
             : undefined;
-        let homeAdvantageDays = 0;
-        let superHomeAdvantageDays = 0;
-        let homePressureDays = 0;
-        let breakawayKms = 0;
-        if ((0, mappers_1.tableExists)(this.db, 'rider_season_stats')) {
-            const row = this.db.prepare(`
-        SELECT SUM(home_advantage_days) as home_adv,
-               SUM(super_home_advantage_days) as super_home,
-               SUM(home_pressure_days) as home_press,
-               SUM(breakaway_kms) as breakaway_kms
-        FROM rider_season_stats
-        WHERE rider_id = ?
-      `).get(riderId);
-            if (row) {
-                homeAdvantageDays = row.home_adv ?? 0;
-                superHomeAdvantageDays = row.super_home ?? 0;
-                homePressureDays = row.home_press ?? 0;
-                breakawayKms = row.breakaway_kms ?? 0;
-            }
-        }
         const breakawayAttempts = careerStatsRow?.breakaway_attempts ?? 0;
         const attacks = careerStatsRow?.attacks ?? 0;
         const counterAttacks = careerStatsRow?.counter_attacks ?? 0;
@@ -1122,29 +1067,14 @@ class RiderRepository {
         const injuries = careerStatsRow?.injuries ?? 0;
         const injuryDays = careerStatsRow?.injury_days ?? 0;
         const superteamCount = careerStatsRow?.superteam_count ?? 0;
-        let dnsCount = 0;
-        let dnfCount = 0;
-        let otlCount = 0;
-        if ((0, mappers_1.tableExists)(this.db, 'stage_entries')) {
-            const nonFinisherRows = this.db.prepare(`
-        SELECT status, status_reason
-        FROM stage_entries
-        WHERE rider_id = ? AND status IN ('dns', 'dnf')
-      `).all(riderId);
-            for (const row of nonFinisherRows) {
-                if (row.status === 'dns') {
-                    dnsCount++;
-                }
-                else if (row.status === 'dnf') {
-                    if (row.status_reason?.startsWith('OTL ')) {
-                        otlCount++;
-                    }
-                    else {
-                        dnfCount++;
-                    }
-                }
-            }
-        }
+        const dnsCount = careerStatsRow?.dns_count ?? 0;
+        const dnfCount = careerStatsRow?.dnf_count ?? 0;
+        const otlCount = careerStatsRow?.otl_count ?? 0;
+        const breakawayKms = careerStatsRow?.breakaway_kms ?? 0;
+        const successfulBreakaways = careerStatsRow?.successful_breakaways ?? 0;
+        const homeAdvantageDays = careerStatsRow?.home_advantage_days ?? 0;
+        const superHomeAdvantageDays = careerStatsRow?.super_home_advantage_days ?? 0;
+        const homePressureDays = careerStatsRow?.home_pressure_days ?? 0;
         const categories = {};
         const knownCategories = [
             'World Tour - Tour de France',
@@ -1207,295 +1137,62 @@ class RiderRepository {
                 winWeather7: 0,
             };
         }
-        if ((0, mappers_1.tableExists)(this.db, 'stage_entries') && (0, mappers_1.tableExists)(this.db, 'stages') && (0, mappers_1.tableExists)(this.db, 'races') && (0, mappers_1.tableExists)(this.db, 'race_categories')) {
-            const raceDaysRows = this.db.prepare(`
-        SELECT cat.name AS category_name, COUNT(DISTINCT se.stage_id) AS race_days
-        FROM stage_entries se
-        JOIN stages ON stages.id = se.stage_id
-        JOIN races ON races.id = stages.race_id
-        JOIN race_categories cat ON cat.id = races.category_id
-        WHERE se.rider_id = ? AND se.status != 'dns'
-        GROUP BY cat.name
+        if ((0, mappers_1.tableExists)(this.db, 'rider_career_category_stats')) {
+            const catRows = this.db.prepare(`
+        SELECT *
+        FROM rider_career_category_stats
+        WHERE rider_id = ?
       `).all(riderId);
-            for (const row of raceDaysRows) {
-                let catStats = categories[row.category_name];
-                if (catStats) {
-                    const days = row.race_days ?? row.raceDays ?? row.racedays ?? 0;
-                    catStats.raceDays = Number(days);
-                }
+            for (const row of catRows) {
+                categories[row.category_name] = {
+                    gcWins: row.gc_wins,
+                    gcSecond: row.gc_second,
+                    gcThird: row.gc_third,
+                    gcTopTen: row.gc_top_ten,
+                    stageWins: row.stage_wins,
+                    stageSecond: row.stage_second,
+                    stageThird: row.stage_third,
+                    stageTopTen: row.stage_top_ten,
+                    oneDayWins: row.one_day_wins,
+                    oneDaySecond: row.one_day_second,
+                    oneDayThird: row.one_day_third,
+                    oneDayTopTen: row.one_day_top_ten,
+                    mountainWins: row.mountain_wins,
+                    pointsWins: row.points_wins,
+                    youthWins: row.youth_wins,
+                    breakawayWins: row.breakaway_wins,
+                    raceDays: row.race_days,
+                    leaderJerseys: row.leader_jerseys,
+                    pointsJerseys: row.points_jerseys,
+                    mountainJerseys: row.mountain_jerseys,
+                    youthJerseys: row.youth_jerseys,
+                    breakawayJerseys: row.breakaway_jerseys,
+                    sprintWins: row.sprint_wins,
+                    climbWinsHC: row.climb_wins_hc,
+                    climbWins1: row.climb_wins_1,
+                    climbWins2: row.climb_wins_2,
+                    climbWins3: row.climb_wins_3,
+                    climbWins4: row.climb_wins_4,
+                    winFlat: row.win_flat,
+                    winRolling: row.win_rolling,
+                    winHilly: row.win_hilly,
+                    winHillyDifficult: row.win_hilly_difficult,
+                    winMediumMountain: row.win_medium_mountain,
+                    winMountain: row.win_mountain,
+                    winHighMountain: row.win_high_mountain,
+                    winCobble: row.win_cobble,
+                    winCobbleHill: row.win_cobble_hill,
+                    winITT: row.win_itt,
+                    winTTT: row.win_ttt,
+                    winWeather1: row.win_weather_1,
+                    winWeather2: row.win_weather_2,
+                    winWeather3: row.win_weather_3,
+                    winWeather4: row.win_weather_4,
+                    winWeather5: row.win_weather_5,
+                    winWeather6: row.win_weather_6,
+                    winWeather7: row.win_weather_7,
+                };
             }
-        }
-        if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
-            const resultsRows = this.db.prepare(`
-        SELECT
-          r.result_type_id AS result_type_id,
-          r.rank AS rank,
-          races.is_stage_race AS is_stage_race,
-          races.number_of_stages AS number_of_stages,
-          stages.stage_number AS stage_number,
-          stages.profile AS profile,
-          cat.name AS category_name,
-          stages.rolled_weather_id AS rolled_weather_id
-        FROM all_results r
-        JOIN stages ON stages.id = r.stage_id
-        JOIN races ON races.id = stages.race_id
-        JOIN race_categories cat ON cat.id = races.category_id
-        WHERE r.rider_id = ?
-
-        UNION ALL
-
-        SELECT
-          r.result_type_id AS result_type_id,
-          r.rank AS rank,
-          races.is_stage_race AS is_stage_race,
-          races.number_of_stages AS number_of_stages,
-          stages.stage_number AS stage_number,
-          stages.profile AS profile,
-          cat.name AS category_name,
-          stages.rolled_weather_id AS rolled_weather_id
-        FROM all_results r
-        JOIN stages ON stages.id = r.stage_id
-        JOIN races ON races.id = stages.race_id
-        JOIN race_categories cat ON cat.id = races.category_id
-        JOIN stage_entries se ON se.stage_id = r.stage_id AND se.team_id = r.team_id
-        WHERE r.rider_id IS NULL AND se.rider_id = ? AND r.result_type_id = 1 AND stages.profile = 'TTT' AND se.status = 'finished'
-      `).all(riderId, riderId);
-            for (const row of resultsRows) {
-                let catStats = categories[row.category_name];
-                if (!catStats) {
-                    catStats = {
-                        gcWins: 0,
-                        gcSecond: 0,
-                        gcThird: 0,
-                        gcTopTen: 0,
-                        stageWins: 0,
-                        stageSecond: 0,
-                        stageThird: 0,
-                        stageTopTen: 0,
-                        oneDayWins: 0,
-                        oneDaySecond: 0,
-                        oneDayThird: 0,
-                        oneDayTopTen: 0,
-                        mountainWins: 0,
-                        pointsWins: 0,
-                        youthWins: 0,
-                        breakawayWins: 0,
-                        raceDays: 0,
-                        leaderJerseys: 0,
-                        pointsJerseys: 0,
-                        mountainJerseys: 0,
-                        youthJerseys: 0,
-                        breakawayJerseys: 0,
-                        sprintWins: 0,
-                        climbWinsHC: 0,
-                        climbWins1: 0,
-                        climbWins2: 0,
-                        climbWins3: 0,
-                        climbWins4: 0,
-                        winFlat: 0,
-                        winRolling: 0,
-                        winHilly: 0,
-                        winHillyDifficult: 0,
-                        winMediumMountain: 0,
-                        winMountain: 0,
-                        winHighMountain: 0,
-                        winCobble: 0,
-                        winCobbleHill: 0,
-                        winITT: 0,
-                        winTTT: 0,
-                        winWeather1: 0,
-                        winWeather2: 0,
-                        winWeather3: 0,
-                        winWeather4: 0,
-                        winWeather5: 0,
-                        winWeather6: 0,
-                        winWeather7: 0,
-                    };
-                    categories[row.category_name] = catStats;
-                }
-                const rank = row.rank;
-                const isStageRace = row.is_stage_race === 1;
-                const isFinalStage = row.stage_number === row.number_of_stages;
-                if (row.result_type_id === 1) { // Stage result
-                    if (rank === 1) {
-                        const profile = row.profile;
-                        if (profile === 'Flat')
-                            catStats.winFlat++;
-                        else if (profile === 'Rolling')
-                            catStats.winRolling++;
-                        else if (profile === 'Hilly')
-                            catStats.winHilly++;
-                        else if (profile === 'Hilly_Difficult')
-                            catStats.winHillyDifficult++;
-                        else if (profile === 'Medium_Mountain')
-                            catStats.winMediumMountain++;
-                        else if (profile === 'Mountain')
-                            catStats.winMountain++;
-                        else if (profile === 'High_Mountain')
-                            catStats.winHighMountain++;
-                        else if (profile === 'Cobble')
-                            catStats.winCobble++;
-                        else if (profile === 'Cobble_Hill')
-                            catStats.winCobbleHill++;
-                        else if (profile === 'ITT')
-                            catStats.winITT++;
-                        else if (profile === 'TTT')
-                            catStats.winTTT++;
-                        if (row.rolled_weather_id != null && row.rolled_weather_id >= 1 && row.rolled_weather_id <= 7) {
-                            const weatherKey = `winWeather${row.rolled_weather_id}`;
-                            catStats[weatherKey]++;
-                        }
-                    }
-                    if (!isStageRace) {
-                        if (rank === 1) {
-                            catStats.oneDayWins++;
-                        }
-                        else if (rank === 2) {
-                            catStats.oneDaySecond++;
-                        }
-                        else if (rank === 3) {
-                            catStats.oneDayThird++;
-                        }
-                        else if (rank > 3 && rank <= 10) {
-                            catStats.oneDayTopTen++;
-                        }
-                    }
-                    else {
-                        if (rank === 1) {
-                            catStats.stageWins++;
-                        }
-                        else if (rank === 2) {
-                            catStats.stageSecond++;
-                        }
-                        else if (rank === 3) {
-                            catStats.stageThird++;
-                        }
-                        else if (rank > 3 && rank <= 10) {
-                            catStats.stageTopTen++;
-                        }
-                    }
-                }
-                else if (row.result_type_id === 2 && isStageRace && isFinalStage) { // GC
-                    if (rank === 1) {
-                        catStats.gcWins++;
-                    }
-                    else if (rank === 2) {
-                        catStats.gcSecond++;
-                    }
-                    else if (rank === 3) {
-                        catStats.gcThird++;
-                    }
-                    else if (rank > 3 && rank <= 10) {
-                        catStats.gcTopTen++;
-                    }
-                }
-                else if (row.result_type_id === 3 && isStageRace && isFinalStage) { // Points
-                    if (rank === 1)
-                        catStats.pointsWins++;
-                }
-                else if (row.result_type_id === 4 && isStageRace && isFinalStage) { // Mountain
-                    if (rank === 1)
-                        catStats.mountainWins++;
-                }
-                else if (row.result_type_id === 5 && isStageRace && isFinalStage) { // Youth
-                    if (rank === 1)
-                        catStats.youthWins++;
-                }
-                else if (row.result_type_id === 7 && isStageRace && isFinalStage) { // Breakaway
-                    if (rank === 1)
-                        catStats.breakawayWins = (catStats.breakawayWins ?? 0) + 1;
-                }
-            }
-        }
-        if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
-            const leaderJerseyRows = this.db.prepare(`
-        SELECT cat.name AS category_name, r.result_type_id, COUNT(*) AS count
-        FROM all_results r
-        JOIN stages ON stages.id = r.stage_id
-        JOIN races ON races.id = stages.race_id
-        JOIN race_categories cat ON cat.id = races.category_id
-        WHERE r.rider_id = ?
-          AND r.result_type_id IN (2, 3, 4, 5, 7)
-          AND r.rank = 1
-          AND races.is_stage_race = 1
-        GROUP BY cat.name, r.result_type_id
-      `).all(riderId);
-            for (const row of leaderJerseyRows) {
-                let catStats = categories[row.category_name];
-                if (catStats) {
-                    if (row.result_type_id === 2) {
-                        catStats.leaderJerseys = row.count;
-                    }
-                    else if (row.result_type_id === 3) {
-                        catStats.pointsJerseys = row.count;
-                    }
-                    else if (row.result_type_id === 4) {
-                        catStats.mountainJerseys = row.count;
-                    }
-                    else if (row.result_type_id === 5) {
-                        catStats.youthJerseys = row.count;
-                    }
-                    else if (row.result_type_id === 7) {
-                        catStats.breakawayJerseys = row.count;
-                    }
-                }
-            }
-        }
-        if ((0, mappers_1.tableExists)(this.db, 'stage_marker_results') && (0, mappers_1.tableExists)(this.db, 'races') && (0, mappers_1.tableExists)(this.db, 'race_categories')) {
-            const checkpointWinsRows = this.db.prepare(`
-        SELECT 
-          cat.name AS category_name,
-          smr.marker_type,
-          smr.marker_category
-        FROM stage_marker_results smr
-        JOIN races ON races.id = smr.race_id
-        JOIN race_categories cat ON cat.id = races.category_id
-        WHERE smr.rider_id = ? AND smr.rank = 1
-      `).all(riderId);
-            for (const row of checkpointWinsRows) {
-                let catStats = categories[row.category_name];
-                if (catStats) {
-                    const mType = row.marker_type;
-                    const mCat = row.marker_category;
-                    if (mType === 'sprint_intermediate' || mCat === 'Sprint') {
-                        catStats.sprintWins++;
-                    }
-                    if (mCat === 'HC') {
-                        catStats.climbWinsHC++;
-                    }
-                    else if (mCat === '1') {
-                        catStats.climbWins1++;
-                    }
-                    else if (mCat === '2') {
-                        catStats.climbWins2++;
-                    }
-                    else if (mCat === '3') {
-                        catStats.climbWins3++;
-                    }
-                    else if (mCat === '4') {
-                        catStats.climbWins4++;
-                    }
-                }
-            }
-        }
-        let successfulBreakaways = 0;
-        if ((0, mappers_1.tableExists)(this.db, 'results') && (0, mappers_1.tableExists)(this.db, 'stages')) {
-            const breakRow = this.db.prepare(`
-        SELECT COUNT(*) as count
-        FROM all_results r1
-        JOIN stages s ON s.id = r1.stage_id
-        WHERE r1.rider_id = ?
-          AND r1.result_type_id = 1
-          AND r1.is_breakaway = 1
-          AND NOT EXISTS (
-            SELECT 1 FROM all_results r2
-            WHERE r2.stage_id = r1.stage_id
-              AND r2.result_type_id = 1
-              AND r2.rank < r1.rank
-              AND r2.is_breakaway = 0
-          )
-      `).get(riderId);
-            successfulBreakaways = breakRow?.count ?? 0;
         }
         let totalGcWins = 0;
         let totalStageWins = 0;
@@ -1528,70 +1225,40 @@ class RiderRepository {
         };
     }
     getCareerWins(riderId) {
-        if (!(0, mappers_1.tableExists)(this.db, 'results') || !(0, mappers_1.tableExists)(this.db, 'stage_entries')) {
+        if (!(0, mappers_1.tableExists)(this.db, 'rider_career_category_stats')) {
             return 0;
         }
         const row = this.db.prepare(`
-      SELECT SUM(CASE WHEN rank = 1 THEN 1 ELSE 0 END) AS wins
-      FROM (
-        SELECT rank FROM all_results
-        WHERE result_type_id = ? AND rider_id = ?
-        
-        UNION ALL
-        
-        SELECT results.rank FROM all_results results
-        JOIN stage_entries ON stage_entries.stage_id = results.stage_id
-        WHERE results.result_type_id = ?
-          AND results.rider_id IS NULL
-          AND stage_entries.rider_id = ?
-          AND stage_entries.team_id = results.team_id
-          
-        UNION ALL
-        
-        SELECT results.rank FROM all_results results
-        JOIN stages ON stages.id = results.stage_id
-        JOIN races ON races.id = stages.race_id
-        WHERE results.result_type_id = ? 
-          AND results.rider_id = ?
-          AND races.is_stage_race = 1 
-          AND stages.stage_number = races.number_of_stages
-      )
-    `).get(mappers_1.RESULT_TYPE_IDS.stage, riderId, mappers_1.RESULT_TYPE_IDS.stage, riderId, mappers_1.RESULT_TYPE_IDS.gc, riderId);
+      SELECT SUM(gc_wins + stage_wins + one_day_wins) AS wins
+      FROM rider_career_category_stats
+      WHERE rider_id = ?
+    `).get(riderId);
         return row?.wins ?? 0;
     }
     getSeasonBreakawayAttempts(season, riderId) {
-        if (!(0, mappers_1.tableExists)(this.db, 'results') || !(0, mappers_1.tableExists)(this.db, 'stages') || !(0, mappers_1.columnExists)(this.db, 'results', 'is_breakaway')) {
+        if (!(0, mappers_1.tableExists)(this.db, 'rider_season_stats')) {
             return 0;
         }
         const row = this.db.prepare(`
-      SELECT COUNT(*) AS attempts
-      FROM all_results results
-      JOIN stages ON stages.id = results.stage_id
-      WHERE results.result_type_id = ?
-        AND results.rider_id = ?
-        AND results.is_breakaway = 1
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
-    `).get(mappers_1.RESULT_TYPE_IDS.stage, riderId, season);
-        return row?.attempts ?? 0;
+      SELECT breakaway_attempts
+      FROM rider_season_stats
+      WHERE season = ? AND rider_id = ?
+    `).get(season, riderId);
+        return row?.breakaway_attempts ?? 0;
     }
     getCareerRaceDaysBySeason(riderId) {
-        if (!(0, mappers_1.tableExists)(this.db, 'results') || !(0, mappers_1.tableExists)(this.db, 'stages')) {
+        if (!(0, mappers_1.tableExists)(this.db, 'rider_season_stats')) {
             return [];
         }
         const rows = this.db.prepare(`
-      SELECT
-        CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
-        COUNT(*) AS raceDays
-      FROM stage_entries
-      JOIN stages ON stages.id = stage_entries.stage_id
-      WHERE stage_entries.status != 'dns'
-        AND stage_entries.rider_id = ?
-      GROUP BY CAST(substr(stages.date, 1, 4) AS INTEGER)
+      SELECT season, race_days AS raceDays
+      FROM rider_season_stats
+      WHERE rider_id = ?
       ORDER BY season DESC
     `).all(riderId);
         return rows.map(r => ({
             season: Number(r.season),
-            raceDays: Number(r.raceDays ?? r.race_days ?? r.racedays ?? 0)
+            raceDays: Number(r.raceDays ?? 0)
         }));
     }
     mapResultTypeIdToRiderStatsRowType(resultTypeId) {

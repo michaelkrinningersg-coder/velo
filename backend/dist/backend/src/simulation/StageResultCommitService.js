@@ -976,6 +976,396 @@ class StageResultCommitService {
           `).run(riderId, currentSeason);
                 }
             }
+            // --- INCREMENTAL STATS & ARCHIVING ---
+            const categoryName = race.category?.name || "Unbekannt";
+            const insertCareerStatsRow = this.db.prepare(`
+        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (?)
+      `);
+            const insertSeasonStatsRow = this.db.prepare(`
+        INSERT OR IGNORE INTO rider_season_stats (rider_id, season) VALUES (?, ?)
+      `);
+            const getOrCreateCategoryStats = this.db.prepare(`
+        INSERT OR IGNORE INTO rider_season_category_stats (rider_id, season, category_name) VALUES (?, ?, ?);
+      `);
+            const getOrCreateCareerCategoryStats = this.db.prepare(`
+        INSERT OR IGNORE INTO rider_career_category_stats (rider_id, category_name) VALUES (?, ?);
+      `);
+            const updateCareerIncrement = this.db.prepare(`
+        UPDATE rider_career_stats
+        SET dns_count = dns_count + ?,
+            dnf_count = dnf_count + ?,
+            otl_count = otl_count + ?,
+            breakaway_kms = breakaway_kms + ?,
+            superform_days = superform_days + ?,
+            supermalus_days = supermalus_days + ?,
+            home_advantage_days = home_advantage_days + ?,
+            super_home_advantage_days = super_home_advantage_days + ?,
+            home_pressure_days = home_pressure_days + ?
+        WHERE rider_id = ?
+      `);
+            const winnerRow = stageRows.find((r) => r.rank === 1);
+            const isBreakawayWinner = winnerRow && winnerRow.riderId != null && breakawayRiderIds.has(winnerRow.riderId);
+            const updateFinishedStats = this.db.prepare(`
+        UPDATE rider_career_stats
+        SET race_days = race_days + 1,
+            successful_breakaways = successful_breakaways + ?
+        WHERE rider_id = ?
+      `);
+            const updateFinishedSeasonStats = this.db.prepare(`
+        UPDATE rider_season_stats
+        SET race_days = race_days + 1,
+            successful_breakaways = successful_breakaways + ?
+        WHERE rider_id = ? AND season = ?
+      `);
+            const updateFinishedCategoryStats = this.db.prepare(`
+        UPDATE rider_season_category_stats
+        SET race_days = race_days + 1
+        WHERE rider_id = ? AND season = ? AND category_name = ?
+      `);
+            const updateFinishedCareerCategoryStats = this.db.prepare(`
+        UPDATE rider_career_category_stats
+        SET race_days = race_days + 1
+        WHERE rider_id = ? AND category_name = ?
+      `);
+            const updateCategoryTttRank = this.db.prepare(`
+        UPDATE rider_season_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            win_ttt = win_ttt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND season = ? AND category_name = ?
+      `);
+            const updateCareerCategoryTttRank = this.db.prepare(`
+        UPDATE rider_career_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            win_ttt = win_ttt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND category_name = ?
+      `);
+            for (const row of stageRows) {
+                if (row.riderId == null) {
+                    if (stage.profile === 'TTT') {
+                        for (const rId of completedRiderIds) {
+                            insertCareerStatsRow.run(rId);
+                            insertSeasonStatsRow.run(rId, currentSeason);
+                            getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
+                            getOrCreateCareerCategoryStats.run(rId, categoryName);
+                            const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
+                            updateFinishedStats.run(isSuccess, rId);
+                            updateFinishedSeasonStats.run(isSuccess, rId, currentSeason);
+                            updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
+                            updateFinishedCareerCategoryStats.run(rId, categoryName);
+                            const w1 = (row.rank === 1 && stage.rolledWeatherId === 1) ? 1 : 0;
+                            const w2 = (row.rank === 1 && stage.rolledWeatherId === 2) ? 1 : 0;
+                            const w3 = (row.rank === 1 && stage.rolledWeatherId === 3) ? 1 : 0;
+                            const w4 = (row.rank === 1 && stage.rolledWeatherId === 4) ? 1 : 0;
+                            const w5 = (row.rank === 1 && stage.rolledWeatherId === 5) ? 1 : 0;
+                            const w6 = (row.rank === 1 && stage.rolledWeatherId === 6) ? 1 : 0;
+                            const w7 = (row.rank === 1 && stage.rolledWeatherId === 7) ? 1 : 0;
+                            const valWins = row.rank === 1 ? 1 : 0;
+                            const valSec = row.rank === 2 ? 1 : 0;
+                            const valThird = row.rank === 3 ? 1 : 0;
+                            const valTopTen = (row.rank > 3 && row.rank <= 10) ? 1 : 0;
+                            updateCategoryTttRank.run(valWins, valSec, valThird, valTopTen, valWins, w1, w2, w3, w4, w5, w6, w7, rId, currentSeason, categoryName);
+                            updateCareerCategoryTttRank.run(valWins, valSec, valThird, valTopTen, valWins, w1, w2, w3, w4, w5, w6, w7, rId, categoryName);
+                        }
+                    }
+                    continue;
+                }
+                const rId = row.riderId;
+                insertCareerStatsRow.run(rId);
+                insertSeasonStatsRow.run(rId, currentSeason);
+                getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
+                getOrCreateCareerCategoryStats.run(rId, categoryName);
+                const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
+                updateFinishedStats.run(isSuccess, rId);
+                updateFinishedSeasonStats.run(isSuccess, rId, currentSeason);
+                updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
+                updateFinishedCareerCategoryStats.run(rId, categoryName);
+                const escKms = riderEscapeKms.get(rId) ?? 0.0;
+                const sform = superformCounts.get(rId) ?? 0;
+                const smalus = supermalusCounts.get(rId) ?? 0;
+                const homeAdv = homeAdvantageCounts.get(rId) ?? 0;
+                const sHomeAdv = superHomeAdvantageCounts.get(rId) ?? 0;
+                const homePress = homePressureCounts.get(rId) ?? 0;
+                updateCareerIncrement.run(0, 0, 0, escKms, sform, smalus, homeAdv, sHomeAdv, homePress, rId);
+                const updateCategoryPlacing = this.db.prepare(`
+          UPDATE rider_season_category_stats
+          SET stage_wins = stage_wins + ?,
+              stage_second = stage_second + ?,
+              stage_third = stage_third + ?,
+              stage_top_ten = stage_top_ten + ?,
+              one_day_wins = one_day_wins + ?,
+              one_day_second = one_day_second + ?,
+              one_day_third = one_day_third + ?,
+              one_day_top_ten = one_day_top_ten + ?,
+              win_flat = win_flat + ?,
+              win_rolling = win_rolling + ?,
+              win_hilly = win_hilly + ?,
+              win_hilly_difficult = win_hilly_difficult + ?,
+              win_medium_mountain = win_medium_mountain + ?,
+              win_mountain = win_mountain + ?,
+              win_high_mountain = win_high_mountain + ?,
+              win_cobble = win_cobble + ?,
+              win_cobble_hill = win_cobble_hill + ?,
+              win_itt = win_itt + ?,
+              win_weather_1 = win_weather_1 + ?,
+              win_weather_2 = win_weather_2 + ?,
+              win_weather_3 = win_weather_3 + ?,
+              win_weather_4 = win_weather_4 + ?,
+              win_weather_5 = win_weather_5 + ?,
+              win_weather_6 = win_weather_6 + ?,
+              win_weather_7 = win_weather_7 + ?
+          WHERE rider_id = ? AND season = ? AND category_name = ?
+        `);
+                const updateCareerCategoryPlacing = this.db.prepare(`
+          UPDATE rider_career_category_stats
+          SET stage_wins = stage_wins + ?,
+              stage_second = stage_second + ?,
+              stage_third = stage_third + ?,
+              stage_top_ten = stage_top_ten + ?,
+              one_day_wins = one_day_wins + ?,
+              one_day_second = one_day_second + ?,
+              one_day_third = one_day_third + ?,
+              one_day_top_ten = one_day_top_ten + ?,
+              win_flat = win_flat + ?,
+              win_rolling = win_rolling + ?,
+              win_hilly = win_hilly + ?,
+              win_hilly_difficult = win_hilly_difficult + ?,
+              win_medium_mountain = win_medium_mountain + ?,
+              win_mountain = win_mountain + ?,
+              win_high_mountain = win_high_mountain + ?,
+              win_cobble = win_cobble + ?,
+              win_cobble_hill = win_cobble_hill + ?,
+              win_itt = win_itt + ?,
+              win_weather_1 = win_weather_1 + ?,
+              win_weather_2 = win_weather_2 + ?,
+              win_weather_3 = win_weather_3 + ?,
+              win_weather_4 = win_weather_4 + ?,
+              win_weather_5 = win_weather_5 + ?,
+              win_weather_6 = win_weather_6 + ?,
+              win_weather_7 = win_weather_7 + ?
+          WHERE rider_id = ? AND category_name = ?
+        `);
+                const pWins = row.rank === 1 ? 1 : 0;
+                const pSec = row.rank === 2 ? 1 : 0;
+                const pThird = row.rank === 3 ? 1 : 0;
+                const pTopTen = (row.rank > 3 && row.rank <= 10) ? 1 : 0;
+                const stageWins = race.isStageRace ? pWins : 0;
+                const stageSecond = race.isStageRace ? pSec : 0;
+                const stageThird = race.isStageRace ? pThird : 0;
+                const stageTopTen = race.isStageRace ? pTopTen : 0;
+                const oneDayWins = !race.isStageRace ? pWins : 0;
+                const oneDaySecond = !race.isStageRace ? pSec : 0;
+                const oneDayThird = !race.isStageRace ? pThird : 0;
+                const oneDayTopTen = !race.isStageRace ? pTopTen : 0;
+                const prof = stage.profile.toLowerCase();
+                const f = (pWins && prof === 'flat') ? 1 : 0;
+                const rol = (pWins && prof === 'rolling') ? 1 : 0;
+                const hil = (pWins && prof === 'hilly') ? 1 : 0;
+                const hd = (pWins && prof === 'hilly_difficult') ? 1 : 0;
+                const mm = (pWins && prof === 'medium_mountain') ? 1 : 0;
+                const mtn = (pWins && prof === 'mountain') ? 1 : 0;
+                const hm = (pWins && prof === 'high_mountain') ? 1 : 0;
+                const cob = (pWins && prof === 'cobble') ? 1 : 0;
+                const ch = (pWins && prof === 'cobble_hill') ? 1 : 0;
+                const itt = (pWins && prof === 'itt') ? 1 : 0;
+                const w1 = (pWins && stage.rolledWeatherId === 1) ? 1 : 0;
+                const w2 = (pWins && stage.rolledWeatherId === 2) ? 1 : 0;
+                const w3 = (pWins && stage.rolledWeatherId === 3) ? 1 : 0;
+                const w4 = (pWins && stage.rolledWeatherId === 4) ? 1 : 0;
+                const w5 = (pWins && stage.rolledWeatherId === 5) ? 1 : 0;
+                const w6 = (pWins && stage.rolledWeatherId === 6) ? 1 : 0;
+                const w7 = (pWins && stage.rolledWeatherId === 7) ? 1 : 0;
+                updateCategoryPlacing.run(stageWins, stageSecond, stageThird, stageTopTen, oneDayWins, oneDaySecond, oneDayThird, oneDayTopTen, f, rol, hil, hd, mm, mtn, hm, cob, ch, itt, w1, w2, w3, w4, w5, w6, w7, rId, currentSeason, categoryName);
+                updateCareerCategoryPlacing.run(stageWins, stageSecond, stageThird, stageTopTen, oneDayWins, oneDaySecond, oneDayThird, oneDayTopTen, f, rol, hil, hd, mm, mtn, hm, cob, ch, itt, w1, w2, w3, w4, w5, w6, w7, rId, categoryName);
+            }
+            for (const dns of dnsEvents) {
+                if (dns.riderId != null) {
+                    insertCareerStatsRow.run(dns.riderId);
+                    insertSeasonStatsRow.run(dns.riderId, currentSeason);
+                    updateCareerIncrement.run(1, 0, 0, 0.0, 0, 0, 0, 0, 0, dns.riderId);
+                }
+            }
+            for (const entry of dnfEntries) {
+                insertCareerStatsRow.run(entry.riderId);
+                insertSeasonStatsRow.run(entry.riderId, currentSeason);
+                const otl = entry.statusReason?.startsWith('OTL ') ? 1 : 0;
+                const dnf = otl ? 0 : 1;
+                updateCareerIncrement.run(0, dnf, otl, 0.0, 0, 0, 0, 0, 0, entry.riderId);
+            }
+            if (race.isStageRace && stage.stageNumber === race.numberOfStages) {
+                const updateSeasonFinalClassifications = this.db.prepare(`
+          UPDATE rider_season_category_stats
+          SET gc_wins = gc_wins + ?,
+              gc_second = gc_second + ?,
+              gc_third = gc_third + ?,
+              gc_top_ten = gc_top_ten + ?,
+              points_wins = points_wins + ?,
+              mountain_wins = mountain_wins + ?,
+              youth_wins = youth_wins + ?,
+              breakaway_wins = breakaway_wins + ?
+          WHERE rider_id = ? AND season = ? AND category_name = ?
+        `);
+                const updateCareerFinalClassifications = this.db.prepare(`
+          UPDATE rider_career_category_stats
+          SET gc_wins = gc_wins + ?,
+              gc_second = gc_second + ?,
+              gc_third = gc_third + ?,
+              gc_top_ten = gc_top_ten + ?,
+              points_wins = points_wins + ?,
+              mountain_wins = mountain_wins + ?,
+              youth_wins = youth_wins + ?,
+              breakaway_wins = breakaway_wins + ?
+          WHERE rider_id = ? AND category_name = ?
+        `);
+                const getGCStats = (riderId) => {
+                    const gcR = gcRows.find((r) => r.riderId === riderId);
+                    const gcRank = gcR ? gcR.rank : 9999;
+                    const gcW = gcRank === 1 ? 1 : 0;
+                    const gc2 = gcRank === 2 ? 1 : 0;
+                    const gc3 = gcRank === 3 ? 1 : 0;
+                    const gcT = (gcRank > 3 && gcRank <= 10) ? 1 : 0;
+                    const ptsR = pointsRows.find((r) => r.riderId === riderId);
+                    const ptsW = (ptsR && ptsR.rank === 1) ? 1 : 0;
+                    const mtnR = mountainRows.find((r) => r.riderId === riderId);
+                    const mtnW = (mtnR && mtnR.rank === 1) ? 1 : 0;
+                    const ythR = youthRows.find((r) => r.riderId === riderId);
+                    const ythW = (ythR && ythR.rank === 1) ? 1 : 0;
+                    const brkR = breakawayRows.find((r) => r.riderId === riderId);
+                    const brkW = (brkR && brkR.rank === 1) ? 1 : 0;
+                    return { gcW, gc2, gc3, gcT, ptsW, mtnW, ythW, brkW };
+                };
+                const finalRiderIds = new Set([
+                    ...gcRows.map((r) => r.riderId),
+                    ...pointsRows.map((r) => r.riderId),
+                    ...mountainRows.map((r) => r.riderId),
+                    ...youthRows.map((r) => r.riderId),
+                    ...breakawayRows.map((r) => r.riderId)
+                ].filter(id => id != null));
+                for (const rId of finalRiderIds) {
+                    getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
+                    getOrCreateCareerCategoryStats.run(rId, categoryName);
+                    const { gcW, gc2, gc3, gcT, ptsW, mtnW, ythW, brkW } = getGCStats(rId);
+                    updateSeasonFinalClassifications.run(gcW, gc2, gc3, gcT, ptsW, mtnW, ythW, brkW, rId, currentSeason, categoryName);
+                    updateCareerFinalClassifications.run(gcW, gc2, gc3, gcT, ptsW, mtnW, ythW, brkW, rId, categoryName);
+                }
+            }
+            const updateMarkerSeasonWins = this.db.prepare(`
+        UPDATE rider_season_category_stats
+        SET sprint_wins = sprint_wins + ?,
+            climb_wins_hc = climb_wins_hc + ?,
+            climb_wins_1 = climb_wins_1 + ?,
+            climb_wins_2 = climb_wins_2 + ?,
+            climb_wins_3 = climb_wins_3 + ?,
+            climb_wins_4 = climb_wins_4 + ?
+        WHERE rider_id = ? AND season = ? AND category_name = ?
+      `);
+            const updateMarkerCareerWins = this.db.prepare(`
+        UPDATE rider_career_category_stats
+        SET sprint_wins = sprint_wins + ?,
+            climb_wins_hc = climb_wins_hc + ?,
+            climb_wins_1 = climb_wins_1 + ?,
+            climb_wins_2 = climb_wins_2 + ?,
+            climb_wins_3 = climb_wins_3 + ?,
+            climb_wins_4 = climb_wins_4 + ?
+        WHERE rider_id = ? AND category_name = ?
+      `);
+            const markerWins = new Map();
+            for (const classification of markerClassifications) {
+                for (const entry of classification.entries) {
+                    if (entry.rank === 1) {
+                        const rId = entry.riderId;
+                        let mw = markerWins.get(rId);
+                        if (!mw) {
+                            mw = { spr: 0, hc: 0, c1: 0, c2: 0, c3: 0, c4: 0 };
+                            markerWins.set(rId, mw);
+                        }
+                        const mType = classification.markerType;
+                        const mCat = classification.markerCategory;
+                        if (mType === 'sprint_intermediate' || mCat === 'Sprint') {
+                            mw.spr++;
+                        }
+                        if (mCat === 'HC')
+                            mw.hc++;
+                        else if (mCat === '1')
+                            mw.c1++;
+                        else if (mCat === '2')
+                            mw.c2++;
+                        else if (mCat === '3')
+                            mw.c3++;
+                        else if (mCat === '4')
+                            mw.c4++;
+                    }
+                }
+            }
+            for (const [rId, mw] of markerWins.entries()) {
+                getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
+                getOrCreateCareerCategoryStats.run(rId, categoryName);
+                updateMarkerSeasonWins.run(mw.spr, mw.hc, mw.c1, mw.c2, mw.c3, mw.c4, rId, currentSeason, categoryName);
+                updateMarkerCareerWins.run(mw.spr, mw.hc, mw.c1, mw.c2, mw.c3, mw.c4, rId, categoryName);
+            }
+            if (race.isStageRace) {
+                const updateJerseysSeason = this.db.prepare(`
+          UPDATE rider_season_category_stats
+          SET leader_jerseys = leader_jerseys + ?,
+              points_jerseys = points_jerseys + ?,
+              mountain_jerseys = mountain_jerseys + ?,
+              youth_jerseys = youth_jerseys + ?,
+              breakaway_jerseys = breakaway_jerseys + ?
+          WHERE rider_id = ? AND season = ? AND category_name = ?
+        `);
+                const updateJerseysCareer = this.db.prepare(`
+          UPDATE rider_career_category_stats
+          SET leader_jerseys = leader_jerseys + ?,
+              points_jerseys = points_jerseys + ?,
+              mountain_jerseys = mountain_jerseys + ?,
+              youth_jerseys = youth_jerseys + ?,
+              breakaway_jerseys = breakaway_jerseys + ?
+          WHERE rider_id = ? AND category_name = ?
+        `);
+                for (const [rId, ledList] of leadersAfterStage.entries()) {
+                    getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
+                    getOrCreateCareerCategoryStats.run(rId, categoryName);
+                    const l = ledList.includes('yellow') ? 1 : 0;
+                    const p = ledList.includes('green') ? 1 : 0;
+                    const m = ledList.includes('red') ? 1 : 0;
+                    const y = ledList.includes('white') ? 1 : 0;
+                    const b = ledList.includes('purple') ? 1 : 0;
+                    updateJerseysSeason.run(l, p, m, y, b, rId, currentSeason, categoryName);
+                    updateJerseysCareer.run(l, p, m, y, b, rId, categoryName);
+                }
+            }
+            const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
+            if (isRaceFinished) {
+                this.db.prepare(`
+          INSERT INTO stage_entries_history (stage_id, race_id, team_id, rider_id, status, status_reason)
+          SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+          FROM stage_entries
+          WHERE race_id = ?
+        `).run(race.id);
+                this.db.prepare(`
+          DELETE FROM stage_entries
+          WHERE race_id = ?
+        `).run(race.id);
+            }
         })();
         const gameStateService = new GameStateService_1.GameStateService(this.db);
         gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);

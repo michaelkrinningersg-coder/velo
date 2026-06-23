@@ -20,6 +20,14 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 21,E3 Saxo Classic,4,7,0,1,2026-03-27,2026-03-27,84
 22,Muscat Classic,68,8,0,1,2026-02-06,2026-02-06,60
 23,Giro di Italia,2,2,1,21,2026-05-08,2026-05-31,95
-45,Gent - Wevelgem,4,7,0,1,2026-03-29,2026-03-29,85
+45,Gent - Wevelgem,4,7,0,1,2026-03-30,2026-03-30,85
 24,Rund um Köln,7,9,0,1,2026-05-17,2026-05-17,63
 46,Dwars door Vlaanderen,4,7,0,1,2026-04-01,2026-04-01,83
+25,Ronde van Vlaanderen,4,3,0,1,2026-04-05,2026-04-05,95
+26,De Brabantse Pijl,4,8,0,1,2026-04-17,2026-04-17,80
+27,Paris - Roubaix,3,3,0,1,2026-04-12,2026-04-12,95
+28,Liege - Bastogne - Liege,4,3,0,1,2026-04-26,2026-04-26,95
+29,Amstel Gold Race,5,7,0,1,2026-04-19,2026-04-19,90
+30,La Flèche Wallonne,4,7,0,1,2026-04-22,2026-04-22,90
+31,Eschborn - Frankfurt,7,7,0,1,2026-05-01,2026-05-01,83
+32,Kopenhagen Sprint,10,7,0,1,2026-06-14,2026-06-14,80

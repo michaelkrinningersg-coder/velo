@@ -161,76 +161,6 @@ export async function loadRaces(): Promise<void> {
   if (isActiveView('dashboard')) {
     renderDashboard();
   }
-  void logParticipantCountsOnce();
-  void logProgramAssignmentsOnce();
-}
-
-async function logParticipantCountsOnce(): Promise<void> {
-  const season = state.gameState?.season;
-  if (!season || state.races.length === 0) return;
-
-  const storageKey = `participantCountsLogged_${season}`;
-  if (localStorage.getItem(storageKey)) return;
-
-  // Fetch participant counts for all upcoming races in parallel (batched to avoid overloading)
-  const upcomingRaces = state.races.slice(0, 30);
-  const results = await Promise.all(
-    upcomingRaces.map(async (race) => {
-      const res = await api.getRaceProgramParticipants(race.id);
-      return { race, count: res.success ? (res.data?.length ?? 0) : -1 };
-    }),
-  );
-
-  // Only log if we got any non-zero participants (i.e., programs are rolled)
-  const hasParticipants = results.some((r) => r.count > 0);
-  if (!hasParticipants) return;
-
-  console.group(`[Velo] Teilnehmeranzahl Saison ${season}`);
-  for (const { race, count } of results) {
-    if (count >= 0) {
-      console.log(`${race.name} (${race.startDate}): ${count} Programmfahrer`);
-    }
-  }
-  console.groupEnd();
-
-  localStorage.setItem(storageKey, '1');
-}
-
-export async function logProgramAssignmentsOnce(): Promise<void> {
-  const season = state.gameState?.season;
-  if (!season) return;
-
-  const storageKey = `programAssignmentsLogged_${season}`;
-  if (localStorage.getItem(storageKey)) return;
-
-  const res = await api.getRiders();
-  if (!res.success || !res.data) return;
-
-  const riders = res.data;
-  // Group riders by program
-  const assignmentsByProgram = new Map<number, { name: string; riders: Rider[] }>();
-
-  for (const r of riders) {
-    if (r.seasonProgram) {
-      const prog = r.seasonProgram;
-      if (!assignmentsByProgram.has(prog.id)) {
-        assignmentsByProgram.set(prog.id, { name: prog.name, riders: [] });
-      }
-      assignmentsByProgram.get(prog.id)!.riders.push(r);
-    }
-  }
-
-  if (assignmentsByProgram.size === 0) return;
-
-  console.group(`[Velo] Programmzuweisungen Saison ${season}`);
-  const sortedProgIds = Array.from(assignmentsByProgram.keys()).sort((a, b) => a - b);
-  for (const progId of sortedProgIds) {
-    const prog = assignmentsByProgram.get(progId)!;
-    console.log(`Program: ${progId} - ${prog.name} (Count: ${prog.riders.length})`);
-  }
-  console.groupEnd();
-
-  localStorage.setItem(storageKey, '1');
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -278,7 +208,6 @@ function renderRaceRowHtml(race: Race): string {
       </td>
       <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
       <td>${raceCategoryNameBadge(race)}</td>
-      <td><button type="button" class="dashboard-race-link" data-dashboard-race-participants-id="${race.id}">Teilnehmer</button></td>
       <td>${distance}</td>
       <td>${elevation}</td>
       <td>${statusBadge}</td>
@@ -288,7 +217,7 @@ function renderRaceRowHtml(race: Race): string {
 export function renderDashboardRaces(): void {
   const tbody = $('dashboard-races-tbody');
   if (!state.gameState) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Kein Spiel geladen.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Kein Spiel geladen.</td></tr>';
     return;
   }
 
@@ -308,13 +237,13 @@ export function renderDashboardRaces(): void {
   // In Progress
   html += `
     <tr class="table-subsection-header">
-      <td colspan="9"><strong>In Progress</strong></td>
+      <td colspan="8"><strong>In Progress</strong></td>
     </tr>
   `;
   if (inProgressRaces.length === 0) {
     html += `
       <tr>
-        <td colspan="9" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine laufenden Rennen.</td>
+        <td colspan="8" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine laufenden Rennen.</td>
       </tr>
     `;
   } else {
@@ -324,13 +253,13 @@ export function renderDashboardRaces(): void {
   // Upcoming
   html += `
     <tr class="table-subsection-header">
-      <td colspan="9"><strong>Geplant (Nächste 7 Tage)</strong></td>
+      <td colspan="8"><strong>Geplant (Nächste 7 Tage)</strong></td>
     </tr>
   `;
   if (upcomingRaces.length === 0) {
     html += `
       <tr>
-        <td colspan="9" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine geplanten Rennen in den nächsten 7 Tagen.</td>
+        <td colspan="8" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine geplanten Rennen in den nächsten 7 Tagen.</td>
       </tr>
     `;
   } else {
@@ -751,15 +680,6 @@ export function initDashboardListeners(): void {
   });
 
   $('dashboard-races-tbody').addEventListener('click', (event) => {
-    const participantsButton = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-participants-id]');
-    if (participantsButton) {
-      const raceId = Number(participantsButton.dataset['dashboardRaceParticipantsId']);
-      if (Number.isFinite(raceId)) {
-        void openRaceProgramParticipants(raceId);
-      }
-      return;
-    }
-
     const raceButton = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-id]');
     if (!raceButton) {
       return;

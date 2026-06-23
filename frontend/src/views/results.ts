@@ -1183,16 +1183,18 @@ export function renderResultsView(): void {
           </tr>`;
       }).join('') || '<tr><td colspan="3" class="results-empty-cell">Keine Ereignisse für diese Etappe.</td></tr>'
     : showStageOverviewTable && selectedClassification
-    ? selectedClassification.rows.map((row) => {
-      const participant = row.riderName ?? row.teamName;
-      const teamName = row.riderName ? row.teamName : '–';
-      const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
-      const participantCell = renderResultsParticipant(participant, true, row.isBreakaway === true, row.riderId, row.teamId);
-      const flagCell = renderResultsFlagColumn(resolveRiderCountryCode(row.riderId));
-      const showAverageSpeed = selectedClassification.resultTypeId === 1 && row.rank === 1 && row.timeSeconds != null && stageDistanceKm != null;
-      const timeCell = row.timeSeconds != null
-        ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
-        : '–';
+    ? (() => {
+        const rows = selectedClassification.rows;
+        return rows.map((row) => {
+          const participant = row.riderName ?? row.teamName;
+          const teamName = row.riderName ? row.teamName : '–';
+          const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
+          const participantCell = renderResultsParticipant(participant, true, row.isBreakaway === true, row.riderId, row.teamId);
+          const flagCell = renderResultsFlagColumn(resolveRiderCountryCode(row.riderId));
+          const showAverageSpeed = selectedClassification.resultTypeId === 1 && row.rank === 1 && row.timeSeconds != null && stageDistanceKm != null;
+          const timeCell = row.timeSeconds != null
+            ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
+            : '–';
       const trendCell = showTrendColumn
         ? `<td class="results-gc-delta-cell">${renderRankDelta(row.previousRank, row.rankDelta)}</td>`
         : '';
@@ -1261,20 +1263,21 @@ export function renderResultsView(): void {
         `;
       }
 
-      return `
-        <tr>
-          <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
-          ${trendCell}
-          <td class="results-jersey-col-cell">${jerseyCell}</td>
-          <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
-          <td class="results-flag-col-cell">${flagCell}</td>
-          <td>${renderTeamNameLink(teamName, row.teamId)}</td>
-          <td>${timeCell}</td>
-          <td>${esc(formatRaceGap(row.gapSeconds))}</td>
-          <td class="results-points-cell">${pointsCellContent}</td>
-          <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
-        </tr>`;
-    }).join('')
+          return `
+            <tr>
+              <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+              ${trendCell}
+              <td class="results-jersey-col-cell">${jerseyCell}</td>
+              <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
+              <td class="results-flag-col-cell">${flagCell}</td>
+              <td>${renderTeamNameLink(teamName, row.teamId)}</td>
+              <td>${timeCell}</td>
+              <td>${esc(formatRaceGap(row.gapSeconds))}</td>
+              <td class="results-points-cell">${pointsCellContent}</td>
+              <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
+            </tr>`;
+        }).join('');
+      })()
     : '';
 
   empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers || showEvents || showRoster);
@@ -1289,7 +1292,9 @@ export function renderResultsView(): void {
         </div>
       </section>`;
 
-    const rowsHtml = selectedMarkerClassification.entries.map((entry) => {
+    const entries = selectedMarkerClassification.entries;
+
+    const rowsHtml = entries.map((entry) => {
       const rider = findRiderById(entry.riderId);
       const riderName = rider ? `${rider.firstName} ${rider.lastName}` : `Fahrer ${entry.riderId}`;
       const teamName = rider?.activeTeamId != null
@@ -1315,6 +1320,7 @@ export function renderResultsView(): void {
 }
 
 export function initResultsListeners(): void {
+
   $('results-race-select').addEventListener('change', (e) => {
     const val = (e.target as HTMLSelectElement).value;
     state.selectedResultsRaceId = val ? Number(val) : null;

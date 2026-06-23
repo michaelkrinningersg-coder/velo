@@ -159,7 +159,10 @@ export function createRouter(dbService: DatabaseService): Router {
     const id = Number(teamId);
     if (!Number.isFinite(id)) return fail(res, 400, 'teamId muss eine Zahl sein.');
     try { dbService.createNewSave(filename, careerName, id); ok<void>(res, undefined); }
-    catch (e) { fail(res, 400, (e as Error).message); }
+    catch (e) {
+      console.error('ERROR IN CREATE SAVE:', e);
+      fail(res, 400, (e as Error).message);
+    }
   });
 
   // Gibt alle wÃ¤hlbaren (nicht-U23) Teams aus der Master-DB zurÃ¼ck
@@ -833,7 +836,7 @@ export function createRouter(dbService: DatabaseService): Router {
               SELECT rider_id FROM all_results WHERE result_type_id = 1 AND rank = 1 AND rider_id IN (${placeholders})
               UNION ALL
               SELECT stage_entries.rider_id AS rider_id FROM all_results results
-              JOIN stage_entries ON stage_entries.stage_id = results.stage_id
+              JOIN all_stage_entries stage_entries ON stage_entries.stage_id = results.stage_id
               WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL AND stage_entries.team_id = results.team_id
                 AND stage_entries.rider_id IN (${placeholders})
               UNION ALL

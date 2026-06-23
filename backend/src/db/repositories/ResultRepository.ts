@@ -149,7 +149,6 @@ export class ResultRepository {
       FROM stages
       WHERE race_id = ?
         AND stage_number < ?
-        AND date < (SELECT current_date FROM game_state WHERE id = 1)
       ORDER BY stage_number DESC
       LIMIT 1
     `).get(raceId, stageNumber) as { stage_id: number; stage_number: number } | undefined;
@@ -162,7 +161,6 @@ export class ResultRepository {
       FROM stages
       WHERE race_id = ?
         AND stage_number < ?
-        AND date < (SELECT current_date FROM game_state WHERE id = 1)
       ORDER BY stage_number DESC
       LIMIT 1
     `).get(raceId, previousStage.stage_number) as { stage_id: number } | undefined;
@@ -315,13 +313,13 @@ export class ResultRepository {
         ) AS gc_rank,
         (
           SELECT se.status
-          FROM stage_entries se
+          FROM all_stage_entries se
           WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
           LIMIT 1
         ) AS dropout_status,
         (
           SELECT se.status_reason
-          FROM stage_entries se
+          FROM all_stage_entries se
           WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
           LIMIT 1
         ) AS dropout_reason
@@ -579,7 +577,7 @@ export class ResultRepository {
         stages.stage_number AS stage_number,
         stage_entries.status AS status,
         stage_entries.status_reason AS status_reason
-      FROM stage_entries
+      FROM all_stage_entries stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN riders ON riders.id = stage_entries.rider_id
       LEFT JOIN teams ON teams.id = stage_entries.team_id
@@ -880,7 +878,6 @@ export class ResultRepository {
       FROM stages
       WHERE race_id = ?
         AND stage_number < ?
-        AND date < (SELECT current_date FROM game_state WHERE id = 1)
       ORDER BY stage_number DESC
       LIMIT 1
     `).get(raceId, stageNumber) as { stage_id: number } | undefined;
@@ -911,7 +908,6 @@ export class ResultRepository {
       FROM stages
       WHERE race_id = ?
         AND stage_number < ?
-        AND date < (SELECT current_date FROM game_state WHERE id = 1)
       ORDER BY stage_number DESC
       LIMIT 1
     `).get(raceId, stageNumber) as { stage_id: number; stage_number: number } | undefined;
@@ -924,7 +920,6 @@ export class ResultRepository {
       FROM stages
       WHERE race_id = ?
         AND stage_number < ?
-        AND date < (SELECT current_date FROM game_state WHERE id = 1)
       ORDER BY stage_number DESC
       LIMIT 1
     `).get(raceId, previousStage.stage_number) as { stage_id: number } | undefined;

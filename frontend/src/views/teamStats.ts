@@ -16,7 +16,7 @@ import {
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
 import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
-import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn } from './riderStats';
+import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn, resolveRiderStatsFinalTypeClassName, getRiderStatsRowTypeLabel, renderFilterButton } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
 function getCategoryPriority(categoryName: string | null | undefined): number {
@@ -347,6 +347,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       if (r.rowType === 'mountain_final') return state.teamStatsTopResultsFilters.mountain;
       if (r.rowType === 'points_final') return state.teamStatsTopResultsFilters.points;
       if (r.rowType === 'youth_final') return state.teamStatsTopResultsFilters.youth;
+      if (r.rowType === 'breakaway_final') return state.teamStatsTopResultsFilters.breakaway;
       return true;
     } else {
       if (r.isStageRace) { // Stage race stage result
@@ -371,6 +372,12 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
   }
   if (state.teamStatsTopResultsFilterSeason != null) {
     filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
+  }
+  if (state.teamStatsTopResultsFilterRank != null && !isNaN(state.teamStatsTopResultsFilterRank)) {
+    filteredRows = filteredRows.filter(r => r.resultRank != null && r.resultRank <= state.teamStatsTopResultsFilterRank!);
+  }
+  if (state.teamStatsTopResultsFilterProfile) {
+    filteredRows = filteredRows.filter(r => r.profile === state.teamStatsTopResultsFilterProfile);
   }
 
   filteredRows.sort((a, b) => {
@@ -427,7 +434,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
   }).join('');
 
   const filtersHtml = `
-    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
+    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
       <div class="form-group" style="margin: 0; display: flex; align-items: center;">
         <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Rennklasse:</label>
         <select id="team-stats-filter-category" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
@@ -442,32 +449,72 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
           ${seasonsList.map(yr => `<option value="${yr}" ${state.teamStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
         </select>
       </div>
+      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
+        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Profil:</label>
+        <select id="team-stats-filter-profile" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444; cursor: pointer;">
+          <option value="all">Alle Profile</option>
+          <option value="Flat" ${state.teamStatsTopResultsFilterProfile === 'Flat' ? 'selected' : ''}>Flat</option>
+          <option value="Rolling" ${state.teamStatsTopResultsFilterProfile === 'Rolling' ? 'selected' : ''}>Rolling</option>
+          <option value="Hilly" ${state.teamStatsTopResultsFilterProfile === 'Hilly' ? 'selected' : ''}>Hilly</option>
+          <option value="Hilly Difficult" ${state.teamStatsTopResultsFilterProfile === 'Hilly Difficult' ? 'selected' : ''}>Hilly Difficult</option>
+          <option value="Medium Mountain" ${state.teamStatsTopResultsFilterProfile === 'Medium Mountain' ? 'selected' : ''}>Medium Mountain</option>
+          <option value="Mountain" ${state.teamStatsTopResultsFilterProfile === 'Mountain' ? 'selected' : ''}>Mountain</option>
+          <option value="High Mountain" ${state.teamStatsTopResultsFilterProfile === 'High Mountain' ? 'selected' : ''}>High Mountain</option>
+          <option value="Cobble" ${state.teamStatsTopResultsFilterProfile === 'Cobble' ? 'selected' : ''}>Cobble</option>
+          <option value="Cobble Hill" ${state.teamStatsTopResultsFilterProfile === 'Cobble Hill' ? 'selected' : ''}>Cobble Hill</option>
+          <option value="ITT" ${state.teamStatsTopResultsFilterProfile === 'ITT' ? 'selected' : ''}>ITT</option>
+          <option value="TTT" ${state.teamStatsTopResultsFilterProfile === 'TTT' ? 'selected' : ''}>TTT</option>
+        </select>
+      </div>
       
-      <div class="top-results-checkboxes" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; border-left: 1px solid rgba(255, 255, 255, 0.15); padding-left: 1rem;">
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="gc" ${state.teamStatsTopResultsFilters.gc ? 'checked' : ''} style="accent-color: #ffd700; width: 14px; height: 14px; cursor: pointer;">
-          nur GC
-        </label>
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="mountain" ${state.teamStatsTopResultsFilters.mountain ? 'checked' : ''} style="accent-color: #ff4d4d; width: 14px; height: 14px; cursor: pointer;">
-          nur Bergwertung
-        </label>
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="points" ${state.teamStatsTopResultsFilters.points ? 'checked' : ''} style="accent-color: #2ecc71; width: 14px; height: 14px; cursor: pointer;">
-          nur Punktewertung
-        </label>
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="youth" ${state.teamStatsTopResultsFilters.youth ? 'checked' : ''} style="accent-color: #ffffff; width: 14px; height: 14px; cursor: pointer;">
-          nur Nachwuchs
-        </label>
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="oneDay" ${state.teamStatsTopResultsFilters.oneDay ? 'checked' : ''} style="accent-color: #9b59b6; width: 14px; height: 14px; cursor: pointer;">
-          One Day Races
-        </label>
-        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #fff; gap: 0.4rem; font-size: 0.9rem; user-select: none; margin-bottom: 0;">
-          <input type="checkbox" class="team-stats-filter-checkbox" data-filter-type="stage" ${state.teamStatsTopResultsFilters.stage ? 'checked' : ''} style="accent-color: #3498db; width: 14px; height: 14px; cursor: pointer;">
-          Etappenwertungen
-        </label>
+      <div style="display: grid; grid-template-rows: auto auto; grid-template-columns: repeat(6, 130px); gap: 0.5rem; align-items: center; justify-items: center; text-align: center; margin-left: auto; border-left: 1px solid rgba(255, 255, 255, 0.1); padding-left: 1rem;">
+        <!-- Column 1: Siege / Top 3 -->
+        <div style="grid-row: 1; grid-column: 1;">
+          ${renderFilterButton('Siege', state.teamStatsTopResultsFilterRank === 1, 'linear-gradient(135deg, #fbbf24, #d4af37)', '#000', 'rgba(251, 191, 36, 0.4)', 'data-team-top-results-rank', '1')}
+        </div>
+        <div style="grid-row: 2; grid-column: 1;">
+          ${renderFilterButton('Top 3', state.teamStatsTopResultsFilterRank === 3, 'linear-gradient(135deg, #e2e8f0, #94a3b8)', '#000', 'rgba(148, 163, 184, 0.4)', 'data-team-top-results-rank', '3')}
+        </div>
+
+        <!-- Column 2: Top 5 / Top 10 -->
+        <div style="grid-row: 1; grid-column: 2;">
+          ${renderFilterButton('Top 5', state.teamStatsTopResultsFilterRank === 5, 'linear-gradient(135deg, #d97706, #b45309)', '#fff', 'rgba(217, 119, 6, 0.4)', 'data-team-top-results-rank', '5')}
+        </div>
+        <div style="grid-row: 2; grid-column: 2;">
+          ${renderFilterButton('Top 10', state.teamStatsTopResultsFilterRank === 10, 'linear-gradient(135deg, #a16207, #78350f)', '#fff', 'rgba(161, 98, 7, 0.4)', 'data-team-top-results-rank', '10')}
+        </div>
+
+        <!-- Column 3: GC / [Empty] -->
+        <div style="grid-row: 1; grid-column: 3;">
+          ${renderFilterButton('GC', state.teamStatsTopResultsFilters.gc, 'linear-gradient(135deg, #facc15, #ca8a04)', '#000', 'rgba(234, 179, 8, 0.4)', 'data-team-top-results-filter', 'gc')}
+        </div>
+        <div style="grid-row: 2; grid-column: 3;">
+          <!-- Empty for GC single layout -->
+        </div>
+
+        <!-- Column 4: Punkte / Berg -->
+        <div style="grid-row: 1; grid-column: 4;">
+          ${renderFilterButton('Punkte', state.teamStatsTopResultsFilters.points, 'linear-gradient(135deg, #4ade80, #16a34a)', '#fff', 'rgba(74, 222, 128, 0.4)', 'data-team-top-results-filter', 'points')}
+        </div>
+        <div style="grid-row: 2; grid-column: 4;">
+          ${renderFilterButton('Berg', state.teamStatsTopResultsFilters.mountain, 'linear-gradient(135deg, #f87171, #dc2626)', '#fff', 'rgba(239, 68, 68, 0.4)', 'data-team-top-results-filter', 'mountain')}
+        </div>
+
+        <!-- Column 5: Nachwuchs / Ausreißer -->
+        <div style="grid-row: 1; grid-column: 5;">
+          ${renderFilterButton('Nachwuchs', state.teamStatsTopResultsFilters.youth, 'linear-gradient(135deg, #ffffff, #e2e8f0)', '#0f172a', 'rgba(255, 255, 255, 0.4)', 'data-team-top-results-filter', 'youth')}
+        </div>
+        <div style="grid-row: 2; grid-column: 5;">
+          ${renderFilterButton('Ausreißer', state.teamStatsTopResultsFilters.breakaway, 'linear-gradient(135deg, #c084fc, #7c3aed)', '#fff', 'rgba(168, 85, 247, 0.4)', 'data-team-top-results-filter', 'breakaway')}
+        </div>
+
+        <!-- Column 6: Etappen / One Day -->
+        <div style="grid-row: 1; grid-column: 6;">
+          ${renderFilterButton('Etappen', state.teamStatsTopResultsFilters.stage, 'linear-gradient(135deg, #60a5fa, #2563eb)', '#fff', 'rgba(59, 130, 246, 0.4)', 'data-team-top-results-filter', 'stage')}
+        </div>
+        <div style="grid-row: 2; grid-column: 6;">
+          ${renderFilterButton('One Day', state.teamStatsTopResultsFilters.oneDay, 'linear-gradient(135deg, #b91c1c, #7f1d1d)', '#fff', 'rgba(185, 28, 28, 0.4)', 'data-team-top-results-filter', 'oneDay')}
+        </div>
       </div>
     </div>
   `;
@@ -477,7 +524,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
-          ? `${row.raceName} · ${row.rowType === 'gc_final' ? 'Gesamtwertung' : row.rowType === 'points_final' ? 'Punktewertung' : row.rowType === 'mountain_final' ? 'Bergwertung' : 'Nachwuchs'}`
+          ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
           : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
 
         let stagePlacementHtml = '–';
@@ -490,7 +537,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
         } else if (row.resultRank == null) {
           // Keep -
         } else if (isFinalRow) {
-          const className = row.rowType === 'gc_final' ? 'is-gc' : row.rowType === 'points_final' ? 'is-points' : row.rowType === 'mountain_final' ? 'is-mountain' : 'is-youth';
+          const className = resolveRiderStatsFinalTypeClassName(row.rowType);
           gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
         } else {
           const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
@@ -1162,22 +1209,8 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
       const fromTeam = rider.fromTeamName ? esc(rider.fromTeamName) : 'Freier Fahrer';
       teamInfoHtml = `<span style="color: #64748b; font-size: 0.8rem; font-weight: normal; margin-left: 0.35rem;">(${fromTeam})</span>`;
     } else {
-      if (rider.toTeamId && rider.toTeamName) {
-        teamInfoHtml = `
-          <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; color: #64748b; margin-top: 0.15rem;">
-            <span>zu:</span>
-            ${renderMiniJersey(rider.toTeamId, rider.toTeamName)}
-            <span style="font-weight: 500;">${esc(rider.toTeamName)}</span>
-          </div>
-        `;
-      } else {
-        const statusText = rider.isRetired ? 'Karriereende' : 'Freier Fahrer';
-        teamInfoHtml = `
-          <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.15rem; font-style: italic;">
-            ${statusText}
-          </div>
-        `;
-      }
+      const toTeam = rider.toTeamName ? `zu: ${rider.toTeamName}` : (rider.isRetired ? 'Karriereende' : 'Freier Fahrer');
+      teamInfoHtml = `<span style="color: #64748b; font-size: 0.8rem; font-weight: normal; margin-left: 0.35rem;">(${esc(toTeam)})</span>`;
     }
 
     return `
@@ -1187,12 +1220,11 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
             <div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
               ${flagHtml}
               ${link}
-              ${type === 'incoming' ? teamInfoHtml : ''}
+              ${teamInfoHtml}
             </div>
             <div style="font-size: 0.8rem; color: #facc15; font-weight: bold; display: flex; align-items: center; gap: 0.5rem; margin-top: 0.1rem; flex-wrap: wrap;">
               <span>${esc(specText)}</span>
             </div>
-            ${type === 'outgoing' ? teamInfoHtml : ''}
           </div>
         </div>
         <div style="text-align: right; flex-shrink: 0; margin-left: 0.5rem;">
@@ -1321,6 +1353,8 @@ export async function openTeamStats(teamId: number): Promise<void> {
   state.teamStatsTab = 'topResults';
   state.teamStatsTopResultsFilterCategory = null;
   state.teamStatsTopResultsFilterSeason = null;
+  state.teamStatsTopResultsFilterRank = null;
+  state.teamStatsTopResultsFilterProfile = null;
   state.teamStatsSelectedSeason = 'all';
   state.teamStatsSelectedRosterYear = state.gameState?.season ?? 2026;
   state.teamStatsRosterSort = {
@@ -1369,6 +1403,30 @@ export function initTeamStatsListeners(): void {
   // Tabs switching, pagination buttons and dropdowns
   $('team-stats-body').addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
+
+    // Rank filter buttons
+    const rankBtn = target.closest<HTMLButtonElement>('button[data-team-top-results-rank]');
+    if (rankBtn) {
+      const val = rankBtn.dataset['teamTopResultsRank'];
+      const selectedRank = val === 'all' ? null : Number(val);
+      state.teamStatsTopResultsFilterRank = state.teamStatsTopResultsFilterRank === selectedRank ? null : selectedRank;
+      state.teamStatsTopResultsPage = 1;
+      if (state.teamStatsPayload) {
+        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+      }
+      return;
+    }
+
+    const filterBtn = target.closest<HTMLButtonElement>('button[data-team-top-results-filter]');
+    if (filterBtn) {
+      const filterType = filterBtn.dataset['teamTopResultsFilter'] as 'gc' | 'mountain' | 'points' | 'youth' | 'breakaway' | 'oneDay' | 'stage';
+      state.teamStatsTopResultsFilters[filterType] = !state.teamStatsTopResultsFilters[filterType];
+      state.teamStatsTopResultsPage = 1;
+      if (state.teamStatsPayload) {
+        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+      }
+      return;
+    }
 
     // Tab buttons
     const tabButton = target.closest<HTMLButtonElement>('button[data-team-stats-tab]');
@@ -1432,10 +1490,9 @@ export function initTeamStatsListeners(): void {
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
       }
-    } else if (target.classList.contains('team-stats-filter-checkbox')) {
-      const checkbox = target as HTMLInputElement;
-      const type = checkbox.dataset['filterType'] as 'gc' | 'mountain' | 'points' | 'youth' | 'oneDay' | 'stage';
-      state.teamStatsTopResultsFilters[type] = checkbox.checked;
+    } else if (target.id === 'team-stats-filter-profile') {
+      const select = target as HTMLSelectElement;
+      state.teamStatsTopResultsFilterProfile = select.value === 'all' ? null : select.value;
       state.teamStatsTopResultsPage = 1;
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);

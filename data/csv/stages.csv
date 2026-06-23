@@ -83,5 +83,13 @@ id,race_id,stage_number,date,profile,start_elevation,details_csv_file,final_spre
 81,23,21,2026-05-31,Rolling,19,giro21.csv,80,95,0.7,1,1,1|2
 83,23,20,2026-05-30,Mountain,226,giro20.csv,62,82,2.2,1.5,1.5,1|2
 84,24,1,2026-05-17,Hilly,48,RuK.csv,60,65,2.5,1.5,1.5,1|3
-85,46,1,2026-04-01,Cobble_Hill,26,DDV.csv,50,65,2.5,3.5,3,"1|3|5"
-86,45,1,2026-03-30,Cobble_Hill,45,GentWevelgem.csv,50,60,2,3.5,3,"1|3|5"
+85,46,1,2026-04-01,Cobble_Hill,26,DDV.csv,50,65,2.5,3.5,3,1|3|5
+86,45,1,2026-03-30,Cobble_Hill,45,GentWevelgem.csv,50,60,2,3.5,3,1|3|5
+87,25,1,2026-04-05,Cobble_Hill,8,tourofflanders.csv,50,60,3,4,4,1|3|5
+88,26,1,2026-04-17,Hilly,37,pijlbrabant.csv,62,72,2.5,3,2,1|3|4|5|6
+89,27,1,2026-04-12,Flat,69,parisroubaix.csv,50,60,2,7,6,1|3|5|6
+90,28,1,2026-04-26,Medium_Mountain,81,liegebastogneliege.csv,60,70,2.5,2,2,1
+91,29,1,2026-04-19,Hilly,45,amstel.csv,60,70,2.5,2,2.5,1|3|5
+92,30,1,2026-04-22,Hilly_Difficult,162,fleche.csv,60,70,3.2,2,2.5,1|3
+93,31,1,2026-05-01,Medium_Mountain,103,eschborn.csv,40,50,3.5,2,2.5,1|3
+94,32,1,2026-06-14,Flat,8,Kopenhagen.csv,90,95,0.7,2,2.5,"1|3|5"

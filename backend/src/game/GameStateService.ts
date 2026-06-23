@@ -7,7 +7,7 @@ import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
-import { refreshRaceEntriesForRaceStart } from '../simulation/RaceRosterService';
+
 import { getDeterministicWeatherEffect } from '../db/mappers';
 import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
@@ -340,7 +340,6 @@ export class GameStateService {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
 
-      this.prepareRaceEntriesForRaceStarts(nextDate);
       const checks = this.runDailyChecks(nextDate);
 
       return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
@@ -559,13 +558,13 @@ export class GameStateService {
           GROUP BY results.rider_id
         ),
         ttt_wins AS (
-          SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
+          SELECT all_stage_entries.rider_id AS rider_id, COUNT(*) AS wins
           FROM results
           JOIN stages ON stages.id = results.stage_id
-          JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+          JOIN all_stage_entries ON all_stage_entries.stage_id = results.stage_id AND all_stage_entries.team_id = results.team_id
           WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
-            AND stage_entries.status = 'finished'
-          GROUP BY stage_entries.rider_id
+            AND all_stage_entries.status = 'finished'
+          GROUP BY all_stage_entries.rider_id
         ),
         gc_wins AS (
           SELECT results.rider_id AS rider_id, COUNT(*) AS wins
@@ -953,7 +952,7 @@ export class GameStateService {
 
     const yesterday = addDaysIso(nextDate, -1);
     const racedYesterdayRow = this.db.prepare(`
-      SELECT se.rider_id, s.stage_score FROM stage_entries se
+      SELECT se.rider_id, s.stage_score FROM all_stage_entries se
       JOIN stages s ON s.id = se.stage_id
       WHERE s.date = ? AND se.status IN ('finished', 'dnf')
     `).all(yesterday) as Array<{ rider_id: number; stage_score: number }>;
@@ -1310,28 +1309,34 @@ export class GameStateService {
     }
 
     const rollingWindowStart = addDaysIso(currentDate, -29);
-    // Single SQL with a CTE: aggregate stage_entries once, then bulk-update
+    const seasonStart = `${currentSeason}-01-01`;
+    const minDate = rollingWindowStart < seasonStart ? rollingWindowStart : seasonStart;
+
+    // Single SQL with a CTE: aggregate all_stage_entries once, then bulk-update
     // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
     // with one statement.
+    // Optimized by filtering stages.date >= @minDate to avoid scanning full history.
     this.db.prepare(`
       WITH stats AS (
-        SELECT stage_entries.rider_id AS rider_id,
+        SELECT all_stage_entries.rider_id AS rider_id,
                SUM(CASE
-                 WHEN stage_entries.status IN ('finished', 'dnf')
+                 WHEN all_stage_entries.status IN ('finished', 'dnf')
                   AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
                   AND stages.date <= @currentDate
                  THEN 1 ELSE 0
                END) AS season_race_days_total,
                SUM(CASE
-                 WHEN stage_entries.status IN ('finished', 'dnf')
+                 WHEN all_stage_entries.status IN ('finished', 'dnf')
                   AND stages.date >= @rollingStart
                   AND stages.date <= @currentDate
                  THEN 1 ELSE 0
                END) AS rolling_30d_race_days
-        FROM stage_entries
-        JOIN stages ON stages.id = stage_entries.stage_id
-        WHERE stage_entries.status IN ('finished', 'dnf')
-        GROUP BY stage_entries.rider_id
+        FROM all_stage_entries
+        JOIN stages ON stages.id = all_stage_entries.stage_id
+        WHERE all_stage_entries.status IN ('finished', 'dnf')
+          AND stages.date >= @minDate
+          AND stages.date <= @currentDate
+        GROUP BY all_stage_entries.rider_id
       )
       UPDATE rider_daily_state
       SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
@@ -1342,6 +1347,7 @@ export class GameStateService {
       season: currentSeason,
       currentDate,
       rollingStart: rollingWindowStart,
+      minDate,
     });
 
     this.db.prepare(`
@@ -1354,14 +1360,14 @@ export class GameStateService {
         GROUP BY results.rider_id
       ),
       ttt_wins AS (
-        SELECT stage_entries.rider_id, COUNT(*) AS wins
+        SELECT all_stage_entries.rider_id, COUNT(*) AS wins
         FROM results
         JOIN stages ON stages.id = results.stage_id
-        JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+        JOIN all_stage_entries ON all_stage_entries.stage_id = results.stage_id AND all_stage_entries.team_id = results.team_id
         WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
-          AND stage_entries.status = 'finished'
+          AND all_stage_entries.status = 'finished'
           AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-        GROUP BY stage_entries.rider_id
+        GROUP BY all_stage_entries.rider_id
       ),
       gc_wins AS (
         SELECT results.rider_id, COUNT(*) AS wins
@@ -1392,50 +1398,6 @@ export class GameStateService {
     });
   }
 
-  private prepareRaceEntriesForRaceStarts(currentDate: string): void {
-    if (!tableExists(this.db, 'races') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'race_entries')) {
-      return;
-    }
-
-    const rows = this.db.prepare(`
-      SELECT races.id AS race_id, stages.id AS stage_id
-      FROM races
-      JOIN stages ON stages.race_id = races.id
-      WHERE stages.date = ?
-        AND (races.is_stage_race = 0 OR stages.stage_number = 1)
-      ORDER BY races.id ASC, stages.stage_number ASC
-    `).all(currentDate) as Array<{ race_id: number; stage_id: number }>;
-
-    if (rows.length === 0) {
-      return;
-    }
-
-    const raceRepo = new RaceRepository(this.db); const riderRepo = new RiderRepository(this.db); const teamRepo = new TeamRepository(this.db);
-    const gsRepo = new GameStateRepository(this.db);
-    const allRiders = riderRepo.getRiders();
-    for (const row of rows) {
-      const race = raceRepo.getRaceById(row.race_id);
-      const stage = raceRepo.getStageById(row.stage_id);
-      if (!race || !stage) {
-        continue;
-      }
-      // Build a composite repo that satisfies RaceRosterService's duck-typed `repo` parameter.
-      const compositeRepo = {
-        getCurrentSeason: () => gsRepo.getCurrentSeason(),
-        getCurrentDate: () => gsRepo.getCurrentDate(),
-        getRiders: (teamId?: number) => teamId != null ? (riderRepo as any).getRiders(teamId) : allRiders,
-        getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
-        getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
-        getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),
-        getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
-        ensureStageEntries: (s: any) => gsRepo.ensureStageEntries(s),
-        prepareStageRaceFatigue: (raceId: number, stageNumber: number, riderIds: number[]) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
-        attachStageRaceFatigue: (raceId: number, riders: any[], stageNumber: number) => (raceRepo as any).attachStageRaceFatigue(raceId, riders, stageNumber),
-        clearStageEntries: (stageId: number) => (gsRepo as any).clearStageEntries(stageId),
-      };
-      refreshRaceEntriesForRaceStart(this.db, compositeRepo, race, stage);
-    }
-  }
 
   private removeExpiredRaceFormEvents(currentDate: string): void {
     if (!tableExists(this.db, 'rider_r_form_events')) {

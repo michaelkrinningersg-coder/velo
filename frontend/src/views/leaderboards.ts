@@ -93,6 +93,7 @@ export function initLeaderboardsView(): void {
       });
     }
   });
+
 }
 
 export function showLeaderboardsView(): void {
@@ -307,6 +308,7 @@ export async function renderLeaderboard(): Promise<void> {
       return;
     }
   }
+
 
   // Hide empty state, show table
   emptyEl.classList.add('hidden');

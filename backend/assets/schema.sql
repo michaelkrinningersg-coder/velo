@@ -728,3 +728,22 @@ CREATE TABLE IF NOT EXISTS team_preferences (
   weight INTEGER NOT NULL,
   UNIQUE(team_id, country_id)
 );
+
+-- ---- Stage Entries History / View --------------------------
+CREATE TABLE IF NOT EXISTS stage_entries_history (
+  stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  team_id        INTEGER NOT NULL REFERENCES teams(id),
+  rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+  status         TEXT    NOT NULL,
+  status_reason  TEXT,
+  PRIMARY KEY (stage_id, rider_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_entries_hist_rider ON stage_entries_history(rider_id);
+
+CREATE VIEW IF NOT EXISTS all_stage_entries AS
+SELECT * FROM stage_entries
+UNION ALL
+SELECT * FROM stage_entries_history;
+

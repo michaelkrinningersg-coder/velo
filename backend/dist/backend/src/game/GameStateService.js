@@ -3,11 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameStateService = void 0;
 const events_1 = require("events");
 const GameStateRepository_1 = require("../db/repositories/GameStateRepository");
-const RaceRepository_1 = require("../db/repositories/RaceRepository");
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
-const RiderRepository_1 = require("../db/repositories/RiderRepository");
-const TeamRepository_1 = require("../db/repositories/TeamRepository");
-const RaceRosterService_1 = require("../simulation/RaceRosterService");
 const mappers_1 = require("../db/mappers");
 const ContractService_1 = require("./ContractService");
 const RiderDevelopmentService_1 = require("./RiderDevelopmentService");
@@ -267,7 +263,6 @@ class GameStateService {
         INSERT INTO career_meta (key, value) VALUES ('current_season', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(String(nextSeason));
-            this.prepareRaceEntriesForRaceStarts(nextDate);
             const checks = this.runDailyChecks(nextDate);
             return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
         })();
@@ -427,13 +422,13 @@ class GameStateService {
           GROUP BY results.rider_id
         ),
         ttt_wins AS (
-          SELECT stage_entries.rider_id AS rider_id, COUNT(*) AS wins
+          SELECT all_stage_entries.rider_id AS rider_id, COUNT(*) AS wins
           FROM results
           JOIN stages ON stages.id = results.stage_id
-          JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+          JOIN all_stage_entries ON all_stage_entries.stage_id = results.stage_id AND all_stage_entries.team_id = results.team_id
           WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
-            AND stage_entries.status = 'finished'
-          GROUP BY stage_entries.rider_id
+            AND all_stage_entries.status = 'finished'
+          GROUP BY all_stage_entries.rider_id
         ),
         gc_wins AS (
           SELECT results.rider_id AS rider_id, COUNT(*) AS wins
@@ -775,7 +770,7 @@ class GameStateService {
         const racingRiderIds = new Set(racingRidersRow.map((r) => r.rider_id));
         const yesterday = addDaysIso(nextDate, -1);
         const racedYesterdayRow = this.db.prepare(`
-      SELECT se.rider_id, s.stage_score FROM stage_entries se
+      SELECT se.rider_id, s.stage_score FROM all_stage_entries se
       JOIN stages s ON s.id = se.stage_id
       WHERE s.date = ? AND se.status IN ('finished', 'dnf')
     `).all(yesterday);
@@ -1070,28 +1065,33 @@ class GameStateService {
             return;
         }
         const rollingWindowStart = addDaysIso(currentDate, -29);
-        // Single SQL with a CTE: aggregate stage_entries once, then bulk-update
+        const seasonStart = `${currentSeason}-01-01`;
+        const minDate = rollingWindowStart < seasonStart ? rollingWindowStart : seasonStart;
+        // Single SQL with a CTE: aggregate all_stage_entries once, then bulk-update
         // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
         // with one statement.
+        // Optimized by filtering stages.date >= @minDate to avoid scanning full history.
         this.db.prepare(`
       WITH stats AS (
-        SELECT stage_entries.rider_id AS rider_id,
+        SELECT all_stage_entries.rider_id AS rider_id,
                SUM(CASE
-                 WHEN stage_entries.status IN ('finished', 'dnf')
+                 WHEN all_stage_entries.status IN ('finished', 'dnf')
                   AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
                   AND stages.date <= @currentDate
                  THEN 1 ELSE 0
                END) AS season_race_days_total,
                SUM(CASE
-                 WHEN stage_entries.status IN ('finished', 'dnf')
+                 WHEN all_stage_entries.status IN ('finished', 'dnf')
                   AND stages.date >= @rollingStart
                   AND stages.date <= @currentDate
                  THEN 1 ELSE 0
                END) AS rolling_30d_race_days
-        FROM stage_entries
-        JOIN stages ON stages.id = stage_entries.stage_id
-        WHERE stage_entries.status IN ('finished', 'dnf')
-        GROUP BY stage_entries.rider_id
+        FROM all_stage_entries
+        JOIN stages ON stages.id = all_stage_entries.stage_id
+        WHERE all_stage_entries.status IN ('finished', 'dnf')
+          AND stages.date >= @minDate
+          AND stages.date <= @currentDate
+        GROUP BY all_stage_entries.rider_id
       )
       UPDATE rider_daily_state
       SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
@@ -1102,6 +1102,7 @@ class GameStateService {
             season: currentSeason,
             currentDate,
             rollingStart: rollingWindowStart,
+            minDate,
         });
         this.db.prepare(`
       WITH individual_wins AS (
@@ -1113,14 +1114,14 @@ class GameStateService {
         GROUP BY results.rider_id
       ),
       ttt_wins AS (
-        SELECT stage_entries.rider_id, COUNT(*) AS wins
+        SELECT all_stage_entries.rider_id, COUNT(*) AS wins
         FROM results
         JOIN stages ON stages.id = results.stage_id
-        JOIN stage_entries ON stage_entries.stage_id = results.stage_id AND stage_entries.team_id = results.team_id
+        JOIN all_stage_entries ON all_stage_entries.stage_id = results.stage_id AND all_stage_entries.team_id = results.team_id
         WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
-          AND stage_entries.status = 'finished'
+          AND all_stage_entries.status = 'finished'
           AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-        GROUP BY stage_entries.rider_id
+        GROUP BY all_stage_entries.rider_id
       ),
       gc_wins AS (
         SELECT results.rider_id, COUNT(*) AS wins
@@ -1149,49 +1150,6 @@ class GameStateService {
     `).run({
             season: currentSeason,
         });
-    }
-    prepareRaceEntriesForRaceStarts(currentDate) {
-        if (!tableExists(this.db, 'races') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'race_entries')) {
-            return;
-        }
-        const rows = this.db.prepare(`
-      SELECT races.id AS race_id, stages.id AS stage_id
-      FROM races
-      JOIN stages ON stages.race_id = races.id
-      WHERE stages.date = ?
-        AND (races.is_stage_race = 0 OR stages.stage_number = 1)
-      ORDER BY races.id ASC, stages.stage_number ASC
-    `).all(currentDate);
-        if (rows.length === 0) {
-            return;
-        }
-        const raceRepo = new RaceRepository_1.RaceRepository(this.db);
-        const riderRepo = new RiderRepository_1.RiderRepository(this.db);
-        const teamRepo = new TeamRepository_1.TeamRepository(this.db);
-        const gsRepo = new GameStateRepository_1.GameStateRepository(this.db);
-        const allRiders = riderRepo.getRiders();
-        for (const row of rows) {
-            const race = raceRepo.getRaceById(row.race_id);
-            const stage = raceRepo.getStageById(row.stage_id);
-            if (!race || !stage) {
-                continue;
-            }
-            // Build a composite repo that satisfies RaceRosterService's duck-typed `repo` parameter.
-            const compositeRepo = {
-                getCurrentSeason: () => gsRepo.getCurrentSeason(),
-                getCurrentDate: () => gsRepo.getCurrentDate(),
-                getRiders: (teamId) => teamId != null ? riderRepo.getRiders(teamId) : allRiders,
-                getTeams: (teamId) => teamRepo.getTeams(teamId),
-                getRaceRiders: (raceId) => raceRepo.getRaceRiders(raceId),
-                getRaceProgramsForRace: (raceId) => raceRepo.getRaceProgramsForRace(raceId),
-                getStageRiders: (stageId) => raceRepo.getStageRiders(stageId),
-                ensureStageEntries: (s) => gsRepo.ensureStageEntries(s),
-                prepareStageRaceFatigue: (raceId, stageNumber, riderIds) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
-                attachStageRaceFatigue: (raceId, riders, stageNumber) => raceRepo.attachStageRaceFatigue(raceId, riders, stageNumber),
-                clearStageEntries: (stageId) => gsRepo.clearStageEntries(stageId),
-            };
-            (0, RaceRosterService_1.refreshRaceEntriesForRaceStart)(this.db, compositeRepo, race, stage);
-        }
     }
     removeExpiredRaceFormEvents(currentDate) {
         if (!tableExists(this.db, 'rider_r_form_events')) {
