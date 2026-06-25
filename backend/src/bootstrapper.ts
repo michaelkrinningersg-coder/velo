@@ -720,43 +720,15 @@ function seedRacePrograms(db: Database.Database): void {
   const rows = readCsv('race_programs.csv');
   const insert = db.prepare(`
     INSERT INTO race_programs (
-      id, name, peak1_min, peak1_max, peak2_min, peak2_max, peak3_min, peak3_max
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, name
+    ) VALUES (?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `race_programs.csv Zeile ${index + 2}`;
-    const peak1Min = int(req(row, 'peak1_min', ctx), `${ctx} / peak1_min`);
-    const peak1Max = int(req(row, 'peak1_max', ctx), `${ctx} / peak1_max`);
-    const peak2Min = int(req(row, 'peak2_min', ctx), `${ctx} / peak2_min`);
-    const peak2Max = int(req(row, 'peak2_max', ctx), `${ctx} / peak2_max`);
-    const peak3Min = int(req(row, 'peak3_min', ctx), `${ctx} / peak3_min`);
-    const peak3Max = int(req(row, 'peak3_max', ctx), `${ctx} / peak3_max`);
-
-    const peaks = [
-      ['peak1', peak1Min, peak1Max],
-      ['peak2', peak2Min, peak2Max],
-      ['peak3', peak3Min, peak3Max],
-    ] as const;
-
-    for (const [label, minWeek, maxWeek] of peaks) {
-      if (minWeek < 1 || minWeek > 53 || maxWeek < 1 || maxWeek > 53) {
-        throw new Error(`${ctx}: ${label}_min und ${label}_max muessen zwischen 1 und 53 liegen.`);
-      }
-      if (minWeek > maxWeek) {
-        throw new Error(`${ctx}: ${label}_min darf nicht groesser als ${label}_max sein.`);
-      }
-    }
-
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
-      peak1Min,
-      peak1Max,
-      peak2Min,
-      peak2Max,
-      peak3Min,
-      peak3Max,
     );
   }
 
@@ -787,60 +759,7 @@ function seedRaceProgramRaces(db: Database.Database): void {
 }
 
 function seedRaceProgramProbabilityRules(db: Database.Database): void {
-  const rows = readCsv('race_program_probability_rules.csv');
-  const insert = db.prepare(`
-    INSERT INTO race_program_probability_rules (
-      id, role_name, spec_1, spec_2, spec_3, program_id, probability
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  const hasRole = db.prepare('SELECT 1 FROM sta_role WHERE name = ?');
-  const hasRiderType = db.prepare('SELECT 1 FROM type_rider WHERE id = ?');
-  const programs = db.prepare('SELECT id, name FROM race_programs ORDER BY id ASC').all() as Array<{ id: number; name: string }>;
-  let insertedRows = 0;
-
-  for (const [index, row] of rows.entries()) {
-    const ctx = `race_program_probability_rules.csv Zeile ${index + 2}`;
-    const matrixId = int(req(row, 'id', ctx), ctx);
-    const roleName = req(row, 'role_name', ctx);
-    const specs = [
-      int(req(row, 'spec_1', ctx), `${ctx} / spec_1`),
-      int(req(row, 'spec_2', ctx), `${ctx} / spec_2`),
-      int(req(row, 'spec_3', ctx), `${ctx} / spec_3`),
-    ].sort((left, right) => left - right);
-
-    if (!hasRole.get(roleName)) {
-      throw new Error(`${ctx}: role_name "${roleName}" existiert nicht in sta_role.`);
-    }
-    for (const spec of specs) {
-      if (!hasRiderType.get(spec)) {
-        throw new Error(`${ctx}: spec ${spec} existiert nicht in type_rider.`);
-      }
-    }
-    if (new Set(specs).size !== 3) {
-      throw new Error(`${ctx}: spec_1, spec_2 und spec_3 muessen drei unterschiedliche type_rider-IDs sein.`);
-    }
-
-    let probabilitySum = 0;
-    for (const program of programs) {
-      const probability = real(req(row, program.name, ctx), `${ctx} / ${program.name}`);
-      if (probability < 0) {
-        throw new Error(`${ctx}: ${program.name} muss groesser oder gleich 0 sein.`);
-      }
-      probabilitySum += probability;
-      insertedRows += 1;
-      insert.run(insertedRows, roleName, specs[0], specs[1], specs[2], program.id, probability);
-    }
-
-    if (Math.abs(probabilitySum - 100) > 0.0001) {
-      throw new Error(`${ctx}: Wahrscheinlichkeiten fuer ${roleName}|${specs.join('|')} ergeben ${probabilitySum}, erwartet 100.`);
-    }
-
-    if (matrixId !== index + 1) {
-      throw new Error(`${ctx}: id ${matrixId} ist nicht fortlaufend, erwartet ${index + 1}.`);
-    }
-  }
-
-  console.log(`  ${rows.length} Matrixregeln gelesen, ${insertedRows} Rennprogramm-Wahrscheinlichkeiten eingefuegt.`);
+  console.log('  Rennprogramm-Wahrscheinlichkeitsregeln abgeschafft, uebersprungen.');
 }
 
 function seedStages(db: Database.Database): void {

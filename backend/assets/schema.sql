@@ -263,19 +263,9 @@ CREATE INDEX IF NOT EXISTS idx_races_end_date ON races(end_date);
 CREATE INDEX IF NOT EXISTS idx_races_category ON races(category_id);
 CREATE INDEX IF NOT EXISTS idx_races_country ON races(country_id);
 
--- ---- Saisonale Rennprogramme -------------------------------
 CREATE TABLE IF NOT EXISTS race_programs (
   id         INTEGER PRIMARY KEY,
-  name       TEXT    NOT NULL UNIQUE,
-  peak1_min  INTEGER NOT NULL CHECK(peak1_min BETWEEN 1 AND 53),
-  peak1_max  INTEGER NOT NULL CHECK(peak1_max BETWEEN 1 AND 53),
-  peak2_min  INTEGER NOT NULL CHECK(peak2_min BETWEEN 1 AND 53),
-  peak2_max  INTEGER NOT NULL CHECK(peak2_max BETWEEN 1 AND 53),
-  peak3_min  INTEGER NOT NULL CHECK(peak3_min BETWEEN 1 AND 53),
-  peak3_max  INTEGER NOT NULL CHECK(peak3_max BETWEEN 1 AND 53),
-  CHECK(peak1_min <= peak1_max),
-  CHECK(peak2_min <= peak2_max),
-  CHECK(peak3_min <= peak3_max)
+  name       TEXT    NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS race_program_races (

@@ -1802,16 +1802,7 @@ export class DatabaseService {
     db.exec(`
       CREATE TABLE IF NOT EXISTS race_programs (
         id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        peak1_min INTEGER NOT NULL DEFAULT 1 CHECK(peak1_min BETWEEN 1 AND 53),
-        peak1_max INTEGER NOT NULL DEFAULT 1 CHECK(peak1_max BETWEEN 1 AND 53),
-        peak2_min INTEGER NOT NULL DEFAULT 1 CHECK(peak2_min BETWEEN 1 AND 53),
-        peak2_max INTEGER NOT NULL DEFAULT 1 CHECK(peak2_max BETWEEN 1 AND 53),
-        peak3_min INTEGER NOT NULL DEFAULT 1 CHECK(peak3_min BETWEEN 1 AND 53),
-        peak3_max INTEGER NOT NULL DEFAULT 1 CHECK(peak3_max BETWEEN 1 AND 53),
-        CHECK(peak1_min <= peak1_max),
-        CHECK(peak2_min <= peak2_max),
-        CHECK(peak3_min <= peak3_max)
+        name TEXT NOT NULL UNIQUE
       );
 
       CREATE TABLE IF NOT EXISTS race_program_races (
@@ -1866,24 +1857,7 @@ export class DatabaseService {
       );
     `);
 
-    if (!columnExists(db, 'race_programs', 'peak1_min')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak1_min INTEGER NOT NULL DEFAULT 1 CHECK(peak1_min BETWEEN 1 AND 53)').run();
-    }
-    if (!columnExists(db, 'race_programs', 'peak1_max')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak1_max INTEGER NOT NULL DEFAULT 1 CHECK(peak1_max BETWEEN 1 AND 53)').run();
-    }
-    if (!columnExists(db, 'race_programs', 'peak2_min')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak2_min INTEGER NOT NULL DEFAULT 1 CHECK(peak2_min BETWEEN 1 AND 53)').run();
-    }
-    if (!columnExists(db, 'race_programs', 'peak2_max')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak2_max INTEGER NOT NULL DEFAULT 1 CHECK(peak2_max BETWEEN 1 AND 53)').run();
-    }
-    if (!columnExists(db, 'race_programs', 'peak3_min')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak3_min INTEGER NOT NULL DEFAULT 1 CHECK(peak3_min BETWEEN 1 AND 53)').run();
-    }
-    if (!columnExists(db, 'race_programs', 'peak3_max')) {
-      db.prepare('ALTER TABLE race_programs ADD COLUMN peak3_max INTEGER NOT NULL DEFAULT 1 CHECK(peak3_max BETWEEN 1 AND 53)').run();
-    }
+
 
     const ruleColumns = db.prepare('PRAGMA table_info(race_program_probability_rules)').all() as Array<{ name: string; type: string }>;
     const specColumns = ruleColumns.filter((column) => ['spec_1', 'spec_2', 'spec_3'].includes(column.name));
@@ -1918,40 +1892,14 @@ export class DatabaseService {
         return;
       }
 
-      const masterHasPeakWeeks = columnExists(masterDb, 'race_programs', 'peak1_min')
-        && columnExists(masterDb, 'race_programs', 'peak1_max')
-        && columnExists(masterDb, 'race_programs', 'peak2_min')
-        && columnExists(masterDb, 'race_programs', 'peak2_max')
-        && columnExists(masterDb, 'race_programs', 'peak3_min')
-        && columnExists(masterDb, 'race_programs', 'peak3_max');
-
-      const programs = (masterHasPeakWeeks
-        ? masterDb.prepare(`
-            SELECT id, name, peak1_min, peak1_max, peak2_min, peak2_max, peak3_min, peak3_max
-            FROM race_programs
-            ORDER BY id ASC
-          `).all()
-        : masterDb.prepare(`
-            SELECT id,
-                   name,
-                   1 AS peak1_min,
-                   1 AS peak1_max,
-                   1 AS peak2_min,
-                   1 AS peak2_max,
-                   1 AS peak3_min,
-                   1 AS peak3_max
-            FROM race_programs
-            ORDER BY id ASC
-          `).all()) as Array<{
-            id: number;
-            name: string;
-            peak1_min: number;
-            peak1_max: number;
-            peak2_min: number;
-            peak2_max: number;
-            peak3_min: number;
-            peak3_max: number;
-          }>;
+      const programs = masterDb.prepare(`
+        SELECT id, name
+        FROM race_programs
+        ORDER BY id ASC
+      `).all() as Array<{
+        id: number;
+        name: string;
+      }>;
       const programRaces = masterDb.prepare('SELECT id, program_id, race_id FROM race_program_races ORDER BY id ASC').all() as Array<{ id: number; program_id: number; race_id: number }>;
       const rules = masterDb.prepare(`
         SELECT id, role_name, spec_1, spec_2, spec_3, program_id, probability
@@ -1961,16 +1909,10 @@ export class DatabaseService {
 
       const insertProgram = db.prepare(`
         INSERT INTO race_programs (
-          id, name, peak1_min, peak1_max, peak2_min, peak2_max, peak3_min, peak3_max
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          id, name
+        ) VALUES (?, ?)
         ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          peak1_min = excluded.peak1_min,
-          peak1_max = excluded.peak1_max,
-          peak2_min = excluded.peak2_min,
-          peak2_max = excluded.peak2_max,
-          peak3_min = excluded.peak3_min,
-          peak3_max = excluded.peak3_max
+          name = excluded.name
       `);
       const insertProgramRace = db.prepare('INSERT OR REPLACE INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
       const insertRule = db.prepare(`
@@ -1985,12 +1927,6 @@ export class DatabaseService {
           insertProgram.run(
             program.id,
             program.name,
-            program.peak1_min,
-            program.peak1_max,
-            program.peak2_min,
-            program.peak2_max,
-            program.peak3_min,
-            program.peak3_max,
           );
         }
         const validRaceIds = new Set(db.prepare('SELECT id FROM races').all().map((r: any) => r.id));

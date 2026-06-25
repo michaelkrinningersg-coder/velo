@@ -25,7 +25,7 @@ const DEFAULT_ROLE_REQUIREMENTS: Record<number, number> = {
 const COBBLE_SELECTION_MIN_SKILL = 65;
 
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion' | 'cobble-low-skill-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -48,6 +48,7 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'low-category-exclusion': 'Nicht startberechtigt für diese Rennkategorie aufgrund der Rolle (Kapitän / Co-Kapitän / Sprinter).',
   'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
   'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Gesamt-Fatigue >= 16).',
+  'cobble-low-skill-exclusion': 'Pflasterrennen erfordern einen Mindest-Cobble-Skill von 65.',
 };
 
 
@@ -150,10 +151,14 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
       if (!isContinuingStageRace && (shortTerm + longTerm) >= 16.0) {
         locks.set(rider.id, 'fatigue-exclusion');
       } else if (hasCobbleStage) {
-        const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
-        const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
-        if (isBerg && !hasCobbleSkill) {
-          locks.set(rider.id, 'cobble-climber-exclusion');
+        if ((rider.skills?.cobble ?? 0) < 65) {
+          locks.set(rider.id, 'cobble-low-skill-exclusion');
+        } else {
+          const isBerg = rider.specialization1 === 'Berg' || rider.specialization2 === 'Berg';
+          const hasCobbleSkill = (rider.skills?.cobble ?? 0) >= 72;
+          if (isBerg && !hasCobbleSkill) {
+            locks.set(rider.id, 'cobble-climber-exclusion');
+          }
         }
       }
     }
@@ -802,16 +807,75 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
       }
 
       let fillCandidates: Rider[];
-      if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
-        fillCandidates = roster
-          .filter((rider: any) => !selectedIds.has(rider.id) && !teamCollisionRiderIds.has(rider.id))
-          .sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+      const categoryId = race.categoryId;
+      const isCobbleRace = !race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill');
+
+      if (isCobbleRace) {
+        fillCandidates = roster.filter((rider: any) => {
+          if (selectedIds.has(rider.id) || teamCollisionRiderIds.has(rider.id)) return false;
+          if (hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks)) return false;
+          const cobbleSkill = rider.skills?.cobble ?? 0;
+          if (cobbleSkill < 65) return false;
+          return [3, 4, 5].includes(rider.roleId);
+        }).sort((a: any, b: any) => (a.skills?.cobble ?? 0) - (b.skills?.cobble ?? 0) || a.id - b.id);
       } else {
-        fillCandidates = orderFillCandidates(
-          roster.filter((rider: any) => !selectedIds.has(rider.id) && canFillRosterSlot(db, repo, rider, teamFullRoster, riderLocks, season, race, teamCollisionRiderIds)),
-          race,
-          useHomePreference
-        );
+        const candidates = roster.filter((rider: any) => {
+          if (selectedIds.has(rider.id) || teamCollisionRiderIds.has(rider.id)) return false;
+          if (hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks)) return false;
+          return true;
+        });
+
+        const catName = race.category?.name ?? '';
+        const isMonumentOrGT = [1, 2, 3].includes(categoryId) || catName.includes('Monument') || catName.includes('Grand Tour') || catName.includes('Tour de France');
+        const isHigh = [4, 7].includes(categoryId) || catName.includes('Stage Race High') || catName.includes('One Day High');
+        const isMiddle = [5, 8].includes(categoryId) || catName.includes('Stage Race Middle') || catName.includes('One Day Middle');
+        const isLow = [6, 9].includes(categoryId) || catName.includes('Stage Race Low') || catName.includes('One Day Low');
+
+        const hasSprinterSelected = teamSelection.some((r: any) => r.roleId === 6);
+        const stageProfileIsFlatRollingHilly = ['Flat', 'Rolling', 'Hilly'].includes(stage.profile);
+
+        const teamSprinters = teamFullRoster
+          .filter((r: any) => r.roleId === 6)
+          .sort((a: any, b: any) => (b.overallRating ?? 0) - (a.overallRating ?? 0) || a.id - b.id);
+
+        fillCandidates = candidates.filter((rider: any) => {
+          const roleId = rider.roleId;
+
+          if (isMonumentOrGT || isHigh) {
+            if (roleId === 6) {
+              return !hasSprinterSelected && stageProfileIsFlatRollingHilly;
+            }
+            return [1, 2, 3, 4, 5].includes(roleId);
+          } else if (isMiddle) {
+            if (roleId === 6) {
+              if (hasSprinterSelected) return false;
+              const isAllowedSprinter = teamSprinters.length > 1 && (teamSprinters[1].id === rider.id || (teamSprinters.length > 2 && teamSprinters[2].id === rider.id));
+              if (!isAllowedSprinter) return false;
+              const isStageRace = race.isStageRace;
+              return isStageRace || stageProfileIsFlatRollingHilly;
+            }
+            return [3, 4, 5].includes(roleId);
+          } else if (isLow) {
+            if (roleId === 6) {
+              const isAllowedSprinter = teamSprinters.length > 2 && teamSprinters[2].id === rider.id;
+              if (!isAllowedSprinter) return false;
+              const isStageRace = race.isStageRace;
+              return isStageRace || stageProfileIsFlatRollingHilly;
+            }
+            return [3, 4, 5].includes(roleId);
+          }
+          return false;
+        });
+
+        fillCandidates.sort((left: any, right: any) => {
+          if (left.roleId === 6 && right.roleId === 6) {
+            return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+          }
+          if ([3, 4, 5].includes(left.roleId) && [3, 4, 5].includes(right.roleId)) {
+            return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+          }
+          return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
+        });
       }
       for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
         teamSelection.push(rider);

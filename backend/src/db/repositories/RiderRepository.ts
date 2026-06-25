@@ -272,13 +272,7 @@ export class RiderRepository {
       const chunkPrograms = this.db.prepare(`
         SELECT rider_season_programs.rider_id,
                rider_season_programs.program_id,
-               race_programs.name AS program_name,
-               race_programs.peak1_min,
-               race_programs.peak1_max,
-               race_programs.peak2_min,
-               race_programs.peak2_max,
-               race_programs.peak3_min,
-               race_programs.peak3_max
+               race_programs.name AS program_name
         FROM rider_season_programs
         JOIN race_programs ON race_programs.id = rider_season_programs.program_id
         WHERE rider_season_programs.season = ?
@@ -303,12 +297,6 @@ export class RiderRepository {
     const programByRiderId = new Map(programRows.map((row) => [row.rider_id, {
       id: row.program_id,
       name: row.program_name,
-      peak1Min: row.peak1_min,
-      peak1Max: row.peak1_max,
-      peak2Min: row.peak2_min,
-      peak2Max: row.peak2_max,
-      peak3Min: row.peak3_min,
-      peak3Max: row.peak3_max,
     } satisfies RaceProgram]));
 
     const raceIdsByRiderId = new Map<number, number[]>();
@@ -334,13 +322,7 @@ export class RiderRepository {
 
     const programRow = this.db.prepare(`
       SELECT race_programs.id,
-             race_programs.name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
+             race_programs.name
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       WHERE rider_season_programs.season = ?

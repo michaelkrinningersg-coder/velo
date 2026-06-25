@@ -687,12 +687,12 @@ function mapRaceProgram(row) {
     return {
         id: row.id,
         name: row.name,
-        peak1Min: row.peak1_min,
-        peak1Max: row.peak1_max,
-        peak2Min: row.peak2_min,
-        peak2Max: row.peak2_max,
-        peak3Min: row.peak3_min,
-        peak3Max: row.peak3_max,
+        peak1Min: row.peak1_min ?? null,
+        peak1Max: row.peak1_max ?? null,
+        peak2Min: row.peak2_min ?? null,
+        peak2Max: row.peak2_max ?? null,
+        peak3Min: row.peak3_min ?? null,
+        peak3Max: row.peak3_max ?? null,
     };
 }
 function mapRaceWithSummary(row, stages, upcomingStage) {

@@ -178,12 +178,12 @@ export interface CareerRaceDaysSeasonRow {
 export interface RaceProgramRow {
   id: number;
   name: string;
-  peak1_min: number | null;
-  peak1_max: number | null;
-  peak2_min: number | null;
-  peak2_max: number | null;
-  peak3_min: number | null;
-  peak3_max: number | null;
+  peak1_min?: number | null;
+  peak1_max?: number | null;
+  peak2_min?: number | null;
+  peak2_max?: number | null;
+  peak3_min?: number | null;
+  peak3_max?: number | null;
 }
 
 export interface RiderSeasonProgramRow {
@@ -1122,12 +1122,12 @@ export function mapRaceProgram(row: RaceProgramRow): RaceProgram {
   return {
     id: row.id,
     name: row.name,
-    peak1Min: row.peak1_min,
-    peak1Max: row.peak1_max,
-    peak2Min: row.peak2_min,
-    peak2Max: row.peak2_max,
-    peak3Min: row.peak3_min,
-    peak3Max: row.peak3_max,
+    peak1Min: row.peak1_min ?? null,
+    peak1Max: row.peak1_max ?? null,
+    peak2Min: row.peak2_min ?? null,
+    peak2Max: row.peak2_max ?? null,
+    peak3Min: row.peak3_min ?? null,
+    peak3Max: row.peak3_max ?? null,
   };
 }
 

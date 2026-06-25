@@ -66,8 +66,13 @@ function isSpecializationId(value: number | null | undefined): value is Speciali
 }
 
 function normalizeSpecIds(specIds: number[]): SpecializationId[] {
-  const uniqueSpecIds = Array.from(new Set(specIds.filter(isSpecializationId)));
-  return SPECIALIZATION_IDS.filter((specId) => uniqueSpecIds.includes(specId));
+  const uniqueSpecIds: SpecializationId[] = [];
+  for (const id of specIds) {
+    if (isSpecializationId(id) && !uniqueSpecIds.includes(id)) {
+      uniqueSpecIds.push(id);
+    }
+  }
+  return uniqueSpecIds;
 }
 
 function resolveSkillScores(row: RiderProgramRow): Record<SpecializationId, number> {
@@ -100,54 +105,11 @@ function resolveBestSpecIds(row: RiderProgramRow): SpecializationId[] {
   return normalizeSpecIds([...seededSpecs, ...missingSpecs.slice(0, 3 - seededSpecs.length)]);
 }
 
-function ruleMatchesSpecs(rule: ProbabilityRuleRow, specs: SpecializationId[]): boolean {
-  const ruleSpecs = normalizeSpecIds([rule.spec_1, rule.spec_2, rule.spec_3].filter((specId): specId is number => specId != null));
-  return ruleSpecs.every((spec) => specs.includes(spec));
-}
-
-function ruleSpecificity(rule: ProbabilityRuleRow): number {
-  return [rule.spec_1, rule.spec_2, rule.spec_3].filter((spec) => spec != null).length;
-}
-
-function selectRulePool(rules: ProbabilityRuleRow[], roleName: string, specs: SpecializationId[]): ProbabilityRuleRow[] {
-  const matching = rules.filter((rule) => rule.role_name === roleName && ruleMatchesSpecs(rule, specs));
-  if (matching.length > 0) {
-    const maxSpecificity = Math.max(...matching.map(ruleSpecificity));
-    return matching.filter((rule) => ruleSpecificity(rule) === maxSpecificity);
-  }
-
-  const fallback = rules.filter((rule) => rule.role_name === ROLE_FALLBACK && ruleMatchesSpecs(rule, specs));
-  if (fallback.length > 0) {
-    const maxSpecificity = Math.max(...fallback.map(ruleSpecificity));
-    return fallback.filter((rule) => ruleSpecificity(rule) === maxSpecificity);
-  }
-
-  return rules.filter((rule) => ruleSpecificity(rule) === 0);
-}
-
-function chooseProgramId(rules: ProbabilityRuleRow[], seed: string): number | null {
-  const totalWeight = rules.reduce((sum, rule) => sum + Math.max(0, rule.probability), 0);
-  if (totalWeight <= 0) {
-    return null;
-  }
-
-  const target = deterministicUnit(seed) * totalWeight;
-  let cursor = 0;
-  for (const rule of [...rules].sort((left, right) => left.id - right.id)) {
-    cursor += Math.max(0, rule.probability);
-    if (target <= cursor) {
-      return rule.program_id;
-    }
-  }
-
-  return rules[rules.length - 1]?.program_id ?? null;
-}
-
 export class RiderProgramService {
   constructor(private readonly db: Database.Database) {}
 
   public ensureSeasonPrograms(season: number, assignedOn?: string): void {
-    if (!tableExists(this.db, 'riders') || !tableExists(this.db, 'race_programs') || !tableExists(this.db, 'race_program_probability_rules')) {
+    if (!tableExists(this.db, 'riders') || !tableExists(this.db, 'race_programs')) {
       return;
     }
 
@@ -177,15 +139,6 @@ export class RiderProgramService {
         ) IS NOT NULL
     `).get(season, season, season) as { count: number } | undefined)?.count ?? 0;
     if (missingCount === 0) {
-      return;
-    }
-
-    const rules = this.db.prepare(`
-      SELECT id, role_name, spec_1, spec_2, spec_3, program_id, probability
-      FROM race_program_probability_rules
-      ORDER BY id ASC
-    `).all() as ProbabilityRuleRow[];
-    if (rules.length === 0) {
       return;
     }
 
@@ -278,26 +231,39 @@ export class RiderProgramService {
     `).all(season, season, season) as RiderProgramRow[];
 
     const allPrograms = this.db.prepare('SELECT id, name FROM race_programs').all() as Array<{ id: number; name: string }>;
-    const top75Riders = new Set(
-      this.db.prepare(`
-        SELECT id FROM riders
-        WHERE is_retired = 0
-        ORDER BY overall_rating DESC, id ASC
-        LIMIT 75
-      `).all().map((r: any) => r.id as number)
-    );
-    const assignmentCounts: Record<number, number> = {};
+    const programsByName = new Map<string, number>();
     for (const p of allPrograms) {
-      assignmentCounts[p.id] = 0;
+      programsByName.set(p.name, p.id);
     }
-    const existingCounts = this.db.prepare(`
-      SELECT program_id, COUNT(*) AS count
-      FROM rider_season_programs
-      WHERE season = ?
-      GROUP BY program_id
-    `).all(season) as Array<{ program_id: number; count: number }>;
-    for (const e of existingCounts) {
-      assignmentCounts[e.program_id] = e.count;
+
+    const validExactMatchCombos = new Set([
+      'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
+      'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
+    ]);
+    const specAbbrMap: Record<number, string> = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A' };
+
+    // Group riders by combination key
+    const groups = new Map<string, typeof riders>();
+    for (const rider of riders) {
+      const specs = resolveBestSpecIds(rider);
+      let comboKey = 'OOO';
+      if (specs.includes(6) && specs.includes(5)) {
+        comboKey = 'APO';
+      } else if (specs.includes(6)) {
+        comboKey = 'AOO';
+      } else {
+        const orderedAbbr = specs.map(id => specAbbrMap[id]).join('');
+        if (validExactMatchCombos.has(orderedAbbr)) {
+          comboKey = orderedAbbr;
+        } else {
+          comboKey = 'OOO';
+        }
+      }
+
+      if (!groups.has(comboKey)) {
+        groups.set(comboKey, []);
+      }
+      groups.get(comboKey)!.push(rider);
     }
 
     const insert = this.db.prepare(`
@@ -306,90 +272,30 @@ export class RiderProgramService {
     `);
 
     this.db.transaction(() => {
-      for (const rider of riders) {
-        const roleName = normalizeRoleName(rider.role_name);
-        const specs = resolveBestSpecIds(rider);
+      for (const [comboKey, groupRiders] of groups.entries()) {
+        groupRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
 
-        const teamRiders = ridersByTeam.get(rider.team_id) ?? [];
-        const isBestRider = teamRiders[0]?.id === rider.id;
-        const isBestSprinter = bestSprinterByTeam.get(rider.team_id) === rider.id;
-        let rulePool: ProbabilityRuleRow[];
-        const excludedProgramIds = new Set<number>();
-
-        if (isBestSprinter) {
-          rulePool = [
-            { id: -1, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 2, probability: 50 },
-            { id: -2, role_name: 'Sprinter', spec_1: null, spec_2: null, spec_3: null, program_id: 6, probability: 50 },
-          ];
-        } else {
-          if (roleName === 'Kapitaen' || roleName === 'Co-Kapitaen') {
-            [14, 15, 17, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
-          }
-          const nonLeaderRiders = teamRiders.filter(
-            r => normalizeRoleName(r.role_name) !== 'Kapitaen' && normalizeRoleName(r.role_name) !== 'Co-Kapitaen'
-          );
-          const nonLeaderIndex = nonLeaderRiders.findIndex(r => r.id === rider.id);
-          if (nonLeaderIndex >= 0 && nonLeaderIndex <= 3) {
-            [15, 18, 19, 20, 29, 30, 31, 32].forEach(id => excludedProgramIds.add(id));
-          }
-
-          // Non-Tour versions (25-28) can only be assigned to Wassertraeger and Starke Helfer
-          if (roleName !== 'Wassertraeger' && roleName !== 'Starke Helfer') {
-            [25, 26, 27, 28].forEach(id => excludedProgramIds.add(id));
-          }
-
-          if (isBestRider) {
-            // Best rider is only allowed program IDs in [1-8, 13-19, 21-24, 29, 30]
-            // We exclude 9, 10, 11, 12, 20, 25, 26, 27, 28, 31, 32
-            const bestRiderExclusions = [9, 10, 11, 12, 20, 25, 26, 27, 28, 31, 32];
-            const combinedExclusions = new Set([...excludedProgramIds, ...bestRiderExclusions]);
-            const filteredRules = rules.filter(r => !combinedExclusions.has(r.program_id));
-            const tempRulePool = selectRulePool(filteredRules, roleName, specs);
-            const totalWeight = tempRulePool.reduce((sum, rule) => sum + Math.max(0, rule.probability), 0);
-
-            if (totalWeight > 0) {
-              rulePool = tempRulePool;
-            } else {
-              // Fallback: relax role exclusions but keep best rider exclusions and non-Tour exclusions
-              const bestRiderExclusionsSet = new Set(bestRiderExclusions);
-              if (roleName !== 'Wassertraeger' && roleName !== 'Starke Helfer') {
-                [25, 26, 27, 28].forEach(id => bestRiderExclusionsSet.add(id));
-              }
-              const relaxedRules = rules.filter(r => !bestRiderExclusionsSet.has(r.program_id));
-              rulePool = selectRulePool(relaxedRules, roleName, specs);
-            }
+        for (let idx = 0; idx < groupRiders.length; idx++) {
+          const rider = groupRiders[idx];
+          let variant = 1;
+          if (idx < 18) {
+            variant = (idx % 3) + 1;
           } else {
-            const filteredRules = rules.filter(r => !excludedProgramIds.has(r.program_id));
-            rulePool = selectRulePool(filteredRules, roleName, specs);
+            variant = ((idx - 18) % 3) + 4;
+          }
+
+          const programName = `${comboKey}_${variant}`;
+          const programId = programsByName.get(programName);
+          if (programId != null) {
+            insert.run(season, rider.id, programId, assignedDate);
+          } else {
+            const fallbackName = `OOO_${variant}`;
+            const fallbackId = programsByName.get(fallbackName) ?? programsByName.get('OOO_1');
+            if (fallbackId != null) {
+              insert.run(season, rider.id, fallbackId, assignedDate);
+            }
           }
         }
-
-        const seed = `${season}|${rider.id}|${roleName}|${specs.join('|')}`;
-        let programId = chooseProgramId(rulePool, seed);
-        if (programId == null) {
-          const isTop75 = top75Riders.has(rider.id);
-          const allowedPrograms = allPrograms.filter(p => {
-            if (excludedProgramIds.has(p.id)) {
-              return false;
-            }
-            if (isTop75) {
-              const nameLower = p.name.toLowerCase();
-              return nameLower.includes('tour') && !nameLower.includes('non_tour') && !nameLower.includes('non-tour');
-            }
-            return true;
-          });
-          const candidates = allowedPrograms.length > 0 ? allowedPrograms : allPrograms.filter(p => !excludedProgramIds.has(p.id));
-          const minCount = Math.min(...candidates.map(c => assignmentCounts[c.id] || 0));
-          const bestCandidates = candidates.filter(c => (assignmentCounts[c.id] || 0) === minCount);
-          const idx = Math.floor(deterministicUnit(seed) * bestCandidates.length);
-          programId = bestCandidates[idx].id;
-        }
-
-        if (programId == null) {
-          continue;
-        }
-        insert.run(season, rider.id, programId, assignedDate);
-        assignmentCounts[programId] = (assignmentCounts[programId] || 0) + 1;
       }
     })();
 
@@ -401,13 +307,15 @@ export class RiderProgramService {
         SELECT riders.first_name,
                riders.last_name,
                riders.overall_rating,
+               role.name AS role_name,
                race_programs.name AS program_name,
                race_programs.id AS program_id
         FROM rider_season_programs
         JOIN riders ON riders.id = rider_season_programs.rider_id
+        LEFT JOIN sta_role role ON role.id = riders.role_id
         JOIN race_programs ON race_programs.id = rider_season_programs.program_id
         WHERE rider_season_programs.season = ?
-      `).all(season) as Array<{ first_name: string; last_name: string; overall_rating: number; program_name: string; program_id: number }>;
+      `).all(season) as Array<{ first_name: string; last_name: string; overall_rating: number; role_name: string | null; program_name: string; program_id: number }>;
 
       const assignmentsByProgram = new Map<string, typeof assignments>();
       for (const a of assignments) {
@@ -423,8 +331,17 @@ export class RiderProgramService {
         const progRiders = assignmentsByProgram.get(progName)!;
         progRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.last_name.localeCompare(b.last_name));
         console.log(`Program: ${progName} (Count: ${progRiders.length})`);
+        const rolesCount: Record<string, number> = {};
         for (const r of progRiders) {
-          console.log(`  - ${r.first_name} ${r.last_name} (OVR: ${r.overall_rating})`);
+          const role = r.role_name ?? 'Wassertraeger';
+          rolesCount[role] = (rolesCount[role] || 0) + 1;
+        }
+        console.log(`  Roles: ${JSON.stringify(rolesCount)}`);
+        for (const r of progRiders.slice(0, 5)) {
+          console.log(`  - ${r.first_name} ${r.last_name} (OVR: ${r.overall_rating}, Role: ${r.role_name})`);
+        }
+        if (progRiders.length > 5) {
+          console.log(`  - ... and ${progRiders.length - 5} more`);
         }
       }
       console.log(`===================================================\n`);

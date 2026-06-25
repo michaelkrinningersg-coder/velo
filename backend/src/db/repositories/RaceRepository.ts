@@ -23,13 +23,7 @@ export class RaceRepository {
 
     const rows = this.db.prepare(`
       SELECT race_programs.id,
-             race_programs.name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
+             race_programs.name
       FROM race_programs
       JOIN race_program_races ON race_program_races.program_id = race_programs.id
       WHERE race_program_races.race_id = ?
@@ -51,13 +45,7 @@ export class RaceRepository {
     const rows = this.db.prepare(`
       SELECT rider_season_programs.rider_id,
              race_programs.id AS program_id,
-             race_programs.name AS program_name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
+             race_programs.name AS program_name
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
@@ -68,12 +56,6 @@ export class RaceRepository {
       rider_id: number;
       program_id: number;
       program_name: string;
-      peak1_min: number | null;
-      peak1_max: number | null;
-      peak2_min: number | null;
-      peak2_max: number | null;
-      peak3_min: number | null;
-      peak3_max: number | null;
     }>;
     const ridersById = new Map(new RiderRepository(this.db).getRiders().map((rider) => [rider.id, rider]));
     const teamsById = new Map(new TeamRepository(this.db).getTeams().map((team) => [team.id, team]));
@@ -90,12 +72,6 @@ export class RaceRepository {
         program: {
           id: row.program_id,
           name: row.program_name,
-          peak1Min: row.peak1_min,
-          peak1Max: row.peak1_max,
-          peak2Min: row.peak2_min,
-          peak2Max: row.peak2_max,
-          peak3Min: row.peak3_min,
-          peak3Max: row.peak3_max,
         },
       });
     }

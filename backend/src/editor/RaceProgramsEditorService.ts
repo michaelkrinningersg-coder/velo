@@ -142,9 +142,10 @@ export class RaceProgramsEditorService {
   private readonly debugDir = resolveDebugDir();
 
   public load(activeDb?: Database): any {
-    const programs = this.loadPrograms();
+    const rawPrograms = this.loadPrograms();
     const races = this.loadRaces();
     const raceProgramRaces = this.loadRaceProgramRaces();
+    const programs = enrichProgramsWithPeaks(rawPrograms, races, raceProgramRaces);
     const raceCategories = this.loadRaceCategories();
     const stages = this.loadStages();
     const programDistribution = this.loadProgramDistribution();
@@ -243,12 +244,6 @@ export class RaceProgramsEditorService {
       programs: Array<{
         id: number;
         name: string;
-        peak1_min: number;
-        peak1_max: number;
-        peak2_min: number;
-        peak2_max: number;
-        peak3_min: number;
-        peak3_max: number;
       }>;
       raceProgramRaces: Array<{
         program_id: number;
@@ -293,20 +288,11 @@ export class RaceProgramsEditorService {
 
         // Update race_programs
         const updateProgram = activeDb.prepare(`
-          UPDATE race_programs SET
-            peak1_min = ?, peak1_max = ?,
-            peak2_min = ?, peak2_max = ?,
-            peak3_min = ?, peak3_max = ?
-          WHERE id = ?
+          UPDATE race_programs SET name = ? WHERE id = ?
         `);
         for (const prog of payload.programs) {
           updateProgram.run(
-            prog.peak1_min,
-            prog.peak1_max,
-            prog.peak2_min,
-            prog.peak2_max,
-            prog.peak3_min,
-            prog.peak3_max,
+            prog.name,
             prog.id
           );
         }
@@ -321,12 +307,6 @@ export class RaceProgramsEditorService {
     return rows.map((row) => ({
       id: parseInt(row['id'] ?? '0', 10),
       name: (row['name'] ?? '').trim(),
-      peak1_min: parseInt(row['peak1_min'] ?? '1', 10),
-      peak1_max: parseInt(row['peak1_max'] ?? '1', 10),
-      peak2_min: parseInt(row['peak2_min'] ?? '1', 10),
-      peak2_max: parseInt(row['peak2_max'] ?? '1', 10),
-      peak3_min: parseInt(row['peak3_min'] ?? '1', 10),
-      peak3_max: parseInt(row['peak3_max'] ?? '1', 10),
     }));
   }
 
@@ -409,18 +389,12 @@ export class RaceProgramsEditorService {
     programs: Array<{
       id: number;
       name: string;
-      peak1_min: number;
-      peak1_max: number;
-      peak2_min: number;
-      peak2_max: number;
-      peak3_min: number;
-      peak3_max: number;
     }>
   ): void {
     const csvPath = path.join(this.dataCsvDir, 'race_programs.csv');
-    let content = 'id,name,peak1_min,peak1_max,peak2_min,peak2_max,peak3_min,peak3_max\n';
+    let content = 'id,name\n';
     for (const prog of programs) {
-      content += `${prog.id},${prog.name},${prog.peak1_min},${prog.peak1_max},${prog.peak2_min},${prog.peak2_max},${prog.peak3_min},${prog.peak3_max}\n`;
+      content += `${prog.id},${prog.name}\n`;
     }
     writeFileSync(csvPath, content, 'utf8');
   }
@@ -439,4 +413,139 @@ export class RaceProgramsEditorService {
     }
     writeFileSync(csvPath, content, 'utf8');
   }
+}
+
+function getIsoWeek(dateStr: string): number {
+  const date = new Date(dateStr + 'T00:00:00.000Z');
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return Math.min(53, Math.max(1, weekNo));
+}
+
+function findHighlightTripletForEditor(
+  races: Array<{ id: number; prestige: number; startDay: number }>,
+  minSpacingDays: number
+): number[] | null {
+  const n = races.length;
+  if (n < 3) return null;
+
+  const firstIndex = 0;
+  let bestPair: [number, number] | null = null;
+  let maxPrestigeSum = -1;
+
+  for (let j = 1; j < n; j++) {
+    if (Math.abs(races[firstIndex].startDay - races[j].startDay) < minSpacingDays) {
+      continue;
+    }
+    for (let k = j + 1; k < n; k++) {
+      if (Math.abs(races[firstIndex].startDay - races[k].startDay) < minSpacingDays) {
+        continue;
+      }
+      if (Math.abs(races[j].startDay - races[k].startDay) < minSpacingDays) {
+        continue;
+      }
+      const prestigeSum = races[firstIndex].prestige + races[j].prestige + races[k].prestige;
+      if (prestigeSum > maxPrestigeSum) {
+        maxPrestigeSum = prestigeSum;
+        bestPair = [j, k];
+      }
+    }
+  }
+
+  if (bestPair !== null) {
+    return [firstIndex, bestPair[0], bestPair[1]];
+  }
+  return null;
+}
+
+function enrichProgramsWithPeaks(programs: any[], races: any[], raceProgramRaces: any[]): any[] {
+  const racesMap = new Map<number, any>();
+  for (const r of races) {
+    racesMap.set(r.id, r);
+  }
+
+  const programRacesMap = new Map<number, any[]>();
+  for (const mapping of raceProgramRaces) {
+    const race = racesMap.get(mapping.race_id);
+    if (race) {
+      if (!programRacesMap.has(mapping.program_id)) {
+        programRacesMap.set(mapping.program_id, []);
+      }
+      programRacesMap.get(mapping.program_id)!.push(race);
+    }
+  }
+
+  return programs.map((prog) => {
+    const progRaces = programRacesMap.get(prog.id) ?? [];
+    const parsedRaces = progRaces
+      .map(r => {
+        let startDay = Math.floor(new Date(`${r.start_date}T00:00:00.000Z`).getTime() / 86400000);
+        if (r.is_stage_race === 1 && r.end_date) {
+          const endDay = Math.floor(new Date(`${r.end_date}T00:00:00.000Z`).getTime() / 86400000);
+          if (!isNaN(endDay)) {
+            startDay = Math.floor((startDay + endDay) / 2);
+          }
+        }
+        return {
+          id: r.id,
+          name: r.name,
+          prestige: r.prestige,
+          startDay,
+          startDate: r.start_date,
+          endDate: r.end_date,
+          isStageRace: r.is_stage_race === 1
+        };
+      })
+      .filter(r => !isNaN(r.startDay));
+
+    parsedRaces.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
+
+    let chosenIndices: number[] | null = null;
+    const thresholds = [70, 56, 42, 28]; // 10, 8, 6, 4 weeks
+    for (const spacing of thresholds) {
+      chosenIndices = findHighlightTripletForEditor(parsedRaces, spacing);
+      if (chosenIndices !== null) {
+        break;
+      }
+    }
+
+    let peaks = [1, 1, 1];
+
+    const getPeakWeekForRace = (r: any): number => {
+      let dateStr = r.startDate;
+      if (r.isStageRace && r.endDate) {
+        const startMs = new Date(`${r.startDate}T00:00:00.000Z`).getTime();
+        const endMs = new Date(`${r.endDate}T00:00:00.000Z`).getTime();
+        const middleMs = (startMs + endMs) / 2;
+        dateStr = new Date(middleMs).toISOString().slice(0, 10);
+      }
+      return getIsoWeek(dateStr);
+    };
+
+    if (chosenIndices !== null) {
+      const chosenRaces = chosenIndices.map(idx => parsedRaces[idx]);
+      const weeks = chosenRaces.map(getPeakWeekForRace);
+      weeks.sort((a, b) => a - b);
+      peaks = weeks;
+    } else if (parsedRaces.length > 0) {
+      const weeks = parsedRaces.slice(0, 3).map(getPeakWeekForRace);
+      weeks.sort((a, b) => a - b);
+      while (weeks.length < 3) {
+        weeks.push(weeks[weeks.length - 1] ?? 1);
+      }
+      peaks = weeks;
+    }
+
+    return {
+      ...prog,
+      peak1_min: Math.max(1, peaks[0] - 2),
+      peak1_max: Math.min(53, peaks[0] + 2),
+      peak2_min: Math.max(1, peaks[1] - 2),
+      peak2_max: Math.min(53, peaks[1] + 2),
+      peak3_min: Math.max(1, peaks[2] - 2),
+      peak3_max: Math.min(53, peaks[2] + 2),
+    };
+  });
 }

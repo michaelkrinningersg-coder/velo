@@ -15,13 +15,7 @@ class RaceRepository {
         }
         const rows = this.db.prepare(`
       SELECT race_programs.id,
-             race_programs.name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
+             race_programs.name
       FROM race_programs
       JOIN race_program_races ON race_program_races.program_id = race_programs.id
       WHERE race_program_races.race_id = ?
@@ -39,13 +33,7 @@ class RaceRepository {
         const rows = this.db.prepare(`
       SELECT rider_season_programs.rider_id,
              race_programs.id AS program_id,
-             race_programs.name AS program_name,
-             race_programs.peak1_min,
-             race_programs.peak1_max,
-             race_programs.peak2_min,
-             race_programs.peak2_max,
-             race_programs.peak3_min,
-             race_programs.peak3_max
+             race_programs.name AS program_name
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
@@ -67,12 +55,6 @@ class RaceRepository {
                 program: {
                     id: row.program_id,
                     name: row.program_name,
-                    peak1Min: row.peak1_min,
-                    peak1Max: row.peak1_max,
-                    peak2Min: row.peak2_min,
-                    peak2Max: row.peak2_max,
-                    peak3Min: row.peak3_min,
-                    peak3Max: row.peak3_max,
                 },
             });
         }

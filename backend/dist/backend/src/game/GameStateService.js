@@ -603,7 +603,7 @@ class GameStateService {
     `);
         for (const rider of missingRows) {
             const windows = programWindows.get(rider.id) ?? null;
-            const peakDates = resolveSeasonPeakDatesFromWindows([], season, windows);
+            const peakDates = resolveSeasonPeakDatesFromWindows([], season, windows, this.db, rider.id);
             insertState.run(rider.id, season, SEASON_FORM_MIN_RAW, JSON.stringify(peakDates));
         }
     }
@@ -671,7 +671,7 @@ class GameStateService {
             }
             const seasonChanged = row.season !== currentSeason;
             const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
-            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), currentSeason, windows);
+            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), currentSeason, windows, this.db, row.rider_id);
             const phase = resolvePeakPhase(currentDate, peakDates);
             let formBonus = row.form_bonus;
             let peakSForm = row.peak_s_form;
@@ -799,7 +799,7 @@ class GameStateService {
             }
             const seasonChanged = row.season !== nextSeason;
             const riderProgramWindows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
-            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), nextSeason, riderProgramWindows);
+            const peakDates = resolveSeasonPeakDatesFromWindows(seasonChanged ? [] : parsePeakDates(row.peak_dates_json), nextSeason, riderProgramWindows, this.db, row.rider_id);
             let formBonus = seasonChanged ? SEASON_FORM_MIN_RAW : row.form_bonus;
             let raceFormBonus = seasonChanged ? 0 : row.race_form_bonus;
             let peakSForm = seasonChanged ? 0 : row.peak_s_form;
@@ -1252,7 +1252,7 @@ class GameStateService {
                 if (selectAward.get(riderId, raceDate)) {
                     continue;
                 }
-                const peakDates = resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), row.season);
+                const peakDates = resolveSeasonPeakDates(parsePeakDates(row.peak_dates_json), row.season, this.db, riderId);
                 const phase = resolvePeakPhase(raceDate, peakDates);
                 let expiresOnIso = addDaysIso(raceDate, phase?.phase === 'build' ? BUILD_R_FORM_EXPIRY_DAYS : FREE_R_FORM_EXPIRY_DAYS);
                 if (phase) {
@@ -1594,80 +1594,14 @@ function resolveIsoWeekDayBounds(season, minWeek, maxWeek) {
     };
 }
 function loadProgramPeakWindows(db, season, riderId) {
-    if (!db || riderId == null
-        || !tableExists(db, 'rider_season_programs')
-        || !tableExists(db, 'race_programs')
-        || !columnExists(db, 'race_programs', 'peak1_min')
-        || !columnExists(db, 'race_programs', 'peak1_max')
-        || !columnExists(db, 'race_programs', 'peak2_min')
-        || !columnExists(db, 'race_programs', 'peak2_max')
-        || !columnExists(db, 'race_programs', 'peak3_min')
-        || !columnExists(db, 'race_programs', 'peak3_max')) {
-        return null;
-    }
-    const row = db.prepare(`
-    SELECT race_programs.peak1_min,
-           race_programs.peak1_max,
-           race_programs.peak2_min,
-           race_programs.peak2_max,
-           race_programs.peak3_min,
-           race_programs.peak3_max
-    FROM rider_season_programs
-    JOIN race_programs ON race_programs.id = rider_season_programs.program_id
-    WHERE rider_season_programs.season = ?
-      AND rider_season_programs.rider_id = ?
-  `).get(season, riderId);
-    if (!row) {
-        return null;
-    }
-    return {
-        peak1Min: row.peak1_min,
-        peak1Max: row.peak1_max,
-        peak2Min: row.peak2_min,
-        peak2Max: row.peak2_max,
-        peak3Min: row.peak3_min,
-        peak3Max: row.peak3_max,
-    };
+    return null;
 }
 /**
  * Bulk-load all program peak windows for the given season in a single query.
  * Returns a Map keyed by rider_id. This is the N+1 fix for `loadProgramPeakWindows`.
  */
 function loadProgramPeakWindowsForSeason(db, season) {
-    const result = new Map();
-    if (!tableExists(db, 'rider_season_programs')
-        || !tableExists(db, 'race_programs')
-        || !columnExists(db, 'race_programs', 'peak1_min')
-        || !columnExists(db, 'race_programs', 'peak1_max')
-        || !columnExists(db, 'race_programs', 'peak2_min')
-        || !columnExists(db, 'race_programs', 'peak2_max')
-        || !columnExists(db, 'race_programs', 'peak3_min')
-        || !columnExists(db, 'race_programs', 'peak3_max')) {
-        return result;
-    }
-    const rows = db.prepare(`
-    SELECT rider_season_programs.rider_id AS rider_id,
-           race_programs.peak1_min,
-           race_programs.peak1_max,
-           race_programs.peak2_min,
-           race_programs.peak2_max,
-           race_programs.peak3_min,
-           race_programs.peak3_max
-    FROM rider_season_programs
-    JOIN race_programs ON race_programs.id = rider_season_programs.program_id
-    WHERE rider_season_programs.season = ?
-  `).all(season);
-    for (const row of rows) {
-        result.set(row.rider_id, {
-            peak1Min: row.peak1_min,
-            peak1Max: row.peak1_max,
-            peak2Min: row.peak2_min,
-            peak2Max: row.peak2_max,
-            peak3Min: row.peak3_min,
-            peak3Max: row.peak3_max,
-        });
-    }
-    return result;
+    return new Map();
 }
 function generateProgramSeasonPeakDates(season, windows) {
     const ranges = [
@@ -1771,13 +1705,149 @@ function generateSeasonPeakDates(season) {
 }
 function resolveSeasonPeakDates(peakDates, season, db, riderId) {
     const programWindows = loadProgramPeakWindows(db, season, riderId);
-    return resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows);
+    return resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows, db, riderId);
+}
+function findHighlightTriplet(races, minSpacingDays) {
+    const n = races.length;
+    if (n < 3)
+        return null;
+    // The highest prestige race is at index 0 because races is sorted by prestige desc.
+    // We must anchor the first highlight race at index 0.
+    const firstIndex = 0;
+    let bestPair = null;
+    let maxPrestigeSum = -1;
+    for (let j = 1; j < n; j++) {
+        if (Math.abs(races[firstIndex].startDay - races[j].startDay) < minSpacingDays) {
+            continue;
+        }
+        for (let k = j + 1; k < n; k++) {
+            if (Math.abs(races[firstIndex].startDay - races[k].startDay) < minSpacingDays) {
+                continue;
+            }
+            if (Math.abs(races[j].startDay - races[k].startDay) < minSpacingDays) {
+                continue;
+            }
+            // Found a valid triplet containing index 0!
+            const prestigeSum = races[firstIndex].prestige + races[j].prestige + races[k].prestige;
+            if (prestigeSum > maxPrestigeSum) {
+                maxPrestigeSum = prestigeSum;
+                bestPair = [j, k];
+            }
+        }
+    }
+    if (bestPair !== null) {
+        return [firstIndex, bestPair[0], bestPair[1]];
+    }
+    return null;
+}
+function matchesProgramRaces(db, riderId, season, peakDates) {
+    if (!db || riderId == null)
+        return true;
+    if (!tableExists(db, 'rider_season_programs') || !tableExists(db, 'race_program_races') || !tableExists(db, 'races')) {
+        return true;
+    }
+    try {
+        const rows = db.prepare(`
+      SELECT r.start_date, r.end_date, r.is_stage_race
+      FROM rider_season_programs rsp
+      JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
+      JOIN races r ON r.id = rpr.race_id
+      WHERE rsp.rider_id = ? AND rsp.season = ?
+    `).all(riderId, season);
+        if (rows.length < 3)
+            return false;
+        const raceDays = rows.map(r => {
+            let startDay = isoDateToDayNumber(r.start_date);
+            if (r.is_stage_race === 1 && r.end_date) {
+                const endDay = isoDateToDayNumber(r.end_date);
+                if (!isNaN(endDay)) {
+                    startDay = Math.floor((startDay + endDay) / 2);
+                }
+            }
+            return startDay;
+        }).filter(d => !isNaN(d));
+        const peakDays = peakDates.map(d => isoDateToDayNumber(d));
+        const used = new Set();
+        const match = (idx) => {
+            if (idx === peakDays.length)
+                return true;
+            for (let i = 0; i < raceDays.length; i++) {
+                if (!used.has(i) && Math.abs(peakDays[idx] - raceDays[i]) <= 14) {
+                    used.add(i);
+                    if (match(idx + 1))
+                        return true;
+                    used.delete(i);
+                }
+            }
+            return false;
+        };
+        return match(0);
+    }
+    catch {
+        return false;
+    }
+}
+function generateHighlightBasedPeakDates(db, riderId, season, programWindows) {
+    if (!tableExists(db, 'rider_season_programs') || !tableExists(db, 'race_program_races') || !tableExists(db, 'races')) {
+        return null;
+    }
+    try {
+        const rows = db.prepare(`
+      SELECT r.id, r.name, r.start_date, r.end_date, r.is_stage_race, r.prestige
+      FROM rider_season_programs rsp
+      JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
+      JOIN races r ON r.id = rpr.race_id
+      WHERE rsp.rider_id = ? AND rsp.season = ?
+    `).all(riderId, season);
+        if (rows.length >= 3) {
+            const races = rows
+                .map(row => {
+                let startDay = isoDateToDayNumber(row.start_date);
+                if (row.is_stage_race === 1 && row.end_date) {
+                    const endDay = isoDateToDayNumber(row.end_date);
+                    if (!isNaN(endDay)) {
+                        startDay = Math.floor((startDay + endDay) / 2);
+                    }
+                }
+                return {
+                    id: row.id,
+                    name: row.name,
+                    prestige: row.prestige,
+                    startDay
+                };
+            })
+                .filter(r => !isNaN(r.startDay));
+            races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
+            let chosenIndices = null;
+            const thresholds = [70, 56, 42, 28]; // 10, 8, 6, 4 weeks
+            for (const spacing of thresholds) {
+                chosenIndices = findHighlightTriplet(races, spacing);
+                if (chosenIndices !== null) {
+                    break;
+                }
+            }
+            if (chosenIndices !== null) {
+                const chosenRaces = chosenIndices.map(idx => races[idx]);
+                const peakDays = chosenRaces.map(r => {
+                    const shift = Math.floor(Math.random() * 29) - 14; // [-14, 14]
+                    return r.startDay + shift;
+                });
+                return peakDays
+                    .sort((a, b) => a - b)
+                    .map(dayNumberToIsoDate);
+            }
+        }
+    }
+    catch (err) {
+        console.error(`Error generating highlight-based peaks for rider ${riderId}:`, err);
+    }
+    return null;
 }
 /**
  * Like `resolveSeasonPeakDates` but takes pre-loaded program windows for the rider,
  * avoiding an N+1 query against `rider_season_programs` / `race_programs`.
  */
-function resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows) {
+function resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows, db, riderId) {
     const programRanges = programWindows == null
         ? null
         : [
@@ -1789,6 +1859,11 @@ function resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows) {
         .filter((peakDate) => peakDate.startsWith(`${season}-`))
         .sort((left, right) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
     if (normalized.length !== 3) {
+        if (db && riderId != null) {
+            const generated = generateHighlightBasedPeakDates(db, riderId, season, programWindows);
+            if (generated)
+                return generated;
+        }
         return programWindows ? generateProgramSeasonPeakDates(season, programWindows) : generateSeasonPeakDates(season);
     }
     const hasValidSpacing = normalized.every((peakDate, index) => {
@@ -1798,11 +1873,16 @@ function resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows) {
         const previousPeak = normalized[index - 1];
         return isoDateToDayNumber(peakDate) - isoDateToDayNumber(previousPeak) >= PEAK_MIN_SPACING_DAYS;
     });
-    const matchesProgramWindows = programRanges == null
+    const matchesRaces = db && riderId != null ? matchesProgramRaces(db, riderId, season, normalized) : (programRanges == null
         ? true
-        : normalized.every((peakDate, index) => isWithinDayRange(peakDate, programRanges[index]));
-    if (hasValidSpacing && matchesProgramWindows) {
+        : normalized.every((peakDate, index) => isWithinDayRange(peakDate, programRanges[index])));
+    if (hasValidSpacing && matchesRaces) {
         return normalized;
+    }
+    if (db && riderId != null) {
+        const generated = generateHighlightBasedPeakDates(db, riderId, season, programWindows);
+        if (generated)
+            return generated;
     }
     return programWindows ? generateProgramSeasonPeakDates(season, programWindows) : generateSeasonPeakDates(season);
 }
