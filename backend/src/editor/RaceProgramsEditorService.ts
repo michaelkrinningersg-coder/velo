@@ -148,7 +148,7 @@ export class RaceProgramsEditorService {
     const programs = enrichProgramsWithPeaks(rawPrograms, races, raceProgramRaces);
     const raceCategories = this.loadRaceCategories();
     const stages = this.loadStages();
-    const programDistribution = this.loadProgramDistribution();
+    let programDistribution = this.loadProgramDistribution();
 
     let roleSpecCombinations: any[] = [];
     if (activeDb) {
@@ -157,6 +157,48 @@ export class RaceProgramsEditorService {
       } catch (e) {
         console.error('Error fetching role/spec combinations from DB:', e);
       }
+    }
+
+    if (activeDb && roleSpecCombinations.length > 0) {
+      const rolesList = ['Kapitaen', 'Co_Kapitaen', 'Sprinter', 'Edelhelfer', 'Starke_Helfer', 'Wassertraeger'];
+      const specsList = ['Berg', 'Hill', 'Sprint', 'Timetrial', 'Cobble', 'Attacker'];
+      
+      const distMap = new Map<number, any>();
+      for (const prog of rawPrograms) {
+        const record: any = {
+          program_id: prog.id,
+          program_name: prog.name,
+          deterministic_rider_count: 0,
+          deterministic_role_Kapitaen: 0,
+          deterministic_role_Co_Kapitaen: 0,
+          deterministic_role_Edelhelfer: 0,
+          deterministic_role_Starke_Helfer: 0,
+          deterministic_role_Wassertraeger: 0,
+          deterministic_role_Sprinter: 0,
+        };
+        for (const role of rolesList) {
+          for (const spec of specsList) {
+            record[`deterministic_${role}_spec1_${spec}`] = 0;
+          }
+        }
+        distMap.set(prog.id, record);
+      }
+
+      for (const combo of roleSpecCombinations) {
+        const record = distMap.get(combo.program_id);
+        if (record) {
+          record.deterministic_rider_count += combo.count;
+          const roleKey = `deterministic_role_${combo.role}`;
+          if (record[roleKey] !== undefined) {
+            record[roleKey] += combo.count;
+          }
+          const specKey = `deterministic_${combo.role}_spec1_${combo.spec1}`;
+          if (record[specKey] !== undefined) {
+            record[specKey] += combo.count;
+          }
+        }
+      }
+      programDistribution = Array.from(distMap.values());
     }
 
     // Fallback: build combinations from programDistribution (only has spec1)

@@ -12,6 +12,33 @@ let activeRiderCountPopupRaceId: number | null = null;
 let programRolesSortKey = 'id';
 let programRolesSortAsc = true;
 
+// Global filter states
+let filterSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true };
+let filterVariants: Record<number, boolean> = {
+  1: true,
+  2: true,
+  3: true,
+  4: true,
+  5: true,
+  6: true,
+};
+let popoverShowV1_3 = true;
+let popoverShowV4_6 = true;
+
+// Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
+function getProgramVariant(name: string): number {
+  const parts = name.split('_');
+  const last = parts[parts.length - 1];
+  const v = parseInt(last, 10);
+  return isNaN(v) ? 1 : v;
+}
+
+// Helper to extract the character at pos (1-indexed) in the prefix (e.g. S at pos 1 for SHP_1)
+function getLetterAt(name: string, pos: number): string {
+  const prefix = name.split('_')[0] || '';
+  return prefix.charAt(pos - 1) || '';
+}
+
 // Helpers
 function getWeekNumber(dateStr: string): number {
   const d = new Date(dateStr);
@@ -428,72 +455,46 @@ export function initRaceProgramsView(): void {
     toggleProgramRaceAssignment(programId, day);
   });
 
-  // Date picker listener in Peak Editor
+  // Listen for checkbox changes in filter card and popover filters
   $('view-race-programs').addEventListener('change', (event) => {
-    const input = event.target as HTMLInputElement;
-    if (input.classList.contains('peak-date-picker')) {
-      const programId = parseInt(input.dataset['programId']!, 10);
-      const peakIndex = parseInt(input.dataset['peak']!, 10);
-      const dateVal = input.value;
-      if (dateVal) {
-        const kw = getWeekNumber(dateVal);
-        updatePeakKws(programId, peakIndex, kw);
-      }
+    const target = event.target as HTMLInputElement;
+    if (target.classList.contains('filter-spec-checkbox')) {
+      const spec = target.dataset['spec']!;
+      filterSpecs[spec] = target.checked;
+      renderRacePrograms();
       return;
     }
-
-    // Peak number inputs changes
-    if (input.classList.contains('peak-number-input')) {
-      const programId = parseInt(input.dataset['programId']!, 10);
-      const field = input.dataset['field']!;
-      const val = parseInt(input.value || '1', 10);
-      updatePeakField(programId, field, val);
+    if (target.classList.contains('filter-variant-checkbox')) {
+      const variant = parseInt(target.dataset['variant']!, 10);
+      filterVariants[variant] = target.checked;
+      renderRacePrograms();
+      return;
+    }
+    if (target.classList.contains('filter-group-checkbox')) {
+      const group = target.dataset['group'];
+      if (group === '1-3') {
+        filterVariants[1] = target.checked;
+        filterVariants[2] = target.checked;
+        filterVariants[3] = target.checked;
+      } else if (group === '4-6') {
+        filterVariants[4] = target.checked;
+        filterVariants[5] = target.checked;
+        filterVariants[6] = target.checked;
+      }
+      renderRacePrograms();
+      return;
+    }
+    if (target.classList.contains('popover-filter-v13')) {
+      popoverShowV1_3 = target.checked;
+      renderRacePrograms();
+      return;
+    }
+    if (target.classList.contains('popover-filter-v46')) {
+      popoverShowV4_6 = target.checked;
+      renderRacePrograms();
+      return;
     }
   });
-}
-
-function updatePeakField(programId: number, field: string, value: number): void {
-  const payload = state.raceProgramsPayload;
-  if (!payload) return;
-
-  const prog = payload.programs.find((p: any) => p.id === programId);
-  if (!prog) return;
-
-  const clamped = Math.max(1, Math.min(53, value));
-  prog[field] = clamped;
-
-  // Enforce min <= max constraints
-  if (field.endsWith('_min')) {
-    const maxField = field.replace('_min', '_max');
-    if (prog[maxField] < clamped) {
-      prog[maxField] = clamped;
-    }
-  } else if (field.endsWith('_max')) {
-    const minField = field.replace('_max', '_min');
-    if (prog[minField] > clamped) {
-      prog[minField] = clamped;
-    }
-  }
-
-  state.raceProgramsDirty = true;
-  renderRacePrograms();
-}
-
-function updatePeakKws(programId: number, peakIndex: number, kw: number): void {
-  const payload = state.raceProgramsPayload;
-  if (!payload) return;
-
-  const prog = payload.programs.find((p: any) => p.id === programId);
-  if (!prog) return;
-
-  const minField = `peak${peakIndex}_min`;
-  const maxField = `peak${peakIndex}_max`;
-
-  prog[minField] = Math.max(1, kw - 2);
-  prog[maxField] = Math.min(53, kw + 2);
-
-  state.raceProgramsDirty = true;
-  renderRacePrograms();
 }
 
 function toggleProgramRaceAssignment(programId: number, dayStr: string): void {
@@ -626,6 +627,73 @@ export function renderRacePrograms(): void {
   const isSaving = state.raceProgramsSaving;
   const activeTab = state.raceProgramsActiveTab;
 
+function renderFilterCard(): string {
+  return `
+    <div class="race-programs-filters-card" style="margin-top: 1rem; padding: 0.8rem; background: var(--bg-800); border: 1px solid var(--border); border-radius: var(--radius-md);">
+      <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center;">
+        
+        <!-- Spec Filters -->
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Spezialisierungen:</span>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="B" ${filterSpecs.B ? 'checked' : ''}> B (Berg)
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="H" ${filterSpecs.H ? 'checked' : ''}> H (Hügel)
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="P" ${filterSpecs.P ? 'checked' : ''}> P (Pflaster)
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="S" ${filterSpecs.S ? 'checked' : ''}> S (Sprint)
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="T" ${filterSpecs.T ? 'checked' : ''}> T (Zeitfahren)
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="A" ${filterSpecs.A ? 'checked' : ''}> A (Attacker)
+          </label>
+        </div>
+
+        <!-- Variant Filters -->
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Varianten:</span>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="1" ${filterVariants[1] ? 'checked' : ''}> 1
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="2" ${filterVariants[2] ? 'checked' : ''}> 2
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="3" ${filterVariants[3] ? 'checked' : ''}> 3
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="4" ${filterVariants[4] ? 'checked' : ''}> 4
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="5" ${filterVariants[5] ? 'checked' : ''}> 5
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-variant-checkbox" data-variant="6" ${filterVariants[6] ? 'checked' : ''}> 6
+          </label>
+        </div>
+
+        <!-- Bulk Variant Groups -->
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Gruppen:</span>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-group-checkbox" data-group="1-3" ${filterVariants[1] && filterVariants[2] && filterVariants[3] ? 'checked' : ''}> Varianten 1-3
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-group-checkbox" data-group="4-6" ${filterVariants[4] && filterVariants[5] && filterVariants[6] ? 'checked' : ''}> Varianten 4-6
+          </label>
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+
   // Tab Header HTML
   let html = `
     <div class="race-programs-layout">
@@ -633,7 +701,6 @@ export function renderRacePrograms(): void {
         <div class="results-type-tabs" style="margin: 0;">
           <button class="results-type-btn${activeTab === 'calendar-cols' ? ' active' : ''}" data-tab="calendar-cols">Kalender Programme (Spalten)</button>
           <button class="results-type-btn${activeTab === 'calendar-rows' ? ' active' : ''}" data-tab="calendar-rows">Kalender Programme (Zeilen)</button>
-          <button class="results-type-btn${activeTab === 'peak-editor' ? ' active' : ''}" data-tab="peak-editor">Peak-Editor Programme</button>
           <button class="results-type-btn${activeTab === 'rider-role' ? ' active' : ''}" data-tab="rider-role">Rider-Role Programme</button>
           <button class="results-type-btn${activeTab === 'program-roles' ? ' active' : ''}" data-tab="program-roles">Programm-Rollen</button>
         </div>
@@ -648,11 +715,11 @@ export function renderRacePrograms(): void {
 
   // Render individual tabs
   if (activeTab === 'calendar-cols') {
+    html += renderFilterCard();
     html += renderTabCalendarCols(payload);
   } else if (activeTab === 'calendar-rows') {
+    html += renderFilterCard();
     html += renderTabCalendarRows(payload);
-  } else if (activeTab === 'peak-editor') {
-    html += renderTabPeakEditor(payload);
   } else if (activeTab === 'rider-role') {
     html += renderTabRiderRole(payload);
   } else if (activeTab === 'program-roles') {
@@ -683,9 +750,21 @@ export function renderRacePrograms(): void {
 
 // 1. Tab: Calendar Programs (Columns)
 function renderTabCalendarCols(payload: any): string {
-  const programs = payload.programs;
+  const allPrograms = payload.programs;
   const raceProgramRaces = payload.raceProgramRaces;
   const races = payload.races;
+  const programDistribution = payload.programDistribution;
+
+  const programs = allPrograms.filter((p: any) => {
+    const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
+                    (p.name.includes('H') && filterSpecs.H) ||
+                    (p.name.includes('P') && filterSpecs.P) ||
+                    (p.name.includes('S') && filterSpecs.S) ||
+                    (p.name.includes('T') && filterSpecs.T) ||
+                    (p.name.includes('A') && filterSpecs.A);
+    const variant = getProgramVariant(p.name);
+    return hasSpec && filterVariants[variant];
+  });
 
   // Calculate day-sums for header
   const programStats = programs.map((p: any) => ({
@@ -699,9 +778,11 @@ function renderTabCalendarCols(payload: any): string {
   `;
   for (const prog of programs) {
     const stats = programStats.find((s: any) => s.id === prog.id)?.stats;
+    const dist = programDistribution.find((row: any) => row.program_id === prog.id);
+    const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     headerRow += `
       <th style="min-width: 140px; text-align: center;">
-        <div style="font-weight: bold; font-size: 0.9rem;">${esc(prog.name)}</div>
+        <div style="font-weight: bold; font-size: 0.9rem;">${esc(prog.name)} (${riderCount} F)</div>
         <div class="text-muted" style="font-size: 0.72rem; margin-top: 0.15rem;">
           P: <span style="color: #fb923c; font-weight: bold;">${stats?.peak}</span> | 
           A: <span style="color: #94a3b8; font-weight: bold;">${stats?.prep}</span> | 
@@ -792,9 +873,21 @@ function renderTabCalendarCols(payload: any): string {
 
 // 2. Tab: Calendar Programs (Rows)
 function renderTabCalendarRows(payload: any): string {
-  const programs = payload.programs;
+  const allPrograms = payload.programs;
   const raceProgramRaces = payload.raceProgramRaces;
   const races = payload.races;
+  const programDistribution = payload.programDistribution;
+
+  const programs = allPrograms.filter((p: any) => {
+    const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
+                    (p.name.includes('H') && filterSpecs.H) ||
+                    (p.name.includes('P') && filterSpecs.P) ||
+                    (p.name.includes('S') && filterSpecs.S) ||
+                    (p.name.includes('T') && filterSpecs.T) ||
+                    (p.name.includes('A') && filterSpecs.A);
+    const variant = getProgramVariant(p.name);
+    return hasSpec && filterVariants[variant];
+  });
 
   // Month names banner
   let monthCols = `<th class="sticky-col-header" style="z-index: 15;">Monat</th>`;
@@ -856,9 +949,11 @@ function renderTabCalendarRows(payload: any): string {
   let rowsHtml = '';
   for (const prog of programs) {
     const stats = calculateProgramDays(prog, payload);
+    const dist = programDistribution.find((row: any) => row.program_id === prog.id);
+    const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     let cols = `
       <td class="sticky-col" style="z-index: 5; white-space: nowrap; font-weight: bold; border-right: 2px solid var(--border);">
-        <div style="font-size: 0.85rem;">${esc(prog.name)}</div>
+        <div style="font-size: 0.85rem;">${esc(prog.name)} (${riderCount} F)</div>
         <div class="text-muted" style="font-size: 0.7rem; font-weight: normal; margin-top: 0.1rem;">
           P: <span style="color: #fb923c; font-weight: bold;">${stats.peak}</span> | 
           A: <span style="color: #94a3b8; font-weight: bold;">${stats.prep}</span> | 
@@ -1033,7 +1128,23 @@ function renderTabRiderRole(payload: any): string {
 
     const assignedProgramDistributions = programDistribution.filter((row: any) => assignedProgramIds.has(row.program_id));
 
-    // 1b. Prepare program lists for the Rider Count popover
+    let targetLetter: 'P' | 'S' | 'H' | 'B' | 'T' | null = null;
+    if (race.is_stage_race === 0) {
+      const singleStage = stages.find((s: any) => s.race_id === race.id);
+      const profile = (singleStage?.profile ?? '').toLowerCase();
+      if (profile === 'cobble' || profile === 'cobble_hill' || profile === 'cobblehill') {
+        targetLetter = 'P';
+      } else if (profile === 'flat' || profile === 'rolling') {
+        targetLetter = 'S';
+      } else if (profile === 'hilly' || profile === 'hilly_difficult') {
+        targetLetter = 'H';
+      } else if (profile === 'medium_mountain' || profile === 'high_mountain' || profile === 'mountain') {
+        targetLetter = 'B';
+      } else if (profile === 'itt' || profile === 'ttt') {
+        targetLetter = 'T';
+      }
+    }
+
     const programItems = payload.programs.map((p: any) => {
       const isAssigned = raceProgramRaces.some((m: any) => m.program_id === p.id && m.race_id === race.id);
       const dist = programDistribution.find((row: any) => row.program_id === p.id);
@@ -1066,16 +1177,56 @@ function renderTabRiderRole(payload: any): string {
         rolesStr,
         totalDays,
       };
-    }).sort((a: any, b: any) => {
-      if (a.isAssigned !== b.isAssigned) {
-        return a.isAssigned ? -1 : 1;
-      }
-      return b.count - a.count;
     });
 
+    if (targetLetter !== null) {
+      const targetL = targetLetter; // local binding for type inference
+      programItems.sort((a: any, b: any) => {
+        let bucketA = 3;
+        if (getLetterAt(a.program.name, 1) === targetL) bucketA = 0;
+        else if (getLetterAt(a.program.name, 2) === targetL) bucketA = 1;
+        else if (getLetterAt(a.program.name, 3) === targetL) bucketA = 2;
+
+        let bucketB = 3;
+        if (getLetterAt(b.program.name, 1) === targetL) bucketB = 0;
+        else if (getLetterAt(b.program.name, 2) === targetL) bucketB = 1;
+        else if (getLetterAt(b.program.name, 3) === targetL) bucketB = 2;
+
+        if (bucketA !== bucketB) {
+          return bucketA - bucketB;
+        }
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+        const varA = getProgramVariant(a.program.name);
+        const varB = getProgramVariant(b.program.name);
+        if (varA !== varB) {
+          return varA - varB;
+        }
+        return a.program.id - b.program.id;
+      });
+    } else {
+      programItems.sort((a: any, b: any) => {
+        if (a.isAssigned !== b.isAssigned) {
+          return a.isAssigned ? -1 : 1;
+        }
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+        const varA = getProgramVariant(a.program.name);
+        const varB = getProgramVariant(b.program.name);
+        if (varA !== varB) {
+          return varA - varB;
+        }
+        return a.program.id - b.program.id;
+      });
+    }
+
     const filteredProgramItems = programItems.filter((item: any) => {
-      const inActive = isRaceInActivePhase(item.program, race);
-      return inActive || item.isAssigned;
+      const variant = getProgramVariant(item.program.name);
+      if (variant >= 1 && variant <= 3 && !popoverShowV1_3) return false;
+      if (variant >= 4 && variant <= 6 && !popoverShowV4_6) return false;
+      return true;
     });
 
     const programItemsHtml = filteredProgramItems.map((item: any) => {
@@ -1112,17 +1263,19 @@ function renderTabRiderRole(payload: any): string {
         }
       }
 
-      const activeStyle = item.isAssigned ? 'font-weight: bold; color: var(--text-100);' : 'color: var(--text-500);';
+      const variant = getProgramVariant(p.name);
+      const colorVal = (variant >= 1 && variant <= 3) ? '#f97316' : '#22c55e';
+      const activeStyle = item.isAssigned ? `font-weight: bold; color: ${colorVal}; text-shadow: 0 0 1px ${colorVal};` : `color: ${colorVal}; opacity: 0.75;`;
       const checkboxText = item.isAssigned ? '☑' : '☐';
 
-      const isSelectable = inActive || item.isAssigned;
-      const pointerStyle = isSelectable ? 'cursor: pointer;' : 'cursor: not-allowed; opacity: 0.4; pointer-events: none;';
-      const extraClass = isSelectable ? '' : ' disabled';
+      const isSelectable = true;
+      const pointerStyle = 'cursor: pointer;';
+      const extraClass = '';
 
       return `
         <div class="popover-program-toggle${extraClass}" data-program-id="${p.id}" data-race-id="${race.id}" 
              style="${pointerStyle} padding: 0.45rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background-color 0.15s; white-space: nowrap;"
-             onmouseover="${isSelectable ? "this.style.backgroundColor='rgba(99, 102, 241, 0.08)'" : ''}"
+             onmouseover="this.style.backgroundColor='rgba(99, 102, 241, 0.08)'"
              onmouseout="this.style.backgroundColor='transparent'">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; overflow: hidden;">
             <span style="font-size: 1.15rem; line-height: 1; user-select: none; color: ${item.isAssigned ? 'var(--accent-h)' : 'var(--text-500)'};">${checkboxText}</span>
@@ -1228,9 +1381,16 @@ function renderTabRiderRole(payload: any): string {
     const riderCountPopupHtml = `
       <div class="race-rider-programs-popover-card ${isRiderPopupActive ? '' : 'hidden'}"
            style="position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 120; min-width: 600px; max-width: 750px; padding: 0.8rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-md); background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%); box-shadow: var(--shadow); text-align: left; font-weight: normal;">
-        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
+        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
           ${popoverTitleHtml}
-          <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-500);">Klicken zum Aktivieren</span>
+          <div style="display: flex; gap: 0.8rem; font-size: 0.75rem; align-items: center;">
+            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-v13" ${popoverShowV1_3 ? 'checked' : ''}> v1-3
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-v46" ${popoverShowV4_6 ? 'checked' : ''}> v4-6
+            </label>
+          </div>
         </div>
         <div class="popover-program-list-scroll" data-race-id="${race.id}" style="display: flex; flex-direction: column; gap: 0.2rem; max-height: 350px; overflow-y: auto;">
           ${programItemsHtml}
