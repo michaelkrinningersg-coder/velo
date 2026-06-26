@@ -117,6 +117,24 @@ export class RiderProgramService {
 
     this.ensureSchema();
 
+    // Clean up any existing program assignments for teamless riders
+    this.db.prepare(`
+      DELETE FROM rider_season_programs
+      WHERE season = ? AND rider_id IN (
+        SELECT r.id
+        FROM riders r
+        LEFT JOIN contracts c ON c.id = (
+          SELECT contracts.id FROM contracts
+          WHERE contracts.rider_id = r.id
+            AND contracts.start_season <= ?
+            AND contracts.end_season >= ?
+          ORDER BY contracts.start_season DESC, contracts.id DESC
+          LIMIT 1
+        )
+        WHERE COALESCE(c.team_id, r.active_team_id) IS NULL
+      )
+    `).run(season, season, season);
+
     const assignedDate = assignedOn ?? this.resolveAssignedOn(season);
     const missingCount = (this.db.prepare(`
       SELECT COUNT(*) AS count
