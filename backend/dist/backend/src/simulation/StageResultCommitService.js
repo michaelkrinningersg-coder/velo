@@ -1062,7 +1062,10 @@ class StageResultCommitService {
             for (const row of stageRows) {
                 if (row.riderId == null) {
                     if (stage.profile === 'TTT') {
-                        for (const rId of completedRiderIds) {
+                        const teamRiderIds = performance
+                            .filter((entry) => entry.team.id === row.teamId)
+                            .map((entry) => entry.rider.id);
+                        for (const rId of teamRiderIds) {
                             insertCareerStatsRow.run(rId);
                             insertSeasonStatsRow.run(rId, currentSeason);
                             getOrCreateCategoryStats.run(rId, currentSeason, categoryName);

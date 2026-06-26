@@ -166,7 +166,7 @@ class LeaderboardRepository {
               s.id AS stage_id
             FROM all_results res
             JOIN stages s ON s.id = res.stage_id
-            JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
+            JOIN all_stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
             WHERE res.rank = 1 
               AND res.result_type_id = 1 
               AND res.rider_id IS NULL
@@ -222,7 +222,7 @@ class LeaderboardRepository {
               s.id AS stage_id
             FROM all_results res
             JOIN stages s ON s.id = res.stage_id
-            JOIN stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
+            JOIN all_stage_entries se ON se.stage_id = res.stage_id AND se.team_id = res.team_id
             WHERE res.rank = 1 
               AND res.result_type_id = 1 
               AND res.rider_id IS NULL
@@ -408,7 +408,7 @@ class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             SUM(s.stage_score) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -435,7 +435,7 @@ class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             SUM(s.stage_score) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -539,7 +539,7 @@ class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -570,7 +570,7 @@ class LeaderboardRepository {
             t.division_id AS team_division_id,
             r.is_retired AS is_retired,
             COUNT(*) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           JOIN sta_country c ON c.id = r.country_id
@@ -1204,7 +1204,7 @@ class LeaderboardRepository {
             if (period === 'season') {
                 query = `
           SELECT r.active_team_id AS team_id, SUM(s.stage_score) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           WHERE se.status = 'finished' AND r.active_team_id IS NOT NULL
@@ -1218,7 +1218,7 @@ class LeaderboardRepository {
             else {
                 query = `
           SELECT r.active_team_id AS team_id, SUM(s.stage_score) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           WHERE se.status = 'finished' AND r.active_team_id IS NOT NULL
@@ -1240,7 +1240,7 @@ class LeaderboardRepository {
             if (period === 'season') {
                 query = `
           SELECT r.active_team_id AS team_id, COUNT(DISTINCT se.stage_id) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           WHERE se.status != 'dns' AND r.active_team_id IS NOT NULL
@@ -1258,7 +1258,7 @@ class LeaderboardRepository {
             else {
                 query = `
           SELECT r.active_team_id AS team_id, COUNT(DISTINCT se.stage_id) AS val
-          FROM stage_entries se
+          FROM all_stage_entries se
           JOIN stages s ON s.id = se.stage_id
           JOIN riders r ON r.id = se.rider_id
           WHERE se.status != 'dns' AND r.active_team_id IS NOT NULL

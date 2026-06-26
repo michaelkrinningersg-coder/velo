@@ -1312,15 +1312,23 @@ class DatabaseService {
         }
         const tttFinisherMap = new Map();
         const tttEntries = db.prepare(`
-      SELECT se.stage_id, se.rider_id
+      SELECT se.stage_id, se.rider_id, se.team_id
       FROM all_stage_entries se
       JOIN stages s ON s.id = se.stage_id
       WHERE s.profile = 'TTT' AND se.status = 'finished'
     `).all();
         for (const e of tttEntries) {
-            const set = tttFinisherMap.get(e.stage_id) ?? new Set();
-            set.add(e.rider_id);
-            tttFinisherMap.set(e.stage_id, set);
+            let stageMap = tttFinisherMap.get(e.stage_id);
+            if (!stageMap) {
+                stageMap = new Map();
+                tttFinisherMap.set(e.stage_id, stageMap);
+            }
+            let teamSet = stageMap.get(e.team_id);
+            if (!teamSet) {
+                teamSet = new Set();
+                stageMap.set(e.team_id, teamSet);
+            }
+            teamSet.add(e.rider_id);
         }
         const results = db.prepare(`
       SELECT stage_id, rider_id, team_id, result_type_id, rank
@@ -1332,7 +1340,8 @@ class DatabaseService {
                 continue;
             if (r.rider_id == null) {
                 if (stage.profile === 'TTT' && r.result_type_id === 1) {
-                    const finishedRiders = tttFinisherMap.get(r.stage_id);
+                    const stageMap = tttFinisherMap.get(r.stage_id);
+                    const finishedRiders = stageMap?.get(r.team_id);
                     if (finishedRiders) {
                         for (const rId of finishedRiders) {
                             const stats = getOrCreateStats(rId, stage.season, stage.category_name);
