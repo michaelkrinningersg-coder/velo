@@ -807,6 +807,10 @@ function renderTabCalendarCols(payload: any): string {
   const programDistribution = payload.programDistribution;
 
   const programs = allPrograms.filter((p: any) => {
+    const dist = programDistribution.find((row: any) => row.program_id === p.id);
+    const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
+    if (riderCount === 0) return false;
+
     const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
                     (p.name.includes('H') && filterSpecs.H) ||
                     (p.name.includes('P') && filterSpecs.P) ||
@@ -951,6 +955,10 @@ function renderTabCalendarRows(payload: any): string {
   const programDistribution = payload.programDistribution;
 
   const programs = allPrograms.filter((p: any) => {
+    const dist = programDistribution.find((row: any) => row.program_id === p.id);
+    const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
+    if (riderCount === 0) return false;
+
     const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
                     (p.name.includes('H') && filterSpecs.H) ||
                     (p.name.includes('P') && filterSpecs.P) ||
@@ -1335,6 +1343,8 @@ function renderTabRiderRole(payload: any): string {
     }
 
     const filteredProgramItems = programItems.filter((item: any) => {
+      if (item.count === 0) return false;
+
       const variant = getProgramVariant(item.program.name);
       if (variant >= 1 && variant <= 3 && !popoverShowV1_3) return false;
       if (variant >= 4 && variant <= 6 && !popoverShowV4_6) return false;

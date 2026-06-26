@@ -83,6 +83,28 @@ function shuffleRandomly<T>(items: T[]): T[] {
   return shuffled;
 }
 
+export function sortWaterCarriersAscending(riders: Rider[]): Rider[] {
+  const result = [...riders];
+  const waterCarrierIndices: number[] = [];
+  const waterCarriers: Rider[] = [];
+
+  for (let i = 0; i < result.length; i++) {
+    if (result[i] && result[i].roleId === 5) {
+      waterCarrierIndices.push(i);
+      waterCarriers.push(result[i]);
+    }
+  }
+
+  if (waterCarriers.length > 1) {
+    waterCarriers.sort((a, b) => (a.seasonRaceDays ?? 0) - (b.seasonRaceDays ?? 0) || a.id - b.id);
+    for (let i = 0; i < waterCarrierIndices.length; i++) {
+      result[waterCarrierIndices[i]] = waterCarriers[i];
+    }
+  }
+
+  return result;
+}
+
 function canCustomizeRoster(race: Race, stage: Stage): boolean {
   return race.id > 0 && stage.id > 0;
 }
@@ -292,13 +314,13 @@ function orderCandidatesForStage(candidates: Rider[], stage: Stage, seed: number
     ? shuffleRandomly(candidates)
     : shuffleDeterministically(candidates, seed);
   if (!isCobbleStage(stage)) {
-    return shuffled;
+    return sortWaterCarriersAscending(shuffled);
   }
 
-  const cobbleReady = shuffled.filter((rider: any) => rider.skills.cobble >= COBBLE_SELECTION_MIN_SKILL);
-  const fallback = shuffled
+  const cobbleReady = sortWaterCarriersAscending(shuffled.filter((rider: any) => rider.skills.cobble >= COBBLE_SELECTION_MIN_SKILL));
+  const fallback = sortWaterCarriersAscending(shuffled
     .filter((rider: any) => rider.skills.cobble < COBBLE_SELECTION_MIN_SKILL)
-    .sort((left: any, right: any) => right.skills.cobble - left.skills.cobble || left.id - right.id);
+    .sort((left: any, right: any) => right.skills.cobble - left.skills.cobble || left.id - right.id));
   return [...cobbleReady, ...fallback];
 }
 
@@ -500,7 +522,7 @@ function isNeutralPhase(rider: Rider): boolean {
 }
 
 export function orderProgramCandidates(candidates: Rider[], race?: Race, useHomePreference = false): Rider[] {
-  return [...candidates].sort((left: any, right: any) => {
+  const sorted = [...candidates].sort((left: any, right: any) => {
     const phaseCompare = resolveProgramPhasePriority(left) - resolveProgramPhasePriority(right);
     if (phaseCompare !== 0) return phaseCompare;
 
@@ -514,6 +536,7 @@ export function orderProgramCandidates(candidates: Rider[], race?: Race, useHome
 
     return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
   });
+  return sortWaterCarriersAscending(sorted);
 }
 
 function hasActiveOrEarmarkedCollision(
@@ -628,9 +651,10 @@ export function orderFillCandidates(candidates: Rider[], race: Race, useHomePref
   const isMonumentOrGrandTour = name.includes('Monument') || name.includes('Grand Tour') || name.includes('Tour de France');
   const isHighCategory = name.includes('Stage Race High') || name.includes('One Day High');
 
+  let sorted: Rider[];
   if (isMonumentOrGrandTour) {
     const roleOrder = [1, 2, 6, 3, 4, 5];
-    return [...candidates].sort((left: any, right: any) => {
+    sorted = [...candidates].sort((left: any, right: any) => {
       const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
       const idxRight = roleOrder.indexOf(right.roleId ?? 0);
       const pLeft = idxLeft === -1 ? 99 : idxLeft;
@@ -648,11 +672,9 @@ export function orderFillCandidates(candidates: Rider[], race: Race, useHomePref
       }
       return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
     });
-  }
-
-  if (isHighCategory) {
+  } else if (isHighCategory) {
     const roleOrder = [3, 4, 5];
-    return [...candidates].sort((left: any, right: any) => {
+    sorted = [...candidates].sort((left: any, right: any) => {
       const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
       const idxRight = roleOrder.indexOf(right.roleId ?? 0);
       const pLeft = idxLeft === -1 ? 99 : idxLeft;
@@ -670,36 +692,38 @@ export function orderFillCandidates(candidates: Rider[], race: Race, useHomePref
       }
       return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
     });
+  } else {
+    // Other races: Middle, Low, etc.
+    const roleOrder = [5, 4, 3, 6];
+    sorted = [...candidates].sort((left: any, right: any) => {
+      const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
+      const idxRight = roleOrder.indexOf(right.roleId ?? 0);
+      const pLeft = idxLeft === -1 ? 99 : idxLeft;
+      const pRight = idxRight === -1 ? 99 : idxRight;
+
+      if (pLeft !== pRight) {
+        return pLeft - pRight;
+      }
+
+      if (useHomePreference) {
+        const leftIsHome = left.countryId === race.countryId ? 1 : 0;
+        const rightIsHome = right.countryId === race.countryId ? 1 : 0;
+        if (leftIsHome !== rightIsHome) {
+          return rightIsHome - leftIsHome;
+        }
+      }
+
+      if (left.roleId === 6) {
+        // Sprinters: weak to strong overall rating
+        return (left.overallRating ?? 0) - (right.overallRating ?? 0) || left.id - right.id;
+      } else {
+        // Wasserträger, Starke Helfer, Edelhelfer: fewest race days first
+        return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+      }
+    });
   }
 
-  // Other races: Middle, Low, etc.
-  const roleOrder = [5, 4, 3, 6];
-  return [...candidates].sort((left: any, right: any) => {
-    const idxLeft = roleOrder.indexOf(left.roleId ?? 0);
-    const idxRight = roleOrder.indexOf(right.roleId ?? 0);
-    const pLeft = idxLeft === -1 ? 99 : idxLeft;
-    const pRight = idxRight === -1 ? 99 : idxRight;
-
-    if (pLeft !== pRight) {
-      return pLeft - pRight;
-    }
-
-    if (useHomePreference) {
-      const leftIsHome = left.countryId === race.countryId ? 1 : 0;
-      const rightIsHome = right.countryId === race.countryId ? 1 : 0;
-      if (leftIsHome !== rightIsHome) {
-        return rightIsHome - leftIsHome;
-      }
-    }
-
-    if (left.roleId === 6) {
-      // Sprinters: weak to strong overall rating
-      return (left.overallRating ?? 0) - (right.overallRating ?? 0) || left.id - right.id;
-    } else {
-      // Wasserträger, Starke Helfer, Edelhelfer: fewest race days first
-      return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
-    }
-  });
+  return sortWaterCarriersAscending(sorted);
 }
 
 function hashString(value: string): number {
@@ -811,13 +835,14 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
       const isCobbleRace = !race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill');
 
       if (isCobbleRace) {
-        fillCandidates = roster.filter((rider: any) => {
+        const sorted = roster.filter((rider: any) => {
           if (selectedIds.has(rider.id) || teamCollisionRiderIds.has(rider.id)) return false;
           if (hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks)) return false;
           const cobbleSkill = rider.skills?.cobble ?? 0;
           if (cobbleSkill < 65) return false;
           return [3, 4, 5].includes(rider.roleId);
         }).sort((a: any, b: any) => (a.skills?.cobble ?? 0) - (b.skills?.cobble ?? 0) || a.id - b.id);
+        fillCandidates = sortWaterCarriersAscending(sorted);
       } else {
         const candidates = roster.filter((rider: any) => {
           if (selectedIds.has(rider.id) || teamCollisionRiderIds.has(rider.id)) return false;
@@ -876,6 +901,7 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
           }
           return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
         });
+        fillCandidates = sortWaterCarriersAscending(fillCandidates);
       }
       for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
         teamSelection.push(rider);
@@ -1204,7 +1230,7 @@ function enforceLieutenantRules(
       if (fillPool.length > 0) {
         let sortedFill: Rider[];
         if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
-          sortedFill = [...fillPool].sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+          sortedFill = sortWaterCarriersAscending([...fillPool].sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id));
         } else {
           sortedFill = orderFillCandidates(
             fillPool.filter(r => canFillRosterSlot(db, repo, r, teamFullRoster, riderLocks, season, race)),
@@ -1261,7 +1287,7 @@ function enforceSprinterLimits(
       if (fillPool.length > 0) {
         let sortedFill: Rider[];
         if (!race.isStageRace && (stage.profile === 'Cobble' || stage.profile === 'Cobble_Hill')) {
-          sortedFill = [...fillPool].sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id);
+          sortedFill = sortWaterCarriersAscending([...fillPool].sort((a: any, b: any) => b.skills.cobble - a.skills.cobble || a.id - b.id));
         } else {
           sortedFill = orderFillCandidates(
             fillPool.filter(r => canFillRosterSlot(db, repo, r, teamFullRoster, riderLocks, season, race)),

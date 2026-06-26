@@ -237,9 +237,58 @@ const groupNames = {
 
 const specAbbrMap = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A', 7: 'F' };
 
-const combosWith3Variants = new Set([
-  'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
-]);
+function normalizeComboKey(comboKey) {
+  const map = {
+    // Berg (B)
+    'BFH': 'BHF',
+    'BTH': 'BHT',
+    'BTF': 'BFT',
+    'BHA': 'BHP',
+    'BFP': 'BHP',
+    
+    // Sprint (S)
+    'STF': 'SFT',
+    'SAF': 'SFA',
+    'STA': 'SAT',
+    'SHF': 'SFT',
+    
+    // Cobble (P)
+    'PTF': 'PFT',
+    'PTA': 'PAT',
+    'PAF': 'PFA',
+    'PHF': 'PFH',
+    'PHS': 'PFT',
+    'PSF': 'PFT',
+    'PSG': 'PFT',
+    
+    // Hill (H)
+    'HAB': 'HBA',
+    'HTF': 'HFT',
+    'HSP': 'HSF',
+    'HTB': 'HSB',
+    'HPS': 'HPF',
+    
+    // Time Trial (T)
+    'TAF': 'TFA',
+    'TBH': 'TBF',
+    'THF': 'TFH',
+    'TFP': 'TPF',
+    'TPH': 'TPF',
+    
+    // Flat (F)
+    'FTA': 'FAT',
+    'FSP': 'FPS',
+    'FHP': 'FPS',
+    'FTP': 'FPS'
+  };
+  return map[comboKey] ?? comboKey;
+}
+
+function getVariantCount(n) {
+  if (n < 4) return 1;
+  if (n < 10) return 2;
+  return 4;
+}
 
 const validExactMatchCombos = new Set([
   'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
@@ -395,6 +444,8 @@ function getSurvivingPrograms() {
       }
     }
 
+    comboKey = normalizeComboKey(comboKey);
+
     if (!comboGroups[comboKey]) comboGroups[comboKey] = [];
     comboGroups[comboKey].push(r);
   }
@@ -416,13 +467,17 @@ function getSurvivingPrograms() {
   
   for (const comboKey of Object.keys(comboGroups)) {
     if (splitCombos.has(comboKey)) {
-      for (const region of Object.values(groupNames)) {
-        for (let v = 1; v <= 6; v++) {
+      for (const [regionIdStr, region] of Object.entries(groupNames)) {
+        const regionId = parseInt(regionIdStr);
+        const regionalRiders = comboGroups[comboKey].filter(r => r.program_group_id === regionId);
+        const maxVariants = getVariantCount(regionalRiders.length);
+        for (let v = 1; v <= maxVariants; v++) {
           candidatePrograms.push({ id: nextId++, name: `${comboKey}_${region}_${v}` });
         }
       }
     } else {
-      const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
+      const totalRiders = comboGroups[comboKey].length;
+      const maxVariants = getVariantCount(totalRiders);
       for (let v = 1; v <= maxVariants; v++) {
         candidatePrograms.push({ id: nextId++, name: `${comboKey}_${v}` });
       }

@@ -62,6 +62,67 @@ function deterministicUnit(seed: string): number {
   return hashString(seed) / 0xffffffff;
 }
 
+export function normalizeComboKey(comboKey: string): string {
+  const map: Record<string, string> = {
+    // Berg (B)
+    'BFH': 'BHF',
+    'BTH': 'BHT',
+    'BTF': 'BFT',
+    'BHA': 'BHP',
+    'BFP': 'BHP',
+    
+    // Sprint (S)
+    'STF': 'SFT',
+    'SAF': 'SFA',
+    'STA': 'SAT',
+    'SHF': 'SFT',
+    
+    // Cobble (P)
+    'PTF': 'PFT',
+    'PTA': 'PAT',
+    'PAF': 'PFA',
+    'PHF': 'PFH',
+    'PHS': 'PFT',
+    'PSF': 'PFT',
+    'PSG': 'PFT',
+    
+    // Hill (H)
+    'HAB': 'HBA',
+    'HTF': 'HFT',
+    'HSP': 'HSF',
+    'HTB': 'HSB',
+    'HPS': 'HPF',
+    
+    // Time Trial (T)
+    'TAF': 'TFA',
+    'TBH': 'TBF',
+    'THF': 'TFH',
+    'TFP': 'TPF',
+    'TPH': 'TPF',
+    
+    // Flat (F)
+    'FTA': 'FAT',
+    'FSP': 'FPS',
+    'FHP': 'FPS',
+    'FTP': 'FPS'
+  };
+  return map[comboKey] ?? comboKey;
+}
+
+export function getVariantIndexForRider(i: number, N: number): number {
+  if (N < 4) {
+    return 1;
+  }
+  if (N < 10) {
+    return (i % 2) + 1;
+  }
+  const half = Math.ceil(N / 2);
+  if (i < half) {
+    return (i % 2) + 1;
+  }
+  return ((i - half) % 2) + 3;
+}
+
 function isSpecializationId(value: number | null | undefined): value is SpecializationId {
   return SPECIALIZATION_IDS.includes(value as SpecializationId);
 }
@@ -269,9 +330,6 @@ export class RiderProgramService {
       'PFB', 'PBF', 'PFH', 'PHF', 'PFS', 'PSF', 'PFT', 'PTF'
     ]);
     const specAbbrMap: Record<number, string> = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A', 7: 'F' };
-    const combosWith3Variants = new Set([
-      'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
-    ]);
     const REGION_NAMES: Record<number, string> = {
       1: 'BeNeLUX',
       2: 'FraGer',
@@ -301,6 +359,8 @@ export class RiderProgramService {
           comboKey = 'OOO';
         }
       }
+
+      comboKey = normalizeComboKey(comboKey);
 
       if (!groups.has(comboKey)) {
         groups.set(comboKey, []);
@@ -405,7 +465,7 @@ export class RiderProgramService {
             
             // Find all available variants for this comboKey and region in the database
             const availableVariants: number[] = [];
-            for (let v = 1; v <= 6; v++) {
+            for (let v = 1; v <= 4; v++) {
               const name = `${comboKey}_${regionName}_${v}`;
               if (programsByName.has(name)) {
                 availableVariants.push(v);
@@ -415,7 +475,7 @@ export class RiderProgramService {
             if (availableVariants.length > 0) {
               for (let i = 0; i < rList.length; i++) {
                 const rider = rList[i];
-                const variant = (i % 6) + 1;
+                const variant = getVariantIndexForRider(i, rList.length);
                 const progName = `${comboKey}_${regionName}_${variant}`;
                 if (programsByName.has(progName)) {
                   const programId = programsByName.get(progName)!;
@@ -427,8 +487,7 @@ export class RiderProgramService {
             } else if (rList.length > 0) {
               // Fallback to standard/global variants if the entire region was pruned
               const availableGlobalVariants: number[] = [];
-              const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
-              for (let v = 1; v <= maxVariants; v++) {
+              for (let v = 1; v <= 4; v++) {
                 const name = `${comboKey}_${v}`;
                 if (programsByName.has(name)) {
                   availableGlobalVariants.push(v);
@@ -438,7 +497,7 @@ export class RiderProgramService {
               if (availableGlobalVariants.length > 0) {
                 for (let i = 0; i < rList.length; i++) {
                   const rider = rList[i];
-                  const variant = (i % maxVariants) + 1;
+                  const variant = getVariantIndexForRider(i, rList.length);
                   const progName = `${comboKey}_${variant}`;
                   if (programsByName.has(progName)) {
                     const programId = programsByName.get(progName)!;
@@ -457,8 +516,7 @@ export class RiderProgramService {
         } else {
           // Standard / non-split combination
           const availableGlobalVariants: number[] = [];
-          const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
-          for (let v = 1; v <= maxVariants; v++) {
+          for (let v = 1; v <= 4; v++) {
             const name = `${comboKey}_${v}`;
             if (programsByName.has(name)) {
               availableGlobalVariants.push(v);
@@ -468,7 +526,7 @@ export class RiderProgramService {
           if (availableGlobalVariants.length > 0) {
             for (let i = 0; i < groupRiders.length; i++) {
               const rider = groupRiders[i];
-              const variant = (i % maxVariants) + 1;
+              const variant = getVariantIndexForRider(i, groupRiders.length);
               const progName = `${comboKey}_${variant}`;
               if (programsByName.has(progName)) {
                 const programId = programsByName.get(progName)!;
