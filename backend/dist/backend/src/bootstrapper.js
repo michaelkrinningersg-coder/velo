@@ -569,7 +569,7 @@ function seedRacePrograms(db) {
 }
 function seedRaceProgramRaces(db) {
     const rows = readCsv('race_program_races.csv');
-    const insert = db.prepare('INSERT INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
+    const insert = db.prepare('INSERT INTO race_program_races (id, program_id, race_id, allowed_program_group_ids) VALUES (?, ?, ?, ?)');
     const hasProgram = db.prepare('SELECT 1 FROM race_programs WHERE id = ?');
     const hasRace = db.prepare('SELECT 1 FROM races WHERE id = ?');
     for (const [index, row] of rows.entries()) {
@@ -577,18 +577,42 @@ function seedRaceProgramRaces(db) {
         const id = int(req(row, 'id', ctx), ctx);
         const programId = int(req(row, 'program_id', ctx), ctx);
         const raceId = int(req(row, 'race_id', ctx), ctx);
+        const allowed = row['allowed_program_group_ids']?.trim() || null;
         if (!hasProgram.get(programId)) {
             throw new Error(`${ctx}: program_id ${programId} existiert nicht.`);
         }
         if (!hasRace.get(raceId)) {
             throw new Error(`${ctx}: race_id ${raceId} existiert nicht.`);
         }
-        insert.run(id, programId, raceId);
+        insert.run(id, programId, raceId, allowed);
     }
     console.log(`  ${rows.length} Rennprogramm-Rennen-Zuordnungen eingefuegt.`);
 }
 function seedRaceProgramProbabilityRules(db) {
-    console.log('  Rennprogramm-Wahrscheinlichkeitsregeln abgeschafft, uebersprungen.');
+    const rows = readCsv('race_program_probability_rules.csv');
+    const insert = db.prepare(`
+    INSERT INTO race_program_probability_rules (id, role_name, spec_1, spec_2, spec_3, program_id, probability)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+    const programs = db.prepare('SELECT id, name FROM race_programs').all();
+    const programIdByName = new Map(programs.map(p => [p.name, p.id]));
+    db.transaction(() => {
+        db.prepare('DELETE FROM race_program_probability_rules').run();
+        for (const [index, row] of rows.entries()) {
+            const ctx = `race_program_probability_rules.csv Zeile ${index + 2}`;
+            const id = int(req(row, 'id', ctx), ctx);
+            const roleName = req(row, 'role_name', ctx);
+            const baseProgram = req(row, 'program_name', ctx);
+            const probability = real(req(row, 'probability', ctx), ctx);
+            const pName = `${baseProgram}_3`;
+            const programId = programIdByName.get(pName);
+            if (programId == null) {
+                throw new Error(`${ctx}: Program/Variant "${pName}" existiert nicht.`);
+            }
+            insert.run(id, roleName, null, null, null, programId, probability);
+        }
+    })();
+    console.log(`  ${rows.length} Rennprogramm-Wahrscheinlichkeitsregeln eingefuegt.`);
 }
 function seedStages(db) {
     const rows = readCsv('stages.csv');

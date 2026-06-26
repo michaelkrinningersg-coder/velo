@@ -1797,7 +1797,6 @@ export class DatabaseService {
   }
 
 
-
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS race_programs (
@@ -1809,6 +1808,7 @@ export class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         program_id INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
         race_id INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        allowed_program_group_ids TEXT,
         UNIQUE(program_id, race_id)
       );
 
@@ -1857,7 +1857,13 @@ export class DatabaseService {
       );
     `);
 
-
+    // Migration: ensure allowed_program_group_ids column exists in race_program_races
+    if (!columnExists(db, 'race_program_races', 'allowed_program_group_ids')) {
+      db.prepare(`
+        ALTER TABLE race_program_races
+        ADD COLUMN allowed_program_group_ids TEXT
+      `).run();
+    }
 
     const ruleColumns = db.prepare('PRAGMA table_info(race_program_probability_rules)').all() as Array<{ name: string; type: string }>;
     const specColumns = ruleColumns.filter((column) => ['spec_1', 'spec_2', 'spec_3'].includes(column.name));
@@ -1900,7 +1906,14 @@ export class DatabaseService {
         id: number;
         name: string;
       }>;
-      const programRaces = masterDb.prepare('SELECT id, program_id, race_id FROM race_program_races ORDER BY id ASC').all() as Array<{ id: number; program_id: number; race_id: number }>;
+
+      const hasAllowedColumnInMaster = columnExists(masterDb, 'race_program_races', 'allowed_program_group_ids');
+      const programRaces = masterDb.prepare(`
+        SELECT id, program_id, race_id ${hasAllowedColumnInMaster ? ', allowed_program_group_ids' : ''}
+        FROM race_program_races
+        ORDER BY id ASC
+      `).all() as Array<{ id: number; program_id: number; race_id: number; allowed_program_group_ids?: string | null }>;
+
       const rules = masterDb.prepare(`
         SELECT id, role_name, spec_1, spec_2, spec_3, program_id, probability
         FROM race_program_probability_rules
@@ -1914,7 +1927,7 @@ export class DatabaseService {
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name
       `);
-      const insertProgramRace = db.prepare('INSERT OR REPLACE INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)');
+      const insertProgramRace = db.prepare('INSERT OR REPLACE INTO race_program_races (id, program_id, race_id, allowed_program_group_ids) VALUES (?, ?, ?, ?)');
       const insertRule = db.prepare(`
         INSERT OR REPLACE INTO race_program_probability_rules (id, role_name, spec_1, spec_2, spec_3, program_id, probability)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1932,7 +1945,7 @@ export class DatabaseService {
         const validRaceIds = new Set(db.prepare('SELECT id FROM races').all().map((r: any) => r.id));
         for (const row of programRaces) {
           if (validRaceIds.has(row.race_id)) {
-            insertProgramRace.run(row.id, row.program_id, row.race_id);
+            insertProgramRace.run(row.id, row.program_id, row.race_id, row.allowed_program_group_ids ?? null);
           }
         }
         for (const row of rules) {

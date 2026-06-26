@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS race_program_races (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   program_id  INTEGER NOT NULL REFERENCES race_programs(id) ON DELETE CASCADE,
   race_id     INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  allowed_program_group_ids TEXT,
   UNIQUE(program_id, race_id)
 );
 

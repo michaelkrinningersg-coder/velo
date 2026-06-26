@@ -4,6 +4,19 @@ const SPECIALIZATION_IDS = [1, 2, 3, 4, 5, 6, 7] as const;
 type SpecializationId = typeof SPECIALIZATION_IDS[number];
 const ROLE_FALLBACK = 'Wassertraeger';
 
+const BASE_PROGRAMS = [
+  'Non_Cobble_Tour',
+  'Cobble_Giro_Tour',
+  'Cobble_Giro_Vuelta',
+  'Vuelta_Tour',
+  'Cobble_Tour',
+  'Non_Cobble Giro_Tour',
+  'Sprinter Non_Cobble_Giro_Vuelta',
+  'Classic_Cobble_No Grand Tour',
+  'Classic_Non_Cobble_No Grand Tour_one day focus',
+  'Classic_Non_Cobble_No Grand Tour_stage race foxus'
+];
+
 type RiderProgramRow = {
   id: number;
   role_name: string | null;
@@ -202,37 +215,13 @@ export class RiderProgramService {
     `).run(season, season, season);
 
     const assignedDate = assignedOn ?? this.resolveAssignedOn(season);
-    const missingCount = (this.db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM riders
-      WHERE riders.is_retired = 0
-        AND NOT EXISTS (
-          SELECT 1
-          FROM rider_season_programs existing_program
-          WHERE existing_program.season = ?
-            AND existing_program.rider_id = riders.id
-        )
-        AND COALESCE(
-          (
-            SELECT team_id FROM contracts
-            WHERE contracts.rider_id = riders.id
-              AND contracts.start_season <= ?
-              AND contracts.end_season >= ?
-            ORDER BY contracts.start_season DESC, contracts.id DESC
-            LIMIT 1
-          ),
-          riders.active_team_id
-        ) IS NOT NULL
-    `).get(season, season, season) as { count: number } | undefined)?.count ?? 0;
-    if (missingCount === 0) {
-      return;
-    }
 
-    // Query all active riders to compute rankings within each team
+    // Load all active riders for the season to determine global rankings
     const allActiveRiders = this.db.prepare(`
       SELECT riders.id,
              role.name AS role_name,
              riders.overall_rating,
+             riders.skill_cobble,
              COALESCE(current_contract.team_id, riders.active_team_id) AS team_id
       FROM riders
       LEFT JOIN sta_role role ON role.id = riders.role_id
@@ -248,55 +237,32 @@ export class RiderProgramService {
         )
       WHERE riders.is_retired = 0
         AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
-    `).all(season, season) as Array<{ id: number; role_name: string | null; overall_rating: number; team_id: number }>;
+    `).all(season, season) as Array<{ id: number; role_name: string | null; overall_rating: number; skill_cobble: number; team_id: number }>;
 
-    const ridersByTeam = new Map<number, typeof allActiveRiders>();
-    for (const r of allActiveRiders) {
-      const teamId = r.team_id;
-      if (!ridersByTeam.has(teamId)) {
-        ridersByTeam.set(teamId, []);
-      }
-      ridersByTeam.get(teamId)!.push(r);
-    }
-    for (const teamRiders of ridersByTeam.values()) {
-      teamRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+    if (allActiveRiders.length === 0) {
+      return;
     }
 
-    const bestSprinterByTeam = new Map<number, number>();
-    for (const [teamId, teamRiders] of ridersByTeam.entries()) {
-      const sprinters = teamRiders.filter(r => normalizeRoleName(r.role_name) === 'Sprinter');
-      if (sprinters.length > 0) {
-        bestSprinterByTeam.set(teamId, sprinters[0].id);
-      }
-    }
+    // Determine top 10 overall riders globally
+    const sortedByOverall = [...allActiveRiders].sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+    const top10OverallIds = new Set(sortedByOverall.slice(0, 10).map(r => r.id));
 
-    const riders = this.db.prepare(`
+    // Determine top sprinters globally
+    const sprinters = allActiveRiders
+      .filter(r => normalizeRoleName(r.role_name) === 'Sprinter')
+      .sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+    const top5SprintersIds = new Set(sprinters.slice(0, 5).map(r => r.id));
+    const sprinters6to15Ids = new Set(sprinters.slice(5, 15).map(r => r.id));
+
+    // Check which riders actually need assignment
+    const missingRiders = this.db.prepare(`
       SELECT riders.id,
              role.name AS role_name,
-             riders.specialization_1_id,
-             riders.specialization_2_id,
-             riders.specialization_3_id,
              riders.overall_rating,
-             COALESCE(current_contract.team_id, riders.active_team_id) AS team_id,
-             country.program_group_id AS program_group_id,
-             riders.skill_flat,
-             riders.skill_mountain,
-             riders.skill_medium_mountain,
-             riders.skill_hill,
-             riders.skill_time_trial,
-             riders.skill_prologue,
              riders.skill_cobble,
-             riders.skill_sprint,
-             riders.skill_acceleration,
-             riders.skill_downhill,
-             riders.skill_attack,
-             riders.skill_stamina,
-             riders.skill_resistance,
-             riders.skill_recuperation,
-             riders.skill_bike_handling
+             COALESCE(current_contract.team_id, riders.active_team_id) AS team_id
       FROM riders
       LEFT JOIN sta_role role ON role.id = riders.role_id
-      LEFT JOIN sta_country country ON country.id = riders.country_id
       LEFT JOIN contracts current_contract
         ON current_contract.id = (
           SELECT contracts.id
@@ -315,62 +281,156 @@ export class RiderProgramService {
           WHERE existing_program.season = ?
             AND existing_program.rider_id = riders.id
         )
-      ORDER BY riders.id ASC
-    `).all(season, season, season) as RiderProgramRow[];
+    `).all(season, season, season) as Array<{ id: number; role_name: string | null; overall_rating: number; skill_cobble: number; team_id: number }>;
 
-    const allPrograms = this.db.prepare('SELECT id, name FROM race_programs').all() as Array<{ id: number; name: string }>;
-    const programsByName = new Map<string, number>();
-    for (const p of allPrograms) {
-      programsByName.set(p.name, p.id);
+    if (missingRiders.length === 0) {
+      return;
     }
 
-    const validExactMatchCombos = new Set([
-      'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
-      'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH',
-      'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
-      'BFH', 'BHF', 'BFS', 'BSF', 'BFP', 'BPF',
-      'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
-      'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
-      'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
-      'PFB', 'PBF', 'PFH', 'PHF', 'PFS', 'PSF', 'PFT', 'PTF'
-    ]);
-    const specAbbrMap: Record<number, string> = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A', 7: 'F' };
-    const REGION_NAMES: Record<number, string> = {
-      1: 'BeNeLUX',
-      2: 'FraGer',
-      3: 'EspSlo',
-      4: 'ITAUSA'
+    const allPrograms = this.db.prepare('SELECT id, name FROM race_programs').all() as Array<{ id: number; name: string }>;
+    const programsById = new Map(allPrograms.map(p => [p.id, p.name]));
+    const programIdByName = new Map(allPrograms.map(p => [p.name, p.id]));
+
+    // Map variant program_id to its base program name
+    const getBaseProgramName = (progId: number): string => {
+      const name = programsById.get(progId) || '';
+      return name.replace(/_\d+$/, '');
     };
 
-    // Group riders by combination key
-    const groups = new Map<string, typeof riders>();
-    for (const rider of riders) {
-      const specs = resolveBestSpecIds(rider);
-      const orderedAbbr = specs.map(id => specAbbrMap[id]).join('');
-      let comboKey = 'OOO';
-      if (validExactMatchCombos.has(orderedAbbr)) {
-        comboKey = orderedAbbr;
-      } else {
-        const spec1 = specs[0];
-        if (spec1 === 5) {
-          comboKey = 'POO';
-        } else if (spec1 === 3) {
-          comboKey = 'SOO';
-        } else if (spec1 === 1) {
-          comboKey = 'BOO';
-        } else if (spec1 === 2) {
-          comboKey = 'HOO';
+    // Load probability rules
+    const dbRules = this.db.prepare(`
+      SELECT role_name, program_id, probability
+      FROM race_program_probability_rules
+    `).all() as Array<{ role_name: string; program_id: number; probability: number }>;
+
+    const rulesByRole = new Map<string, Array<{ baseProgram: string; probability: number }>>();
+    for (const rule of dbRules) {
+      const role = rule.role_name;
+      const baseProgram = getBaseProgramName(rule.program_id);
+      if (!rulesByRole.has(role)) {
+        rulesByRole.set(role, []);
+      }
+      rulesByRole.get(role)!.push({ baseProgram, probability: rule.probability });
+    }
+
+    // Exclusions helper
+    const isProgramExcluded = (baseProgram: string, role: string, skillCobble: number): boolean => {
+      const isCaptainOrCo = role === 'Kapitaen' || role === 'Co-Kapitaen';
+      
+      // Classic programs exclude Captains and Co-Captains
+      if (baseProgram.startsWith('Classic_') && isCaptainOrCo) {
+        return true;
+      }
+
+      const isCobbleProgram = baseProgram.includes('Cobble') && !baseProgram.includes('Non_Cobble');
+      if (isCobbleProgram) {
+        const isWassertraegerOrStarker = role === 'Wassertraeger' || role === 'Starke Helfer';
+        if (isWassertraegerOrStarker) {
+          return skillCobble <= 65; // >65 Pflaster
         } else {
-          comboKey = 'OOO';
+          return skillCobble <= 70; // >70 Pflaster
+        }
+      } else {
+        if (isCaptainOrCo) {
+          return skillCobble > 72; // kein Pflaster >72
+        } else {
+          return skillCobble > 70; // kein Pflaster >70
+        }
+      }
+    };
+
+
+    const TDF_PROGRAMS = ['Non_Cobble_Tour', 'Cobble_Giro_Tour', 'Vuelta_Tour', 'Cobble_Tour', 'Non_Cobble Giro_Tour'];
+    const GT_PROGRAMS = [...TDF_PROGRAMS, 'Cobble_Giro_Vuelta', 'Sprinter Non_Cobble_Giro_Vuelta'];
+
+    // Map each missing rider to their chosen base program
+    const assignedRiders: Array<{ riderId: number, teamId: number, baseProgram: string, roleName: string, overall: number }> = [];
+
+    for (const rider of missingRiders) {
+      const role = normalizeRoleName(rider.role_name);
+      
+      // Get probability rules for role (fallback to Wassertraeger if not defined)
+      let rRules = rulesByRole.get(role) || rulesByRole.get('Wassertraeger') || [];
+      if (rRules.length === 0) {
+        // Uniform fallback over all programs
+        rRules = BASE_PROGRAMS.map(base => ({ baseProgram: base, probability: 10 }));
+      }
+
+      // Filter and evaluate candidate probabilities
+      let candidates = rRules.map(r => ({
+        baseProgram: r.baseProgram,
+        probability: isProgramExcluded(r.baseProgram, role, rider.skill_cobble) ? 0 : r.probability
+      }));
+
+      // Top-Fahrer locks
+      if (top10OverallIds.has(rider.id) || top5SprintersIds.has(rider.id)) {
+        candidates = candidates.map(c => ({
+          baseProgram: c.baseProgram,
+          probability: TDF_PROGRAMS.includes(c.baseProgram) ? c.probability : 0
+        }));
+      } else if (sprinters6to15Ids.has(rider.id)) {
+        candidates = candidates.map(c => ({
+          baseProgram: c.baseProgram,
+          probability: GT_PROGRAMS.includes(c.baseProgram) ? c.probability : 0
+        }));
+      }
+
+      // Filter candidates with non-zero probability
+      let activeCandidates = candidates.filter(c => c.probability > 0);
+
+      let selectedBase = '';
+      if (activeCandidates.length === 0) {
+        // Fallback: find any program that doesn't exclude this rider, ignoring probability rules
+        const fallbackCandidates = BASE_PROGRAMS.filter(base => !isProgramExcluded(base, role, rider.skill_cobble));
+        if (fallbackCandidates.length > 0) {
+          // If top overall/sprinter, restrict fallback to TDF if possible, otherwise GT
+          let filteredFallbacks = fallbackCandidates;
+          if (top10OverallIds.has(rider.id) || top5SprintersIds.has(rider.id)) {
+            filteredFallbacks = fallbackCandidates.filter(base => TDF_PROGRAMS.includes(base));
+          } else if (sprinters6to15Ids.has(rider.id)) {
+            filteredFallbacks = fallbackCandidates.filter(base => GT_PROGRAMS.includes(base));
+          }
+          const finalFallbacks = filteredFallbacks.length > 0 ? filteredFallbacks : fallbackCandidates;
+          const riderSeed = `rider-fallback-${rider.id}-${season}`;
+          const randIndex = Math.floor(deterministicUnit(riderSeed) * finalFallbacks.length);
+          selectedBase = finalFallbacks[randIndex];
+        } else {
+          // Absolute fallback
+          selectedBase = 'Non_Cobble_Tour';
+        }
+      } else {
+        const riderSeed = `rider-program-${rider.id}-${season}`;
+        const rand = deterministicUnit(riderSeed);
+        const sum = activeCandidates.reduce((acc, c) => acc + c.probability, 0);
+        const val = rand * sum;
+        let acc = 0;
+        selectedBase = activeCandidates[0].baseProgram;
+        for (const cand of activeCandidates) {
+          acc += cand.probability;
+          if (val <= acc) {
+            selectedBase = cand.baseProgram;
+            break;
+          }
         }
       }
 
-      comboKey = normalizeComboKey(comboKey);
+      assignedRiders.push({
+        riderId: rider.id,
+        teamId: rider.team_id,
+        baseProgram: selectedBase,
+        roleName: role,
+        overall: rider.overall_rating
+      });
+    }
 
-      if (!groups.has(comboKey)) {
-        groups.set(comboKey, []);
+    // Group assigned riders by (teamId, baseProgram)
+    const groups = new Map<string, typeof assignedRiders>();
+    for (const r of assignedRiders) {
+      const key = `${r.teamId}:${r.baseProgram}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
       }
-      groups.get(comboKey)!.push(rider);
+      groups.get(key)!.push(r);
     }
 
     const insert = this.db.prepare(`
@@ -378,172 +438,38 @@ export class RiderProgramService {
       VALUES (?, ?, ?, ?)
     `);
 
-    const assignFallback = (rider: typeof riders[number], originalComboKey: string) => {
-      let assigned = false;
-      const specs = resolveBestSpecIds(rider);
-      const spec1 = specs[0];
-
-      // Determine fallback key based on spec1
-      let fallbackKey = 'OOO';
-      if (spec1 === 5) {
-        fallbackKey = 'POO';
-      } else if (spec1 === 3) {
-        fallbackKey = 'SOO';
-      } else if (spec1 === 1) {
-        fallbackKey = 'BOO';
-      } else if (spec1 === 2) {
-        fallbackKey = 'HOO';
-      } else {
-        fallbackKey = 'OOO';
-      }
-
-      // Try assigning to the specific fallback key first (check for regional or standard variants)
-      const availablePrograms = Array.from(programsByName.keys())
-        .filter(name => {
-          const parts = name.split('_');
-          return parts[0] === fallbackKey;
-        });
-
-      if (availablePrograms.length > 0) {
-        availablePrograms.sort();
-        // Check regional group first
-        const regionId = rider.program_group_id || 4;
-        const regionName = REGION_NAMES[regionId];
-        const regionalPrograms = availablePrograms.filter(name => name.includes(`_${regionName}_`));
-        
-        const targets = regionalPrograms.length > 0 ? regionalPrograms : availablePrograms;
-        const selectedName = targets[rider.id % targets.length];
-        const programId = programsByName.get(selectedName)!;
-        insert.run(season, rider.id, programId, assignedDate);
-        assigned = true;
-      }
-
-      // If not assigned, fall back to OOO
-      if (!assigned && fallbackKey !== 'OOO') {
-        const availableOoo = Array.from(programsByName.keys())
-          .filter(name => name.startsWith('OOO_'));
-        
-        if (availableOoo.length > 0) {
-          availableOoo.sort();
-          const regionId = rider.program_group_id || 4;
-          const regionName = REGION_NAMES[regionId];
-          const regionalOoo = availableOoo.filter(name => name.includes(`_${regionName}_`));
-          
-          const targets = regionalOoo.length > 0 ? regionalOoo : availableOoo;
-          const selectedName = targets[rider.id % targets.length];
-          const programId = programsByName.get(selectedName)!;
-          insert.run(season, rider.id, programId, assignedDate);
-          assigned = true;
-        }
-      }
-
-      // If still not assigned, fall back to the first available program in the database
-      if (!assigned) {
-        const firstProgramId = Array.from(programsByName.values())[0];
-        if (firstProgramId != null) {
-          insert.run(season, rider.id, firstProgramId, assignedDate);
-        }
-      }
-    };
-
     this.db.transaction(() => {
-      for (const [comboKey, groupRiders] of groups.entries()) {
-        groupRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
+      for (const [key, groupRiders] of groups.entries()) {
+        const [teamIdStr, baseProgram] = key.split(':');
 
-        // Check if there are regional variants in the database for this combination
-        const isSplit = Array.from(programsByName.keys()).some(name => name.startsWith(`${comboKey}_BeNeLUX_`));
+        const leaders = groupRiders.filter(r => r.roleName === 'Kapitaen' || r.roleName === 'Co-Kapitaen' || r.roleName === 'Sprinter');
+        const helpers = groupRiders.filter(r => r.roleName !== 'Kapitaen' && r.roleName !== 'Co-Kapitaen' && r.roleName !== 'Sprinter');
 
-        if (isSplit) {
-          // Group by regional program group
-          const regionalGroups: Record<number, typeof groupRiders> = { 1: [], 2: [], 3: [], 4: [] };
-          for (const rider of groupRiders) {
-            const regionId = rider.program_group_id || 4; // default to 4 (ITAUSA)
-            if (!regionalGroups[regionId]) {
-              regionalGroups[regionId] = [];
-            }
-            regionalGroups[regionId].push(rider);
+        // Sort and assign leaders to Variant 1 or 2 alternatingly
+        leaders.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
+        for (let i = 0; i < leaders.length; i++) {
+          const rider = leaders[i];
+          const variant = (i % 2) + 1;
+          const progName = `${baseProgram}_${variant}`;
+          const programId = programIdByName.get(progName);
+          if (programId != null) {
+            insert.run(season, rider.riderId, programId, assignedDate);
           }
+        }
 
-          for (const [regionIdStr, rList] of Object.entries(regionalGroups)) {
-            const regionId = parseInt(regionIdStr);
-            const regionName = REGION_NAMES[regionId] || 'ITAUSA';
-            
-            // Find all available variants for this comboKey and region in the database
-            const availableVariants: number[] = [];
-            for (let v = 1; v <= 4; v++) {
-              const name = `${comboKey}_${regionName}_${v}`;
-              if (programsByName.has(name)) {
-                availableVariants.push(v);
-              }
-            }
-
-            if (availableVariants.length > 0) {
-              for (let i = 0; i < rList.length; i++) {
-                const rider = rList[i];
-                const variant = getVariantIndexForRider(i, rList.length);
-                const progName = `${comboKey}_${regionName}_${variant}`;
-                if (programsByName.has(progName)) {
-                  const programId = programsByName.get(progName)!;
-                  insert.run(season, rider.id, programId, assignedDate);
-                } else {
-                  assignFallback(rider, comboKey);
-                }
-              }
-            } else if (rList.length > 0) {
-              // Fallback to standard/global variants if the entire region was pruned
-              const availableGlobalVariants: number[] = [];
-              for (let v = 1; v <= 4; v++) {
-                const name = `${comboKey}_${v}`;
-                if (programsByName.has(name)) {
-                  availableGlobalVariants.push(v);
-                }
-              }
-
-              if (availableGlobalVariants.length > 0) {
-                for (let i = 0; i < rList.length; i++) {
-                  const rider = rList[i];
-                  const variant = getVariantIndexForRider(i, rList.length);
-                  const progName = `${comboKey}_${variant}`;
-                  if (programsByName.has(progName)) {
-                    const programId = programsByName.get(progName)!;
-                    insert.run(season, rider.id, programId, assignedDate);
-                  } else {
-                    assignFallback(rider, comboKey);
-                  }
-                }
-              } else {
-                for (const rider of rList) {
-                  assignFallback(rider, comboKey);
-                }
-              }
-            }
+        // Sort and assign helpers (50% to Variant 1/2 alternatingly, 50% to Variant 3)
+        helpers.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
+        const topCount = Math.ceil(helpers.length / 2);
+        for (let i = 0; i < helpers.length; i++) {
+          const rider = helpers[i];
+          let variant = 3;
+          if (i < topCount) {
+            variant = (i % 2) + 1;
           }
-        } else {
-          // Standard / non-split combination
-          const availableGlobalVariants: number[] = [];
-          for (let v = 1; v <= 4; v++) {
-            const name = `${comboKey}_${v}`;
-            if (programsByName.has(name)) {
-              availableGlobalVariants.push(v);
-            }
-          }
-
-          if (availableGlobalVariants.length > 0) {
-            for (let i = 0; i < groupRiders.length; i++) {
-              const rider = groupRiders[i];
-              const variant = getVariantIndexForRider(i, groupRiders.length);
-              const progName = `${comboKey}_${variant}`;
-              if (programsByName.has(progName)) {
-                const programId = programsByName.get(progName)!;
-                insert.run(season, rider.id, programId, assignedDate);
-              } else {
-                assignFallback(rider, comboKey);
-              }
-            }
-          } else {
-            for (const rider of groupRiders) {
-              assignFallback(rider, comboKey);
-            }
+          const progName = `${baseProgram}_${variant}`;
+          const programId = programIdByName.get(progName);
+          if (programId != null) {
+            insert.run(season, rider.riderId, programId, assignedDate);
           }
         }
       }

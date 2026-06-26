@@ -340,14 +340,14 @@ class GameStateService {
       `).all(`${oldYearStr}-%`);
             const insertProgramRace = this.db.prepare(`
         INSERT OR IGNORE INTO race_program_races (
-          program_id, race_id
-        ) VALUES (?, ?)
+          program_id, race_id, allowed_program_group_ids
+        ) VALUES (?, ?, ?)
       `);
             for (const pr of oldProgramRaces) {
                 const newRaceId = raceMap.get(pr.race_id);
                 if (newRaceId === undefined)
                     continue;
-                insertProgramRace.run(pr.program_id, newRaceId);
+                insertProgramRace.run(pr.program_id, newRaceId, pr.allowed_program_group_ids ?? null);
             }
         }
     }
@@ -1752,7 +1752,14 @@ function matchesProgramRaces(db, riderId, season, peakDates) {
       FROM rider_season_programs rsp
       JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
       JOIN races r ON r.id = rpr.race_id
+      JOIN riders ON riders.id = rsp.rider_id
+      JOIN sta_country ON sta_country.id = riders.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
+        AND (
+          rpr.allowed_program_group_ids IS NULL
+          OR rpr.allowed_program_group_ids = ''
+          OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+        )
     `).all(riderId, season);
         if (rows.length < 3)
             return false;
@@ -1797,7 +1804,14 @@ function generateHighlightBasedPeakDates(db, riderId, season, programWindows) {
       FROM rider_season_programs rsp
       JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
       JOIN races r ON r.id = rpr.race_id
+      JOIN riders ON riders.id = rsp.rider_id
+      JOIN sta_country ON sta_country.id = riders.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
+        AND (
+          rpr.allowed_program_group_ids IS NULL
+          OR rpr.allowed_program_group_ids = ''
+          OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+        )
     `).all(riderId, season);
         if (rows.length >= 3) {
             const races = rows

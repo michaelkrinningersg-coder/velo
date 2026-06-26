@@ -57,6 +57,15 @@ function isProgramRegionVisible(name: string): boolean {
   return filterRegions[region] ?? true;
 }
 
+function matchesSpecFilter(name: string, specFilters: Record<string, boolean>): boolean {
+  const l1 = getLetterAt(name, 1);
+  const l2 = getLetterAt(name, 2);
+  const l3 = getLetterAt(name, 3);
+  return (l1 !== '' && !!specFilters[l1]) ||
+         (l2 !== '' && !!specFilters[l2]) ||
+         (l3 === 'P' && !!specFilters.P);
+}
+
 
 // Helpers
 function getWeekNumber(dateStr: string): number {
@@ -950,13 +959,7 @@ function renderTabCalendarCols(payload: any): string {
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
-    const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
-                    (p.name.includes('H') && filterSpecs.H) ||
-                    (p.name.includes('P') && filterSpecs.P) ||
-                    (p.name.includes('S') && filterSpecs.S) ||
-                    (p.name.includes('T') && filterSpecs.T) ||
-                    (p.name.includes('A') && filterSpecs.A) ||
-                    (p.name.includes('F') && filterSpecs.F);
+    const hasSpec = matchesSpecFilter(p.name, filterSpecs);
     const variant = getProgramVariant(p.name);
     return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
   });
@@ -1113,13 +1116,7 @@ function renderTabCalendarRows(payload: any): string {
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
-    const hasSpec = (p.name.includes('B') && filterSpecs.B) ||
-                    (p.name.includes('H') && filterSpecs.H) ||
-                    (p.name.includes('P') && filterSpecs.P) ||
-                    (p.name.includes('S') && filterSpecs.S) ||
-                    (p.name.includes('T') && filterSpecs.T) ||
-                    (p.name.includes('A') && filterSpecs.A) ||
-                    (p.name.includes('F') && filterSpecs.F);
+    const hasSpec = matchesSpecFilter(p.name, filterSpecs);
     const variant = getProgramVariant(p.name);
     return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
   });
@@ -1535,13 +1532,7 @@ function renderTabRiderRole(payload: any): string {
       if (variant >= 4 && variant <= 6 && !popoverShowV4_6) return false;
 
       const pName = item.program.name;
-      const hasSpec = (pName.includes('B') && popoverShowSpecs.B) ||
-                      (pName.includes('H') && popoverShowSpecs.H) ||
-                      (pName.includes('P') && popoverShowSpecs.P) ||
-                      (pName.includes('S') && popoverShowSpecs.S) ||
-                      (pName.includes('T') && popoverShowSpecs.T) ||
-                      (pName.includes('A') && popoverShowSpecs.A) ||
-                      (pName.includes('F') && popoverShowSpecs.F);
+      const hasSpec = matchesSpecFilter(pName, popoverShowSpecs);
       if (!hasSpec) return false;
 
       return isProgramRegionVisible(pName);

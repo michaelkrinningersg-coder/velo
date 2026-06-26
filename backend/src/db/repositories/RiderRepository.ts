@@ -286,8 +286,15 @@ export class RiderRepository {
                  race_program_races.race_id
           FROM rider_season_programs
           JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+          JOIN riders ON riders.id = rider_season_programs.rider_id
+          JOIN sta_country ON sta_country.id = riders.country_id
           WHERE rider_season_programs.season = ?
             AND rider_season_programs.rider_id IN (${placeholders})
+            AND (
+              race_program_races.allowed_program_group_ids IS NULL
+              OR race_program_races.allowed_program_group_ids = ''
+              OR ('|' || race_program_races.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+            )
           ORDER BY race_program_races.race_id ASC
         `).all(season, ...chunk) as any;
         raceRows.push(...chunkRaces);
@@ -335,9 +342,16 @@ export class RiderRepository {
     const raceRows = this.db.prepare(`
       ${buildRaceSelect()}
       JOIN race_program_races ON race_program_races.race_id = races.id
+      JOIN riders ON riders.id = ?
+      JOIN sta_country ON sta_country.id = riders.country_id
       WHERE race_program_races.program_id = ?
+        AND (
+          race_program_races.allowed_program_group_ids IS NULL
+          OR race_program_races.allowed_program_group_ids = ''
+          OR ('|' || race_program_races.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+        )
       ORDER BY races.start_date ASC, races.id ASC
-    `).all(programRow.id) as RaceRow[];
+    `).all(riderId, programRow.id) as RaceRow[];
     const stagesByRaceId = new RaceRepository(this.db).getStagesByRaceIds(raceRows.map(row => row.id));
     const currentDate = new GameStateRepository(this.db).getCurrentDate();
     return {

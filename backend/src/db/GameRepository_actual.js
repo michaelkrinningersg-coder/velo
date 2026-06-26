@@ -1584,8 +1584,15 @@ class GameRepository {
       FROM rider_season_programs
       JOIN race_programs ON race_programs.id = rider_season_programs.program_id
       JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+      JOIN riders ON riders.id = rider_season_programs.rider_id
+      JOIN sta_country ON sta_country.id = riders.country_id
       WHERE rider_season_programs.season = ?
         AND race_program_races.race_id = ?
+        AND (
+          race_program_races.allowed_program_group_ids IS NULL
+          OR race_program_races.allowed_program_group_ids = ''
+          OR ('|' || race_program_races.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+        )
       ORDER BY race_programs.id ASC, rider_season_programs.rider_id ASC
     `).all(season, raceId);
         const ridersById = new Map(this.getRiders().map((rider) => [rider.id, rider]));
