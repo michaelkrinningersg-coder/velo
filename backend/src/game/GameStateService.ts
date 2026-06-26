@@ -1742,7 +1742,7 @@ export class GameStateService {
           ? 1 - (R - 65) * 0.02
           : 1 + (65 - R) * 0.02;
 
-        let addedShort = stageScore >= 10 ? (stageScore / 100) * 0.75 * multiplier : 0;
+        let addedShort = stageScore >= 10 ? (stageScore / 100) * 0.55 * multiplier : 0;
         let addedLongDecayable = stageScore >= 10 ? (stageScore / 1000) * 0.75 * multiplier : 0;
 
         const age = Number(stageDate.slice(0, 4)) - row.birth_year;

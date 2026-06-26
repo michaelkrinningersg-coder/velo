@@ -125,7 +125,6 @@ class GameStateRepository {
           FROM race_entries re
           LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = re.rider_id
           WHERE re.race_id = ?
-            AND COALESCE(rider_state.unavailable_days_remaining, 0) = 0
           ORDER BY re.rider_id ASC
         `).all(stage.raceId)
             : this.db.prepare(`
@@ -147,6 +146,22 @@ class GameStateRepository {
             }
         })();
         if ((0, mappers_1.tableExists)(this.db, 'rider_daily_state')) {
+            this.db.prepare(`
+        UPDATE stage_entries
+        SET status = 'dns',
+            status_reason = (
+              SELECT CASE WHEN health_status = 'ill' THEN 'Krankheitsbedingt' ELSE 'Verletzungsbedingt' END
+              FROM rider_daily_state
+              WHERE rider_daily_state.rider_id = stage_entries.rider_id
+            )
+        WHERE stage_id = ?
+          AND status = 'scheduled'
+          AND rider_id IN (
+            SELECT rider_id
+            FROM rider_daily_state
+            WHERE unavailable_days_remaining > 0
+          )
+      `).run(stage.id);
             this.db.prepare(`
         UPDATE stage_entries
         SET status = 'dns', status_reason = 'Erschöpfung'
