@@ -16,6 +16,17 @@ let programRolesSortAsc = true;
 let filterCobble: 'all' | 'cobble' | 'non-cobble' = 'all';
 let filterRaceCategories: Set<number> = new Set();
 let popoverFilterCobble: 'all' | 'cobble' | 'non-cobble' = 'all';
+let autoAssignRaceBlocks = false;
+
+const RACE_BLOCKS: number[][] = [
+  [1, 2, 4], // Australian block (Tour Down Under, Surf Coast Classic, Cadel Evans)
+  [13, 14],  // French opening weekend (Ardèche, Drôme)
+  [15, 70],  // Belgian opening weekend (Omloop Nieuwsblad, Kuurne-Brussel-Kuurne)
+  [62, 63],  // Canadian classics (Quebec, Montreal)
+  [78, 79],  // Bretagne weekend (Morbihan, Tro-Bro Léon)
+  [88, 90, 91, 92, 64], // Italian autumn classics (Emilia, Bernocchi, Varesine, Piemonte, Lombardia)
+  [94, 96],  // Veneto classics
+];
 
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name: string): number {
@@ -287,39 +298,53 @@ function toggleProgramRaceDirect(programId: number, raceId: number): void {
     (m: any) => m.program_id === programId && m.race_id === raceId
   );
 
-  if (idx === -1) {
-    const targetRace = payload.races.find((r: any) => r.id === raceId);
-    if (targetRace) {
-      const start = targetRace.start_date;
-      const end = targetRace.end_date;
+  const block = autoAssignRaceBlocks ? RACE_BLOCKS.find(b => b.includes(raceId)) : null;
+  const raceIdsToToggle = block ? block : [raceId];
 
-      // Find all overlapping assignments for this program (excluding the same race)
-      const toRemove: number[] = [];
-      payload.raceProgramRaces.forEach((m: any, index: number) => {
-        if (m.program_id === programId && m.race_id !== raceId) {
-          const otherRace = payload.races.find((r: any) => r.id === m.race_id);
-          if (otherRace) {
-            const overlap = otherRace.start_date <= end && otherRace.end_date >= start;
-            if (overlap) {
-              toRemove.push(index);
+  if (idx === -1) {
+    for (const rId of raceIdsToToggle) {
+      const exists = payload.raceProgramRaces.some(
+        (m: any) => m.program_id === programId && m.race_id === rId
+      );
+      if (exists) continue;
+
+      const targetRace = payload.races.find((r: any) => r.id === rId);
+      if (targetRace) {
+        const start = targetRace.start_date;
+        const end = targetRace.end_date;
+
+        const toRemove: number[] = [];
+        payload.raceProgramRaces.forEach((m: any, index: number) => {
+          if (m.program_id === programId && m.race_id !== rId) {
+            const otherRace = payload.races.find((r: any) => r.id === m.race_id);
+            if (otherRace) {
+              const overlap = otherRace.start_date <= end && otherRace.end_date >= start;
+              if (overlap) {
+                toRemove.push(index);
+              }
             }
           }
-        }
-      });
+        });
 
-      // Remove overlapping assignments in reverse order
-      toRemove.sort((a, b) => b - a).forEach((index) => {
-        payload.raceProgramRaces.splice(index, 1);
+        toRemove.sort((a, b) => b - a).forEach((index) => {
+          payload.raceProgramRaces.splice(index, 1);
+        });
+      }
+
+      payload.raceProgramRaces.push({
+        program_id: programId,
+        race_id: rId,
       });
     }
-
-    // Add new assignment
-    payload.raceProgramRaces.push({
-      program_id: programId,
-      race_id: raceId,
-    });
   } else {
-    payload.raceProgramRaces.splice(idx, 1);
+    for (const rId of raceIdsToToggle) {
+      const matchIdx = payload.raceProgramRaces.findIndex(
+        (m: any) => m.program_id === programId && m.race_id === rId
+      );
+      if (matchIdx !== -1) {
+        payload.raceProgramRaces.splice(matchIdx, 1);
+      }
+    }
   }
 
   state.raceProgramsDirty = true;
@@ -607,6 +632,11 @@ export function initRaceProgramsView(): void {
       renderRacePrograms();
       return;
     }
+    if (target.classList.contains('filter-auto-blocks-checkbox')) {
+      autoAssignRaceBlocks = target.checked;
+      renderRacePrograms();
+      return;
+    }
   });
 }
 
@@ -622,21 +652,68 @@ function toggleProgramRaceAssignment(programId: number, dayStr: string): void {
   );
 
   if (currentMappingIndex === -1) {
-    // 1. Not assigned -> Assign to the first active race
-    payload.raceProgramRaces.push({
-      program_id: programId,
-      race_id: races[0].id,
-    });
-  } else {
-    // 2. Assigned -> Cycle
-    const currentMapping = payload.raceProgramRaces[currentMappingIndex];
-    const idx = races.findIndex((r: any) => r.id === currentMapping.race_id);
+    const targetRace = races[0];
+    const block = autoAssignRaceBlocks ? RACE_BLOCKS.find(b => b.includes(targetRace.id)) : null;
+    const raceIdsToAssign = block ? block : [targetRace.id];
 
+    for (const rId of raceIdsToAssign) {
+      const exists = payload.raceProgramRaces.some(
+        (m: any) => m.program_id === programId && m.race_id === rId
+      );
+      if (exists) continue;
+
+      const raceObj = payload.races.find((r: any) => r.id === rId);
+      if (raceObj) {
+        const start = raceObj.start_date;
+        const end = raceObj.end_date;
+
+        const toRemove: number[] = [];
+        payload.raceProgramRaces.forEach((m: any, index: number) => {
+          if (m.program_id === programId && m.race_id !== rId) {
+            const otherRace = payload.races.find((r: any) => r.id === m.race_id);
+            if (otherRace) {
+              const overlap = otherRace.start_date <= end && otherRace.end_date >= start;
+              if (overlap) {
+                toRemove.push(index);
+              }
+            }
+          }
+        });
+
+        toRemove.sort((a, b) => b - a).forEach((index) => {
+          payload.raceProgramRaces.splice(index, 1);
+        });
+      }
+
+      payload.raceProgramRaces.push({
+        program_id: programId,
+        race_id: rId,
+      });
+    }
+  } else {
+    const currentMapping = payload.raceProgramRaces[currentMappingIndex];
+
+    if (autoAssignRaceBlocks) {
+      const block = RACE_BLOCKS.find(b => b.includes(currentMapping.race_id));
+      if (block) {
+        for (const rId of block) {
+          const matchIdx = payload.raceProgramRaces.findIndex(
+            (m: any) => m.program_id === programId && m.race_id === rId
+          );
+          if (matchIdx !== -1) {
+            payload.raceProgramRaces.splice(matchIdx, 1);
+          }
+        }
+        state.raceProgramsDirty = true;
+        renderRacePrograms();
+        return;
+      }
+    }
+
+    const idx = races.findIndex((r: any) => r.id === currentMapping.race_id);
     if (idx < races.length - 1) {
-      // Switch to next race
       currentMapping.race_id = races[idx + 1].id;
     } else {
-      // Last race -> Unassign completely
       payload.raceProgramRaces.splice(currentMappingIndex, 1);
     }
   }
@@ -785,6 +862,13 @@ function renderFilterCard(payload: any): string {
           </label>
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
             <input type="radio" name="filter-cobble-radio" class="filter-cobble-radio" value="non-cobble" ${filterCobble === 'non-cobble' ? 'checked' : ''}> Non-Cobble
+          </label>
+        </div>
+
+        <!-- Auto-Assign Blocks Option -->
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <label style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; font-weight: bold; cursor: pointer; user-select: none; color: var(--accent-h);">
+            <input type="checkbox" class="filter-auto-blocks-checkbox" ${autoAssignRaceBlocks ? 'checked' : ''}> Rennblöcke verkoppeln
           </label>
         </div>
 
