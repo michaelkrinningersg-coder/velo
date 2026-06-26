@@ -38,7 +38,11 @@ Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) a
   - **Cobble-Defizit bei Klassikern:** Sind bei Eintagesrennen mit Kopfsteinpflaster (`Cobble` / `Cobble_Hill`) $< 20$ Fahrer mit Pflasterspezialität (`Cobble` in `spec1`, `spec2` oder `spec3`) zugewiesen, leuchtet die Gesamtteilnehmerzahl im Tabellenfeld sowie im Header des Zuweisungs-Popovers rot auf.
   - **Zuweisungs-Popover per Klick auf Fahreranzahl:**
     - Ermöglicht das Aktivieren/Deaktivieren von Programmen für das Rennen.
-    - **Einschränkung der Rennprogramm-Auswahl:** Ein Rennprogramm ist im Popover nur dann auswählbar, wenn dessen Peak- oder Vorbereitungsphase während des Laufs des jeweiligen Rennens aktiv ist. Bei Rundfahrten reicht es, wenn ein beliebiger Tag des Rennens in das Peak- oder Vorbereitungsfenster fällt. Inaktive Programme werden ausgegraut, sind nicht klickbar (`pointer-events: none`) und haben einen `not-allowed`-Cursor. Bereits zugewiesene inaktive Programme bleiben deselektierbar.
+    - **Popover Styling, Filters, and Visibility:**
+      - Stiled program names: variants 1-3 in orange (`#f97316`) and variants 4-6 in green (`#22c55e`).
+      - Alle 114 Programme sind jederzeit sichtbar und auswählbar.
+      - Hinzufügen von `v1-3` und `v4-6` Checkboxen im Popover-Header zur schnellen Filterung der Programme.
+      - Hinzufügen von Spezialisierungs-Filtern (`B`, `H`, `P`, `S`, `T`, `A`) im Popover-Header zur dynamischen Filterung passend zum Kalender-Tab.
     - **Automatische Überschneidungsprüfung:** Wird ein Programm einem Rennen zugewiesen und hat dieses Programm bereits eine Zuweisung zu einem anderen Rennen, das sich zeitlich überschneidet, wird die vorherige Zuweisung automatisch entfernt, um Doppelplanungen zu verhindern. Die gesamte Seite wird direkt live aktualisiert.
     - Zeigt ein **orangefarbenes Ausrufezeichen-Icon `!`** neben Programmen, wenn das Rennen außerhalb deren Peak- und Aufbauphase liegt.
   - **Accordion-Details (Split auf Spec 1 / Spec 2):**

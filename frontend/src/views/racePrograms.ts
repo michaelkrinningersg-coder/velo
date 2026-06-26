@@ -24,6 +24,7 @@ let filterVariants: Record<number, boolean> = {
 };
 let popoverShowV1_3 = true;
 let popoverShowV4_6 = true;
+let popoverShowSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true };
 
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name: string): number {
@@ -491,6 +492,12 @@ export function initRaceProgramsView(): void {
     }
     if (target.classList.contains('popover-filter-v46')) {
       popoverShowV4_6 = target.checked;
+      renderRacePrograms();
+      return;
+    }
+    if (target.classList.contains('popover-filter-spec')) {
+      const spec = target.dataset['spec']!;
+      popoverShowSpecs[spec] = target.checked;
       renderRacePrograms();
       return;
     }
@@ -1226,7 +1233,15 @@ function renderTabRiderRole(payload: any): string {
       const variant = getProgramVariant(item.program.name);
       if (variant >= 1 && variant <= 3 && !popoverShowV1_3) return false;
       if (variant >= 4 && variant <= 6 && !popoverShowV4_6) return false;
-      return true;
+
+      const pName = item.program.name;
+      const hasSpec = (pName.includes('B') && popoverShowSpecs.B) ||
+                      (pName.includes('H') && popoverShowSpecs.H) ||
+                      (pName.includes('P') && popoverShowSpecs.P) ||
+                      (pName.includes('S') && popoverShowSpecs.S) ||
+                      (pName.includes('T') && popoverShowSpecs.T) ||
+                      (pName.includes('A') && popoverShowSpecs.A);
+      return hasSpec;
     });
 
     const programItemsHtml = filteredProgramItems.map((item: any) => {
@@ -1381,14 +1396,37 @@ function renderTabRiderRole(payload: any): string {
     const riderCountPopupHtml = `
       <div class="race-rider-programs-popover-card ${isRiderPopupActive ? '' : 'hidden'}"
            style="position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 120; min-width: 600px; max-width: 750px; padding: 0.8rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-md); background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%); box-shadow: var(--shadow); text-align: left; font-weight: normal;">
-        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-          ${popoverTitleHtml}
-          <div style="display: flex; gap: 0.8rem; font-size: 0.75rem; align-items: center;">
-            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-v13" ${popoverShowV1_3 ? 'checked' : ''}> v1-3
+        <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; flex-direction: column; gap: 0.4rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            ${popoverTitleHtml}
+            <div style="display: flex; gap: 0.8rem; font-size: 0.75rem; align-items: center;">
+              <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+                <input type="checkbox" class="popover-filter-v13" ${popoverShowV1_3 ? 'checked' : ''}> v1-3
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+                <input type="checkbox" class="popover-filter-v46" ${popoverShowV4_6 ? 'checked' : ''}> v4-6
+              </label>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.6rem; font-size: 0.72rem; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,0.18); padding: 0.25rem 0.4rem; border-radius: var(--radius-sm);">
+            <span style="color: var(--text-400); font-weight: 500;">Filter:</span>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="B" ${popoverShowSpecs.B ? 'checked' : ''}> B
             </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-v46" ${popoverShowV4_6 ? 'checked' : ''}> v4-6
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="H" ${popoverShowSpecs.H ? 'checked' : ''}> H
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="P" ${popoverShowSpecs.P ? 'checked' : ''}> P
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="S" ${popoverShowSpecs.S ? 'checked' : ''}> S
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="T" ${popoverShowSpecs.T ? 'checked' : ''}> T
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="A" ${popoverShowSpecs.A ? 'checked' : ''}> A
             </label>
           </div>
         </div>
