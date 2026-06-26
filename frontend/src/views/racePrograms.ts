@@ -13,7 +13,7 @@ let programRolesSortKey = 'id';
 let programRolesSortAsc = true;
 
 // Global filter states
-let filterSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true };
+let filterSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
 let filterVariants: Record<number, boolean> = {
   1: true,
   2: true,
@@ -22,9 +22,10 @@ let filterVariants: Record<number, boolean> = {
   5: true,
   6: true,
 };
+let filterRegions: Record<string, boolean> = { BeNeLUX: true, FraGer: true, EspSlo: true, ITAUSA: true };
 let popoverShowV1_3 = true;
 let popoverShowV4_6 = true;
-let popoverShowSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true };
+let popoverShowSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
 
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name: string): number {
@@ -39,6 +40,23 @@ function getLetterAt(name: string, pos: number): string {
   const prefix = name.split('_')[0] || '';
   return prefix.charAt(pos - 1) || '';
 }
+
+// Helper to extract the region from program name (e.g. BeNeLUX from AOO_BeNeLUX_1)
+function getProgramRegion(name: string): string | null {
+  const parts = name.split('_');
+  if (parts.length === 3) {
+    return parts[1];
+  }
+  return null;
+}
+
+// Helper to check if a program is visible according to selected regions
+function isProgramRegionVisible(name: string): boolean {
+  const region = getProgramRegion(name);
+  if (region === null) return true; // global/standard programs are always shown
+  return filterRegions[region] ?? true;
+}
+
 
 // Helpers
 function getWeekNumber(dateStr: string): number {
@@ -465,6 +483,12 @@ export function initRaceProgramsView(): void {
       renderRacePrograms();
       return;
     }
+    if (target.classList.contains('filter-region-checkbox')) {
+      const region = target.dataset['region']!;
+      filterRegions[region] = target.checked;
+      renderRacePrograms();
+      return;
+    }
     if (target.classList.contains('filter-variant-checkbox')) {
       const variant = parseInt(target.dataset['variant']!, 10);
       filterVariants[variant] = target.checked;
@@ -660,6 +684,9 @@ function renderFilterCard(): string {
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
             <input type="checkbox" class="filter-spec-checkbox" data-spec="A" ${filterSpecs.A ? 'checked' : ''}> A (Attacker)
           </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-spec-checkbox" data-spec="F" ${filterSpecs.F ? 'checked' : ''}> F (Flat)
+          </label>
         </div>
 
         <!-- Variant Filters -->
@@ -693,6 +720,23 @@ function renderFilterCard(): string {
           </label>
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
             <input type="checkbox" class="filter-group-checkbox" data-group="4-6" ${filterVariants[4] && filterVariants[5] && filterVariants[6] ? 'checked' : ''}> Varianten 4-6
+          </label>
+        </div>
+
+        <!-- Region Filters -->
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Regionen (Herkunft):</span>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-region-checkbox" data-region="BeNeLUX" ${filterRegions.BeNeLUX ? 'checked' : ''}> BeNeLUX
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-region-checkbox" data-region="FraGer" ${filterRegions.FraGer ? 'checked' : ''}> FraGer
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-region-checkbox" data-region="EspSlo" ${filterRegions.EspSlo ? 'checked' : ''}> EspSlo
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="filter-region-checkbox" data-region="ITAUSA" ${filterRegions.ITAUSA ? 'checked' : ''}> ITAUSA
           </label>
         </div>
 
@@ -768,10 +812,31 @@ function renderTabCalendarCols(payload: any): string {
                     (p.name.includes('P') && filterSpecs.P) ||
                     (p.name.includes('S') && filterSpecs.S) ||
                     (p.name.includes('T') && filterSpecs.T) ||
-                    (p.name.includes('A') && filterSpecs.A);
+                    (p.name.includes('A') && filterSpecs.A) ||
+                    (p.name.includes('F') && filterSpecs.F);
     const variant = getProgramVariant(p.name);
-    return hasSpec && filterVariants[variant];
+    return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
   });
+
+  programs.sort((a: any, b: any) => {
+    let scoreA = 3;
+    const l1A = getLetterAt(a.name, 1);
+    const l2A = getLetterAt(a.name, 2);
+    if (l1A === 'F') scoreA = 1;
+    else if (l2A === 'F') scoreA = 2;
+
+    let scoreB = 3;
+    const l1B = getLetterAt(b.name, 1);
+    const l2B = getLetterAt(b.name, 2);
+    if (l1B === 'F') scoreB = 1;
+    else if (l2B === 'F') scoreB = 2;
+
+    if (scoreA !== scoreB) {
+      return scoreA - scoreB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
 
   // Calculate day-sums for header
   const programStats = programs.map((p: any) => ({
@@ -891,10 +956,31 @@ function renderTabCalendarRows(payload: any): string {
                     (p.name.includes('P') && filterSpecs.P) ||
                     (p.name.includes('S') && filterSpecs.S) ||
                     (p.name.includes('T') && filterSpecs.T) ||
-                    (p.name.includes('A') && filterSpecs.A);
+                    (p.name.includes('A') && filterSpecs.A) ||
+                    (p.name.includes('F') && filterSpecs.F);
     const variant = getProgramVariant(p.name);
-    return hasSpec && filterVariants[variant];
+    return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
   });
+
+  programs.sort((a: any, b: any) => {
+    let scoreA = 3;
+    const l1A = getLetterAt(a.name, 1);
+    const l2A = getLetterAt(a.name, 2);
+    if (l1A === 'F') scoreA = 1;
+    else if (l2A === 'F') scoreA = 2;
+
+    let scoreB = 3;
+    const l1B = getLetterAt(b.name, 1);
+    const l2B = getLetterAt(b.name, 2);
+    if (l1B === 'F') scoreB = 1;
+    else if (l2B === 'F') scoreB = 2;
+
+    if (scoreA !== scoreB) {
+      return scoreA - scoreB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
 
   // Month names banner
   let monthCols = `<th class="sticky-col-header" style="z-index: 15;">Monat</th>`;
@@ -1188,16 +1274,35 @@ function renderTabRiderRole(payload: any): string {
 
     if (targetLetter !== null) {
       const targetL = targetLetter; // local binding for type inference
+      const isFlatOrRolling = (race.is_stage_race === 0) && (stages.find((s: any) => s.race_id === race.id)?.profile?.toLowerCase() === 'flat' || stages.find((s: any) => s.race_id === race.id)?.profile?.toLowerCase() === 'rolling');
+
       programItems.sort((a: any, b: any) => {
         let bucketA = 3;
-        if (getLetterAt(a.program.name, 1) === targetL) bucketA = 0;
-        else if (getLetterAt(a.program.name, 2) === targetL) bucketA = 1;
-        else if (getLetterAt(a.program.name, 3) === targetL) bucketA = 2;
-
         let bucketB = 3;
-        if (getLetterAt(b.program.name, 1) === targetL) bucketB = 0;
-        else if (getLetterAt(b.program.name, 2) === targetL) bucketB = 1;
-        else if (getLetterAt(b.program.name, 3) === targetL) bucketB = 2;
+
+        if (isFlatOrRolling) {
+          const l1A = getLetterAt(a.program.name, 1);
+          const l2A = getLetterAt(a.program.name, 2);
+          const l3A = getLetterAt(a.program.name, 3);
+          if (l1A === 'S' || l1A === 'F') bucketA = 0;
+          else if (l2A === 'S' || l2A === 'F') bucketA = 1;
+          else if (l3A === 'S' || l3A === 'F') bucketA = 2;
+
+          const l1B = getLetterAt(b.program.name, 1);
+          const l2B = getLetterAt(b.program.name, 2);
+          const l3B = getLetterAt(b.program.name, 3);
+          if (l1B === 'S' || l1B === 'F') bucketB = 0;
+          else if (l2B === 'S' || l2B === 'F') bucketB = 1;
+          else if (l3B === 'S' || l3B === 'F') bucketB = 2;
+        } else {
+          if (getLetterAt(a.program.name, 1) === targetL) bucketA = 0;
+          else if (getLetterAt(a.program.name, 2) === targetL) bucketA = 1;
+          else if (getLetterAt(a.program.name, 3) === targetL) bucketA = 2;
+
+          if (getLetterAt(b.program.name, 1) === targetL) bucketB = 0;
+          else if (getLetterAt(b.program.name, 2) === targetL) bucketB = 1;
+          else if (getLetterAt(b.program.name, 3) === targetL) bucketB = 2;
+        }
 
         if (bucketA !== bucketB) {
           return bucketA - bucketB;
@@ -1240,8 +1345,11 @@ function renderTabRiderRole(payload: any): string {
                       (pName.includes('P') && popoverShowSpecs.P) ||
                       (pName.includes('S') && popoverShowSpecs.S) ||
                       (pName.includes('T') && popoverShowSpecs.T) ||
-                      (pName.includes('A') && popoverShowSpecs.A);
-      return hasSpec;
+                      (pName.includes('A') && popoverShowSpecs.A) ||
+                      (pName.includes('F') && popoverShowSpecs.F);
+      if (!hasSpec) return false;
+
+      return isProgramRegionVisible(pName);
     });
 
     const programItemsHtml = filteredProgramItems.map((item: any) => {
@@ -1427,6 +1535,9 @@ function renderTabRiderRole(payload: any): string {
             </label>
             <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
               <input type="checkbox" class="popover-filter-spec" data-spec="A" ${popoverShowSpecs.A ? 'checked' : ''}> A
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="checkbox" class="popover-filter-spec" data-spec="F" ${popoverShowSpecs.F ? 'checked' : ''}> F
             </label>
           </div>
         </div>

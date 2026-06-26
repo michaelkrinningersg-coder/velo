@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS game_state (
   is_game_over  INTEGER NOT NULL DEFAULT 0 CHECK(is_game_over IN (0, 1))
 );
 
+-- ---- Länder-Gruppen für Programme -----------------------------
+CREATE TABLE IF NOT EXISTS program_groups (
+  id   INTEGER PRIMARY KEY,
+  name TEXT    NOT NULL UNIQUE
+);
+
 -- ---- Laender-Stammdaten -------------------------------------
 CREATE TABLE IF NOT EXISTS sta_country (
   id                 INTEGER PRIMARY KEY,
@@ -30,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sta_country (
   continent          TEXT    NOT NULL,
   regen_rating       INTEGER NOT NULL CHECK(regen_rating BETWEEN 1 AND 100),
   number_regen_min   INTEGER NOT NULL CHECK(number_regen_min >= 0),
-  number_regen_max   INTEGER NOT NULL CHECK(number_regen_max >= number_regen_min)
+  number_regen_max   INTEGER NOT NULL CHECK(number_regen_max >= number_regen_min),
+  program_group_id   INTEGER REFERENCES program_groups(id)
 );
 
 -- ---- Liga-System / Divisionen mit Regeln --------------------

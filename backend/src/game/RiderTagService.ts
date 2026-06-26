@@ -33,6 +33,7 @@ function getStagePoints(specialization: RiderSpecialization | null): number {
     case 'Timetrial':
     case 'Sprint':
     case 'Attacker':
+    case 'Flat':
       return 1;
     default:
       return 0;

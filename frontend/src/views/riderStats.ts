@@ -471,6 +471,7 @@ export function getRiderSpecializationLabel(specialization: { id: number; name: 
       case 'Timetrial': return 'Zeitfahrer';
       case 'Cobble': return 'Pflasterspezialist';
       case 'Attacker': return 'Angreifer';
+      case 'Flat': return 'Flachlandspezialist';
       default: return specialization;
     }
   }
@@ -487,6 +488,7 @@ export function getSpecializationIcon(specialization: { id: number; name: string
     case 'Timetrial': return RIDER_STATS_ICONS.timetrial;
     case 'Cobble': return RIDER_STATS_ICONS.cobble;
     case 'Attacker': return RIDER_STATS_ICONS.attacker;
+    case 'Flat': return RIDER_STATS_ICONS.flat;
     default: return '';
   }
 }

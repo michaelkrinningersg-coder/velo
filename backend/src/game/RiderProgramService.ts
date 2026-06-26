@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SPECIALIZATION_IDS = [1, 2, 3, 4, 5, 6] as const;
+const SPECIALIZATION_IDS = [1, 2, 3, 4, 5, 6, 7] as const;
 type SpecializationId = typeof SPECIALIZATION_IDS[number];
 const ROLE_FALLBACK = 'Wassertraeger';
 
@@ -12,6 +12,7 @@ type RiderProgramRow = {
   specialization_3_id: number | null;
   overall_rating: number;
   team_id: number;
+  program_group_id: number | null;
   skill_flat: number;
   skill_mountain: number;
   skill_medium_mountain: number;
@@ -82,7 +83,8 @@ function resolveSkillScores(row: RiderProgramRow): Record<SpecializationId, numb
     3: row.skill_sprint * 0.4 + row.skill_acceleration * 0.25 + row.skill_flat * 0.15 + row.skill_bike_handling * 0.1 + row.skill_resistance * 0.1,
     4: row.skill_time_trial * 0.45 + row.skill_prologue * 0.25 + row.skill_flat * 0.15 + row.skill_stamina * 0.15,
     5: row.skill_cobble * 0.55 + row.skill_flat * 0.15 + row.skill_bike_handling * 0.15 + row.skill_resistance * 0.15,
-    6: (row.skill_attack * 0.35 + row.skill_stamina * 0.2 + row.skill_resistance * 0.2 + row.skill_hill * 0.15 + row.skill_acceleration * 0.1) * 0.97,
+    6: (row.skill_attack * 0.35 + row.skill_stamina * 0.2 + row.skill_resistance * 0.2 + row.skill_hill * 0.15 + row.skill_acceleration * 0.1) * 0.978,
+    7: (row.skill_flat * 0.5 + row.skill_stamina * 0.2 + row.skill_resistance * 0.15 + row.skill_bike_handling * 0.15) * 0.991,
   };
 }
 
@@ -192,6 +194,7 @@ export class RiderProgramService {
              riders.specialization_3_id,
              riders.overall_rating,
              COALESCE(current_contract.team_id, riders.active_team_id) AS team_id,
+             country.program_group_id AS program_group_id,
              riders.skill_flat,
              riders.skill_mountain,
              riders.skill_medium_mountain,
@@ -209,6 +212,7 @@ export class RiderProgramService {
              riders.skill_bike_handling
       FROM riders
       LEFT JOIN sta_role role ON role.id = riders.role_id
+      LEFT JOIN sta_country country ON country.id = riders.country_id
       LEFT JOIN contracts current_contract
         ON current_contract.id = (
           SELECT contracts.id
@@ -220,7 +224,6 @@ export class RiderProgramService {
           LIMIT 1
         )
       WHERE riders.is_retired = 0
-        AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
           FROM rider_season_programs existing_program
@@ -238,23 +241,43 @@ export class RiderProgramService {
 
     const validExactMatchCombos = new Set([
       'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
-      'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
+      'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH',
+      'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
+      'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+      'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
+      'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
+      'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
+      'PFB', 'PBF', 'PFH', 'PHF', 'PFS', 'PSF', 'PFT', 'PTF'
     ]);
-    const specAbbrMap: Record<number, string> = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A' };
+    const specAbbrMap: Record<number, string> = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A', 7: 'F' };
+    const combosWith3Variants = new Set([
+      'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
+    ]);
+    const REGION_NAMES: Record<number, string> = {
+      1: 'BeNeLUX',
+      2: 'FraGer',
+      3: 'EspSlo',
+      4: 'ITAUSA'
+    };
 
     // Group riders by combination key
     const groups = new Map<string, typeof riders>();
     for (const rider of riders) {
       const specs = resolveBestSpecIds(rider);
+      const orderedAbbr = specs.map(id => specAbbrMap[id]).join('');
       let comboKey = 'OOO';
-      if (specs.includes(6) && specs.includes(5)) {
-        comboKey = 'APO';
-      } else if (specs.includes(6)) {
-        comboKey = 'AOO';
+      if (validExactMatchCombos.has(orderedAbbr)) {
+        comboKey = orderedAbbr;
       } else {
-        const orderedAbbr = specs.map(id => specAbbrMap[id]).join('');
-        if (validExactMatchCombos.has(orderedAbbr)) {
-          comboKey = orderedAbbr;
+        const spec1 = specs[0];
+        if (spec1 === 5) {
+          comboKey = 'POO';
+        } else if (spec1 === 3) {
+          comboKey = 'SOO';
+        } else if (spec1 === 1) {
+          comboKey = 'BOO';
+        } else if (spec1 === 2) {
+          comboKey = 'HOO';
         } else {
           comboKey = 'OOO';
         }
@@ -271,28 +294,173 @@ export class RiderProgramService {
       VALUES (?, ?, ?, ?)
     `);
 
+    const assignFallback = (rider: typeof riders[number], originalComboKey: string) => {
+      let assigned = false;
+      const specs = resolveBestSpecIds(rider);
+      const spec1 = specs[0];
+
+      // Determine fallback key based on spec1
+      let fallbackKey = 'OOO';
+      if (spec1 === 5) {
+        fallbackKey = 'POO';
+      } else if (spec1 === 3) {
+        fallbackKey = 'SOO';
+      } else if (spec1 === 1) {
+        fallbackKey = 'BOO';
+      } else if (spec1 === 2) {
+        fallbackKey = 'HOO';
+      } else {
+        fallbackKey = 'OOO';
+      }
+
+      // Try assigning to the specific fallback key first (check for regional or standard variants)
+      const availablePrograms = Array.from(programsByName.keys())
+        .filter(name => {
+          const parts = name.split('_');
+          return parts[0] === fallbackKey;
+        });
+
+      if (availablePrograms.length > 0) {
+        availablePrograms.sort();
+        // Check regional group first
+        const regionId = rider.program_group_id || 4;
+        const regionName = REGION_NAMES[regionId];
+        const regionalPrograms = availablePrograms.filter(name => name.includes(`_${regionName}_`));
+        
+        const targets = regionalPrograms.length > 0 ? regionalPrograms : availablePrograms;
+        const selectedName = targets[rider.id % targets.length];
+        const programId = programsByName.get(selectedName)!;
+        insert.run(season, rider.id, programId, assignedDate);
+        assigned = true;
+      }
+
+      // If not assigned, fall back to OOO
+      if (!assigned && fallbackKey !== 'OOO') {
+        const availableOoo = Array.from(programsByName.keys())
+          .filter(name => name.startsWith('OOO_'));
+        
+        if (availableOoo.length > 0) {
+          availableOoo.sort();
+          const regionId = rider.program_group_id || 4;
+          const regionName = REGION_NAMES[regionId];
+          const regionalOoo = availableOoo.filter(name => name.includes(`_${regionName}_`));
+          
+          const targets = regionalOoo.length > 0 ? regionalOoo : availableOoo;
+          const selectedName = targets[rider.id % targets.length];
+          const programId = programsByName.get(selectedName)!;
+          insert.run(season, rider.id, programId, assignedDate);
+          assigned = true;
+        }
+      }
+
+      // If still not assigned, fall back to the first available program in the database
+      if (!assigned) {
+        const firstProgramId = Array.from(programsByName.values())[0];
+        if (firstProgramId != null) {
+          insert.run(season, rider.id, firstProgramId, assignedDate);
+        }
+      }
+    };
+
     this.db.transaction(() => {
       for (const [comboKey, groupRiders] of groups.entries()) {
         groupRiders.sort((a, b) => b.overall_rating - a.overall_rating || a.id - b.id);
 
-        for (let idx = 0; idx < groupRiders.length; idx++) {
-          const rider = groupRiders[idx];
-          let variant = 1;
-          if (idx < 18) {
-            variant = (idx % 3) + 1;
-          } else {
-            variant = ((idx - 18) % 3) + 4;
+        // Check if there are regional variants in the database for this combination
+        const isSplit = Array.from(programsByName.keys()).some(name => name.startsWith(`${comboKey}_BeNeLUX_`));
+
+        if (isSplit) {
+          // Group by regional program group
+          const regionalGroups: Record<number, typeof groupRiders> = { 1: [], 2: [], 3: [], 4: [] };
+          for (const rider of groupRiders) {
+            const regionId = rider.program_group_id || 4; // default to 4 (ITAUSA)
+            if (!regionalGroups[regionId]) {
+              regionalGroups[regionId] = [];
+            }
+            regionalGroups[regionId].push(rider);
           }
 
-          const programName = `${comboKey}_${variant}`;
-          const programId = programsByName.get(programName);
-          if (programId != null) {
-            insert.run(season, rider.id, programId, assignedDate);
+          for (const [regionIdStr, rList] of Object.entries(regionalGroups)) {
+            const regionId = parseInt(regionIdStr);
+            const regionName = REGION_NAMES[regionId] || 'ITAUSA';
+            
+            // Find all available variants for this comboKey and region in the database
+            const availableVariants: number[] = [];
+            for (let v = 1; v <= 6; v++) {
+              const name = `${comboKey}_${regionName}_${v}`;
+              if (programsByName.has(name)) {
+                availableVariants.push(v);
+              }
+            }
+
+            if (availableVariants.length > 0) {
+              for (let i = 0; i < rList.length; i++) {
+                const rider = rList[i];
+                const variant = (i % 6) + 1;
+                const progName = `${comboKey}_${regionName}_${variant}`;
+                if (programsByName.has(progName)) {
+                  const programId = programsByName.get(progName)!;
+                  insert.run(season, rider.id, programId, assignedDate);
+                } else {
+                  assignFallback(rider, comboKey);
+                }
+              }
+            } else if (rList.length > 0) {
+              // Fallback to standard/global variants if the entire region was pruned
+              const availableGlobalVariants: number[] = [];
+              const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
+              for (let v = 1; v <= maxVariants; v++) {
+                const name = `${comboKey}_${v}`;
+                if (programsByName.has(name)) {
+                  availableGlobalVariants.push(v);
+                }
+              }
+
+              if (availableGlobalVariants.length > 0) {
+                for (let i = 0; i < rList.length; i++) {
+                  const rider = rList[i];
+                  const variant = (i % maxVariants) + 1;
+                  const progName = `${comboKey}_${variant}`;
+                  if (programsByName.has(progName)) {
+                    const programId = programsByName.get(progName)!;
+                    insert.run(season, rider.id, programId, assignedDate);
+                  } else {
+                    assignFallback(rider, comboKey);
+                  }
+                }
+              } else {
+                for (const rider of rList) {
+                  assignFallback(rider, comboKey);
+                }
+              }
+            }
+          }
+        } else {
+          // Standard / non-split combination
+          const availableGlobalVariants: number[] = [];
+          const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
+          for (let v = 1; v <= maxVariants; v++) {
+            const name = `${comboKey}_${v}`;
+            if (programsByName.has(name)) {
+              availableGlobalVariants.push(v);
+            }
+          }
+
+          if (availableGlobalVariants.length > 0) {
+            for (let i = 0; i < groupRiders.length; i++) {
+              const rider = groupRiders[i];
+              const variant = (i % maxVariants) + 1;
+              const progName = `${comboKey}_${variant}`;
+              if (programsByName.has(progName)) {
+                const programId = programsByName.get(progName)!;
+                insert.run(season, rider.id, programId, assignedDate);
+              } else {
+                assignFallback(rider, comboKey);
+              }
+            }
           } else {
-            const fallbackName = `OOO_${variant}`;
-            const fallbackId = programsByName.get(fallbackName) ?? programsByName.get('OOO_1');
-            if (fallbackId != null) {
-              insert.run(season, rider.id, fallbackId, assignedDate);
+            for (const rider of groupRiders) {
+              assignFallback(rider, comboKey);
             }
           }
         }

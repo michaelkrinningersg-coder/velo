@@ -301,15 +301,27 @@ function shuffleDeterministically(items, seed) {
     }
     return shuffled;
 }
+function seedProgramGroups(db) {
+    const rows = readCsv('program_groups.csv');
+    const insert = db.prepare(`
+    INSERT INTO program_groups (id, name)
+    VALUES (?, ?)
+  `);
+    for (const [index, row] of rows.entries()) {
+        const ctx = `program_groups.csv Zeile ${index + 2}`;
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx));
+    }
+    console.log(`  ${rows.length} Laender-Gruppen eingefuegt.`);
+}
 function seedStaCountry(db) {
     const rows = readCsv('country.csv');
     const insert = db.prepare(`
-    INSERT INTO sta_country (id, name, code_3, continent, regen_rating, number_regen_min, number_regen_max)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sta_country (id, name, code_3, continent, regen_rating, number_regen_min, number_regen_max, program_group_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `country.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), req(row, 'code_3', ctx), req(row, 'continent', ctx), int(req(row, 'regen_rating', ctx), ctx), int(req(row, 'number_regen_min', ctx), ctx), int(req(row, 'number_regen_max', ctx), ctx));
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), req(row, 'code_3', ctx), req(row, 'continent', ctx), int(req(row, 'regen_rating', ctx), ctx), int(req(row, 'number_regen_min', ctx), ctx), int(req(row, 'number_regen_max', ctx), ctx), int(req(row, 'program_group_id', ctx), ctx));
     }
     console.log(`  ${rows.length} Laender eingefuegt.`);
 }
@@ -908,6 +920,12 @@ function bootstrap(force = false) {
         console.log('Bootstrap: world_data.db bereits vorhanden, uebersprungen.');
         return;
     }
+    const originalRandom = Math.random;
+    let seed = 42;
+    Math.random = () => {
+        const x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    };
     console.log('Bootstrap: Erstelle world_data.db ...');
     if (!process.pkg && !fs.existsSync(ASSETS_DIR)) {
         fs.mkdirSync(ASSETS_DIR, { recursive: true });
@@ -920,6 +938,7 @@ function bootstrap(force = false) {
         const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
         db.exec(schema);
         console.log('  Schema angewendet.');
+        seedProgramGroups(db);
         seedStaCountry(db);
         seedTypeRider(db);
         seedStaRole(db);
@@ -950,9 +969,11 @@ function bootstrap(force = false) {
         db.pragma('journal_mode = DELETE');
         db.close();
         db = null;
+        Math.random = originalRandom;
         console.log(`✅  world_data.db erstellt: ${DB_PATH}`);
     }
     catch (error) {
+        Math.random = originalRandom;
         try {
             db?.close();
         }

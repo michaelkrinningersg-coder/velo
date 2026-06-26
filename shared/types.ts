@@ -53,7 +53,8 @@ export type RiderSpecialization =
   | 'Hill'
   | 'Sprint'
   | 'Timetrial'
-  | 'Attacker';
+  | 'Attacker'
+  | 'Flat';
 
 export type RiderSkills = Record<RiderSkillKey, number>;
 export type RiderPotentials = Record<RiderSkillKey, number>;

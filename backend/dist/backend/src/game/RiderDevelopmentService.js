@@ -98,7 +98,8 @@ function getSpecializationScores(skills) {
         { specialization: 'Sprint', score: scoreProfile(skills, [['sprint', 0.4], ['acceleration', 0.25], ['flat', 0.15], ['bikeHandling', 0.1], ['resistance', 0.1]]) },
         { specialization: 'Timetrial', score: scoreProfile(skills, [['timeTrial', 0.5], ['prologue', 0.2], ['flat', 0.1], ['resistance', 0.1], ['bikeHandling', 0.1]]) },
         { specialization: 'Cobble', score: scoreProfile(skills, [['cobble', 0.4], ['flat', 0.2], ['resistance', 0.15], ['bikeHandling', 0.15], ['hill', 0.1]]) },
-        { specialization: 'Attacker', score: scoreProfile(skills, [['attack', 0.26], ['acceleration', 0.18], ['hill', 0.18], ['mediumMountain', 0.18], ['resistance', 0.18]]) * 0.97 },
+        { specialization: 'Attacker', score: scoreProfile(skills, [['attack', 0.26], ['acceleration', 0.18], ['hill', 0.18], ['mediumMountain', 0.18], ['resistance', 0.18]]) * 0.978 },
+        { specialization: 'Flat', score: scoreProfile(skills, [['flat', 0.50], ['stamina', 0.20], ['resistance', 0.15], ['bikeHandling', 0.15]]) * 0.991 },
     ];
     return scores.sort((left, right) => right.score - left.score);
 }
@@ -240,6 +241,7 @@ function resolveSkillFocusFactor(riderType, skillKey) {
         Timetrial: { timeTrial: 1.35, prologue: 1.25, flat: 1.1, resistance: 1.1 },
         Cobble: { cobble: 1.35, flat: 1.15, resistance: 1.15, hill: 1.05, bikeHandling: 1.08 },
         Attacker: { attack: 1.35, acceleration: 1.15, hill: 1.12, mediumMountain: 1.1, resistance: 1.1 },
+        Flat: { flat: 1.35, stamina: 1.2, bikeHandling: 1.12, resistance: 1.1, timeTrial: 1.05 },
     };
     return factors[riderType][skillKey] ?? 0.78;
 }

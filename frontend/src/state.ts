@@ -933,6 +933,7 @@ export function getRiderSpecializationLabel(specialization: string): string {
     case 'Timetrial': return 'Zeitfahrer';
     case 'Cobble': return 'Pflasterspezialist';
     case 'Attacker': return 'Angreifer';
+    case 'Flat': return 'Flachlandspezialist';
     default: return specialization;
   }
 }

@@ -5,3 +5,4 @@ id,key,display_name,is_stage_focus,is_one_day_focus
 4,Timetrial,Zeitfahrer,1,0
 5,Cobble,Pflasterspezialist,0,1
 6,Attacker,Angreifer,1,1
+7,Flat,Flachlandspezialist,1,0

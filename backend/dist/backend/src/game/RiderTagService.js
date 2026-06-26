@@ -16,6 +16,7 @@ function getStagePoints(specialization) {
         case 'Timetrial':
         case 'Sprint':
         case 'Attacker':
+        case 'Flat':
             return 1;
         default:
             return 0;

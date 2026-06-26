@@ -3,18 +3,36 @@ const path = require('path');
 
 const dataDir = path.resolve(__dirname, '..', '..', 'data', 'csv');
 
-// Helper to read and parse CSV
+// Helper to read and parse CSV (delimiter-agnostic)
 function readCsv(filename) {
   const filePath = path.join(dataDir, filename);
   if (!fs.existsSync(filePath)) return [];
   const content = fs.readFileSync(filePath, 'utf8');
-  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const headers = lines[0].split(',');
+  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const delimiter = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(delimiter);
   return lines.slice(1).map(line => {
-    const values = line.split(',');
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === delimiter && !inQuotes) {
+        values.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current);
+
     const obj = {};
     headers.forEach((h, i) => {
-      obj[h] = values[i] || '';
+      obj[h] = (values[i] || '').trim();
     });
     return obj;
   });
@@ -193,41 +211,285 @@ const stagesCsvContent = [stagesHeader, ...finalStagesList.map(s => `${s.id},${s
 fs.writeFileSync(path.join(dataDir, 'stages.csv'), stagesCsvContent, 'utf8');
 console.log('Saved stages.csv with new stages!');
 
-// 3. Generate race_programs.csv (114 programs)
-const combosWith6Variants = [
+// 3. Generate race_programs.csv based on simulation
+const SPECIALIZATION_IDS = [1, 2, 3, 4, 5, 6, 7];
+const FLAT_MULT = 0.991;
+const ATTACKER_MULT = 0.978;
+
+const g1 = ['BEL', 'NED', 'LUX', 'NOR', 'DEN', 'SWD', 'GBR', 'IRL'];
+const g2 = ['FRA', 'AUS', 'NZL', 'GER', 'AUT', 'SWI'];
+const g3 = ['ESP', 'POR', 'AND', 'CAN', 'CZE', 'POL', 'LAT', 'EST', 'LTU', 'SLO', 'SVK'];
+const g4 = ['ITA', 'COL', 'ECU', 'VEN', 'MEX', 'ARG', 'USA'];
+
+function getProgramGroupId(code) {
+  if (g1.includes(code)) return 1;
+  if (g2.includes(code)) return 2;
+  if (g3.includes(code)) return 3;
+  return 4;
+}
+
+const groupNames = {
+  1: 'BeNeLUX',
+  2: 'FraGer',
+  3: 'EspSlo',
+  4: 'ITAUSA'
+};
+
+const specAbbrMap = { 1: 'B', 2: 'H', 3: 'S', 4: 'T', 5: 'P', 6: 'A', 7: 'F' };
+
+const combosWith3Variants = new Set([
+  'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
+]);
+
+const validExactMatchCombos = new Set([
   'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
-  'PHS', 'HPS', 'AOO', 'OOO'
+  'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH',
+  'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
+  'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+  'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
+  'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
+  'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
+  'PFB', 'PBF', 'PFH', 'PHF', 'PFS', 'PSF', 'PFT', 'PTF'
+]);
+
+const initialCombosWith6Variants = [
+  'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
+  'PHS', 'HPS', 'AOO', 'OOO',
+  'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
+  'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+  'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
+  'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
+  'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
+  'PFB', 'PBF', 'PFH', 'PHF', 'PFS', 'PSF', 'PFT', 'PTF'
 ];
 
-const combosWith3Variants = [
+const initialCombosWith3Variants = [
   'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH'
 ];
 
-const raceProgramsList = [];
-let programId = 1;
+function resolveSkillScores(row) {
+  const f = parseFloat(row.skill_flat || '50');
+  const m = parseFloat(row.skill_mountain || '50');
+  const mm = parseFloat(row.skill_medium_mountain || '50');
+  const h = parseFloat(row.skill_hill || '50');
+  const tt = parseFloat(row.skill_time_trial || '50');
+  const pr = parseFloat(row.skill_prologue || '50');
+  const co = parseFloat(row.skill_cobble || '50');
+  const sp = parseFloat(row.skill_sprint || '50');
+  const ac = parseFloat(row.skill_acceleration || '50');
+  const att = parseFloat(row.skill_attack || '50');
+  const st = parseFloat(row.skill_stamina || '50');
+  const re = parseFloat(row.skill_resistance || '50');
+  const rec = parseFloat(row.skill_recuperation || '50');
+  const dh = parseFloat(row.skill_downhill || '50');
+  const bh = parseFloat(row.skill_bike_handling) || Math.min(85, Math.max(0, dh * 0.7 + sp * 0.15 + att * 0.05 + re * 0.1));
 
-for (const combo of combosWith6Variants) {
-  for (let variant = 1; variant <= 6; variant++) {
-    raceProgramsList.push({
-      id: String(programId++),
-      name: `${combo}_${variant}`
-    });
-  }
+  return {
+    1: m * 0.45 + mm * 0.25 + rec * 0.15 + st * 0.15,
+    2: h * 0.4 + mm * 0.2 + ac * 0.15 + att * 0.15 + re * 0.1,
+    3: sp * 0.4 + ac * 0.25 + f * 0.15 + bh * 0.1 + re * 0.1,
+    4: tt * 0.45 + pr * 0.25 + f * 0.15 + st * 0.15,
+    5: co * 0.55 + f * 0.15 + bh * 0.15 + re * 0.15,
+    6: (att * 0.35 + st * 0.2 + re * 0.2 + h * 0.15 + ac * 0.1) * ATTACKER_MULT,
+    7: (f * 0.5 + st * 0.2 + re * 0.15 + bh * 0.15) * FLAT_MULT,
+  };
 }
 
-for (const combo of combosWith3Variants) {
-  for (let variant = 1; variant <= 3; variant++) {
-    raceProgramsList.push({
-      id: String(programId++),
-      name: `${combo}_${variant}`
-    });
+function resolveBestSpecIds(row) {
+  const spec1 = row.specialization_1_id ? parseInt(row.specialization_1_id) : null;
+  const spec2 = row.specialization_2_id ? parseInt(row.specialization_2_id) : null;
+  const spec3 = row.specialization_3_id ? parseInt(row.specialization_3_id) : null;
+  const seededSpecs = [spec1, spec2, spec3].filter(id => id != null);
+
+  if (seededSpecs.length >= 3) {
+    return seededSpecs.slice(0, 3);
   }
+
+  const scores = resolveSkillScores(row);
+  const missingSpecs = SPECIALIZATION_IDS
+    .filter((specId) => !seededSpecs.includes(specId))
+    .sort((left, right) => scores[right] - scores[left] || left - right);
+
+  const merged = [...seededSpecs, ...missingSpecs.slice(0, 3 - seededSpecs.length)];
+  const unique = [];
+  for (const id of merged) {
+    if (!unique.includes(id)) unique.push(id);
+  }
+  return unique.slice(0, 3);
 }
+
+function provisionalOverall(row) {
+  const sum = parseFloat(row.skill_flat || '50') +
+    parseFloat(row.skill_mountain || '50') +
+    parseFloat(row.skill_medium_mountain || '50') +
+    parseFloat(row.skill_hill || '50') +
+    parseFloat(row.skill_time_trial || '50') +
+    parseFloat(row.skill_cobble || '50') +
+    parseFloat(row.skill_sprint || '50') * 1.2 +
+    parseFloat(row.skill_stamina || '50') +
+    parseFloat(row.skill_resistance || '50') +
+    parseFloat(row.skill_recuperation || '50') +
+    parseFloat(row.skill_acceleration || '50');
+  const val = sum / 11.2;
+  return Math.max(0, Math.min(85, Math.round(val * 100) / 100));
+}
+
+function getSurvivingPrograms() {
+  // 1. Run the bootstrapper first to generate a deterministic world_data.db
+  const bootstrapperPath = path.resolve(__dirname, '..', 'dist', 'backend', 'src', 'bootstrapper.js');
+  const { bootstrap } = require(bootstrapperPath);
+  bootstrap(true);
+
+  // 2. Open database and query riders
+  const Database = require('better-sqlite3');
+  const dbPath = path.resolve(__dirname, '..', 'assets', 'world_data.db');
+  const db = new Database(dbPath);
+
+  const riders = db.prepare(`
+    SELECT r.id,
+           r.specialization_1_id,
+           r.specialization_2_id,
+           r.specialization_3_id,
+           r.overall_rating,
+           COALESCE(current_contract.team_id, r.active_team_id) AS team_id,
+           country.program_group_id AS program_group_id,
+           dt.tier AS team_tier
+    FROM riders r
+    LEFT JOIN sta_country country ON country.id = r.country_id
+    LEFT JOIN contracts current_contract
+      ON current_contract.id = (
+        SELECT contracts.id
+        FROM contracts
+        WHERE contracts.rider_id = r.id
+          AND contracts.start_season <= 2026
+          AND contracts.end_season >= 2026
+        ORDER BY contracts.start_season DESC, contracts.id DESC
+        LIMIT 1
+      )
+    LEFT JOIN teams t ON t.id = COALESCE(current_contract.team_id, r.active_team_id)
+    LEFT JOIN division_teams dt ON dt.id = t.division_id
+    WHERE r.is_retired = 0
+  `).all();
+
+  // Group by combination to find splits
+  const comboGroups = {};
+  for (const r of riders) {
+    const specs = [r.specialization_1_id, r.specialization_2_id, r.specialization_3_id];
+    const orderedAbbr = specs.map(id => specAbbrMap[id]).join('');
+    let comboKey = 'OOO';
+    if (validExactMatchCombos.has(orderedAbbr)) {
+      comboKey = orderedAbbr;
+    } else {
+      const spec1 = specs[0];
+      if (spec1 === 5) {
+        comboKey = 'POO';
+      } else if (spec1 === 3) {
+        comboKey = 'SOO';
+      } else if (spec1 === 1) {
+        comboKey = 'BOO';
+      } else if (spec1 === 2) {
+        comboKey = 'HOO';
+      } else {
+        comboKey = 'OOO';
+      }
+    }
+
+    if (!comboGroups[comboKey]) comboGroups[comboKey] = [];
+    comboGroups[comboKey].push(r);
+  }
+
+  // Determine split combinations (Tier 1 count >= 25)
+  const splitCombos = new Set();
+  for (const [combo, list] of Object.entries(comboGroups)) {
+    const tier1Count = list.filter(r => r.team_tier === 1).length;
+    if (tier1Count >= 25) {
+      splitCombos.add(combo);
+    }
+  }
+
+  // 3. Clear race_programs table and insert ALL candidate programs
+  db.prepare('DELETE FROM race_programs').run();
+  
+  const candidatePrograms = [];
+  let nextId = 1;
+  
+  for (const comboKey of Object.keys(comboGroups)) {
+    if (splitCombos.has(comboKey)) {
+      for (const region of Object.values(groupNames)) {
+        for (let v = 1; v <= 6; v++) {
+          candidatePrograms.push({ id: nextId++, name: `${comboKey}_${region}_${v}` });
+        }
+      }
+    } else {
+      const maxVariants = combosWith3Variants.has(comboKey) ? 3 : 6;
+      for (let v = 1; v <= maxVariants; v++) {
+        candidatePrograms.push({ id: nextId++, name: `${comboKey}_${v}` });
+      }
+    }
+  }
+
+  const insertProg = db.prepare('INSERT INTO race_programs (id, name) VALUES (?, ?)');
+  db.transaction(() => {
+    for (const p of candidatePrograms) {
+      insertProg.run(p.id, p.name);
+    }
+  })();
+
+  // 4. Run the actual runtime assignment engine on these candidate programs
+  db.prepare('DELETE FROM rider_season_programs WHERE season = 2026').run();
+  const { RiderProgramService } = require('../dist/backend/src/game/RiderProgramService.js');
+  const service = new RiderProgramService(db);
+  service.ensureSeasonPrograms(2026);
+
+  // 5. Query which programs got at least 1 Tier 1 rider
+  const stats = db.prepare(`
+    SELECT 
+      rp.name AS program_name,
+      SUM(CASE WHEN dt.tier = 1 THEN 1 ELSE 0 END) AS tier1_riders
+    FROM race_programs rp
+    LEFT JOIN rider_season_programs rsp ON rsp.program_id = rp.id AND rsp.season = 2026
+    LEFT JOIN riders r ON r.id = rsp.rider_id
+    LEFT JOIN contracts c ON c.id = (
+      SELECT contracts.id FROM contracts
+      WHERE contracts.rider_id = r.id
+        AND contracts.start_season <= 2026
+        AND contracts.end_season >= 2026
+      ORDER BY contracts.start_season DESC, contracts.id DESC
+      LIMIT 1
+    )
+    LEFT JOIN teams t ON t.id = COALESCE(c.team_id, r.active_team_id)
+    LEFT JOIN division_teams dt ON dt.id = t.division_id
+    GROUP BY rp.name
+  `).all();
+
+  db.prepare('DELETE FROM rider_season_programs WHERE season = 2026').run();
+  db.close();
+
+  // Determine surviving programs
+  const surviving = [];
+  for (const s of stats) {
+    if (s.program_name === 'OOO_1' || s.program_name === 'OOO_BeNeLUX_1') {
+      surviving.push(s.program_name);
+      continue;
+    }
+    if (s.tier1_riders >= 1) {
+      surviving.push(s.program_name);
+    }
+  }
+
+  return surviving.sort();
+}
+
+const survivingProgramNames = getSurvivingPrograms();
+const raceProgramsList = survivingProgramNames.map((name, i) => ({
+  id: String(i + 1),
+  name
+}));
 
 const programsHeader = 'id,name';
 const programsCsvContent = [programsHeader, ...raceProgramsList.map(p => `${p.id},${p.name}`)].join('\n') + '\n';
 fs.writeFileSync(path.join(dataDir, 'race_programs.csv'), programsCsvContent, 'utf8');
-console.log('Saved race_programs.csv with ' + raceProgramsList.length + ' new programs!');
+console.log('Saved race_programs.csv with ' + raceProgramsList.length + ' surviving programs!');
 
 // 4. Generate race_program_races.csv
 // We will assign matching races to each program.
@@ -251,13 +513,6 @@ for (const program of raceProgramsList) {
     if (combo === 'OOO') {
       // Fallback program gets all races
       match = true;
-    } else if (combo === 'AOO' || combo === 'APO') {
-      // Attacker/APO program gets hilly and cobble classics, and stage races
-      const isCobble = [15, 21, 45, 46, 25, 27].includes(raceId) || race.name.includes('Roubaix') || race.name.includes('Flanders');
-      const isHilly = [16, 17, 26, 28, 29, 30, 56, 63, 64].includes(raceId) || race.name.includes('Lombardia');
-      if (isCobble || isHilly || isStage) {
-        match = true;
-      }
     } else {
       // General spec combinations
       const hasB = combo.includes('B');
@@ -265,8 +520,9 @@ for (const program of raceProgramsList) {
       const hasS = combo.includes('S');
       const hasT = combo.includes('T');
       const hasP = combo.includes('P');
+      const hasF = combo.includes('F');
 
-      if (hasB || hasT) {
+      if (hasB || hasT || hasF) {
         // Stage races
         if (isStage) match = true;
       }
@@ -280,7 +536,7 @@ for (const program of raceProgramsList) {
         const isHilly = [16, 17, 26, 28, 29, 30, 56, 63, 64].includes(raceId) || race.name.includes('Lombardia') || race.name.includes('Sebastian') || race.name.includes('Liege');
         if (isHilly) match = true;
       }
-      if (hasS) {
+      if (hasS || hasF) {
         // Flat/sprint classics / stage races
         const isSprintClassics = [2, 20, 24, 31, 32, 58, 61, 62].includes(raceId) || race.name.includes('Cyclassics') || race.name.includes('Frankfurt');
         if (isSprintClassics || isStage) match = true;
