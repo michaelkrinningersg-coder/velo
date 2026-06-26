@@ -906,9 +906,14 @@ function renderTabCalendarCols(payload: any): string {
     const dist = distributionMap ? distributionMap.get(prog.id) : programDistribution.find((row: any) => row.program_id === prog.id);
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     headerRow += `
-      <th style="min-width: 140px; text-align: center;">
-        <div style="font-weight: bold; font-size: 0.9rem;">${esc(prog.name)} (${riderCount} F)</div>
-        <div class="text-muted" style="font-size: 0.72rem; margin-top: 0.15rem;">
+      <th style="min-width: 100px; max-width: 120px; text-align: center; vertical-align: top; padding: 0.35rem 0.2rem;">
+        <div style="font-weight: bold; font-size: 0.72rem; line-height: 1.2; white-space: normal; word-wrap: break-word; overflow-wrap: break-word;">
+          ${esc(prog.name).replace(/_/g, ' ')}
+        </div>
+        <div style="font-size: 0.7rem; font-weight: normal; color: var(--accent-h); margin-top: 0.15rem;">
+          (${riderCount} F)
+        </div>
+        <div class="text-muted" style="font-size: 0.62rem; margin-top: 0.2rem; font-weight: normal; white-space: nowrap;">
           P: <span style="color: #fb923c; font-weight: bold;">${stats?.peak}</span> | 
           A: <span style="color: #94a3b8; font-weight: bold;">${stats?.prep}</span> | 
           O: <span>${stats?.none}</span>

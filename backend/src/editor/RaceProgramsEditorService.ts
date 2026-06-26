@@ -290,6 +290,7 @@ export class RaceProgramsEditorService {
       raceProgramRaces: Array<{
         program_id: number;
         race_id: number;
+        allowed_program_group_ids?: string | null;
       }>;
     },
     activeDb?: Database
@@ -299,6 +300,7 @@ export class RaceProgramsEditorService {
       id: index + 1,
       program_id: item.program_id,
       race_id: item.race_id,
+      allowed_program_group_ids: item.allowed_program_group_ids || null,
     }));
 
     // 2. Write CSV Files to disk
@@ -320,11 +322,11 @@ export class RaceProgramsEditorService {
         );
 
         const insertMapping = activeDb.prepare(
-          'INSERT INTO race_program_races (id, program_id, race_id) VALUES (?, ?, ?)'
+          'INSERT INTO race_program_races (id, program_id, race_id, allowed_program_group_ids) VALUES (?, ?, ?, ?)'
         );
         for (const row of newRaceProgramRaces) {
           if (existingRaces.has(row.race_id) && existingPrograms.has(row.program_id)) {
-            insertMapping.run(row.id, row.program_id, row.race_id);
+            insertMapping.run(row.id, row.program_id, row.race_id, row.allowed_program_group_ids);
           }
         }
 
@@ -377,6 +379,7 @@ export class RaceProgramsEditorService {
       id: parseInt(row['id'] ?? '0', 10),
       program_id: parseInt(row['program_id'] ?? '0', 10),
       race_id: parseInt(row['race_id'] ?? '0', 10),
+      allowed_program_group_ids: row['allowed_program_group_ids'] ? row['allowed_program_group_ids'].trim() : null,
     }));
   }
 
@@ -446,12 +449,14 @@ export class RaceProgramsEditorService {
       id: number;
       program_id: number;
       race_id: number;
+      allowed_program_group_ids?: string | null;
     }>
   ): void {
     const csvPath = path.join(this.dataCsvDir, 'race_program_races.csv');
-    let content = 'id,program_id,race_id\n';
+    let content = 'id,program_id,race_id,allowed_program_group_ids\n';
     for (const item of mappings) {
-      content += `${item.id},${item.program_id},${item.race_id}\n`;
+      const allowedStr = item.allowed_program_group_ids ? item.allowed_program_group_ids : '';
+      content += `${item.id},${item.program_id},${item.race_id},${allowedStr}\n`;
     }
     writeFileSync(csvPath, content, 'utf8');
   }
