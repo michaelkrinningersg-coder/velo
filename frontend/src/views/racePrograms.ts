@@ -97,6 +97,15 @@ function getCellColorClass(status: 'peak' | 'prep' | 'none'): string {
 }
 
 function isRaceInActivePhase(program: any, race: any): boolean {
+  if (race.cachedKws) {
+    for (const kw of race.cachedKws) {
+      const status = getWeekStatus(program, kw);
+      if (status === 'peak' || status === 'prep') {
+        return true;
+      }
+    }
+    return false;
+  }
   const start = new Date(race.start_date);
   const end = new Date(race.end_date);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -136,6 +145,14 @@ function isWeekInPeakOr6WeeksAnstieg(program: any, W: number): boolean {
 }
 
 function isRaceInPeakOr6WeeksAnstieg(program: any, race: any): boolean {
+  if (race.cachedKws) {
+    for (const kw of race.cachedKws) {
+      if (isWeekInPeakOr6WeeksAnstieg(program, kw)) {
+        return true;
+      }
+    }
+    return false;
+  }
   const start = new Date(race.start_date);
   const end = new Date(race.end_date);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -166,6 +183,21 @@ function getProgramDaysPerPhase(program: any, assignedRaceIds: Set<number>, payl
   const assignedRaces = payload.races.filter((r: any) => assignedRaceIds.has(r.id));
 
   for (const race of assignedRaces) {
+    if (race.cachedDays) {
+      race.cachedDays.forEach((d: any) => {
+        const kw = d.kw;
+        if (kw <= peaks[0].max) {
+          phase1++;
+        } else if (kw <= peaks[1].max) {
+          phase2++;
+        } else if (kw <= peaks[2].max) {
+          phase3++;
+        } else {
+          phase4++;
+        }
+      });
+      continue;
+    }
     const start = new Date(race.start_date);
     const end = new Date(race.end_date);
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -191,39 +223,59 @@ function getProgramDaysPerPhase(program: any, assignedRaceIds: Set<number>, payl
 }
 
 function checkCanAssignProgram(program: any, race: any, payload: any): boolean {
-  const assignedRaceIds = new Set<number>(
-    payload.raceProgramRaces
-      .filter((m: any) => m.program_id === program.id && m.race_id !== race.id)
-      .map((m: any) => m.race_id)
-  );
+  let assignedRaceIds: Set<number>;
+  if (payload.programToRacesMap) {
+    assignedRaceIds = new Set<number>(payload.programToRacesMap.get(program.id) || []);
+    assignedRaceIds.delete(race.id);
+  } else {
+    assignedRaceIds = new Set<number>(
+      payload.raceProgramRaces
+        .filter((m: any) => m.program_id === program.id && m.race_id !== race.id)
+        .map((m: any) => m.race_id)
+    );
+  }
 
   const daysPerPhase = getProgramDaysPerPhase(program, assignedRaceIds, payload);
 
   const touchedPhases = new Set<string>();
-  const start = new Date(race.start_date);
-  const end = new Date(race.end_date);
-  
   const peaks = [
     { min: program.peak1_min, max: program.peak1_max },
     { min: program.peak2_min, max: program.peak2_max },
     { min: program.peak3_min, max: program.peak3_max }
   ].sort((a, b) => a.min - b.min);
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    const kw = getWeekNumber(dateStr);
+  if (race.cachedDays) {
+    race.cachedDays.forEach((d: any) => {
+      const kw = d.kw;
+      if (kw <= peaks[0].max) {
+        touchedPhases.add('phase1');
+      } else if (kw <= peaks[1].max) {
+        touchedPhases.add('phase2');
+      } else if (kw <= peaks[2].max) {
+        touchedPhases.add('phase3');
+      } else {
+        touchedPhases.add('phase4');
+      }
+    });
+  } else {
+    const start = new Date(race.start_date);
+    const end = new Date(race.end_date);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const kw = getWeekNumber(dateStr);
 
-    if (kw <= peaks[0].max) {
-      touchedPhases.add('phase1');
-    } else if (kw <= peaks[1].max) {
-      touchedPhases.add('phase2');
-    } else if (kw <= peaks[2].max) {
-      touchedPhases.add('phase3');
-    } else {
-      touchedPhases.add('phase4');
+      if (kw <= peaks[0].max) {
+        touchedPhases.add('phase1');
+      } else if (kw <= peaks[1].max) {
+        touchedPhases.add('phase2');
+      } else if (kw <= peaks[2].max) {
+        touchedPhases.add('phase3');
+      } else {
+        touchedPhases.add('phase4');
+      }
     }
   }
 
@@ -314,8 +366,74 @@ const DAYS_OF_2026: Array<{ dateStr: string; label: string; weekNum: number }> =
   return list;
 })();
 
+function enrichPayloadWithCachedData(payload: any): void {
+  if (!payload || payload.enriched) return;
+
+  payload.races.forEach((race: any) => {
+    const days: Array<{ dateStr: string; kw: number }> = [];
+    const kws = new Set<number>();
+    const start = new Date(race.start_date);
+    const end = new Date(race.end_date);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const kw = getWeekNumber(dateStr);
+      days.push({ dateStr, kw });
+      kws.add(kw);
+    }
+    race.cachedDays = days;
+    race.cachedKws = Array.from(kws);
+  });
+
+  const racesByDate = new Map<string, any[]>();
+  DAYS_OF_2026.forEach(day => {
+    racesByDate.set(day.dateStr, []);
+  });
+  payload.races.forEach((race: any) => {
+    if (race.cachedDays) {
+      race.cachedDays.forEach((d: any) => {
+        const list = racesByDate.get(d.dateStr);
+        if (list) {
+          list.push(race);
+        }
+      });
+    }
+  });
+  payload.racesByDate = racesByDate;
+
+  const distributionMap = new Map<number, any>();
+  payload.programDistribution.forEach((row: any) => {
+    distributionMap.set(row.program_id, row);
+  });
+  payload.distributionMap = distributionMap;
+
+  payload.enriched = true;
+}
+
+function rebuildAssignmentIndexes(payload: any): void {
+  if (!payload) return;
+
+  const assignmentMap = new Map<string, any>();
+  const programToRacesMap = new Map<number, Set<number>>();
+
+  payload.raceProgramRaces.forEach((m: any) => {
+    assignmentMap.set(`${m.program_id}_${m.race_id}`, m);
+
+    if (!programToRacesMap.has(m.program_id)) {
+      programToRacesMap.set(m.program_id, new Set<number>());
+    }
+    programToRacesMap.get(m.program_id)!.add(m.race_id);
+  });
+
+  payload.assignmentMap = assignmentMap;
+  payload.programToRacesMap = programToRacesMap;
+}
+
 export async function loadRaceProgramsData(force = false): Promise<void> {
   if (state.raceProgramsPayload && !force) {
+    rebuildAssignmentIndexes(state.raceProgramsPayload);
     renderRacePrograms();
     return;
   }
@@ -328,6 +446,8 @@ export async function loadRaceProgramsData(force = false): Promise<void> {
   }
 
   state.raceProgramsPayload = res.data;
+  enrichPayloadWithCachedData(state.raceProgramsPayload);
+  rebuildAssignmentIndexes(state.raceProgramsPayload);
   state.raceProgramsDirty = false;
   state.raceProgramsSaving = false;
   activePopupRaceId = null;
@@ -593,14 +713,28 @@ function calculateProgramDays(program: any, payload: any): { peak: number; prep:
   let none = 0;
 
   // Find all assigned races
-  const assignedRaceIds = new Set<number>(
-    payload.raceProgramRaces.filter((m: any) => m.program_id === program.id).map((m: any) => m.race_id)
-  );
+  let assignedRaceIds: Set<number>;
+  if (payload.programToRacesMap) {
+    assignedRaceIds = payload.programToRacesMap.get(program.id) || new Set<number>();
+  } else {
+    assignedRaceIds = new Set<number>(
+      payload.raceProgramRaces.filter((m: any) => m.program_id === program.id).map((m: any) => m.race_id)
+    );
+  }
 
   const assignedRaces = payload.races.filter((r: any) => assignedRaceIds.has(r.id));
 
   // Loop through all days of each assigned race
   for (const race of assignedRaces) {
+    if (race.cachedDays) {
+      race.cachedDays.forEach((d: any) => {
+        const status = getWeekStatus(program, d.kw);
+        if (status === 'peak') peak++;
+        else if (status === 'prep') prep++;
+        else none++;
+      });
+      continue;
+    }
     const start = new Date(race.start_date);
     const end = new Date(race.end_date);
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -628,6 +762,8 @@ export function renderRacePrograms(): void {
     root.innerHTML = '<div class="results-empty">Keine Daten geladen.</div>';
     return;
   }
+
+  rebuildAssignmentIndexes(payload);
 
   // Save scroll positions
   const savedWindowX = window.scrollX;
@@ -805,9 +941,12 @@ function renderTabCalendarCols(payload: any): string {
   const raceProgramRaces = payload.raceProgramRaces;
   const races = payload.races;
   const programDistribution = payload.programDistribution;
+  const distributionMap = payload.distributionMap;
+  const racesByDate = payload.racesByDate;
+  const assignmentMap = payload.assignmentMap;
 
   const programs = allPrograms.filter((p: any) => {
-    const dist = programDistribution.find((row: any) => row.program_id === p.id);
+    const dist = distributionMap ? distributionMap.get(p.id) : programDistribution.find((row: any) => row.program_id === p.id);
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
@@ -854,7 +993,7 @@ function renderTabCalendarCols(payload: any): string {
   `;
   for (const prog of programs) {
     const stats = programStats.find((s: any) => s.id === prog.id)?.stats;
-    const dist = programDistribution.find((row: any) => row.program_id === prog.id);
+    const dist = distributionMap ? distributionMap.get(prog.id) : programDistribution.find((row: any) => row.program_id === prog.id);
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     headerRow += `
       <th style="min-width: 140px; text-align: center;">
@@ -871,7 +1010,7 @@ function renderTabCalendarCols(payload: any): string {
 
   let rowsHtml = '';
   for (const day of DAYS_OF_2026) {
-    const racesToday = races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+    const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
     const hasRaces = racesToday.length > 0;
     const rowClass = hasRaces ? 'row-has-races' : '';
 
@@ -902,9 +1041,21 @@ function renderTabCalendarCols(payload: any): string {
       const colorClass = getCellColorClass(status);
 
       // Find if this program is assigned to any race running today
-      const assignedMapping = raceProgramRaces.find(
-        (m: any) => m.program_id === prog.id && racesToday.some((r: any) => r.id === m.race_id)
-      );
+      let assignedMapping = null;
+      if (assignmentMap) {
+        for (const r of racesToday) {
+          const key = `${prog.id}_${r.id}`;
+          const m = assignmentMap.get(key);
+          if (m) {
+            assignedMapping = m;
+            break;
+          }
+        }
+      } else {
+        assignedMapping = raceProgramRaces.find(
+          (m: any) => m.program_id === prog.id && racesToday.some((r: any) => r.id === m.race_id)
+        );
+      }
 
       let content = '';
       let tdClass = `toggleable-race-cell ${colorClass}`;
@@ -953,9 +1104,12 @@ function renderTabCalendarRows(payload: any): string {
   const raceProgramRaces = payload.raceProgramRaces;
   const races = payload.races;
   const programDistribution = payload.programDistribution;
+  const distributionMap = payload.distributionMap;
+  const racesByDate = payload.racesByDate;
+  const assignmentMap = payload.assignmentMap;
 
   const programs = allPrograms.filter((p: any) => {
-    const dist = programDistribution.find((row: any) => row.program_id === p.id);
+    const dist = distributionMap ? distributionMap.get(p.id) : programDistribution.find((row: any) => row.program_id === p.id);
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
@@ -1002,6 +1156,11 @@ function renderTabCalendarRows(payload: any): string {
   const monthSpans: Array<{ name: string; span: number }> = [];
   const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
+  const raceAssignmentsCountMap = new Map<number, number>();
+  raceProgramRaces.forEach((m: any) => {
+    raceAssignmentsCountMap.set(m.race_id, (raceAssignmentsCountMap.get(m.race_id) || 0) + 1);
+  });
+
   for (const day of DAYS_OF_2026) {
     const mIndex = parseInt(day.dateStr.split('-')[1], 10) - 1;
     const mName = monthNames[mIndex];
@@ -1011,7 +1170,7 @@ function renderTabCalendarRows(payload: any): string {
       monthSpans[monthSpans.length - 1].span++;
     }
 
-    const racesToday = races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+    const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
     const hasRaces = racesToday.length > 0;
     const rCountText = hasRaces ? `${racesToday.length} R` : '';
     const rCountClass = hasRaces ? 'race-count-active' : '';
@@ -1028,7 +1187,7 @@ function renderTabCalendarRows(payload: any): string {
       const race = racesToday[index];
       if (!race) return '';
       const style = resolveRaceCategoryBadgeStyle(race.category?.name);
-      const assignedCount = raceProgramRaces.filter((m: any) => m.race_id === race.id).length;
+      const assignedCount = raceAssignmentsCountMap.get(race.id) || 0;
       return `
         <span class="race-id-badge" style="background-color: ${style.background}; border: 1px solid ${style.border}; color: ${style.color}; cursor: help;" 
               title="${esc(race.name)}\nZugelassene Programme: ${assignedCount}">
@@ -1050,7 +1209,7 @@ function renderTabCalendarRows(payload: any): string {
   let rowsHtml = '';
   for (const prog of programs) {
     const stats = calculateProgramDays(prog, payload);
-    const dist = programDistribution.find((row: any) => row.program_id === prog.id);
+    const dist = distributionMap ? distributionMap.get(prog.id) : programDistribution.find((row: any) => row.program_id === prog.id);
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     let cols = `
       <td class="sticky-col" style="z-index: 5; white-space: nowrap; font-weight: bold; border-right: 2px solid var(--border);">
@@ -1066,12 +1225,24 @@ function renderTabCalendarRows(payload: any): string {
     for (const day of DAYS_OF_2026) {
       const status = getWeekStatus(prog, day.weekNum);
       const colorClass = getCellColorClass(status);
-      const racesToday = races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+      const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
       const hasRaces = racesToday.length > 0;
 
-      const assignedMapping = raceProgramRaces.find(
-        (m: any) => m.program_id === prog.id && racesToday.some((r: any) => r.id === m.race_id)
-      );
+      let assignedMapping = null;
+      if (assignmentMap) {
+        for (const r of racesToday) {
+          const key = `${prog.id}_${r.id}`;
+          const m = assignmentMap.get(key);
+          if (m) {
+            assignedMapping = m;
+            break;
+          }
+        }
+      } else {
+        assignedMapping = raceProgramRaces.find(
+          (m: any) => m.program_id === prog.id && racesToday.some((r: any) => r.id === m.race_id)
+        );
+      }
 
       let cellContent = '';
       let tdClass = `toggleable-race-cell ${colorClass}`;
@@ -1220,13 +1391,27 @@ function renderTabRiderRole(payload: any): string {
   const raceProgramRaces = payload.raceProgramRaces;
   const stages = payload.stages;
   const programDistribution = payload.programDistribution;
+  const distributionMap = payload.distributionMap;
+  const assignmentMap = payload.assignmentMap;
+
+  // Pre-calculate program stats once for all races
+  const programStatsMap = new Map<number, { peak: number; prep: number; none: number }>();
+  payload.programs.forEach((p: any) => {
+    programStatsMap.set(p.id, calculateProgramDays(p, payload));
+  });
+
+  // Pre-calculate race to programs mapping
+  const raceToProgramsMap = new Map<number, Set<number>>();
+  raceProgramRaces.forEach((m: any) => {
+    if (!raceToProgramsMap.has(m.race_id)) {
+      raceToProgramsMap.set(m.race_id, new Set<number>());
+    }
+    raceToProgramsMap.get(m.race_id)!.add(m.program_id);
+  });
 
   const rows = races.map((race: any) => {
     // 1. Find assigned programs
-    const assignedProgramIds = new Set<number>(
-      raceProgramRaces.filter((m: any) => m.race_id === race.id).map((m: any) => m.program_id)
-    );
-
+    const assignedProgramIds = raceToProgramsMap.get(race.id) || new Set<number>();
     const assignedProgramDistributions = programDistribution.filter((row: any) => assignedProgramIds.has(row.program_id));
 
     let targetLetter: 'P' | 'S' | 'H' | 'B' | 'T' | null = null;
@@ -1247,8 +1432,8 @@ function renderTabRiderRole(payload: any): string {
     }
 
     const programItems = payload.programs.map((p: any) => {
-      const isAssigned = raceProgramRaces.some((m: any) => m.program_id === p.id && m.race_id === race.id);
-      const dist = programDistribution.find((row: any) => row.program_id === p.id);
+      const isAssigned = assignmentMap ? assignmentMap.has(`${p.id}_${race.id}`) : raceProgramRaces.some((m: any) => m.program_id === p.id && m.race_id === race.id);
+      const dist = distributionMap ? distributionMap.get(p.id) : programDistribution.find((row: any) => row.program_id === p.id);
       
       const count = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
       
@@ -1268,7 +1453,7 @@ function renderTabRiderRole(payload: any): string {
       if (sprint > 0) rolesDesc.push(`${sprint} Sprinter`);
       const rolesStr = rolesDesc.length > 0 ? `(${rolesDesc.join(', ')})` : '';
 
-      const stats = calculateProgramDays(p, payload);
+      const stats = programStatsMap.get(p.id) || { peak: 0, prep: 0, none: 0 };
       const totalDays = stats.peak + stats.prep + stats.none;
 
       return {
@@ -1805,6 +1990,7 @@ function renderSortHeaderLeft(key: string, label: string, extraStyle = ''): stri
 function renderTabProgramRoles(payload: any): string {
   const programs = payload.programs;
   const roleSpecCombinations = payload.roleSpecCombinations || [];
+  const programToRacesMap = payload.programToRacesMap;
 
   const roleLabels: Record<string, string> = {
     Kapitaen: 'Kapitän',
@@ -1824,9 +2010,18 @@ function renderTabProgramRoles(payload: any): string {
     Attacker: 'Attacker',
   };
 
+  // Pre-index combinations by program ID
+  const combosByProgramMap = new Map<number, any[]>();
+  roleSpecCombinations.forEach((c: any) => {
+    if (!combosByProgramMap.has(c.program_id)) {
+      combosByProgramMap.set(c.program_id, []);
+    }
+    combosByProgramMap.get(c.program_id)!.push(c);
+  });
+
   // Pre-calculate counts, filter combinations and calculate race days per program
   const programDataList = programs.map((prog: any) => {
-    const progCombos = roleSpecCombinations.filter((c: any) => c.program_id === prog.id);
+    const progCombos = combosByProgramMap.get(prog.id) || [];
     
     let totalRiders = 0;
     const roleCounts: Record<string, number> = {
@@ -1888,7 +2083,7 @@ function renderTabProgramRoles(payload: any): string {
     const roleCounts = item.roleCounts;
     const raceDays = item.raceDays;
 
-    const assignedRaceIds = new Set<number>(
+    const assignedRaceIds = programToRacesMap ? (programToRacesMap.get(prog.id) || new Set<number>()) : new Set<number>(
       payload.raceProgramRaces.filter((m: any) => m.program_id === prog.id).map((m: any) => m.race_id)
     );
     const phaseDays = getProgramDaysPerPhase(prog, assignedRaceIds, payload);

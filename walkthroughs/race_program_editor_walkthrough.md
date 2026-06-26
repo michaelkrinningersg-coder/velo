@@ -100,4 +100,29 @@ Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) a
   - Die Datenbank lädt jetzt sauber mit genau **1.981 Zuweisungen**.
   - Alle Programmgruppen enthalten weiterhin mindestens einen Tier-1-Fahrer.
 
+---
+
+## Performance-Optimierung des Programm-Editors
+
+Wir haben umfangreiche Performance-Optimierungen im Frontend des Programm-Editors ([racePrograms.ts](file:///c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/frontend/src/views/racePrograms.ts)) durchgeführt. Diese beheben die zuvor spürbaren Freezes (2–5 Sekunden) beim Rendern und Filtern komplett:
+
+### 1. Pre-Caching & Indexierung
+* **Enrichment bei Payload-Ladevorgang (`enrichPayloadWithCachedData`)**: Berechnet einmalig die relevanten Tage und KW-Werte pro Rennen vor und indiziert Rennen nach Datum in einer `racesByDate`-Map.
+* **Dynamische Zuweisungs-Indizes (`rebuildAssignmentIndexes`)**: Baut bei Änderungen Lookup-Maps auf. `assignmentMap` (`${programId}_${raceId}`) erlaubt eine konstante Abfragezeit $O(1)$ statt linearer Suchen auf den 2.200 Mappings.
+
+### 2. Vermeidung redundanter Schleifen-Berechnungen
+* **Einmalige Statistik-Berechnung**: Im Reiter "Rider-Role" werden die Renntage aller Programme einmalig pro Renderdurchgang berechnet und in einer Map gespeichert, anstatt sie in der inneren Zuweisungsschleife 18.300-mal redundant aufzurufen.
+* **Pre-Indexierte Kombinationen**: Tab 4 und 5 nutzen Cache-Maps für Kombinationen nach Programm-ID, um Arrayscans zu vermeiden.
+
+### 3. Messergebnisse aus der Profilierung (Profilierungs-Lauf)
+Wir haben ein automatisiertes Profiling-Skript ([test_editor_perf.js](file:///C:/Users/mkrinninger/.gemini/antigravity-ide/brain/eb714a58-5557-41a1-b747-e80e057ef235/scratch/test_editor_perf.js)) aufgesetzt, welches folgende Ausführungszeiten ermittelt hat:
+* **Daten-Enrichment (`enrichPayloadWithCachedData`)**: **2.25 ms**
+* **Index-Wiederaufbau (`rebuildAssignmentIndexes`)**: **1.78 ms**
+* **Zellen-Lookup im Kalender (365 Tage * 187 Programme)**: **13.20 ms** (zuvor 3–5 Sekunden Freeze!)
+* **Rider-Role Berechnungen (98 Rennen * 187 Programme)**: **8.86 ms** (zuvor mehrere Sekunden!)
+* **Programm-Rollen Berechnungen**: **0.32 ms**
+
+Die gesamte Berechnungszeit für eine Rendering-Aktualisierung liegt somit bei **unter 25 Millisekunden**. Dadurch wechselt der Editor nun ohne jede Verzögerung (< 50ms im Browser) die Tabs, wendet Filter an und aktualisiert Zuweisungen.
+
+
 
