@@ -13,19 +13,9 @@ let programRolesSortKey = 'id';
 let programRolesSortAsc = true;
 
 // Global filter states
-let filterSpecs: Record<string, boolean> = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
-let filterVariants: Record<number, boolean> = {
-  1: true,
-  2: true,
-  3: true,
-  4: true,
-  5: true,
-  6: true,
-};
-let filterRegions: Record<string, boolean> = { BeNeLUX: true, FraGer: true, EspSlo: true, ITAUSA: true };
-let popoverShowV1_3 = true;
-let popoverShowV4_6 = true;
-let popoverShowSpecs: Record<string, boolean> = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
+let filterCobble: 'all' | 'cobble' | 'non-cobble' = 'all';
+let filterRaceCategories: Set<number> = new Set();
+let popoverFilterCobble: 'all' | 'cobble' | 'non-cobble' = 'all';
 
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name: string): number {
@@ -41,29 +31,12 @@ function getLetterAt(name: string, pos: number): string {
   return prefix.charAt(pos - 1) || '';
 }
 
-// Helper to extract the region from program name (e.g. BeNeLUX from AOO_BeNeLUX_1)
-function getProgramRegion(name: string): string | null {
-  const parts = name.split('_');
-  if (parts.length === 3) {
-    return parts[1];
-  }
-  return null;
-}
-
-// Helper to check if a program is visible according to selected regions
-function isProgramRegionVisible(name: string): boolean {
-  const region = getProgramRegion(name);
-  if (region === null) return true; // global/standard programs are always shown
-  return filterRegions[region] ?? true;
-}
-
-function matchesSpecFilter(name: string, specFilters: Record<string, boolean>): boolean {
-  const l1 = getLetterAt(name, 1);
-  const l2 = getLetterAt(name, 2);
-  const l3 = getLetterAt(name, 3);
-  return (l1 !== '' && !!specFilters[l1]) ||
-         (l2 !== '' && !!specFilters[l2]) ||
-         (l3 === 'P' && !!specFilters.P);
+function isProgramVisible(name: string, filterVal: 'all' | 'cobble' | 'non-cobble'): boolean {
+  const nameLower = name.toLowerCase();
+  const isCobble = nameLower.includes('cobble') && !nameLower.includes('non_cobble') && !nameLower.includes('non cobble') && !nameLower.includes('non-cobble');
+  if (filterVal === 'cobble') return isCobble;
+  if (filterVal === 'non-cobble') return !isCobble;
+  return true;
 }
 
 
@@ -443,6 +416,9 @@ function rebuildAssignmentIndexes(payload: any): void {
 export async function loadRaceProgramsData(force = false): Promise<void> {
   if (state.raceProgramsPayload && !force) {
     rebuildAssignmentIndexes(state.raceProgramsPayload);
+    if (filterRaceCategories.size === 0 && state.raceProgramsPayload.raceCategories) {
+      filterRaceCategories = new Set(state.raceProgramsPayload.raceCategories.map((c: any) => c.id));
+    }
     renderRacePrograms();
     return;
   }
@@ -461,6 +437,11 @@ export async function loadRaceProgramsData(force = false): Promise<void> {
   state.raceProgramsSaving = false;
   activePopupRaceId = null;
   activeRiderCountPopupRaceId = null;
+
+  if (state.raceProgramsPayload && state.raceProgramsPayload.raceCategories) {
+    filterRaceCategories = new Set(state.raceProgramsPayload.raceCategories.map((c: any) => c.id));
+  }
+
   renderRacePrograms();
 }
 
@@ -606,51 +587,23 @@ export function initRaceProgramsView(): void {
   // Listen for checkbox changes in filter card and popover filters
   $('view-race-programs').addEventListener('change', (event) => {
     const target = event.target as HTMLInputElement;
-    if (target.classList.contains('filter-spec-checkbox')) {
-      const spec = target.dataset['spec']!;
-      filterSpecs[spec] = target.checked;
+    if (target.classList.contains('filter-cobble-radio')) {
+      filterCobble = target.value as any;
       renderRacePrograms();
       return;
     }
-    if (target.classList.contains('filter-region-checkbox')) {
-      const region = target.dataset['region']!;
-      filterRegions[region] = target.checked;
+    if (target.classList.contains('popover-filter-cobble-radio')) {
+      popoverFilterCobble = target.value as any;
       renderRacePrograms();
       return;
     }
-    if (target.classList.contains('filter-variant-checkbox')) {
-      const variant = parseInt(target.dataset['variant']!, 10);
-      filterVariants[variant] = target.checked;
-      renderRacePrograms();
-      return;
-    }
-    if (target.classList.contains('filter-group-checkbox')) {
-      const group = target.dataset['group'];
-      if (group === '1-3') {
-        filterVariants[1] = target.checked;
-        filterVariants[2] = target.checked;
-        filterVariants[3] = target.checked;
-      } else if (group === '4-6') {
-        filterVariants[4] = target.checked;
-        filterVariants[5] = target.checked;
-        filterVariants[6] = target.checked;
+    if (target.classList.contains('filter-category-checkbox')) {
+      const catId = parseInt(target.dataset['categoryId']!, 10);
+      if (target.checked) {
+        filterRaceCategories.add(catId);
+      } else {
+        filterRaceCategories.delete(catId);
       }
-      renderRacePrograms();
-      return;
-    }
-    if (target.classList.contains('popover-filter-v13')) {
-      popoverShowV1_3 = target.checked;
-      renderRacePrograms();
-      return;
-    }
-    if (target.classList.contains('popover-filter-v46')) {
-      popoverShowV4_6 = target.checked;
-      renderRacePrograms();
-      return;
-    }
-    if (target.classList.contains('popover-filter-spec')) {
-      const spec = target.dataset['spec']!;
-      popoverShowSpecs[spec] = target.checked;
       renderRacePrograms();
       return;
     }
@@ -803,86 +756,42 @@ export function renderRacePrograms(): void {
   const isSaving = state.raceProgramsSaving;
   const activeTab = state.raceProgramsActiveTab;
 
-function renderFilterCard(): string {
+function renderFilterCard(payload: any): string {
+  const categoryCheckboxes = payload.raceCategories.map((cat: any) => {
+    const isChecked = filterRaceCategories.has(cat.id);
+    const rStyle = resolveRaceCategoryBadgeStyle(cat.name);
+    return `
+      <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+        <input type="checkbox" class="filter-category-checkbox" data-category-id="${cat.id}" ${isChecked ? 'checked' : ''}>
+        <span class="race-id-badge" style="background-color: ${rStyle.background}; border: 1px solid ${rStyle.border}; color: ${rStyle.color}; font-size: 0.72rem; padding: 0.05rem 0.25rem; border-radius: 3px;">
+          ${esc(cat.name)}
+        </span>
+      </label>
+    `;
+  }).join('\n');
+
   return `
     <div class="race-programs-filters-card" style="margin-top: 1rem; padding: 0.8rem; background: var(--bg-800); border: 1px solid var(--border); border-radius: var(--radius-md);">
       <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center;">
         
-        <!-- Spec Filters -->
-        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Spezialisierungen:</span>
+        <!-- Cobble / Non-Cobble Filter -->
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Programm-Typ:</span>
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="B" ${filterSpecs.B ? 'checked' : ''}> B (Berg)
+            <input type="radio" name="filter-cobble-radio" class="filter-cobble-radio" value="all" ${filterCobble === 'all' ? 'checked' : ''}> Alle
           </label>
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="H" ${filterSpecs.H ? 'checked' : ''}> H (Hügel)
+            <input type="radio" name="filter-cobble-radio" class="filter-cobble-radio" value="cobble" ${filterCobble === 'cobble' ? 'checked' : ''}> Cobble
           </label>
           <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="P" ${filterSpecs.P ? 'checked' : ''}> P (Pflaster)
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="S" ${filterSpecs.S ? 'checked' : ''}> S (Sprint)
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="T" ${filterSpecs.T ? 'checked' : ''}> T (Zeitfahren)
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="A" ${filterSpecs.A ? 'checked' : ''}> A (Attacker)
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-spec-checkbox" data-spec="F" ${filterSpecs.F ? 'checked' : ''}> F (Flat)
+            <input type="radio" name="filter-cobble-radio" class="filter-cobble-radio" value="non-cobble" ${filterCobble === 'non-cobble' ? 'checked' : ''}> Non-Cobble
           </label>
         </div>
 
-        <!-- Variant Filters -->
+        <!-- Race Categories Filters -->
         <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Varianten:</span>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="1" ${filterVariants[1] ? 'checked' : ''}> 1
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="2" ${filterVariants[2] ? 'checked' : ''}> 2
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="3" ${filterVariants[3] ? 'checked' : ''}> 3
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="4" ${filterVariants[4] ? 'checked' : ''}> 4
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="5" ${filterVariants[5] ? 'checked' : ''}> 5
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-variant-checkbox" data-variant="6" ${filterVariants[6] ? 'checked' : ''}> 6
-          </label>
-        </div>
-
-        <!-- Bulk Variant Groups -->
-        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Gruppen:</span>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-group-checkbox" data-group="1-3" ${filterVariants[1] && filterVariants[2] && filterVariants[3] ? 'checked' : ''}> Varianten 1-3
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-group-checkbox" data-group="4-6" ${filterVariants[4] && filterVariants[5] && filterVariants[6] ? 'checked' : ''}> Varianten 4-6
-          </label>
-        </div>
-
-        <!-- Region Filters -->
-        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Regionen (Herkunft):</span>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-region-checkbox" data-region="BeNeLUX" ${filterRegions.BeNeLUX ? 'checked' : ''}> BeNeLUX
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-region-checkbox" data-region="FraGer" ${filterRegions.FraGer ? 'checked' : ''}> FraGer
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-region-checkbox" data-region="EspSlo" ${filterRegions.EspSlo ? 'checked' : ''}> EspSlo
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="filter-region-checkbox" data-region="ITAUSA" ${filterRegions.ITAUSA ? 'checked' : ''}> ITAUSA
-          </label>
+          <span style="font-weight: bold; font-size: 0.85rem; color: var(--text-300);">Rennen anzeigen nach Kategorie:</span>
+          ${categoryCheckboxes}
         </div>
 
       </div>
@@ -911,10 +820,10 @@ function renderFilterCard(): string {
 
   // Render individual tabs
   if (activeTab === 'calendar-cols') {
-    html += renderFilterCard();
+    html += renderFilterCard(payload);
     html += renderTabCalendarCols(payload);
   } else if (activeTab === 'calendar-rows') {
-    html += renderFilterCard();
+    html += renderFilterCard(payload);
     html += renderTabCalendarRows(payload);
   } else if (activeTab === 'rider-role') {
     html += renderTabRiderRole(payload);
@@ -959,9 +868,7 @@ function renderTabCalendarCols(payload: any): string {
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
-    const hasSpec = matchesSpecFilter(p.name, filterSpecs);
-    const variant = getProgramVariant(p.name);
-    return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
+    return isProgramVisible(p.name, filterCobble);
   });
 
   programs.sort((a: any, b: any) => {
@@ -1013,7 +920,8 @@ function renderTabCalendarCols(payload: any): string {
 
   let rowsHtml = '';
   for (const day of DAYS_OF_2026) {
-    const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+    const racesToday = (racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr))
+      .filter((r: any) => filterRaceCategories.has(r.category_id));
     const hasRaces = racesToday.length > 0;
     const rowClass = hasRaces ? 'row-has-races' : '';
 
@@ -1116,9 +1024,7 @@ function renderTabCalendarRows(payload: any): string {
     const riderCount = dist ? parseInt(dist.deterministic_rider_count || '0', 10) : 0;
     if (riderCount === 0) return false;
 
-    const hasSpec = matchesSpecFilter(p.name, filterSpecs);
-    const variant = getProgramVariant(p.name);
-    return hasSpec && filterVariants[variant] && isProgramRegionVisible(p.name);
+    return isProgramVisible(p.name, filterCobble);
   });
 
   programs.sort((a: any, b: any) => {
@@ -1167,7 +1073,8 @@ function renderTabCalendarRows(payload: any): string {
       monthSpans[monthSpans.length - 1].span++;
     }
 
-    const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+    const racesToday = (racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr))
+      .filter((r: any) => filterRaceCategories.has(r.category_id));
     const hasRaces = racesToday.length > 0;
     const rCountText = hasRaces ? `${racesToday.length} R` : '';
     const rCountClass = hasRaces ? 'race-count-active' : '';
@@ -1222,7 +1129,8 @@ function renderTabCalendarRows(payload: any): string {
     for (const day of DAYS_OF_2026) {
       const status = getWeekStatus(prog, day.weekNum);
       const colorClass = getCellColorClass(status);
-      const racesToday = racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr);
+      const racesToday = (racesByDate ? (racesByDate.get(day.dateStr) || []) : races.filter((r: any) => r.start_date <= day.dateStr && r.end_date >= day.dateStr))
+        .filter((r: any) => filterRaceCategories.has(r.category_id));
       const hasRaces = racesToday.length > 0;
 
       let assignedMapping = null;
@@ -1526,16 +1434,7 @@ function renderTabRiderRole(payload: any): string {
 
     const filteredProgramItems = programItems.filter((item: any) => {
       if (item.count === 0) return false;
-
-      const variant = getProgramVariant(item.program.name);
-      if (variant >= 1 && variant <= 3 && !popoverShowV1_3) return false;
-      if (variant >= 4 && variant <= 6 && !popoverShowV4_6) return false;
-
-      const pName = item.program.name;
-      const hasSpec = matchesSpecFilter(pName, popoverShowSpecs);
-      if (!hasSpec) return false;
-
-      return isProgramRegionVisible(pName);
+      return isProgramVisible(item.program.name, popoverFilterCobble);
     });
 
     const programItemsHtml = filteredProgramItems.map((item: any) => {
@@ -1693,37 +1592,17 @@ function renderTabRiderRole(payload: any): string {
         <div class="popover-head" style="border-bottom: 1px solid rgba(148, 163, 184, 0.12); padding-bottom: 0.4rem; margin-bottom: 0.4rem; display: flex; flex-direction: column; gap: 0.4rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             ${popoverTitleHtml}
-            <div style="display: flex; gap: 0.8rem; font-size: 0.75rem; align-items: center;">
-              <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
-                <input type="checkbox" class="popover-filter-v13" ${popoverShowV1_3 ? 'checked' : ''}> v1-3
-              </label>
-              <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
-                <input type="checkbox" class="popover-filter-v46" ${popoverShowV4_6 ? 'checked' : ''}> v4-6
-              </label>
-            </div>
           </div>
-          <div style="display: flex; gap: 0.6rem; font-size: 0.72rem; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,0.18); padding: 0.25rem 0.4rem; border-radius: var(--radius-sm);">
-            <span style="color: var(--text-400); font-weight: 500;">Filter:</span>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="B" ${popoverShowSpecs.B ? 'checked' : ''}> B
+          <div style="display: flex; gap: 0.8rem; font-size: 0.75rem; align-items: center; background: rgba(0,0,0,0.18); padding: 0.25rem 0.4rem; border-radius: var(--radius-sm);">
+            <span style="color: var(--text-400); font-weight: 500;">Programm-Typ:</span>
+            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="radio" name="popover-filter-cobble-radio-${race.id}" class="popover-filter-cobble-radio" value="all" ${popoverFilterCobble === 'all' ? 'checked' : ''}> Alle
             </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="H" ${popoverShowSpecs.H ? 'checked' : ''}> H
+            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="radio" name="popover-filter-cobble-radio-${race.id}" class="popover-filter-cobble-radio" value="cobble" ${popoverFilterCobble === 'cobble' ? 'checked' : ''}> Cobble
             </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="P" ${popoverShowSpecs.P ? 'checked' : ''}> P
-            </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="S" ${popoverShowSpecs.S ? 'checked' : ''}> S
-            </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="T" ${popoverShowSpecs.T ? 'checked' : ''}> T
-            </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="A" ${popoverShowSpecs.A ? 'checked' : ''}> A
-            </label>
-            <label style="display: inline-flex; align-items: center; gap: 0.15rem; cursor: pointer; user-select: none; margin: 0;">
-              <input type="checkbox" class="popover-filter-spec" data-spec="F" ${popoverShowSpecs.F ? 'checked' : ''}> F
+            <label style="display: inline-flex; align-items: center; gap: 0.2rem; cursor: pointer; user-select: none; margin: 0;">
+              <input type="radio" name="popover-filter-cobble-radio-${race.id}" class="popover-filter-cobble-radio" value="non-cobble" ${popoverFilterCobble === 'non-cobble' ? 'checked' : ''}> Non-Cobble
             </label>
           </div>
         </div>
