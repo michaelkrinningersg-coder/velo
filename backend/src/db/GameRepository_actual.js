@@ -817,22 +817,19 @@ class GameRepository {
         if (expectedStageCount < 1) {
             return [];
         }
-        const hasEntries = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM stage_entries WHERE race_id = ?
-    `).get(raceId)?.c ?? 0) > 0;
-        const tableName = hasEntries ? 'stage_entries' : 'stage_entries_history';
 
         const rows = this.db.prepare(`
-      SELECT ${tableName}.rider_id AS rider_id
-      FROM ${tableName}
-      JOIN stages ON stages.id = ${tableName}.stage_id
-      WHERE ${tableName}.race_id = ?
+      SELECT all_stage_entries.rider_id AS rider_id
+      FROM all_stage_entries
+      JOIN stages ON stages.id = all_stage_entries.stage_id
+      WHERE all_stage_entries.race_id = ?
         AND stages.stage_number <= ?
-      GROUP BY ${tableName}.rider_id
+      GROUP BY all_stage_entries.rider_id
       HAVING COUNT(*) = ?
-        AND SUM(CASE WHEN ${tableName}.status = 'finished' THEN 1 ELSE 0 END) = ?
-        AND SUM(CASE WHEN ${tableName}.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
+        AND SUM(CASE WHEN all_stage_entries.status = 'finished' THEN 1 ELSE 0 END) = ?
+        AND SUM(CASE WHEN all_stage_entries.status IN ('dns', 'dnf') THEN 1 ELSE 0 END) = 0
     `).all(raceId, upToStageNumber, expectedStageCount, expectedStageCount);
+
         return rows.map((row) => row.rider_id);
     }
     markUnavailableStageRaceParticipantsAsDnf() {

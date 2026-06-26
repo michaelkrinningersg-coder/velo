@@ -268,11 +268,7 @@ export class GameStateRepository {
       return [];
     }
 
-    // Check if we should read from stage_entries or stage_entries_history
-    const hasEntries = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM stage_entries WHERE race_id = ?
-    `).get(raceId) as { c: number })?.c > 0;
-    const tableName = hasEntries ? 'stage_entries' : 'stage_entries_history';
+    const tableName = tableExists(this.db, 'all_stage_entries') ? 'all_stage_entries' : 'stage_entries';
 
     const rows = this.db.prepare(`
       SELECT ${tableName}.rider_id AS rider_id
