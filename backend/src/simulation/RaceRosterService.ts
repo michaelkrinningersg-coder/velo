@@ -25,7 +25,7 @@ const DEFAULT_ROLE_REQUIREMENTS: Record<number, number> = {
 const COBBLE_SELECTION_MIN_SKILL = 65;
 
 
-type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion' | 'cobble-low-skill-exclusion';
+type RiderLockReason = 'already-raced-today' | 'active-stage-race' | 'unavailable' | 'winter-break' | 'low-category-exclusion' | 'cobble-climber-exclusion' | 'fatigue-exclusion' | 'cobble-low-skill-exclusion' | 'gt-program-exclusion';
 type SelectionPhase = 'exact' | 'replacement' | 'fill';
 
 interface RoleRequirement {
@@ -49,6 +49,7 @@ const RIDER_LOCK_MESSAGES: Record<RiderLockReason, string> = {
   'cobble-climber-exclusion': 'Bergfahrer (Spec 1/2) ohne Cobble-Skill >= 72 sind nicht startberechtigt bei Pflasterrennen.',
   'fatigue-exclusion': 'Zu erschöpft für den Start eines neuen Rennens (Gesamt-Fatigue >= 16).',
   'cobble-low-skill-exclusion': 'Pflasterrennen erfordern einen Mindest-Cobble-Skill von 65.',
+  'gt-program-exclusion': 'Diese Grand Tour ist nicht im Saisonprogramm des Fahrers enthalten.',
 };
 
 
@@ -200,6 +201,26 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
 
   if (race) {
     const catId = race.categoryId;
+    const catName = race.category?.name ?? '';
+    const isGrandTour = catId === 1 || catId === 2 || catName.includes('Grand Tour') || catName.includes('Tour de France');
+
+    if (isGrandTour) {
+      const racePrograms = repo.getRaceProgramsForRace ? repo.getRaceProgramsForRace(race.id) : [];
+      if (racePrograms && racePrograms.length > 0) {
+        for (const rider of riders) {
+          const roleId = rider.roleId;
+          if (roleId === 1 || roleId === 2 || roleId === 6) {
+            const programRaceIds = rider.seasonProgramRaceIds ?? [];
+            if (!programRaceIds.includes(race.id)) {
+              if (!locks.has(rider.id)) {
+                locks.set(rider.id, 'gt-program-exclusion');
+              }
+            }
+          }
+        }
+      }
+    }
+
     const isCapLockedCategory = ![1, 2, 3, 4, 7].includes(catId);
     const isCoCapLockedCategory = ![1, 2, 3, 4, 5, 7, 8].includes(catId);
 
