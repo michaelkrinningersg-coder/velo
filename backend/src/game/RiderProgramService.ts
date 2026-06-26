@@ -224,6 +224,7 @@ export class RiderProgramService {
           LIMIT 1
         )
       WHERE riders.is_retired = 0
+        AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
           FROM rider_season_programs existing_program

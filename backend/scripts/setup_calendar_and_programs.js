@@ -369,6 +369,7 @@ function getSurvivingPrograms() {
     LEFT JOIN teams t ON t.id = COALESCE(current_contract.team_id, r.active_team_id)
     LEFT JOIN division_teams dt ON dt.id = t.division_id
     WHERE r.is_retired = 0
+      AND COALESCE(current_contract.team_id, r.active_team_id) IS NOT NULL
   `).all();
 
   // Group by combination to find splits
