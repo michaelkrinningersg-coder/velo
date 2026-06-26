@@ -365,8 +365,8 @@ export class GameStateService {
 
     const insertRace = this.db.prepare(`
       INSERT INTO races (
-        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const raceMap = new Map<number, number>();
@@ -382,7 +382,9 @@ export class GameStateService {
         r.number_of_stages,
         newStartDate,
         newEndDate,
-        r.prestige
+        r.prestige,
+        r.preferred_nationality_group || null,
+        r.required_specs || null
       );
       raceMap.set(r.id, res.lastInsertRowid as number);
     }

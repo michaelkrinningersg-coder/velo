@@ -545,12 +545,12 @@ function seedRaces(db) {
     const rows = readCsv('races.csv');
     const insert = db.prepare(`
     INSERT INTO races (
-      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
     for (const [index, row] of rows.entries()) {
         const ctx = `races.csv Zeile ${index + 2}`;
-        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), int(req(row, 'country_id', ctx), ctx), int(req(row, 'category_id', ctx), ctx), boolFlag(req(row, 'is_stage_race', ctx), ctx), int(req(row, 'number_of_stages', ctx), ctx), req(row, 'start_date', ctx), req(row, 'end_date', ctx), int(req(row, 'prestige', ctx), ctx));
+        insert.run(int(req(row, 'id', ctx), ctx), req(row, 'name', ctx), int(req(row, 'country_id', ctx), ctx), int(req(row, 'category_id', ctx), ctx), boolFlag(req(row, 'is_stage_race', ctx), ctx), int(req(row, 'number_of_stages', ctx), ctx), req(row, 'start_date', ctx), req(row, 'end_date', ctx), int(req(row, 'prestige', ctx), ctx), row['preferred_nationality_group']?.trim() || null, row['required_specs']?.trim() || null);
     }
     console.log(`  ${rows.length} Rennen eingefuegt.`);
 }

@@ -65,3 +65,39 @@ Wir haben eine neue, interaktive View **Programmübersicht** (Programm-Editor) a
 
 - **Erweiterte SQL-Abfrage:** Die Methode `getRoleSpecCombinationsFromDb` selektiert und gruppiert zusätzlich nach `specialization_3_id`, um alle drei Spezialisierungen der Fahrer aus der Datenbank im Payload zur Verfügung zu stellen.
 - Beim Klick auf **"Änderungen exportieren"** werden die Zuweisungen mit fortlaufenden IDs in `data/csv/race_program_races.csv` und `data/csv/race_programs.csv` zurückgeschrieben und live in die SQLite-Datenbank der laufenden Karriere synchronisiert.
+
+### 4. Automatische Rennprogramm-Zuweisung & Filter-Verbesserungen
+
+- **Datenbank-Erweiterungen (`races.csv`)**:
+  - `preferred_nationality_group`: Bevorzugte Nationalitätskombinationen für Rennen (`BeNeLUX`, `FraGer`, `EspSlo`, `ITAUSA`) basierend auf dem Herkunftsland.
+  - `required_specs`: Die für das Rennen erforderlichen Fahrer-Spezialisierungen, automatisch berechnet nach den Etappenprofilen:
+    - Etappen mit Berg (Mountain) $\rightarrow$ `B|T|F|A`
+    - Etappen mit Pflaster (Cobble, ohne Berg) $\rightarrow$ `P|T|F|A`
+    - Etappen mit Hügeln (Hilly, ohne Berg/Pflaster) $\rightarrow$ `H|T|F|A`
+    - Sonst (Flach/Hügelig leicht) $\rightarrow$ `T|F|S|A`
+- **Kategoriebasierte Zuweisungsregeln**:
+  - **TDF / GT / Monumente**: Zuweisung aller Varianten 1-2 (keine Varianten 3-4).
+  - **Stage Race / One Day High & Middle**: Zuweisung einer zufälligen Variante aus 1-2 und einer aus 3-4 (falls vorhanden).
+  - **One Day Low**: Zuweisung einer Variante aus 1-2 für nur 1/4 der passenden Spezialisierungen; für die restlichen 3/4 werden Varianten aus 3-4 zugewiesen.
+- **Vermeidung von Doppelbuchungen (Collision Checking)**:
+  - Ein Rennprogramm wird niemals gleichzeitig zu zwei überschneidenden Rennen zugewiesen (`startA <= endB && endA >= startB`).
+- **Filtern von leeren Programmen im UI**:
+  - Rennprogramme mit 0 aktiven Fahrern werden im Kalender-Grid (Zeilen- und Spaltenansicht) sowie im Zuweisungs-Popover standardmäßig ausgeblendet, um die Ansichten übersichtlich zu halten.
+- **Spezialisierungsfilter standardmäßig deaktiviert**:
+  - Alle Spezialisierungs-Filterhäkchen im Popover sind standardmäßig deselektiert, damit der Benutzer gezielt Filter aktivieren kann.
+
+### 5. 2026 UCI WorldTour Kalender-Anpassungen
+
+- **Datums- und Namenskorrekturen**:
+  - Namen und Daten von 26 WorldTour-Rennen wurden an den offiziellen UCI WorldTour-Kalender 2026 angepasst.
+  - Die Termine aller zugehörigen Etappen in `stages.csv` wurden automatisch mitverschoben.
+- **Kürzung von Etappen-Rundfahrten**:
+  - **Santos Tour Down Under (ID 1)**: Auf 6 Etappen gekürzt (Etappen 7 & 8 wurden gelöscht).
+  - **Tour de Suisse (ID 54)**: Auf 5 Etappen gekürzt (Etappen 6, 7 & 8 wurden gelöscht).
+- **Robuste Zuweisungs-Logik**:
+  - Die Zuweisungs-Skripte wurden so überarbeitet, dass alte Etappen von UWT-Rennen (ID >= 50) vor dem Überschreiben herausgefiltert werden. Dies verhindert Unique-Key-Fehlermeldungen in SQLite bei der Zuweisung.
+- **Ergebnisse**:
+  - Die Datenbank lädt jetzt sauber mit genau **1.981 Zuweisungen**.
+  - Alle Programmgruppen enthalten weiterhin mindestens einen Tier-1-Fahrer.
+
+

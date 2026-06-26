@@ -282,14 +282,14 @@ class GameStateService {
     `).all(`${oldYearStr}-%`);
         const insertRace = this.db.prepare(`
       INSERT INTO races (
-        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         const raceMap = new Map();
         for (const r of oldRaces) {
             const newStartDate = r.start_date.replace(oldYearStr, newYearStr);
             const newEndDate = r.end_date.replace(oldYearStr, newYearStr);
-            const res = insertRace.run(r.name, r.country_id, r.category_id, r.is_stage_race, r.number_of_stages, newStartDate, newEndDate, r.prestige);
+            const res = insertRace.run(r.name, r.country_id, r.category_id, r.is_stage_race, r.number_of_stages, newStartDate, newEndDate, r.prestige, r.preferred_nationality_group || null, r.required_specs || null);
             raceMap.set(r.id, res.lastInsertRowid);
         }
         // 2. Duplicate stages

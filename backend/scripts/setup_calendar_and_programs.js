@@ -43,32 +43,20 @@ const newRaces = [
   { id: '50', name: 'Volta Ciclista a Catalunya', country_id: '8', category_id: '4', is_stage_race: '1', number_of_stages: '7', start_date: '2026-03-23', end_date: '2026-03-29', prestige: '85' },
   { id: '51', name: 'Itzulia Basque Country', country_id: '8', category_id: '4', is_stage_race: '1', number_of_stages: '6', start_date: '2026-04-06', end_date: '2026-04-11', prestige: '83' },
   { id: '52', name: 'Tour de Romandie', country_id: '17', category_id: '4', is_stage_race: '1', number_of_stages: '6', start_date: '2026-04-28', end_date: '2026-05-03', prestige: '82' },
-  { id: '53', name: 'Criterium du Dauphine', country_id: '3', category_id: '4', is_stage_race: '1', number_of_stages: '8', start_date: '2026-05-31', end_date: '2026-06-07', prestige: '88' },
-  { id: '54', name: 'Tour de Suisse', country_id: '17', category_id: '4', is_stage_race: '1', number_of_stages: '8', start_date: '2026-06-07', end_date: '2026-06-14', prestige: '87' },
+  { id: '53', name: 'Tour Auvergne - Rhône-Alpes', country_id: '3', category_id: '4', is_stage_race: '1', number_of_stages: '8', start_date: '2026-06-07', end_date: '2026-06-14', prestige: '88' },
+  { id: '54', name: 'Tour de Suisse', country_id: '17', category_id: '4', is_stage_race: '1', number_of_stages: '5', start_date: '2026-06-17', end_date: '2026-06-21', prestige: '87' },
   { id: '55', name: 'Tour de France', country_id: '3', category_id: '1', is_stage_race: '1', number_of_stages: '21', start_date: '2026-07-04', end_date: '2026-07-26', prestige: '100' },
-  { id: '56', name: 'Clasica de San Sebastian', country_id: '8', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-07-25', end_date: '2026-07-25', prestige: '83' },
+  { id: '56', name: 'DSSK (Donostia San Sebastian Klasikoa)', country_id: '8', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-08-01', end_date: '2026-08-01', prestige: '83' },
   { id: '57', name: 'Tour de Pologne', country_id: '30', category_id: '4', is_stage_race: '1', number_of_stages: '7', start_date: '2026-08-03', end_date: '2026-08-09', prestige: '80' },
-  { id: '58', name: 'BEMER Cyclassics', country_id: '7', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-08-16', end_date: '2026-08-16', prestige: '80' },
-  { id: '59', name: 'Renewi Tour', country_id: '4', category_id: '4', is_stage_race: '1', number_of_stages: '5', start_date: '2026-08-24', end_date: '2026-08-28', prestige: '81' },
-  { id: '60', name: 'Vuelta a Espana', country_id: '8', category_id: '2', is_stage_race: '1', number_of_stages: '21', start_date: '2026-08-22', end_date: '2026-09-13', prestige: '95' },
-  { id: '61', name: 'Bretagne Classic - Ouest-France', country_id: '3', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-08-30', end_date: '2026-08-30', prestige: '82' },
-  { id: '62', name: 'Grand Prix Cycliste de Quebec', country_id: '22', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-09-11', end_date: '2026-09-11', prestige: '83' },
-  { id: '63', name: 'Grand Prix Cycliste de Montreal', country_id: '22', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-09-13', end_date: '2026-09-13', prestige: '83' },
+  { id: '58', name: 'ADAC Cyclassics', country_id: '7', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-08-16', end_date: '2026-08-16', prestige: '80' },
+  { id: '59', name: 'Renewi Tour', country_id: '4', category_id: '4', is_stage_race: '1', number_of_stages: '5', start_date: '2026-08-19', end_date: '2026-08-23', prestige: '81' },
+  { id: '60', name: 'La Vuelta Ciclista a España', country_id: '8', category_id: '2', is_stage_race: '1', number_of_stages: '21', start_date: '2026-08-22', end_date: '2026-09-13', prestige: '95' },
+  { id: '61', name: 'Bretagne Classic - CIC', country_id: '3', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-08-30', end_date: '2026-08-30', prestige: '82' },
+  { id: '62', name: 'Grand Prix Cycliste de Québec', country_id: '22', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-09-11', end_date: '2026-09-11', prestige: '83' },
+  { id: '63', name: 'Grand Prix Cycliste de Montréal', country_id: '22', category_id: '7', is_stage_race: '0', number_of_stages: '1', start_date: '2026-09-13', end_date: '2026-09-13', prestige: '83' },
   { id: '64', name: 'Il Lombardia', country_id: '2', category_id: '3', is_stage_race: '0', number_of_stages: '1', start_date: '2026-10-10', end_date: '2026-10-10', prestige: '95' },
   { id: '65', name: 'Tour of Guangxi', country_id: '25', category_id: '4', is_stage_race: '1', number_of_stages: '6', start_date: '2026-10-13', end_date: '2026-10-18', prestige: '75' }
 ];
-
-// Write races.csv
-const existingRaces = readCsv('races.csv');
-const allRacesMap = new Map();
-existingRaces.forEach(r => allRacesMap.set(r.id, r));
-newRaces.forEach(r => allRacesMap.set(r.id, r));
-const finalRacesList = Array.from(allRacesMap.values()).sort((a,b) => parseInt(a.id) - parseInt(b.id));
-
-const racesHeader = 'id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_date,prestige';
-const racesCsvContent = [racesHeader, ...finalRacesList.map(r => `${r.id},"${r.name}",${r.country_id},${r.category_id},${r.is_stage_race},${r.number_of_stages},${r.start_date},${r.end_date},${r.prestige}`)].join('\n') + '\n';
-fs.writeFileSync(path.join(dataDir, 'races.csv'), racesCsvContent, 'utf8');
-console.log('Saved races.csv with new UWT races!');
 
 // Helper to format date
 function addDays(dateStr, days) {
@@ -121,18 +109,18 @@ for (let i = 0; i < 6; i++) {
   newStages.push(makeStageRow(nextStageId++, 52, i + 1, addDays('2026-04-28', i), romStages[i], romFiles[i]));
 }
 
-// 53: Criterium du Dauphine (8 stages)
+// 53: Tour Auvergne - Rhône-Alpes (8 stages)
 const dauStages = ['Flat', 'Rolling', 'Hilly', 'ITT', 'Hilly_Difficult', 'Medium_Mountain', 'High_Mountain', 'Mountain'];
 const dauFiles = ['dummy_flat_a.csv', 'dummy_rolling_a.csv', 'dummy_hilly_a.csv', 'dummy_itt_e.csv', 'dummy_hilly_difficult_a.csv', 'dummy_medium_mountain_a.csv', 'dummy_high_mountain_a.csv', 'dummy_mountain_a.csv'];
 for (let i = 0; i < 8; i++) {
-  newStages.push(makeStageRow(nextStageId++, 53, i + 1, addDays('2026-05-31', i), dauStages[i], dauFiles[i]));
+  newStages.push(makeStageRow(nextStageId++, 53, i + 1, addDays('2026-06-07', i), dauStages[i], dauFiles[i]));
 }
 
-// 54: Tour de Suisse (8 stages)
-const suiStages = ['ITT', 'Flat', 'Rolling', 'Hilly', 'Mountain', 'High_Mountain', 'ITT', 'Hilly_Difficult'];
-const suiFiles = ['dummy_itt_c.csv', 'dummy_flat_b.csv', 'dummy_rolling_b.csv', 'dummy_hilly_b.csv', 'dummy_mountain_c.csv', 'dummy_high_mountain_b.csv', 'dummy_itt_f.csv', 'dummy_hilly_difficult_c.csv'];
-for (let i = 0; i < 8; i++) {
-  newStages.push(makeStageRow(nextStageId++, 54, i + 1, addDays('2026-06-07', i), suiStages[i], suiFiles[i]));
+// 54: Tour de Suisse (5 stages)
+const suiStages = ['ITT', 'Flat', 'Rolling', 'Hilly', 'Mountain'];
+const suiFiles = ['dummy_itt_c.csv', 'dummy_flat_b.csv', 'dummy_rolling_b.csv', 'dummy_hilly_b.csv', 'dummy_mountain_c.csv'];
+for (let i = 0; i < 5; i++) {
+  newStages.push(makeStageRow(nextStageId++, 54, i + 1, addDays('2026-06-17', i), suiStages[i], suiFiles[i]));
 }
 
 // 55: Tour de France (21 stages)
@@ -148,8 +136,8 @@ for (let i = 0; i < 21; i++) {
   newStages.push(makeStageRow(nextStageId++, 55, i + 1, addDays('2026-07-04', i), tdfStages[i], tdfFiles[i]));
 }
 
-// 56: Clasica de San Sebastian (1 stage)
-newStages.push(makeStageRow(nextStageId++, 56, 1, '2026-07-25', 'Hilly_Difficult', 'dummy_hilly_difficult_a.csv'));
+// 56: DSSK (Donostia San Sebastian Klasikoa) (1 stage)
+newStages.push(makeStageRow(nextStageId++, 56, 1, '2026-08-01', 'Hilly_Difficult', 'dummy_hilly_difficult_a.csv'));
 
 // 57: Tour de Pologne (7 stages)
 const polStages = ['Flat', 'Rolling', 'Hilly', 'ITT', 'Rolling', 'Hilly_Difficult', 'Flat'];
@@ -158,14 +146,14 @@ for (let i = 0; i < 7; i++) {
   newStages.push(makeStageRow(nextStageId++, 57, i + 1, addDays('2026-08-03', i), polStages[i], polFiles[i]));
 }
 
-// 58: BEMER Cyclassics (1 stage)
+// 58: ADAC Cyclassics (1 stage)
 newStages.push(makeStageRow(nextStageId++, 58, 1, '2026-08-16', 'Flat', 'dummy_flat_a.csv'));
 
 // 59: Renewi Tour (5 stages)
 const renStages = ['Flat', 'ITT', 'Flat', 'Rolling', 'Cobble'];
 const renFiles = ['dummy_flat_a.csv', 'dummy_itt_b.csv', 'dummy_flat_b.csv', 'dummy_rolling_a.csv', 'dummy_cobble_a.csv'];
 for (let i = 0; i < 5; i++) {
-  newStages.push(makeStageRow(nextStageId++, 59, i + 1, addDays('2026-08-24', i), renStages[i], renFiles[i]));
+  newStages.push(makeStageRow(nextStageId++, 59, i + 1, addDays('2026-08-19', i), renStages[i], renFiles[i]));
 }
 
 // 60: Vuelta a Espana (21 stages)
@@ -202,7 +190,12 @@ for (let i = 0; i < 6; i++) {
 
 const existingStages = readCsv('stages.csv');
 const allStagesMap = new Map();
-existingStages.forEach(s => allStagesMap.set(s.id, s));
+existingStages.forEach(s => {
+  const rId = parseInt(s.race_id, 10);
+  if (rId < 50 || rId > 65) {
+    allStagesMap.set(s.id, s);
+  }
+});
 newStages.forEach(s => allStagesMap.set(s.id, s));
 const finalStagesList = Array.from(allStagesMap.values()).sort((a,b) => parseInt(a.id) - parseInt(b.id));
 
@@ -210,6 +203,49 @@ const stagesHeader = 'id,race_id,stage_number,date,profile,start_elevation,detai
 const stagesCsvContent = [stagesHeader, ...finalStagesList.map(s => `${s.id},${s.race_id},${s.stage_number},${s.date},${s.profile},${s.start_elevation},${s.details_csv_file},${s.final_spread_start_percent},${s.final_push_start_percent},${s.final_spread_difficulty_multiplier},${s.crash_incident_multiplier},${s.mechanical_incident_multiplier},"${s.allowed_weather}"`)].join('\n') + '\n';
 fs.writeFileSync(path.join(dataDir, 'stages.csv'), stagesCsvContent, 'utf8');
 console.log('Saved stages.csv with new stages!');
+
+// Load countries to map country_id to preferred nationality group
+const countries = readCsv('country.csv');
+const countryGroupMap = {};
+countries.forEach(c => {
+  const groupId = parseInt(c.program_group_id, 10);
+  const groupNames = { 1: 'BeNeLUX', 2: 'FraGer', 3: 'EspSlo', 4: 'ITAUSA' };
+  countryGroupMap[c.id] = groupNames[groupId] || 'ITAUSA';
+});
+
+// Write races.csv with new columns
+const existingRaces = readCsv('races.csv');
+const allRacesMap = new Map();
+existingRaces.forEach(r => allRacesMap.set(r.id, r));
+newRaces.forEach(r => allRacesMap.set(r.id, r));
+const finalRacesList = Array.from(allRacesMap.values()).sort((a,b) => parseInt(a.id) - parseInt(b.id));
+
+const racesHeader = 'id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_date,prestige,preferred_nationality_group,required_specs';
+const racesCsvContent = [racesHeader, ...finalRacesList.map(r => {
+  const prefNat = countryGroupMap[r.country_id] || 'ITAUSA';
+  const raceStages = finalStagesList.filter(s => s.race_id === r.id);
+  const stageProfiles = raceStages.map(s => s.profile);
+  
+  let spec = 'T|F|S|A';
+  const hasMountain = stageProfiles.some(p => ['Mountain', 'High_Mountain', 'Medium_Mountain'].includes(p));
+  const hasCobble = stageProfiles.some(p => ['Cobble', 'Cobble_Hill'].includes(p));
+  const hasHilly = stageProfiles.some(p => ['Hilly', 'Hilly_Difficult'].includes(p));
+
+  if (hasMountain) {
+    spec = 'B|T|F|A';
+  } else if (hasCobble) {
+    spec = 'P|T|F|A';
+  } else if (hasHilly) {
+    spec = 'H|T|F|A';
+  } else {
+    spec = 'T|F|S|A';
+  }
+
+  return `${r.id},"${r.name}",${r.country_id},${r.category_id},${r.is_stage_race},${r.number_of_stages},${r.start_date},${r.end_date},${r.prestige},${prefNat},${spec}`;
+})].join('\n') + '\n';
+
+fs.writeFileSync(path.join(dataDir, 'races.csv'), racesCsvContent, 'utf8');
+console.log('Saved races.csv with preferred nationality and required specs!');
 
 // 3. Generate race_programs.csv based on simulation
 const SPECIALIZATION_IDS = [1, 2, 3, 4, 5, 6, 7];
@@ -568,62 +604,208 @@ console.log('Saved race_programs.csv with ' + raceProgramsList.length + ' surviv
 const newRaceProgramRaces = [];
 let mappingId = 1;
 
-// Define matching rules
-for (const program of raceProgramsList) {
-  const name = program.name;
-  const combo = name.split('_')[0];
-  const pId = parseInt(program.id);
-
-  // We assign races based on characters in combo
-  finalRacesList.forEach(race => {
-    const raceId = parseInt(race.id);
-    const catId = parseInt(race.category_id);
-    const isStage = race.is_stage_race === '1';
-
-    let match = false;
-
-    if (combo === 'OOO') {
-      // Fallback program gets all races
-      match = true;
-    } else {
-      // General spec combinations
-      const hasB = combo.includes('B');
-      const hasH = combo.includes('H');
-      const hasS = combo.includes('S');
-      const hasT = combo.includes('T');
-      const hasP = combo.includes('P');
-      const hasF = combo.includes('F');
-
-      if (hasB || hasT || hasF) {
-        // Stage races
-        if (isStage) match = true;
-      }
-      if (hasP) {
-        // Cobble classics (Roubaix, Flanders, Gent-Wevelgem, E3, Omloop, Dwars, stage 5 of Renewi)
-        const isCobble = [15, 21, 45, 46, 25, 27, 59].includes(raceId) || race.name.includes('Roubaix') || race.name.includes('Flanders');
-        if (isCobble) match = true;
-      }
-      if (hasH) {
-        // Hilly classics (Strade, MSR, Amstel, Fleche, Liege, San Sebastian, Montreal, Lombardia, Brabantse Pijl)
-        const isHilly = [16, 17, 26, 28, 29, 30, 56, 63, 64].includes(raceId) || race.name.includes('Lombardia') || race.name.includes('Sebastian') || race.name.includes('Liege');
-        if (isHilly) match = true;
-      }
-      if (hasS || hasF) {
-        // Flat/sprint classics / stage races
-        const isSprintClassics = [2, 20, 24, 31, 32, 58, 61, 62].includes(raceId) || race.name.includes('Cyclassics') || race.name.includes('Frankfurt');
-        if (isSprintClassics || isStage) match = true;
-      }
-    }
-
-    if (match) {
-      newRaceProgramRaces.push({
-        id: String(mappingId++),
-        program_id: String(pId),
-        race_id: String(raceId)
-      });
-    }
-  });
+// Parse program names
+function parseProgramName(name) {
+  const parts = name.split('_');
+  const combo = parts[0];
+  let group = null;
+  let variant = 1;
+  if (parts.length === 3) {
+    group = parts[1];
+    variant = parseInt(parts[2], 10);
+  } else if (parts.length === 2) {
+    variant = parseInt(parts[1], 10);
+  }
+  return {
+    combo,
+    group,
+    variant,
+    spec1: combo[0]
+  };
 }
+
+const parsedPrograms = raceProgramsList.map(p => {
+  const parsed = parseProgramName(p.name);
+  return {
+    id: p.id,
+    name: p.name,
+    ...parsed
+  };
+});
+
+// Collision tracking
+const programCalendars = new Map(); // program_id -> Array of race objects
+parsedPrograms.forEach(p => {
+  programCalendars.set(p.id, []);
+});
+
+function racesOverlap(raceA, raceB) {
+  const startA = new Date(raceA.start_date);
+  const endA = new Date(raceA.end_date);
+  const startB = new Date(raceB.start_date);
+  const endB = new Date(raceB.end_date);
+  return startA <= endB && endA >= startB;
+}
+
+function isProgramBusy(programId, newRace) {
+  const calendar = programCalendars.get(programId) || [];
+  for (const assignedRace of calendar) {
+    if (racesOverlap(assignedRace, newRace)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getMatchingProgramCandidates(combo, preferredGroup, variantSet) {
+  const candidates = [];
+  for (const v of variantSet) {
+    if (preferredGroup) {
+      const regionalName = `${combo}_${preferredGroup}_${v}`;
+      const found = parsedPrograms.find(p => p.name === regionalName);
+      if (found) {
+        candidates.push(found);
+        continue;
+      }
+    }
+    const globalName = `${combo}_${v}`;
+    const found = parsedPrograms.find(p => p.name === globalName);
+    if (found) {
+      candidates.push(found);
+    }
+  }
+  return candidates;
+}
+
+// Deterministic seedable pseudo-random generator to ensure stable sorting and choices
+let seedVal = 12345;
+function seededRandom() {
+  const x = Math.sin(seedVal++) * 10000;
+  return x - Math.floor(x);
+}
+
+function shuffle(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Read back races to include their new columns
+const finalRacesWithNewColumns = readCsv('races.csv');
+
+// Sort races by prestige descending so that high-prestige races are filled first, and date as a tie breaker
+const sortedRaces = [...finalRacesWithNewColumns].sort((a, b) => {
+  const diff = parseInt(b.prestige, 10) - parseInt(a.prestige, 10);
+  if (diff !== 0) return diff;
+  return a.start_date.localeCompare(b.start_date);
+});
+
+for (const race of sortedRaces) {
+  const catId = parseInt(race.category_id, 10);
+  const requiredSpecs = (race.required_specs || '').split('|');
+  const preferredGroup = race.preferred_nationality_group;
+
+  // Find all matching combos for the specs
+  const matchingCombos = Array.from(new Set(parsedPrograms.filter(p => requiredSpecs.includes(p.spec1)).map(p => p.combo)));
+  
+  if (matchingCombos.length === 0) continue;
+
+  // We always assign OOO fallback program if available, checking collisions
+  const fallback = parsedPrograms.find(p => p.combo === 'OOO' && p.group === preferredGroup) || parsedPrograms.find(p => p.combo === 'OOO' && !p.group);
+  if (fallback) {
+    if (!isProgramBusy(fallback.id, race)) {
+      programCalendars.get(fallback.id).push(race);
+      newRaceProgramRaces.push({ id: String(mappingId++), program_id: fallback.id, race_id: race.id });
+    }
+  }
+
+  // Determine variant assignment rules
+  if ([1, 2, 3].includes(catId)) {
+    // TDF (1), GT (2), Monument (3): all variants 1-2
+    for (const combo of matchingCombos) {
+      const candidates = getMatchingProgramCandidates(combo, preferredGroup, [1, 2]);
+      for (const p of candidates) {
+        if (!isProgramBusy(p.id, race)) {
+          programCalendars.get(p.id).push(race);
+          newRaceProgramRaces.push({ id: String(mappingId++), program_id: p.id, race_id: race.id });
+        }
+      }
+    }
+  } else if ([4, 5, 7, 8].includes(catId)) {
+    // Stage Race / One Day High & Middle: 1 random from {1, 2}, 1 random from {3, 4}
+    for (const combo of matchingCombos) {
+      // 1 random from {1, 2}
+      const setA = shuffle(getMatchingProgramCandidates(combo, preferredGroup, [1, 2]));
+      for (const p of setA) {
+        if (!isProgramBusy(p.id, race)) {
+          programCalendars.get(p.id).push(race);
+          newRaceProgramRaces.push({ id: String(mappingId++), program_id: p.id, race_id: race.id });
+          break; // only select one
+        }
+      }
+      // 1 random from {3, 4}
+      const setB = shuffle(getMatchingProgramCandidates(combo, preferredGroup, [3, 4]));
+      for (const p of setB) {
+        if (!isProgramBusy(p.id, race)) {
+          programCalendars.get(p.id).push(race);
+          newRaceProgramRaces.push({ id: String(mappingId++), program_id: p.id, race_id: race.id });
+          break; // only select one
+        }
+      }
+    }
+  } else {
+    // Low / other categories: 1 variant from {1, 2} on 1/4 of specs, else {3, 4}
+    const shuffledCombos = shuffle(matchingCombos);
+    const splitCount = Math.max(1, Math.round(shuffledCombos.length / 4));
+    
+    for (let i = 0; i < shuffledCombos.length; i++) {
+      const combo = shuffledCombos[i];
+      if (i < splitCount) {
+        // try to assign one from {1, 2}
+        const setA = shuffle(getMatchingProgramCandidates(combo, preferredGroup, [1, 2]));
+        for (const p of setA) {
+          if (!isProgramBusy(p.id, race)) {
+            programCalendars.get(p.id).push(race);
+            newRaceProgramRaces.push({ id: String(mappingId++), program_id: p.id, race_id: race.id });
+            break;
+          }
+        }
+      } else {
+        // try to assign one from {3, 4}
+        const setB = shuffle(getMatchingProgramCandidates(combo, preferredGroup, [3, 4]));
+        for (const p of setB) {
+          if (!isProgramBusy(p.id, race)) {
+            programCalendars.get(p.id).push(race);
+            newRaceProgramRaces.push({ id: String(mappingId++), program_id: p.id, race_id: race.id });
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Report gaps
+const raceProgramCounts = {};
+finalRacesWithNewColumns.forEach(r => {
+  raceProgramCounts[r.id] = 0;
+});
+newRaceProgramRaces.forEach(a => {
+  raceProgramCounts[a.race_id]++;
+});
+
+console.log('=== Gaps Report (Races with 0 assigned programs) ===');
+let gapsCount = 0;
+finalRacesWithNewColumns.forEach(r => {
+  if (raceProgramCounts[r.id] === 0) {
+    console.log(`- Race "${r.name}" (ID: ${r.id}, Prestige: ${r.prestige}, Cat: ${r.category_id}) has 0 programs assigned.`);
+    gapsCount++;
+  }
+});
+console.log(`Total gaps (0 programs assigned): ${gapsCount}`);
 
 const mappingHeader = 'id,program_id,race_id';
 const mappingCsvContent = [mappingHeader, ...newRaceProgramRaces.map(m => `${m.id},${m.program_id},${m.race_id}`)].join('\n') + '\n';

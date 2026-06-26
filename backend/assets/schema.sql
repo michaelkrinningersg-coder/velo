@@ -253,15 +253,17 @@ CREATE INDEX IF NOT EXISTS idx_skill_weights_context ON skill_weights(simulation
 
 -- ---- Rennen -------------------------------------------------
 CREATE TABLE IF NOT EXISTS races (
-  id                INTEGER PRIMARY KEY,
-  name              TEXT    NOT NULL,
-  country_id        INTEGER NOT NULL REFERENCES sta_country(id),
-  category_id       INTEGER NOT NULL REFERENCES race_categories(id),
-  is_stage_race     INTEGER NOT NULL CHECK(is_stage_race IN (0, 1)),
-  number_of_stages  INTEGER NOT NULL CHECK(number_of_stages > 0),
-  start_date        TEXT    NOT NULL,
-  end_date          TEXT    NOT NULL,
-  prestige          INTEGER NOT NULL CHECK(prestige BETWEEN 0 AND 100),
+  id                          INTEGER PRIMARY KEY,
+  name                        TEXT    NOT NULL,
+  country_id                  INTEGER NOT NULL REFERENCES sta_country(id),
+  category_id                 INTEGER NOT NULL REFERENCES race_categories(id),
+  is_stage_race               INTEGER NOT NULL CHECK(is_stage_race IN (0, 1)),
+  number_of_stages            INTEGER NOT NULL CHECK(number_of_stages > 0),
+  start_date                  TEXT    NOT NULL,
+  end_date                    TEXT    NOT NULL,
+  prestige                    INTEGER NOT NULL CHECK(prestige BETWEEN 0 AND 100),
+  preferred_nationality_group TEXT,
+  required_specs              TEXT,
   CHECK(end_date >= start_date)
 );
 
