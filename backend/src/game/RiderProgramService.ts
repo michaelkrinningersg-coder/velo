@@ -67,7 +67,6 @@ export function normalizeComboKey(comboKey: string): string {
     // Berg (B)
     'BFH': 'BHF',
     'BTH': 'BHT',
-    'BTF': 'BFT',
     'BHA': 'BHP',
     'BFP': 'BHP',
     
@@ -85,6 +84,7 @@ export function normalizeComboKey(comboKey: string): string {
     'PHS': 'PFT',
     'PSF': 'PFT',
     'PSG': 'PFT',
+    'PSH': 'SPH',
     
     // Hill (H)
     'HAB': 'HBA',
@@ -99,12 +99,17 @@ export function normalizeComboKey(comboKey: string): string {
     'THF': 'TFH',
     'TFP': 'TPF',
     'TPH': 'TPF',
+    'TFS': 'TFH',
+    'TSF': 'TFH',
     
     // Flat (F)
     'FTA': 'FAT',
     'FSP': 'FPS',
     'FHP': 'FPS',
-    'FTP': 'FPS'
+    'FTP': 'FPS',
+    'FST': 'FTS',
+    'FSH': 'FTS',
+    'FHS': 'FTS'
   };
   return map[comboKey] ?? comboKey;
 }
@@ -323,7 +328,7 @@ export class RiderProgramService {
       'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
       'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH',
       'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
-      'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+      'BFH', 'BHF', 'BFS', 'BSF', 'BFP', 'BPF',
       'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
       'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
       'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',

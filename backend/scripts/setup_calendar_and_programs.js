@@ -242,7 +242,6 @@ function normalizeComboKey(comboKey) {
     // Berg (B)
     'BFH': 'BHF',
     'BTH': 'BHT',
-    'BTF': 'BFT',
     'BHA': 'BHP',
     'BFP': 'BHP',
     
@@ -260,6 +259,7 @@ function normalizeComboKey(comboKey) {
     'PHS': 'PFT',
     'PSF': 'PFT',
     'PSG': 'PFT',
+    'PSH': 'SPH',
     
     // Hill (H)
     'HAB': 'HBA',
@@ -274,12 +274,17 @@ function normalizeComboKey(comboKey) {
     'THF': 'TFH',
     'TFP': 'TPF',
     'TPH': 'TPF',
+    'TFS': 'TFH',
+    'TSF': 'TFH',
     
     // Flat (F)
     'FTA': 'FAT',
     'FSP': 'FPS',
     'FHP': 'FPS',
-    'FTP': 'FPS'
+    'FTP': 'FPS',
+    'FST': 'FTS',
+    'FSH': 'FTS',
+    'FHS': 'FTS'
   };
   return map[comboKey] ?? comboKey;
 }
@@ -290,11 +295,17 @@ function getVariantCount(n) {
   return 4;
 }
 
+function getMaxVariants(comboKey, region, baseRidersCount) {
+  if (comboKey === 'SPH' || comboKey === 'SHP') return 1;
+  if (comboKey === 'SPF' && region === 'FraGer') return 2;
+  return getVariantCount(baseRidersCount);
+}
+
 const validExactMatchCombos = new Set([
   'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
   'PHS', 'HPS', 'HPB', 'TPH', 'HBT', 'PST', 'PHB', 'PTH', 'SPT', 'TBH', 'HTB', 'BTH',
   'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
-  'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+  'BFH', 'BHF', 'BFS', 'BSF', 'BFP', 'BPF',
   'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
   'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
   'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
@@ -305,7 +316,7 @@ const initialCombosWith6Variants = [
   'SHP', 'HBS', 'SPH', 'HSB', 'HSP', 'BHS', 'BHT', 'HBP', 'PSH', 'BHP',
   'PHS', 'HPS', 'AOO', 'OOO',
   'FPS', 'FSP', 'FSH', 'FHS', 'FPH', 'FHP', 'FPT', 'FTP', 'FTS', 'FST',
-  'BFH', 'BHF', 'BFS', 'BSF', 'BFT', 'BTF', 'BFP', 'BPF',
+  'BFH', 'BHF', 'BFS', 'BSF', 'BFP', 'BPF',
   'HFB', 'HBF', 'HFS', 'HSF', 'HFT', 'HTF', 'HFP', 'HPF',
   'SFB', 'SBF', 'SFH', 'SHF', 'SFT', 'STF', 'SFP', 'SPF',
   'TFB', 'TBF', 'TFH', 'THF', 'TFS', 'TSF', 'TFP', 'TPF',
@@ -455,7 +466,9 @@ function getSurvivingPrograms() {
   for (const [combo, list] of Object.entries(comboGroups)) {
     const tier1Count = list.filter(r => r.team_tier === 1).length;
     if (tier1Count >= 25) {
-      splitCombos.add(combo);
+      if (combo[0] !== 'P' && combo[1] !== 'P' && combo !== 'TFH' && combo !== 'TFS') {
+        splitCombos.add(combo);
+      }
     }
   }
 
@@ -470,14 +483,14 @@ function getSurvivingPrograms() {
       for (const [regionIdStr, region] of Object.entries(groupNames)) {
         const regionId = parseInt(regionIdStr);
         const regionalRiders = comboGroups[comboKey].filter(r => r.program_group_id === regionId);
-        const maxVariants = getVariantCount(regionalRiders.length);
+        const maxVariants = getMaxVariants(comboKey, region, regionalRiders.length);
         for (let v = 1; v <= maxVariants; v++) {
           candidatePrograms.push({ id: nextId++, name: `${comboKey}_${region}_${v}` });
         }
       }
     } else {
       const totalRiders = comboGroups[comboKey].length;
-      const maxVariants = getVariantCount(totalRiders);
+      const maxVariants = getMaxVariants(comboKey, null, totalRiders);
       for (let v = 1; v <= maxVariants; v++) {
         candidatePrograms.push({ id: nextId++, name: `${comboKey}_${v}` });
       }
@@ -524,6 +537,9 @@ function getSurvivingPrograms() {
   // Determine surviving programs
   const surviving = [];
   for (const s of stats) {
+    if (s.program_name === 'BHT_FraGer_4') {
+      continue;
+    }
     if (s.program_name === 'OOO_1' || s.program_name === 'OOO_BeNeLUX_1') {
       surviving.push(s.program_name);
       continue;

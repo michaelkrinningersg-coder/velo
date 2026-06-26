@@ -13,7 +13,7 @@ let programRolesSortKey = 'id';
 let programRolesSortAsc = true;
 
 // Global filter states
-let filterSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
+let filterSpecs: Record<string, boolean> = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
 let filterVariants: Record<number, boolean> = {
   1: true,
   2: true,
@@ -25,7 +25,7 @@ let filterVariants: Record<number, boolean> = {
 let filterRegions: Record<string, boolean> = { BeNeLUX: true, FraGer: true, EspSlo: true, ITAUSA: true };
 let popoverShowV1_3 = true;
 let popoverShowV4_6 = true;
-let popoverShowSpecs: Record<string, boolean> = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
+let popoverShowSpecs: Record<string, boolean> = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
 
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name: string): number {

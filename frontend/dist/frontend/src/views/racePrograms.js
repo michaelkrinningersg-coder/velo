@@ -6,7 +6,7 @@ let activeRiderCountPopupRaceId = null;
 let programRolesSortKey = 'id';
 let programRolesSortAsc = true;
 // Global filter states
-let filterSpecs = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
+let filterSpecs = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
 let filterVariants = {
     1: true,
     2: true,
@@ -18,7 +18,7 @@ let filterVariants = {
 let filterRegions = { BeNeLUX: true, FraGer: true, EspSlo: true, ITAUSA: true };
 let popoverShowV1_3 = true;
 let popoverShowV4_6 = true;
-let popoverShowSpecs = { B: true, H: true, P: true, S: true, T: true, A: true, F: true };
+let popoverShowSpecs = { B: false, H: false, P: false, S: false, T: false, A: false, F: false };
 // Helper to extract variant suffix from program name (e.g. 1 from SHP_1)
 function getProgramVariant(name) {
     const parts = name.split('_');
