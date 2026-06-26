@@ -1,0 +1,399 @@
+const fs = require('fs');
+const path = require('path');
+
+const csvPath = 'c:/Users/mkrinninger/Downloads/velo-feature-riderdevelopment/data/csv/race_program_races.csv';
+
+// 1. Read existing allowed_program_group_ids mapping per race_id
+const content = fs.readFileSync(csvPath, 'utf8');
+const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+const headers = lines[0].split(',');
+const raceAllowedMap = new Map();
+
+lines.slice(1).forEach(line => {
+  const cells = line.split(',');
+  const raceId = parseInt(cells[headers.indexOf('race_id')], 10);
+  const allowed = cells[headers.indexOf('allowed_program_group_ids')];
+  if (allowed && allowed.trim() !== '') {
+    raceAllowedMap.set(raceId, allowed.trim());
+  }
+});
+
+// 2. Define the program mappings
+
+// Program 1: Non_Cobble_Tour_1 (100 days, 85 WT / 15 Pro)
+const prog1Races = [
+  55, // Tour de France (21)
+  1,  // Tour Down Under (6)
+  10, // UAE Tour (7)
+  50, // Volta Ciclista a Catalunya (7)
+  18, // Tirreno-Adriatico (7)
+  51, // Itzulia Basque Country (6)
+  52, // Tour de Romandie (6)
+  53, // Tour Auvergne - Rhône-Alpes (Dauphiné) (8)
+  57, // Tour de Pologne (7)
+  16, // Strade Bianche (1)
+  17, // Milano-Sanremo (1)
+  29, // Amstel Gold Race (1)
+  30, // La Flèche Wallonne (1)
+  28, // Liège-Bastogne-Liège (1)
+  56, // Donostia San Sebastian Klasikoa (DSSK) (1)
+  61, // Bretagne Classic (1)
+  62, // Grand Prix de Québec (1)
+  63, // Grand Prix de Montréal (1)
+  64, // Il Lombardia (1)
+  3,  // Volta Algarve (5)
+  102, // Tour of the Alps (5)
+  73, // Milano - Torino (1)
+  88, // Giro dell'Emilia (1)
+  91, // Tre Valli Varesine (1)
+  13, // Faun-Ardèche (1)
+  14  // Faun Drome (1)
+];
+
+// Program 2: Non_Cobble_Tour_2 (100 days, 85 WT / 15 Pro)
+const prog2Races = [
+  55, // Tour de France (21)
+  1,  // Tour Down Under (6)
+  10, // UAE Tour (7)
+  50, // Volta Ciclista a Catalunya (7)
+  19, // Paris-Nice (8)
+  51, // Itzulia Basque Country (6)
+  52, // Tour de Romandie (6)
+  54, // Tour de Suisse (5)
+  57, // Tour de Pologne (7)
+  16, // Strade Bianche (1)
+  17, // Milano-Sanremo (1)
+  29, // Amstel Gold Race (1)
+  30, // La Flèche Wallonne (1)
+  28, // Liège-Bastogne-Liège (1)
+  32, // Copenhagen Sprint ME (1)
+  58, // ADAC Cyclassics (1)
+  56, // Donostia San Sebastian Klasikoa (DSSK) (1)
+  61, // Bretagne Classic (1)
+  62, // Grand Prix de Québec (1)
+  63, // Grand Prix de Montréal (1)
+  64, // Il Lombardia (1)
+  5,  // Volta a la Comunitat Valenciana (5)
+  104, // Tour de Hongrie (5)
+  13, // Faun-Ardèche (1)
+  14, // Faun Drome (1)
+  73, // Milano - Torino (1)
+  88, // Giro dell'Emilia (1)
+  91  // Tre Valli Varesine (1)
+];
+
+// Program 3: Non_Cobble_Tour_3 (145 days, 29 WT [20%] / 116 Pro [80%])
+const prog3Races = [
+  55, // Tour de France (21)
+  1,  // Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  16, // Strade Bianche (1)
+  122, // AlUla Tour (5)
+  5,   // Volta a la Comunitat Valenciana (5)
+  9,   // Figueira Champions Classic (1)
+  8,   // Clasica Almeria (1)
+  3,   // Volta Algarve (5)
+  13,  // Faun-Ardèche (1)
+  14,  // Faun Drome (1)
+  71,  // Trofeo Laigueglia (1)
+  72,  // Danilith Nokere Koerse (1)
+  74,  // Grand Prix de Denain - Porte du Hainaut (1)
+  75,  // Bredene Koksijde Classic (1)
+  76,  // Gran Premio Miguel Indurain (1)
+  100, // Région Pays de la Loire Tour (4)
+  101, // Tour of Hainan (5)
+  102, // Tour of the Alps (5)
+  103, // Presidential Cycling Tour of Türkiye (8)
+  78,  // Grand Prix du Morbihan (1)
+  79,  // Tro-Bro Léon (1)
+  104, // Tour de Hongrie (5)
+  80,  // Classique Dunkerque / Grand prix des Hauts de France (1)
+  105, // 4 Jours de Dunkerque / GP des Hauts de France (5)
+  106, // Boucles de la Mayenne - Crédit Mutuel (4)
+  108, // Ethias-Tour de Wallonie (5)
+  81,  // Brussels Cycling Classic (1)
+  82,  // Circuit Franco-Belge (1)
+  109, // Baloise Belgium Tour (5)
+  112, // PostNord Tour of Denmark (5)
+  113, // Vuelta a Burgos (5)
+  114, // Arctic Race of Norway (4)
+  116, // Lidl Deutschland Tour (5)
+  117, // Lloyds Tour of Britain Men (5)
+  84,  // Gran Premio città di Peccioli - Coppa Sabatini (1)
+  85,  // GP de Fourmies / La Voix du Nord (1)
+  119, // Skoda Tour de Luxembourg (5)
+  121, // Petronas Le Tour de Langkawi (8)
+  90,  // Coppa Bernocchi - GP Banco BPM (1)
+  91   // Tre Valli Varesine (1)
+];
+
+// Program 4: Cobble_Giro_Tour_1 (120 days, 102 WT [85%] / 18 Pro [15%])
+const prog4Races = [
+  55, // Tour de France (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  1,  // Santos Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  10, // UAE Tour (7)
+  16, // Strade Bianche (1)
+  18, // Tirreno-Adriatico (7)
+  17, // Milano-Sanremo (1)
+  51, // Itzulia Basque Country (6)
+  29, // Amstel Gold Race (1)
+  30, // La Flèche Wallonne (1)
+  28, // Liège-Bastogne-Liège (1)
+  31, // Eschborn-Frankfurt (1)
+  32, // Copenhagen Sprint ME (1)
+  54, // Tour de Suisse (5)
+  56, // Donostia San Sebastian Klasikoa (DSSK) (1)
+  57, // Tour de Pologne (7)
+  58, // ADAC Cyclassics (1)
+  59, // Renewi Tour (5)
+  61, // Bretagne Classic - CIC (1)
+  2,  // Surf Coast Classic ME (1)
+  5,  // Volta a la Comunitat Valenciana (5)
+  70, // Kuurne - Brussel - Kuurne (1)
+  72, // Danilith Nokere Koerse (1)
+  79, // Tro-Bro Léon (1)
+  87, // Flandrien 0.0 Classic (1)
+  121 // Petronas Le Tour de Langkawi (8)
+];
+
+// Program 5: Cobble_Giro_Tour_2 (120 days, 102 WT [85%] / 18 Pro [15%])
+const prog5Races = [
+  55, // Tour de France (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  16, // Strade Bianche (1)
+  19, // Paris-Nice (8)
+  17, // Milano-Sanremo (1)
+  52, // Tour de Romandie (6)
+  53, // Tour Auvergne - Rhône-Alpes (Dauphiné) (8)
+  60, // La Vuelta Ciclista a España (21)
+  64, // Il Lombardia (1)
+  65, // Tour of Guangxi (6)
+  11, // Tour of Oman (5)
+  8,  // Clasica Almeria (1)
+  3,  // Volta Algarve (5)
+  70, // Kuurne - Brussel - Kuurne (1)
+  72, // Danilith Nokere Koerse (1)
+  100, // Région Pays de la Loire Tour (4)
+  93  // Paris - Tours Elite (1)
+];
+
+// Program 6: Cobble_Giro_Tour_3 (145 days, 58 WT [40%] / 87 Pro [60%])
+const prog6Races = [
+  55, // Tour de France (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  1,  // Santos Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  16, // Strade Bianche (1)
+  17, // Milano-Sanremo (1)
+  28, // Liège-Bastogne-Liège (1)
+  122, // AlUla Tour (5)
+  5,   // Volta a la Comunitat Valenciana (5)
+  9,   // Figueira Champions Classic (1)
+  8,   // Clasica Almeria (1)
+  3,   // Volta Algarve (5)
+  70,  // Kuurne - Brussel - Kuurne (1)
+  71,  // Trofeo Laigueglia (1)
+  72,  // Danilith Nokere Koerse (1)
+  74,  // Grand Prix de Denain - Porte du Hainaut (1)
+  75,  // Bredene Koksijde Classic (1)
+  76,  // Gran Premio Miguel Indurain (1)
+  100, // Région Pays de la Loire Tour (4)
+  101, // Tour of Hainan (5)
+  102, // Tour of the Alps (5)
+  79,  // Tro-Bro Léon (1)
+  108, // Ethias-Tour de Wallonie (5)
+  81,  // Brussels Cycling Classic (1)
+  82,  // Circuit Franco-Belge (1)
+  109, // Baloise Belgium Tour (5)
+  112, // PostNord Tour of Denmark (5)
+  113, // Vuelta a Burgos (5)
+  114, // Arctic Race of Norway (4)
+  116, // Lidl Deutschland Tour (5)
+  117, // Lloyds Tour of Britain Men (5)
+  84,  // Gran Premio città di Peccioli - Coppa Sabatini (1)
+  85,  // GP de Fourmies / La Voix du Nord (1)
+  86,  // Lotto Grand Prix de Wallonie (1)
+  87,  // Flandrien 0.0 Classic (1)
+  121, // Petronas Le Tour de Langkawi (8)
+  93   // Paris - Tours Elite (1)
+];
+
+// Program 7: Cobble_Giro_Vuelta_1 (120 days, 102 WT [85%] / 18 Pro [15%])
+const prog7Races = [
+  60, // La Vuelta Ciclista a España (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  1,  // Santos Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  16, // Strade Bianche (1)
+  17, // Milano-Sanremo (1)
+  32, // Copenhagen Sprint ME (1)
+  54, // Tour de Suisse (5)
+  56, // Donostia San Sebastian Klasikoa (DSSK) (1)
+  57, // Tour de Pologne (7)
+  58, // ADAC Cyclassics (1)
+  65, // Tour of Guangxi (6)
+  18, // Tirreno-Adriatico (7)
+  51, // Itzulia Basque Country (6)
+  52, // Tour de Romandie (6)
+  28, // Liège-Bastogne-Liège (1)
+  70, // Kuurne - Brussel - Kuurne (1)
+  72, // Danilith Nokere Koerse (1)
+  79, // Tro-Bro Léon (1)
+  87, // Flandrien 0.0 Classic (1)
+  111, // Tour of Magnificent Qinghai (8)
+  120  // CRO Race (6)
+];
+
+// Program 8: Cobble_Giro_Vuelta_2 (120 days, 102 WT [85%] / 18 Pro [15%])
+const prog8Races = [
+  60, // La Vuelta Ciclista a España (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  1,  // Santos Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  10, // UAE Tour (7)
+  16, // Strade Bianche (1)
+  19, // Paris-Nice (8)
+  17, // Milano-Sanremo (1)
+  28, // Liège-Bastogne-Liège (1)
+  53, // Tour Auvergne - Rhône-Alpes (Dauphiné) (8)
+  55, // Tour de France (21)
+  2,  // Surf Coast Classic ME (1)
+  5,  // Volta a la Comunitat Valenciana (5)
+  8,  // Clasica Almeria (1)
+  70, // Kuurne - Brussel - Kuurne (1)
+  72, // Danilith Nokere Koerse (1)
+  121, // Petronas Le Tour de Langkawi (8)
+  93  // Paris - Tours Elite (1)
+];
+
+// Program 9: Cobble_Giro_Vuelta_3 (145 days, 58 WT [40%] / 87 Pro [60%])
+const prog9Races = [
+  60, // La Vuelta Ciclista a España (21)
+  23, // Giro d'Italia (21)
+  15, // Omloop Nieuwsblad ME (1)
+  21, // E3 Saxo Classic ME (1)
+  45, // In Flanders Fields (Gent-Wevelgem) (1)
+  46, // Dwars door Vlaanderen (1)
+  25, // Ronde van Vlaanderen ME (1)
+  27, // Paris-Roubaix (1)
+  1,  // Santos Tour Down Under (6)
+  4,  // Mapei Cadel Evans Great Ocean Road Race (1)
+  16, // Strade Bianche (1)
+  17, // Milano-Sanremo (1)
+  28, // Liège-Bastogne-Liège (1)
+  122, // AlUla Tour (5)
+  5,   // Volta a la Comunitat Valenciana (5)
+  9,   // Figueira Champions Classic (1)
+  8,   // Clasica Almeria (1)
+  3,   // Volta Algarve (5)
+  70,  // Kuurne - Brussel - Kuurne (1)
+  71,  // Trofeo Laigueglia (1)
+  72,  // Danilith Nokere Koerse (1)
+  74,  // Grand Prix de Denain - Porte du Hainaut (1)
+  75,  // Bredene Koksijde Classic (1)
+  76,  // Gran Premio Miguel Indurain (1)
+  100, // Région Pays de la Loire Tour (4)
+  101, // Tour of Hainan (5)
+  102, // Tour of the Alps (5)
+  79,  // Tro-Bro Léon (1)
+  108, // Ethias-Tour de Wallonie (5)
+  81,  // Brussels Cycling Classic (1)
+  82,  // Circuit Franco-Belge (1)
+  109, // Baloise Belgium Tour (5)
+  111, // Tour of Magnificent Qinghai (8)
+  112, // PostNord Tour of Denmark (5)
+  113, // Vuelta a Burgos (5)
+  114, // Arctic Race of Norway (4)
+  86,  // Lotto Grand Prix de Wallonie (1)
+  87,  // Flandrien 0.0 Classic (1)
+  121, // Petronas Le Tour de Langkawi (8)
+  90,  // Coppa Bernocchi - GP Banco BPM (1)
+  91,  // Tre Valli Varesine (1)
+  92,  // Gran Piemonte (1)
+  93,  // Paris - Tours Elite (1)
+  94   // Giro del Veneto (1)
+];
+
+// Program 10: Vuelta_Tour_1 (125 days, 85 WT [106 days] / 15 Pro [19 days])
+const prog10Races = [
+  1, 10, 23, 28, 29, 30, 52, 53, 54, 55, 56, 60, 64, 65, 86, 87, 90, 91, 92, 93, 108, 121
+];
+
+// Program 11: Vuelta_Tour_2 (125 days, 85 WT [106 days] / 15 Pro [19 days])
+const prog11Races = [
+  23, 26, 28, 29, 30, 50, 51, 52, 53, 54, 55, 56, 60, 64, 65, 87, 90, 91, 92, 93, 108, 121
+];
+
+// Program 12: Vuelta_Tour_3 (145 days, 35 WT [53 days] / 65 Pro [92 days])
+const prog12Races = [
+  1, 4, 8, 9, 11, 12, 13, 16, 22, 26, 28, 29, 30, 55, 60, 70, 71, 73, 74, 75, 76, 78, 79, 80, 81, 82, 90, 91, 92, 93, 94, 96, 100, 104, 105, 107, 108, 110, 112, 113, 115, 119, 121, 122
+];
+
+const newMappings = [];
+let nextId = 1;
+
+function addProgRaces(programId, races) {
+  races.forEach(raceId => {
+    newMappings.push({
+      id: nextId++,
+      program_id: programId,
+      race_id: raceId,
+      allowed_program_group_ids: raceAllowedMap.get(raceId) || ''
+    });
+  });
+}
+
+addProgRaces(1, prog1Races);
+addProgRaces(2, prog2Races);
+addProgRaces(3, prog3Races);
+addProgRaces(4, prog4Races);
+addProgRaces(5, prog5Races);
+addProgRaces(6, prog6Races);
+addProgRaces(7, prog7Races);
+addProgRaces(8, prog8Races);
+addProgRaces(9, prog9Races);
+addProgRaces(10, prog10Races);
+addProgRaces(11, prog11Races);
+addProgRaces(12, prog12Races);
+
+// 3. Write back to CSV
+let outputContent = 'id,program_id,race_id,allowed_program_group_ids\n';
+newMappings.forEach(m => {
+  outputContent += `${m.id},${m.program_id},${m.race_id},${m.allowed_program_group_ids}\n`;
+});
+
+fs.writeFileSync(csvPath, outputContent, 'utf8');
+console.log(`Successfully populated ${newMappings.length} mappings into ${csvPath}`);
