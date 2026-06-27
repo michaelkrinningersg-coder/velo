@@ -170,10 +170,8 @@ export class RiderRepository {
     const seasonPointsByRiderId = (includeDetailedStats && !isCurrentSeason) ? this.getSeasonPointsByRiderId(activeSeason, riderIdsForStats) : new Map();
     const raceFormSourcesByRiderId = includeDetailedStats ? this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate) : new Map();
     const seasonRaceStatsByRiderId = (includeDetailedStats && !isCurrentSeason) ? this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats, isCurrentSeason) : new Map();
-    const yearStartSkillsByRiderId = includeDetailedStats ? this.loadYearlyBaselinesByRiderId(rows.map((row) => row.id), activeSeason) : new Map();
     const riders = rows.map((row) => ({
       ...mapRider(row, activeSeason, currentDate, isCurrentSeason ? (row.season_points ?? 0) : (seasonPointsByRiderId.get(row.id) ?? 0)),
-      yearStartSkills: yearStartSkillsByRiderId.get(row.id),
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
       seasonRaceDays: isCurrentSeason ? (row.season_race_days_total ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0),
       seasonWins: isCurrentSeason ? (row.season_wins ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0),
@@ -228,31 +226,7 @@ export class RiderRepository {
   }
 
 
-  private loadYearlyBaselinesByRiderId(riderIds: number[], season: number): Map<number, Record<RiderSkillKey, number>> {
-    const map = new Map<number, Record<RiderSkillKey, number>>();
-    if (riderIds.length === 0 || !tableExists(this.db, 'rider_skill_yearly_baseline')) {
-      return map;
-    }
 
-    const chunkSize = 500;
-    for (let i = 0; i < riderIds.length; i += chunkSize) {
-      const chunk = riderIds.slice(i, i + chunkSize);
-      const placeholders = chunk.map(() => '?').join(', ');
-      const rows = this.db.prepare(`
-        SELECT rider_id, skill_key, baseline_value
-        FROM rider_skill_yearly_baseline
-        WHERE season = ? AND rider_id IN (${placeholders})
-      `).all(season, ...chunk) as Array<{ rider_id: number; skill_key: string; baseline_value: number }>;
-
-      for (const row of rows) {
-        if (!map.has(row.rider_id)) {
-          map.set(row.rider_id, {} as Record<RiderSkillKey, number>);
-        }
-        map.get(row.rider_id)![row.skill_key as RiderSkillKey] = row.baseline_value;
-      }
-    }
-    return map;
-  }
 
 
   private attachProgramData(riders: Rider[], season: number): Rider[] {

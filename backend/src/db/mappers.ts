@@ -163,6 +163,7 @@ export interface RiderRow {
   long_term_fatigue_decayable: number | null;
   long_term_fatigue_locked: number | null;
   weather_profile_id?: number | null;
+  yearly_baseline_skills?: string | null;
 }
 
 export interface RiderSeasonRaceStats {
@@ -871,6 +872,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     shortTermFatigueMalus,
     totalFatigueLoadMalus,
     shortTermFatigueWarning,
+    yearStartSkills: row.yearly_baseline_skills ? JSON.parse(row.yearly_baseline_skills) : undefined,
     peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
     peakRForm: row.peak_r_form ?? 0,
     activePeakDate: row.active_peak_date,

@@ -120,26 +120,12 @@ class GameStateService {
         if (this.syncedStateDate !== state.currentDate) {
             this.syncCurrentSeasonFormState(state.currentDate, state.season);
             this.syncDailyFormHistory(state.currentDate);
-            // Lazily populate rider_skill_yearly_baseline for current season if missing
-            const baselineCount = this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season).c;
-            if (baselineCount === 0) {
-                this.db.prepare(`
-          INSERT OR IGNORE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
-          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
-        `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
-                this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(state.season);
+            // Lazily populate yearly_baseline_skills for current season if missing
+            const missingBaseline = this.db.prepare(`
+        SELECT COUNT(*) as c FROM riders WHERE is_retired = 0 AND yearly_baseline_skills IS NULL
+      `).get();
+            if (missingBaseline.c > 0) {
+                this.snapshotYearlyBaselineSkills();
             }
             this.syncedStateDate = state.currentDate;
         }
@@ -238,27 +224,8 @@ class GameStateService {
           SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
           WHERE is_retired = 0 AND skill_development > 0
         `).run();
-                // Snapshot der Fahrer-Werte als Baseline fÃ¼r die Saison in der UI abspeichern
-                this.db.prepare(`
-          INSERT OR REPLACE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
-          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'prologue', skill_prologue FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'attack', skill_attack FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'bike_handling', skill_bike_handling FROM riders WHERE is_retired = 0
-        `).run(...Array(16).fill(nextSeason));
-                this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(nextSeason);
+                // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
+                this.snapshotYearlyBaselineSkills();
             }
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
@@ -1063,6 +1030,13 @@ class GameStateService {
                 this.db.prepare('DELETE FROM rider_fatigue_history').run();
             }
         }
+        // Retention policy: delete rider_fatigue_history entries older than 30 days
+        if (this.isTable('rider_fatigue_history')) {
+            this.db.prepare(`
+        DELETE FROM rider_fatigue_history
+        WHERE date < date(?, '-30 days')
+      `).run(nextDate);
+        }
         this.syncDailyFormHistory(nextDate);
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
@@ -1494,6 +1468,45 @@ class GameStateService {
                 const newLongLocked = roundToTwoDecimals(currentLongLocked + addedLongLocked);
                 stmtUpdate.run(newShort, newLongDecayable, newLongLocked, riderId);
                 stmtInsertHistory.run(riderId, stageDate, 'race', raceName, stageNumber, stageScore, addedShort, addedLongDecayable, addedLongLocked, newShort, roundToTwoDecimals(newLongDecayable + newLongLocked));
+            }
+        })();
+    }
+    snapshotYearlyBaselineSkills() {
+        console.log("Snapshotting active riders' skills as yearly baseline...");
+        const riders = this.db.prepare(`
+      SELECT id, overall_rating, skill_flat, skill_mountain, skill_medium_mountain, skill_hill,
+             skill_time_trial, skill_prologue, skill_cobble, skill_sprint, skill_acceleration,
+             skill_downhill, skill_attack, skill_stamina, skill_resistance, skill_recuperation,
+             skill_bike_handling
+      FROM riders
+      WHERE is_retired = 0
+    `).all();
+        const update = this.db.prepare(`
+      UPDATE riders
+      SET yearly_baseline_skills = ?
+      WHERE id = ?
+    `);
+        this.db.transaction(() => {
+            for (const r of riders) {
+                const baseline = {
+                    overall_rating: r.overall_rating,
+                    flat: r.skill_flat,
+                    mountain: r.skill_mountain,
+                    medium_mountain: r.skill_medium_mountain,
+                    hill: r.skill_hill,
+                    time_trial: r.skill_time_trial,
+                    prologue: r.skill_prologue,
+                    cobble: r.skill_cobble,
+                    sprint: r.skill_sprint,
+                    acceleration: r.skill_acceleration,
+                    downhill: r.skill_downhill,
+                    attack: r.skill_attack,
+                    stamina: r.skill_stamina,
+                    resistance: r.skill_resistance,
+                    recuperation: r.skill_recuperation,
+                    bike_handling: r.skill_bike_handling,
+                };
+                update.run(JSON.stringify(baseline), r.id);
             }
         })();
     }

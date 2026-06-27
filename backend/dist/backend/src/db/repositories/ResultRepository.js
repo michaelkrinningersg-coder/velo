@@ -234,33 +234,7 @@ class ResultRepository {
         role.name AS role_name,
         riders.overall_rating AS overall_rating,
         specialization_1.type_key AS spec1_name,
-        specialization_2.type_key AS spec2_name,
-        (
-          SELECT r.rank
-          FROM all_results r
-          JOIN stages s ON s.id = r.stage_id
-          WHERE s.race_id = ? 
-            AND r.result_type_id = 2
-            AND r.rider_id = riders.id
-            AND s.stage_number = (
-              SELECT MAX(s2.stage_number)
-              FROM stages s2
-              JOIN all_results r2 ON r2.stage_id = s2.id
-              WHERE s2.race_id = ? AND r2.result_type_id = 2
-            )
-        ) AS gc_rank,
-        (
-          SELECT se.status
-          FROM all_stage_entries se
-          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
-          LIMIT 1
-        ) AS dropout_status,
-        (
-          SELECT se.status_reason
-          FROM all_stage_entries se
-          WHERE se.race_id = ? AND se.rider_id = riders.id AND se.status IN ('dns', 'dnf')
-          LIMIT 1
-        ) AS dropout_reason
+        specialization_2.type_key AS spec2_name
       FROM race_entries
       JOIN riders ON riders.id = race_entries.rider_id
       LEFT JOIN sta_country ON sta_country.id = riders.country_id
@@ -270,7 +244,7 @@ class ResultRepository {
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
       WHERE race_entries.race_id = ?
       ORDER BY teams.name ASC, riders.last_name ASC, riders.first_name ASC
-    `).all(raceId, raceId, raceId, raceId, raceId);
+    `).all(raceId);
         // Determine dropped riders: any rider with a row in stage_non_finishers for this race
         const droppedRiderIds = new Set();
         if ((0, mappers_1.tableExists)(this.db, 'stage_non_finishers')) {
@@ -284,8 +258,41 @@ class ResultRepository {
                 droppedRiderIds.add(r.rider_id);
             }
         }
+        // 1. Fetch GC Ranks efficiently: find the maximum stage number with GC results
+        const maxStageRow = this.db.prepare(`
+      SELECT MAX(stages.stage_number) AS max_stage_number
+      FROM stages
+      JOIN all_results r ON r.stage_id = stages.id
+      WHERE stages.race_id = ? AND r.result_type_id = 2
+    `).get(raceId);
+        const maxStageNumber = maxStageRow?.max_stage_number ?? null;
+        let gcRanksByRiderId = new Map();
+        if (maxStageNumber != null) {
+            const maxStageIdRow = this.db.prepare(`
+        SELECT id FROM stages WHERE race_id = ? AND stage_number = ?
+      `).get(raceId, maxStageNumber);
+            if (maxStageIdRow) {
+                const gcRanks = this.db.prepare(`
+          SELECT rider_id, rank
+          FROM all_results
+          WHERE stage_id = ? AND result_type_id = 2 AND rider_id IS NOT NULL
+        `).all(maxStageIdRow.id);
+                gcRanksByRiderId = new Map(gcRanks.map(r => [r.rider_id, r.rank]));
+            }
+        }
+        // 2. Fetch dropouts efficiently
+        const dropouts = this.db.prepare(`
+      SELECT rider_id, status, status_reason
+      FROM all_stage_entries
+      WHERE race_id = ? AND status IN ('dns', 'dnf')
+    `).all(raceId);
+        const dropoutByRiderId = new Map(dropouts.map(d => [d.rider_id, d]));
         const entries = rosterRows.map((row) => {
-            const hasDropped = droppedRiderIds.has(row.rider_id) || row.dropout_status != null;
+            const dropout = dropoutByRiderId.get(row.rider_id);
+            const dropoutStatus = dropout?.status ?? null;
+            const dropoutReason = dropout?.status_reason ?? null;
+            const hasDropped = droppedRiderIds.has(row.rider_id) || dropoutStatus != null;
+            const gcRank = gcRanksByRiderId.get(row.rider_id) ?? null;
             return {
                 riderId: row.rider_id,
                 firstName: row.first_name,
@@ -299,9 +306,9 @@ class ResultRepository {
                 specialization1: row.spec1_name,
                 specialization2: row.spec2_name,
                 hasDropped,
-                gcRank: hasDropped ? null : row.gc_rank,
-                dropoutStatus: row.dropout_status,
-                dropoutReason: row.dropout_reason,
+                gcRank: hasDropped ? null : gcRank,
+                dropoutStatus: dropoutStatus,
+                dropoutReason,
             };
         });
         return {
@@ -381,20 +388,94 @@ class ResultRepository {
             : [];
         const previousRanksByType = new Map();
         if (meta.stage_number > 1) {
-            for (const rt of resultTypes) {
-                if (rt.id === mappers_1.RESULT_TYPE_IDS.stage)
-                    continue;
-                const standings = this.getPreviousClassificationStandings(meta.race_id, meta.stage_number, rt.id);
-                const rankMap = new Map();
-                for (const s of standings) {
-                    if (rt.id === mappers_1.RESULT_TYPE_IDS.team && s.teamId != null) {
-                        rankMap.set(`team_${s.teamId}`, s.rank);
-                    }
-                    else if (s.riderId != null && (fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(s.riderId))) {
-                        rankMap.set(`rider_${s.riderId}`, s.rank);
+            const previousStage = this.db.prepare(`
+        SELECT id AS stage_id, stage_number
+        FROM stages
+        WHERE race_id = ?
+          AND stage_number < ?
+        ORDER BY stage_number DESC
+        LIMIT 1
+      `).get(meta.race_id, meta.stage_number);
+            if (previousStage) {
+                const prevPrevStage = this.db.prepare(`
+          SELECT id AS stage_id
+          FROM stages
+          WHERE race_id = ?
+            AND stage_number < ?
+          ORDER BY stage_number DESC
+          LIMIT 1
+        `).get(meta.race_id, previousStage.stage_number);
+                const prevPrevRanksByType = new Map();
+                if (prevPrevStage) {
+                    const pRows = this.db.prepare(`
+            SELECT rider_id, team_id, rank, result_type_id
+            FROM all_results
+            WHERE stage_id = ?
+              AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
+          `).all(prevPrevStage.stage_id);
+                    for (const r of pRows) {
+                        let typeMap = prevPrevRanksByType.get(r.result_type_id);
+                        if (!typeMap) {
+                            typeMap = new Map();
+                            prevPrevRanksByType.set(r.result_type_id, typeMap);
+                        }
+                        const key = r.result_type_id === mappers_1.RESULT_TYPE_IDS.team && r.team_id != null
+                            ? `team_${r.team_id}`
+                            : (r.rider_id != null ? `rider_${r.rider_id}` : '');
+                        if (key)
+                            typeMap.set(key, r.rank);
                     }
                 }
-                previousRanksByType.set(rt.id, rankMap);
+                const prevRows = this.db.prepare(`
+          SELECT rider_id, team_id, rank, time_seconds, points, result_type_id
+          FROM all_results
+          WHERE stage_id = ?
+            AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
+          ORDER BY rank ASC
+        `).all(previousStage.stage_id);
+                const prevStandingsByType = new Map();
+                const prevRowsByType = new Map();
+                for (const row of prevRows) {
+                    const bucket = prevRowsByType.get(row.result_type_id) ?? [];
+                    bucket.push(row);
+                    prevRowsByType.set(row.result_type_id, bucket);
+                }
+                for (const [rtId, rowsForType] of prevRowsByType.entries()) {
+                    const leaderTime = rowsForType.find((row) => row.time_seconds != null)?.time_seconds ?? null;
+                    const prevPrevMap = prevPrevRanksByType.get(rtId);
+                    const standings = rowsForType.map((row) => {
+                        const key = rtId === mappers_1.RESULT_TYPE_IDS.team && row.team_id != null
+                            ? `team_${row.team_id}`
+                            : (row.rider_id != null ? `rider_${row.rider_id}` : '');
+                        const prevRank = key && prevPrevMap ? (prevPrevMap.get(key) ?? null) : null;
+                        return {
+                            riderId: row.rider_id,
+                            teamId: row.team_id,
+                            rank: row.rank,
+                            points: row.points,
+                            timeSeconds: row.time_seconds,
+                            gapSeconds: row.time_seconds != null && leaderTime != null ? Math.max(0, row.time_seconds - leaderTime) : null,
+                            previousRank: prevRank,
+                            rankDelta: prevRank != null ? prevRank - row.rank : null,
+                        };
+                    });
+                    prevStandingsByType.set(rtId, standings);
+                }
+                for (const rt of resultTypes) {
+                    if (rt.id === mappers_1.RESULT_TYPE_IDS.stage)
+                        continue;
+                    const standings = prevStandingsByType.get(rt.id) ?? [];
+                    const rankMap = new Map();
+                    for (const s of standings) {
+                        if (rt.id === mappers_1.RESULT_TYPE_IDS.team && s.teamId != null) {
+                            rankMap.set(`team_${s.teamId}`, s.rank);
+                        }
+                        else if (s.riderId != null && (fullyClassifiedRiderIds == null || fullyClassifiedRiderIds.has(s.riderId))) {
+                            rankMap.set(`rider_${s.riderId}`, s.rank);
+                        }
+                    }
+                    previousRanksByType.set(rt.id, rankMap);
+                }
             }
         }
         const groupedRows = new Map();

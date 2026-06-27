@@ -120,6 +120,19 @@ class DatabaseService {
             console.log("Dropping old relational table 'stage_entries_history'...");
             db.prepare("DROP TABLE stage_entries_history;").run();
         }
+        // Migration: Add yearly_baseline_skills column to riders and drop rider_skill_yearly_baseline
+        if (!columnExists(db, 'riders', 'yearly_baseline_skills')) {
+            console.log("Adding 'yearly_baseline_skills' column to 'riders' table...");
+            db.prepare("ALTER TABLE riders ADD COLUMN yearly_baseline_skills TEXT DEFAULT NULL;").run();
+        }
+        const hasBaselineTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rider_skill_yearly_baseline'").get();
+        if (hasBaselineTable) {
+            console.log("Dropping old table 'rider_skill_yearly_baseline'...");
+            db.prepare("DROP TABLE IF EXISTS rider_skill_yearly_baseline;").run();
+            db.prepare("DROP INDEX IF EXISTS idx_rider_skill_yearly_baseline_lookup;").run();
+        }
+        // Force recreation of race_entries view with new schema
+        db.prepare("DROP VIEW IF EXISTS race_entries;").run();
         const schema = fs.readFileSync(this.schemaPath, 'utf8');
         db.exec(schema);
     }
@@ -762,150 +775,150 @@ class DatabaseService {
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         1 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type1') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         2 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type2') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         3 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type3') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         4 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type4') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         5 AS result_type_id,
-        ROW_NUMBER() OVER (PARTITION BY j.value->>'sid' ORDER BY CAST(j.value->>'rk' AS INTEGER) ASC) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        ROW_NUMBER() OVER (PARTITION BY j.value->>0 ORDER BY CAST(j.value->>3 AS INTEGER) ASC) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id
-      JOIN riders r ON r.id = CAST(j.value->>'rid' AS INTEGER),
+      JOIN riders r ON r.id = CAST(j.value->>1 AS INTEGER),
       json_each(c.payload, '$.type2') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
         AND (CAST(SUBSTR(s.date, 1, 4) AS INTEGER) - r.birth_year) <= 25
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         6 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type6') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
       UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
         s.id AS stage_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>1 AS INTEGER) AS rider_id,
+        CAST(j.value->>2 AS INTEGER) AS team_id,
         7 AS result_type_id,
-        CAST(j.value->>'rk' AS INTEGER) AS rank,
-        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
-        CAST(j.value->>'pts' AS INTEGER) AS points,
-        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
-        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
-        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
-        j.value->>'eids' AS event_ids,
-        j.value->>'jw' AS jerseys_worn
+        CAST(j.value->>3 AS INTEGER) AS rank,
+        CAST(j.value->>4 AS INTEGER) AS time_seconds,
+        CAST(j.value->>5 AS INTEGER) AS points,
+        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
+        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>8 AS REAL) AS leadout_bonus,
+        CAST(j.value->>9 AS REAL) AS breakaway_kms,
+        j.value->>10 AS event_ids,
+        j.value->>11 AS jerseys_worn
       FROM race_results_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type7') j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id;
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id;
     `).run();
     }
     ensureRiderFormSchema(db) {
@@ -1260,14 +1273,14 @@ class DatabaseService {
       SELECT
         s.id AS stage_id,
         c.race_id AS race_id,
-        CAST(j.value->>'tid' AS INTEGER) AS team_id,
-        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
-        j.value->>'st' AS status,
-        j.value->>'str' AS status_reason
+        CAST(j.value->>1 AS INTEGER) AS team_id,
+        CAST(j.value->>2 AS INTEGER) AS rider_id,
+        j.value->>3 AS status,
+        j.value->>4 AS status_reason
       FROM stage_entries_compact c
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload) j
-      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      WHERE CAST(j.value->>0 AS INTEGER) = s.id
     `).run();
         db.prepare(`DROP VIEW IF EXISTS all_stage_entries;`).run();
         db.prepare(`

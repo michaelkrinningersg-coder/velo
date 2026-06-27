@@ -984,19 +984,21 @@ class StageResultCommitService {
           SELECT rider_id FROM stage_entries
           WHERE stage_id = ? AND team_id = ? AND status != 'dns'
         `).all(stage.id, superTeamId);
+                const insertSuperteamCareer = this.db.prepare(`
+          INSERT INTO rider_career_stats (rider_id, superteam_count)
+          VALUES (?, 1)
+          ON CONFLICT(rider_id) DO UPDATE SET superteam_count = superteam_count + 1
+        `);
+                const updateSuperteamSeason = this.db.prepare(`
+          UPDATE rider_season_stats
+          SET superteam_count = superteam_count + 1
+          WHERE rider_id = ? AND season = ?
+        `);
                 for (const row of startingTeamRiderRows) {
                     const riderId = row.rider_id;
-                    this.db.prepare(`
-            INSERT INTO rider_career_stats (rider_id, superteam_count)
-            VALUES (?, 1)
-            ON CONFLICT(rider_id) DO UPDATE SET superteam_count = superteam_count + 1
-          `).run(riderId);
+                    insertSuperteamCareer.run(riderId);
                     insertSeasonStatsRowStmt.run(riderId, currentSeason);
-                    this.db.prepare(`
-            UPDATE rider_season_stats
-            SET superteam_count = superteam_count + 1
-            WHERE rider_id = ? AND season = ?
-          `).run(riderId, currentSeason);
+                    updateSuperteamSeason.run(riderId, currentSeason);
                 }
             }
             // --- INCREMENTAL STATS & ARCHIVING ---
@@ -1050,6 +1052,10 @@ class StageResultCommitService {
         SET race_days = race_days + 1
         WHERE rider_id = ? AND category_name = ?
       `);
+            const getTeamRidersStmt = this.db.prepare(`
+        SELECT rider_id FROM stage_entries
+        WHERE stage_id = ? AND team_id = ? AND status NOT IN ('dns', 'dnf')
+      `);
             const updateCategoryTttRank = this.db.prepare(`
         UPDATE rider_season_category_stats
         SET stage_wins = stage_wins + ?,
@@ -1082,10 +1088,70 @@ class StageResultCommitService {
             win_weather_7 = win_weather_7 + ?
         WHERE rider_id = ? AND category_name = ?
       `);
+            const updateCategoryPlacing = this.db.prepare(`
+        UPDATE rider_season_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            one_day_wins = one_day_wins + ?,
+            one_day_second = one_day_second + ?,
+            one_day_third = one_day_third + ?,
+            one_day_top_ten = one_day_top_ten + ?,
+            win_flat = win_flat + ?,
+            win_rolling = win_rolling + ?,
+            win_hilly = win_hilly + ?,
+            win_hilly_difficult = win_hilly_difficult + ?,
+            win_medium_mountain = win_medium_mountain + ?,
+            win_mountain = win_mountain + ?,
+            win_high_mountain = win_high_mountain + ?,
+            win_cobble = win_cobble + ?,
+            win_cobble_hill = win_cobble_hill + ?,
+            win_itt = win_itt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND season = ? AND category_name = ?
+      `);
+            const updateCareerCategoryPlacing = this.db.prepare(`
+        UPDATE rider_career_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            one_day_wins = one_day_wins + ?,
+            one_day_second = one_day_second + ?,
+            one_day_third = one_day_third + ?,
+            one_day_top_ten = one_day_top_ten + ?,
+            win_flat = win_flat + ?,
+            win_rolling = win_rolling + ?,
+            win_hilly = win_hilly + ?,
+            win_hilly_difficult = win_hilly_difficult + ?,
+            win_medium_mountain = win_medium_mountain + ?,
+            win_mountain = win_mountain + ?,
+            win_high_mountain = win_high_mountain + ?,
+            win_cobble = win_cobble + ?,
+            win_cobble_hill = win_cobble_hill + ?,
+            win_itt = win_itt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND category_name = ?
+      `);
             for (const row of stageRows) {
                 if (row.riderId == null) {
                     if (stage.profile === 'TTT') {
-                        for (const rId of completedRiderIds) {
+                        const teamRiderRows = getTeamRidersStmt.all(stage.id, row.teamId);
+                        for (const teamRider of teamRiderRows) {
+                            const rId = teamRider.rider_id;
                             insertCareerStatsRow.run(rId);
                             insertSeasonStatsRow.run(rId, currentSeason);
                             getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
@@ -1129,64 +1195,6 @@ class StageResultCommitService {
                 const sHomeAdv = superHomeAdvantageCounts.get(rId) ?? 0;
                 const homePress = homePressureCounts.get(rId) ?? 0;
                 updateCareerIncrement.run(0, 0, 0, escKms, sform, smalus, homeAdv, sHomeAdv, homePress, rId);
-                const updateCategoryPlacing = this.db.prepare(`
-          UPDATE rider_season_category_stats
-          SET stage_wins = stage_wins + ?,
-              stage_second = stage_second + ?,
-              stage_third = stage_third + ?,
-              stage_top_ten = stage_top_ten + ?,
-              one_day_wins = one_day_wins + ?,
-              one_day_second = one_day_second + ?,
-              one_day_third = one_day_third + ?,
-              one_day_top_ten = one_day_top_ten + ?,
-              win_flat = win_flat + ?,
-              win_rolling = win_rolling + ?,
-              win_hilly = win_hilly + ?,
-              win_hilly_difficult = win_hilly_difficult + ?,
-              win_medium_mountain = win_medium_mountain + ?,
-              win_mountain = win_mountain + ?,
-              win_high_mountain = win_high_mountain + ?,
-              win_cobble = win_cobble + ?,
-              win_cobble_hill = win_cobble_hill + ?,
-              win_itt = win_itt + ?,
-              win_weather_1 = win_weather_1 + ?,
-              win_weather_2 = win_weather_2 + ?,
-              win_weather_3 = win_weather_3 + ?,
-              win_weather_4 = win_weather_4 + ?,
-              win_weather_5 = win_weather_5 + ?,
-              win_weather_6 = win_weather_6 + ?,
-              win_weather_7 = win_weather_7 + ?
-          WHERE rider_id = ? AND season = ? AND category_name = ?
-        `);
-                const updateCareerCategoryPlacing = this.db.prepare(`
-          UPDATE rider_career_category_stats
-          SET stage_wins = stage_wins + ?,
-              stage_second = stage_second + ?,
-              stage_third = stage_third + ?,
-              stage_top_ten = stage_top_ten + ?,
-              one_day_wins = one_day_wins + ?,
-              one_day_second = one_day_second + ?,
-              one_day_third = one_day_third + ?,
-              one_day_top_ten = one_day_top_ten + ?,
-              win_flat = win_flat + ?,
-              win_rolling = win_rolling + ?,
-              win_hilly = win_hilly + ?,
-              win_hilly_difficult = win_hilly_difficult + ?,
-              win_medium_mountain = win_medium_mountain + ?,
-              win_mountain = win_mountain + ?,
-              win_high_mountain = win_high_mountain + ?,
-              win_cobble = win_cobble + ?,
-              win_cobble_hill = win_cobble_hill + ?,
-              win_itt = win_itt + ?,
-              win_weather_1 = win_weather_1 + ?,
-              win_weather_2 = win_weather_2 + ?,
-              win_weather_3 = win_weather_3 + ?,
-              win_weather_4 = win_weather_4 + ?,
-              win_weather_5 = win_weather_5 + ?,
-              win_weather_6 = win_weather_6 + ?,
-              win_weather_7 = win_weather_7 + ?
-          WHERE rider_id = ? AND category_name = ?
-        `);
                 const pWins = row.rank === 1 ? 1 : 0;
                 const pSec = row.rank === 2 ? 1 : 0;
                 const pThird = row.rank === 3 ? 1 : 0;
@@ -1385,13 +1393,13 @@ class StageResultCommitService {
           FROM stage_entries
           WHERE race_id = ?
         `).all(race.id);
-                const compactStageEntries = stageEntries.map(row => ({
-                    sid: row.stage_id,
-                    tid: row.team_id,
-                    rid: row.rider_id,
-                    st: row.status,
-                    str: row.status_reason
-                }));
+                const compactStageEntries = stageEntries.map(row => [
+                    row.stage_id,
+                    row.team_id,
+                    row.rider_id,
+                    row.status,
+                    row.status_reason
+                ]);
                 this.db.prepare(`
           INSERT OR REPLACE INTO stage_entries_compact (race_id, season, payload)
           VALUES (?, ?, ?)
@@ -1406,10 +1414,10 @@ class StageResultCommitService {
           FROM active_race_entries
           WHERE race_id = ?
         `).all(race.id);
-                const compactRaceEntries = raceEntries.map(row => ({
-                    t: row.team_id,
-                    r: row.rider_id
-                }));
+                const compactRaceEntries = raceEntries.map(row => [
+                    row.team_id,
+                    row.rider_id
+                ]);
                 this.db.prepare(`
           INSERT OR REPLACE INTO race_entries_compact (race_id, season, payload)
           VALUES (?, ?, ?)
@@ -1441,20 +1449,20 @@ class StageResultCommitService {
                 for (const row of activeResults) {
                     const typeKey = `type${row.result_type_id}`;
                     if (groups[typeKey]) {
-                        groups[typeKey].push({
-                            sid: row.stage_id,
-                            rid: row.rider_id,
-                            tid: row.team_id,
-                            rk: row.rank,
-                            ts: row.time_seconds,
-                            pts: row.points,
-                            ib: row.is_breakaway,
-                            lrid: row.leadout_rider_id,
-                            lbn: row.leadout_bonus,
-                            bkms: row.breakaway_kms,
-                            eids: row.event_ids,
-                            jw: row.jerseys_worn
-                        });
+                        groups[typeKey].push([
+                            row.stage_id,
+                            row.rider_id,
+                            row.team_id,
+                            row.rank,
+                            row.time_seconds,
+                            row.points,
+                            row.is_breakaway,
+                            row.leadout_rider_id,
+                            row.leadout_bonus,
+                            row.breakaway_kms,
+                            row.event_ids,
+                            row.jerseys_worn
+                        ]);
                     }
                 }
                 this.db.prepare(`
@@ -1647,6 +1655,11 @@ class StageResultCommitService {
         const ridersToUpdate = new Set([...winRiderIds, ...dnfRiderIds]);
         if (ridersToUpdate.size === 0)
             return;
+        const updateRiderPrefs = this.db.prepare(`
+      UPDATE riders
+      SET favorite_races = ?, non_favorite_races = ?
+      WHERE id = ?
+    `);
         for (const riderId of ridersToUpdate) {
             const rider = ridersById.get(riderId);
             if (!rider)
@@ -1677,11 +1690,7 @@ class StageResultCommitService {
             if (changed) {
                 rider.favoriteRaces = favs;
                 rider.nonFavoriteRaces = nonFavs;
-                this.db.prepare(`
-          UPDATE riders
-          SET favorite_races = ?, non_favorite_races = ?
-          WHERE id = ?
-        `).run(favs.join(','), nonFavs.join(','), riderId);
+                updateRiderPrefs.run(favs.join(','), nonFavs.join(','), riderId);
             }
         }
     }
@@ -1731,13 +1740,14 @@ class StageResultCommitService {
             'pot_prologue', 'pot_cobble', 'pot_sprint', 'pot_acceleration', 'pot_downhill',
             'pot_attack', 'pot_stamina', 'pot_resistance', 'pot_recuperation', 'pot_bike_handling'
         ];
+        const getRiderPotentialsStmt = this.db.prepare(`
+      SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
+             pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
+             pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
+      FROM riders WHERE id = ?
+    `);
         for (const riderId of validU23RiderIds) {
-            const riderPotentials = this.db.prepare(`
-        SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
-               pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
-               pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
-        FROM riders WHERE id = ?
-      `).get(riderId);
+            const riderPotentials = getRiderPotentialsStmt.get(riderId);
             if (!riderPotentials)
                 continue;
             const validColumns = potColumns.filter((col) => riderPotentials[col] < 85);

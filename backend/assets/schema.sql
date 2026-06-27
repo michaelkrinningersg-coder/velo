@@ -140,7 +140,8 @@ CREATE TABLE IF NOT EXISTS riders (
   active_team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
   active_contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
   is_retired        INTEGER NOT NULL DEFAULT 0 CHECK(is_retired IN (0, 1)),
-  weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7)
+  weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7),
+  yearly_baseline_skills TEXT DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_riders_active_team ON riders(active_team_id);
@@ -394,8 +395,8 @@ SELECT * FROM active_race_entries
 UNION ALL
 SELECT
   c.race_id AS race_id,
-  CAST(j.value->>'t' AS INTEGER) AS team_id,
-  CAST(j.value->>'r' AS INTEGER) AS rider_id
+  CAST(j.value->>0 AS INTEGER) AS team_id,
+  CAST(j.value->>1 AS INTEGER) AS rider_id
 FROM race_entries_compact c,
 json_each(c.payload) j;
 
@@ -470,17 +471,7 @@ CREATE TABLE IF NOT EXISTS stage_marker_results (
 CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
   ON stage_marker_results(stage_id, marker_key, rank);
 
--- ---- Skill-Baseline pro Saison (fÃ¼r Delta-Anzeige) ---------
-CREATE TABLE IF NOT EXISTS rider_skill_yearly_baseline (
-  rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-  season INTEGER NOT NULL,
-  skill_key TEXT NOT NULL,
-  baseline_value REAL NOT NULL,
-  PRIMARY KEY (rider_id, season, skill_key)
-);
 
-CREATE INDEX IF NOT EXISTS idx_rider_skill_yearly_baseline_lookup
-  ON rider_skill_yearly_baseline(season, rider_id);
 
 -- ---- Newgen: Startwert-Presets (Skills) --------------------
 -- Definiert pro Profil-Typ (Sprint, Berg, â€¦) und Sub-Variante
