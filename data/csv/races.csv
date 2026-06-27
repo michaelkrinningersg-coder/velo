@@ -97,3 +97,20 @@ id,name,country_id,category_id,is_stage_race,number_of_stages,start_date,end_dat
 120,"CRO Race",44,5,1,6,2026-09-22,2026-09-27,62,ITAUSA,B|T|F|A
 121,"Petronas Le Tour de Langkawi",49,5,1,8,2026-09-27,2026-10-04,61,ITAUSA,H|T|F|A
 122,"AlUla Tour",109,5,1,5,2026-01-27,2026-01-31,61,ITAUSA,H|T|F|A
+123,"Classica Camp de Morvedre",8,9,0,1,2026-01-23,2026-01-23,50,EspSlo,H|T|F|A
+124,"Gran Premio Castellón - Ruta de la Cerámica",8,9,0,1,2026-01-24,2026-01-24,50,EspSlo,H|T|F|A
+125,"Clàssica Comunitat Valenciana - Gran Premi València",8,9,0,1,2026-01-25,2026-01-25,50,EspSlo,T|F|S|A
+126,"Trofeo Calvià",8,9,0,1,2026-01-28,2026-01-28,50,EspSlo,H|T|F|A
+127,"Trofeo Ses Salines",8,9,0,1,2026-01-29,2026-01-29,50,EspSlo,T|F|S|A
+128,"Trofeo Serra Tramuntana",8,9,0,1,2026-01-30,2026-01-30,50,EspSlo,B|T|F|A
+129,"Trofeo Andratx - Pollença",8,9,0,1,2026-01-31,2026-01-31,50,EspSlo,B|T|F|A
+130,"Grand Prix Cycliste de Marseille La Marseillaise",3,9,0,1,2026-02-01,2026-02-01,50,FraGer,H|T|F|A
+131,"Trofeo Palma",8,9,0,1,2026-02-01,2026-02-01,50,EspSlo,T|F|S|A
+132,"Etoile de Bessèges - Tour du Gard",3,6,1,5,2026-02-04,2026-02-08,50,FraGer,B|T|F|A
+133,"Tour de la Provence",3,6,1,3,2026-02-13,2026-02-15,50,FraGer,B|T|F|A
+134,"Vuelta a la Región de Murcia “Costa Cálida”",8,6,1,2,2026-02-13,2026-02-14,50,EspSlo,B|T|F|A
+135,"Clásica Jaén",8,9,0,1,2026-02-16,2026-02-16,50,EspSlo,H|T|F|A
+136,"Classic Var",3,9,0,1,2026-02-21,2026-02-21,50,FraGer,H|T|F|A
+137,"Coppa Agostoni - Giro delle Brianze",2,9,0,1,2026-10-04,2026-10-04,50,ITAUSA,H|T|F|A
+138,"Tour de Vendée",3,9,0,1,2026-10-04,2026-10-04,50,FraGer,T|F|S|A
+139,"Binche - Chimay - Binche / Mémorial Frank Vandenbroucke",4,9,0,1,2026-10-06,2026-10-06,50,BeNeLUX,H|T|F|A

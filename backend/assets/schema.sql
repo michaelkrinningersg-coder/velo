@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS race_categories (
   number_of_teams            INTEGER NOT NULL CHECK(number_of_teams > 0),
   number_of_riders           INTEGER NOT NULL CHECK(number_of_riders > 0),
   bonus_system_id            INTEGER NOT NULL REFERENCES race_categories_bonus(id),
-  home_selection_probability REAL    NOT NULL DEFAULT 0.0 CHECK(home_selection_probability BETWEEN 0.0 AND 1.0)
+  home_selection_probability REAL    NOT NULL DEFAULT 0.0 CHECK(home_selection_probability >= 0.0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_race_categories_tier ON race_categories(tier);

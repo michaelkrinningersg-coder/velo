@@ -4,8 +4,8 @@ id,name,tier,number_of_teams,number_of_riders,bonus_system_id,home_selection_pro
 3,World Tour - Monument,1,25,8,3,0.02
 4,World Tour - Stage Race High,1,25,8,4,0.50
 5,World Tour - Stage Race Middle,1,25,8,5,1.00
-6,World Tour - Stage Race Low,1,25,8,6,1.00
+6,World Tour - Stage Race Low,1,25,6,6,1.00
 7,World Tour - One Day High,1,25,8,7,0.50
 8,World Tour - One Day Middle,1,25,8,8,1.00
-9,World Tour - One Day Low,1,25,8,9,1.00
+9,World Tour - One Day Low,1,25,6,9,1.00
 

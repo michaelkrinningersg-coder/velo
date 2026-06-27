@@ -31,15 +31,15 @@ id,role_name,program_name,probability
 30,Starke Helfer,Classic_Cobble_No Grand Tour,20
 31,Starke Helfer,Classic_Non_Cobble_No Grand Tour_one day focus,10
 32,Starke Helfer,Classic_Non_Cobble_No Grand Tour_stage race foxus,22
-33,Wassertraeger,Non_Cobble_Tour,8
-34,Wassertraeger,Cobble_Giro_Tour,8
-35,Wassertraeger,Cobble_Giro_Vuelta,8
-36,Wassertraeger,Vuelta_Tour,8
-37,Wassertraeger,Cobble_Tour,8
-38,Wassertraeger,Non_Cobble Giro_Tour,8
-39,Wassertraeger,Classic_Cobble_No Grand Tour,20
-40,Wassertraeger,Classic_Non_Cobble_No Grand Tour_one day focus,10
-41,Wassertraeger,Classic_Non_Cobble_No Grand Tour_stage race foxus,22
+33,Wassertraeger,Non_Cobble_Tour,4.17
+34,Wassertraeger,Cobble_Giro_Tour,4.17
+35,Wassertraeger,Cobble_Giro_Vuelta,4.17
+36,Wassertraeger,Vuelta_Tour,4.17
+37,Wassertraeger,Cobble_Tour,4.16
+38,Wassertraeger,Non_Cobble Giro_Tour,4.16
+39,Wassertraeger,Classic_Cobble_No Grand Tour,25
+40,Wassertraeger,Classic_Non_Cobble_No Grand Tour_one day focus,25
+41,Wassertraeger,Classic_Non_Cobble_No Grand Tour_stage race foxus,25
 42,Sprinter,Sprinter Non_Cobble_Giro_Vuelta,50
 43,Sprinter,Non_Cobble_Tour,15
 44,Sprinter,Cobble_Giro_Tour,10

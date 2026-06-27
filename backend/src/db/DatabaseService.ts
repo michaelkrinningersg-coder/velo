@@ -157,7 +157,7 @@ export class DatabaseService {
     if (!columnExists(db, 'race_categories', 'home_selection_probability')) {
       db.prepare(`
         ALTER TABLE race_categories
-        ADD COLUMN home_selection_probability REAL NOT NULL DEFAULT 0.0 CHECK(home_selection_probability BETWEEN 0.0 AND 1.0)
+        ADD COLUMN home_selection_probability REAL NOT NULL DEFAULT 0.0 CHECK(home_selection_probability >= 0.0)
       `).run();
     }
 
