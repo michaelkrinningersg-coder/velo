@@ -55,10 +55,8 @@ interface RoleIdMap {
 }
 
 type HelperRoleKey = 'eliteHelper' | 'strongHelper' | 'waterCarrier';
-type NonSprinterRoleKey = 'captain' | 'coCaptain' | 'eliteHelper' | 'strongHelper' | 'waterCarrier';
 
 const HELPER_ROLE_KEYS: HelperRoleKey[] = ['eliteHelper', 'strongHelper', 'waterCarrier'];
-const NON_SPRINTER_ROLE_KEYS: NonSprinterRoleKey[] = ['captain', 'coCaptain', 'eliteHelper', 'strongHelper', 'waterCarrier'];
 
 function compareLeadership(left: RiderRoleRow, right: RiderRoleRow): number {
   return right.overall_rating - left.overall_rating
@@ -215,12 +213,12 @@ export class RiderRoleService {
 
     // 1. Sort by leadership
     const leadershipRoster = [...roster].sort(compareLeadership);
-    const leadershipCounts = this.resolveLeadershipRoleCounts(roster.length, roleIds);
 
-    // Assign Captains first (from all riders)
+    // Assign Captains first (exactly 3)
     let assignedCaptains = 0;
+    const captainLimit = Math.min(3, roster.length);
     for (const rider of leadershipRoster) {
-      if (assignedCaptains < leadershipCounts.captain) {
+      if (assignedCaptains < captainLimit) {
         assignments.set(rider.id, roleIds.captain.id);
         assignedCaptains++;
       }
@@ -243,13 +241,14 @@ export class RiderRoleService {
       }
     }
 
-    // 3. Assign Co-Captains (next leadership counts, skipping already assigned captains and sprinters)
+    // 3. Assign Co-Captains (exactly 3, skipping already assigned captains and sprinters)
     let assignedCoCaptains = 0;
+    const coCaptainLimit = Math.min(3, roster.length - assignments.size);
     for (const rider of leadershipRoster) {
       if (assignments.has(rider.id)) {
         continue;
       }
-      if (assignedCoCaptains < leadershipCounts.coCaptain) {
+      if (assignedCoCaptains < coCaptainLimit) {
         assignments.set(rider.id, roleIds.coCaptain.id);
         assignedCoCaptains++;
       }
@@ -282,31 +281,6 @@ export class RiderRoleService {
       counts.waterCarrier = helperRosterSize;
     }
     return counts;
-  }
-
-  private resolveLeadershipRoleCounts(
-    rosterSize: number,
-    roleIds: RoleIdMap,
-  ): Record<'captain' | 'coCaptain', number> {
-    const proportionalCounts = this.resolveProportionalCounts(rosterSize, NON_SPRINTER_ROLE_KEYS, roleIds);
-    let captain = proportionalCounts.captain;
-    let coCaptain = proportionalCounts.coCaptain;
-
-    if (rosterSize > 0 && captain === 0) {
-      captain = 1;
-    }
-
-    if (captain + coCaptain > rosterSize) {
-      const overflow = captain + coCaptain - rosterSize;
-      const reducedCoCaptain = Math.max(0, coCaptain - overflow);
-      const stillOverflow = overflow - (coCaptain - reducedCoCaptain);
-      coCaptain = reducedCoCaptain;
-      if (stillOverflow > 0) {
-        captain = Math.max(1, captain - stillOverflow);
-      }
-    }
-
-    return { captain, coCaptain };
   }
 
   private resolveProportionalCounts<K extends keyof RoleIdMap>(
