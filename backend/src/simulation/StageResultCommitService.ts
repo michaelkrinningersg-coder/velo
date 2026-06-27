@@ -1706,7 +1706,7 @@ export class StageResultCommitService {
     gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
     gameStateService.applyStageFatigue(stage.id, completedRiderIds, dnfEntries.map((e) => e.riderId));
 
-    this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
+    this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason(), stage.id);
 
     this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
     this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);

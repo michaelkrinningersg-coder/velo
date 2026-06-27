@@ -404,7 +404,7 @@ export class ResultRepository {
 
     const season = Number.parseInt(meta.date.slice(0, 4), 10);
     if (Number.isFinite(season)) {
-      new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season);
+      new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season, stageId);
     }
 
     const resultTypes = this.db.prepare(`

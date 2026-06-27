@@ -655,12 +655,12 @@ export class GameStateRepository {
   }
 
 
-  public syncSeasonPointEventsForSeason(season = new GameStateRepository(this.db).getCurrentSeason()): void {
+  public syncSeasonPointEventsForSeason(season = new GameStateRepository(this.db).getCurrentSeason(), stageId?: number): void {
     if (!tableExists(this.db, 'season_point_events') || !tableExists(this.db, 'results')) {
       return;
     }
 
-    const stages = this.db.prepare(`
+    const query = `
       SELECT
         stages.id AS stage_id,
         stages.race_id AS race_id,
@@ -685,13 +685,17 @@ export class GameStateRepository {
       JOIN race_categories ON race_categories.id = races.category_id
       JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
       WHERE CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${stageId != null ? 'AND stages.id = ?' : ''}
         AND EXISTS (
           SELECT 1
           FROM results
           WHERE results.stage_id = stages.id AND results.result_type_id = ?
         )
       ORDER BY stages.date ASC, stages.race_id ASC, stages.stage_number ASC
-    `).all(season, RESULT_TYPE_IDS.stage) as SeasonPointStageRow[];
+    `;
+
+    const params = stageId != null ? [season, stageId, RESULT_TYPE_IDS.stage] : [season, RESULT_TYPE_IDS.stage];
+    const stages = this.db.prepare(query).all(...params) as SeasonPointStageRow[];
 
     if (stages.length === 0) {
       return;
