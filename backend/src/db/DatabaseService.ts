@@ -858,11 +858,57 @@ export class DatabaseService {
         ON results_history(team_id);
     `).run();
 
+    db.prepare(`DROP VIEW IF EXISTS all_results;`).run();
+
     db.prepare(`
-      CREATE VIEW IF NOT EXISTS all_results AS
+      CREATE VIEW all_results AS
       SELECT * FROM results
       UNION ALL
-      SELECT * FROM results_history;
+      SELECT * FROM results_history
+      UNION ALL
+      SELECT 
+        r.id,
+        r.race_id,
+        r.stage_id,
+        r.rider_id,
+        r.team_id,
+        5 AS result_type_id,
+        ROW_NUMBER() OVER (PARTITION BY r.stage_id ORDER BY r.rank ASC) AS rank,
+        r.time_seconds,
+        r.points,
+        r.is_breakaway,
+        r.leadout_rider_id,
+        r.leadout_bonus,
+        r.breakaway_kms,
+        r.event_ids,
+        r.jerseys_worn
+      FROM results r
+      JOIN riders ON riders.id = r.rider_id
+      JOIN stages ON stages.id = r.stage_id
+      WHERE r.result_type_id = 2
+        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25
+      UNION ALL
+      SELECT 
+        r.id,
+        r.race_id,
+        r.stage_id,
+        r.rider_id,
+        r.team_id,
+        5 AS result_type_id,
+        ROW_NUMBER() OVER (PARTITION BY r.stage_id ORDER BY r.rank ASC) AS rank,
+        r.time_seconds,
+        r.points,
+        r.is_breakaway,
+        r.leadout_rider_id,
+        r.leadout_bonus,
+        r.breakaway_kms,
+        r.event_ids,
+        r.jerseys_worn
+      FROM results_history r
+      JOIN riders ON riders.id = r.rider_id
+      JOIN stages ON stages.id = r.stage_id
+      WHERE r.result_type_id = 2
+        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25;
     `).run();
   }
 

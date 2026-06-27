@@ -366,6 +366,7 @@ export interface StageResultDbRow {
   rider_id: number | null;
   rider_first_name: string | null;
   rider_last_name: string | null;
+  birth_year?: number | null;
   team_id: number | null;
   team_name: string | null;
   leadout_rider_id?: number | null;

@@ -989,14 +989,16 @@ export class StageResultCommitService {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.gc, row);
       }
       for (const row of pointsRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+        if (row.points != null && row.points > 0) {
+          this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+        }
       }
       for (const row of mountainRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
+        if (row.points != null && row.points > 0) {
+          this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
+        }
       }
-      for (const row of youthRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.youth, row);
-      }
+
       for (const row of breakawayRows) {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.breakaway, {
           rank: row.rank,
@@ -1017,7 +1019,10 @@ export class StageResultCommitService {
         });
       }
       for (const classification of markerClassifications) {
-        for (const entry of classification.entries) {
+        const entriesToSave = classification.entries.filter(
+          (entry: any) => (entry.pointsAwarded != null && entry.pointsAwarded > 0) || entry.rank === 1
+        );
+        for (const entry of entriesToSave) {
           const performanceEntry = performanceByRiderId.get(entry.riderId);
           if (!performanceEntry) continue;
           insertMarkerResult.run(
@@ -1696,6 +1701,11 @@ export class StageResultCommitService {
 
         this.db.prepare(`
           DELETE FROM stage_entries
+          WHERE race_id = ?
+        `).run(race.id);
+
+        this.db.prepare(`
+          DELETE FROM rider_stage_race_state
           WHERE race_id = ?
         `).run(race.id);
       }

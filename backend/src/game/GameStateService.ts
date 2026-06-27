@@ -8,7 +8,7 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
 
-import { getDeterministicWeatherEffect } from '../db/mappers';
+import { getDeterministicWeatherEffect, isWinterBreak } from '../db/mappers';
 import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
@@ -199,6 +199,8 @@ export class GameStateService {
           UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
         `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+
+        this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(state.season);
       }
 
       this.syncedStateDate = state.currentDate;
@@ -332,6 +334,8 @@ export class GameStateService {
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'bike_handling', skill_bike_handling FROM riders WHERE is_retired = 0
         `).run(...Array(16).fill(nextSeason));
+
+        this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(nextSeason);
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);
@@ -1411,15 +1415,26 @@ export class GameStateService {
 
 
   private removeExpiredRaceFormEvents(currentDate: string): void {
-    if (!tableExists(this.db, 'rider_r_form_events')) {
-      return;
+    if (tableExists(this.db, 'rider_r_form_events')) {
+      this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
     }
-
-    this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
+    if (tableExists(this.db, 'rider_r_form_daily_awards')) {
+      this.db.prepare('DELETE FROM rider_r_form_daily_awards WHERE award_date < ?').run(currentDate);
+    }
   }
 
   private syncDailyFormHistory(currentDate: string): void {
     if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
+      return;
+    }
+
+    if (isWinterBreak(currentDate)) {
+      return;
+    }
+
+    const isFirstDay = currentDate.endsWith('-01-01');
+    const dayOfWeek = new Date(currentDate + 'T00:00:00Z').getUTCDay();
+    if (!isFirstDay && dayOfWeek !== 0) {
       return;
     }
 

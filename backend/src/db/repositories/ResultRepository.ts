@@ -424,6 +424,7 @@ export class ResultRepository {
         results.rider_id AS rider_id,
         riders.first_name AS rider_first_name,
         riders.last_name AS rider_last_name,
+        riders.birth_year AS birth_year,
         results.team_id AS team_id,
         teams.name AS team_name,
         results.leadout_rider_id AS leadout_rider_id,
@@ -480,7 +481,19 @@ export class ResultRepository {
 
     const classifications: StageClassification[] = resultTypes
       .map((resultType) => {
-        const typeRows = groupedRows.get(resultType.id) ?? [];
+        let typeRows = groupedRows.get(resultType.id) ?? [];
+        if (resultType.id === RESULT_TYPE_IDS.youth) {
+          const gcRowsList = groupedRows.get(RESULT_TYPE_IDS.gc) ?? [];
+          const season = Number.parseInt(meta.date.slice(0, 4), 10);
+          typeRows = gcRowsList
+            .filter((row) => row.birth_year != null && (season - row.birth_year) <= 25)
+            .map((row, index) => ({
+              ...row,
+              result_type_id: RESULT_TYPE_IDS.youth,
+              result_type_name: 'Youth',
+              rank: index + 1
+            }));
+        }
         const shouldFilterCompletedRiders = fullyClassifiedRiderIds != null
           && (resultType.id === RESULT_TYPE_IDS.gc
             || resultType.id === RESULT_TYPE_IDS.points
@@ -745,6 +758,31 @@ export class ResultRepository {
 
 
   public loadSeasonPointResultRows(stageId: number, resultTypeId: number): SeasonPointResultRow[] {
+    if (resultTypeId === RESULT_TYPE_IDS.youth) {
+      const stageRow = this.db.prepare('SELECT date FROM stages WHERE id = ?').get(stageId) as { date: string } | undefined;
+      if (!stageRow) return [];
+      const season = Number.parseInt(stageRow.date.slice(0, 4), 10);
+      
+      const gcYouthRows = this.db.prepare(`
+        SELECT 
+          r.rider_id, 
+          r.team_id
+        FROM all_results r
+        JOIN riders ON riders.id = r.rider_id
+        WHERE r.stage_id = ? 
+          AND r.result_type_id = ? 
+          AND r.rider_id IS NOT NULL 
+          AND (? - riders.birth_year) <= 25
+        ORDER BY r.rank ASC
+      `).all(stageId, RESULT_TYPE_IDS.gc, season) as Array<{ rider_id: number; team_id: number }>;
+
+      return gcYouthRows.map((row, index) => ({
+        rider_id: row.rider_id,
+        team_id: row.team_id,
+        rank: index + 1
+      }));
+    }
+
     return this.db.prepare(`
       SELECT rider_id, team_id, rank
       FROM all_results
