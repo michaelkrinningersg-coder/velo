@@ -71,7 +71,6 @@ export class ResultRepository {
       }
     }
 
-    new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season);
     if (!tableExists(this.db, 'season_point_events')) {
       return {
         season,
@@ -401,11 +400,6 @@ export class ResultRepository {
       WHERE stages.id = ?
     `).get(stageId) as (StageResultsMetaRow & { rolled_weather_id: number | null, rolled_wetter_name: string | null }) | undefined;
     if (!meta) return null;
-
-    const season = Number.parseInt(meta.date.slice(0, 4), 10);
-    if (Number.isFinite(season)) {
-      new GameStateRepository(this.db).syncSeasonPointEventsForSeason(season, stageId);
-    }
 
     const resultTypes = this.db.prepare(`
       SELECT id, name

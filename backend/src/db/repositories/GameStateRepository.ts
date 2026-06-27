@@ -688,7 +688,7 @@ export class GameStateRepository {
         ${stageId != null ? 'AND stages.id = ?' : ''}
         AND EXISTS (
           SELECT 1
-          FROM results
+          FROM all_results results
           WHERE results.stage_id = stages.id AND results.result_type_id = ?
         )
       ORDER BY stages.date ASC, stages.race_id ASC, stages.stage_number ASC
@@ -717,14 +717,14 @@ export class GameStateRepository {
 
         const pointsLeaderRow = this.db.prepare(`
           SELECT points
-          FROM results
+          FROM all_results
           WHERE stage_id = ? AND result_type_id = ? AND rank = 1
         `).get(stage.stage_id, RESULT_TYPE_IDS.points) as { points: number | null } | undefined;
         const hasPointsPoints = pointsLeaderRow != null && pointsLeaderRow.points != null && pointsLeaderRow.points > 0;
 
         const mountainLeaderRow = this.db.prepare(`
           SELECT points
-          FROM results
+          FROM all_results
           WHERE stage_id = ? AND result_type_id = ? AND rank = 1
         `).get(stage.stage_id, RESULT_TYPE_IDS.mountain) as { points: number | null } | undefined;
         const hasMountainPoints = mountainLeaderRow != null && mountainLeaderRow.points != null && mountainLeaderRow.points > 0;

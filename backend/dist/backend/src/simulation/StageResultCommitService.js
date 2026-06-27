@@ -190,7 +190,7 @@ class StageResultCommitService {
             applyIncidentRaceState: (raceId, incidents) => gsRepo.applyIncidentRaceState(raceId, incidents),
             markStageEntriesFinished: (stageId, riderIds) => gsRepo.markStageEntriesFinished(stageId, riderIds),
             updateStageEntryStatus: (stageId, riderId, status, reason) => gsRepo.updateStageEntryStatus(stageId, riderId, status, reason),
-            syncSeasonPointEventsForSeason: (season) => gsRepo.syncSeasonPointEventsForSeason(season),
+            syncSeasonPointEventsForSeason: (season, stageId) => gsRepo.syncSeasonPointEventsForSeason(season, stageId),
             ensureStageEntries: (stage) => gsRepo.ensureStageEntries(stage),
             prepareStageRaceFatigue: (raceId, stageNumber, riderIds) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
             attachStageRaceFatigue: (raceId, riders, stageNumber) => raceRepo.attachStageRaceFatigue(raceId, riders, stageNumber),
@@ -778,13 +778,14 @@ class StageResultCommitService {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.gc, row);
             }
             for (const row of pointsRows) {
-                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+                if (row.points != null && row.points > 0) {
+                    this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+                }
             }
             for (const row of mountainRows) {
-                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
-            }
-            for (const row of youthRows) {
-                this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.youth, row);
+                if (row.points != null && row.points > 0) {
+                    this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
+                }
             }
             for (const row of breakawayRows) {
                 this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.breakaway, {
@@ -806,7 +807,8 @@ class StageResultCommitService {
                 });
             }
             for (const classification of markerClassifications) {
-                for (const entry of classification.entries) {
+                const entriesToSave = classification.entries.filter((entry) => (entry.pointsAwarded != null && entry.pointsAwarded > 0) || entry.rank === 1);
+                for (const entry of entriesToSave) {
                     const performanceEntry = performanceByRiderId.get(entry.riderId);
                     if (!performanceEntry)
                         continue;
@@ -954,6 +956,27 @@ class StageResultCommitService {
                 for (const c of leadoutContributions) {
                     insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
                 }
+                // 1. Keep only the top 200 leadouts for the current season to prevent database bloat
+                this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season = ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            WHERE season = ?
+            ORDER BY leadout_bonus DESC, id DESC
+            LIMIT 200
+          )
+        `).run(currentSeason, currentSeason);
+                // 2. Prune old seasons' leadouts that are not in the top 200 all-time
+                this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season != ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            ORDER BY leadout_bonus DESC
+            LIMIT 200
+          )
+        `).run(currentSeason);
             }
             if (superTeamId != null) {
                 this.db.prepare('UPDATE stages SET super_team_id = ? WHERE id = ?').run(superTeamId, stage.id);
@@ -1355,15 +1378,92 @@ class StageResultCommitService {
             }
             const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
             if (isRaceFinished) {
-                this.db.prepare(`
-          INSERT INTO stage_entries_history (stage_id, race_id, team_id, rider_id, status, status_reason)
-          SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+                const currentSeason = this.repo.getCurrentSeason();
+                // 1. Archive stage entries
+                const stageEntries = this.db.prepare(`
+          SELECT stage_id, team_id, rider_id, status, status_reason
           FROM stage_entries
           WHERE race_id = ?
-        `).run(race.id);
+        `).all(race.id);
+                const compactStageEntries = stageEntries.map(row => ({
+                    sid: row.stage_id,
+                    tid: row.team_id,
+                    rid: row.rider_id,
+                    st: row.status,
+                    str: row.status_reason
+                }));
+                this.db.prepare(`
+          INSERT OR REPLACE INTO stage_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactStageEntries));
                 this.db.prepare(`
           DELETE FROM stage_entries
           WHERE race_id = ?
+        `).run(race.id);
+                // 2. Archive race entries
+                const raceEntries = this.db.prepare(`
+          SELECT team_id, rider_id
+          FROM active_race_entries
+          WHERE race_id = ?
+        `).all(race.id);
+                const compactRaceEntries = raceEntries.map(row => ({
+                    t: row.team_id,
+                    r: row.rider_id
+                }));
+                this.db.prepare(`
+          INSERT OR REPLACE INTO race_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactRaceEntries));
+                this.db.prepare(`
+          DELETE FROM active_race_entries
+          WHERE race_id = ?
+        `).run(race.id);
+                // 3. Clear transient race state
+                this.db.prepare(`
+          DELETE FROM rider_stage_race_state
+          WHERE race_id = ?
+        `).run(race.id);
+                // 4. Archive active results into compact JSON format
+                const activeResults = this.db.prepare(`
+          SELECT r.stage_id, r.rider_id, r.team_id, r.result_type_id, r.rank, r.time_seconds, r.points, r.is_breakaway, r.leadout_rider_id, r.leadout_bonus, r.breakaway_kms, r.event_ids, r.jerseys_worn
+          FROM results r
+          JOIN stages s ON s.id = r.stage_id
+          WHERE s.race_id = ?
+        `).all(race.id);
+                const groups = {
+                    type1: [],
+                    type2: [],
+                    type3: [],
+                    type4: [],
+                    type6: [],
+                    type7: []
+                };
+                for (const row of activeResults) {
+                    const typeKey = `type${row.result_type_id}`;
+                    if (groups[typeKey]) {
+                        groups[typeKey].push({
+                            sid: row.stage_id,
+                            rid: row.rider_id,
+                            tid: row.team_id,
+                            rk: row.rank,
+                            ts: row.time_seconds,
+                            pts: row.points,
+                            ib: row.is_breakaway,
+                            lrid: row.leadout_rider_id,
+                            lbn: row.leadout_bonus,
+                            bkms: row.breakaway_kms,
+                            eids: row.event_ids,
+                            jw: row.jerseys_worn
+                        });
+                    }
+                }
+                this.db.prepare(`
+          INSERT OR REPLACE INTO race_results_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(groups));
+                this.db.prepare(`
+          DELETE FROM results
+          WHERE stage_id IN (SELECT id FROM stages WHERE race_id = ?)
         `).run(race.id);
             }
         })();
@@ -1371,7 +1471,7 @@ class StageResultCommitService {
         gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
         gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
         gameStateService.applyStageFatigue(stage.id, completedRiderIds, dnfEntries.map((e) => e.riderId));
-        this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
+        this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason(), stage.id);
         this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
         this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);
         return {
@@ -1447,7 +1547,7 @@ class StageResultCommitService {
     ensureStageCanBeSimulated(stage) {
         const existing = this.db.prepare(`
       SELECT 1
-      FROM results
+      FROM all_results
       WHERE stage_id = ? AND result_type_id = ?
       LIMIT 1
     `).get(stage.id, RESULT_TYPES.stage);
@@ -1456,7 +1556,7 @@ class StageResultCommitService {
         }
         const row = this.db.prepare(`
       SELECT MAX(stages.stage_number) AS last_stage_number
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE stages.race_id = ? AND results.result_type_id = ?
     `).get(stage.raceId, RESULT_TYPES.stage);

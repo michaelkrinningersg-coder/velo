@@ -512,11 +512,11 @@ class GameStateRepository {
             }
         }
     }
-    syncSeasonPointEventsForSeason(season = new GameStateRepository(this.db).getCurrentSeason()) {
+    syncSeasonPointEventsForSeason(season = new GameStateRepository(this.db).getCurrentSeason(), stageId) {
         if (!(0, mappers_1.tableExists)(this.db, 'season_point_events') || !(0, mappers_1.tableExists)(this.db, 'results')) {
             return;
         }
-        const stages = this.db.prepare(`
+        const query = `
       SELECT
         stages.id AS stage_id,
         stages.race_id AS race_id,
@@ -541,13 +541,16 @@ class GameStateRepository {
       JOIN race_categories ON race_categories.id = races.category_id
       JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
       WHERE CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+        ${stageId != null ? 'AND stages.id = ?' : ''}
         AND EXISTS (
           SELECT 1
-          FROM results
+          FROM all_results results
           WHERE results.stage_id = stages.id AND results.result_type_id = ?
         )
       ORDER BY stages.date ASC, stages.race_id ASC, stages.stage_number ASC
-    `).all(season, mappers_1.RESULT_TYPE_IDS.stage);
+    `;
+        const params = stageId != null ? [season, stageId, mappers_1.RESULT_TYPE_IDS.stage] : [season, mappers_1.RESULT_TYPE_IDS.stage];
+        const stages = this.db.prepare(query).all(...params);
         if (stages.length === 0) {
             return;
         }
@@ -565,13 +568,13 @@ class GameStateRepository {
                 const youthRows = new ResultRepository_1.ResultRepository(this.db).loadSeasonPointResultRows(stage.stage_id, mappers_1.RESULT_TYPE_IDS.youth);
                 const pointsLeaderRow = this.db.prepare(`
           SELECT points
-          FROM results
+          FROM all_results
           WHERE stage_id = ? AND result_type_id = ? AND rank = 1
         `).get(stage.stage_id, mappers_1.RESULT_TYPE_IDS.points);
                 const hasPointsPoints = pointsLeaderRow != null && pointsLeaderRow.points != null && pointsLeaderRow.points > 0;
                 const mountainLeaderRow = this.db.prepare(`
           SELECT points
-          FROM results
+          FROM all_results
           WHERE stage_id = ? AND result_type_id = ? AND rank = 1
         `).get(stage.stage_id, mappers_1.RESULT_TYPE_IDS.mountain);
                 const hasMountainPoints = mountainLeaderRow != null && mountainLeaderRow.points != null && mountainLeaderRow.points > 0;

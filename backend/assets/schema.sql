@@ -370,15 +370,34 @@ CREATE INDEX IF NOT EXISTS idx_stage_climb_scores_stage
   ON stage_climb_scores(stage_id);
 
 -- ---- Rennteilnehmer -----------------------------------------
-CREATE TABLE IF NOT EXISTS race_entries (
+CREATE TABLE IF NOT EXISTS active_race_entries (
   race_id  INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
   team_id  INTEGER NOT NULL REFERENCES teams(id),
   rider_id INTEGER NOT NULL REFERENCES riders(id),
   PRIMARY KEY (race_id, rider_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_race_entries_rider_race
-  ON race_entries(rider_id, race_id);
+CREATE INDEX IF NOT EXISTS idx_active_race_entries_rider_race
+  ON active_race_entries(rider_id, race_id);
+
+CREATE TABLE IF NOT EXISTS race_entries_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_entries_compact_season
+  ON race_entries_compact(season);
+
+CREATE VIEW IF NOT EXISTS race_entries AS
+SELECT * FROM active_race_entries
+UNION ALL
+SELECT
+  c.race_id AS race_id,
+  CAST(j.value->>'t' AS INTEGER) AS team_id,
+  CAST(j.value->>'r' AS INTEGER) AS rider_id
+FROM race_entries_compact c,
+json_each(c.payload) j;
 
 CREATE TABLE IF NOT EXISTS stage_entries (
   stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
@@ -730,20 +749,38 @@ CREATE TABLE IF NOT EXISTS team_preferences (
 );
 
 -- ---- Stage Entries History / View --------------------------
-CREATE TABLE IF NOT EXISTS stage_entries_history (
-  stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
-  race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
-  team_id        INTEGER NOT NULL REFERENCES teams(id),
-  rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-  status         TEXT    NOT NULL,
-  status_reason  TEXT,
-  PRIMARY KEY (stage_id, rider_id)
+CREATE TABLE IF NOT EXISTS stage_entries_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_stage_entries_hist_rider ON stage_entries_history(rider_id);
+CREATE INDEX IF NOT EXISTS idx_stage_entries_compact_season
+  ON stage_entries_compact(season);
+
+CREATE VIEW IF NOT EXISTS stage_entries_history AS
+SELECT
+  CAST(j.value->>'sid' AS INTEGER) AS stage_id,
+  c.race_id AS race_id,
+  CAST(j.value->>'tid' AS INTEGER) AS team_id,
+  CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+  j.value->>'st' AS status,
+  j.value->>'str' AS status_reason
+FROM stage_entries_compact c,
+json_each(c.payload) j;
 
 CREATE VIEW IF NOT EXISTS all_stage_entries AS
 SELECT * FROM stage_entries
 UNION ALL
 SELECT * FROM stage_entries_history;
+
+-- ---- Archivierte Rennergebnisse ----------------------------
+CREATE TABLE IF NOT EXISTS race_results_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_results_compact_season
+  ON race_results_compact(season);
 

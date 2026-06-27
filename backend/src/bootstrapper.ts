@@ -1120,7 +1120,7 @@ function seedRaceEntries(db: Database.Database): void {
     ORDER BY overall_rating DESC, id ASC
     LIMIT ?
   `);
-  const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+  const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
 
   db.transaction(() => {
     for (const race of races) {

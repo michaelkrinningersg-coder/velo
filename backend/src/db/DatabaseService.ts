@@ -80,6 +80,22 @@ export class DatabaseService {
   }
 
   private applyLatestSchema(db: Database.Database): void {
+    // Migration: If 'race_entries' exists as a table, rename it to 'active_race_entries'
+    const raceEntriesType = db.prepare("SELECT type FROM sqlite_master WHERE name = 'race_entries'").get() as { type: string } | undefined;
+    if (raceEntriesType && raceEntriesType.type === 'table') {
+      console.log("Migrating 'race_entries' table to 'active_race_entries'...");
+      db.prepare("ALTER TABLE race_entries RENAME TO active_race_entries;").run();
+      db.prepare("DROP INDEX IF EXISTS idx_race_entries_rider_race;").run();
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_active_race_entries_rider_race ON active_race_entries(rider_id, race_id);").run();
+    }
+
+    // Migration: If 'stage_entries_history' exists as a table, drop it to let it be recreated as a view
+    const stageEntriesHistoryType = db.prepare("SELECT type FROM sqlite_master WHERE name = 'stage_entries_history'").get() as { type: string } | undefined;
+    if (stageEntriesHistoryType && stageEntriesHistoryType.type === 'table') {
+      console.log("Dropping old relational table 'stage_entries_history'...");
+      db.prepare("DROP TABLE stage_entries_history;").run();
+    }
+
     const schema = fs.readFileSync(this.schemaPath, 'utf8');
     db.exec(schema);
   }
@@ -908,7 +924,156 @@ export class DatabaseService {
       JOIN riders ON riders.id = r.rider_id
       JOIN stages ON stages.id = r.stage_id
       WHERE r.result_type_id = 2
-        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25;
+        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        1 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type1') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        2 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type2') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        3 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type3') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        4 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type4') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        5 AS result_type_id,
+        ROW_NUMBER() OVER (PARTITION BY j.value->>'sid' ORDER BY CAST(j.value->>'rk' AS INTEGER) ASC) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id
+      JOIN riders r ON r.id = CAST(j.value->>'rid' AS INTEGER),
+      json_each(c.payload, '$.type2') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+        AND (CAST(SUBSTR(s.date, 1, 4) AS INTEGER) - r.birth_year) <= 25
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        6 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type6') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+      UNION ALL
+      SELECT
+        NULL AS id,
+        s.race_id AS race_id,
+        s.id AS stage_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        7 AS result_type_id,
+        CAST(j.value->>'rk' AS INTEGER) AS rank,
+        CAST(j.value->>'ts' AS INTEGER) AS time_seconds,
+        CAST(j.value->>'pts' AS INTEGER) AS points,
+        CAST(j.value->>'ib' AS INTEGER) AS is_breakaway,
+        CAST(j.value->>'lrid' AS INTEGER) AS leadout_rider_id,
+        CAST(j.value->>'lbn' AS REAL) AS leadout_bonus,
+        CAST(j.value->>'bkms' AS REAL) AS breakaway_kms,
+        j.value->>'eids' AS event_ids,
+        j.value->>'jw' AS jerseys_worn
+      FROM race_results_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload, '$.type7') j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id;
     `).run();
   }
 
@@ -1106,50 +1271,28 @@ export class DatabaseService {
       db.prepare('ALTER TABLE rider_career_stats ADD COLUMN injury_days INTEGER NOT NULL DEFAULT 0').run();
     }
 
-    if (!columnExists(db, 'rider_career_stats', 'max_short_term_fatigue')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_short_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
-    }
-    if (!columnExists(db, 'rider_career_stats', 'max_long_term_fatigue')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_long_term_fatigue REAL NOT NULL DEFAULT 0.0').run();
-    }
-    if (!columnExists(db, 'rider_career_stats', 'max_combined_fatigue')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_fatigue REAL NOT NULL DEFAULT 0.0').run();
-    }
-    if (!columnExists(db, 'rider_career_stats', 'max_s_form')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_s_form REAL NOT NULL DEFAULT 0.0').run();
-    }
-    if (!columnExists(db, 'rider_career_stats', 'max_r_form')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_r_form REAL NOT NULL DEFAULT 0.0').run();
-    }
-    if (!columnExists(db, 'rider_career_stats', 'max_combined_form')) {
-      db.prepare('ALTER TABLE rider_career_stats ADD COLUMN max_combined_form REAL NOT NULL DEFAULT 0.0').run();
-    }
+    // Drop Peak fatigue and form triggers
+    db.prepare('DROP TRIGGER IF EXISTS trg_update_highest_rider_records_fatigue').run();
+    db.prepare('DROP TRIGGER IF EXISTS trg_update_highest_rider_records_form').run();
 
-    db.prepare(`
-      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_fatigue
-      AFTER UPDATE OF short_term_fatigue, long_term_fatigue_decayable ON rider_daily_state
-      BEGIN
-        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
-        UPDATE rider_career_stats SET
-          max_short_term_fatigue = MAX(max_short_term_fatigue, NEW.short_term_fatigue),
-          max_long_term_fatigue = MAX(max_long_term_fatigue, NEW.long_term_fatigue_decayable),
-          max_combined_fatigue = MAX(max_combined_fatigue, NEW.short_term_fatigue + NEW.long_term_fatigue_decayable)
-        WHERE rider_id = NEW.rider_id;
-      END;
-    `).run();
-
-    db.prepare(`
-      CREATE TRIGGER IF NOT EXISTS trg_update_highest_rider_records_form
-      AFTER UPDATE OF form_bonus, race_form_bonus ON rider_daily_state
-      BEGIN
-        INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (NEW.rider_id);
-        UPDATE rider_career_stats SET
-          max_s_form = MAX(max_s_form, NEW.form_bonus),
-          max_r_form = MAX(max_r_form, NEW.race_form_bonus),
-          max_combined_form = MAX(max_combined_form, NEW.form_bonus + NEW.race_form_bonus)
-        WHERE rider_id = NEW.rider_id;
-      END;
-    `).run();
+    // Drop Peak fatigue and form columns if the SQLite version supports it
+    const dropColumns = [
+      'max_short_term_fatigue',
+      'max_long_term_fatigue',
+      'max_combined_fatigue',
+      'max_s_form',
+      'max_r_form',
+      'max_combined_form'
+    ];
+    for (const col of dropColumns) {
+      if (columnExists(db, 'rider_career_stats', col)) {
+        try {
+          db.prepare(`ALTER TABLE rider_career_stats DROP COLUMN ${col}`).run();
+        } catch (e) {
+          console.warn(`Could not drop column ${col}:`, e);
+        }
+      }
+    }
   }
 
   private ensureStageLeadoutsSchema(db: Database.Database): void {
@@ -1277,25 +1420,56 @@ export class DatabaseService {
     `).run();
   }
 
-  private ensureRiderCategoryStatsSchema(db: Database.Database): void {
+  private ensureRaceResultsCompactSchema(db: Database.Database): void {
     db.prepare(`
-      CREATE TABLE IF NOT EXISTS stage_entries_history (
-        stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
-        race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
-        team_id        INTEGER NOT NULL REFERENCES teams(id),
-        rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-        status         TEXT    NOT NULL,
-        status_reason  TEXT,
-        PRIMARY KEY (stage_id, rider_id)
+      CREATE TABLE IF NOT EXISTS race_results_compact (
+        race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+        season   INTEGER NOT NULL,
+        payload  TEXT    NOT NULL
       )
     `).run();
 
     db.prepare(`
-      CREATE INDEX IF NOT EXISTS idx_stage_entries_hist_rider ON stage_entries_history(rider_id);
+      CREATE INDEX IF NOT EXISTS idx_race_results_compact_season
+        ON race_results_compact(season)
+    `).run();
+  }
+
+  private ensureRiderCategoryStatsSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_entries_compact (
+        race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+        season   INTEGER NOT NULL,
+        payload  TEXT    NOT NULL
+      )
     `).run();
 
     db.prepare(`
-      CREATE VIEW IF NOT EXISTS all_stage_entries AS
+      CREATE INDEX IF NOT EXISTS idx_stage_entries_compact_season
+        ON stage_entries_compact(season)
+    `).run();
+
+    db.prepare(`DROP VIEW IF EXISTS stage_entries_history;`).run();
+
+    db.prepare(`
+      CREATE VIEW stage_entries_history AS
+      SELECT
+        s.id AS stage_id,
+        c.race_id AS race_id,
+        CAST(j.value->>'tid' AS INTEGER) AS team_id,
+        CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+        j.value->>'st' AS status,
+        j.value->>'str' AS status_reason
+      FROM stage_entries_compact c
+      JOIN stages s ON s.race_id = c.race_id,
+      json_each(c.payload) j
+      WHERE CAST(j.value->>'sid' AS INTEGER) = s.id
+    `).run();
+
+    db.prepare(`DROP VIEW IF EXISTS all_stage_entries;`).run();
+
+    db.prepare(`
+      CREATE VIEW all_stage_entries AS
       SELECT * FROM stage_entries
       UNION ALL
       SELECT * FROM stage_entries_history;
@@ -1401,7 +1575,7 @@ export class DatabaseService {
     `).run();
 
     if (tableExists(db, 'stages') && tableExists(db, 'results')) {
-      const hasSimulatedStages = db.prepare("SELECT 1 FROM results LIMIT 1").get() != null;
+      const hasSimulatedStages = db.prepare("SELECT 1 FROM all_results LIMIT 1").get() != null;
       const isCategoryStatsEmpty = db.prepare("SELECT 1 FROM rider_career_category_stats LIMIT 1").get() == null;
       
       if (hasSimulatedStages && isCategoryStatsEmpty) {
@@ -2040,6 +2214,7 @@ export class DatabaseService {
     this.ensureStageLeadoutsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);
     this.ensureSeasonStandingsSnapshotsSchema(db);
+    this.ensureRaceResultsCompactSchema(db);
     this.ensureTeamPreferencesData(db);
     this.ensureReferenceData(db);
     this.ensureDayChangeIndexes(db);

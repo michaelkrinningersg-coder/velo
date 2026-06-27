@@ -288,7 +288,7 @@ export class StageResultCommitService {
       applyIncidentRaceState: (raceId: number, incidents: any[]) => gsRepo.applyIncidentRaceState(raceId, incidents),
       markStageEntriesFinished: (stageId: number, riderIds: number[]) => gsRepo.markStageEntriesFinished(stageId, riderIds),
       updateStageEntryStatus: (stageId: number, riderId: number, status: any, reason: any) => gsRepo.updateStageEntryStatus(stageId, riderId, status, reason),
-      syncSeasonPointEventsForSeason: (season?: number) => gsRepo.syncSeasonPointEventsForSeason(season),
+      syncSeasonPointEventsForSeason: (season?: number, stageId?: number) => gsRepo.syncSeasonPointEventsForSeason(season, stageId),
       ensureStageEntries: (stage: any) => gsRepo.ensureStageEntries(stage),
       prepareStageRaceFatigue: (raceId: number, stageNumber: number, riderIds: number[]) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
       attachStageRaceFatigue: (raceId: number, riders: any[], stageNumber: number) => (raceRepo as any).attachStageRaceFatigue(raceId, riders, stageNumber),
@@ -1228,6 +1228,29 @@ export class StageResultCommitService {
         for (const c of leadoutContributions) {
           insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
         }
+
+        // 1. Keep only the top 200 leadouts for the current season to prevent database bloat
+        this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season = ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            WHERE season = ?
+            ORDER BY leadout_bonus DESC, id DESC
+            LIMIT 200
+          )
+        `).run(currentSeason, currentSeason);
+
+        // 2. Prune old seasons' leadouts that are not in the top 200 all-time
+        this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season != ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            ORDER BY leadout_bonus DESC
+            LIMIT 200
+          )
+        `).run(currentSeason);
       }
 
       if (superTeamId != null) {
@@ -1692,21 +1715,106 @@ export class StageResultCommitService {
 
       const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
       if (isRaceFinished) {
-        this.db.prepare(`
-          INSERT INTO stage_entries_history (stage_id, race_id, team_id, rider_id, status, status_reason)
-          SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+        const currentSeason = this.repo.getCurrentSeason();
+
+        // 1. Archive stage entries
+        const stageEntries = this.db.prepare(`
+          SELECT stage_id, team_id, rider_id, status, status_reason
           FROM stage_entries
           WHERE race_id = ?
-        `).run(race.id);
+        `).all(race.id) as any[];
+
+        const compactStageEntries = stageEntries.map(row => ({
+          sid: row.stage_id,
+          tid: row.team_id,
+          rid: row.rider_id,
+          st: row.status,
+          str: row.status_reason
+        }));
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO stage_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactStageEntries));
 
         this.db.prepare(`
           DELETE FROM stage_entries
           WHERE race_id = ?
         `).run(race.id);
 
+        // 2. Archive race entries
+        const raceEntries = this.db.prepare(`
+          SELECT team_id, rider_id
+          FROM active_race_entries
+          WHERE race_id = ?
+        `).all(race.id) as any[];
+
+        const compactRaceEntries = raceEntries.map(row => ({
+          t: row.team_id,
+          r: row.rider_id
+        }));
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO race_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactRaceEntries));
+
+        this.db.prepare(`
+          DELETE FROM active_race_entries
+          WHERE race_id = ?
+        `).run(race.id);
+
+        // 3. Clear transient race state
         this.db.prepare(`
           DELETE FROM rider_stage_race_state
           WHERE race_id = ?
+        `).run(race.id);
+
+        // 4. Archive active results into compact JSON format
+        const activeResults = this.db.prepare(`
+          SELECT r.stage_id, r.rider_id, r.team_id, r.result_type_id, r.rank, r.time_seconds, r.points, r.is_breakaway, r.leadout_rider_id, r.leadout_bonus, r.breakaway_kms, r.event_ids, r.jerseys_worn
+          FROM results r
+          JOIN stages s ON s.id = r.stage_id
+          WHERE s.race_id = ?
+        `).all(race.id) as any[];
+
+        const groups: Record<string, any[]> = {
+          type1: [],
+          type2: [],
+          type3: [],
+          type4: [],
+          type6: [],
+          type7: []
+        };
+
+        for (const row of activeResults) {
+          const typeKey = `type${row.result_type_id}`;
+          if (groups[typeKey]) {
+            groups[typeKey].push({
+              sid: row.stage_id,
+              rid: row.rider_id,
+              tid: row.team_id,
+              rk: row.rank,
+              ts: row.time_seconds,
+              pts: row.points,
+              ib: row.is_breakaway,
+              lrid: row.leadout_rider_id,
+              lbn: row.leadout_bonus,
+              bkms: row.breakaway_kms,
+              eids: row.event_ids,
+              jw: row.jerseys_worn
+            });
+          }
+        }
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO race_results_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(groups));
+
+        this.db.prepare(`
+          DELETE FROM results
+          WHERE stage_id IN (SELECT id FROM stages WHERE race_id = ?)
         `).run(race.id);
       }
     })();
@@ -1799,7 +1907,7 @@ export class StageResultCommitService {
   private ensureStageCanBeSimulated(stage: Stage): void {
     const existing = this.db.prepare(`
       SELECT 1
-      FROM results
+      FROM all_results
       WHERE stage_id = ? AND result_type_id = ?
       LIMIT 1
     `).get(stage.id, RESULT_TYPES.stage);
@@ -1809,7 +1917,7 @@ export class StageResultCommitService {
 
     const row = this.db.prepare(`
       SELECT MAX(stages.stage_number) AS last_stage_number
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE stages.race_id = ? AND results.result_type_id = ?
     `).get(stage.raceId, RESULT_TYPES.stage) as { last_stage_number: number | null } | undefined;

@@ -1175,8 +1175,8 @@ export function applyRaceRosterSelection(db: Database.Database, repo: any, race:
   const autoEntries = previewRaceRoster(db, repo, race, stage).filter((rider: any) => rider.activeTeamId !== playerTeam.id);
   const finalSelections = [...autoEntries, ...validatedSelections];
 
-  const deleteEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
-  const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+  const deleteEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
+  const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
 
   db.transaction(() => {
     deleteEntries.run(race.id);
@@ -1204,7 +1204,7 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
   }
 
   const selected = buildRaceRoster(db, repo, race, stage, true);
-  const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+  const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
 
   db.transaction(() => {
     for (const rider of selected) {
@@ -1225,9 +1225,9 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
 
 export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   const selected = buildRaceRoster(db, repo, race, stage);
-  const deleteRaceEntries = db.prepare('DELETE FROM race_entries WHERE race_id = ?');
+  const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
-  const insertEntry = db.prepare('INSERT OR IGNORE INTO race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
+  const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
 
   db.transaction(() => {
     deleteStageEntries.run(race.id);

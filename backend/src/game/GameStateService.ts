@@ -1319,51 +1319,20 @@ export class GameStateService {
   }
 
   private syncRiderLoadState(currentDate: string, currentSeason: number): void {
-    if (!this.isTable('rider_daily_state') || !this.isTable('stage_entries') || !this.isTable('stages') || !this.isTable('riders')) {
+    if (!this.isTable('rider_daily_state') || !this.isTable('rider_season_stats')) {
       return;
     }
 
-    const rollingWindowStart = addDaysIso(currentDate, -29);
-    const seasonStart = `${currentSeason}-01-01`;
-    const minDate = rollingWindowStart < seasonStart ? rollingWindowStart : seasonStart;
-
-    // Single SQL with a CTE: aggregate all_stage_entries once, then bulk-update
-    // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
-    // with one statement.
-    // Optimized by filtering stages.date >= @minDate to avoid scanning full history.
     this.db.prepare(`
-      WITH stats AS (
-        SELECT all_stage_entries.rider_id AS rider_id,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS season_race_days_total,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND stages.date >= @rollingStart
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS rolling_30d_race_days
-        FROM all_stage_entries
-        JOIN stages ON stages.id = all_stage_entries.stage_id
-        WHERE all_stage_entries.status IN ('finished', 'dnf')
-          AND stages.date >= @minDate
-          AND stages.date <= @currentDate
-        GROUP BY all_stage_entries.rider_id
-      )
       UPDATE rider_daily_state
-      SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
-          rolling_30d_race_days  = COALESCE(stats.rolling_30d_race_days, 0)
-      FROM stats
-      WHERE stats.rider_id = rider_daily_state.rider_id
-    `).run({
-      season: currentSeason,
-      currentDate,
-      rollingStart: rollingWindowStart,
-      minDate,
-    });
+      SET season_race_days_total = COALESCE((
+        SELECT race_days
+        FROM rider_season_stats
+        WHERE rider_season_stats.rider_id = rider_daily_state.rider_id
+          AND rider_season_stats.season = ?
+      ), 0),
+      rolling_30d_race_days = 0
+    `).run(currentSeason);
 
     this.db.prepare(`
       WITH individual_wins AS (
@@ -1577,7 +1546,7 @@ export class GameStateService {
       return [];
     }
 
-    const rows = tableExists(this.db, 'results')
+    const rows = tableExists(this.db, 'all_results')
       ? this.db.prepare(`
           SELECT
             stages.id AS stage_id,
@@ -1591,7 +1560,7 @@ export class GameStateService {
             races.is_stage_race AS is_stage_race
           FROM stages
           JOIN races ON races.id = stages.race_id
-          LEFT JOIN results stage_results
+          LEFT JOIN all_results stage_results
             ON stage_results.stage_id = stages.id
            AND stage_results.result_type_id = 1
           WHERE stages.date = ?
@@ -1605,7 +1574,7 @@ export class GameStateService {
             stages.start_elevation,
             stages.details_csv_file,
             races.is_stage_race
-          HAVING COUNT(stage_results.id) = 0
+          HAVING COUNT(stage_results.stage_id) = 0
           ORDER BY races.id ASC, stages.stage_number ASC
         `).all(currentDate) as PendingStageRow[]
       : this.db.prepare(`

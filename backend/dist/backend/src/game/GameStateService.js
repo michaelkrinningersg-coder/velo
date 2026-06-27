@@ -139,6 +139,7 @@ class GameStateService {
           UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
         `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+                this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(state.season);
             }
             this.syncedStateDate = state.currentDate;
         }
@@ -257,6 +258,7 @@ class GameStateService {
           UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
           UNION ALL SELECT id, ?, 'bike_handling', skill_bike_handling FROM riders WHERE is_retired = 0
         `).run(...Array(16).fill(nextSeason));
+                this.db.prepare('DELETE FROM rider_skill_yearly_baseline WHERE season < ?').run(nextSeason);
             }
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
@@ -1065,49 +1067,19 @@ class GameStateService {
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
     syncRiderLoadState(currentDate, currentSeason) {
-        if (!this.isTable('rider_daily_state') || !this.isTable('stage_entries') || !this.isTable('stages') || !this.isTable('riders')) {
+        if (!this.isTable('rider_daily_state') || !this.isTable('rider_season_stats')) {
             return;
         }
-        const rollingWindowStart = addDaysIso(currentDate, -29);
-        const seasonStart = `${currentSeason}-01-01`;
-        const minDate = rollingWindowStart < seasonStart ? rollingWindowStart : seasonStart;
-        // Single SQL with a CTE: aggregate all_stage_entries once, then bulk-update
-        // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
-        // with one statement.
-        // Optimized by filtering stages.date >= @minDate to avoid scanning full history.
         this.db.prepare(`
-      WITH stats AS (
-        SELECT all_stage_entries.rider_id AS rider_id,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS season_race_days_total,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND stages.date >= @rollingStart
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS rolling_30d_race_days
-        FROM all_stage_entries
-        JOIN stages ON stages.id = all_stage_entries.stage_id
-        WHERE all_stage_entries.status IN ('finished', 'dnf')
-          AND stages.date >= @minDate
-          AND stages.date <= @currentDate
-        GROUP BY all_stage_entries.rider_id
-      )
       UPDATE rider_daily_state
-      SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
-          rolling_30d_race_days  = COALESCE(stats.rolling_30d_race_days, 0)
-      FROM stats
-      WHERE stats.rider_id = rider_daily_state.rider_id
-    `).run({
-            season: currentSeason,
-            currentDate,
-            rollingStart: rollingWindowStart,
-            minDate,
-        });
+      SET season_race_days_total = COALESCE((
+        SELECT race_days
+        FROM rider_season_stats
+        WHERE rider_season_stats.rider_id = rider_daily_state.rider_id
+          AND rider_season_stats.season = ?
+      ), 0),
+      rolling_30d_race_days = 0
+    `).run(currentSeason);
         this.db.prepare(`
       WITH individual_wins AS (
         SELECT results.rider_id, COUNT(*) AS wins
@@ -1156,13 +1128,23 @@ class GameStateService {
         });
     }
     removeExpiredRaceFormEvents(currentDate) {
-        if (!tableExists(this.db, 'rider_r_form_events')) {
-            return;
+        if (tableExists(this.db, 'rider_r_form_events')) {
+            this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
         }
-        this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
+        if (tableExists(this.db, 'rider_r_form_daily_awards')) {
+            this.db.prepare('DELETE FROM rider_r_form_daily_awards WHERE award_date < ?').run(currentDate);
+        }
     }
     syncDailyFormHistory(currentDate) {
         if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
+            return;
+        }
+        if ((0, mappers_1.isWinterBreak)(currentDate)) {
+            return;
+        }
+        const isFirstDay = currentDate.endsWith('-01-01');
+        const dayOfWeek = new Date(currentDate + 'T00:00:00Z').getUTCDay();
+        if (!isFirstDay && dayOfWeek !== 0) {
             return;
         }
         // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
@@ -1289,7 +1271,7 @@ class GameStateService {
         if (!tableExists(this.db, 'stages') || !tableExists(this.db, 'races')) {
             return [];
         }
-        const rows = tableExists(this.db, 'results')
+        const rows = tableExists(this.db, 'all_results')
             ? this.db.prepare(`
           SELECT
             stages.id AS stage_id,
@@ -1303,7 +1285,7 @@ class GameStateService {
             races.is_stage_race AS is_stage_race
           FROM stages
           JOIN races ON races.id = stages.race_id
-          LEFT JOIN results stage_results
+          LEFT JOIN all_results stage_results
             ON stage_results.stage_id = stages.id
            AND stage_results.result_type_id = 1
           WHERE stages.date = ?
@@ -1317,7 +1299,7 @@ class GameStateService {
             stages.start_elevation,
             stages.details_csv_file,
             races.is_stage_race
-          HAVING COUNT(stage_results.id) = 0
+          HAVING COUNT(stage_results.stage_id) = 0
           ORDER BY races.id ASC, stages.stage_number ASC
         `).all(currentDate)
             : this.db.prepare(`
