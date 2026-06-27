@@ -830,11 +830,47 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     cachedPrograms.set(overlapRace.id, repo.getRaceProgramsForRace(overlapRace.id));
   }
 
+  const allowedThirdSprinterTeams = new Set<number>();
+  if (race.categoryId === 9 && !race.isStageRace) {
+    const candidatesList: Array<{ teamId: number; seasonRaceDays: number; sprinterId: number }> = [];
+    for (const team of selectedTeams) {
+      const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
+      const sprinters = teamFullRoster.filter(r => r.roleId === 6);
+      sprinters.sort((a: any, b: any) =>
+        (b.overallRating ?? 0) - (a.overallRating ?? 0) ||
+        (a.lastName || '').localeCompare(b.lastName || '', 'de') ||
+        (a.firstName || '').localeCompare(b.firstName || '', 'de') ||
+        a.id - b.id
+      );
+      const s3 = sprinters[2];
+      if (s3) {
+        candidatesList.push({
+          teamId: team.id,
+          seasonRaceDays: s3.seasonRaceDays ?? 0,
+          sprinterId: s3.id
+        });
+      }
+    }
+    candidatesList.sort((a, b) => a.seasonRaceDays - b.seasonRaceDays || a.sprinterId - b.sprinterId);
+    const allowedCount = Math.floor(candidatesList.length * 0.5);
+    for (let i = 0; i < allowedCount; i++) {
+      allowedThirdSprinterTeams.add(candidatesList[i].teamId);
+    }
+  }
+
   const selected = selectedTeams.flatMap((team: any) => {
     const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
     const roster = getEligibleRiders(teamFullRoster, riderLocks);
+    const excludedSprinterIds = getExcludedSprinterIdsForTeam(
+      teamFullRoster,
+      race.categoryId ?? 0,
+      race.isStageRace ?? false,
+      race.id,
+      season,
+      allowedThirdSprinterTeams
+    );
     const programCandidates = orderProgramCandidates(
-      roster.filter((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)),
+      roster.filter((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id) && !excludedSprinterIds.has(rider.id)),
       race,
       useHomePreference
     );
@@ -892,6 +928,7 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
         const candidates = roster.filter((rider: any) => {
           if (selectedIds.has(rider.id) || teamCollisionRiderIds.has(rider.id)) return false;
           if (hasActiveOrEarmarkedCollision(db, repo, rider, teamFullRoster, season, race, riderLocks)) return false;
+          if (excludedSprinterIds.has(rider.id)) return false;
           return true;
         });
 
@@ -1038,11 +1075,26 @@ export function previewRaceRosterEditor(db: Database.Database, repo: any, race: 
   const riderLocks = buildRiderLockMap(db, repo, race, repo.getRiders());
   const selectedIds = new Set(previewRaceRoster(db, repo, race, stage).map((rider: any) => rider.id));
   const playerTeam = getPlayerTeam(repo);
+  const season = repo.getCurrentSeason();
+  const playerRoster = repo.getRiders(playerTeam.id);
+  const allowedThirdSprinterTeams = getAllowedThirdSprinterTeams(db, repo, race);
+  const playerExcludedSprinterIds = getExcludedSprinterIdsForTeam(
+    playerRoster,
+    race.categoryId ?? 0,
+    race.isStageRace ?? false,
+    race.id,
+    season,
+    allowedThirdSprinterTeams
+  );
+
   const teams = [{
     team: playerTeam,
     riderLimit: race.category?.numberOfRiders ?? 0,
-    riders: repo.getRiders(playerTeam.id).map((rider: any) => {
-      const lockReason = riderLocks.get(rider.id) ?? null;
+    riders: playerRoster.map((rider: any) => {
+      let lockReason = riderLocks.get(rider.id) ?? null;
+      if (lockReason == null && playerExcludedSprinterIds.has(rider.id)) {
+        lockReason = 'low-category-exclusion';
+      }
       return {
         rider,
         isSelected: selectedIds.has(rider.id),
@@ -1078,10 +1130,24 @@ export function applyRaceRosterSelection(db: Database.Database, repo: any, race:
     throw new Error(`${playerTeam.name} muss genau ${riderLimit} Fahrer fuer das Starterfeld stellen.`);
   }
 
+  const season = repo.getCurrentSeason();
+  const allowedThirdSprinterTeams = getAllowedThirdSprinterTeams(db, repo, race);
+  const playerExcludedSprinterIds = getExcludedSprinterIdsForTeam(
+    playerRoster,
+    race.categoryId ?? 0,
+    race.isStageRace ?? false,
+    race.id,
+    season,
+    allowedThirdSprinterTeams
+  );
+
   for (const rider of validatedSelections) {
     const lockReason = riderLocks.get(rider.id);
     if (lockReason) {
       throw new Error(`${rider.firstName} ${rider.lastName} ist gesperrt: ${RIDER_LOCK_MESSAGES[lockReason]}`);
+    }
+    if (playerExcludedSprinterIds.has(rider.id)) {
+      throw new Error(`${rider.firstName} ${rider.lastName} ist für dieses Rennen nicht startberechtigt (Ausschlussregel für Sprinter).`);
     }
   }
 
@@ -1368,4 +1434,131 @@ function enforceSprinterLimits(
   }
 
   return currentSelection;
+}
+
+function getAllowedThirdSprinterTeams(db: Database.Database, repo: any, race: Race): Set<number> {
+  const allowedThirdSprinterTeams = new Set<number>();
+  if (race.categoryId === 9 && !race.isStageRace) {
+    const programIds = new Set(repo.getRaceProgramsForRace(race.id).map((p: any) => p.id));
+    const riders = repo.getRiders();
+    const ridersByTeamId = new Map<number, Rider[]>();
+    for (const r of riders) {
+      if (r.activeTeamId != null) {
+        if (!ridersByTeamId.has(r.activeTeamId)) {
+          ridersByTeamId.set(r.activeTeamId, []);
+        }
+        ridersByTeamId.get(r.activeTeamId)!.push(r);
+      }
+    }
+    const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
+    const teamLimit = race.category?.numberOfTeams ?? 0;
+    const selectedTeams = repo.getTeams()
+      .filter((team: any) => team.division === targetDivision)
+      .filter((team: any) => (ridersByTeamId.get(team.id) ?? []).some((rider: any) => rider.seasonProgram != null && programIds.has(rider.seasonProgram.id)))
+      .slice(0, teamLimit);
+
+    const candidatesList: Array<{ teamId: number; seasonRaceDays: number; sprinterId: number }> = [];
+    for (const team of selectedTeams) {
+      const teamFullRoster = ridersByTeamId.get(team.id) ?? [];
+      const sprinters = teamFullRoster.filter(r => r.roleId === 6);
+      sprinters.sort((a: any, b: any) =>
+        (b.overallRating ?? 0) - (a.overallRating ?? 0) ||
+        (a.lastName || '').localeCompare(b.lastName || '', 'de') ||
+        (a.firstName || '').localeCompare(b.firstName || '', 'de') ||
+        a.id - b.id
+      );
+      const s3 = sprinters[2];
+      if (s3) {
+        candidatesList.push({
+          teamId: team.id,
+          seasonRaceDays: s3.seasonRaceDays ?? 0,
+          sprinterId: s3.id
+        });
+      }
+    }
+    candidatesList.sort((a, b) => a.seasonRaceDays - b.seasonRaceDays || a.sprinterId - b.sprinterId);
+    const allowedCount = Math.floor(candidatesList.length * 0.5);
+    for (let i = 0; i < allowedCount; i++) {
+      allowedThirdSprinterTeams.add(candidatesList[i].teamId);
+    }
+  }
+  return allowedThirdSprinterTeams;
+}
+
+function getExcludedSprinterIdsForTeam(
+  teamFullRoster: Rider[],
+  categoryId: number,
+  isStageRace: boolean,
+  raceId: number,
+  season: number,
+  allowedThirdSprinterTeams: Set<number>
+): Set<number> {
+  const excluded = new Set<number>();
+  const sprinters = teamFullRoster.filter((r) => r.roleId === 6);
+  sprinters.sort((a: any, b: any) => 
+    (b.overallRating ?? 0) - (a.overallRating ?? 0) || 
+    (a.lastName || '').localeCompare(b.lastName || '', 'de') || 
+    (a.firstName || '').localeCompare(b.firstName || '', 'de') || 
+    a.id - b.id
+  );
+
+  // Category 6: Stage Race Low
+  if (categoryId === 6 && isStageRace) {
+    sprinters.forEach(s => excluded.add(s.id));
+  }
+
+  // Category 5: Stage Race Middle
+  if (categoryId === 5 && isStageRace) {
+    sprinters.forEach((s, idx) => {
+      if (idx !== 2) {
+        excluded.add(s.id);
+      }
+    });
+  }
+
+  // Category 9: One Day Low
+  if (categoryId === 9 && !isStageRace) {
+    const isTeamAllowed = teamFullRoster.length > 0 ? allowedThirdSprinterTeams.has(teamFullRoster[0].activeTeamId ?? 0) : false;
+    sprinters.forEach((s, idx) => {
+      if (idx === 2) {
+        if (!isTeamAllowed) {
+          excluded.add(s.id);
+        }
+      } else if (idx > 2) {
+        excluded.add(s.id);
+      }
+    });
+  }
+
+  // Category 8: One Day Middle
+  if (categoryId === 8 && !isStageRace) {
+    const teamId = teamFullRoster[0]?.activeTeamId ?? 0;
+    const seedStr = `${season}:${raceId}:${teamId}:sprinter_selection`;
+    const seedHash = hashString(seedStr);
+    const rand = (seedHash % 10000) / 10000;
+    
+    const has2nd = sprinters.length >= 2;
+    const has3rd = sprinters.length >= 3;
+
+    let allowedIdx = -1;
+    if (has2nd && has3rd) {
+      allowedIdx = rand < 0.5 ? 1 : 2; // either 2nd or 3rd sprinter is allowed
+    } else if (has2nd) {
+      allowedIdx = 1;
+    } else if (has3rd) {
+      allowedIdx = 2;
+    }
+
+    sprinters.forEach((s, idx) => {
+      if (idx === 1 || idx === 2) {
+        if (idx !== allowedIdx) {
+          excluded.add(s.id);
+        }
+      } else if (idx > 2) {
+        excluded.add(s.id);
+      }
+    });
+  }
+
+  return excluded;
 }

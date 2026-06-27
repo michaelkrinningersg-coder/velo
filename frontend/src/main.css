@@ -5437,7 +5437,7 @@ html, body {
 /* Calendar Weeks */
 .calendar-week {
   position: relative;
-  min-height: 108px;
+  min-height: 136px;
   background: rgba(255, 255, 255, 0.01);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 6px;
@@ -5527,7 +5527,7 @@ html, body {
   margin-top: 26px;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(3, 24px);
+  grid-template-rows: repeat(4, 24px);
   gap: 3px 0;
   flex: 1;
 }
