@@ -100,7 +100,7 @@ function isNovember(currentDate: string): boolean {
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
 }
 

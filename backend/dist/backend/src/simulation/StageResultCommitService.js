@@ -28,7 +28,7 @@ const SUPPORTED_RESULT_TYPES = [
     { id: RESULT_TYPES.breakaway, name: 'Breakaway' },
 ];
 function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName);
     return row != null;
 }
 function parseRankedValues(serialized) {

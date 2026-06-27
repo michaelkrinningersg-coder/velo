@@ -18,7 +18,7 @@ const BASE_PROGRAMS = [
     'Classic_Non_Cobble_No Grand Tour_stage race foxus'
 ];
 function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName);
     return row != null;
 }
 function normalizeRoleName(value) {

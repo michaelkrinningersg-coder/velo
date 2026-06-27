@@ -81,7 +81,7 @@ interface RiderDailyStateRow {
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
 }
 
@@ -281,7 +281,12 @@ export class GameStateService {
             DELETE FROM results
             WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
           `).run(`${currentRow.season}-%`);
-          console.log(`Ergebnisse der Saison ${currentRow.season} erfolgreich archiviert.`);
+
+          this.db.prepare(`
+            DELETE FROM stage_entries
+            WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
+          `).run(`${currentRow.season}-%`);
+          console.log(`Ergebnisse und Etappeneinträge der Saison ${currentRow.season} erfolgreich archiviert/bereinigt.`);
         } catch (e) {
           console.error('Fehler beim Archivieren der Saisonergebnisse:', e);
         }

@@ -56,7 +56,7 @@ const RESULT_TYPE_ROWS = [
     { id: 6, name: 'Team' },
 ];
 function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName);
     return row != null;
 }
 function columnExists(db, tableName, columnName) {

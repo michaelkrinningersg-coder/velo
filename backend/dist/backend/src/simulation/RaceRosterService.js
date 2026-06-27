@@ -434,6 +434,21 @@ function orderProgramCandidates(candidates, race, useHomePreference = false) {
                 return rightIsHome - leftIsHome;
             }
         }
+        // Rotationslogik für mittlere Kategorie-Rennen
+        const catName = race?.category?.name ?? '';
+        const categoryId = race?.categoryId ?? 0;
+        const isMiddle = race != null && ([5, 8].includes(categoryId) || catName.includes('Stage Race Middle') || catName.includes('One Day Middle'));
+        if (isMiddle) {
+            const leftIsRotatable = [3, 4, 5, 6].includes(left.roleId ?? 0);
+            const rightIsRotatable = [3, 4, 5, 6].includes(right.roleId ?? 0);
+            if (leftIsRotatable && rightIsRotatable) {
+                return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+            }
+            if (leftIsRotatable !== rightIsRotatable) {
+                // Kapitän/Co-Kapitän (nicht rotierbar) kommt zuerst
+                return leftIsRotatable ? 1 : -1;
+            }
+        }
         return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
     });
     return sortWaterCarriersAscending(sorted);
@@ -522,6 +537,8 @@ function orderFillCandidates(candidates, race, useHomePreference = false) {
     const name = race.category?.name ?? '';
     const isMonumentOrGrandTour = name.includes('Monument') || name.includes('Grand Tour') || name.includes('Tour de France');
     const isHighCategory = name.includes('Stage Race High') || name.includes('One Day High');
+    const categoryId = race.categoryId;
+    const isMiddle = [5, 8].includes(categoryId) || name.includes('Stage Race Middle') || name.includes('One Day Middle');
     let sorted;
     if (isMonumentOrGrandTour) {
         const roleOrder = [1, 2, 6, 3, 4, 5];
@@ -582,6 +599,10 @@ function orderFillCandidates(candidates, race, useHomePreference = false) {
                 }
             }
             if (left.roleId === 6) {
+                if (isMiddle) {
+                    // Sprinters in Middle category races: rotate by fewest race days
+                    return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+                }
                 // Sprinters: weak to strong overall rating
                 return (left.overallRating ?? 0) - (right.overallRating ?? 0) || left.id - right.id;
             }
@@ -749,15 +770,34 @@ function buildRaceRoster(db, repo, race, stage, enableDebug = false) {
                     }
                     return false;
                 });
-                fillCandidates.sort((left, right) => {
-                    if (left.roleId === 6 && right.roleId === 6) {
-                        return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
-                    }
-                    if ([3, 4, 5].includes(left.roleId) && [3, 4, 5].includes(right.roleId)) {
-                        return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
-                    }
-                    return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
-                });
+                if (isMiddle) {
+                    fillCandidates.sort((left, right) => {
+                        // Prioritize Wasserträger (roleId 5) first
+                        const leftIsWt = left.roleId === 5 ? 1 : 0;
+                        const rightIsWt = right.roleId === 5 ? 1 : 0;
+                        if (leftIsWt !== rightIsWt) {
+                            return rightIsWt - leftIsWt;
+                        }
+                        // Both are role 5, or both are other rotatable roles (3, 4, 6): sort by seasonRaceDays ascending
+                        const leftIsRotatable = [3, 4, 5, 6].includes(left.roleId ?? 0);
+                        const rightIsRotatable = [3, 4, 5, 6].includes(right.roleId ?? 0);
+                        if (leftIsRotatable && rightIsRotatable) {
+                            return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+                        }
+                        return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
+                    });
+                }
+                else {
+                    fillCandidates.sort((left, right) => {
+                        if (left.roleId === 6 && right.roleId === 6) {
+                            return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+                        }
+                        if ([3, 4, 5].includes(left.roleId) && [3, 4, 5].includes(right.roleId)) {
+                            return (left.seasonRaceDays ?? 0) - (right.seasonRaceDays ?? 0) || left.id - right.id;
+                        }
+                        return (right.overallRating ?? 0) - (left.overallRating ?? 0) || left.id - right.id;
+                    });
+                }
                 fillCandidates = sortWaterCarriersAscending(fillCandidates);
             }
             for (const rider of fillCandidates.slice(0, riderLimit - teamSelection.length)) {
