@@ -727,50 +727,6 @@ class DatabaseService {
       UNION ALL
       SELECT * FROM results_history
       UNION ALL
-      SELECT 
-        r.id,
-        r.race_id,
-        r.stage_id,
-        r.rider_id,
-        r.team_id,
-        5 AS result_type_id,
-        ROW_NUMBER() OVER (PARTITION BY r.stage_id ORDER BY r.rank ASC) AS rank,
-        r.time_seconds,
-        r.points,
-        r.is_breakaway,
-        r.leadout_rider_id,
-        r.leadout_bonus,
-        r.breakaway_kms,
-        r.event_ids,
-        r.jerseys_worn
-      FROM results r
-      JOIN riders ON riders.id = r.rider_id
-      JOIN stages ON stages.id = r.stage_id
-      WHERE r.result_type_id = 2
-        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25
-      UNION ALL
-      SELECT 
-        r.id,
-        r.race_id,
-        r.stage_id,
-        r.rider_id,
-        r.team_id,
-        5 AS result_type_id,
-        ROW_NUMBER() OVER (PARTITION BY r.stage_id ORDER BY r.rank ASC) AS rank,
-        r.time_seconds,
-        r.points,
-        r.is_breakaway,
-        r.leadout_rider_id,
-        r.leadout_bonus,
-        r.breakaway_kms,
-        r.event_ids,
-        r.jerseys_worn
-      FROM results_history r
-      JOIN riders ON riders.id = r.rider_id
-      JOIN stages ON stages.id = r.stage_id
-      WHERE r.result_type_id = 2
-        AND (CAST(SUBSTR(stages.date, 1, 4) AS INTEGER) - riders.birth_year) <= 25
-      UNION ALL
       SELECT
         NULL AS id,
         s.race_id AS race_id,
@@ -854,29 +810,6 @@ class DatabaseService {
       JOIN stages s ON s.race_id = c.race_id,
       json_each(c.payload, '$.type4') j
       WHERE CAST(j.value->>0 AS INTEGER) = s.id
-      UNION ALL
-      SELECT
-        NULL AS id,
-        s.race_id AS race_id,
-        s.id AS stage_id,
-        CAST(j.value->>1 AS INTEGER) AS rider_id,
-        CAST(j.value->>2 AS INTEGER) AS team_id,
-        5 AS result_type_id,
-        ROW_NUMBER() OVER (PARTITION BY j.value->>0 ORDER BY CAST(j.value->>3 AS INTEGER) ASC) AS rank,
-        CAST(j.value->>4 AS INTEGER) AS time_seconds,
-        CAST(j.value->>5 AS INTEGER) AS points,
-        CAST(j.value->>6 AS INTEGER) AS is_breakaway,
-        CAST(j.value->>7 AS INTEGER) AS leadout_rider_id,
-        CAST(j.value->>8 AS REAL) AS leadout_bonus,
-        CAST(j.value->>9 AS REAL) AS breakaway_kms,
-        j.value->>10 AS event_ids,
-        j.value->>11 AS jerseys_worn
-      FROM race_results_compact c
-      JOIN stages s ON s.race_id = c.race_id
-      JOIN riders r ON r.id = CAST(j.value->>1 AS INTEGER),
-      json_each(c.payload, '$.type2') j
-      WHERE CAST(j.value->>0 AS INTEGER) = s.id
-        AND (CAST(SUBSTR(s.date, 1, 4) AS INTEGER) - r.birth_year) <= 25
       UNION ALL
       SELECT
         NULL AS id,
@@ -2050,6 +1983,12 @@ class DatabaseService {
         this.activeConnection.pragma('journal_mode = WAL');
         this.activeConnection.pragma('synchronous = NORMAL');
         this.activeConnection.pragma('foreign_keys = ON');
+        // Auto-vacuum to automatically shrink database file on delete
+        const currentAutoVacuum = this.activeConnection.pragma('auto_vacuum', { simple: true });
+        if (currentAutoVacuum === 0) {
+            this.activeConnection.pragma('auto_vacuum = FULL');
+            this.activeConnection.prepare('VACUUM').run();
+        }
         this.ensureAllSchemas(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
         new RiderProgramService_1.RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);

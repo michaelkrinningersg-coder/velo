@@ -78,6 +78,7 @@ interface RiderDailyStateRow {
   birth_year?: number;
   active_team_id?: number | null;
   team_tier?: number | null;
+  is_player_team?: number | null;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -221,6 +222,8 @@ export class GameStateService {
 
   public advanceDay(): GameState {
     ResultRepository.clearInMemoryStageEvents();
+    let isNewSeason = false;
+    let oldSeason = 0;
     const nextState = this.db.transaction(() => {
       this.ensureStateRow();
       const currentRow = this.db.prepare(
@@ -236,6 +239,8 @@ export class GameStateService {
       const nextDate = addDaysIso(currentRow.current_date, 1);
       const nextSeason = resolveSeason(nextDate, currentRow.season);
       if (nextSeason !== currentRow.season) {
+        isNewSeason = true;
+        oldSeason = currentRow.season;
         // Standings-Snapshot für die abgelaufene Saison sichern
         try {
           const resultRepo = new ResultRepository(this.db);
@@ -315,9 +320,17 @@ export class GameStateService {
       `).run(String(nextSeason));
 
       const checks = this.runDailyChecks(nextDate);
-
       return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
     })();
+
+    if (isNewSeason) {
+      try {
+        console.log(`Running post-season VACUUM for season ${oldSeason}...`);
+        this.db.prepare('VACUUM').run();
+      } catch (e) {
+        console.error('Failed to run post-season VACUUM:', e);
+      }
+    }
 
     this.events.emit('dayAdvanced', nextState);
     return nextState;
@@ -888,7 +901,8 @@ export class GameStateService {
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked, rds.consecutive_non_race_days,
              r.skill_recuperation, r.birth_year,
              r.active_team_id,
-             dt.tier AS team_tier
+             dt.tier AS team_tier,
+             t.is_player_team AS is_player_team
       FROM rider_daily_state rds
       JOIN riders r ON r.id = rds.rider_id
       LEFT JOIN teams t ON t.id = r.active_team_id
@@ -913,13 +927,7 @@ export class GameStateService {
       WHERE rider_id = ?
     `);
 
-    const insertFatigueHistory = this.db.prepare(`
-      INSERT INTO rider_fatigue_history (
-        rider_id, date, type, race_name, stage_number, stage_score,
-        short_change, long_decayable_change, long_locked_change,
-        short_after, long_after
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+
 
     const racingRidersRow = this.db.prepare(`
       SELECT se.rider_id FROM stage_entries se
@@ -1114,21 +1122,6 @@ export class GameStateService {
         longTermDecayable = 0.0;
         longTermLocked = 0.0;
 
-        if (shortChange !== 0 || longDecayableChange !== 0 || longLockedChange !== 0) {
-          insertFatigueHistory.run(
-            row.rider_id,
-            nextDate,
-            'decay',
-            'Saisonwechsel',
-            null,
-            null,
-            shortChange,
-            longDecayableChange,
-            longLockedChange,
-            0.0,
-            0.0
-          );
-        }
       } else {
         const oldShort = shortTermFatigue;
         const oldLongDecayable = longTermDecayable;
@@ -1197,21 +1190,6 @@ export class GameStateService {
         shortChange = roundToThreeDecimals(shortTermFatigue - oldShort);
         longDecayableChange = roundToThreeDecimals(longTermDecayable - oldLongDecayable);
 
-        if (shortChange !== 0 || longDecayableChange !== 0) {
-          insertFatigueHistory.run(
-            row.rider_id,
-            nextDate,
-            'decay',
-            'Regeneration',
-            null,
-            null,
-            shortChange,
-            longDecayableChange,
-            0.0,
-            shortTermFatigue,
-            roundToThreeDecimals(longTermDecayable + longTermLocked)
-          );
-        }
       }
 
       // Skip the UPDATE if nothing actually changed. This saves ~5000 redundant
@@ -1413,25 +1391,6 @@ export class GameStateService {
       date: currentDate,
       seasonFormMax: SEASON_FORM_MAX_RAW,
     });
-
-    if (tableExists(this.db, 'rider_career_stats')) {
-      this.db.prepare(`
-        INSERT INTO rider_career_stats (rider_id, max_s_form, max_r_form, max_combined_form)
-        SELECT
-          rider_id,
-          s_form,
-          r_form,
-          total_form
-        FROM rider_form_history
-        WHERE date = @date
-        ON CONFLICT(rider_id) DO UPDATE SET
-          max_s_form = MAX(max_s_form, excluded.max_s_form),
-          max_r_form = MAX(max_r_form, excluded.max_r_form),
-          max_combined_form = MAX(max_combined_form, excluded.max_combined_form)
-      `).run({
-        date: currentDate
-      });
-    }
   }
 
   public applyRaceDayFormBonuses(raceDate: string, riderIds: number[]): void {
@@ -1633,9 +1592,11 @@ export class GameStateService {
     const stmtSelect = this.db.prepare(`
       SELECT r.id, r.skill_recuperation, r.birth_year,
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked,
-             rds.season_race_days_total
+             rds.season_race_days_total,
+             t.is_player_team AS is_player_team
       FROM riders r
       LEFT JOIN rider_daily_state rds ON rds.rider_id = r.id
+      LEFT JOIN teams t ON t.id = r.active_team_id
       WHERE r.id = ?
     `);
 
@@ -1648,13 +1609,6 @@ export class GameStateService {
       WHERE rider_id = ?
     `);
 
-    const stmtInsertHistory = this.db.prepare(`
-      INSERT INTO rider_fatigue_history (
-        rider_id, date, type, race_name, stage_number, stage_score,
-        short_change, long_decayable_change, long_locked_change,
-        short_after, long_after
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
 
     this.db.transaction(() => {
       for (const riderId of participatedRiderIds) {
@@ -1666,6 +1620,7 @@ export class GameStateService {
           long_term_fatigue_decayable: number | null;
           long_term_fatigue_locked: number | null;
           season_race_days_total: number | null;
+          is_player_team: number | null;
         } | undefined;
 
         if (!row) continue;
@@ -1684,19 +1639,6 @@ export class GameStateService {
 
           stmtUpdate.run(currentShort, currentLongDecayable, currentLongLocked, riderId);
 
-          stmtInsertHistory.run(
-            riderId,
-            stageDate,
-            'race',
-            'Transfer',
-            null, // stageNumber
-            null, // stageScore
-            transferShortChange,
-            transferLongDecayableChange,
-            0.0,  // longLockedChange
-            currentShort,
-            roundToTwoDecimals(currentLongDecayable + currentLongLocked)
-          );
         }
 
         const R = row.skill_recuperation;
@@ -1794,19 +1736,6 @@ export class GameStateService {
 
         stmtUpdate.run(newShort, newLongDecayable, newLongLocked, riderId);
 
-        stmtInsertHistory.run(
-          riderId,
-          stageDate,
-          'race',
-          raceName,
-          stageNumber,
-          stageScore,
-          addedShort,
-          addedLongDecayable,
-          addedLongLocked,
-          newShort,
-          roundToTwoDecimals(newLongDecayable + newLongLocked)
-        );
       }
     })();
   }

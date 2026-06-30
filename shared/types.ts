@@ -1226,6 +1226,7 @@ export interface RiderTeamEditorRiderRow {
   firstName: string;
   lastName: string;
   countryId: number;
+  countryCode?: string;
   birthYear: number;
   teamId: number | null;
   skillFlat: number;

@@ -6,6 +6,7 @@ import {
   clamp,
   getSkillColor,
   downloadTextFile,
+  renderFlag,
 } from '../state';
 import { compareStrings } from './teams';
 import type {
@@ -194,6 +195,16 @@ export function renderRiderTeamEditorCell(rider: RiderTeamEditorRiderRow, column
       return `<td><select class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="teamId" data-rider-team-editor-rider-id="${rider.riderId}">${renderRiderTeamEditorTeamOptions(rider.teamId)}</select></td>`;
     case 'number': {
       const value = rider[column.key as keyof RiderTeamEditorRiderRow] as number;
+      if (column.key === 'countryId') {
+        const flagHtml = rider.countryCode ? renderFlag(rider.countryCode) : '';
+        return `
+          <td>
+            <div class="rider-team-editor-country-cell" style="display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+              ${flagHtml}
+              <input type="number" class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="${column.key}" data-rider-team-editor-rider-id="${rider.riderId}" value="${value}" style="width: 45px; text-align: center;">
+            </div>
+          </td>`;
+      }
       return `<td><input type="number" class="rider-team-editor-input${dirtyClass}" data-rider-team-editor-field="${column.key}" data-rider-team-editor-rider-id="${rider.riderId}" value="${value}"></td>`;
     }
     case 'text': {
@@ -353,6 +364,8 @@ export function rebuildRiderTeamEditorTeams(payload: RiderTeamEditorPayload): Ri
   }));
 }
 
+let countriesList: Array<{ id: number; name: string; code3: string }> = [];
+
 export async function loadRiderTeamEditorData(force = false): Promise<void> {
   if (state.riderTeamEditorPayload && !force) {
     renderRiderTeamEditor();
@@ -360,10 +373,18 @@ export async function loadRiderTeamEditorData(force = false): Promise<void> {
   }
 
   $('rider-team-editor-root').innerHTML = '<div class="results-empty">Editor wird geladen.</div>';
-  const res = await api.getRiderTeamEditor();
+  const [res, countriesRes] = await Promise.all([
+    api.getRiderTeamEditor(),
+    api.listStageEditorCountries(),
+  ]);
+
   if (!res.success || !res.data) {
     $('rider-team-editor-root').innerHTML = `<div class="results-empty">${esc(res.error ?? 'Editor konnte nicht geladen werden.')}</div>`;
     return;
+  }
+
+  if (countriesRes.success && countriesRes.data) {
+    countriesList = countriesRes.data;
   }
 
   state.riderTeamEditorPayload = res.data;
@@ -393,7 +414,12 @@ export function updateRiderTeamEditorField(riderId: number, field: keyof RiderTe
   if (field === 'teamId') {
     rider.teamId = rawValue === 'free-agents' ? null : Number.parseInt(rawValue, 10);
   } else if (typeof rider[field] === 'number') {
-    (rider[field] as any) = Number.parseInt(rawValue || '0', 10);
+    const numVal = Number.parseInt(rawValue || '0', 10);
+    (rider[field] as any) = numVal;
+    if (field === 'countryId') {
+      const matched = countriesList.find((c) => c.id === numVal);
+      rider.countryCode = matched ? matched.code3 : 'UNK';
+    }
   } else {
     (rider[field] as any) = rawValue;
   }
