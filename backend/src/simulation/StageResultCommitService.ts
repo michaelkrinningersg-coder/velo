@@ -4,6 +4,7 @@ import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
+import { TeamCategoryStatsService } from '../game/TeamCategoryStatsService';
 
 import { GameStateService } from '../game/GameStateService';
 import type {
@@ -1282,6 +1283,51 @@ export class StageResultCommitService {
 
       // --- INCREMENTAL STATS & ARCHIVING ---
       const categoryName = race.category?.name || "Unbekannt";
+
+      // 1. Record Team Success Stats
+      try {
+        const statsService = new TeamCategoryStatsService(this.db);
+        const isFinalStage = race.isStageRace && stage.stageNumber === race.numberOfStages;
+
+        // Record Stage / One Day results
+        for (const row of stageRows) {
+          if (row.teamId != null) {
+            statsService.recordStageResult(
+              row.teamId,
+              currentSeason,
+              categoryName,
+              row.rank,
+              stage.profile,
+              stage.rolledWeatherId ?? null,
+              race.isStageRace
+            );
+          }
+        }
+
+        // Record Final Standings on the last stage of a stage race
+        if (isFinalStage) {
+          for (const row of gcRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.gc);
+          }
+          for (const row of pointsRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.points);
+          }
+          for (const row of mountainRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.mountain);
+          }
+          for (const row of youthRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.youth);
+          }
+          for (const row of breakawayRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.breakaway);
+          }
+          for (const row of teamRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.team);
+          }
+        }
+      } catch (err: any) {
+        console.error('Error updating team category stats:', err.message);
+      }
 
       const insertCareerStatsRow = this.db.prepare(`
         INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (?)

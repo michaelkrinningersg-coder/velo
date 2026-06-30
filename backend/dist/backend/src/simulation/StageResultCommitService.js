@@ -6,6 +6,7 @@ const RaceRepository_1 = require("../db/repositories/RaceRepository");
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
 const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const TeamRepository_1 = require("../db/repositories/TeamRepository");
+const TeamCategoryStatsService_1 = require("../game/TeamCategoryStatsService");
 const GameStateService_1 = require("../game/GameStateService");
 const stageResultRules_1 = require("../../../shared/stageResultRules");
 const RaceRosterService_1 = require("./RaceRosterService");
@@ -1003,6 +1004,41 @@ class StageResultCommitService {
             }
             // --- INCREMENTAL STATS & ARCHIVING ---
             const categoryName = race.category?.name || "Unbekannt";
+            // 1. Record Team Success Stats
+            try {
+                const statsService = new TeamCategoryStatsService_1.TeamCategoryStatsService(this.db);
+                const isFinalStage = race.isStageRace && stage.stageNumber === race.numberOfStages;
+                // Record Stage / One Day results
+                for (const row of stageRows) {
+                    if (row.teamId != null) {
+                        statsService.recordStageResult(row.teamId, currentSeason, categoryName, row.rank, stage.profile, stage.rolledWeatherId ?? null, race.isStageRace);
+                    }
+                }
+                // Record Final Standings on the last stage of a stage race
+                if (isFinalStage) {
+                    for (const row of gcRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.gc);
+                    }
+                    for (const row of pointsRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.points);
+                    }
+                    for (const row of mountainRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.mountain);
+                    }
+                    for (const row of youthRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.youth);
+                    }
+                    for (const row of breakawayRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.breakaway);
+                    }
+                    for (const row of teamRows) {
+                        statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.team);
+                    }
+                }
+            }
+            catch (err) {
+                console.error('Error updating team category stats:', err.message);
+            }
             const insertCareerStatsRow = this.db.prepare(`
         INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (?)
       `);

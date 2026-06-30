@@ -409,12 +409,13 @@ class RiderRepository {
        AND stage_points.award_type = CASE WHEN races.is_stage_race = 1 THEN 'stage_result' ELSE 'one_day_result' END
       WHERE stage_entries.rider_id = ?
         AND stage_entries.status IN ('finished', 'dnf')
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND (
           COALESCE(rider_stage_results.rank, team_stage_results.rank) IS NOT NULL
           OR stage_entries.status = 'dnf'
         )
       ORDER BY stages.date ASC, races.id ASC, stages.stage_number ASC
-    `).all(mappers_1.RESULT_TYPE_IDS.gc, riderId);
+    `).all(mappers_1.RESULT_TYPE_IDS.gc, riderId, currentSeason);
         const finalRows = this.db.prepare(`
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
@@ -452,9 +453,10 @@ class RiderRepository {
       WHERE results.rider_id = ?
         AND races.is_stage_race = 1
         AND stages.stage_number = races.number_of_stages
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND results.result_type_id IN (${mappers_1.RESULT_TYPE_IDS.gc}, ${mappers_1.RESULT_TYPE_IDS.points}, ${mappers_1.RESULT_TYPE_IDS.mountain}, ${mappers_1.RESULT_TYPE_IDS.youth}, ${mappers_1.RESULT_TYPE_IDS.breakaway})
       ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
-    `).all(riderId);
+    `).all(riderId, currentSeason);
         const seasons = new Map();
         const blocks = new Map();
         const stageSummaryCache = new Map();

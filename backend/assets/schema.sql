@@ -775,3 +775,47 @@ CREATE TABLE IF NOT EXISTS race_results_compact (
 CREATE INDEX IF NOT EXISTS idx_race_results_compact_season
   ON race_results_compact(season);
 
+CREATE TABLE IF NOT EXISTS team_season_category_stats (
+  team_id                     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  season                      INTEGER NOT NULL,
+  category_name               TEXT NOT NULL,
+  one_day_wins                INTEGER NOT NULL DEFAULT 0,
+  one_day_second              INTEGER NOT NULL DEFAULT 0,
+  one_day_third               INTEGER NOT NULL DEFAULT 0,
+  one_day_top_ten             INTEGER NOT NULL DEFAULT 0,
+  stage_wins                  INTEGER NOT NULL DEFAULT 0,
+  stage_second                INTEGER NOT NULL DEFAULT 0,
+  stage_third                 INTEGER NOT NULL DEFAULT 0,
+  stage_top_ten               INTEGER NOT NULL DEFAULT 0,
+  gc_wins                     INTEGER NOT NULL DEFAULT 0,
+  gc_second                   INTEGER NOT NULL DEFAULT 0,
+  gc_third                    INTEGER NOT NULL DEFAULT 0,
+  gc_top_ten                  INTEGER NOT NULL DEFAULT 0,
+  points_wins                 INTEGER NOT NULL DEFAULT 0,
+  mountain_wins               INTEGER NOT NULL DEFAULT 0,
+  youth_wins                  INTEGER NOT NULL DEFAULT 0,
+  breakaway_wins              INTEGER NOT NULL DEFAULT 0,
+  win_flat                    INTEGER NOT NULL DEFAULT 0,
+  win_rolling                 INTEGER NOT NULL DEFAULT 0,
+  win_hilly                   INTEGER NOT NULL DEFAULT 0,
+  win_hilly_difficult         INTEGER NOT NULL DEFAULT 0,
+  win_medium_mountain         INTEGER NOT NULL DEFAULT 0,
+  win_mountain                INTEGER NOT NULL DEFAULT 0,
+  win_high_mountain           INTEGER NOT NULL DEFAULT 0,
+  win_cobble                  INTEGER NOT NULL DEFAULT 0,
+  win_cobble_hill             INTEGER NOT NULL DEFAULT 0,
+  win_itt                     INTEGER NOT NULL DEFAULT 0,
+  win_ttt                     INTEGER NOT NULL DEFAULT 0,
+  win_weather_1               INTEGER NOT NULL DEFAULT 0,
+  win_weather_2               INTEGER NOT NULL DEFAULT 0,
+  win_weather_3               INTEGER NOT NULL DEFAULT 0,
+  win_weather_4               INTEGER NOT NULL DEFAULT 0,
+  win_weather_5               INTEGER NOT NULL DEFAULT 0,
+  win_weather_6               INTEGER NOT NULL DEFAULT 0,
+  win_weather_7               INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (team_id, season, category_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_season_category_stats_lookup
+  ON team_season_category_stats(team_id, season);
+

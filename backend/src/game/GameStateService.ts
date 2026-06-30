@@ -279,6 +279,58 @@ export class GameStateService {
             WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
           `).run(`${currentRow.season}-%`);
           console.log(`Ergebnisse und Etappeneinträge der Saison ${currentRow.season} erfolgreich archiviert/bereinigt.`);
+
+          // Prune race_results_compact for the elapsed season to keep only point-scoring results
+          try {
+            console.log(`Pruning race results compact for season ${currentRow.season}...`);
+            const pointsEvents = this.db.prepare(`
+              SELECT stage_id, rider_id, team_id
+              FROM season_point_events
+              WHERE season = ? AND points_awarded > 0
+            `).all(currentRow.season) as Array<{ stage_id: number; rider_id: number | null; team_id: number }>;
+
+            const riderPointsKeys = new Set<string>();
+            const teamPointsKeys = new Set<string>();
+            for (const p of pointsEvents) {
+              if (p.rider_id != null) {
+                riderPointsKeys.add(`${p.stage_id}_${p.rider_id}`);
+              } else {
+                teamPointsKeys.add(`${p.stage_id}_${p.team_id}`);
+              }
+            }
+
+            const compactRows = this.db.prepare(`
+              SELECT race_id, payload FROM race_results_compact WHERE season = ?
+            `).all(currentRow.season) as Array<{ race_id: number; payload: string }>;
+
+            const updateStmt = this.db.prepare(`
+              UPDATE race_results_compact SET payload = ? WHERE race_id = ?
+            `);
+
+            for (const row of compactRows) {
+              const groups = JSON.parse(row.payload);
+              for (const typeKey of Object.keys(groups)) {
+                if (Array.isArray(groups[typeKey])) {
+                  groups[typeKey] = groups[typeKey].filter((r: any) => {
+                    const stageId = r[0];
+                    const riderId = r[1];
+                    const teamId = r[2];
+                    const rank = r[3];
+                    if (rank === 1) return true; // Sieger immer behalten
+                    if (riderId != null) {
+                      return riderPointsKeys.has(`${stageId}_${riderId}`);
+                    } else {
+                      return teamPointsKeys.has(`${stageId}_${teamId}`);
+                    }
+                  });
+                }
+              }
+              updateStmt.run(JSON.stringify(groups), row.race_id);
+            }
+            console.log(`Pruning finished for season ${currentRow.season}.`);
+          } catch (pe) {
+            console.error('Fehler beim Bereinigen der Saisonergebnisse:', pe);
+          }
         } catch (e) {
           console.error('Fehler beim Archivieren der Saisonergebnisse:', e);
         }
