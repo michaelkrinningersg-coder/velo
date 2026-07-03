@@ -2406,7 +2406,7 @@ ${e.error??"Unbekannter Fehler"}`),Je();return}Kr(e.data.fileName,e.data.content
       </div>
     </div>
   `}function Mf(e){var n;const a=(d.draftSelectedSeason??((n=d.currentSave)==null?void 0:n.currentSeason)??2026)-e.riderBirthYear,r=Ht(e.riderSpecialization)||"Allrounder";let s="";return e.oldTeamId===e.teamId?s=`
-      ${it(null,null,95)}
+      ${it(e.oldTeamId,e.oldTeamName,95)}
       <span style="font-size: 2.5rem; color: #94a3b8; font-weight: bold; display: flex; align-items: center;">➔</span>
       ${it(e.teamId,e.teamName,95)}
     `:e.oldTeamId&&e.oldTeamId>0?s=`
@@ -2533,13 +2533,13 @@ ${e.error??"Unbekannter Fehler"}`),Je();return}Kr(e.data.fileName,e.data.content
     
     <div style="display: flex; flex: 1; gap: 2rem; overflow: hidden; min-height: 0;">
       <!-- Linke Spalte: Kandidaten (3-Spalten) -->
-      <div style="flex: 3.0; display: flex; flex-direction: column; min-height: 0;">
+      <div style="flex: 2.3; display: flex; flex-direction: column; min-height: 0;">
         <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Kandidaten-Pool</h3>
         <div id="draft-overlay-candidates-list" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem 0.6rem; overflow-y: auto; flex: 1; padding-right: 0.5rem;"></div>
       </div>
       
-      <!-- Rechte Spalte: Auswahl (Schmaler) -->
-      <div style="flex: 1.0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(255,255,255,0.01); border: 2px dashed rgba(255,255,255,0.08); border-radius: 12px; padding: 1.5rem; position: relative; min-height: 0;">
+      <!-- Rechte Spalte: Auswahl (Breiter) -->
+      <div style="flex: 1.7; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(255,255,255,0.01); border: 2px dashed rgba(255,255,255,0.08); border-radius: 12px; padding: 1.5rem; position: relative; min-height: 0;">
         <div id="draft-overlay-pick-display" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 0;"></div>
       </div>
     </div>
