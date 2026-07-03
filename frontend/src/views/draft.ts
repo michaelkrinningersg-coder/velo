@@ -1124,10 +1124,23 @@ async function renderActivePlayerTurn(): Promise<void> {
 
   if (displayWrap) {
     if (draftState.isPlayerTeam) {
-      const selectedId = (state as any).selectedDraftRiderId;
+      let selectedId = (state as any).selectedDraftRiderId;
+      if (!selectedId && draftState.candidates && draftState.candidates.length > 0) {
+        selectedId = draftState.candidates[0].riderId;
+        (state as any).selectedDraftRiderId = selectedId;
+      }
+      
+      // Update candidate list to highlight the auto-selected/newly selected candidate
+      if (candList && draftState.candidates) {
+        candList.innerHTML = draftState.candidates.map((c: any) => {
+          const isSelected = c.riderId === selectedId;
+          return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
+        }).join('');
+      }
+
       const selectedRider = draftState.candidates?.find((c: any) => c.riderId === selectedId);
       if (selectedRider) {
-        displayWrap.innerHTML = renderDraftPlayerDecisionBox(selectedRider);
+        displayWrap.innerHTML = renderDraftPlayerDecisionBox3Col(selectedRider, draftState.nextTeamId, draftState.nextTeamName);
       } else {
         displayWrap.innerHTML = `
           <div style="font-size: 1.1rem; color: #94a3b8; text-align: center; max-width: 80%;">
@@ -1139,45 +1152,103 @@ async function renderActivePlayerTurn(): Promise<void> {
   }
 }
 
-function renderDraftPlayerDecisionBox(rider: any): string {
-  const season = state.draftSelectedSeason ?? state.currentSave?.currentSeason ?? 2026;
-  const age = season - rider.birthYear;
-  const specs = [];
-  if (rider.specialization1) specs.push(formatSpecName(rider.specialization1));
-  if (rider.specialization2) specs.push(formatSpecName(rider.specialization2));
-  if (rider.specialization3) specs.push(formatSpecName(rider.specialization3));
-  const specText = specs.length > 0 ? specs.join(' · ') : 'Allrounder';
+function renderDraftPlayerDecisionBox3Col(selectedRider: any, playerTeamId: number, playerTeamName: string): string {
+  const index = state.draftOverlayPicks?.length ?? 0;
+  const rosterBefore = getRosterForTeamAtPick(playerTeamId, index, false);
+  
+  const candidateRiderMapped = {
+    ...selectedRider,
+    id: selectedRider.riderId,
+    nationality: selectedRider.countryCode,
+  };
+  
+  const rosterAfter = [...rosterBefore, candidateRiderMapped];
+  const countsBefore = getSpecCounts(rosterBefore);
+  const countsAfter = getSpecCounts(rosterAfter);
+  
+  const countsHeaderHtml = renderSpecsHeaderHtml(playerTeamId, countsBefore, countsAfter, true);
+  const specsHeader = document.getElementById('draft-overlay-specs-header');
+  if (specsHeader) {
+    specsHeader.innerHTML = countsHeaderHtml;
+  }
 
-  const uciRankText = rider.uciRank ? `${rider.uciRank}` : '—';
+  const sortedRoster = [...rosterAfter].sort((a,b) => b.overallRating - a.overallRating);
+  const top10 = sortedRoster.slice(0, 10);
+  const isRiderInTop10 = top10.some(r => r.id === selectedRider.riderId);
+  const rankInTeam = sortedRoster.findIndex(r => r.id === selectedRider.riderId) + 1;
+  
+  let top10Html = top10.map((r, i) => renderRiderRow(r, i + 1, index, selectedRider.riderId, playerTeamId)).join('');
+  if (!isRiderInTop10) {
+    top10Html += `
+      <div style="border-top: 1px dashed rgba(255,255,255,0.15); margin: 0.3rem 0; padding-top: 0.3rem;"></div>
+      ${renderRiderRow(candidateRiderMapped, rankInTeam, index, selectedRider.riderId, playerTeamId)}
+    `;
+  }
+  
+  const specLabel = formatSpecName(selectedRider.specialization1) || 'Allrounder';
+  const specCompanions = sortedRoster.filter(r => 
+    selectedRider.specialization1 && 
+    (r.specialization1 === selectedRider.specialization1 || r.specialization2 === selectedRider.specialization1)
+  ).slice(0, 10);
+  
+  let specCompanionsHtml = specCompanions.map((r) => {
+    const companionRank = sortedRoster.findIndex(x => x.id === r.id) + 1;
+    return renderRiderRow(r, companionRank, index, selectedRider.riderId, playerTeamId);
+  }).join('');
+  
+  if (specCompanions.length === 0) {
+    specCompanionsHtml = '<div style="font-size: 0.8rem; color: #64748b; font-style: italic; padding: 0.5rem; text-align: center;">Keine Partner im Team</div>';
+  }
+  
+  const fakePick = {
+    riderBirthYear: selectedRider.birthYear,
+    riderSpecialization: selectedRider.specialization1,
+    oldTeamId: selectedRider.oldTeamId,
+    oldTeamName: selectedRider.oldTeamName,
+    teamId: playerTeamId,
+    teamName: playerTeamName,
+    riderLastName: selectedRider.lastName,
+    countryCode: selectedRider.countryCode,
+    riderId: selectedRider.riderId,
+    overallAtDraft: selectedRider.overallRating,
+    potOverallAtDraft: selectedRider.potential,
+    contractLength: 2,
+  };
+  
+  const bigBoxHtml = renderDraftSelectedRiderBigBox(fakePick);
   
   return `
-    <div style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1rem; color: #fff;">
-      <h3 style="margin: 0; color: var(--accent, #38bdf8); font-size: 1.3rem;">Fahrer auswählen</h3>
-      <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem;">
-        ${rider.oldTeamId ? getDraftRiderJerseyHtml(rider.oldTeamId, rider.oldTeamName, 80) : getDraftRiderJerseyHtml(null, null, 80)}
+    <div style="display: flex; width: 100%; height: 100%; gap: 1rem; overflow: hidden; animation: scaleIn 0.3s ease-out;">
+      <!-- Left Column: Both Gesamtstärke and Spec Box -->
+      <div style="flex: 1.25; display: flex; flex-direction: column; gap: 1rem; min-height: 0;">
+        <!-- Top Box: Gesamtstärkenrangliste -->
+        <div style="flex: 1; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; overflow: hidden; min-height: 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.25rem;">Kader Top 10</h4>
+          <div style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.35rem; padding-right: 0.25rem;">
+            ${top10Html}
+          </div>
+        </div>
+        <!-- Bottom Box: Spec Rangliste -->
+        <div style="flex: 1; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; overflow: hidden; min-height: 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>Spec: ${esc(specLabel)}</span>
+            <span style="font-size: 0.75rem; font-weight: normal; color: #64748b;">(max 10)</span>
+          </h4>
+          <div style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.35rem; padding-right: 0.25rem;">
+            ${specCompanionsHtml}
+          </div>
+        </div>
       </div>
-      <div style="font-size: 1.4rem; font-weight: bold; text-align: center;">
-        ${esc(rider.firstName)} ${esc(rider.lastName)} ${renderFlag(rider.countryCode)}
+      
+      <!-- Right Column: Draft Big Card + Confirm Button -->
+      <div style="flex: 2.0; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 0; gap: 1rem;">
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%;">
+          ${bigBoxHtml}
+        </div>
+        <button id="draft-overlay-confirm-btn" class="btn btn-primary" data-rider-id="${selectedRider.riderId}" style="width: 95%; max-width: 420px; padding: 0.75rem; font-size: 1.15rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); border-radius: 8px;">
+          FAHRER VERPFLICHTEN
+        </button>
       </div>
-      <div style="display: flex; gap: 1rem; align-items: center; font-size: 0.95rem; color: #94a3b8;">
-        <span>Alter: <strong style="color: #fff;">${age}</strong></span>
-        <span>·</span>
-        <span>OVR: <strong style="color: #fbbf24;">${rider.overallRating.toFixed(1)}</strong></span>
-        <span>·</span>
-        <span>POT: <strong style="color: #60a5fa;">${rider.potential.toFixed(1)}</strong></span>
-      </div>
-      <div style="font-size: 0.9rem; color: #facc15; font-weight: 500;">
-        ${esc(specText)}
-      </div>
-      <div style="font-size: 0.85rem; color: #94a3b8; display: flex; gap: 1rem;">
-        <span>UCI-Rang: <strong>${uciRankText}</strong></span>
-        <span>·</span>
-        <span>Siege: <strong>${rider.wins}</strong></span>
-      </div>
-
-      <button id="draft-overlay-confirm-btn" class="btn btn-primary" data-rider-id="${rider.riderId}" style="margin-top: 1.5rem; width: 80%; padding: 0.75rem; font-size: 1.1rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
-        FAHRER VERPFLICHTEN
-      </button>
     </div>
   `;
 }
@@ -1199,20 +1270,34 @@ async function submitPlayerDraftPick(riderId: number): Promise<void> {
       const oldLength = state.draftOverlayPicks?.length ?? 0;
       state.draftOverlayPicks = detailsRes.data.picks;
       
+      // Auto-advance wieder aktivieren, damit die nachfolgenden KI-Picks durchlaufen
+      const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
+      if (autoCheckbox) {
+        autoCheckbox.checked = true;
+      }
+      state.draftOverlayAuto = true;
+
       if (state.draftOverlayPicks && state.draftOverlayPicks.length > oldLength) {
         state.draftOverlayActive = true;
-        (state as any).draftRevealShown = false;
+        state.draftOverlayCurrentIndex = oldLength;
+        (state as any).draftRevealShown = true;
+        
+        hideLoading();
+        
+        // Erst Standard-Header & -Knöpfe initialisieren, dann direkt den aufgedeckten Pick rendern
         showDraftPick(oldLength);
+        revealCurrentPick();
       } else {
+        hideLoading();
         void renderActivePlayerTurn();
       }
     } else {
+      hideLoading();
       void renderActivePlayerTurn();
     }
   } catch (e) {
-    alert('Fehler beim Übermitteln des Picks: ' + (e as Error).message);
-  } finally {
     hideLoading();
+    alert('Fehler beim Übermitteln des Picks: ' + (e as Error).message);
   }
 }
 
