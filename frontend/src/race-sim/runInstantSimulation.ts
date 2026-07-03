@@ -23,7 +23,7 @@ export async function runInstantSimulation(
   bootstrap: RealtimeSimulationBootstrap,
   onProgress?: (progress: number) => void,
 ): Promise<SimulationSnapshot> {
-  const engine = new SimulationEngine(bootstrap, { maxSubstepSeconds: 5 });
+  const engine = new SimulationEngine(bootstrap, { maxSubstepSeconds: 5, isInstantSimulation: true });
 
   let isFinished = false;
   while (!isFinished) {
