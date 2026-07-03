@@ -256,9 +256,29 @@ export class GameStateRepository {
       return;
     }
 
+    // Schema-Erstellung/Überprüfung einmalig vor der Schleife ausführen
+    this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_entries (
+        stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+        race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+        team_id        INTEGER NOT NULL REFERENCES teams(id),
+        rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        status         TEXT    NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'started', 'finished', 'dns', 'dnf')),
+        status_reason  TEXT,
+        PRIMARY KEY (stage_id, rider_id)
+      )
+    `).run();
+
+    // SQL-Statement einmalig vorbereiten
+    const updateStmt = this.db.prepare(`
+      UPDATE stage_entries
+      SET status = 'finished', status_reason = NULL
+      WHERE stage_id = ? AND rider_id = ?
+    `);
+
     this.db.transaction(() => {
       for (const riderId of riderIds) {
-        this.updateStageEntryStatus(stageId, riderId, 'finished');
+        updateStmt.run(stageId, riderId);
       }
     })();
   }
