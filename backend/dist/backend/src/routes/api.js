@@ -1044,6 +1044,45 @@ function createRouter(dbService) {
             fail(res, 400, e.message);
         }
     });
+    router.post('/debug/sql-raw', (req, res) => {
+        try {
+            const { filename, sql } = req.body;
+            const Database = require('better-sqlite3');
+            const path = require('path');
+            const os = require('os');
+            const fs = require('fs');
+            // Try to resolve the savegames directory within the repository workspace
+            let savegamesDir = path.join(os.homedir(), '.velo', 'savegames');
+            let current = __dirname;
+            while (true) {
+                if (fs.existsSync(path.join(current, 'backend')) && fs.existsSync(path.join(current, 'frontend'))) {
+                    const repoSaveDir = path.join(current, 'savegames');
+                    if (fs.existsSync(repoSaveDir)) {
+                        savegamesDir = repoSaveDir;
+                    }
+                    break;
+                }
+                const parent = path.dirname(current);
+                if (parent === current) {
+                    break;
+                }
+                current = parent;
+            }
+            const savePath = path.join(savegamesDir, filename);
+            const db = new Database(savePath);
+            let result;
+            try {
+                result = db.prepare(sql).all();
+            }
+            finally {
+                db.close();
+            }
+            ok(res, result);
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
     return router;
 }
 function ensureWeatherRolled(db, stageId) {
