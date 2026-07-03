@@ -471,13 +471,12 @@ export class RiderRepository {
        AND stage_points.award_type = CASE WHEN races.is_stage_race = 1 THEN 'stage_result' ELSE 'one_day_result' END
       WHERE stage_entries.rider_id = ?
         AND stage_entries.status IN ('finished', 'dnf')
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND (
           COALESCE(rider_stage_results.rank, team_stage_results.rank) IS NOT NULL
           OR stage_entries.status = 'dnf'
         )
       ORDER BY stages.date ASC, races.id ASC, stages.stage_number ASC
-    `).all(RESULT_TYPE_IDS.gc, riderId, currentSeason) as RiderStatsStageDbRow[];
+    `).all(RESULT_TYPE_IDS.gc, riderId) as RiderStatsStageDbRow[];
 
     const finalRows = this.db.prepare(`
       SELECT
@@ -516,10 +515,9 @@ export class RiderRepository {
       WHERE results.rider_id = ?
         AND races.is_stage_race = 1
         AND stages.stage_number = races.number_of_stages
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND results.result_type_id IN (${RESULT_TYPE_IDS.gc}, ${RESULT_TYPE_IDS.points}, ${RESULT_TYPE_IDS.mountain}, ${RESULT_TYPE_IDS.youth}, ${RESULT_TYPE_IDS.breakaway})
       ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
-    `).all(riderId, currentSeason) as RiderStatsFinalDbRow[];
+    `).all(riderId) as RiderStatsFinalDbRow[];
 
     const seasons = new Map<number, RiderStatsSeason>();
     const blocks = new Map<string, RiderStatsRaceBlock>();
@@ -614,12 +612,14 @@ export class RiderRepository {
         isStageRace: row.is_stage_race === 1,
       } satisfies RiderStatsRow);
 
-      const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
-      pointsByTerrain[terrainBucket] += stagePoints;
-      if (row.is_stage_race === 1) {
-        pointsByRaceFormat.stageRace += stagePoints;
-      } else {
-        pointsByRaceFormat.oneDay += stagePoints;
+      if (row.season === currentSeason) {
+        const terrainBucket = resolveRiderStatsTerrainBucket(row.profile);
+        pointsByTerrain[terrainBucket] += stagePoints;
+        if (row.is_stage_race === 1) {
+          pointsByRaceFormat.stageRace += stagePoints;
+        } else {
+          pointsByRaceFormat.oneDay += stagePoints;
+        }
       }
     }
 
