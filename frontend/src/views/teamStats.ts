@@ -1128,6 +1128,7 @@ function formatSpecName(spec: string | null): string | null {
   if (norm === 'sprint' || norm === 'sprinter') return 'Sprint';
   if (norm === 'timetrial' || norm === 'time_trial' || norm === 'time trialist' || norm === 'zf') return 'Zeitfahren';
   if (norm === 'cobble' || norm === 'classic' || norm === 'pave') return 'Cobble';
+  if (norm === 'flat' || norm === 'flach' || norm === 'flachlandspezialist' || norm === 'flachland') return 'Flach';
   return spec;
 }
 

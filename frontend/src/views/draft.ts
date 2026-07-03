@@ -415,6 +415,7 @@ function formatSpecName(spec: string | null | undefined): string | null {
   if (norm === 'timetrial' || norm === 'time_trial' || norm === 'time trialist' || norm === 'zf' || norm === 'zeitfahrer') return 'Zeitfahren';
   if (norm === 'cobble' || norm === 'classic' || norm === 'pave' || norm === 'pflasterspezialist') return 'Cobble';
   if (norm === 'attacker' || norm === 'angreifer') return 'Angreifer';
+  if (norm === 'flat' || norm === 'flach' || norm === 'flachlandspezialist' || norm === 'flachland') return 'Flach';
   return spec;
 }
 
@@ -791,7 +792,18 @@ export function triggerDraftSchedule(): void {
         if (nextIndex < state.draftOverlayPicks!.length) {
           showDraftPick(nextIndex);
         } else {
-          closeDraftOverlay();
+          if (state.gameState?.draftStatus === 'active') {
+            // Pause auto-play for player turn and render it
+            state.draftOverlayAuto = false;
+            const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
+            if (autoCheckbox) {
+              autoCheckbox.checked = false;
+            }
+            state.draftOverlayCurrentIndex = nextIndex;
+            void renderActivePlayerTurn();
+          } else {
+            closeDraftOverlay();
+          }
         }
       }, delay);
     }
