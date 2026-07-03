@@ -228,7 +228,11 @@ function resolveAgeGrowthFactor(age, peakAge) {
     if (age >= peakAge)
         return 0;
     const yearsUntilPeak = Math.max(0, peakAge - age);
-    return Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
+    let factor = Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
+    if (age < 20) {
+        factor *= 0.9;
+    }
+    return factor;
 }
 function resolveSkillDevelopmentFactor(skillDevelopment) {
     return 0.65 + (Math.max(1, Math.min(20, skillDevelopment)) / 20) * 0.7;

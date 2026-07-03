@@ -867,12 +867,12 @@ export class GameStateService {
     const programWindows = this.getProgramWindowsForSeason(currentSeason);
 
     for (const row of rows) {
+      const seasonChanged = row.season !== currentSeason;
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
-      if (!isTier1) {
+      if (!isTier1 && !seasonChanged) {
         continue;
       }
 
-      const seasonChanged = row.season !== currentSeason;
       const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
       const peakDates = resolveSeasonPeakDatesFromWindows(
         seasonChanged ? [] : parsePeakDates(row.peak_dates_json),
@@ -1014,12 +1014,12 @@ export class GameStateService {
     const updates: any[][] = [];
 
     for (const row of rows) {
+      const seasonChanged = row.season !== nextSeason;
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
-      if (!isTier1) {
+      if (!isTier1 && !seasonChanged) {
         continue;
       }
 
-      const seasonChanged = row.season !== nextSeason;
       const riderProgramWindows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
       const peakDates = resolveSeasonPeakDatesFromWindows(
         seasonChanged ? [] : parsePeakDates(row.peak_dates_json),

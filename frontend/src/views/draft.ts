@@ -906,13 +906,20 @@ export function revealCurrentPick(): void {
 }
 
 function interleaveCandidates(arr: any[]): any[] {
-  const n = arr.length;
-  const half = Math.ceil(n / 2);
+  const sorted = [...arr].sort((a: any, b: any) => b.overallRating - a.overallRating);
+  const n = sorted.length;
+  if (n <= 1) return sorted;
+  
+  const numCols = 3;
+  const numRows = Math.ceil(n / numCols);
+  
   const result: any[] = [];
-  for (let i = 0; i < half; i++) {
-    result.push(arr[i]);
-    if (i + half < n) {
-      result.push(arr[i + half]);
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      const idx = c * numRows + r;
+      if (idx < n) {
+        result.push(sorted[idx]);
+      }
     }
   }
   return result;
@@ -963,9 +970,8 @@ export function showDraftPick(index: number): void {
   const nextBtn = document.getElementById('draft-overlay-next-btn') as HTMLButtonElement;
   if (nextBtn) nextBtn.disabled = index === state.draftOverlayPicks.length - 1;
   
-  // Candidates pool sort by OVR desc
-  const sortedPool = [...pick.candidates].sort((a: any, b: any) => b.overallRating - a.overallRating);
-  const interleavedPool = interleaveCandidates(sortedPool);
+  // Candidates pool sort by OVR desc and interleave into 3 columns
+  const interleavedPool = interleaveCandidates(pick.candidates);
   
   const candList = document.getElementById('draft-overlay-candidates-list');
   if (candList) {
@@ -1125,7 +1131,8 @@ async function renderActivePlayerTurn(): Promise<void> {
   const candList = document.getElementById('draft-overlay-candidates-list');
   if (candList) {
     if (draftState.isPlayerTeam && draftState.candidates && draftState.candidates.length > 0) {
-      candList.innerHTML = draftState.candidates.map((c: any) => {
+      const interleaved = interleaveCandidates(draftState.candidates);
+      candList.innerHTML = interleaved.map((c: any) => {
         const isSelected = c.riderId === (state as any).selectedDraftRiderId;
         return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
       }).join('');
@@ -1138,13 +1145,15 @@ async function renderActivePlayerTurn(): Promise<void> {
     if (draftState.isPlayerTeam) {
       let selectedId = (state as any).selectedDraftRiderId;
       if (!selectedId && draftState.candidates && draftState.candidates.length > 0) {
-        selectedId = draftState.candidates[0].riderId;
+        const sorted = [...draftState.candidates].sort((a: any, b: any) => b.overallRating - a.overallRating);
+        selectedId = sorted[0].riderId;
         (state as any).selectedDraftRiderId = selectedId;
       }
       
       // Update candidate list to highlight the auto-selected/newly selected candidate
       if (candList && draftState.candidates) {
-        candList.innerHTML = draftState.candidates.map((c: any) => {
+        const interleaved = interleaveCandidates(draftState.candidates);
+        candList.innerHTML = interleaved.map((c: any) => {
           const isSelected = c.riderId === selectedId;
           return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
         }).join('');

@@ -325,7 +325,11 @@ function resolveDevelopmentBlockReason(row: DailyDevelopmentRow, context: RiderD
 function resolveAgeGrowthFactor(age: number, peakAge: number): number {
   if (age >= peakAge) return 0;
   const yearsUntilPeak = Math.max(0, peakAge - age);
-  return Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
+  let factor = Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
+  if (age < 20) {
+    factor *= 0.9;
+  }
+  return factor;
 }
 
 function resolveSkillDevelopmentFactor(skillDevelopment: number): number {
