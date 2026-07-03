@@ -37,6 +37,9 @@ interface GameStateRow {
   current_date: string;
   season: number;
   is_game_over: number;
+  draft_status?: string;
+  draft_current_pick_number?: number;
+  draft_season?: number | null;
 }
 
 interface DailyCheckSummary {
@@ -202,7 +205,7 @@ export class GameStateService {
   public loadState(): GameState {
     this.ensureSchemaOnce();
     const row = this.db.prepare(
-      'SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1',
+      'SELECT "current_date" AS current_date, season, is_game_over, draft_status, draft_current_pick_number, draft_season FROM game_state WHERE id = 1',
     ).get() as GameStateRow | undefined;
     if (!row) throw new Error('game_state konnte nicht geladen werden.');
     return this.mapState(row);
@@ -217,6 +220,9 @@ export class GameStateService {
       isRaceDay: pendingStages.length > 0,
       currentStageId: pendingStages[0]?.stageId ?? null,
       pendingStages,
+      draftStatus: state.draftStatus,
+      draftCurrentPickNumber: state.draftCurrentPickNumber,
+      draftSeason: state.draftSeason,
     };
   }
 
@@ -227,7 +233,7 @@ export class GameStateService {
     const nextState = this.db.transaction(() => {
       this.ensureStateRow();
       const currentRow = this.db.prepare(
-        'SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1',
+        'SELECT "current_date" AS current_date, season, is_game_over, draft_status, draft_current_pick_number, draft_season FROM game_state WHERE id = 1',
       ).get() as GameStateRow | undefined;
       if (!currentRow) throw new Error('game_state nicht ladbar.');
 
@@ -339,25 +345,18 @@ export class GameStateService {
         this.duplicateCalendarForSeason(currentRow.season, nextSeason);
 
         new ContractService(this.db).checkContractStatuses(nextSeason, true);
-        new RiderDraftService(this.db).executeDraft(nextSeason);
-        new ContractService(this.db).checkContractStatuses(nextSeason); // activate new draft contracts
-        new RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
-        new RiderRoleService(this.db).recalculateAllTeamRoles();
-        new RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
+        const draftService = new RiderDraftService(this.db);
+        draftService.prepareDraft(nextSeason);
 
-        // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
-        new RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
-        new RiderDevelopmentService(this.db).initializeRiders(nextSeason);
-
-        // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
         this.db.prepare(`
-          UPDATE riders
-          SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
-          WHERE is_retired = 0 AND skill_development > 0
-        `).run();
+          UPDATE game_state
+          SET draft_status = 'active',
+              draft_current_pick_number = 1,
+              draft_season = ?
+          WHERE id = 1
+        `).run(nextSeason);
 
-        // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
-        this.snapshotYearlyBaselineSkills();
+        draftService.executeNextPicksUntilPlayer(nextSeason, false);
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);
@@ -1294,10 +1293,20 @@ export class GameStateService {
     }
 
     if (seasonChangedRiderIds.length > 0) {
+      const resetSeasonStats = this.db.prepare(`
+        UPDATE rider_daily_state
+        SET season_points = 0,
+            season_wins = 0,
+            season_race_days_total = 0,
+            rolling_30d_race_days = 0
+        WHERE rider_id = ?
+      `);
+
       // Use one prepared statement inside a tight loop instead of building a
       // giant IN(...) query; SQLite is happy with this when bound individually.
       for (const riderId of seasonChangedRiderIds) {
         deleteFormEvents.run(riderId);
+        resetSeasonStats.run(riderId);
       }
 
       if (this.isTable('rider_form_history')) {
@@ -1599,6 +1608,9 @@ export class GameStateService {
       formattedDate:  formatDateForUi(row.current_date),
       hasRaceToday:   dailyChecks.hasRaceToday,
       racesTodayCount: dailyChecks.racesTodayCount,
+      draftStatus:    (row.draft_status as any) ?? 'completed',
+      draftCurrentPickNumber: row.draft_current_pick_number ?? 1,
+      draftSeason:    row.draft_season ?? null,
     };
   }
 
@@ -1831,6 +1843,40 @@ export class GameStateService {
         };
         update.run(JSON.stringify(baseline), r.id);
       }
+    })();
+  }
+
+  public completeDraftAndInitializeSeason(season: number, nextDate: string): void {
+    this.db.transaction(() => {
+      new ContractService(this.db).checkContractStatuses(season); // activate new draft contracts
+      new RiderDevelopmentService(this.db).recalculateSpecializations(season);
+      new RiderRoleService(this.db).recalculateAllTeamRoles();
+      new RiderProgramService(this.db).ensureSeasonPrograms(season, nextDate);
+
+      // Newgens für die nächste Saison erzeugen
+      new RiderNewgenService(this.db).createYearStartNewgens(season);
+      new RiderDevelopmentService(this.db).initializeRiders(season);
+
+      // Skill-Development aller aktiven Fahrer neu auswürfeln (±3, max 20, min 1)
+      this.db.prepare(`
+        UPDATE riders
+        SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
+        WHERE is_retired = 0 AND skill_development > 0
+      `).run();
+
+      // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
+      this.snapshotYearlyBaselineSkills();
+
+      // Initialize rider daily states for newly drafted riders
+      this.ensureRiderDailyStateRows(season);
+
+      // Set draft_status to completed
+      this.db.prepare(`
+        UPDATE game_state
+        SET draft_status = 'completed',
+            draft_season = NULL
+        WHERE id = 1
+      `).run();
     })();
   }
 }

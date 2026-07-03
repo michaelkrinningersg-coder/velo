@@ -7,6 +7,7 @@ import { RiderRepository } from '../db/repositories/RiderRepository';
 import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
 import { GameStateService } from '../game/GameStateService';
+import { RiderDraftService } from '../game/RiderDraftService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
@@ -881,6 +882,94 @@ export function createRouter(dbService: DatabaseService): Router {
       ok(res, {
         season,
         picks: picksWithCandidates
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/draft/:season/state', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+      const draftService = new RiderDraftService(db);
+      const state = draftService.getNextPickState(season);
+
+      let candidates: any[] = [];
+      let nextTeamName: string | null = null;
+      if (state.nextTeamId !== null) {
+        const teamRow = db.prepare('SELECT name FROM teams WHERE id = ?').get(state.nextTeamId) as { name: string } | undefined;
+        nextTeamName = teamRow?.name ?? null;
+
+        // If it's the player team, load candidates
+        if (state.isPlayerTeam) {
+          candidates = draftService.getDraftCandidatesForNextPick(season);
+        }
+      }
+
+      ok(res, {
+        season,
+        nextTeamId: state.nextTeamId,
+        nextTeamName,
+        isPlayerTeam: state.isPlayerTeam,
+        currentRound: state.currentRound,
+        currentPickNumber: state.currentPickNumber,
+        finished: state.finished,
+        candidates
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/draft/:season/pick', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+      const { riderId } = req.body;
+      if (!riderId) {
+        return fail(res, 400, 'Fahrer-ID fehlt.');
+      }
+
+      const draftService = new RiderDraftService(db);
+      const state = draftService.getNextPickState(season);
+      if (state.finished) {
+        return fail(res, 400, 'Der Draft ist bereits beendet.');
+      }
+      if (!state.isPlayerTeam) {
+        return fail(res, 400, 'Nicht der Zug des Spieler-Teams.');
+      }
+
+      // Execute the player's pick
+      draftService.executeSingleDraftPick(season, state.nextTeamId!, state.currentRound, state.currentPickNumber, riderId);
+
+      // Run subsequent KI picks until it's the player's turn again (or finished)
+      const result = draftService.executeNextPicksUntilPlayer(season, false);
+
+      // If finished, complete the draft & season initialization
+      if (result.finished) {
+        const nextDate = getGss().loadState().currentDate;
+        getGss().completeDraftAndInitializeSeason(season, nextDate);
+      }
+
+      ok(res, {
+        finished: result.finished,
+        playerTurn: result.playerTurn
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/draft/:season/quick-complete', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+
+      const draftService = new RiderDraftService(db);
+      const result = draftService.executeNextPicksUntilPlayer(season, true);
+
+      // Complete the season initialization
+      const nextDate = getGss().loadState().currentDate;
+      getGss().completeDraftAndInitializeSeason(season, nextDate);
+
+      ok(res, {
+        finished: true,
+        playerTurn: false
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

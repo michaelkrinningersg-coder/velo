@@ -344,7 +344,7 @@ class RiderRepository {
         }
         const currentSeason = new GameStateRepository_1.GameStateRepository(this.db).getCurrentSeason();
         const currentSeasonRank = new ResultRepository_1.ResultRepository(this.db).getSeasonRankForRider(currentSeason, rider.id);
-        const currentSeasonPoints = rider.seasonPoints ?? 0;
+        const currentSeasonPoints = this.getSeasonPointsByRiderId(currentSeason, [rider.id]).get(rider.id) ?? 0;
         const currentSeasonRaceStats = { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 };
         const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
         const careerWins = this.getCareerWins(rider.id);
@@ -409,13 +409,12 @@ class RiderRepository {
        AND stage_points.award_type = CASE WHEN races.is_stage_race = 1 THEN 'stage_result' ELSE 'one_day_result' END
       WHERE stage_entries.rider_id = ?
         AND stage_entries.status IN ('finished', 'dnf')
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND (
           COALESCE(rider_stage_results.rank, team_stage_results.rank) IS NOT NULL
           OR stage_entries.status = 'dnf'
         )
       ORDER BY stages.date ASC, races.id ASC, stages.stage_number ASC
-    `).all(mappers_1.RESULT_TYPE_IDS.gc, riderId, currentSeason);
+    `).all(mappers_1.RESULT_TYPE_IDS.gc, riderId);
         const finalRows = this.db.prepare(`
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
@@ -453,10 +452,9 @@ class RiderRepository {
       WHERE results.rider_id = ?
         AND races.is_stage_race = 1
         AND stages.stage_number = races.number_of_stages
-        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         AND results.result_type_id IN (${mappers_1.RESULT_TYPE_IDS.gc}, ${mappers_1.RESULT_TYPE_IDS.points}, ${mappers_1.RESULT_TYPE_IDS.mountain}, ${mappers_1.RESULT_TYPE_IDS.youth}, ${mappers_1.RESULT_TYPE_IDS.breakaway})
       ORDER BY stages.date ASC, races.id ASC, results.result_type_id ASC
-    `).all(riderId, currentSeason);
+    `).all(riderId);
         const seasons = new Map();
         const blocks = new Map();
         const stageSummaryCache = new Map();
@@ -542,13 +540,15 @@ class RiderRepository {
                 teamId: row.team_id ?? null,
                 isStageRace: row.is_stage_race === 1,
             });
-            const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
-            pointsByTerrain[terrainBucket] += stagePoints;
-            if (row.is_stage_race === 1) {
-                pointsByRaceFormat.stageRace += stagePoints;
-            }
-            else {
-                pointsByRaceFormat.oneDay += stagePoints;
+            if (row.season === currentSeason) {
+                const terrainBucket = (0, mappers_1.resolveRiderStatsTerrainBucket)(row.profile);
+                pointsByTerrain[terrainBucket] += stagePoints;
+                if (row.is_stage_race === 1) {
+                    pointsByRaceFormat.stageRace += stagePoints;
+                }
+                else {
+                    pointsByRaceFormat.oneDay += stagePoints;
+                }
             }
         }
         for (const row of finalRows) {

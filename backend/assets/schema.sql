@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS game_state (
   id            INTEGER PRIMARY KEY CHECK(id = 1),
   current_date  TEXT    NOT NULL,
   season        INTEGER NOT NULL,
-  is_game_over  INTEGER NOT NULL DEFAULT 0 CHECK(is_game_over IN (0, 1))
+  is_game_over  INTEGER NOT NULL DEFAULT 0 CHECK(is_game_over IN (0, 1)),
+  draft_status  TEXT    NOT NULL DEFAULT 'completed',
+  draft_current_pick_number INTEGER NOT NULL DEFAULT 1,
+  draft_season  INTEGER DEFAULT NULL
 );
 
 -- ---- Länder-Gruppen für Programme -----------------------------

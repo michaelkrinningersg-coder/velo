@@ -582,6 +582,9 @@ export interface GameState {
   formattedDate: string;
   hasRaceToday: boolean;
   racesTodayCount: number;
+  draftStatus?: 'not_started' | 'active' | 'completed';
+  draftCurrentPickNumber?: number;
+  draftSeason?: number | null;
 }
 
 export interface PendingStage {
@@ -602,6 +605,9 @@ export interface GameStatus {
   isRaceDay: boolean;
   currentStageId: number | null;
   pendingStages: PendingStage[];
+  draftStatus?: 'not_started' | 'active' | 'completed';
+  draftCurrentPickNumber?: number;
+  draftSeason?: number | null;
 }
 
 export interface ResultType {

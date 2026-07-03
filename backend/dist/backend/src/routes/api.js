@@ -9,6 +9,7 @@ const RiderRepository_1 = require("../db/repositories/RiderRepository");
 const ResultRepository_1 = require("../db/repositories/ResultRepository");
 const LeaderboardRepository_1 = require("../db/repositories/LeaderboardRepository");
 const GameStateService_1 = require("../game/GameStateService");
+const RiderDraftService_1 = require("../game/RiderDraftService");
 const RouteImporter_1 = require("../simulation/RouteImporter");
 const RaceRosterService_1 = require("../simulation/RaceRosterService");
 const StageResultCommitService_1 = require("../simulation/StageResultCommitService");
@@ -884,6 +885,89 @@ function createRouter(dbService) {
             ok(res, {
                 season,
                 picks: picksWithCandidates
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.get('/draft/:season/state', (req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            const season = parseInt(req.params.season, 10);
+            const draftService = new RiderDraftService_1.RiderDraftService(db);
+            const state = draftService.getNextPickState(season);
+            let candidates = [];
+            let nextTeamName = null;
+            if (state.nextTeamId !== null) {
+                const teamRow = db.prepare('SELECT name FROM teams WHERE id = ?').get(state.nextTeamId);
+                nextTeamName = teamRow?.name ?? null;
+                // If it's the player team, load candidates
+                if (state.isPlayerTeam) {
+                    candidates = draftService.getDraftCandidatesForNextPick(season);
+                }
+            }
+            ok(res, {
+                season,
+                nextTeamId: state.nextTeamId,
+                nextTeamName,
+                isPlayerTeam: state.isPlayerTeam,
+                currentRound: state.currentRound,
+                currentPickNumber: state.currentPickNumber,
+                finished: state.finished,
+                candidates
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/draft/:season/pick', (req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            const season = parseInt(req.params.season, 10);
+            const { riderId } = req.body;
+            if (!riderId) {
+                return fail(res, 400, 'Fahrer-ID fehlt.');
+            }
+            const draftService = new RiderDraftService_1.RiderDraftService(db);
+            const state = draftService.getNextPickState(season);
+            if (state.finished) {
+                return fail(res, 400, 'Der Draft ist bereits beendet.');
+            }
+            if (!state.isPlayerTeam) {
+                return fail(res, 400, 'Nicht der Zug des Spieler-Teams.');
+            }
+            // Execute the player's pick
+            draftService.executeSingleDraftPick(season, state.nextTeamId, state.currentRound, state.currentPickNumber, riderId);
+            // Run subsequent KI picks until it's the player's turn again (or finished)
+            const result = draftService.executeNextPicksUntilPlayer(season, false);
+            // If finished, complete the draft & season initialization
+            if (result.finished) {
+                const nextDate = getGss().loadState().currentDate;
+                getGss().completeDraftAndInitializeSeason(season, nextDate);
+            }
+            ok(res, {
+                finished: result.finished,
+                playerTurn: result.playerTurn
+            });
+        }
+        catch (e) {
+            fail(res, 400, e.message);
+        }
+    });
+    router.post('/draft/:season/quick-complete', (req, res) => {
+        try {
+            const db = dbService.getActiveConnection();
+            const season = parseInt(req.params.season, 10);
+            const draftService = new RiderDraftService_1.RiderDraftService(db);
+            const result = draftService.executeNextPicksUntilPlayer(season, true);
+            // Complete the season initialization
+            const nextDate = getGss().loadState().currentDate;
+            getGss().completeDraftAndInitializeSeason(season, nextDate);
+            ok(res, {
+                finished: true,
+                playerTurn: false
             });
         }
         catch (e) {

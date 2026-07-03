@@ -105,6 +105,9 @@ export const api = {
   getInjuries:         () => call<InjuryRow[]>('GET', '/api/injuries'),
   getDraftHistory:     (season: number) => call<DraftHistoryPayload>('GET', `/api/draft/${season}`),
   getDraftDetails:     (season: number) => call<any>('GET', `/api/draft/${season}/details`),
+  getDraftState:       (season: number) => call<any>('GET', `/api/draft/${season}/state`),
+  makeDraftPick:       (season: number, riderId: number) => call<any>('POST', `/api/draft/${season}/pick`, { riderId }),
+  quickCompleteDraft:  (season: number) => call<any>('POST', `/api/draft/${season}/quick-complete`),
   getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
     call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),
   getRaceProgramsEditor: () => call<any>('GET', '/api/race-programs-editor'),

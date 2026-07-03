@@ -99,7 +99,6 @@ export async function enterGameScreen(): Promise<void> {
   $('meta-career').textContent = state.currentSave?.careerName ?? '';
   state.seasonStandingsSelectedSeason = null;
   state.riderStatsSelectedSeason = null;
-  activateView('dashboard');
   showLoading('Spiel wird geladen…');
   try {
     await loadGameState();
@@ -113,7 +112,13 @@ export async function enterGameScreen(): Promise<void> {
     if (ridersRes.success) state.riders = ridersRes.data ?? [];
 
     await loadRaces();
-    renderDashboard();
+    if (state.gameState?.draftStatus === 'active') {
+      activateView('draft');
+      void loadDraftHistory(state.draftSelectedSeason || state.currentSave?.currentSeason || 2026);
+    } else {
+      activateView('dashboard');
+      renderDashboard();
+    }
   } catch (e) {
     alert('Fehler beim Laden des Spiels: ' + (e as Error).message);
   } finally {
@@ -127,6 +132,12 @@ function initAppListeners(): void {
   document.querySelectorAll<HTMLElement>('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const view = btn.dataset['view'] ?? '';
+      if (state.gameState?.draftStatus === 'active') {
+        if (view !== 'draft') {
+          alert('Ein Fahrerdraft läuft gerade. Du musst den Draft abschließen, bevor du das Spiel fortsetzen kannst.');
+          return;
+        }
+      }
       activateView(view as any);
       if (view === 'dashboard') renderDashboard();
       if (view === 'teams') void refreshTeamsViewData();

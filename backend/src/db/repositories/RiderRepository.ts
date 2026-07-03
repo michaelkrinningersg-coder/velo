@@ -393,7 +393,7 @@ export class RiderRepository {
 
     const currentSeason = new GameStateRepository(this.db).getCurrentSeason();
     const currentSeasonRank = new ResultRepository(this.db).getSeasonRankForRider(currentSeason, rider.id);
-    const currentSeasonPoints = rider.seasonPoints ?? 0;
+    const currentSeasonPoints = this.getSeasonPointsByRiderId(currentSeason, [rider.id]).get(rider.id) ?? 0;
     const currentSeasonRaceStats = { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 };
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);

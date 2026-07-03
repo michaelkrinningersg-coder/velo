@@ -11,6 +11,7 @@ import {
   resolveTeamJerseyAssetPath,
 } from '../state';
 import type { DraftHistoryPayload, DraftHistoryRow } from '../../../shared/types';
+import { loadGameState } from './dashboard';
 
 export let currentDraftSort: { key: keyof DraftHistoryRow | 'potOverallAtDraft', asc: boolean } = { key: 'pickNumber', asc: true };
 
@@ -64,10 +65,39 @@ export function renderDraftView(): void {
   const container = $('draft-table-container');
   const select = $('draft-season-select') as HTMLSelectElement;
 
+  const toolbar = document.querySelector('#view-draft .results-toolbar') as HTMLElement | null;
+
   if (!state.currentSave) {
     container.innerHTML = '<div class="alert alert-info">Kein Spiel geladen.</div>';
     return;
   }
+
+  if (state.gameState?.draftStatus === 'active') {
+    if (toolbar) toolbar.classList.add('hidden');
+    const draftSeason = state.gameState.draftSeason || state.currentSave?.currentSeason || 2026;
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; background: rgba(30, 41, 59, 0.7); border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; max-width: 600px; margin: 2rem auto; text-align: center; color: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+        <div style="font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));">🏆</div>
+        <h2 style="font-size: 1.8rem; margin: 0 0 1rem 0; font-weight: bold; background: linear-gradient(135deg, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Fahrerdraft Saison ${draftSeason}</h2>
+        <p style="color: #cbd5e1; font-size: 1.1rem; line-height: 1.6; margin: 0 0 2rem 0; max-width: 450px;">
+          Der jährliche Fahrerdraft für die Saison ${draftSeason} hat begonnen! Als Manager deines Teams triffst du deine Entscheidungen interaktiv.
+        </p>
+        <button id="draft-start-interactive-btn" class="btn btn-primary" style="padding: 0.85rem 2rem; font-size: 1.2rem; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4); transition: transform 0.2s, box-shadow 0.2s;">
+          DRAFT STARTEN & REPLAY ANSEHEN
+        </button>
+      </div>
+    `;
+    
+    const startBtn = document.getElementById('draft-start-interactive-btn');
+    if (startBtn) {
+      startBtn.onclick = () => {
+        void startDraftPresentation(draftSeason);
+      };
+    }
+    return;
+  }
+
+  if (toolbar) toolbar.classList.remove('hidden');
 
   // Populate season select if empty
   if (select.options.length === 0) {
@@ -232,7 +262,7 @@ function clearDraftTimeouts(): void {
 
 export function getOpenSlotsForPick(teamId: number, currentPickIndex: number, picks: any[]): number {
   const team = state.teams.find(t => t.id === teamId);
-  const maxRosterSize = team?.division === 'U23' ? 20 : (team?.division === 'ProTour' ? 30 : 32); 
+  const maxRosterSize = team?.division === 'U23' ? 20 : (team?.division === 'ProTour' ? 30 : 40); 
   
   const currentRidersCount = state.riders.filter(r => r.activeTeamId === teamId).length;
   const subsequentPicksCount = picks.slice(currentPickIndex + 1).filter(p => p.teamId === teamId).length;
@@ -325,7 +355,7 @@ function renderSpecsHeaderHtml(teamId: number, countsBefore: any, countsAfter: a
   });
   
   const team = state.teams.find(t => t.id === teamId);
-  const maxRosterSize = team?.division === 'U23' ? 20 : (team?.division === 'ProTour' ? 30 : 32); 
+  const maxRosterSize = team?.division === 'U23' ? 20 : (team?.division === 'ProTour' ? 30 : 40); 
   const sizeBefore = getRosterForTeamAtPick(teamId, state.draftOverlayCurrentIndex, false).length;
   const sizeAfter = getRosterForTeamAtPick(teamId, state.draftOverlayCurrentIndex, true).length;
   
@@ -388,8 +418,10 @@ function formatSpecName(spec: string | null | undefined): string | null {
   return spec;
 }
 
-function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: number): string {
+function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: number, isPlayerTurn = false): string {
   const borderStyle = isSelected ? 'border: 2px solid var(--accent, #38bdf8); background: rgba(56, 189, 248, 0.08);' : 'border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);';
+  const cursorStyle = isPlayerTurn ? 'cursor: pointer;' : '';
+  const clickClass = isPlayerTurn ? 'draft-candidate-clickable' : '';
   
   const specs: string[] = [];
   const s1 = formatSpecName(c.specialization1);
@@ -409,34 +441,31 @@ function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: num
     : '';
   
   let jerseyHtml = '';
-  if (c.oldTeamId === currentTeamId) {
-    // contract extension: show placeholder jersey
-    jerseyHtml = getDraftRiderJerseyHtml(null, null, 32);
-  } else if (c.oldTeamId && c.oldTeamId > 0) {
-    // transfer: show old team's jersey
-    jerseyHtml = getDraftRiderJerseyHtml(c.oldTeamId, c.oldTeamName, 32);
+  if (c.oldTeamId && c.oldTeamId > 0) {
+    // Show actual team jersey (solves renewal placeholder bug)
+    jerseyHtml = getDraftRiderJerseyHtml(c.oldTeamId, c.oldTeamName, 26);
   } else {
     // free agent / others: hide jersey icon
     jerseyHtml = '';
   }
   
   return `
-    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0.5rem; border-radius: 6px; transition: all 0.2s; ${borderStyle}">
-      <div style="display: flex; align-items: center; gap: 0.6rem;">
+    <div class="${clickClass}" data-rider-id="${c.riderId}" style="display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0.4rem; border-radius: 6px; transition: all 0.2s; ${borderStyle} ${cursorStyle}">
+      <div style="display: flex; align-items: center; gap: 0.45rem;">
         ${jerseyHtml ? `
         <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
           ${jerseyHtml}
         </div>
         ` : ''}
         <div>
-          <div style="display: flex; align-items: center; gap: 0.35rem;">
+          <div style="display: flex; align-items: center; gap: 0.25rem;">
             ${renderFlag(c.countryCode)}
-            <button class="app-rider-link" data-rider-id="${c.riderId}" style="background: none; border: none; padding: 0; color: #60a5fa; font-weight: bold; cursor: pointer; text-align: left; font-size: 0.88rem; text-decoration: none;">
+            <button class="app-rider-link" data-rider-id="${c.riderId}" style="background: none; border: none; padding: 0; color: #60a5fa; font-weight: bold; cursor: pointer; text-align: left; font-size: 0.8rem; text-decoration: none; line-height: 1.2;">
               ${esc(c.lastName)}
             </button>
-            <span style="color: #60a5fa; font-weight: bold; font-size: 0.85rem; margin-left: 0.15rem;">(</span><span style="color: #facc15; font-weight: bold; font-size: 0.85rem;">${age}</span><span style="color: #60a5fa; font-weight: bold; font-size: 0.85rem;">)</span>
+            <span style="color: #60a5fa; font-weight: bold; font-size: 0.78rem; margin-left: 0.1rem;">(</span><span style="color: #facc15; font-weight: bold; font-size: 0.78rem;">${age}</span><span style="color: #60a5fa; font-weight: bold; font-size: 0.78rem;">)</span>
           </div>
-          <div style="font-size: 0.75rem; color: #facc15; font-weight: bold; display: flex; align-items: center; gap: 0.4rem; margin-top: 0.1rem; flex-wrap: wrap;">
+          <div style="font-size: 0.68rem; color: #facc15; font-weight: bold; display: flex; align-items: center; gap: 0.3rem; margin-top: 0.05rem; flex-wrap: wrap; line-height: 1.1;">
             <span>${specText}</span>
             <span>·</span>
             <span>UCI: ${uciRankText}</span>
@@ -445,13 +474,13 @@ function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: num
         </div>
       </div>
       
-      <div style="display: flex; align-items: center; gap: 0.6rem;">
-        <div style="text-align: right;">
-          <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase;">POT</div>
-          <div style="font-size: 0.8rem; font-weight: 500; color: #94a3b8;">${c.potential.toFixed(1)}</div>
-          <div style="font-size: 0.7rem; color: var(--accent, #38bdf8); font-weight: 500; margin-top: 0.1rem;">${c.probability.toFixed(1)}%</div>
+      <div style="display: flex; align-items: center; gap: 0.45rem;">
+        <div style="text-align: right; line-height: 1.1;">
+          <div style="font-size: 0.62rem; color: #64748b; text-transform: uppercase; font-weight: bold;">POT</div>
+          <div style="font-size: 0.72rem; font-weight: bold; color: #94a3b8;">${c.potential.toFixed(1)}</div>
+          <div style="font-size: 0.65rem; color: var(--accent, #38bdf8); font-weight: bold; margin-top: 0.02rem;">${c.probability.toFixed(1)}%</div>
         </div>
-        <div style="border: 1.5px solid #fbbf24; border-radius: 5px; padding: 0.25rem 0.4rem; color: #fbbf24; font-weight: bold; font-size: 0.95rem; min-width: 2.6rem; text-align: center; background: rgba(251, 191, 36, 0.05); line-height: 1.1;">
+        <div style="border: 1px solid #fbbf24; border-radius: 4px; padding: 0.15rem 0.3rem; color: #fbbf24; font-weight: bold; font-size: 0.85rem; min-width: 2.2rem; text-align: center; background: rgba(251, 191, 36, 0.05); line-height: 1.1;">
           ${c.overallRating.toFixed(1)}
         </div>
       </div>
@@ -615,13 +644,13 @@ function createDraftOverlayElement(season: number): HTMLElement {
     </header>
     
     <div style="display: flex; flex: 1; gap: 2rem; overflow: hidden; min-height: 0;">
-      <!-- Linke Spalte: Kandidaten -->
-      <div style="flex: 2.0; display: flex; flex-direction: column; min-height: 0;">
+      <!-- Linke Spalte: Kandidaten (3-Spalten) -->
+      <div style="flex: 3.0; display: flex; flex-direction: column; min-height: 0;">
         <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Kandidaten-Pool</h3>
-        <div id="draft-overlay-candidates-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem 0.75rem; overflow-y: auto; flex: 1; padding-right: 0.5rem;"></div>
+        <div id="draft-overlay-candidates-list" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem 0.6rem; overflow-y: auto; flex: 1; padding-right: 0.5rem;"></div>
       </div>
       
-      <!-- Rechte Spalte: Auswahl -->
+      <!-- Rechte Spalte: Auswahl (Schmaler) -->
       <div style="flex: 1.0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(255,255,255,0.01); border: 2px dashed rgba(255,255,255,0.08); border-radius: 12px; padding: 1.5rem; position: relative; min-height: 0;">
         <div id="draft-overlay-pick-display" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 0;"></div>
       </div>
@@ -632,7 +661,39 @@ function createDraftOverlayElement(season: number): HTMLElement {
     const target = event.target as HTMLElement;
     
     if (target.id === 'draft-overlay-quick-btn') {
-      closeDraftOverlay();
+      if (state.gameState?.draftStatus === 'active') {
+        if (confirm('Möchtest du den Draft wirklich abkürzen? Die KI wird alle restlichen Runden automatisch für dein Team und alle anderen simulieren.')) {
+          void quickCompleteDraftFlow();
+        }
+      } else {
+        closeDraftOverlay();
+      }
+      return;
+    }
+
+    if (target.id === 'draft-overlay-finish-btn') {
+      void (async () => {
+        showLoading('Spielstand wird aktualisiert...');
+        await loadGameState();
+        closeDraftOverlay();
+        hideLoading();
+      })();
+      return;
+    }
+
+    if (target.id === 'draft-overlay-confirm-btn') {
+      const riderId = Number(target.dataset.riderId);
+      if (!isNaN(riderId)) {
+        void submitPlayerDraftPick(riderId);
+      }
+      return;
+    }
+
+    const candidateBox = target.closest('.draft-candidate-clickable') as HTMLElement | null;
+    if (candidateBox) {
+      const riderId = Number(candidateBox.dataset.riderId);
+      (state as any).selectedDraftRiderId = riderId;
+      void renderActivePlayerTurn();
       return;
     }
     
@@ -682,6 +743,14 @@ function createDraftOverlayElement(season: number): HTMLElement {
           state.draftOverlayAuto = false;
         }
         showDraftPick(state.draftOverlayCurrentIndex + 1);
+      } else if (state.draftOverlayPicks && state.draftOverlayCurrentIndex + 1 === state.draftOverlayPicks.length && state.gameState?.draftStatus === 'active') {
+        const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
+        if (autoCheckbox) {
+          autoCheckbox.checked = false;
+          state.draftOverlayAuto = false;
+        }
+        state.draftOverlayCurrentIndex = state.draftOverlayCurrentIndex + 1;
+        void renderActivePlayerTurn();
       }
       return;
     }
@@ -942,6 +1011,7 @@ export async function startDraftPresentation(season: number): Promise<void> {
   state.draftSpeedMultiplier = 1;
   state.draftPaused = false;
   (state as any).draftRevealShown = false;
+  (state as any).selectedDraftRiderId = null;
   
   showLoading('Draft-Präsentation wird geladen...');
   try {
@@ -951,12 +1021,6 @@ export async function startDraftPresentation(season: number): Promise<void> {
       api.getTeams(),
     ]);
 
-    if (!res.success || !res.data || !res.data.picks || res.data.picks.length === 0) {
-      hideLoading();
-      state.draftOverlayActive = false;
-      return;
-    }
-
     if (ridersRes.success && ridersRes.data) {
       state.riders = ridersRes.data;
     }
@@ -964,12 +1028,209 @@ export async function startDraftPresentation(season: number): Promise<void> {
       state.teams = teamsRes.data;
     }
     
-    state.draftOverlayPicks = res.data.picks;
+    state.draftOverlayPicks = res.success && res.data ? res.data.picks : [];
     createDraftOverlayElement(season);
-    showDraftPick(0);
+
+    if (state.draftOverlayPicks && state.draftOverlayPicks.length > 0) {
+      showDraftPick(0);
+    } else {
+      if (state.gameState?.draftStatus === 'active') {
+        void renderActivePlayerTurn();
+      } else {
+        closeDraftOverlay();
+      }
+    }
   } catch (e) {
     console.error(e);
     state.draftOverlayActive = false;
+  } finally {
+    hideLoading();
+  }
+}
+
+async function renderActivePlayerTurn(): Promise<void> {
+  clearDraftTimeouts();
+  const season = state.draftSelectedSeason || state.currentSave?.currentSeason || 2026;
+  
+  const displayWrap = document.getElementById('draft-overlay-pick-display');
+  if (displayWrap) {
+    displayWrap.innerHTML = '<div style="color: #94a3b8; font-size: 1.1rem;">Lade aktuellen Draft-Zustand...</div>';
+  }
+
+  const res = await api.getDraftState(season);
+  if (!res.success) {
+    alert('Fehler beim Laden des Draft-Zustands: ' + res.error);
+    return;
+  }
+
+  const draftState = res.data;
+  if (draftState.finished) {
+    if (displayWrap) {
+      displayWrap.innerHTML = `
+        <div style="text-align: center; color: #fff;">
+          <h3 style="color: #10b981; font-size: 1.5rem; margin-bottom: 1rem;">Draft abgeschlossen!</h3>
+          <p style="color: #94a3b8; margin-bottom: 2rem;">Alle Teams haben ihren Kader für die neue Saison zusammengestellt.</p>
+          <button id="draft-overlay-finish-btn" class="btn btn-primary" style="padding: 0.75rem 1.5rem; font-weight: bold; background: #10b981; border: none;">Draft beenden & fortfahren</button>
+        </div>
+      `;
+    }
+    const nextBtn = document.getElementById('draft-overlay-next-btn') as HTMLButtonElement;
+    if (nextBtn) nextBtn.disabled = true;
+    const prevBtn = document.getElementById('draft-overlay-prev-btn') as HTMLButtonElement;
+    if (prevBtn) prevBtn.disabled = true;
+    return;
+  }
+
+  const roundTitle = document.getElementById('draft-overlay-round-title');
+  if (roundTitle) roundTitle.textContent = `Runde ${draftState.currentRound}`;
+  
+  const teamSubtitle = document.getElementById('draft-overlay-team-subtitle');
+  if (teamSubtitle) {
+    if (draftState.isPlayerTeam) {
+      teamSubtitle.textContent = 'DU BIST AN DER REIHE!';
+      teamSubtitle.style.color = '#fbbf24';
+    } else {
+      teamSubtitle.textContent = `${draftState.nextTeamName} wählt...`;
+      teamSubtitle.style.color = '#d97706';
+    }
+  }
+
+  const teamJerseyWrap = document.getElementById('draft-overlay-team-jersey-wrap');
+  if (teamJerseyWrap) {
+    teamJerseyWrap.innerHTML = getDraftRiderJerseyHtml(draftState.nextTeamId, draftState.nextTeamName, 72);
+  }
+
+  const progressLabel = document.getElementById('draft-overlay-progress-label');
+  if (progressLabel) {
+    progressLabel.textContent = `Pick ${draftState.currentPickNumber}`;
+  }
+
+  const prevBtn = document.getElementById('draft-overlay-prev-btn') as HTMLButtonElement;
+  if (prevBtn) prevBtn.disabled = true;
+  const nextBtn = document.getElementById('draft-overlay-next-btn') as HTMLButtonElement;
+  if (nextBtn) nextBtn.disabled = true;
+
+  const candList = document.getElementById('draft-overlay-candidates-list');
+  if (candList) {
+    if (draftState.isPlayerTeam && draftState.candidates && draftState.candidates.length > 0) {
+      candList.innerHTML = draftState.candidates.map((c: any) => {
+        const isSelected = c.riderId === (state as any).selectedDraftRiderId;
+        return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
+      }).join('');
+    } else {
+      candList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 1rem;">Warte auf den Zug der KI...</div>';
+    }
+  }
+
+  if (displayWrap) {
+    if (draftState.isPlayerTeam) {
+      const selectedId = (state as any).selectedDraftRiderId;
+      const selectedRider = draftState.candidates?.find((c: any) => c.riderId === selectedId);
+      if (selectedRider) {
+        displayWrap.innerHTML = renderDraftPlayerDecisionBox(selectedRider);
+      } else {
+        displayWrap.innerHTML = `
+          <div style="font-size: 1.1rem; color: #94a3b8; text-align: center; max-width: 80%;">
+            Wähle links einen Fahrer aus dem Pool aus, um Details anzuzeigen und ihn zu verpflichten.
+          </div>
+        `;
+      }
+    }
+  }
+}
+
+function renderDraftPlayerDecisionBox(rider: any): string {
+  const season = state.draftSelectedSeason ?? state.currentSave?.currentSeason ?? 2026;
+  const age = season - rider.birthYear;
+  const specs = [];
+  if (rider.specialization1) specs.push(formatSpecName(rider.specialization1));
+  if (rider.specialization2) specs.push(formatSpecName(rider.specialization2));
+  if (rider.specialization3) specs.push(formatSpecName(rider.specialization3));
+  const specText = specs.length > 0 ? specs.join(' · ') : 'Allrounder';
+
+  const uciRankText = rider.uciRank ? `${rider.uciRank}` : '—';
+  
+  return `
+    <div style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1rem; color: #fff;">
+      <h3 style="margin: 0; color: var(--accent, #38bdf8); font-size: 1.3rem;">Fahrer auswählen</h3>
+      <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem;">
+        ${rider.oldTeamId ? getDraftRiderJerseyHtml(rider.oldTeamId, rider.oldTeamName, 80) : getDraftRiderJerseyHtml(null, null, 80)}
+      </div>
+      <div style="font-size: 1.4rem; font-weight: bold; text-align: center;">
+        ${esc(rider.firstName)} ${esc(rider.lastName)} ${renderFlag(rider.countryCode)}
+      </div>
+      <div style="display: flex; gap: 1rem; align-items: center; font-size: 0.95rem; color: #94a3b8;">
+        <span>Alter: <strong style="color: #fff;">${age}</strong></span>
+        <span>·</span>
+        <span>OVR: <strong style="color: #fbbf24;">${rider.overallRating.toFixed(1)}</strong></span>
+        <span>·</span>
+        <span>POT: <strong style="color: #60a5fa;">${rider.potential.toFixed(1)}</strong></span>
+      </div>
+      <div style="font-size: 0.9rem; color: #facc15; font-weight: 500;">
+        ${esc(specText)}
+      </div>
+      <div style="font-size: 0.85rem; color: #94a3b8; display: flex; gap: 1rem;">
+        <span>UCI-Rang: <strong>${uciRankText}</strong></span>
+        <span>·</span>
+        <span>Siege: <strong>${rider.wins}</strong></span>
+      </div>
+
+      <button id="draft-overlay-confirm-btn" class="btn btn-primary" data-rider-id="${rider.riderId}" style="margin-top: 1.5rem; width: 80%; padding: 0.75rem; font-size: 1.1rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+        FAHRER VERPFLICHTEN
+      </button>
+    </div>
+  `;
+}
+
+async function submitPlayerDraftPick(riderId: number): Promise<void> {
+  const season = state.draftSelectedSeason || state.currentSave?.currentSeason || 2026;
+  showLoading('Fahrer wird verpflichtet...');
+  try {
+    const res = await api.makeDraftPick(season, riderId);
+    if (!res.success) {
+      alert('Fehler beim Entwurf des Fahrers: ' + res.error);
+      return;
+    }
+
+    (state as any).selectedDraftRiderId = null;
+
+    const detailsRes = await api.getDraftDetails(season);
+    if (detailsRes.success && detailsRes.data) {
+      const oldLength = state.draftOverlayPicks?.length ?? 0;
+      state.draftOverlayPicks = detailsRes.data.picks;
+      
+      if (state.draftOverlayPicks && state.draftOverlayPicks.length > oldLength) {
+        state.draftOverlayActive = true;
+        (state as any).draftRevealShown = false;
+        showDraftPick(oldLength);
+      } else {
+        void renderActivePlayerTurn();
+      }
+    } else {
+      void renderActivePlayerTurn();
+    }
+  } catch (e) {
+    alert('Fehler beim Übermitteln des Picks: ' + (e as Error).message);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function quickCompleteDraftFlow(): Promise<void> {
+  const season = state.draftSelectedSeason || state.currentSave?.currentSeason || 2026;
+  showLoading('Draft wird simuliert...');
+  try {
+    const res = await api.quickCompleteDraft(season);
+    if (!res.success) {
+      alert('Fehler beim Beenden des Drafts: ' + res.error);
+      return;
+    }
+
+    await loadGameState();
+    closeDraftOverlay();
+    alert('Der Draft wurde erfolgreich abgeschlossen!');
+  } catch (e) {
+    alert('Fehler beim Beenden des Drafts: ' + (e as Error).message);
   } finally {
     hideLoading();
   }

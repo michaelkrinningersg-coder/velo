@@ -108,6 +108,26 @@ export class DatabaseService {
       db.prepare("DROP INDEX IF EXISTS idx_rider_skill_yearly_baseline_lookup;").run();
     }
 
+    // Migration: Add interactive draft columns to game_state
+    if (!columnExists(db, 'game_state', 'draft_status')) {
+      console.log("Adding 'draft_status' column to 'game_state' table...");
+      db.prepare("ALTER TABLE game_state ADD COLUMN draft_status TEXT NOT NULL DEFAULT 'completed';").run();
+    }
+    if (!columnExists(db, 'game_state', 'draft_current_pick_number')) {
+      console.log("Adding 'draft_current_pick_number' column to 'game_state' table...");
+      db.prepare("ALTER TABLE game_state ADD COLUMN draft_current_pick_number INTEGER NOT NULL DEFAULT 1;").run();
+    }
+    if (!columnExists(db, 'game_state', 'draft_season')) {
+      console.log("Adding 'draft_season' column to 'game_state' table...");
+      db.prepare("ALTER TABLE game_state ADD COLUMN draft_season INTEGER DEFAULT NULL;").run();
+    }
+
+    // Migration: Add program_group_id column to sta_country
+    if (!columnExists(db, 'sta_country', 'program_group_id')) {
+      console.log("Adding 'program_group_id' column to 'sta_country' table...");
+      db.prepare("ALTER TABLE sta_country ADD COLUMN program_group_id INTEGER REFERENCES program_groups(id) DEFAULT NULL;").run();
+    }
+
     // Force recreation of race_entries view with new schema
     db.prepare("DROP VIEW IF EXISTS race_entries;").run();
 

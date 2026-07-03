@@ -131,6 +131,24 @@ class DatabaseService {
             db.prepare("DROP TABLE IF EXISTS rider_skill_yearly_baseline;").run();
             db.prepare("DROP INDEX IF EXISTS idx_rider_skill_yearly_baseline_lookup;").run();
         }
+        // Migration: Add interactive draft columns to game_state
+        if (!columnExists(db, 'game_state', 'draft_status')) {
+            console.log("Adding 'draft_status' column to 'game_state' table...");
+            db.prepare("ALTER TABLE game_state ADD COLUMN draft_status TEXT NOT NULL DEFAULT 'completed';").run();
+        }
+        if (!columnExists(db, 'game_state', 'draft_current_pick_number')) {
+            console.log("Adding 'draft_current_pick_number' column to 'game_state' table...");
+            db.prepare("ALTER TABLE game_state ADD COLUMN draft_current_pick_number INTEGER NOT NULL DEFAULT 1;").run();
+        }
+        if (!columnExists(db, 'game_state', 'draft_season')) {
+            console.log("Adding 'draft_season' column to 'game_state' table...");
+            db.prepare("ALTER TABLE game_state ADD COLUMN draft_season INTEGER DEFAULT NULL;").run();
+        }
+        // Migration: Add program_group_id column to sta_country
+        if (!columnExists(db, 'sta_country', 'program_group_id')) {
+            console.log("Adding 'program_group_id' column to 'sta_country' table...");
+            db.prepare("ALTER TABLE sta_country ADD COLUMN program_group_id INTEGER REFERENCES program_groups(id) DEFAULT NULL;").run();
+        }
         // Force recreation of race_entries view with new schema
         db.prepare("DROP VIEW IF EXISTS race_entries;").run();
         const schema = fs.readFileSync(this.schemaPath, 'utf8');
@@ -1992,12 +2010,20 @@ class DatabaseService {
         this.activeConnection.pragma('journal_mode = WAL');
         this.activeConnection.pragma('synchronous = NORMAL');
         this.activeConnection.pragma('foreign_keys = ON');
-        // Auto-vacuum to automatically shrink database file on delete
+        // Performance-Tuning PRAGMAs
+        this.activeConnection.pragma('cache_size = -262144'); // 1 GB Cache-Obergrenze (262144 Pages à 4KB)
+        this.activeConnection.pragma('mmap_size = 536870912'); // 512 MB Memory Map
+        this.activeConnection.pragma('temp_store = MEMORY'); // Temporäre Tabellen im RAM halten
+        this.activeConnection.pragma('journal_size_limit = 67108864'); // WAL-Log auf max 64 MB begrenzen
+        this.activeConnection.pragma('busy_timeout = 5000'); // Lock-Timeout erhöhen
+        // Auto-vacuum deaktivieren, um Write-Performance-Overhead während des Spiels zu minimieren.
+        // Stattdessen wird die DB bei jedem Laden manuell per VACUUM aufgeräumt und geschrumpft.
         const currentAutoVacuum = this.activeConnection.pragma('auto_vacuum', { simple: true });
-        if (currentAutoVacuum === 0) {
-            this.activeConnection.pragma('auto_vacuum = FULL');
-            this.activeConnection.prepare('VACUUM').run();
+        if (currentAutoVacuum !== 0) {
+            this.activeConnection.pragma('auto_vacuum = NONE');
         }
+        // Spielstand beim Laden bereinigen und verkleinern
+        this.activeConnection.prepare('VACUUM').run();
         this.ensureAllSchemas(this.activeConnection);
         const gameState = new GameStateService_1.GameStateService(this.activeConnection).ensureState();
         new RiderProgramService_1.RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
@@ -2090,6 +2116,7 @@ class DatabaseService {
         };
         createIfTable('contracts', `CREATE INDEX IF NOT EXISTS idx_contracts_team ON contracts(team_id);`);
         createIfTable('stage_entries', `CREATE INDEX IF NOT EXISTS idx_stage_entries_team ON stage_entries(team_id);`);
+        createIfTable('stage_entries', `CREATE INDEX IF NOT EXISTS idx_stage_entries_covering ON stage_entries(stage_id, team_id, status, rider_id);`);
         createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_team ON results_history(team_id);`);
         createIfTable('results_history', `CREATE INDEX IF NOT EXISTS idx_results_history_stage ON results_history(stage_id, result_type_id, rank);`);
         createIfTable('results', `CREATE INDEX IF NOT EXISTS idx_results_race_id ON results(race_id);`);

@@ -137,7 +137,7 @@ class GameStateService {
     }
     loadState() {
         this.ensureSchemaOnce();
-        const row = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1').get();
+        const row = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over, draft_status, draft_current_pick_number, draft_season FROM game_state WHERE id = 1').get();
         if (!row)
             throw new Error('game_state konnte nicht geladen werden.');
         return this.mapState(row);
@@ -151,6 +151,9 @@ class GameStateService {
             isRaceDay: pendingStages.length > 0,
             currentStageId: pendingStages[0]?.stageId ?? null,
             pendingStages,
+            draftStatus: state.draftStatus,
+            draftCurrentPickNumber: state.draftCurrentPickNumber,
+            draftSeason: state.draftSeason,
         };
     }
     advanceDay() {
@@ -159,7 +162,7 @@ class GameStateService {
         let oldSeason = 0;
         const nextState = this.db.transaction(() => {
             this.ensureStateRow();
-            const currentRow = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1').get();
+            const currentRow = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over, draft_status, draft_current_pick_number, draft_season FROM game_state WHERE id = 1').get();
             if (!currentRow)
                 throw new Error('game_state nicht ladbar.');
             const pendingStages = this.getPendingStages(currentRow.current_date);
@@ -265,22 +268,16 @@ class GameStateService {
                 // Duplicate calendar dates (stages and races) to the new season's year
                 this.duplicateCalendarForSeason(currentRow.season, nextSeason);
                 new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason, true);
-                new RiderDraftService_1.RiderDraftService(this.db).executeDraft(nextSeason);
-                new ContractService_1.ContractService(this.db).checkContractStatuses(nextSeason); // activate new draft contracts
-                new RiderDevelopmentService_1.RiderDevelopmentService(this.db).recalculateSpecializations(nextSeason);
-                new RiderRoleService_1.RiderRoleService(this.db).recalculateAllTeamRoles();
-                new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(nextSeason, nextDate);
-                // Newgens fÃ¼r die nÃ¤chste Saison erzeugen
-                new RiderNewgenService_1.RiderNewgenService(this.db).createYearStartNewgens(nextSeason);
-                new RiderDevelopmentService_1.RiderDevelopmentService(this.db).initializeRiders(nextSeason);
-                // Skill-Development aller aktiven Fahrer neu auswÃ¼rfeln (Â±3, max 20, min 1)
+                const draftService = new RiderDraftService_1.RiderDraftService(this.db);
+                draftService.prepareDraft(nextSeason);
                 this.db.prepare(`
-          UPDATE riders
-          SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
-          WHERE is_retired = 0 AND skill_development > 0
-        `).run();
-                // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
-                this.snapshotYearlyBaselineSkills();
+          UPDATE game_state
+          SET draft_status = 'active',
+              draft_current_pick_number = 1,
+              draft_season = ?
+          WHERE id = 1
+        `).run(nextSeason);
+                draftService.executeNextPicksUntilPlayer(nextSeason, false);
             }
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
@@ -1070,10 +1067,19 @@ class GameStateService {
             })();
         }
         if (seasonChangedRiderIds.length > 0) {
+            const resetSeasonStats = this.db.prepare(`
+        UPDATE rider_daily_state
+        SET season_points = 0,
+            season_wins = 0,
+            season_race_days_total = 0,
+            rolling_30d_race_days = 0
+        WHERE rider_id = ?
+      `);
             // Use one prepared statement inside a tight loop instead of building a
             // giant IN(...) query; SQLite is happy with this when bound individually.
             for (const riderId of seasonChangedRiderIds) {
                 deleteFormEvents.run(riderId);
+                resetSeasonStats.run(riderId);
             }
             if (this.isTable('rider_form_history')) {
                 this.db.prepare('DELETE FROM rider_form_history').run();
@@ -1346,6 +1352,9 @@ class GameStateService {
             formattedDate: formatDateForUi(row.current_date),
             hasRaceToday: dailyChecks.hasRaceToday,
             racesTodayCount: dailyChecks.racesTodayCount,
+            draftStatus: row.draft_status ?? 'completed',
+            draftCurrentPickNumber: row.draft_current_pick_number ?? 1,
+            draftSeason: row.draft_season ?? null,
         };
     }
     applyStageFatigue(stageId, completedRiderIds, dnfRiderIds) {
@@ -1532,6 +1541,34 @@ class GameStateService {
                 };
                 update.run(JSON.stringify(baseline), r.id);
             }
+        })();
+    }
+    completeDraftAndInitializeSeason(season, nextDate) {
+        this.db.transaction(() => {
+            new ContractService_1.ContractService(this.db).checkContractStatuses(season); // activate new draft contracts
+            new RiderDevelopmentService_1.RiderDevelopmentService(this.db).recalculateSpecializations(season);
+            new RiderRoleService_1.RiderRoleService(this.db).recalculateAllTeamRoles();
+            new RiderProgramService_1.RiderProgramService(this.db).ensureSeasonPrograms(season, nextDate);
+            // Newgens für die nächste Saison erzeugen
+            new RiderNewgenService_1.RiderNewgenService(this.db).createYearStartNewgens(season);
+            new RiderDevelopmentService_1.RiderDevelopmentService(this.db).initializeRiders(season);
+            // Skill-Development aller aktiven Fahrer neu auswürfeln (±3, max 20, min 1)
+            this.db.prepare(`
+        UPDATE riders
+        SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
+        WHERE is_retired = 0 AND skill_development > 0
+      `).run();
+            // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
+            this.snapshotYearlyBaselineSkills();
+            // Initialize rider daily states for newly drafted riders
+            this.ensureRiderDailyStateRows(season);
+            // Set draft_status to completed
+            this.db.prepare(`
+        UPDATE game_state
+        SET draft_status = 'completed',
+            draft_season = NULL
+        WHERE id = 1
+      `).run();
         })();
     }
 }
