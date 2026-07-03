@@ -165,6 +165,16 @@ class DatabaseService {
             console.log("Adding 'program_group_id' column to 'sta_country' table...");
             db.prepare("ALTER TABLE sta_country ADD COLUMN program_group_id INTEGER REFERENCES program_groups(id) DEFAULT NULL;").run();
         }
+        // Migration: Add preferred_nationality_group column to races
+        if (!columnExists(db, 'races', 'preferred_nationality_group')) {
+            console.log("Adding 'preferred_nationality_group' column to 'races' table...");
+            db.prepare("ALTER TABLE races ADD COLUMN preferred_nationality_group TEXT DEFAULT NULL;").run();
+        }
+        // Migration: Add required_specs column to races
+        if (!columnExists(db, 'races', 'required_specs')) {
+            console.log("Adding 'required_specs' column to 'races' table...");
+            db.prepare("ALTER TABLE races ADD COLUMN required_specs TEXT DEFAULT NULL;").run();
+        }
         // Force recreation of race_entries view with new schema
         db.prepare("DROP VIEW IF EXISTS race_entries;").run();
         const schema = fs.readFileSync(this.schemaPath, 'utf8');
