@@ -74,8 +74,26 @@ export class DatabaseService {
       ? path.join(path.dirname(process.execPath), MASTER_DB_NAME)
       : path.join(assetsDir, MASTER_DB_NAME);
     this.schemaPath = path.join(assetsDir, 'schema.sql');
-    this.savegamesDir = process.env['SAVEGAME_DIR']
-      ?? path.join(os.homedir(), '.velo', 'savegames');
+
+    // Try to resolve the savegames directory within the repository workspace
+    let defaultSaveDir = path.join(os.homedir(), '.velo', 'savegames');
+    let current = __dirname;
+    while (true) {
+      if (fs.existsSync(path.join(current, 'backend')) && fs.existsSync(path.join(current, 'frontend'))) {
+        const repoSaveDir = path.join(current, 'savegames');
+        if (fs.existsSync(repoSaveDir)) {
+          defaultSaveDir = repoSaveDir;
+        }
+        break;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+
+    this.savegamesDir = process.env['SAVEGAME_DIR'] ?? defaultSaveDir;
     this.ensureSavegamesDir();
   }
 

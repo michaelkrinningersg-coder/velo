@@ -1,0 +1,23 @@
+{
+  "name": "Velo - Cycling Manager",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+  "forwardPorts": [5173, 3101],
+  "portsAttributes": {
+    "5173": {
+      "label": "Velo Frontend (Web UI)",
+      "onAutoForward": "openPreview"
+    },
+    "3101": {
+      "label": "Velo Backend API",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

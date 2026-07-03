@@ -1,9 +1,28 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const Database = require('../backend/node_modules/better-sqlite3');
 
-const source = 'C:/Users/mkrinninger/.velo/savegames/test_career_1781271978877.db';
-const dest = 'C:/Users/mkrinninger/.velo/savegames/draft-test-december.db';
+// Try to resolve the savegames directory within the repository workspace
+let savegamesDir = path.join(os.homedir(), '.velo', 'savegames');
+let current = __dirname;
+while (true) {
+  if (fs.existsSync(path.join(current, 'backend')) && fs.existsSync(path.join(current, 'frontend'))) {
+    const repoSaveDir = path.join(current, 'savegames');
+    if (fs.existsSync(repoSaveDir)) {
+      savegamesDir = repoSaveDir;
+    }
+    break;
+  }
+  const parent = path.dirname(current);
+  if (parent === current) {
+    break;
+  }
+  current = parent;
+}
+
+const source = path.join(savegamesDir, 'test_career_1781271978877.db');
+const dest = path.join(savegamesDir, 'draft-test-december.db');
 
 try {
   if (!fs.existsSync(source)) {

@@ -35,11 +35,30 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const DatabaseService_1 = require("../db/DatabaseService");
 const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 function run() {
-    const source = 'C:/Users/mkrinninger/.velo/savegames/test_career_1781271978877.db';
-    const dest = 'C:/Users/mkrinninger/.velo/savegames/draft-test-december.db';
+    // Try to resolve the savegames directory within the repository workspace
+    let savegamesDir = path.join(os.homedir(), '.velo', 'savegames');
+    let current = __dirname;
+    while (true) {
+        if (fs.existsSync(path.join(current, 'backend')) && fs.existsSync(path.join(current, 'frontend'))) {
+            const repoSaveDir = path.join(current, 'savegames');
+            if (fs.existsSync(repoSaveDir)) {
+                savegamesDir = repoSaveDir;
+            }
+            break;
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+            break;
+        }
+        current = parent;
+    }
+    const source = path.join(savegamesDir, 'test_career_1781271978877.db');
+    const dest = path.join(savegamesDir, 'draft-test-december.db');
     if (!fs.existsSync(source)) {
-        console.error("Source file does not exist.");
+        console.error(`Source file does not exist at: ${source}`);
         process.exit(1);
     }
     // Copy the source file to dest
