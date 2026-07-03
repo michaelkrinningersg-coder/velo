@@ -1277,7 +1277,19 @@ async function submitPlayerDraftPick(riderId: number): Promise<void> {
 
     (state as any).selectedDraftRiderId = null;
 
-    const detailsRes = await api.getDraftDetails(season);
+    const [detailsRes, ridersRes, teamsRes] = await Promise.all([
+      api.getDraftDetails(season),
+      api.getRiders(undefined, false, true, season),
+      api.getTeams(),
+    ]);
+
+    if (ridersRes.success && ridersRes.data) {
+      state.riders = ridersRes.data;
+    }
+    if (teamsRes.success && teamsRes.data) {
+      state.teams = teamsRes.data;
+    }
+
     if (detailsRes.success && detailsRes.data) {
       const oldLength = state.draftOverlayPicks?.length ?? 0;
       state.draftOverlayPicks = detailsRes.data.picks;
