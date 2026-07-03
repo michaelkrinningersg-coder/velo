@@ -2871,11 +2871,27 @@ export class SimulationEngine {
     }
 
     let gapPenalty = activeBreakawayRiders[0]?.breakawayGapPenalty ?? 0;
-    const bestNonBreakawayRider = [...activeNonBreakawayRiders].sort((left, right) => (
-      right.distanceCoveredMeters - left.distanceCoveredMeters
-      || right.currentSpeedMps - left.currentSpeedMps
-      || left.rider.id - right.rider.id
-    ))[0] ?? null;
+    let bestNonBreakawayRider: RiderState | null = null;
+    for (const r of activeNonBreakawayRiders) {
+      if (!bestNonBreakawayRider) {
+        bestNonBreakawayRider = r;
+        continue;
+      }
+      const distDiff = r.distanceCoveredMeters - bestNonBreakawayRider.distanceCoveredMeters;
+      if (distDiff > 0) {
+        bestNonBreakawayRider = r;
+      } else if (distDiff === 0) {
+        const speedDiff = r.currentSpeedMps - bestNonBreakawayRider.currentSpeedMps;
+        if (speedDiff > 0) {
+          bestNonBreakawayRider = r;
+        } else if (speedDiff === 0) {
+          if (r.rider.id < bestNonBreakawayRider.rider.id) {
+            bestNonBreakawayRider = r;
+          }
+        }
+      }
+    }
+
     if (!bestNonBreakawayRider) {
       this.breakawayGapStatus = null;
       return gapPenalty;
@@ -2892,10 +2908,24 @@ export class SimulationEngine {
         break;
       }
 
-      const breakawayLeaderCrossing = activeBreakawayRiders
-        .map((candidate) => candidate.markerCrossings[marker.key] ?? null)
-        .filter((crossing): crossing is MarkerCrossing => crossing != null)
-        .sort((left, right) => left.crossingTimeSeconds - right.crossingTimeSeconds || left.riderId - right.riderId)[0] ?? null;
+      let breakawayLeaderCrossing: MarkerCrossing | null = null;
+      for (const candidate of activeBreakawayRiders) {
+        const crossing = candidate.markerCrossings[marker.key];
+        if (!crossing) continue;
+        if (!breakawayLeaderCrossing) {
+          breakawayLeaderCrossing = crossing;
+          continue;
+        }
+        const timeDiff = crossing.crossingTimeSeconds - breakawayLeaderCrossing.crossingTimeSeconds;
+        if (timeDiff < 0) {
+          breakawayLeaderCrossing = crossing;
+        } else if (timeDiff === 0) {
+          if (crossing.riderId < breakawayLeaderCrossing.riderId) {
+            breakawayLeaderCrossing = crossing;
+          }
+        }
+      }
+
       if (breakawayLeaderCrossing) {
         const gapSeconds = bestNonBreakawayCrossing.crossingTimeSeconds - breakawayLeaderCrossing.crossingTimeSeconds;
         gapPenalty = this.resolveBreakawayTimeGapPenalty(gapSeconds);
@@ -2916,10 +2946,15 @@ export class SimulationEngine {
         break;
       }
 
-      const breakawayLeaderCrossingTime = activeBreakawayRiders
-        .map((candidate) => candidate.breakawayFallbackCheckpointTimes[checkpointIndex] ?? null)
-        .filter((crossingTime): crossingTime is number => crossingTime != null)
-        .sort((left, right) => left - right)[0] ?? null;
+      let breakawayLeaderCrossingTime: number | null = null;
+      for (const candidate of activeBreakawayRiders) {
+        const crossingTime = candidate.breakawayFallbackCheckpointTimes[checkpointIndex];
+        if (crossingTime == null) continue;
+        if (breakawayLeaderCrossingTime == null || crossingTime < breakawayLeaderCrossingTime) {
+          breakawayLeaderCrossingTime = crossingTime;
+        }
+      }
+
       if (breakawayLeaderCrossingTime != null) {
         const gapSeconds = bestNonBreakawayCrossingTime - breakawayLeaderCrossingTime;
         gapPenalty = this.resolveBreakawayTimeGapPenalty(gapSeconds);
@@ -2961,16 +2996,47 @@ export class SimulationEngine {
       return;
     }
 
-    const bestBreakawayRider = [...activeBreakawayRiders].sort((left, right) => (
-      right.distanceCoveredMeters - left.distanceCoveredMeters
-      || right.currentSpeedMps - left.currentSpeedMps
-      || left.rider.id - right.rider.id
-    ))[0] ?? null;
-    const bestNonBreakawayRider = [...activeNonBreakawayRiders].sort((left, right) => (
-      right.distanceCoveredMeters - left.distanceCoveredMeters
-      || right.currentSpeedMps - left.currentSpeedMps
-      || left.rider.id - right.rider.id
-    ))[0] ?? null;
+    let bestBreakawayRider: RiderState | null = null;
+    for (const r of activeBreakawayRiders) {
+      if (!bestBreakawayRider) {
+        bestBreakawayRider = r;
+        continue;
+      }
+      const distDiff = r.distanceCoveredMeters - bestBreakawayRider.distanceCoveredMeters;
+      if (distDiff > 0) {
+        bestBreakawayRider = r;
+      } else if (distDiff === 0) {
+        const speedDiff = r.currentSpeedMps - bestBreakawayRider.currentSpeedMps;
+        if (speedDiff > 0) {
+          bestBreakawayRider = r;
+        } else if (speedDiff === 0) {
+          if (r.rider.id < bestBreakawayRider.rider.id) {
+            bestBreakawayRider = r;
+          }
+        }
+      }
+    }
+
+    let bestNonBreakawayRider: RiderState | null = null;
+    for (const r of activeNonBreakawayRiders) {
+      if (!bestNonBreakawayRider) {
+        bestNonBreakawayRider = r;
+        continue;
+      }
+      const distDiff = r.distanceCoveredMeters - bestNonBreakawayRider.distanceCoveredMeters;
+      if (distDiff > 0) {
+        bestNonBreakawayRider = r;
+      } else if (distDiff === 0) {
+        const speedDiff = r.currentSpeedMps - bestNonBreakawayRider.currentSpeedMps;
+        if (speedDiff > 0) {
+          bestNonBreakawayRider = r;
+        } else if (speedDiff === 0) {
+          if (r.rider.id < bestNonBreakawayRider.rider.id) {
+            bestNonBreakawayRider = r;
+          }
+        }
+      }
+    }
     if (!bestBreakawayRider || !bestNonBreakawayRider || bestBreakawayRider.distanceCoveredMeters <= bestNonBreakawayRider.distanceCoveredMeters) {
       this.breakawayGapStatus = null;
       return;
@@ -3135,7 +3201,9 @@ export class SimulationEngine {
       rider.skillBreakdown = `${rider.skillBreakdown} · Attack +${attackSkillBonus}`;
     }
     rider.currentSpeedMps = rider.tempSpeedMps * rider.draftModifier;
-    rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
+    if (rider.photoFinishScore === 0) {
+      rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
+    }
     rider.isAttacking = this.activeStageAttacksByRiderId.has(rider.rider.id);
     rider.isBreakaway = this.breakawayPlan?.riderIds.includes(rider.rider.id) ?? false;
   }
