@@ -403,6 +403,8 @@ export interface ParsedStageSegment {
   wind_exp: number;
   start_markers?: StageMarker[];
   end_markers?: StageMarker[];
+  gradientModifierCached?: number;
+  endMeterCached?: number;
 }
 
 export interface ParsedStageSummary {
