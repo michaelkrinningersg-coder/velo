@@ -54,7 +54,7 @@ type ProbabilityRuleRow = {
 };
 
 function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
 }
 
@@ -458,18 +458,53 @@ export class RiderProgramService {
         }
 
         // Sort and assign helpers (50% to Variant 1/2 alternatingly, 50% to Variant 3)
-        helpers.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
-        const topCount = Math.ceil(helpers.length / 2);
-        for (let i = 0; i < helpers.length; i++) {
-          const rider = helpers[i];
-          let variant = 3;
-          if (i < topCount) {
-            variant = (i % 2) + 1;
+        if (
+          baseProgram === 'Classic_Cobble_No Grand Tour' ||
+          baseProgram === 'Classic_Non_Cobble_No Grand Tour_one day focus' ||
+          baseProgram === 'Classic_Non_Cobble_No Grand Tour_stage race foxus'
+        ) {
+          const wassertraegers = helpers.filter(h => h.roleName === 'Wassertraeger');
+          const nonWassertraegers = helpers.filter(h => h.roleName !== 'Wassertraeger');
+
+          wassertraegers.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
+          for (let i = 0; i < wassertraegers.length; i++) {
+            const rider = wassertraegers[i];
+            const variant = (i % 2) + 4;
+            const progName = `${baseProgram}_${variant}`;
+            const programId = programIdByName.get(progName);
+            if (programId != null) {
+              insert.run(season, rider.riderId, programId, assignedDate);
+            }
           }
-          const progName = `${baseProgram}_${variant}`;
-          const programId = programIdByName.get(progName);
-          if (programId != null) {
-            insert.run(season, rider.riderId, programId, assignedDate);
+
+          nonWassertraegers.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
+          const topCount = Math.ceil(nonWassertraegers.length / 2);
+          for (let i = 0; i < nonWassertraegers.length; i++) {
+            const rider = nonWassertraegers[i];
+            let variant = 3;
+            if (i < topCount) {
+              variant = (i % 2) + 1;
+            }
+            const progName = `${baseProgram}_${variant}`;
+            const programId = programIdByName.get(progName);
+            if (programId != null) {
+              insert.run(season, rider.riderId, programId, assignedDate);
+            }
+          }
+        } else {
+          helpers.sort((a, b) => b.overall - a.overall || a.riderId - b.riderId);
+          const topCount = Math.ceil(helpers.length / 2);
+          for (let i = 0; i < helpers.length; i++) {
+            const rider = helpers[i];
+            let variant = 3;
+            if (i < topCount) {
+              variant = (i % 2) + 1;
+            }
+            const progName = `${baseProgram}_${variant}`;
+            const programId = programIdByName.get(progName);
+            if (programId != null) {
+              insert.run(season, rider.riderId, programId, assignedDate);
+            }
           }
         }
       }

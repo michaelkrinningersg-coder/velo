@@ -230,11 +230,11 @@ export function renderCalendar(): void {
       return a.startIdx - b.startIdx;
     });
 
-    // Allocate slots (0, 1, 2)
-    const occupied = Array.from({ length: 3 }, () => Array(7).fill(false));
+    // Allocate slots (0, 1, 2, 3)
+    const occupied = Array.from({ length: 4 }, () => Array(7).fill(false));
     for (const ev of overlapping) {
-      let allocatedSlot = 2; // fallback
-      for (let s = 0; s < 3; s++) {
+      let allocatedSlot = 3; // fallback
+      for (let s = 0; s < 4; s++) {
         let free = true;
         for (let d = ev.startIdx; d <= ev.endIdx; d++) {
           if (occupied[s][d]) {

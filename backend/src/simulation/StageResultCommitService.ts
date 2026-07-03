@@ -4,6 +4,7 @@ import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
+import { TeamCategoryStatsService } from '../game/TeamCategoryStatsService';
 
 import { GameStateService } from '../game/GameStateService';
 import type {
@@ -97,7 +98,7 @@ interface ResultInsertRow {
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
 }
 
@@ -288,7 +289,7 @@ export class StageResultCommitService {
       applyIncidentRaceState: (raceId: number, incidents: any[]) => gsRepo.applyIncidentRaceState(raceId, incidents),
       markStageEntriesFinished: (stageId: number, riderIds: number[]) => gsRepo.markStageEntriesFinished(stageId, riderIds),
       updateStageEntryStatus: (stageId: number, riderId: number, status: any, reason: any) => gsRepo.updateStageEntryStatus(stageId, riderId, status, reason),
-      syncSeasonPointEventsForSeason: (season?: number) => gsRepo.syncSeasonPointEventsForSeason(season),
+      syncSeasonPointEventsForSeason: (season?: number, stageId?: number) => gsRepo.syncSeasonPointEventsForSeason(season, stageId),
       ensureStageEntries: (stage: any) => gsRepo.ensureStageEntries(stage),
       prepareStageRaceFatigue: (raceId: number, stageNumber: number, riderIds: number[]) => gsRepo.prepareStageRaceFatigue(raceId, stageNumber, riderIds),
       attachStageRaceFatigue: (raceId: number, riders: any[], stageNumber: number) => (raceRepo as any).attachStageRaceFatigue(raceId, riders, stageNumber),
@@ -989,14 +990,16 @@ export class StageResultCommitService {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.gc, row);
       }
       for (const row of pointsRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+        if (row.points != null && row.points > 0) {
+          this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.points, row);
+        }
       }
       for (const row of mountainRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
+        if (row.points != null && row.points > 0) {
+          this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.mountain, row);
+        }
       }
-      for (const row of youthRows) {
-        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.youth, row);
-      }
+
       for (const row of breakawayRows) {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.breakaway, {
           rank: row.rank,
@@ -1017,7 +1020,10 @@ export class StageResultCommitService {
         });
       }
       for (const classification of markerClassifications) {
-        for (const entry of classification.entries) {
+        const entriesToSave = classification.entries.filter(
+          (entry: any) => (entry.pointsAwarded != null && entry.pointsAwarded > 0) || entry.rank === 1
+        );
+        for (const entry of entriesToSave) {
           const performanceEntry = performanceByRiderId.get(entry.riderId);
           if (!performanceEntry) continue;
           insertMarkerResult.run(
@@ -1223,6 +1229,29 @@ export class StageResultCommitService {
         for (const c of leadoutContributions) {
           insertLeadoutStmt.run(stage.id, race.id, currentSeason, c.teamId, c.sprinterId, c.leadoutBonus, c.contributorsJson);
         }
+
+        // 1. Keep only the top 200 leadouts for the current season to prevent database bloat
+        this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season = ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            WHERE season = ?
+            ORDER BY leadout_bonus DESC, id DESC
+            LIMIT 200
+          )
+        `).run(currentSeason, currentSeason);
+
+        // 2. Prune old seasons' leadouts that are not in the top 200 all-time
+        this.db.prepare(`
+          DELETE FROM stage_leadouts
+          WHERE season != ? AND id NOT IN (
+            SELECT id
+            FROM stage_leadouts
+            ORDER BY leadout_bonus DESC
+            LIMIT 200
+          )
+        `).run(currentSeason);
       }
 
       if (superTeamId != null) {
@@ -1232,25 +1261,73 @@ export class StageResultCommitService {
           WHERE stage_id = ? AND team_id = ? AND status != 'dns'
         `).all(stage.id, superTeamId) as Array<{ rider_id: number }>;
 
+        const insertSuperteamCareer = this.db.prepare(`
+          INSERT INTO rider_career_stats (rider_id, superteam_count)
+          VALUES (?, 1)
+          ON CONFLICT(rider_id) DO UPDATE SET superteam_count = superteam_count + 1
+        `);
+        const updateSuperteamSeason = this.db.prepare(`
+          UPDATE rider_season_stats
+          SET superteam_count = superteam_count + 1
+          WHERE rider_id = ? AND season = ?
+        `);
+
         for (const row of startingTeamRiderRows) {
           const riderId = row.rider_id;
-          this.db.prepare(`
-            INSERT INTO rider_career_stats (rider_id, superteam_count)
-            VALUES (?, 1)
-            ON CONFLICT(rider_id) DO UPDATE SET superteam_count = superteam_count + 1
-          `).run(riderId);
+          insertSuperteamCareer.run(riderId);
 
           insertSeasonStatsRowStmt.run(riderId, currentSeason);
-          this.db.prepare(`
-            UPDATE rider_season_stats
-            SET superteam_count = superteam_count + 1
-            WHERE rider_id = ? AND season = ?
-          `).run(riderId, currentSeason);
+          updateSuperteamSeason.run(riderId, currentSeason);
         }
       }
 
       // --- INCREMENTAL STATS & ARCHIVING ---
       const categoryName = race.category?.name || "Unbekannt";
+
+      // 1. Record Team Success Stats
+      try {
+        const statsService = new TeamCategoryStatsService(this.db);
+        const isFinalStage = race.isStageRace && stage.stageNumber === race.numberOfStages;
+
+        // Record Stage / One Day results
+        for (const row of stageRows) {
+          if (row.teamId != null) {
+            statsService.recordStageResult(
+              row.teamId,
+              currentSeason,
+              categoryName,
+              row.rank,
+              stage.profile,
+              stage.rolledWeatherId ?? null,
+              race.isStageRace
+            );
+          }
+        }
+
+        // Record Final Standings on the last stage of a stage race
+        if (isFinalStage) {
+          for (const row of gcRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.gc);
+          }
+          for (const row of pointsRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.points);
+          }
+          for (const row of mountainRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.mountain);
+          }
+          for (const row of youthRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.youth);
+          }
+          for (const row of breakawayRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.breakaway);
+          }
+          for (const row of teamRows) {
+            statsService.recordGcResult(row.teamId, currentSeason, categoryName, row.rank, RESULT_TYPES.team);
+          }
+        }
+      } catch (err: any) {
+        console.error('Error updating team category stats:', err.message);
+      }
 
       const insertCareerStatsRow = this.db.prepare(`
         INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (?)
@@ -1311,6 +1388,11 @@ export class StageResultCommitService {
         WHERE rider_id = ? AND category_name = ?
       `);
 
+      const getTeamRidersStmt = this.db.prepare(`
+        SELECT rider_id FROM stage_entries
+        WHERE stage_id = ? AND team_id = ? AND status NOT IN ('dns', 'dnf')
+      `);
+
       const updateCategoryTttRank = this.db.prepare(`
         UPDATE rider_season_category_stats
         SET stage_wins = stage_wins + ?,
@@ -1345,13 +1427,72 @@ export class StageResultCommitService {
         WHERE rider_id = ? AND category_name = ?
       `);
 
+      const updateCategoryPlacing = this.db.prepare(`
+        UPDATE rider_season_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            one_day_wins = one_day_wins + ?,
+            one_day_second = one_day_second + ?,
+            one_day_third = one_day_third + ?,
+            one_day_top_ten = one_day_top_ten + ?,
+            win_flat = win_flat + ?,
+            win_rolling = win_rolling + ?,
+            win_hilly = win_hilly + ?,
+            win_hilly_difficult = win_hilly_difficult + ?,
+            win_medium_mountain = win_medium_mountain + ?,
+            win_mountain = win_mountain + ?,
+            win_high_mountain = win_high_mountain + ?,
+            win_cobble = win_cobble + ?,
+            win_cobble_hill = win_cobble_hill + ?,
+            win_itt = win_itt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND season = ? AND category_name = ?
+      `);
+
+      const updateCareerCategoryPlacing = this.db.prepare(`
+        UPDATE rider_career_category_stats
+        SET stage_wins = stage_wins + ?,
+            stage_second = stage_second + ?,
+            stage_third = stage_third + ?,
+            stage_top_ten = stage_top_ten + ?,
+            one_day_wins = one_day_wins + ?,
+            one_day_second = one_day_second + ?,
+            one_day_third = one_day_third + ?,
+            one_day_top_ten = one_day_top_ten + ?,
+            win_flat = win_flat + ?,
+            win_rolling = win_rolling + ?,
+            win_hilly = win_hilly + ?,
+            win_hilly_difficult = win_hilly_difficult + ?,
+            win_medium_mountain = win_medium_mountain + ?,
+            win_mountain = win_mountain + ?,
+            win_high_mountain = win_high_mountain + ?,
+            win_cobble = win_cobble + ?,
+            win_cobble_hill = win_cobble_hill + ?,
+            win_itt = win_itt + ?,
+            win_weather_1 = win_weather_1 + ?,
+            win_weather_2 = win_weather_2 + ?,
+            win_weather_3 = win_weather_3 + ?,
+            win_weather_4 = win_weather_4 + ?,
+            win_weather_5 = win_weather_5 + ?,
+            win_weather_6 = win_weather_6 + ?,
+            win_weather_7 = win_weather_7 + ?
+        WHERE rider_id = ? AND category_name = ?
+      `);
+
       for (const row of stageRows) {
         if (row.riderId == null) {
           if (stage.profile === 'TTT') {
-            const teamRiderIds = performance
-              .filter((entry: any) => entry.team.id === row.teamId)
-              .map((entry: any) => entry.rider.id);
-            for (const rId of teamRiderIds) {
+            const teamRiderRows = getTeamRidersStmt.all(stage.id, row.teamId) as Array<{ rider_id: number }>;
+            for (const teamRider of teamRiderRows) {
+              const rId = teamRider.rider_id;
               insertCareerStatsRow.run(rId);
               insertSeasonStatsRow.run(rId, currentSeason);
               getOrCreateCategoryStats.run(rId, currentSeason, categoryName);
@@ -1403,66 +1544,6 @@ export class StageResultCommitService {
         const homePress = homePressureCounts.get(rId) ?? 0;
 
         updateCareerIncrement.run(0, 0, 0, escKms, sform, smalus, homeAdv, sHomeAdv, homePress, rId);
-
-        const updateCategoryPlacing = this.db.prepare(`
-          UPDATE rider_season_category_stats
-          SET stage_wins = stage_wins + ?,
-              stage_second = stage_second + ?,
-              stage_third = stage_third + ?,
-              stage_top_ten = stage_top_ten + ?,
-              one_day_wins = one_day_wins + ?,
-              one_day_second = one_day_second + ?,
-              one_day_third = one_day_third + ?,
-              one_day_top_ten = one_day_top_ten + ?,
-              win_flat = win_flat + ?,
-              win_rolling = win_rolling + ?,
-              win_hilly = win_hilly + ?,
-              win_hilly_difficult = win_hilly_difficult + ?,
-              win_medium_mountain = win_medium_mountain + ?,
-              win_mountain = win_mountain + ?,
-              win_high_mountain = win_high_mountain + ?,
-              win_cobble = win_cobble + ?,
-              win_cobble_hill = win_cobble_hill + ?,
-              win_itt = win_itt + ?,
-              win_weather_1 = win_weather_1 + ?,
-              win_weather_2 = win_weather_2 + ?,
-              win_weather_3 = win_weather_3 + ?,
-              win_weather_4 = win_weather_4 + ?,
-              win_weather_5 = win_weather_5 + ?,
-              win_weather_6 = win_weather_6 + ?,
-              win_weather_7 = win_weather_7 + ?
-          WHERE rider_id = ? AND season = ? AND category_name = ?
-        `);
-
-        const updateCareerCategoryPlacing = this.db.prepare(`
-          UPDATE rider_career_category_stats
-          SET stage_wins = stage_wins + ?,
-              stage_second = stage_second + ?,
-              stage_third = stage_third + ?,
-              stage_top_ten = stage_top_ten + ?,
-              one_day_wins = one_day_wins + ?,
-              one_day_second = one_day_second + ?,
-              one_day_third = one_day_third + ?,
-              one_day_top_ten = one_day_top_ten + ?,
-              win_flat = win_flat + ?,
-              win_rolling = win_rolling + ?,
-              win_hilly = win_hilly + ?,
-              win_hilly_difficult = win_hilly_difficult + ?,
-              win_medium_mountain = win_medium_mountain + ?,
-              win_mountain = win_mountain + ?,
-              win_high_mountain = win_high_mountain + ?,
-              win_cobble = win_cobble + ?,
-              win_cobble_hill = win_cobble_hill + ?,
-              win_itt = win_itt + ?,
-              win_weather_1 = win_weather_1 + ?,
-              win_weather_2 = win_weather_2 + ?,
-              win_weather_3 = win_weather_3 + ?,
-              win_weather_4 = win_weather_4 + ?,
-              win_weather_5 = win_weather_5 + ?,
-              win_weather_6 = win_weather_6 + ?,
-              win_weather_7 = win_weather_7 + ?
-          WHERE rider_id = ? AND category_name = ?
-        `);
 
         const pWins = row.rank === 1 ? 1 : 0;
         const pSec = row.rank === 2 ? 1 : 0;
@@ -1690,16 +1771,106 @@ export class StageResultCommitService {
 
       const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
       if (isRaceFinished) {
-        this.db.prepare(`
-          INSERT INTO stage_entries_history (stage_id, race_id, team_id, rider_id, status, status_reason)
-          SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+        const currentSeason = this.repo.getCurrentSeason();
+
+        // 1. Archive stage entries
+        const stageEntries = this.db.prepare(`
+          SELECT stage_id, team_id, rider_id, status, status_reason
           FROM stage_entries
           WHERE race_id = ?
-        `).run(race.id);
+        `).all(race.id) as any[];
+
+        const compactStageEntries = stageEntries.map(row => [
+          row.stage_id,
+          row.team_id,
+          row.rider_id,
+          row.status,
+          row.status_reason
+        ]);
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO stage_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactStageEntries));
 
         this.db.prepare(`
           DELETE FROM stage_entries
           WHERE race_id = ?
+        `).run(race.id);
+
+        // 2. Archive race entries
+        const raceEntries = this.db.prepare(`
+          SELECT team_id, rider_id
+          FROM active_race_entries
+          WHERE race_id = ?
+        `).all(race.id) as any[];
+
+        const compactRaceEntries = raceEntries.map(row => [
+          row.team_id,
+          row.rider_id
+        ]);
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO race_entries_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(compactRaceEntries));
+
+        this.db.prepare(`
+          DELETE FROM active_race_entries
+          WHERE race_id = ?
+        `).run(race.id);
+
+        // 3. Clear transient race state
+        this.db.prepare(`
+          DELETE FROM rider_stage_race_state
+          WHERE race_id = ?
+        `).run(race.id);
+
+        // 4. Archive active results into compact JSON format
+        const activeResults = this.db.prepare(`
+          SELECT r.stage_id, r.rider_id, r.team_id, r.result_type_id, r.rank, r.time_seconds, r.points, r.is_breakaway, r.leadout_rider_id, r.leadout_bonus, r.breakaway_kms, r.event_ids, r.jerseys_worn
+          FROM results r
+          JOIN stages s ON s.id = r.stage_id
+          WHERE s.race_id = ?
+        `).all(race.id) as any[];
+
+        const groups: Record<string, any[]> = {
+          type1: [],
+          type2: [],
+          type3: [],
+          type4: [],
+          type6: [],
+          type7: []
+        };
+
+        for (const row of activeResults) {
+          const typeKey = `type${row.result_type_id}`;
+          if (groups[typeKey]) {
+            groups[typeKey].push([
+              row.stage_id,
+              row.rider_id,
+              row.team_id,
+              row.rank,
+              row.time_seconds,
+              row.points,
+              row.is_breakaway,
+              row.leadout_rider_id,
+              row.leadout_bonus,
+              row.breakaway_kms,
+              row.event_ids,
+              row.jerseys_worn
+            ]);
+          }
+        }
+
+        this.db.prepare(`
+          INSERT OR REPLACE INTO race_results_compact (race_id, season, payload)
+          VALUES (?, ?, ?)
+        `).run(race.id, currentSeason, JSON.stringify(groups));
+
+        this.db.prepare(`
+          DELETE FROM results
+          WHERE stage_id IN (SELECT id FROM stages WHERE race_id = ?)
         `).run(race.id);
       }
     })();
@@ -1709,7 +1880,7 @@ export class StageResultCommitService {
     gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
     gameStateService.applyStageFatigue(stage.id, completedRiderIds, dnfEntries.map((e) => e.riderId));
 
-    this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason());
+    this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason(), stage.id);
 
     this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
     this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);
@@ -1792,7 +1963,7 @@ export class StageResultCommitService {
   private ensureStageCanBeSimulated(stage: Stage): void {
     const existing = this.db.prepare(`
       SELECT 1
-      FROM results
+      FROM all_results
       WHERE stage_id = ? AND result_type_id = ?
       LIMIT 1
     `).get(stage.id, RESULT_TYPES.stage);
@@ -1802,7 +1973,7 @@ export class StageResultCommitService {
 
     const row = this.db.prepare(`
       SELECT MAX(stages.stage_number) AS last_stage_number
-      FROM results
+      FROM all_results results
       JOIN stages ON stages.id = results.stage_id
       WHERE stages.race_id = ? AND results.result_type_id = ?
     `).get(stage.raceId, RESULT_TYPES.stage) as { last_stage_number: number | null } | undefined;
@@ -1932,6 +2103,12 @@ export class StageResultCommitService {
     const ridersToUpdate = new Set([...winRiderIds, ...dnfRiderIds]);
     if (ridersToUpdate.size === 0) return;
 
+    const updateRiderPrefs = this.db.prepare(`
+      UPDATE riders
+      SET favorite_races = ?, non_favorite_races = ?
+      WHERE id = ?
+    `);
+
     for (const riderId of ridersToUpdate) {
       const rider = ridersById.get(riderId);
       if (!rider) continue;
@@ -1963,11 +2140,7 @@ export class StageResultCommitService {
       if (changed) {
         rider.favoriteRaces = favs;
         rider.nonFavoriteRaces = nonFavs;
-        this.db.prepare(`
-          UPDATE riders
-          SET favorite_races = ?, non_favorite_races = ?
-          WHERE id = ?
-        `).run(favs.join(','), nonFavs.join(','), riderId);
+        updateRiderPrefs.run(favs.join(','), nonFavs.join(','), riderId);
       }
     }
   }
@@ -2027,13 +2200,15 @@ export class StageResultCommitService {
       'pot_attack', 'pot_stamina', 'pot_resistance', 'pot_recuperation', 'pot_bike_handling'
     ];
 
+    const getRiderPotentialsStmt = this.db.prepare(`
+      SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
+             pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
+             pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
+      FROM riders WHERE id = ?
+    `);
+
     for (const riderId of validU23RiderIds) {
-      const riderPotentials = this.db.prepare(`
-        SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
-               pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
-               pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
-        FROM riders WHERE id = ?
-      `).get(riderId) as Record<string, number> | undefined;
+      const riderPotentials = getRiderPotentialsStmt.get(riderId) as Record<string, number> | undefined;
 
       if (!riderPotentials) continue;
 

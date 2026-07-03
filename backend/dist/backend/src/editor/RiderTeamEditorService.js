@@ -177,6 +177,7 @@ class RiderTeamEditorService {
         const teams = this.loadTeams();
         const teamIds = new Set(teams.map((team) => team.teamId));
         const seenRiderIds = new Set();
+        const countryMap = this.loadCountryMap();
         const normalizedRiders = payload.riders.map((rider, index) => {
             this.validateRider(rider, index, teamIds, seenRiderIds);
             const normalized = {
@@ -187,6 +188,7 @@ class RiderTeamEditorService {
                 nonFavoriteRaces: rider.nonFavoriteRaces.trim(),
                 overallRating: calculateOverall(rider),
             };
+            normalized.countryCode = countryMap.get(normalized.countryId) ?? 'UNK';
             return normalized;
         });
         this.writeRiders(normalizedRiders);
@@ -199,9 +201,10 @@ class RiderTeamEditorService {
         const teams = this.loadTeams();
         const teamIds = new Set(teams.map((team) => team.teamId));
         const seenRiderIds = new Set();
+        const countryMap = this.loadCountryMap();
         const normalizedRiders = payload.riders.map((rider, index) => {
             this.validateRider(rider, index, teamIds, seenRiderIds);
-            return {
+            const normalized = {
                 ...rider,
                 firstName: rider.firstName.trim(),
                 lastName: rider.lastName.trim(),
@@ -209,16 +212,38 @@ class RiderTeamEditorService {
                 nonFavoriteRaces: rider.nonFavoriteRaces.trim(),
                 overallRating: calculateOverall(rider),
             };
+            normalized.countryCode = countryMap.get(normalized.countryId) ?? 'UNK';
+            return normalized;
         });
         return {
             fileName: 'riders.csv',
             content: this.serializeRiders(normalizedRiders),
         };
     }
+    loadCountryMap() {
+        const countryPath = path_1.default.join(this.dataCsvDir, 'country.csv');
+        const countryMap = new Map();
+        if ((0, fs_1.existsSync)(countryPath)) {
+            const { rows } = parseCsv((0, fs_1.readFileSync)(countryPath, 'utf8'));
+            for (const row of rows) {
+                const id = parseInt(row['id'] ?? '', 10);
+                const code3 = (row['code_3'] ?? '').trim();
+                if (Number.isFinite(id) && code3) {
+                    countryMap.set(id, code3);
+                }
+            }
+        }
+        return countryMap;
+    }
     loadRiders() {
         const ridersPath = path_1.default.join(this.dataCsvDir, 'riders.csv');
         const { rows } = parseCsv((0, fs_1.readFileSync)(ridersPath, 'utf8'));
-        return rows.map((row, index) => this.mapRiderRow(row, index));
+        const countryMap = this.loadCountryMap();
+        return rows.map((row, index) => {
+            const mapped = this.mapRiderRow(row, index);
+            mapped.countryCode = countryMap.get(mapped.countryId) ?? 'UNK';
+            return mapped;
+        });
     }
     loadTeams() {
         const teamsPath = path_1.default.join(this.dataCsvDir, 'teams.csv');

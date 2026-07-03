@@ -26,7 +26,7 @@ const PEAK_MIN_SPACING_DAYS = 28;
 const ILLNESS_CHANCE = 0.0025;
 const INJURY_CHANCE = 0.002;
 function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName);
     return row != null;
 }
 function columnExists(db, tableName, columnName) {
@@ -120,25 +120,12 @@ class GameStateService {
         if (this.syncedStateDate !== state.currentDate) {
             this.syncCurrentSeasonFormState(state.currentDate, state.season);
             this.syncDailyFormHistory(state.currentDate);
-            // Lazily populate rider_skill_yearly_baseline for current season if missing
-            const baselineCount = this.db.prepare('SELECT count(*) as c FROM rider_skill_yearly_baseline WHERE season = ?').get(state.season).c;
-            if (baselineCount === 0) {
-                this.db.prepare(`
-          INSERT OR IGNORE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
-          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
-        `).run(state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season, state.season);
+            // Lazily populate yearly_baseline_skills for current season if missing
+            const missingBaseline = this.db.prepare(`
+        SELECT COUNT(*) as c FROM riders WHERE is_retired = 0 AND yearly_baseline_skills IS NULL
+      `).get();
+            if (missingBaseline.c > 0) {
+                this.snapshotYearlyBaselineSkills();
             }
             this.syncedStateDate = state.currentDate;
         }
@@ -168,6 +155,8 @@ class GameStateService {
     }
     advanceDay() {
         ResultRepository_1.ResultRepository.clearInMemoryStageEvents();
+        let isNewSeason = false;
+        let oldSeason = 0;
         const nextState = this.db.transaction(() => {
             this.ensureStateRow();
             const currentRow = this.db.prepare('SELECT "current_date" AS current_date, season, is_game_over FROM game_state WHERE id = 1').get();
@@ -180,6 +169,8 @@ class GameStateService {
             const nextDate = addDaysIso(currentRow.current_date, 1);
             const nextSeason = resolveSeason(nextDate, currentRow.season);
             if (nextSeason !== currentRow.season) {
+                isNewSeason = true;
+                oldSeason = currentRow.season;
                 // Standings-Snapshot für die abgelaufene Saison sichern
                 try {
                     const resultRepo = new ResultRepository_1.ResultRepository(this.db);
@@ -211,7 +202,62 @@ class GameStateService {
             DELETE FROM results
             WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
           `).run(`${currentRow.season}-%`);
-                    console.log(`Ergebnisse der Saison ${currentRow.season} erfolgreich archiviert.`);
+                    this.db.prepare(`
+            DELETE FROM stage_entries
+            WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
+          `).run(`${currentRow.season}-%`);
+                    console.log(`Ergebnisse und Etappeneinträge der Saison ${currentRow.season} erfolgreich archiviert/bereinigt.`);
+                    // Prune race_results_compact for the elapsed season to keep only point-scoring results
+                    try {
+                        console.log(`Pruning race results compact for season ${currentRow.season}...`);
+                        const pointsEvents = this.db.prepare(`
+              SELECT stage_id, rider_id, team_id
+              FROM season_point_events
+              WHERE season = ? AND points_awarded > 0
+            `).all(currentRow.season);
+                        const riderPointsKeys = new Set();
+                        const teamPointsKeys = new Set();
+                        for (const p of pointsEvents) {
+                            if (p.rider_id != null) {
+                                riderPointsKeys.add(`${p.stage_id}_${p.rider_id}`);
+                            }
+                            else {
+                                teamPointsKeys.add(`${p.stage_id}_${p.team_id}`);
+                            }
+                        }
+                        const compactRows = this.db.prepare(`
+              SELECT race_id, payload FROM race_results_compact WHERE season = ?
+            `).all(currentRow.season);
+                        const updateStmt = this.db.prepare(`
+              UPDATE race_results_compact SET payload = ? WHERE race_id = ?
+            `);
+                        for (const row of compactRows) {
+                            const groups = JSON.parse(row.payload);
+                            for (const typeKey of Object.keys(groups)) {
+                                if (Array.isArray(groups[typeKey])) {
+                                    groups[typeKey] = groups[typeKey].filter((r) => {
+                                        const stageId = r[0];
+                                        const riderId = r[1];
+                                        const teamId = r[2];
+                                        const rank = r[3];
+                                        if (rank === 1)
+                                            return true; // Sieger immer behalten
+                                        if (riderId != null) {
+                                            return riderPointsKeys.has(`${stageId}_${riderId}`);
+                                        }
+                                        else {
+                                            return teamPointsKeys.has(`${stageId}_${teamId}`);
+                                        }
+                                    });
+                                }
+                            }
+                            updateStmt.run(JSON.stringify(groups), row.race_id);
+                        }
+                        console.log(`Pruning finished for season ${currentRow.season}.`);
+                    }
+                    catch (pe) {
+                        console.error('Fehler beim Bereinigen der Saisonergebnisse:', pe);
+                    }
                 }
                 catch (e) {
                     console.error('Fehler beim Archivieren der Saisonergebnisse:', e);
@@ -233,26 +279,8 @@ class GameStateService {
           SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
           WHERE is_retired = 0 AND skill_development > 0
         `).run();
-                // Snapshot der Fahrer-Werte als Baseline fÃ¼r die Saison in der UI abspeichern
-                this.db.prepare(`
-          INSERT OR REPLACE INTO rider_skill_yearly_baseline (rider_id, season, skill_key, baseline_value)
-          SELECT id, ?, 'overall_rating', overall_rating FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'flat', skill_flat FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'mountain', skill_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'medium_mountain', skill_medium_mountain FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'hill', skill_hill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'time_trial', skill_time_trial FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'prologue', skill_prologue FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'cobble', skill_cobble FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'sprint', skill_sprint FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'acceleration', skill_acceleration FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'downhill', skill_downhill FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'attack', skill_attack FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'stamina', skill_stamina FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'resistance', skill_resistance FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'recuperation', skill_recuperation FROM riders WHERE is_retired = 0
-          UNION ALL SELECT id, ?, 'bike_handling', skill_bike_handling FROM riders WHERE is_retired = 0
-        `).run(...Array(16).fill(nextSeason));
+                // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
+                this.snapshotYearlyBaselineSkills();
             }
             this.ensureRiderDailyStateTable();
             this.ensureRiderDailyStateRows(currentRow.season);
@@ -266,6 +294,15 @@ class GameStateService {
             const checks = this.runDailyChecks(nextDate);
             return this.mapState({ current_date: nextDate, season: nextSeason, is_game_over: currentRow.is_game_over }, checks);
         })();
+        if (isNewSeason) {
+            try {
+                console.log(`Running post-season VACUUM for season ${oldSeason}...`);
+                this.db.prepare('VACUUM').run();
+            }
+            catch (e) {
+                console.error('Failed to run post-season VACUUM:', e);
+            }
+        }
         this.events.emit('dayAdvanced', nextState);
         return nextState;
     }
@@ -731,7 +768,8 @@ class GameStateService {
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked, rds.consecutive_non_race_days,
              r.skill_recuperation, r.birth_year,
              r.active_team_id,
-             dt.tier AS team_tier
+             dt.tier AS team_tier,
+             t.is_player_team AS is_player_team
       FROM rider_daily_state rds
       JOIN riders r ON r.id = rds.rider_id
       LEFT JOIN teams t ON t.id = r.active_team_id
@@ -754,13 +792,6 @@ class GameStateService {
           long_term_fatigue_locked = ?,
           consecutive_non_race_days = ?
       WHERE rider_id = ?
-    `);
-        const insertFatigueHistory = this.db.prepare(`
-      INSERT INTO rider_fatigue_history (
-        rider_id, date, type, race_name, stage_number, stage_score,
-        short_change, long_decayable_change, long_locked_change,
-        short_after, long_after
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         const racingRidersRow = this.db.prepare(`
       SELECT se.rider_id FROM stage_entries se
@@ -927,9 +958,6 @@ class GameStateService {
                 shortTermFatigue = 0.0;
                 longTermDecayable = 0.0;
                 longTermLocked = 0.0;
-                if (shortChange !== 0 || longDecayableChange !== 0 || longLockedChange !== 0) {
-                    insertFatigueHistory.run(row.rider_id, nextDate, 'decay', 'Saisonwechsel', null, null, shortChange, longDecayableChange, longLockedChange, 0.0, 0.0);
-                }
             }
             else {
                 const oldShort = shortTermFatigue;
@@ -995,9 +1023,6 @@ class GameStateService {
                 longTermDecayable = roundToThreeDecimals(longTermDecayable);
                 shortChange = roundToThreeDecimals(shortTermFatigue - oldShort);
                 longDecayableChange = roundToThreeDecimals(longTermDecayable - oldLongDecayable);
-                if (shortChange !== 0 || longDecayableChange !== 0) {
-                    insertFatigueHistory.run(row.rider_id, nextDate, 'decay', 'Regeneration', null, null, shortChange, longDecayableChange, 0.0, shortTermFatigue, roundToThreeDecimals(longTermDecayable + longTermLocked));
-                }
             }
             // Skip the UPDATE if nothing actually changed. This saves ~5000 redundant
             // row updates on quiet days where most riders have stable state.
@@ -1057,53 +1082,30 @@ class GameStateService {
                 this.db.prepare('DELETE FROM rider_fatigue_history').run();
             }
         }
+        // Retention policy: delete rider_fatigue_history entries older than 30 days
+        if (this.isTable('rider_fatigue_history')) {
+            this.db.prepare(`
+        DELETE FROM rider_fatigue_history
+        WHERE date < date(?, '-30 days')
+      `).run(nextDate);
+        }
         this.syncDailyFormHistory(nextDate);
         new RiderDevelopmentService_1.RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
     }
     syncRiderLoadState(currentDate, currentSeason) {
-        if (!this.isTable('rider_daily_state') || !this.isTable('stage_entries') || !this.isTable('stages') || !this.isTable('riders')) {
+        if (!this.isTable('rider_daily_state') || !this.isTable('rider_season_stats')) {
             return;
         }
-        const rollingWindowStart = addDaysIso(currentDate, -29);
-        const seasonStart = `${currentSeason}-01-01`;
-        const minDate = rollingWindowStart < seasonStart ? rollingWindowStart : seasonStart;
-        // Single SQL with a CTE: aggregate all_stage_entries once, then bulk-update
-        // rider_daily_state via a row-source join. This replaces ~N+1 per-rider updates
-        // with one statement.
-        // Optimized by filtering stages.date >= @minDate to avoid scanning full history.
         this.db.prepare(`
-      WITH stats AS (
-        SELECT all_stage_entries.rider_id AS rider_id,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS season_race_days_total,
-               SUM(CASE
-                 WHEN all_stage_entries.status IN ('finished', 'dnf')
-                  AND stages.date >= @rollingStart
-                  AND stages.date <= @currentDate
-                 THEN 1 ELSE 0
-               END) AS rolling_30d_race_days
-        FROM all_stage_entries
-        JOIN stages ON stages.id = all_stage_entries.stage_id
-        WHERE all_stage_entries.status IN ('finished', 'dnf')
-          AND stages.date >= @minDate
-          AND stages.date <= @currentDate
-        GROUP BY all_stage_entries.rider_id
-      )
       UPDATE rider_daily_state
-      SET season_race_days_total = COALESCE(stats.season_race_days_total, 0),
-          rolling_30d_race_days  = COALESCE(stats.rolling_30d_race_days, 0)
-      FROM stats
-      WHERE stats.rider_id = rider_daily_state.rider_id
-    `).run({
-            season: currentSeason,
-            currentDate,
-            rollingStart: rollingWindowStart,
-            minDate,
-        });
+      SET season_race_days_total = COALESCE((
+        SELECT race_days
+        FROM rider_season_stats
+        WHERE rider_season_stats.rider_id = rider_daily_state.rider_id
+          AND rider_season_stats.season = ?
+      ), 0),
+      rolling_30d_race_days = 0
+    `).run(currentSeason);
         this.db.prepare(`
       WITH individual_wins AS (
         SELECT results.rider_id, COUNT(*) AS wins
@@ -1152,13 +1154,23 @@ class GameStateService {
         });
     }
     removeExpiredRaceFormEvents(currentDate) {
-        if (!tableExists(this.db, 'rider_r_form_events')) {
-            return;
+        if (tableExists(this.db, 'rider_r_form_events')) {
+            this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
         }
-        this.db.prepare('DELETE FROM rider_r_form_events WHERE expires_on <= ?').run(currentDate);
+        if (tableExists(this.db, 'rider_r_form_daily_awards')) {
+            this.db.prepare('DELETE FROM rider_r_form_daily_awards WHERE award_date < ?').run(currentDate);
+        }
     }
     syncDailyFormHistory(currentDate) {
         if (!this.isTable('rider_daily_state') || !this.isTable('rider_form_history') || !this.isTable('riders')) {
+            return;
+        }
+        if ((0, mappers_1.isWinterBreak)(currentDate)) {
+            return;
+        }
+        const isFirstDay = currentDate.endsWith('-01-01');
+        const dayOfWeek = new Date(currentDate + 'T00:00:00Z').getUTCDay();
+        if (!isFirstDay && dayOfWeek !== 0) {
             return;
         }
         // Single INSERT...SELECT with UPSERT. The aggregation and the write happen
@@ -1194,24 +1206,6 @@ class GameStateService {
             date: currentDate,
             seasonFormMax: SEASON_FORM_MAX_RAW,
         });
-        if (tableExists(this.db, 'rider_career_stats')) {
-            this.db.prepare(`
-        INSERT INTO rider_career_stats (rider_id, max_s_form, max_r_form, max_combined_form)
-        SELECT
-          rider_id,
-          s_form,
-          r_form,
-          total_form
-        FROM rider_form_history
-        WHERE date = @date
-        ON CONFLICT(rider_id) DO UPDATE SET
-          max_s_form = MAX(max_s_form, excluded.max_s_form),
-          max_r_form = MAX(max_r_form, excluded.max_r_form),
-          max_combined_form = MAX(max_combined_form, excluded.max_combined_form)
-      `).run({
-                date: currentDate
-            });
-        }
     }
     applyRaceDayFormBonuses(raceDate, riderIds) {
         if (riderIds.length === 0 || !tableExists(this.db, 'rider_daily_state')) {
@@ -1285,7 +1279,7 @@ class GameStateService {
         if (!tableExists(this.db, 'stages') || !tableExists(this.db, 'races')) {
             return [];
         }
-        const rows = tableExists(this.db, 'results')
+        const rows = tableExists(this.db, 'all_results')
             ? this.db.prepare(`
           SELECT
             stages.id AS stage_id,
@@ -1299,7 +1293,7 @@ class GameStateService {
             races.is_stage_race AS is_stage_race
           FROM stages
           JOIN races ON races.id = stages.race_id
-          LEFT JOIN results stage_results
+          LEFT JOIN all_results stage_results
             ON stage_results.stage_id = stages.id
            AND stage_results.result_type_id = 1
           WHERE stages.date = ?
@@ -1313,7 +1307,7 @@ class GameStateService {
             stages.start_elevation,
             stages.details_csv_file,
             races.is_stage_race
-          HAVING COUNT(stage_results.id) = 0
+          HAVING COUNT(stage_results.stage_id) = 0
           ORDER BY races.id ASC, stages.stage_number ASC
         `).all(currentDate)
             : this.db.prepare(`
@@ -1381,9 +1375,11 @@ class GameStateService {
         const stmtSelect = this.db.prepare(`
       SELECT r.id, r.skill_recuperation, r.birth_year,
              rds.short_term_fatigue, rds.long_term_fatigue_decayable, rds.long_term_fatigue_locked,
-             rds.season_race_days_total
+             rds.season_race_days_total,
+             t.is_player_team AS is_player_team
       FROM riders r
       LEFT JOIN rider_daily_state rds ON rds.rider_id = r.id
+      LEFT JOIN teams t ON t.id = r.active_team_id
       WHERE r.id = ?
     `);
         const stmtUpdate = this.db.prepare(`
@@ -1393,13 +1389,6 @@ class GameStateService {
           long_term_fatigue_locked = ?,
           consecutive_non_race_days = 0
       WHERE rider_id = ?
-    `);
-        const stmtInsertHistory = this.db.prepare(`
-      INSERT INTO rider_fatigue_history (
-        rider_id, date, type, race_name, stage_number, stage_score,
-        short_change, long_decayable_change, long_locked_change,
-        short_after, long_after
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         this.db.transaction(() => {
             for (const riderId of participatedRiderIds) {
@@ -1416,16 +1405,12 @@ class GameStateService {
                     currentShort = roundToTwoDecimals(currentShort + transferShortChange);
                     currentLongDecayable = roundToTwoDecimals(currentLongDecayable + transferLongDecayableChange);
                     stmtUpdate.run(currentShort, currentLongDecayable, currentLongLocked, riderId);
-                    stmtInsertHistory.run(riderId, stageDate, 'race', 'Transfer', null, // stageNumber
-                    null, // stageScore
-                    transferShortChange, transferLongDecayableChange, 0.0, // longLockedChange
-                    currentShort, roundToTwoDecimals(currentLongDecayable + currentLongLocked));
                 }
                 const R = row.skill_recuperation;
                 const multiplier = R >= 65
                     ? 1 - (R - 65) * 0.02
                     : 1 + (65 - R) * 0.02;
-                let addedShort = stageScore >= 10 ? (stageScore / 100) * 0.75 * multiplier : 0;
+                let addedShort = stageScore >= 10 ? (stageScore / 100) * 0.55 * multiplier : 0;
                 let addedLongDecayable = stageScore >= 10 ? (stageScore / 1000) * 0.75 * multiplier : 0;
                 const age = Number(stageDate.slice(0, 4)) - row.birth_year;
                 if (age >= 30 && age <= 34) {
@@ -1507,7 +1492,45 @@ class GameStateService {
                 const newLongDecayable = roundToTwoDecimals(currentLongDecayable + addedLongDecayable);
                 const newLongLocked = roundToTwoDecimals(currentLongLocked + addedLongLocked);
                 stmtUpdate.run(newShort, newLongDecayable, newLongLocked, riderId);
-                stmtInsertHistory.run(riderId, stageDate, 'race', raceName, stageNumber, stageScore, addedShort, addedLongDecayable, addedLongLocked, newShort, roundToTwoDecimals(newLongDecayable + newLongLocked));
+            }
+        })();
+    }
+    snapshotYearlyBaselineSkills() {
+        console.log("Snapshotting active riders' skills as yearly baseline...");
+        const riders = this.db.prepare(`
+      SELECT id, overall_rating, skill_flat, skill_mountain, skill_medium_mountain, skill_hill,
+             skill_time_trial, skill_prologue, skill_cobble, skill_sprint, skill_acceleration,
+             skill_downhill, skill_attack, skill_stamina, skill_resistance, skill_recuperation,
+             skill_bike_handling
+      FROM riders
+      WHERE is_retired = 0
+    `).all();
+        const update = this.db.prepare(`
+      UPDATE riders
+      SET yearly_baseline_skills = ?
+      WHERE id = ?
+    `);
+        this.db.transaction(() => {
+            for (const r of riders) {
+                const baseline = {
+                    overall_rating: r.overall_rating,
+                    flat: r.skill_flat,
+                    mountain: r.skill_mountain,
+                    medium_mountain: r.skill_medium_mountain,
+                    hill: r.skill_hill,
+                    time_trial: r.skill_time_trial,
+                    prologue: r.skill_prologue,
+                    cobble: r.skill_cobble,
+                    sprint: r.skill_sprint,
+                    acceleration: r.skill_acceleration,
+                    downhill: r.skill_downhill,
+                    attack: r.skill_attack,
+                    stamina: r.skill_stamina,
+                    resistance: r.skill_resistance,
+                    recuperation: r.skill_recuperation,
+                    bike_handling: r.skill_bike_handling,
+                };
+                update.run(JSON.stringify(baseline), r.id);
             }
         })();
     }

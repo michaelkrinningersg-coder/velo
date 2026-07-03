@@ -564,7 +564,6 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
       </div>
       <div class="rider-stats-header-col align-left">
         <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Saisonrenntage">${RIDER_STATS_ICONS.raceDays} <span class="rider-stats-icon-pill-value">${seasonRaceDaysTotal}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width ${rolling30dRaceDays > 14 ? 'text-warning' : ''}" title="30-Tage Renntage">${RIDER_STATS_ICONS.rollingRaceDays} <span class="rider-stats-icon-pill-value">${rolling30dRaceDays}</span></span>
         <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Langzeit-Fatigue">${RIDER_STATS_ICONS.longFatigue} <span class="rider-stats-icon-pill-value">${longTermFatigueMalus}</span></span>
         <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width ${shortTermFatigueWarning !== 'none' ? 'text-error' : ''}" title="Kurzzeitfatigue">${RIDER_STATS_ICONS.shortFatigue} <span class="rider-stats-icon-pill-value">${shortTermFatigueMalus}</span></span>
       </div>

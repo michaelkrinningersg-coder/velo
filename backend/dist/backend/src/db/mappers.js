@@ -353,7 +353,7 @@ function resolveRiderSeasonFormPhase(currentDate, peakDates) {
     return 'fall';
 }
 function tableExists(db, tableName) {
-    const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName);
     return row != null;
 }
 function columnExists(db, tableName, columnName) {
@@ -455,6 +455,7 @@ function mapRider(row, currentYear, _currentDate, seasonPoints = 0, stageNumber)
         shortTermFatigueMalus,
         totalFatigueLoadMalus,
         shortTermFatigueWarning,
+        yearStartSkills: row.yearly_baseline_skills ? JSON.parse(row.yearly_baseline_skills) : undefined,
         peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
         peakRForm: row.peak_r_form ?? 0,
         activePeakDate: row.active_peak_date,

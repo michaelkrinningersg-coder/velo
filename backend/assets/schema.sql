@@ -140,7 +140,8 @@ CREATE TABLE IF NOT EXISTS riders (
   active_team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
   active_contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
   is_retired        INTEGER NOT NULL DEFAULT 0 CHECK(is_retired IN (0, 1)),
-  weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7)
+  weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7),
+  yearly_baseline_skills TEXT DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_riders_active_team ON riders(active_team_id);
@@ -194,7 +195,7 @@ CREATE TABLE IF NOT EXISTS race_categories (
   number_of_teams            INTEGER NOT NULL CHECK(number_of_teams > 0),
   number_of_riders           INTEGER NOT NULL CHECK(number_of_riders > 0),
   bonus_system_id            INTEGER NOT NULL REFERENCES race_categories_bonus(id),
-  home_selection_probability REAL    NOT NULL DEFAULT 0.0 CHECK(home_selection_probability BETWEEN 0.0 AND 1.0)
+  home_selection_probability REAL    NOT NULL DEFAULT 0.0 CHECK(home_selection_probability >= 0.0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_race_categories_tier ON race_categories(tier);
@@ -370,15 +371,34 @@ CREATE INDEX IF NOT EXISTS idx_stage_climb_scores_stage
   ON stage_climb_scores(stage_id);
 
 -- ---- Rennteilnehmer -----------------------------------------
-CREATE TABLE IF NOT EXISTS race_entries (
+CREATE TABLE IF NOT EXISTS active_race_entries (
   race_id  INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
   team_id  INTEGER NOT NULL REFERENCES teams(id),
   rider_id INTEGER NOT NULL REFERENCES riders(id),
   PRIMARY KEY (race_id, rider_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_race_entries_rider_race
-  ON race_entries(rider_id, race_id);
+CREATE INDEX IF NOT EXISTS idx_active_race_entries_rider_race
+  ON active_race_entries(rider_id, race_id);
+
+CREATE TABLE IF NOT EXISTS race_entries_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_entries_compact_season
+  ON race_entries_compact(season);
+
+CREATE VIEW IF NOT EXISTS race_entries AS
+SELECT * FROM active_race_entries
+UNION ALL
+SELECT
+  c.race_id AS race_id,
+  CAST(j.value->>0 AS INTEGER) AS team_id,
+  CAST(j.value->>1 AS INTEGER) AS rider_id
+FROM race_entries_compact c,
+json_each(c.payload) j;
 
 CREATE TABLE IF NOT EXISTS stage_entries (
   stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
@@ -451,17 +471,7 @@ CREATE TABLE IF NOT EXISTS stage_marker_results (
 CREATE INDEX IF NOT EXISTS idx_stage_marker_results_stage_key
   ON stage_marker_results(stage_id, marker_key, rank);
 
--- ---- Skill-Baseline pro Saison (fÃ¼r Delta-Anzeige) ---------
-CREATE TABLE IF NOT EXISTS rider_skill_yearly_baseline (
-  rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-  season INTEGER NOT NULL,
-  skill_key TEXT NOT NULL,
-  baseline_value REAL NOT NULL,
-  PRIMARY KEY (rider_id, season, skill_key)
-);
 
-CREATE INDEX IF NOT EXISTS idx_rider_skill_yearly_baseline_lookup
-  ON rider_skill_yearly_baseline(season, rider_id);
 
 -- ---- Newgen: Startwert-Presets (Skills) --------------------
 -- Definiert pro Profil-Typ (Sprint, Berg, â€¦) und Sub-Variante
@@ -730,20 +740,82 @@ CREATE TABLE IF NOT EXISTS team_preferences (
 );
 
 -- ---- Stage Entries History / View --------------------------
-CREATE TABLE IF NOT EXISTS stage_entries_history (
-  stage_id       INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
-  race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
-  team_id        INTEGER NOT NULL REFERENCES teams(id),
-  rider_id       INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
-  status         TEXT    NOT NULL,
-  status_reason  TEXT,
-  PRIMARY KEY (stage_id, rider_id)
+CREATE TABLE IF NOT EXISTS stage_entries_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_stage_entries_hist_rider ON stage_entries_history(rider_id);
+CREATE INDEX IF NOT EXISTS idx_stage_entries_compact_season
+  ON stage_entries_compact(season);
+
+CREATE VIEW IF NOT EXISTS stage_entries_history AS
+SELECT
+  CAST(j.value->>'sid' AS INTEGER) AS stage_id,
+  c.race_id AS race_id,
+  CAST(j.value->>'tid' AS INTEGER) AS team_id,
+  CAST(j.value->>'rid' AS INTEGER) AS rider_id,
+  j.value->>'st' AS status,
+  j.value->>'str' AS status_reason
+FROM stage_entries_compact c,
+json_each(c.payload) j;
 
 CREATE VIEW IF NOT EXISTS all_stage_entries AS
 SELECT * FROM stage_entries
 UNION ALL
 SELECT * FROM stage_entries_history;
+
+-- ---- Archivierte Rennergebnisse ----------------------------
+CREATE TABLE IF NOT EXISTS race_results_compact (
+  race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
+  season   INTEGER NOT NULL,
+  payload  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_race_results_compact_season
+  ON race_results_compact(season);
+
+CREATE TABLE IF NOT EXISTS team_season_category_stats (
+  team_id                     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  season                      INTEGER NOT NULL,
+  category_name               TEXT NOT NULL,
+  one_day_wins                INTEGER NOT NULL DEFAULT 0,
+  one_day_second              INTEGER NOT NULL DEFAULT 0,
+  one_day_third               INTEGER NOT NULL DEFAULT 0,
+  one_day_top_ten             INTEGER NOT NULL DEFAULT 0,
+  stage_wins                  INTEGER NOT NULL DEFAULT 0,
+  stage_second                INTEGER NOT NULL DEFAULT 0,
+  stage_third                 INTEGER NOT NULL DEFAULT 0,
+  stage_top_ten               INTEGER NOT NULL DEFAULT 0,
+  gc_wins                     INTEGER NOT NULL DEFAULT 0,
+  gc_second                   INTEGER NOT NULL DEFAULT 0,
+  gc_third                    INTEGER NOT NULL DEFAULT 0,
+  gc_top_ten                  INTEGER NOT NULL DEFAULT 0,
+  points_wins                 INTEGER NOT NULL DEFAULT 0,
+  mountain_wins               INTEGER NOT NULL DEFAULT 0,
+  youth_wins                  INTEGER NOT NULL DEFAULT 0,
+  breakaway_wins              INTEGER NOT NULL DEFAULT 0,
+  win_flat                    INTEGER NOT NULL DEFAULT 0,
+  win_rolling                 INTEGER NOT NULL DEFAULT 0,
+  win_hilly                   INTEGER NOT NULL DEFAULT 0,
+  win_hilly_difficult         INTEGER NOT NULL DEFAULT 0,
+  win_medium_mountain         INTEGER NOT NULL DEFAULT 0,
+  win_mountain                INTEGER NOT NULL DEFAULT 0,
+  win_high_mountain           INTEGER NOT NULL DEFAULT 0,
+  win_cobble                  INTEGER NOT NULL DEFAULT 0,
+  win_cobble_hill             INTEGER NOT NULL DEFAULT 0,
+  win_itt                     INTEGER NOT NULL DEFAULT 0,
+  win_ttt                     INTEGER NOT NULL DEFAULT 0,
+  win_weather_1               INTEGER NOT NULL DEFAULT 0,
+  win_weather_2               INTEGER NOT NULL DEFAULT 0,
+  win_weather_3               INTEGER NOT NULL DEFAULT 0,
+  win_weather_4               INTEGER NOT NULL DEFAULT 0,
+  win_weather_5               INTEGER NOT NULL DEFAULT 0,
+  win_weather_6               INTEGER NOT NULL DEFAULT 0,
+  win_weather_7               INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (team_id, season, category_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_season_category_stats_lookup
+  ON team_season_category_stats(team_id, season);
 

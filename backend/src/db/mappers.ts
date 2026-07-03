@@ -163,6 +163,7 @@ export interface RiderRow {
   long_term_fatigue_decayable: number | null;
   long_term_fatigue_locked: number | null;
   weather_profile_id?: number | null;
+  yearly_baseline_skills?: string | null;
 }
 
 export interface RiderSeasonRaceStats {
@@ -366,6 +367,7 @@ export interface StageResultDbRow {
   rider_id: number | null;
   rider_first_name: string | null;
   rider_last_name: string | null;
+  birth_year?: number | null;
   team_id: number | null;
   team_name: string | null;
   leadout_rider_id?: number | null;
@@ -759,7 +761,7 @@ export function resolveRiderSeasonFormPhase(currentDate: string, peakDates: stri
 }
 
 export function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string } | undefined;
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
 }
 
@@ -870,6 +872,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     shortTermFatigueMalus,
     totalFatigueLoadMalus,
     shortTermFatigueWarning,
+    yearStartSkills: row.yearly_baseline_skills ? JSON.parse(row.yearly_baseline_skills) : undefined,
     peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
     peakRForm: row.peak_r_form ?? 0,
     activePeakDate: row.active_peak_date,

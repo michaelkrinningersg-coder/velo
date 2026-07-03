@@ -831,23 +831,11 @@ export function createRouter(dbService: DatabaseService): Router {
           const placeholders = chunk.map(() => '?').join(',');
           
           const winsRows = db.prepare(`
-            SELECT rider_id, COUNT(*) AS wins
-            FROM (
-              SELECT rider_id FROM all_results WHERE result_type_id = 1 AND rank = 1 AND rider_id IN (${placeholders})
-              UNION ALL
-              SELECT stage_entries.rider_id AS rider_id FROM all_results results
-              JOIN all_stage_entries stage_entries ON stage_entries.stage_id = results.stage_id
-              WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL AND stage_entries.team_id = results.team_id
-                AND stage_entries.rider_id IN (${placeholders})
-              UNION ALL
-              SELECT results.rider_id AS rider_id FROM all_results results
-              JOIN stages ON stages.id = results.stage_id
-              JOIN races ON races.id = stages.race_id
-              WHERE results.result_type_id = 2 AND results.rank = 1 AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
-                AND results.rider_id IN (${placeholders})
-            )
+            SELECT rider_id, SUM(gc_wins + stage_wins + one_day_wins) AS wins
+            FROM rider_career_category_stats
+            WHERE rider_id IN (${placeholders})
             GROUP BY rider_id
-          `).all(...chunk, ...chunk, ...chunk) as Array<{ rider_id: number; wins: number }>;
+          `).all(...chunk) as Array<{ rider_id: number; wins: number }>;
 
           for (const row of winsRows) {
             winsMap.set(row.rider_id, (winsMap.get(row.rider_id) ?? 0) + row.wins);

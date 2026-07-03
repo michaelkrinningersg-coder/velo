@@ -24,31 +24,10 @@ export function resolveLongTermFatigueMalus(seasonRaceDaysTotal: number, age = 2
 }
 
 export function resolveShortTermFatigueMalus(rolling30dRaceDays: number, age = 25): number {
-  if (rolling30dRaceDays <= 10) {
-    return 0;
-  }
-
-  let baseMalus = 0;
-  if (rolling30dRaceDays <= 15) {
-    baseMalus = (rolling30dRaceDays - 10) * 0.1;
-  } else if (rolling30dRaceDays <= 20) {
-    baseMalus = 0.5 + ((rolling30dRaceDays - 15) * 0.1);
-  } else if (rolling30dRaceDays <= 25) {
-    baseMalus = 1 + ((rolling30dRaceDays - 20) * 0.5);
-  } else {
-    baseMalus = 3.5 + ((rolling30dRaceDays - 25) * 0.75);
-  }
-
-  return roundToTwoDecimals(age <= 22 ? baseMalus * 1.5 : baseMalus);
+  return 0;
 }
 
 export function resolveShortTermFatigueWarning(rolling30dRaceDays: number): RiderLoadWarningLevel {
-  if (rolling30dRaceDays > 25) {
-    return 'critical';
-  }
-  if (rolling30dRaceDays > 20) {
-    return 'warning';
-  }
   return 'none';
 }
 

@@ -173,12 +173,6 @@ function isLiveMetric(key: string): boolean {
 
 function isAllTimeOnlyMetric(key: string): boolean {
   return [
-    'max_short_term_fatigue',
-    'max_long_term_fatigue',
-    'max_combined_fatigue',
-    'max_s_form',
-    'max_r_form',
-    'max_combined_form',
     'mentors_ranking',
   ].includes(key) || key.startsWith('youngest_winners');
 }

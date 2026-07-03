@@ -239,8 +239,8 @@ export class TeamRepository {
         spe.rank AS result_rank,
         spe.points_awarded AS season_points,
         stages.stage_score AS stage_score,
-        results.event_ids AS event_ids,
-        results.jerseys_worn AS jerseys_worn,
+        NULL AS event_ids,
+        NULL AS jerseys_worn,
         stages.super_team_id AS super_team_id,
         spe.team_id AS team_id
       FROM season_point_events spe
@@ -249,7 +249,6 @@ export class TeamRepository {
       JOIN stages ON stages.id = spe.stage_id
       JOIN races ON races.id = spe.race_id
       JOIN race_categories cat ON cat.id = races.category_id
-      LEFT JOIN all_results results ON results.stage_id = spe.stage_id AND results.rider_id = spe.rider_id AND results.result_type_id = 1
       WHERE spe.team_id = ?
         AND spe.points_awarded > 0
         AND spe.award_type IN ('stage_result', 'one_day_result', 'gc_final', 'points_final', 'mountain_final', 'youth_final')
@@ -632,92 +631,59 @@ export class TeamRepository {
       }
     }
 
-    // G. Query GC & Stage results
-    const resultsRows = this.db.prepare(`
-      SELECT
-        CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
-        r.result_type_id AS result_type_id,
-        r.rank AS rank,
-        races.is_stage_race AS is_stage_race,
-        races.number_of_stages AS number_of_stages,
-        stages.stage_number AS stage_number,
-        stages.profile AS profile,
-        cat.name AS category_name,
-        stages.rolled_weather_id AS rolled_weather_id
-      FROM all_results r
-      JOIN stages ON stages.id = r.stage_id
-      JOIN races ON races.id = stages.race_id
-      JOIN race_categories cat ON cat.id = races.category_id
-      WHERE r.team_id = ?
-    `).all(teamId) as Array<{
-      season: number;
-      result_type_id: number;
-      rank: number;
-      is_stage_race: number;
-      number_of_stages: number;
-      stage_number: number;
-      profile: string;
-      category_name: string;
-      rolled_weather_id: number | null;
-    }>;
+    // G. Query GC & Stage results from pre-aggregated table
+    const statsRows = tableExists(this.db, 'team_season_category_stats')
+      ? this.db.prepare(`
+          SELECT * FROM team_season_category_stats WHERE team_id = ?
+        `).all(teamId) as any[]
+      : [];
 
-    for (const row of resultsRows) {
+    for (const row of statsRows) {
       const statsList = [successStats['all'], successStats[String(row.season)]].filter(Boolean);
       for (const stats of statsList) {
         let catStats = stats.categories[row.category_name];
         if (!catStats) {
           continue;
         }
+        catStats.oneDayWins += row.one_day_wins ?? 0;
+        catStats.oneDaySecond += row.one_day_second ?? 0;
+        catStats.oneDayThird += row.one_day_third ?? 0;
+        catStats.oneDayTopTen += row.one_day_top_ten ?? 0;
 
-        const rank = row.rank;
-        const isStageRace = row.is_stage_race === 1;
-        const isFinalStage = row.stage_number === row.number_of_stages;
+        catStats.stageWins += row.stage_wins ?? 0;
+        catStats.stageSecond += row.stage_second ?? 0;
+        catStats.stageThird += row.stage_third ?? 0;
+        catStats.stageTopTen += row.stage_top_ten ?? 0;
 
-        if (row.result_type_id === 1) { // Stage result
-          if (rank === 1) {
-            const profile = row.profile;
-            if (profile === 'Flat') catStats.winFlat++;
-            else if (profile === 'Rolling') catStats.winRolling++;
-            else if (profile === 'Hilly') catStats.winHilly++;
-            else if (profile === 'Hilly_Difficult') catStats.winHillyDifficult++;
-            else if (profile === 'Medium_Mountain') catStats.winMediumMountain++;
-            else if (profile === 'Mountain') catStats.winMountain++;
-            else if (profile === 'High_Mountain') catStats.winHighMountain++;
-            else if (profile === 'Cobble') catStats.winCobble++;
-            else if (profile === 'Cobble_Hill') catStats.winCobbleHill++;
-            else if (profile === 'ITT') catStats.winITT++;
-            else if (profile === 'TTT') catStats.winTTT++;
+        catStats.gcWins += row.gc_wins ?? 0;
+        catStats.gcSecond += row.gc_second ?? 0;
+        catStats.gcThird += row.gc_third ?? 0;
+        catStats.gcTopTen += row.gc_top_ten ?? 0;
 
-            if (row.rolled_weather_id != null && row.rolled_weather_id >= 1 && row.rolled_weather_id <= 7) {
-              const weatherKey = `winWeather${row.rolled_weather_id}` as keyof typeof catStats;
-              (catStats[weatherKey] as number)++;
-            }
-          }
-          if (!isStageRace) {
-            if (rank === 1) catStats.oneDayWins++;
-            else if (rank === 2) catStats.oneDaySecond++;
-            else if (rank === 3) catStats.oneDayThird++;
-            else if (rank > 3 && rank <= 10) catStats.oneDayTopTen++;
-          } else {
-            if (rank === 1) catStats.stageWins++;
-            else if (rank === 2) catStats.stageSecond++;
-            else if (rank === 3) catStats.stageThird++;
-            else if (rank > 3 && rank <= 10) catStats.stageTopTen++;
-          }
-        } else if ((row.result_type_id === 2 || row.result_type_id === 6) && isStageRace && isFinalStage) { // GC
-          if (rank === 1) catStats.gcWins++;
-          else if (rank === 2) catStats.gcSecond++;
-          else if (rank === 3) catStats.gcThird++;
-          else if (rank > 3 && rank <= 10) catStats.gcTopTen++;
-        } else if (row.result_type_id === 3 && isStageRace && isFinalStage) { // Points
-          if (rank === 1) catStats.pointsWins++;
-        } else if (row.result_type_id === 4 && isStageRace && isFinalStage) { // Mountain
-          if (rank === 1) catStats.mountainWins++;
-        } else if (row.result_type_id === 5 && isStageRace && isFinalStage) { // Youth
-          if (rank === 1) catStats.youthWins++;
-        } else if (row.result_type_id === 7 && isStageRace && isFinalStage) { // Breakaway
-          if (rank === 1) catStats.breakawayWins = (catStats.breakawayWins ?? 0) + 1;
-        }
+        catStats.pointsWins += row.points_wins ?? 0;
+        catStats.mountainWins += row.mountain_wins ?? 0;
+        catStats.youthWins += row.youth_wins ?? 0;
+        catStats.breakawayWins += row.breakaway_wins ?? 0;
+
+        catStats.winFlat += row.win_flat ?? 0;
+        catStats.winRolling += row.win_rolling ?? 0;
+        catStats.winHilly += row.win_hilly ?? 0;
+        catStats.winHillyDifficult += row.win_hilly_difficult ?? 0;
+        catStats.winMediumMountain += row.win_medium_mountain ?? 0;
+        catStats.winMountain += row.win_mountain ?? 0;
+        catStats.winHighMountain += row.win_high_mountain ?? 0;
+        catStats.winCobble += row.win_cobble ?? 0;
+        catStats.winCobbleHill += row.win_cobble_hill ?? 0;
+        catStats.winITT += row.win_itt ?? 0;
+        catStats.winTTT += row.win_ttt ?? 0;
+
+        catStats.winWeather1 += row.win_weather_1 ?? 0;
+        catStats.winWeather2 += row.win_weather_2 ?? 0;
+        catStats.winWeather3 += row.win_weather_3 ?? 0;
+        catStats.winWeather4 += row.win_weather_4 ?? 0;
+        catStats.winWeather5 += row.win_weather_5 ?? 0;
+        catStats.winWeather6 += row.win_weather_6 ?? 0;
+        catStats.winWeather7 += row.win_weather_7 ?? 0;
       }
     }
 
