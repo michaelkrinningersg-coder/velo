@@ -248,18 +248,75 @@ export function initDraftListeners(): void {
 }
 
 // ============================================================
+//  WEB WORKER TIMERS (Avoids background tab throttling)
+// ============================================================
+
+let workerInstance: Worker | null = null;
+const activeCallbacks = new Map<string, () => void>();
+
+function getWorker(): Worker {
+  if (workerInstance) return workerInstance;
+
+  const blobCode = `
+    const activeTimeouts = new Map();
+
+    self.onmessage = function(e) {
+      const { action, id, delay } = e.data;
+      if (action === 'start') {
+        if (activeTimeouts.has(id)) {
+          clearTimeout(activeTimeouts.get(id));
+        }
+        const timer = setTimeout(() => {
+          activeTimeouts.delete(id);
+          self.postMessage({ type: 'fire', id });
+        }, delay);
+        activeTimeouts.set(id, timer);
+      } else if (action === 'cancel') {
+        if (activeTimeouts.has(id)) {
+          clearTimeout(activeTimeouts.get(id));
+          activeTimeouts.delete(id);
+        }
+      }
+    };
+  `;
+
+  const blob = new Blob([blobCode], { type: 'application/javascript' });
+  workerInstance = new Worker(URL.createObjectURL(blob));
+  
+  workerInstance.onmessage = function(e) {
+    const { type, id } = e.data;
+    if (type === 'fire') {
+      const callback = activeCallbacks.get(id);
+      if (callback) {
+        activeCallbacks.delete(id);
+        callback();
+      }
+    }
+  };
+
+  return workerInstance;
+}
+
+function setWorkerTimeout(callback: () => void, delay: number, id: string): void {
+  const worker = getWorker();
+  activeCallbacks.set(id, callback);
+  worker.postMessage({ action: 'start', id, delay });
+}
+
+function clearWorkerTimeout(id: string): void {
+  if (workerInstance) {
+    workerInstance.postMessage({ action: 'cancel', id });
+  }
+  activeCallbacks.delete(id);
+}
+
+// ============================================================
 //  DRAFT INTERACTIVE OVERLAY SYSTEM
 // ============================================================
 
 function clearDraftTimeouts(): void {
-  if ((state as any).draftOverlayTimer1) {
-    clearTimeout((state as any).draftOverlayTimer1);
-    (state as any).draftOverlayTimer1 = null;
-  }
-  if ((state as any).draftOverlayTimer2) {
-    clearTimeout((state as any).draftOverlayTimer2);
-    (state as any).draftOverlayTimer2 = null;
-  }
+  clearWorkerTimeout('timer1');
+  clearWorkerTimeout('timer2');
 }
 
 export function getOpenSlotsForPick(teamId: number, currentPickIndex: number, picks: any[]): number {
@@ -790,13 +847,13 @@ export function triggerDraftSchedule(): void {
   
   if (!(state as any).draftRevealShown) {
     const delay = 2000 / speed;
-    (state as any).draftOverlayTimer1 = window.setTimeout(() => {
+    setWorkerTimeout(() => {
       revealCurrentPick();
-    }, delay);
+    }, delay, 'timer1');
   } else {
     if (state.draftOverlayAuto) {
       const delay = 3000 / speed;
-      (state as any).draftOverlayTimer2 = window.setTimeout(() => {
+      setWorkerTimeout(() => {
         const nextIndex = index + 1;
         if (nextIndex < state.draftOverlayPicks!.length) {
           showDraftPick(nextIndex);
@@ -814,7 +871,7 @@ export function triggerDraftSchedule(): void {
             closeDraftOverlay();
           }
         }
-      }, delay);
+      }, delay, 'timer2');
     }
   }
 }
@@ -1198,9 +1255,9 @@ async function renderActivePlayerTurn(): Promise<void> {
       // If auto progress is checked, automatically simulate next pick after a short delay
       if (state.draftOverlayAuto) {
         const delay = 1500 / state.draftSpeedMultiplier;
-        (state as any).draftOverlayTimer2 = window.setTimeout(() => {
+        setWorkerTimeout(() => {
           void triggerLiveAiPick();
-        }, delay);
+        }, delay, 'timer2');
       }
     }
   }

@@ -434,6 +434,30 @@ export async function completeRealtimeStage(
   }
 }
 
+export function handleRosterRiderClick(riderId: number, teamId: number): void {
+  if (!state.rosterEditor) return;
+  const teamEntry = state.rosterEditor.teams.find(t => t.team.id === teamId);
+  if (!teamEntry) return;
+
+  const riderOpt = teamEntry.riders.find(r => r.rider.id === riderId);
+  if (!riderOpt || riderOpt.isLocked) return;
+
+  const idx = state.rosterEditorSelectedRiderIds.indexOf(riderId);
+  if (idx !== -1) {
+    state.rosterEditorSelectedRiderIds.splice(idx, 1);
+  } else {
+    const selectedCount = getRosterEditorSelectedCount(teamId);
+    if (selectedCount >= teamEntry.riderLimit) {
+      showError('roster-editor-error', `Du kannst maximal ${teamEntry.riderLimit} Fahrer für ${teamEntry.team.name} auswählen.`);
+      return;
+    }
+    hideError('roster-editor-error');
+    state.rosterEditorSelectedRiderIds.push(riderId);
+  }
+
+  renderRosterEditor();
+}
+
 export function initLiveRaceListeners(): void {
   $<HTMLSelectElement>('race-sim-stage-select').addEventListener('change', (event) => {
     const stageId = Number((event.target as HTMLSelectElement).value);
@@ -444,5 +468,19 @@ export function initLiveRaceListeners(): void {
     state.realtimeError = null;
     void openRealtimeStage(stageId, false);
   });
+
+  const rosterEditorBody = $('roster-editor-body');
+  if (rosterEditorBody) {
+    rosterEditorBody.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('button.roster-editor-rider');
+      if (!button) return;
+
+      const riderId = Number(button.dataset.rosterRiderId);
+      const teamId = Number(button.dataset.rosterTeamId);
+      if (Number.isFinite(riderId) && Number.isFinite(teamId)) {
+        handleRosterRiderClick(riderId, teamId);
+      }
+    });
+  }
 }
 
