@@ -342,21 +342,23 @@
         <div id="results-type-tabs" class="results-type-tabs"></div>
         <div id="results-marker-tabs" class="results-type-tabs hidden"></div>
         <div id="results-empty" class="results-empty">Noch keine Ergebnisse geladen.</div>
-        <table class="data-table hidden" id="results-table">
-          <thead>
-            <tr>
-              <th>Platz</th>
-              <th class="results-jersey-col">Trikot</th>
-              <th>Fahrer / Team</th>
-              <th>Team</th>
-              <th>Zeit</th>
-              <th>Rückstand</th>
-              <th>Punktewertung</th>
-              <th>UCI Punkte</th>
-            </tr>
-          </thead>
-          <tbody id="results-tbody"></tbody>
-        </table>
+        <div class="data-table-card hidden" id="results-table-card">
+          <table class="data-table" id="results-table">
+            <thead>
+              <tr>
+                <th>Platz</th>
+                <th class="results-jersey-col">Trikot</th>
+                <th>Fahrer / Team</th>
+                <th>Team</th>
+                <th>Zeit</th>
+                <th>Rückstand</th>
+                <th>Punktewertung</th>
+                <th>UCI Punkte</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
         <div id="results-marker-classifications" class="results-marker-classifications hidden"></div>
         <div id="results-roster" class="results-roster hidden"></div>
       </div>
@@ -375,20 +377,22 @@
         </div>
         <div id="season-standings-scope-tabs" class="results-type-tabs"></div>
         <div id="season-standings-empty" class="results-empty">Noch keine Saisonpunkte vorhanden.</div>
-        <table class="data-table hidden" id="season-standings-table">
-          <thead>
-            <tr>
-              <th>Platz</th>
-              <th id="season-standings-jersey-header" class="results-jersey-col">Trikot</th>
-              <th id="season-standings-primary-header">Fahrer</th>
-              <th id="season-standings-flag-header" class="results-flag-col">Flagge</th>
-              <th id="season-standings-secondary-header">Team</th>
-              <th>Punkte</th>
-              <th>Rückstand</th>
-            </tr>
-          </thead>
-          <tbody id="season-standings-tbody"></tbody>
-        </table>
+        <div class="data-table-card hidden" id="season-standings-table-card">
+          <table class="data-table" id="season-standings-table">
+            <thead>
+              <tr>
+                <th>Platz</th>
+                <th id="season-standings-jersey-header" class="results-jersey-col">Trikot</th>
+                <th id="season-standings-primary-header">Fahrer</th>
+                <th id="season-standings-flag-header" class="results-flag-col">Flagge</th>
+                <th id="season-standings-secondary-header">Team</th>
+                <th>Punkte</th>
+                <th>Rückstand</th>
+              </tr>
+            </thead>
+            <tbody id="season-standings-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Leaderboards -->

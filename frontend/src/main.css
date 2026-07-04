@@ -11,8 +11,12 @@
   --bg-600:    #334155;
   --border:    #334155;
 
+  --bg-500:    #475569;
+
   --text-100:  #f1f5f9;
+  --text-200:  #e2e8f0;
   --text-300:  #cbd5e1;
+  --text-400:  #94a3b8;
   --text-500:  #64748b;
 
   --accent:    #6366f1;
@@ -20,6 +24,13 @@
   --success:   #22c55e;
   --warning:   #f59e0b;
   --danger:    #ef4444;
+
+  /* Podium / Card design */
+  --gold:      #fbbf24;
+  --silver:    #cbd5e1;
+  --bronze:    #d08b5b;
+  --card-bg:   linear-gradient(180deg, #1c2740 0%, #172033 100%);
+  --row-hover: rgba(99, 102, 241, .10);
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -402,48 +413,87 @@ html, body {
   border-bottom: 1px solid rgba(148, 163, 184, .28);
   position: sticky;
   top: 0;
-  background: linear-gradient(180deg, rgba(59, 130, 246, .12) 0%, rgba(30, 41, 59, .95) 100%);
+  background: linear-gradient(180deg, rgba(99, 102, 241, .18) 0%, rgba(28, 39, 64, .96) 100%);
 }
 
 .data-table tbody tr {
   border-bottom: 1px solid var(--bg-700);
-  transition: background .1s;
+  transition: background .12s ease;
+  /* Linker Akzentbalken, per Zeile via --row-accent überschreibbar */
+  box-shadow: inset 3px 0 0 var(--row-accent, transparent);
+}
+
+.data-table tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.data-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+/* ---- Data-Table Karte ------------------------------------- */
+.data-table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.data-table-card .data-table {
+  margin: 0;
 }
 
 .results-toolbar {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 320px));
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.results-toolbar select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .25);
 }
 
 .results-type-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: .6rem;
-  margin-bottom: 1rem;
+  gap: .5rem;
+  margin-bottom: 1.25rem;
+  padding: .35rem;
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .results-type-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-800);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-300);
   border-radius: 999px;
-  padding: .45rem .9rem;
+  padding: .45rem 1rem;
   font: inherit;
   cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
 .results-type-btn:hover {
-  border-color: var(--accent-h);
   color: var(--text-100);
+  background: rgba(99, 102, 241, .12);
 }
 
 .results-type-btn.active {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-h) 0%, var(--accent) 100%);
   border-color: var(--accent);
   color: #fff;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, .45);
 }
 
 .results-empty {
@@ -452,6 +502,35 @@ html, body {
   border-radius: var(--radius-md);
   background: var(--bg-800);
   color: var(--text-500);
+}
+
+/* ---- Podium-Highlight für die Top-3 ----------------------- */
+.data-table tbody tr.results-row-rank-1 {
+  --row-accent: var(--gold);
+  background: linear-gradient(90deg, rgba(251, 191, 36, .16) 0%, transparent 55%);
+}
+.data-table tbody tr.results-row-rank-2 {
+  --row-accent: var(--silver);
+  background: linear-gradient(90deg, rgba(203, 213, 225, .13) 0%, transparent 55%);
+}
+.data-table tbody tr.results-row-rank-3 {
+  --row-accent: var(--bronze);
+  background: linear-gradient(90deg, rgba(208, 139, 91, .15) 0%, transparent 55%);
+}
+.data-table tbody tr.results-row-rank-3 {
+  border-bottom: 2px solid rgba(148, 163, 184, .28);
+}
+.data-table tbody tr.results-row-rank-1:hover,
+.data-table tbody tr.results-row-rank-2:hover,
+.data-table tbody tr.results-row-rank-3:hover {
+  background: var(--row-hover);
+}
+
+.rank-medal {
+  display: inline-block;
+  margin-right: .3rem;
+  font-size: .95em;
+  line-height: 1;
 }
 
 .results-empty-cell {

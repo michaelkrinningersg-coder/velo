@@ -47,6 +47,21 @@ export const RESULTS_ROSTER_KEY = '__roster__';
 
 let selectedEventFilter = 'all';
 
+/** CSS-Klasse für die Podium-Hervorhebung einer Ergebniszeile (Top-3). */
+export function resultsRowRankClass(rank: number | null | undefined): string {
+  if (rank === 1) return ' results-row-rank-1';
+  if (rank === 2) return ' results-row-rank-2';
+  if (rank === 3) return ' results-row-rank-3';
+  return '';
+}
+
+/** Platz-Zelle mit Medaillen-Badge für Top-3, sonst nur die Zahl. */
+export function renderRankCell(rank: number): string {
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+  const medalHtml = medal ? `<span class="rank-medal">${medal}</span>` : '';
+  return `<td class="pos-${Math.min(rank, 3)}">${medalHtml}${rank}</td>`;
+}
+
 export function isMountainClassificationMarkerType(markerType: string, markerCategory: string | null | undefined): boolean {
   if (markerType === 'climb_top' || markerType === 'finish_hill' || markerType === 'finish_mountain') {
     return true;
@@ -730,6 +745,7 @@ export function renderResultsView(): void {
   const meta = $('results-stage-meta');
   const empty = $('results-empty');
   const table = $('results-table');
+  const tableCard = $('results-table-card');
   const headerRow = table.querySelector('thead tr');
   const tbody = $('results-tbody');
   const markerClassifications = $('results-marker-classifications');
@@ -800,7 +816,7 @@ export function renderResultsView(): void {
     tbody.innerHTML = '';
     markerClassifications.innerHTML = '';
     markerClassifications.classList.add('hidden');
-    table.classList.add('hidden');
+    tableCard.classList.add('hidden');
     rosterContainer.innerHTML = '';
     rosterContainer.classList.add('hidden');
     empty.classList.remove('hidden');
@@ -903,7 +919,7 @@ export function renderResultsView(): void {
   if (showRoster) {
     rosterContainer.innerHTML = renderRaceRoster();
     rosterContainer.classList.remove('hidden');
-    table.classList.add('hidden');
+    tableCard.classList.add('hidden');
     markerTabs.innerHTML = '';
     markerTabs.classList.add('hidden');
     markerClassifications.innerHTML = '';
@@ -1208,8 +1224,8 @@ export function renderResultsView(): void {
           }
         }
         return `
-          <tr>
-            <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+          <tr class="results-row${resultsRowRankClass(row.rank)}">
+            ${renderRankCell(row.rank)}
             ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
             <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
@@ -1228,8 +1244,8 @@ export function renderResultsView(): void {
           }
         }
         return `
-          <tr>
-            <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+          <tr class="results-row${resultsRowRankClass(row.rank)}">
+            ${renderRankCell(row.rank)}
             ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
             <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
@@ -1241,8 +1257,8 @@ export function renderResultsView(): void {
       }
       if (isTeamClassification) {
         return `
-          <tr>
-            <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+          <tr class="results-row${resultsRowRankClass(row.rank)}">
+            ${renderRankCell(row.rank)}
             ${trendCell}
             <td class="results-jersey-col-cell">${jerseyCell}</td>
             <td>${renderTeamNameLink(row.teamName, row.teamId)}</td>
@@ -1264,8 +1280,8 @@ export function renderResultsView(): void {
       }
 
           return `
-            <tr>
-              <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+            <tr class="results-row${resultsRowRankClass(row.rank)}">
+              ${renderRankCell(row.rank)}
               ${trendCell}
               <td class="results-jersey-col-cell">${jerseyCell}</td>
               <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
@@ -1281,7 +1297,7 @@ export function renderResultsView(): void {
     : '';
 
   empty.classList.toggle('hidden', !!selectedClassification || showNonFinishers || showEvents || showRoster);
-  table.classList.toggle('hidden', !showStageOverviewTable || showRoster);
+  tableCard.classList.toggle('hidden', !showStageOverviewTable || showRoster);
 
   if (selectedMarkerClassification) {
     const headerHtml = `

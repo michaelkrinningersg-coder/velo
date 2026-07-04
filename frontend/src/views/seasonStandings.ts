@@ -20,6 +20,7 @@ import {
   formatRaceDateRange,
   raceCategoryBadge,
 } from './dashboard';
+import { resultsRowRankClass, renderRankCell } from './results';
 import type {
   SeasonStandingsPayload,
   SeasonStandingCountryRow,
@@ -138,7 +139,7 @@ export function renderSeasonStandingsView(): void {
   const meta = $('season-standings-meta');
   const tabs = $('season-standings-scope-tabs');
   const empty = $('season-standings-empty');
-  const table = $('season-standings-table');
+  const tableCard = $('season-standings-table-card');
   const tbody = $('season-standings-tbody');
   const jerseyHeader = $('season-standings-jersey-header');
   const primaryHeader = $('season-standings-primary-header');
@@ -195,7 +196,7 @@ export function renderSeasonStandingsView(): void {
 
   if (!state.seasonStandings || rows.length === 0) {
     tbody.innerHTML = '';
-    table.classList.add('hidden');
+    tableCard.classList.add('hidden');
     empty.classList.remove('hidden');
     empty.textContent = 'Noch keine Saisonpunkte vorhanden.';
     return;
@@ -203,8 +204,8 @@ export function renderSeasonStandingsView(): void {
 
   tbody.innerHTML = isCountryScope
     ? countryRows.map((row) => `
-      <tr>
-        <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+      <tr class="results-row${resultsRowRankClass(row.rank)}">
+        ${renderRankCell(row.rank)}
         <td class="results-jersey-col-cell hidden"></td>
         <td class="season-standings-country-cell">${renderSeasonCountryNameCell(row)}</td>
         <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
@@ -223,8 +224,8 @@ export function renderSeasonStandingsView(): void {
         ? esc(row.countryName ?? row.countryCode ?? '–')
         : renderTeamNameLink(row.teamName ?? '–', row.teamId, false);
       return `
-        <tr>
-          <td class="pos-${Math.min(row.rank, 3)}">${row.rank}</td>
+        <tr class="results-row${resultsRowRankClass(row.rank)}">
+          ${renderRankCell(row.rank)}
           <td class="results-jersey-col-cell">${jerseyCell}</td>
           <td>${primaryCell}</td>
           <td class="results-flag-col-cell">${flagCell}</td>
@@ -235,7 +236,7 @@ export function renderSeasonStandingsView(): void {
     }).join('');
 
   empty.classList.add('hidden');
-  table.classList.remove('hidden');
+  tableCard.classList.remove('hidden');
 }
 
 export function initSeasonStandingsListeners(): void {
