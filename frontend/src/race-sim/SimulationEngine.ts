@@ -1851,28 +1851,6 @@ export class SimulationEngine {
   }
 
   private pushMessage(message: Omit<RaceSimMessage, 'id' | 'riderTeamId'> & { riderTeamId?: number | null }): void {
-    if (this.isInstantSimulation) {
-      const newMessage: RaceSimMessage = {
-        id: this.nextMessageId,
-        elapsedSeconds: message.elapsedSeconds,
-        riderId: message.riderId,
-        riderName: message.riderName,
-        type: message.type,
-        tone: message.tone,
-        title: '',
-        detail: '',
-        riderTeamId: null,
-        kmMark: 0,
-      };
-      this.messages.unshift(newMessage);
-      this.allEvents.push(newMessage);
-      this.nextMessageId += 1;
-      if (this.messages.length > 60) {
-        this.messages.length = 60;
-      }
-      return;
-    }
-
     const riderTeamId = message.riderTeamId
       ?? (message.riderId != null
         ? this.riders.find((candidate) => candidate.rider.id === message.riderId)?.rider.activeTeamId ?? null
@@ -1898,6 +1876,14 @@ export class SimulationEngine {
       riderTeamId,
       kmMark,
     };
+
+    if (this.isInstantSimulation) {
+      // In instant simulation, we don't need to populate the scrolling log array (this.messages) since there is no UI rendering,
+      // saving CPU and garbage collection overhead. However, we MUST populate the full details in allEvents so that events are correctly committed to the database.
+      this.allEvents.push(newMessage);
+      this.nextMessageId += 1;
+      return;
+    }
 
     this.messages.unshift(newMessage);
     this.allEvents.push(newMessage);
