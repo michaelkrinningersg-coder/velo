@@ -2200,8 +2200,38 @@ export class DatabaseService {
     return path.join(this.savegamesDir, safeName);
   }
 
-  private ensureAllSchemas(db: Database.Database): void {
+  /**
+   * Applies the full, production-equivalent schema (schema.sql + all runtime
+   * `ensure*` migrations and reference data) to an arbitrary database handle.
+   *
+   * Exposed so the test harness can build an in-memory DB that matches
+   * production exactly, without reimplementing (and drifting from) the
+   * migration logic. Master-DB-dependent steps guard on `masterDbPath`
+   * existence and are safely skipped when it is absent.
+   */
+  public applySchemaTo(db: Database.Database): void {
+    // The schema string re-enables `PRAGMA foreign_keys = ON`; the reference-data
+    // sync steps then copy master rows that may reference ids not yet present in
+    // a freshly-seeded DB. Structural migration should not be gated by FK
+    // enforcement of half-populated data, so disable it for the duration and
+    // restore the caller's setting afterwards.
+    const previousForeignKeys = db.pragma('foreign_keys', { simple: true });
+    try {
+      this.ensureAllSchemas(db, { disableForeignKeys: true });
+    } finally {
+      db.pragma(`foreign_keys = ${previousForeignKeys ? 'ON' : 'OFF'}`);
+    }
+  }
+
+  private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
+    // `applyLatestSchema` re-executes schema.sql, which contains
+    // `PRAGMA foreign_keys = ON`. When applying to a not-yet-populated DB
+    // (test harness), re-assert OFF before the master-reference sync so those
+    // inserts aren't rejected by dangling references to master ids.
+    if (opts.disableForeignKeys) {
+      db.pragma('foreign_keys = OFF');
+    }
     this.ensureRiderWeatherProfileSchema(db);
     this.ensureDraftPicksPoolSchema(db);
     this.ensureWeatherSchema(db);
@@ -2481,5 +2511,9 @@ export class DatabaseService {
 
   public getMasterDbPath(): string {
     return this.masterDbPath;
+  }
+
+  public getSchemaPath(): string {
+    return this.schemaPath;
   }
 }
