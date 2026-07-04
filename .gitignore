@@ -1,3 +1,4 @@
+# Python (vestigial — no active Python in the project)
 .venv/
 __pycache__/
 *.pyc
@@ -5,9 +6,37 @@ __pycache__/
 *.pyd
 .pytest_cache/
 *.egg-info/
+
+# Node
+node_modules
+
+# Build outputs (regenerated via `npm run build`)
+dist/
+backend/dist/
+frontend/dist/
+
+# Native bindings (regenerated on `npm install`)
+*.node
+
+# Standalone packaged binaries
+*.exe
+
+# Databases — ignore all by default...
+*.db
+# ...but keep the tracked master template and the shared test savegame.
+!backend/assets/world_data.db
+!savegames/*.db
+
+# Legacy explicit DB ignores (kept for clarity)
 radsport_manager.db
 velo.db
-node_modules
+
+# Agent / scratch working directories & dumps
+brain/
+scratch/
+debug/*.db
+debug/*.log
+
+# Editor / assistant tooling
 .continue/
 .continueignore
-
