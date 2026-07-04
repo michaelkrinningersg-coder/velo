@@ -126,6 +126,149 @@ function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: numbe
     .map((team: any) => team.id);
 }
 
+function getSinglePickDetails(db: any, season: number, pickNumber: number): any {
+  // 1. Get the draft history row
+  const r = db.prepare(`
+    SELECT 
+      d.draft_round AS draftRound,
+      d.pick_number AS pickNumber,
+      d.contract_length AS contractLength,
+      d.overall_at_draft AS overallAtDraft,
+      d.pot_overall_at_draft AS potOverallAtDraft,
+      d.draft_value AS draftValue,
+      
+      r.id AS riderId,
+      r.first_name AS riderFirstName,
+      r.last_name AS riderLastName,
+      r.birth_year AS riderBirthYear,
+      
+      c.code_3 AS countryCode,
+      
+      t.id AS teamId,
+      t.name AS teamName,
+      
+      ot.id AS oldTeamId,
+      ot.name AS oldTeamName,
+      
+      spec.display_name AS riderSpecialization
+      
+    FROM draft_history d
+    JOIN riders r ON d.rider_id = r.id
+    JOIN sta_country c ON r.country_id = c.id
+    JOIN teams t ON d.team_id = t.id
+    LEFT JOIN teams ot ON d.old_team_id = ot.id
+    LEFT JOIN type_rider spec ON r.specialization_1_id = spec.id
+    WHERE d.season = ? AND d.pick_number = ?
+  `).get(season, pickNumber) as any;
+
+  if (!r) return null;
+
+  // 2. Get UCI Ranks for the previous year
+  const uciPointsRows = db.prepare(`
+    SELECT rider_id, SUM(points_awarded) AS points
+    FROM season_point_events
+    WHERE season = ?
+    GROUP BY rider_id
+    ORDER BY points DESC
+  `).all(season - 1) as Array<{ rider_id: number, points: number }>;
+  
+  const uciRanks = new Map<number, number>();
+  uciPointsRows.forEach((row, index) => {
+    uciRanks.set(row.rider_id, index + 1);
+  });
+
+  // 3. Get wins map
+  const winsRow = db.prepare(`
+    SELECT SUM(gc_wins + stage_wins + one_day_wins) AS wins
+    FROM rider_career_category_stats
+    WHERE rider_id = ?
+  `).get(r.riderId) as { wins: number | null } | undefined;
+  const riderWins = winsRow?.wins ?? 0;
+
+  // 4. Get candidates from pool
+  const candidatesRaw = db.prepare(`
+    SELECT 
+      p.rider_id AS riderId,
+      p.weight AS weight,
+      p.probability AS probability,
+      COALESCE(p.old_team_id, (
+        SELECT team_id FROM contracts 
+        WHERE rider_id = p.rider_id AND end_season = ? - 1
+        ORDER BY end_season DESC LIMIT 1
+      )) AS oldTeamId,
+      COALESCE(ot.name, (
+        SELECT name FROM teams 
+        WHERE id = (
+          SELECT team_id FROM contracts 
+          WHERE rider_id = p.rider_id AND end_season = ? - 1
+          ORDER BY end_season DESC LIMIT 1
+        )
+      )) AS oldTeamName,
+      r.first_name AS firstName,
+      r.last_name AS lastName,
+      r.overall_rating AS overallRating,
+      r.pot_overall AS potential,
+      r.birth_year AS birthYear,
+      spec1.display_name AS specialization1,
+      spec2.display_name AS specialization2,
+      spec3.display_name AS specialization3,
+      c.code_3 AS countryCode
+    FROM draft_picks_pool p
+    JOIN riders r ON p.rider_id = r.id
+    LEFT JOIN teams ot ON p.old_team_id = ot.id
+    LEFT JOIN type_rider spec1 ON r.specialization_1_id = spec1.id
+    LEFT JOIN type_rider spec2 ON r.specialization_2_id = spec2.id
+    LEFT JOIN type_rider spec3 ON r.specialization_3_id = spec3.id
+    JOIN sta_country c ON r.country_id = c.id
+    WHERE p.season = ? AND p.pick_number = ?
+    ORDER BY p.probability DESC
+  `).all(season, season, season, pickNumber) as any[];
+
+  // 5. Get career wins of candidates
+  const candidateRiderIds = candidatesRaw.map(cand => cand.riderId);
+  const winsMap = new Map<number, number>();
+  if (candidateRiderIds.length > 0) {
+    const placeholders = candidateRiderIds.map(() => '?').join(',');
+    const winsRows = db.prepare(`
+      SELECT rider_id, SUM(gc_wins + stage_wins + one_day_wins) AS wins
+      FROM rider_career_category_stats
+      WHERE rider_id IN (${placeholders})
+      GROUP BY rider_id
+    `).all(...candidateRiderIds) as Array<{ rider_id: number; wins: number }>;
+
+    for (const row of winsRows) {
+      winsMap.set(row.rider_id, row.wins);
+    }
+  }
+
+  const candidates = candidatesRaw.map(cand => {
+    const uciRank = uciRanks.get(cand.riderId) ?? null;
+    const wins = winsMap.get(cand.riderId) ?? 0;
+    return {
+      riderId: cand.riderId,
+      firstName: cand.firstName,
+      lastName: cand.lastName,
+      countryCode: cand.countryCode,
+      specialization1: cand.specialization1 || null,
+      specialization2: cand.specialization2 || null,
+      specialization3: cand.specialization3 || null,
+      overallRating: cand.overallRating,
+      potential: cand.potential,
+      probability: cand.probability,
+      oldTeamId: cand.oldTeamId,
+      oldTeamName: cand.oldTeamName,
+      birthYear: cand.birthYear,
+      uciRank,
+      wins
+    };
+  });
+
+  return {
+    ...r,
+    candidates
+  };
+}
+
 export function createRouter(dbService: DatabaseService): Router {
   const router = Router();
   const routeImporter = new RouteImporter();
@@ -936,21 +1079,67 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 400, 'Nicht der Zug des Spieler-Teams.');
       }
 
-      // Execute the player's pick
-      draftService.executeSingleDraftPick(season, state.nextTeamId!, state.currentRound, state.currentPickNumber, riderId);
+      const pickNumber = state.currentPickNumber;
 
-      // Run subsequent KI picks until it's the player's turn again (or finished)
-      const result = draftService.executeNextPicksUntilPlayer(season, false);
+      // Execute only the player's pick
+      draftService.executeSingleDraftPick(season, state.nextTeamId!, state.currentRound, pickNumber, riderId);
+
+      // Check new pick state after the player pick
+      const nextState = draftService.getNextPickState(season);
 
       // If finished, complete the draft & season initialization
-      if (result.finished) {
+      if (nextState.finished) {
         const nextDate = getGss().loadState().currentDate;
         getGss().completeDraftAndInitializeSeason(season, nextDate);
       }
 
+      // Get the details of the pick just made
+      const pickDetails = getSinglePickDetails(db, season, pickNumber);
+
       ok(res, {
-        finished: result.finished,
-        playerTurn: result.playerTurn
+        finished: nextState.finished,
+        playerTurn: nextState.isPlayerTeam,
+        nextPickState: nextState,
+        pick: pickDetails
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/draft/:season/simulate-next', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const season = parseInt(req.params.season, 10);
+      const draftService = new RiderDraftService(db);
+      const state = draftService.getNextPickState(season);
+      if (state.finished) {
+        return fail(res, 400, 'Der Draft ist bereits beendet.');
+      }
+      if (state.isPlayerTeam) {
+        return fail(res, 400, 'Das Spieler-Team ist an der Reihe.');
+      }
+
+      const pickNumber = state.currentPickNumber;
+
+      // Execute one AI pick
+      draftService.executeSingleDraftPick(season, state.nextTeamId!, state.currentRound, pickNumber);
+
+      // Check new pick state after the AI pick
+      const nextState = draftService.getNextPickState(season);
+
+      // If finished, complete the draft & season initialization
+      if (nextState.finished) {
+        const nextDate = getGss().loadState().currentDate;
+        getGss().completeDraftAndInitializeSeason(season, nextDate);
+      }
+
+      // Get the details of the pick just made
+      const pickDetails = getSinglePickDetails(db, season, pickNumber);
+
+      ok(res, {
+        finished: nextState.finished,
+        playerTurn: nextState.isPlayerTeam,
+        nextPickState: nextState,
+        pick: pickDetails
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

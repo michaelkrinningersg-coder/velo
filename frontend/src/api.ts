@@ -107,6 +107,7 @@ export const api = {
   getDraftDetails:     (season: number) => call<any>('GET', `/api/draft/${season}/details`),
   getDraftState:       (season: number) => call<any>('GET', `/api/draft/${season}/state`),
   makeDraftPick:       (season: number, riderId: number) => call<any>('POST', `/api/draft/${season}/pick`, { riderId }),
+  simulateNextPick:    (season: number) => call<any>('POST', `/api/draft/${season}/simulate-next`),
   quickCompleteDraft:  (season: number) => call<any>('POST', `/api/draft/${season}/quick-complete`),
   getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
     call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),

@@ -328,6 +328,22 @@ export class RiderDraftService {
     // Spec counts for quotas
     const teamMap = this.getTeamSpecCounts(season, teamId);
 
+    // Count active strong riders (OVR >= 75) in each specialization for this team
+    const strongRiders = this.db.prepare(`
+      SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      WHERE c.team_id = ? AND c.status IN ('active', 'future') AND r.overall_rating >= 75
+      GROUP BY r.specialization_1_id
+    `).all(teamId) as Array<{ spec1Id: number | null; count: number }>;
+
+    const strongSpecsCount = new Map<number, number>();
+    for (const row of strongRiders) {
+      if (row.spec1Id !== null) {
+        strongSpecsCount.set(row.spec1Id, row.count);
+      }
+    }
+
     // Compute weights
     const poolDetails = pool.map((rider) => {
       let weight = 1.0;
@@ -402,6 +418,24 @@ export class RiderDraftService {
             factors.push(`${specLabel} Quota (+15)`);
           }
         }
+      }
+
+      // Concept 1 & 2: Diversification of strong riders (OVR >= 75)
+      const isStrong = rider.overall_rating >= 75;
+      const isRenewal = rider.old_team_id === teamId;
+
+      if (isStrong && !isRenewal && rider.specialization_1_id !== null) {
+        const existingStrongCount = strongSpecsCount.get(rider.specialization_1_id) ?? 0;
+        if (existingStrongCount >= 2) {
+          const penalty = 15.0;
+          weight -= penalty;
+          const specLabel = rider.specialization_1_id === 1 ? 'Berg' : rider.specialization_1_id === 2 ? 'Hügel' : rider.specialization_1_id === 3 ? 'Sprint' : rider.specialization_1_id === 4 ? 'ZF' : 'Cobble';
+          factors.push(`Spitzen-Diversifizierung: Bereits ${existingStrongCount} starke ${specLabel}fahrer (-${penalty})`);
+        }
+      }
+
+      if (weight < 0.01) {
+        weight = 0.01;
       }
 
       return { rider, weight, factors };
@@ -633,6 +667,22 @@ export class RiderDraftService {
     // Spec counts for quotas
     const teamMap = this.getTeamSpecCounts(season, teamId);
 
+    // Count active strong riders (OVR >= 75) in each specialization for this team
+    const strongRiders = this.db.prepare(`
+      SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
+      FROM contracts c
+      JOIN riders r ON c.rider_id = r.id
+      WHERE c.team_id = ? AND c.status IN ('active', 'future') AND r.overall_rating >= 75
+      GROUP BY r.specialization_1_id
+    `).all(teamId) as Array<{ spec1Id: number | null; count: number }>;
+
+    const strongSpecsCount = new Map<number, number>();
+    for (const row of strongRiders) {
+      if (row.spec1Id !== null) {
+        strongSpecsCount.set(row.spec1Id, row.count);
+      }
+    }
+
     // Compute weights
     const poolDetails = pool.map((rider) => {
       let weight = 1.0;
@@ -707,6 +757,24 @@ export class RiderDraftService {
             factors.push(`${specLabel} Quota (+15)`);
           }
         }
+      }
+
+      // Concept 1 & 2: Diversification of strong riders (OVR >= 75)
+      const isStrong = rider.overall_rating >= 75;
+      const isRenewal = rider.old_team_id === teamId;
+
+      if (isStrong && !isRenewal && rider.specialization_1_id !== null) {
+        const existingStrongCount = strongSpecsCount.get(rider.specialization_1_id) ?? 0;
+        if (existingStrongCount >= 2) {
+          const penalty = 15.0;
+          weight -= penalty;
+          const specLabel = rider.specialization_1_id === 1 ? 'Berg' : rider.specialization_1_id === 2 ? 'Hügel' : rider.specialization_1_id === 3 ? 'Sprint' : rider.specialization_1_id === 4 ? 'ZF' : 'Cobble';
+          factors.push(`Spitzen-Diversifizierung: Bereits ${existingStrongCount} starke ${specLabel}fahrer (-${penalty})`);
+        }
+      }
+
+      if (weight < 0.01) {
+        weight = 0.01;
       }
 
       return { rider, weight, factors };

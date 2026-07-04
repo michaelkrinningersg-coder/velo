@@ -355,8 +355,6 @@ export class GameStateService {
               draft_season = ?
           WHERE id = 1
         `).run(nextSeason);
-
-        draftService.executeNextPicksUntilPlayer(nextSeason, false);
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);

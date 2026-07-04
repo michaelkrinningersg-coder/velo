@@ -75,6 +75,8 @@ export function renderDraftView(): void {
   if (state.gameState?.draftStatus === 'active') {
     if (toolbar) toolbar.classList.add('hidden');
     const draftSeason = state.gameState.draftSeason || state.currentSave?.currentSeason || 2026;
+    const currentPick = state.gameState?.draftCurrentPickNumber || 1;
+    const btnLabel = currentPick > 1 ? 'DRAFT FORTSETZEN' : 'DRAFT STARTEN';
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; background: rgba(30, 41, 59, 0.7); border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; max-width: 600px; margin: 2rem auto; text-align: center; color: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
         <div style="font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));">🏆</div>
@@ -83,7 +85,7 @@ export function renderDraftView(): void {
           Der jährliche Fahrerdraft für die Saison ${draftSeason} hat begonnen! Als Manager deines Teams triffst du deine Entscheidungen interaktiv.
         </p>
         <button id="draft-start-interactive-btn" class="btn btn-primary" style="padding: 0.85rem 2rem; font-size: 1.2rem; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4); transition: transform 0.2s, box-shadow 0.2s;">
-          DRAFT STARTEN & REPLAY ANSEHEN
+          ${btnLabel}
         </button>
       </div>
     `;
@@ -744,6 +746,13 @@ function createDraftOverlayElement(season: number): HTMLElement {
           state.draftOverlayAuto = false;
         }
         showDraftPick(state.draftOverlayCurrentIndex + 1);
+      } else if (state.draftOverlayPicks && state.draftOverlayCurrentIndex === state.draftOverlayPicks.length && state.gameState?.draftStatus === 'active') {
+        const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
+        if (autoCheckbox) {
+          autoCheckbox.checked = false;
+          state.draftOverlayAuto = false;
+        }
+        void triggerLiveAiPick();
       } else if (state.draftOverlayPicks && state.draftOverlayCurrentIndex + 1 === state.draftOverlayPicks.length && state.gameState?.draftStatus === 'active') {
         const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
         if (autoCheckbox) {
@@ -1023,7 +1032,6 @@ export async function startDraftPresentation(season: number): Promise<void> {
   clearDraftTimeouts();
   state.draftOverlayActive = true;
   state.draftOverlayAuto = true;
-  state.draftOverlayCurrentIndex = 0;
   state.draftSelectedSeason = season;
   
   state.draftSpeedMultiplier = 1;
@@ -1031,7 +1039,7 @@ export async function startDraftPresentation(season: number): Promise<void> {
   (state as any).draftRevealShown = false;
   (state as any).selectedDraftRiderId = null;
   
-  showLoading('Draft-Präsentation wird geladen...');
+  showLoading('Fahrerdraft wird geladen...');
   try {
     const [res, ridersRes, teamsRes] = await Promise.all([
       api.getDraftDetails(season),
@@ -1047,10 +1055,14 @@ export async function startDraftPresentation(season: number): Promise<void> {
     }
     
     state.draftOverlayPicks = res.success && res.data ? res.data.picks : [];
+    
+    // Start directly at the current index (frontier of completed picks)
+    state.draftOverlayCurrentIndex = state.draftOverlayPicks ? state.draftOverlayPicks.length : 0;
+    
     createDraftOverlayElement(season);
 
-    if (state.draftOverlayPicks && state.draftOverlayPicks.length > 0) {
-      showDraftPick(0);
+    if (state.draftOverlayPicks && state.draftOverlayCurrentIndex < state.draftOverlayPicks.length) {
+      showDraftPick(state.draftOverlayCurrentIndex);
     } else {
       if (state.gameState?.draftStatus === 'active') {
         void renderActivePlayerTurn();
@@ -1124,9 +1136,13 @@ async function renderActivePlayerTurn(): Promise<void> {
   }
 
   const prevBtn = document.getElementById('draft-overlay-prev-btn') as HTMLButtonElement;
-  if (prevBtn) prevBtn.disabled = true;
+  if (prevBtn) {
+    prevBtn.disabled = state.draftOverlayCurrentIndex === 0;
+  }
   const nextBtn = document.getElementById('draft-overlay-next-btn') as HTMLButtonElement;
-  if (nextBtn) nextBtn.disabled = true;
+  if (nextBtn) {
+    nextBtn.disabled = draftState.isPlayerTeam;
+  }
 
   const candList = document.getElementById('draft-overlay-candidates-list');
   if (candList) {
@@ -1137,7 +1153,7 @@ async function renderActivePlayerTurn(): Promise<void> {
         return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
       }).join('');
     } else {
-      candList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 1rem;">Warte auf den Zug der KI...</div>';
+      candList.innerHTML = `<div style="color: #64748b; font-style: italic; padding: 1rem;">Warte auf den Zug der KI für ${esc(draftState.nextTeamName || 'Team')}...</div>`;
     }
   }
 
@@ -1168,6 +1184,23 @@ async function renderActivePlayerTurn(): Promise<void> {
             Wähle links einen Fahrer aus dem Pool aus, um Details anzuzeigen und ihn zu verpflichten.
           </div>
         `;
+      }
+    } else {
+      displayWrap.innerHTML = `
+        <div style="font-size: 1.3rem; font-weight: 500; color: #94a3b8; display: flex; flex-direction: column; align-items: center; gap: 2.25rem; transform: translateY(-20px);">
+          <div style="filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5)); display: flex; align-items: center; justify-content: center; width: 120px; height: 120px;">
+            ${getDraftRiderJerseyHtml(draftState.nextTeamId, draftState.nextTeamName, 120)}
+          </div>
+          <span>KI-Team am Zug...</span>
+        </div>
+      `;
+
+      // If auto progress is checked, automatically simulate next pick after a short delay
+      if (state.draftOverlayAuto) {
+        const delay = 1500 / state.draftSpeedMultiplier;
+        (state as any).draftOverlayTimer2 = window.setTimeout(() => {
+          void triggerLiveAiPick();
+        }, delay);
       }
     }
   }
@@ -1286,44 +1319,39 @@ async function submitPlayerDraftPick(riderId: number): Promise<void> {
 
     (state as any).selectedDraftRiderId = null;
 
-    const [detailsRes, ridersRes, teamsRes] = await Promise.all([
-      api.getDraftDetails(season),
-      api.getRiders(undefined, false, true, season),
-      api.getTeams(),
-    ]);
+    const { pick, nextPickState } = res.data;
+    if (pick) {
+      // 1. Update the rider's active team locally for real-time header counts
+      const rider = state.riders.find(r => r.id === pick.riderId);
+      if (rider) {
+        rider.activeTeamId = pick.teamId;
+      }
 
-    if (ridersRes.success && ridersRes.data) {
-      state.riders = ridersRes.data;
-    }
-    if (teamsRes.success && teamsRes.data) {
-      state.teams = teamsRes.data;
-    }
+      // 2. Append the pick to list of picks
+      if (!state.draftOverlayPicks) {
+        state.draftOverlayPicks = [];
+      }
+      state.draftOverlayPicks.push(pick);
 
-    if (detailsRes.success && detailsRes.data) {
-      const oldLength = state.draftOverlayPicks?.length ?? 0;
-      state.draftOverlayPicks = detailsRes.data.picks;
-      
-      // Auto-advance wieder aktivieren, damit die nachfolgenden KI-Picks durchlaufen
+      // 3. Update index and reveal state
+      state.draftOverlayCurrentIndex = state.draftOverlayPicks.length - 1;
+      (state as any).draftRevealShown = false;
+
+      // 4. Update the game state pick number
+      if (state.gameState) {
+        state.gameState.draftCurrentPickNumber = nextPickState.currentPickNumber;
+        state.gameState.draftStatus = nextPickState.finished ? 'completed' : 'active';
+      }
+
+      // 5. Restore auto progress by default
+      state.draftOverlayAuto = true;
       const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
       if (autoCheckbox) {
         autoCheckbox.checked = true;
       }
-      state.draftOverlayAuto = true;
 
-      if (state.draftOverlayPicks && state.draftOverlayPicks.length > oldLength) {
-        state.draftOverlayActive = true;
-        state.draftOverlayCurrentIndex = oldLength;
-        (state as any).draftRevealShown = true;
-        
-        hideLoading();
-        
-        // Erst Standard-Header & -Knöpfe initialisieren, dann direkt den aufgedeckten Pick rendern
-        showDraftPick(oldLength);
-        revealCurrentPick();
-      } else {
-        hideLoading();
-        void renderActivePlayerTurn();
-      }
+      hideLoading();
+      showDraftPick(state.draftOverlayCurrentIndex);
     } else {
       hideLoading();
       void renderActivePlayerTurn();
@@ -1331,6 +1359,69 @@ async function submitPlayerDraftPick(riderId: number): Promise<void> {
   } catch (e) {
     hideLoading();
     alert('Fehler beim Übermitteln des Picks: ' + (e as Error).message);
+  }
+}
+
+async function triggerLiveAiPick(): Promise<void> {
+  clearDraftTimeouts();
+  const season = state.draftSelectedSeason || state.currentSave?.currentSeason || 2026;
+  
+  const displayWrap = document.getElementById('draft-overlay-pick-display');
+  if (displayWrap) {
+    displayWrap.innerHTML = `
+      <div style="font-size: 1.3rem; font-weight: 500; color: #94a3b8; display: flex; flex-direction: column; align-items: center; gap: 2.25rem; transform: translateY(-20px);">
+        <div style="animation: pulse 1s infinite alternate; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5)); display: flex; align-items: center; justify-content: center; width: 120px; height: 120px;">
+          ${getDraftRiderJerseyHtml(null, null, 120)}
+        </div>
+        <style>
+          @keyframes pulse {
+            from { opacity: 0.4; transform: scale(0.92); }
+            to { opacity: 1; transform: scale(1.08); }
+          }
+        </style>
+        <span>Simuliere Zug der KI...</span>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await api.simulateNextPick(season);
+    if (!res.success) {
+      alert('Fehler beim Simulieren des KI-Zugs: ' + res.error);
+      return;
+    }
+
+    const { pick, nextPickState } = res.data;
+    if (pick) {
+      // 1. Update the rider's active team locally for real-time header counts
+      const rider = state.riders.find(r => r.id === pick.riderId);
+      if (rider) {
+        rider.activeTeamId = pick.teamId;
+      }
+
+      // 2. Append the pick to list of picks
+      if (!state.draftOverlayPicks) {
+        state.draftOverlayPicks = [];
+      }
+      state.draftOverlayPicks.push(pick);
+
+      // 3. Update index and reveal state
+      state.draftOverlayCurrentIndex = state.draftOverlayPicks.length - 1;
+      (state as any).draftRevealShown = false;
+
+      // 4. Update the game state pick number
+      if (state.gameState) {
+        state.gameState.draftCurrentPickNumber = nextPickState.currentPickNumber;
+        state.gameState.draftStatus = nextPickState.finished ? 'completed' : 'active';
+      }
+
+      showDraftPick(state.draftOverlayCurrentIndex);
+    } else {
+      void renderActivePlayerTurn();
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Fehler beim Simulieren des KI-Zugs: ' + (e as Error).message);
   }
 }
 
