@@ -910,6 +910,7 @@ export interface RiderCareerStats {
   homePressureDays?: number;
   breakawayKms?: number;
   superteamCount: number;
+  totalKm?: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;

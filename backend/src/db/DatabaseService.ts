@@ -1485,6 +1485,7 @@ export class DatabaseService {
       ['home_advantage_days', 'INTEGER NOT NULL DEFAULT 0'],
       ['super_home_advantage_days', 'INTEGER NOT NULL DEFAULT 0'],
       ['home_pressure_days', 'INTEGER NOT NULL DEFAULT 0'],
+      ['total_km', 'REAL NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
@@ -1496,6 +1497,7 @@ export class DatabaseService {
     const seasonColumns = [
       ['successful_breakaways', 'INTEGER NOT NULL DEFAULT 0'],
       ['race_days', 'INTEGER NOT NULL DEFAULT 0'],
+      ['total_km', 'REAL NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of seasonColumns) {
@@ -1628,7 +1630,8 @@ export class DatabaseService {
           supermalus_days = COALESCE((SELECT SUM(supermalus_days) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0),
           home_advantage_days = COALESCE((SELECT SUM(home_advantage_days) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0),
           super_home_advantage_days = COALESCE((SELECT SUM(super_home_advantage_days) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0),
-          home_pressure_days = COALESCE((SELECT SUM(home_pressure_days) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0)
+          home_pressure_days = COALESCE((SELECT SUM(home_pressure_days) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0),
+          total_km = COALESCE((SELECT SUM(total_km) FROM rider_season_stats WHERE rider_season_stats.rider_id = rider_career_stats.rider_id), 0)
       WHERE rider_id = ?
     `);
 

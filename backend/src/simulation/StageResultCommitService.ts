@@ -1362,17 +1362,21 @@ export class StageResultCommitService {
       const winnerRow = stageRows.find((r: any) => r.rank === 1);
       const isBreakawayWinner = winnerRow && winnerRow.riderId != null && breakawayRiderIds.has(winnerRow.riderId);
 
+      const stageDistanceKm = stage.distanceKm ?? 0;
+
       const updateFinishedStats = this.db.prepare(`
         UPDATE rider_career_stats
         SET race_days = race_days + 1,
-            successful_breakaways = successful_breakaways + ?
+            successful_breakaways = successful_breakaways + ?,
+            total_km = total_km + ?
         WHERE rider_id = ?
       `);
 
       const updateFinishedSeasonStats = this.db.prepare(`
         UPDATE rider_season_stats
         SET race_days = race_days + 1,
-            successful_breakaways = successful_breakaways + ?
+            successful_breakaways = successful_breakaways + ?,
+            total_km = total_km + ?
         WHERE rider_id = ? AND season = ?
       `);
 
@@ -1499,8 +1503,8 @@ export class StageResultCommitService {
               getOrCreateCareerCategoryStats.run(rId, categoryName);
 
               const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
-              updateFinishedStats.run(isSuccess, rId);
-              updateFinishedSeasonStats.run(isSuccess, rId, currentSeason);
+              updateFinishedStats.run(isSuccess, stageDistanceKm, rId);
+              updateFinishedSeasonStats.run(isSuccess, stageDistanceKm, rId, currentSeason);
               updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
               updateFinishedCareerCategoryStats.run(rId, categoryName);
 
@@ -1531,8 +1535,8 @@ export class StageResultCommitService {
         getOrCreateCareerCategoryStats.run(rId, categoryName);
 
         const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
-        updateFinishedStats.run(isSuccess, rId);
-        updateFinishedSeasonStats.run(isSuccess, rId, currentSeason);
+        updateFinishedStats.run(isSuccess, stageDistanceKm, rId);
+        updateFinishedSeasonStats.run(isSuccess, stageDistanceKm, rId, currentSeason);
         updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
         updateFinishedCareerCategoryStats.run(rId, categoryName);
 

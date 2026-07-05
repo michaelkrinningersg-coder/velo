@@ -1170,7 +1170,7 @@ export class RiderRepository {
                  illnesses, illness_days, injuries, injury_days, superteam_count,
                  dns_count, dnf_count, otl_count, breakaway_kms, successful_breakaways,
                  race_days, superform_days, supermalus_days, home_advantage_days,
-                 super_home_advantage_days, home_pressure_days
+                 super_home_advantage_days, home_pressure_days, total_km
           FROM rider_career_stats
           WHERE rider_id = ?
         `).get(riderId) as {
@@ -1195,6 +1195,7 @@ export class RiderRepository {
           home_advantage_days: number;
           super_home_advantage_days: number;
           home_pressure_days: number;
+          total_km: number;
         } | undefined
       : undefined;
 
@@ -1216,6 +1217,7 @@ export class RiderRepository {
     const homeAdvantageDays = careerStatsRow?.home_advantage_days ?? 0;
     const superHomeAdvantageDays = careerStatsRow?.super_home_advantage_days ?? 0;
     const homePressureDays = careerStatsRow?.home_pressure_days ?? 0;
+    const totalKm = careerStatsRow?.total_km ?? 0;
 
     const categories: RiderCareerStats['categories'] = {};
 
@@ -1417,6 +1419,7 @@ export class RiderRepository {
       homePressureDays,
       breakawayKms,
       superteamCount,
+      totalKm,
       categories,
     };
   }
