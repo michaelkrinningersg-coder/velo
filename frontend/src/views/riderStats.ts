@@ -2443,12 +2443,28 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
   }
 
   const currentSeason = state.gameState?.season ?? 2026;
+
+  // Per-Saison-Aggregation aus dem Payload (keine Datenfeld-Aenderung noetig)
+  const raceDaysBySeason = new Map<number, number>((payload?.careerRaceDaysBySeason ?? []).map((r) => [r.season, r.raceDays]));
+  const seasonAgg = new Map<number, { wins: number; points: number }>();
+  for (const s of payload?.seasons ?? []) {
+    let wins = 0;
+    let points = 0;
+    for (const block of s.raceBlocks ?? []) {
+      for (const row of block.rows ?? []) {
+        points += row.seasonPoints ?? 0;
+        if ((row.rowType === 'stage_result' && row.resultRank === 1) || (row.rowType === 'gc_final' && row.resultRank === 1)) wins++;
+      }
+    }
+    seasonAgg.set(s.season, { wins, points });
+  }
+
   const yearlySteps: Array<{
     season: number;
     teamId: number | null;
     teamName: string | null;
     roleName: string | null;
-    statusText: string;
+    status: 'active' | 'future' | 'expired';
   }> = [];
 
   for (const c of contracts) {
@@ -2461,60 +2477,74 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
       } else {
         roleName = payload?.seasonRoles?.find(sr => sr.season === yr)?.roleName || '-';
       }
-
-      const statusText = yr === currentSeason ? '<span style="color: #22c55e; font-weight: bold;">Aktiv</span>'
-                       : yr > currentSeason ? '<span style="color: #60a5fa; font-weight: bold;">Zukünftig</span>'
-                       : '<span style="color: #94a3b8;">Abgelaufen</span>';
-
       yearlySteps.push({
         season: yr,
         teamId: c.teamId,
         teamName: c.teamName,
         roleName,
-        statusText
+        status: yr === currentSeason ? 'active' : (yr > currentSeason ? 'future' : 'expired'),
       });
     }
   }
-
-  // Absteigend nach Jahr sortieren
   yearlySteps.sort((a, b) => b.season - a.season);
 
-  const rowsHtml = yearlySteps.map(step => {
-    const jerseyHtml = step.teamId ? renderMiniJersey(step.teamId, step.teamName) : '';
-    const teamLink = step.teamId 
-      ? renderTeamNameLink(step.teamName || '', step.teamId, true, 'results-rider-link') 
-      : 'Freier Fahrer (Free Agent)';
-    const teamCellHtml = step.teamId 
-      ? `<div style="display: flex; align-items: center; gap: 0.5rem;">${jerseyHtml} <span style="vertical-align: middle;">${teamLink}</span></div>`
-      : `<span style="color: #94a3b8; font-style: italic;">${teamLink}</span>`;
+  // Kopf: aktuelles Team + Vertragslaufzeit
+  const activeContract = contracts.find((c) => c.startSeason <= currentSeason && c.endSeason >= currentSeason) ?? null;
+  const headerTeamId = activeContract?.teamId ?? payload?.teamId ?? null;
+  const headerTeamName = activeContract?.teamName ?? payload?.teamName ?? 'Ohne Team';
+  const headerJersey = headerTeamId
+    ? `<img src="${esc(resolveTeamJerseyAssetPath(headerTeamId))}" alt="${esc(headerTeamName)}" style="width:40px;height:40px;object-fit:contain;flex:0 0 auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';" />`
+    : '';
 
+  const statusPill = (status: 'active' | 'future' | 'expired'): string => {
+    if (status === 'active') return '<span style="font-size:11px;font-weight:700;color:#86efac;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.32);padding:3px 10px;border-radius:99px;">Aktiv</span>';
+    if (status === 'future') return '<span style="font-size:11px;font-weight:700;color:#93c5fd;background:rgba(59,130,246,.14);border:1px solid rgba(59,130,246,.34);padding:3px 10px;border-radius:99px;">Zukünftig</span>';
+    return '<span style="font-size:11px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:3px 10px;border-radius:99px;">Ausgelaufen</span>';
+  };
+
+  const GRID = 'display:grid;grid-template-columns:70px minmax(120px,1fr) 96px 104px 74px 56px 82px 52px;gap:10px;align-items:center;';
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+
+  const rowsHtml = yearlySteps.map((step) => {
+    const agg = seasonAgg.get(step.season);
+    const raceDays = raceDaysBySeason.get(step.season) ?? (step.season === currentSeason ? (payload?.currentSeasonRaceDays ?? 0) : 0);
+    const wins = step.status === 'future' ? '–' : String(agg?.wins ?? 0);
+    const points = step.status === 'future' ? '–' : String(agg?.points ?? (step.season === currentSeason ? (payload?.currentSeasonPoints ?? 0) : 0));
+    const uci = step.season === currentSeason && payload?.currentSeasonRank != null ? `#${payload.currentSeasonRank}` : '–';
+    const teamCell = step.teamId
+      ? `<span style="display:inline-flex;align-items:center;gap:9px;min-width:0;">${renderMiniJersey(step.teamId, step.teamName)}<span style="font-size:12.5px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(step.teamName ?? '')}</span></span>`
+      : '<span style="font-size:12.5px;color:#94a3b8;font-style:italic;">Free Agent</span>';
     return `
-      <tr>
-        <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center; font-weight: bold; color: #fff;">Saison ${step.season}</td>
-        <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-weight: 500;">${teamCellHtml}</td>
-        <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center; color: #ccc;">${esc(step.roleName || '-')}</td>
-        <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${step.statusText}</td>
-      </tr>
-    `;
+      <div style="${GRID}padding:9px 14px;border-top:1px solid #14203a;">
+        <span style="${MONOF};font-size:13px;font-weight:700;color:#e2e8f0;">${step.season}</span>
+        ${teamCell}
+        <span style="font-size:12px;color:#9fb0c9;">${esc(step.roleName || '-')}</span>
+        <span>${statusPill(step.status)}</span>
+        <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${step.status === 'future' ? '–' : raceDays}</span>
+        <span style="${MONOF};font-size:12px;color:#fbbf24;justify-self:end;">${wins}</span>
+        <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${points}</span>
+        <span style="${MONOF};font-size:12px;color:#22d3ee;justify-self:end;">${uci}</span>
+      </div>`;
   }).join('');
 
   return `
-    <section class="rider-stats-section" style="margin-top: 1.5rem;">
-      <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: #fff;">Vertragshistorie</h3>
-      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left;">
-          <thead>
-            <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02);">
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center; width: 15%;">Saison</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: left; width: 45%;">Team</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center; width: 25%;">Rolle</th>
-              <th style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center; width: 15%;">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
+    <section class="rider-stats-section" style="margin-top: 1rem;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+        ${headerJersey}
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16px;font-weight:800;color:#f1f5f9;">${esc(headerTeamName)}</div>
+          <div style="${MONOF};font-size:11px;color:#8494ad;">${activeContract ? `aktueller Vertrag bis ${activeContract.endSeason}` : 'kein aktiver Vertrag'}</div>
+        </div>
+        ${activeContract ? '<span style="font-size:11px;font-weight:700;color:#86efac;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.32);padding:5px 12px;border-radius:99px;">Vertrag aktiv</span>' : ''}
+      </div>
+      <div style="border-radius:14px;border:1px solid #1e2c49;background:#0c1526;padding:16px 18px;">
+        <div style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;margin-bottom:13px;">VERTRÄGE &amp; SAISON-BILANZ</div>
+        <div style="border-radius:12px;overflow:hidden;border:1px solid #16233c;">
+          <div style="${GRID}padding:8px 14px;${MONOF};font-size:9px;letter-spacing:.05em;color:#5a6a85;background:#0a1122;border-bottom:1px solid #16233c;">
+            <span>SAISON</span><span>TEAM</span><span>ROLLE</span><span>STATUS</span><span style="justify-self:end;">RENNTAGE</span><span style="justify-self:end;">SIEGE</span><span style="justify-self:end;">PUNKTE</span><span style="justify-self:end;">UCI</span>
+          </div>
+          ${rowsHtml}
+        </div>
       </div>
     </section>
   `;
