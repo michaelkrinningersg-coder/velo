@@ -308,47 +308,52 @@ export async function renderLeaderboard(): Promise<void> {
   emptyEl.classList.add('hidden');
   tableEl.classList.remove('hidden');
 
-  // Render headers
+  // Broadcast-Grid: Kopf + Zeilen
   const isLeadout = activeMetricKey === 'highest_leadout_bonus';
   const isLieutenant = activeMetricKey === 'strongest_lieutenants';
-  if (activeScope === 'riders') {
-    theadEl.innerHTML = `
-      <tr>
-        <th style="width: 60px; text-align: center;">Platz</th>
-        <th style="width: 50px; text-align: center;">Trikot</th>
-        <th style="width: 60px; text-align: center;">Land</th>
-        <th>Fahrer</th>
-        <th>Team</th>
-        ${isLeadout ? '<th>Rennen / Etappe / Jahr</th>' : ''}
-        ${isLieutenant ? '<th>Fährt für</th>' : ''}
-        <th style="text-align: right; width: 180px;">Wert</th>
-      </tr>
-    `;
-  } else {
-    theadEl.innerHTML = `
-      <tr>
-        <th style="width: 60px; text-align: center;">Platz</th>
-        <th style="width: 60px; text-align: center;">Trikot</th>
-        <th>Team</th>
-        ${isLeadout ? '<th>Rennen / Etappe / Jahr</th>' : ''}
-        <th style="text-align: right; width: 180px;">Wert</th>
-      </tr>
-    `;
-  }
+  const MONO = "font-family:'JetBrains Mono',monospace;";
+
+  const cardTitle = $('leaderboard-card-title');
+  const cardCount = $('leaderboard-card-count');
+  if (cardTitle) cardTitle.textContent = activeScope === 'teams' ? 'Team-Rangliste' : 'Fahrer-Rangliste';
+  if (cardCount) cardCount.textContent = `${filteredData.length} ${activeScope === 'teams' ? 'Teams' : 'Fahrer'}`;
+
+  const cols = (activeScope === 'riders'
+    ? ['52px', '44px', '44px', 'minmax(150px,1.4fr)', 'minmax(90px,.8fr)',
+        ...(isLeadout ? ['minmax(160px,1fr)'] : []),
+        ...(isLieutenant ? ['minmax(150px,1fr)'] : []),
+        '130px']
+    : ['52px', '44px', 'minmax(180px,1fr)',
+        ...(isLeadout ? ['minmax(150px,1fr)'] : []),
+        '130px']).join(' ');
+
+  theadEl.style.gridTemplateColumns = cols;
+  theadEl.innerHTML = activeScope === 'riders'
+    ? `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span style="justify-self:center;">LAND</span><span>FAHRER</span><span>TEAM</span>${isLeadout ? '<span>RENNEN / ETAPPE / JAHR</span>' : ''}${isLieutenant ? '<span>FÄHRT FÜR</span>' : ''}<span style="justify-self:end;">WERT</span>`
+    : `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span>TEAM</span>${isLeadout ? '<span>RENNEN / ETAPPE / JAHR</span>' : ''}<span style="justify-self:end;">WERT</span>`;
+
+  const rankColor = (r: number): string => r === 1 ? '#fbbf24' : r === 2 ? '#cbd5e1' : r === 3 ? '#d08b5b' : '#9fb0c9';
+  const podium = (r: number): string => r === 1
+    ? 'box-shadow:inset 3px 0 0 #fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.08),transparent 55%);'
+    : r === 2 ? 'box-shadow:inset 3px 0 0 #cbd5e1;background:linear-gradient(90deg,rgba(203,213,225,.07),transparent 55%);'
+    : r === 3 ? 'box-shadow:inset 3px 0 0 #d08b5b;background:linear-gradient(90deg,rgba(208,139,91,.07),transparent 55%);'
+    : '';
+  const rowAlign = activeScope === 'teams' ? 'start' : 'center';
 
   // Render rows
   let html = '';
   let rank = 1;
   for (const row of filteredData) {
     const displayRank = rank++;
-    const rankBadgeClass = displayRank === 1 ? 'badge-primary' : displayRank <= 3 ? 'badge-secondary' : 'badge-ghost';
-    const rankHtml = `<span class="badge ${rankBadgeClass}" style="min-width: 28px; text-align: center; display: inline-block;">${displayRank}</span>`;
-    const jerseyHtml = renderMiniJersey(row.teamId, row.teamName);
+    const rankHtml = `<span style="text-align:center;${MONO}font-size:15px;font-weight:800;color:${rankColor(displayRank)};">${displayRank}</span>`;
+    const jerseyHtml = `<span style="display:flex;justify-content:center;">${renderMiniJersey(row.teamId, row.teamName)}</span>`;
+    const rowStyle = `display:grid;grid-template-columns:${cols};gap:9px;align-items:${rowAlign};padding:9px 16px;border-top:1px solid #14203a;${podium(displayRank)}`;
+    const valueHtml = `<span style="${MONO}text-align:right;justify-self:end;font-weight:800;color:#4ade80;">${esc(String(row.value))}</span>`;
 
     let leadoutCell = '';
     if (isLeadout) {
       const stageLabel = row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–';
-      leadoutCell = `<td style="vertical-align: middle;">${esc(row.raceName ?? '–')} · ${esc(stageLabel)} · ${esc(String(row.season ?? '–'))}</td>`;
+      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.raceName ?? '–')} · ${esc(stageLabel)} · ${esc(String(row.season ?? '–'))}</span>`;
     }
 
     let lieutenantCell = '';
@@ -358,46 +363,44 @@ export async function renderLeaderboard(): Promise<void> {
         const leaderFlag = det.leaderNationality ? renderFlag(det.leaderNationality) : '';
         const roleLabel = det.leaderRoleName ? ` (${det.leaderRoleName})` : '';
         lieutenantCell = `
-          <td style="vertical-align: middle;">
-            <span style="display: inline-flex; align-items: center; gap: 0.25rem;">
-              ${leaderFlag}
-              <a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${det.leaderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">
-                ${esc(det.leaderFirstName)} ${esc(det.leaderLastName)}
-              </a>
-              <span class="text-muted" style="font-size: 0.85em;">${esc(roleLabel)}</span>
-            </span>
-          </td>
+          <span style="min-width:0;overflow:hidden;display:inline-flex; align-items: center; gap: 0.25rem;">
+            ${leaderFlag}
+            <a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${det.leaderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">
+              ${esc(det.leaderFirstName)} ${esc(det.leaderLastName)}
+            </a>
+            <span class="text-muted" style="font-size: 0.85em;">${esc(roleLabel)}</span>
+          </span>
         `;
       } else {
-        lieutenantCell = `<td style="vertical-align: middle;">–</td>`;
+        lieutenantCell = `<span style="color:#5f6f8a;">–</span>`;
       }
     }
 
     if (activeScope === 'riders') {
-      const flagHtml = row.nationality ? renderFlag(row.nationality) : '—';
+      const flagHtml = `<span style="display:flex;justify-content:center;">${row.nationality ? renderFlag(row.nationality) : '—'}</span>`;
       const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
       const teamHtml = (row.teamAbbr && row.teamId != null)
         ? `<a href="#" onclick="event.preventDefault(); openTeamStatsFromLeaderboard(${row.teamId})" style="color: #94a3b8; text-decoration: none; hover: text-decoration: underline;" title="${esc(row.teamName ?? '')}">${esc(row.teamAbbr)}</a>`
         : (row.teamAbbr ? `<span class="text-muted" title="${esc(row.teamName ?? '')}">${esc(row.teamAbbr)}</span>` : '—');
 
       html += `
-        <tr>
-          <td style="text-align: center; vertical-align: middle;">${rankHtml}</td>
-          <td style="text-align: center; vertical-align: middle;">${jerseyHtml}</td>
-          <td style="text-align: center; vertical-align: middle;">${flagHtml}</td>
-          <td style="vertical-align: middle;">${riderName}</td>
-          <td style="vertical-align: middle;">${teamHtml}</td>
+        <div style="${rowStyle}">
+          ${rankHtml}
+          ${jerseyHtml}
+          ${flagHtml}
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${riderName}</span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teamHtml}</span>
           ${leadoutCell}
           ${lieutenantCell}
-          <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
-        </tr>
+          ${valueHtml}
+        </div>
       `;
     } else {
       let teamNameHtml = '';
       if (row.leadoutDetails) {
         const det = row.leadoutDetails;
         const sprinterFlag = det.sprinterNationality ? renderFlag(det.sprinterNationality) : '';
-        
+
         teamNameHtml = `
           <div style="font-weight: bold; font-size: 0.95rem; color: #fff;">
             <a href="#" onclick="event.preventDefault(); openTeamStatsFromLeaderboard(${row.teamId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">
@@ -433,13 +436,13 @@ export async function renderLeaderboard(): Promise<void> {
       }
 
       html += `
-        <tr>
-          <td style="text-align: center; vertical-align: middle;">${rankHtml}</td>
-          <td style="text-align: center; vertical-align: middle;">${jerseyHtml}</td>
-          <td style="vertical-align: middle; padding: 0.6rem 0.75rem;">${teamNameHtml}</td>
+        <div style="${rowStyle}">
+          ${rankHtml}
+          ${jerseyHtml}
+          <span style="min-width:0;">${teamNameHtml}</span>
           ${leadoutCell}
-          <td style="text-align: right; font-weight: bold; color: #34d399; vertical-align: middle;">${esc(String(row.value))}</td>
-        </tr>
+          ${valueHtml}
+        </div>
       `;
     }
   }

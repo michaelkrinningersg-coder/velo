@@ -604,10 +604,14 @@
 
         <div id="leaderboard-empty" class="results-empty">Wähle eine Statistik aus den Dropdowns oben aus, um die Rangliste zu laden.</div>
 
-        <table class="data-table hidden" id="leaderboard-table">
-          <thead id="leaderboard-thead"></thead>
-          <tbody id="leaderboard-tbody"></tbody>
-        </table>
+        <div class="results-grid-card hidden" id="leaderboard-table">
+          <div class="results-grid-cardhead">
+            <span class="results-card-title" id="leaderboard-card-title">Rangliste</span>
+            <span class="results-card-count" id="leaderboard-card-count"></span>
+          </div>
+          <div id="leaderboard-thead" class="results-grid-head"></div>
+          <div id="leaderboard-tbody" class="results-grid-body"></div>
+        </div>
       </div>
 
       <!-- Stage Editor -->
