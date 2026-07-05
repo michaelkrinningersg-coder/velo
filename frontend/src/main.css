@@ -1033,13 +1033,13 @@ html, body {
   overflow-x: auto;
   overflow-y: visible;
   overscroll-behavior-x: contain;
-  border: 1px solid rgba(148, 163, 184, .14);
+  border: 1px solid #1c2b47;
   border-radius: .5rem;
 }
 
 .data-table-teams thead th,
 .data-table-teams tbody td {
-  border-right: 1px solid rgba(148, 163, 184, .14);
+  border-right: 1px solid #16233c;
 }
 
 .data-table-teams thead th:last-child,
@@ -1065,13 +1065,13 @@ html, body {
 }
 
 .team-table-sort:hover {
-  background: rgba(96, 165, 250, .08);
-  color: #fff;
+  background: rgba(34, 211, 238, .08);
+  color: #e2e8f0;
 }
 
 .team-table-sort-active {
-  background: rgba(96, 165, 250, .12);
-  color: #fff;
+  background: rgba(34, 211, 238, .12);
+  color: #22d3ee;
 }
 
 .team-table-sort-label {
@@ -1085,21 +1085,21 @@ html, body {
   align-items: center;
   justify-content: center;
   min-width: 1.2rem;
-  color: rgba(191, 219, 254, .82);
+  color: rgba(34, 211, 238, .7);
   font-size: .98rem;
   font-weight: 900;
-  text-shadow: 0 0 10px rgba(96, 165, 250, .18);
+  text-shadow: 0 0 10px rgba(34, 211, 238, .18);
 }
 
 .team-table-sort-indicator-active {
-  color: #ffffff;
-  text-shadow: 0 0 14px rgba(96, 165, 250, .65);
+  color: #22d3ee;
+  text-shadow: 0 0 14px rgba(34, 211, 238, .6);
   transform: scale(1.18);
 }
 
 .team-table-row-expanded,
 .team-detail-row-expanded {
-  background: rgba(59, 130, 246, .05);
+  background: rgba(34, 211, 238, .05);
 }
 
 .team-table-name-cell {
@@ -1521,9 +1521,9 @@ html, body {
   gap: .25rem;
   margin-top: .85rem;
   padding: .25rem;
-  border: 1px solid rgba(148, 163, 184, .22);
+  border: 1px solid #1c2b47;
   border-radius: .5rem;
-  background: rgba(15, 23, 42, .55);
+  background: #0b1424;
 }
 
 .team-detail-page-tab {
@@ -1531,7 +1531,7 @@ html, body {
   border-radius: .35rem;
   padding: .42rem .7rem;
   background: transparent;
-  color: var(--text-300);
+  color: #9fb0c9;
   font: inherit;
   font-size: .82rem;
   font-weight: 700;
@@ -1539,10 +1539,14 @@ html, body {
   transition: background .15s ease, color .15s ease;
 }
 
-.team-detail-page-tab:hover,
+.team-detail-page-tab:hover {
+  background: rgba(34, 211, 238, .08);
+  color: #e2e8f0;
+}
+
 .team-detail-page-tab-active {
-  background: rgba(59, 130, 246, .28);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .info-toggle {
