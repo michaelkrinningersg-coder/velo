@@ -13,7 +13,7 @@ import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type { Race } from '../../../shared/types';
 
 const MONO = "font-family:'JetBrains Mono',monospace";
-const MONTH_ABBR = ['JAN', 'FEB', 'MÄR', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
+const MONTH_ABBR = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
 
 let currentYear = 2026;
 let currentMonthIndex = 5; // June (0-based)
@@ -206,7 +206,11 @@ export function showCalendarView(): void {
 export function renderCalendar(): void {
   if (!isActiveView('calendar')) return;
 
-  $('calendar-month-label').textContent = `${MONTH_NAMES[currentMonthIndex]} ${currentYear}`;
+  const monthYearLabel = `${MONTH_NAMES[currentMonthIndex]} ${currentYear}`;
+  $('calendar-month-label').textContent = monthYearLabel;
+  $('calendar-card-month').textContent = monthYearLabel;
+  const seasonYear = state.gameState?.season ?? currentYear;
+  $('calendar-year-title').textContent = `Saison ${seasonYear}`;
 
   renderSeasonRibbon();
 
@@ -328,23 +332,37 @@ function raceTotalKm(race: Race): number {
 }
 
 // Rennliste im Renn-Radar-Stil (Datumsblock + Kategorie-Farbbalken + Status).
+// Standardmaessig auf den angezeigten Monat begrenzt (wie Design "Rennen im Mai");
+// bei aktiver Suche wird ueber die ganze Saison gesucht.
 export function renderCalendarRaceList(): void {
   const searchInput = $('calendar-race-search') as HTMLInputElement | null;
   const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
   const listEl = $('calendar-races-list');
+  const titleEl = $('calendar-list-title');
+  const countEl = $('calendar-list-count');
   const currentDate = state.gameState?.currentDate ?? '';
+
+  const monthFirst = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(currentYear, currentMonthIndex + 1, 0).getDate();
+  const monthLast = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
   const filteredRaces = state.races
     .filter((race) => {
-      if (!query) return true;
-      return race.name.toLowerCase().includes(query)
-        || (race.category?.name != null && race.category.name.toLowerCase().includes(query));
+      if (query) {
+        return race.name.toLowerCase().includes(query)
+          || (race.category?.name != null && race.category.name.toLowerCase().includes(query));
+      }
+      // Rennen, die den angezeigten Monat ueberschneiden
+      return race.startDate <= monthLast && race.endDate >= monthFirst;
     })
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
+  titleEl.textContent = query ? 'Suchergebnisse' : `Rennen im ${MONTH_NAMES[currentMonthIndex]}`;
+  countEl.textContent = `${filteredRaces.length} ${filteredRaces.length === 1 ? 'Rennen' : 'Rennen'}`;
+
   if (filteredRaces.length === 0) {
-    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine Rennen gefunden.</div>';
+    listEl.innerHTML = `<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">${query ? 'Keine Rennen gefunden.' : 'Keine Rennen in diesem Monat.'}</div>`;
     return;
   }
 
@@ -378,7 +396,7 @@ export function renderCalendarRaceList(): void {
   }).join('');
 }
 
-// Saison-Ribbon: Renndichte je Monat des aktuell angezeigten Jahres.
+// Saison-Ribbon: Renndichte je Monat des aktuell angezeigten Jahres (Design #3a).
 function renderSeasonRibbon(): void {
   const ribbon = $('calendar-season-ribbon');
   const yearStr = String(currentYear);
@@ -391,25 +409,29 @@ function renderSeasonRibbon(): void {
     if (monthIdx >= 0 && monthIdx < 12) counts[monthIdx]++;
   }
   const maxCount = Math.max(1, ...counts);
-
-  const [gy, gm] = (state.gameState?.currentDate ?? '').split('-').map(Number);
-  const gameMonthIdx = gy === currentYear ? (gm - 1) : -1;
+  const MAX_BAR = 40; // px, wie im Design
 
   ribbon.innerHTML = counts.map((count, idx) => {
     const isActive = idx === currentMonthIndex;
-    const isGameMonth = idx === gameMonthIdx;
-    const fill = Math.round((count / maxCount) * 100);
-    const barColor = isActive ? '#22d3ee' : (count > 0 ? 'rgba(34,211,238,.45)' : 'rgba(148,163,184,.18)');
+    const barPx = count > 0 ? Math.max(5, Math.round((count / maxCount) * MAX_BAR)) : 3;
+    const barBg = isActive
+      ? 'linear-gradient(180deg,#22d3ee,#0891b2)'
+      : (count > 0 ? '#26374f' : '#1c2740');
+    const glow = isActive ? 'box-shadow:0 0 12px rgba(34,211,238,.5);' : '';
+    const labelColor = isActive ? '#22d3ee' : '#5f6f8a';
+    const labelWeight = isActive ? '700' : '400';
     return `
       <button type="button" data-ribbon-month="${idx}"
-        style="flex:1;min-width:0;background:${isActive ? 'rgba(34,211,238,.10)' : 'transparent'};border:1px solid ${isActive ? 'rgba(34,211,238,.4)' : 'transparent'};border-radius:6px;padding:4px 2px 5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;"
-        title="${MONTH_NAMES[idx]}: ${count} Rennen">
-        <span style="width:100%;height:26px;display:flex;align-items:flex-end;justify-content:center;">
-          <span style="width:60%;height:${Math.max(fill, count > 0 ? 12 : 4)}%;background:${barColor};border-radius:2px;"></span>
-        </span>
-        <span style="${MONO};font-size:9px;letter-spacing:.06em;color:${isActive ? '#22d3ee' : (isGameMonth ? '#fbbf24' : '#6a7a95')};">${MONTH_ABBR[idx]}</span>
-        <span style="${MONO};font-size:9px;font-weight:700;color:${count > 0 ? '#93a3bd' : '#3f4c63'};">${count}</span>
+        style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:0;"
+        title="${MONTH_NAMES[idx]}: ${count} ${count === 1 ? 'Rennen' : 'Rennen'}">
+        <span style="width:70%;height:${barPx}px;background:${barBg};border-radius:3px;${glow}"></span>
+        <span style="${MONO};font-size:9px;font-weight:${labelWeight};color:${labelColor};">${MONTH_ABBR[idx]}</span>
       </button>
     `;
   }).join('');
+
+  const currentEl = document.getElementById('calendar-ribbon-current');
+  if (currentEl) {
+    currentEl.textContent = `▮ ${MONTH_NAMES[currentMonthIndex]} · aktuell`;
+  }
 }

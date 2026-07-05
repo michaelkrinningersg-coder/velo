@@ -148,31 +148,59 @@
         </section>
       </div>
 
-      <!-- Kalender -->
+      <!-- Kalender (Broadcast-Redesign 3A) -->
       <div id="view-calendar" class="view">
-        <div class="view-header"><h2>Saisonkalender</h2></div>
+        <!-- View-Header: Eyebrow + Saison-Titel · Monats-Nav · Heute · Suche -->
+        <div class="calendar-view-header">
+          <div>
+            <div class="calendar-eyebrow">Rennkalender</div>
+            <h2 id="calendar-year-title" class="calendar-season-title">Saison 2026</h2>
+          </div>
+          <div class="calendar-view-header-controls">
+            <div class="calendar-month-nav">
+              <button id="calendar-prev-month" aria-label="Vorheriger Monat">‹</button>
+              <span id="calendar-month-label">Mai 2026</span>
+              <button id="calendar-next-month" aria-label="Nächster Monat">›</button>
+            </div>
+            <button id="calendar-today-btn" class="calendar-today-btn">Heute</button>
+            <div class="calendar-search-box">
+              <input type="text" id="calendar-race-search" placeholder="Rennen suchen…" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Saison-Ribbon -->
+        <div class="calendar-ribbon-card">
+          <div class="calendar-ribbon-card-head">
+            <span class="calendar-ribbon-eyebrow">Saison auf einen Blick · Renndichte pro Monat</span>
+            <span id="calendar-ribbon-current" class="calendar-ribbon-current">▮ Mai · aktuell</span>
+          </div>
+          <div id="calendar-season-ribbon" class="calendar-season-ribbon"></div>
+        </div>
+
+        <!-- Zwei Spalten: Kalender-Karte + Rennliste -->
         <div class="calendar-layout-container">
           <div class="calendar-pane">
-            <div class="calendar-header">
-              <button class="btn btn-secondary" id="calendar-prev-month">◄</button>
-              <h3 id="calendar-month-label">Juni 2026</h3>
-              <button class="btn btn-secondary" id="calendar-next-month">►</button>
-              <button class="btn btn-ghost btn-sm" id="calendar-today-btn">Heute</button>
+            <div class="calendar-card-head">
+              <span id="calendar-card-month" class="calendar-card-month">Mai 2026</span>
+              <div class="calendar-legend">
+                <span class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:#22d3ee;"></span>Grand Tour</span>
+                <span class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:#818cf8;"></span>Rundfahrt</span>
+                <span class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:#f87171;"></span>Eintages</span>
+                <span class="calendar-legend-item"><span class="calendar-legend-swatch" style="border-radius:50%;background:#ef4444;"></span>läuft</span>
+              </div>
             </div>
-            <div id="calendar-season-ribbon" class="calendar-season-ribbon"></div>
             <div class="calendar-grid-wrapper">
               <div class="calendar-weekdays">
-                <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+                <div>MO</div><div>DI</div><div>MI</div><div>DO</div><div>FR</div><div>SA</div><div>SO</div>
               </div>
               <div class="calendar-weeks-container" id="calendar-weeks"></div>
             </div>
           </div>
           <div class="calendar-list-pane">
             <div class="calendar-list-header">
-              <h3>Rennliste (Saison)</h3>
-              <div class="calendar-list-search-wrap">
-                <input type="text" id="calendar-race-search" placeholder="Rennen suchen..." />
-              </div>
+              <span id="calendar-list-title" class="calendar-list-title">Rennen im Mai</span>
+              <span id="calendar-list-count" class="calendar-list-count">0 Rennen</span>
             </div>
             <div class="calendar-list-table-wrap">
               <div id="calendar-races-list" class="calendar-radar-list"></div>

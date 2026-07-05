@@ -158,6 +158,17 @@ export async function loadRaces(): Promise<void> {
   }
 }
 
+// Laedt die Fahrerliste neu (Saisonpunkte/-siege), damit Dashboard-KPIs und
+// Top-10 nach Etappen/Tageswechsel aktuelle Werte zeigen statt der Ladewerte.
+export async function loadRiders(): Promise<void> {
+  const res = await api.getRiders(undefined, false);
+  if (!res.success) { console.error(res.error); return; }
+  state.riders = res.data ?? [];
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+}
+
 
 export function getStageDisplayName(stage: Stage): string {
   return `Etappe ${stage.stageNumber}`;
@@ -666,6 +677,7 @@ export async function executeDayAdvance(): Promise<boolean> {
       return false;
     }
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
+    await loadRiders();
     await loadGameState();
     await loadRaces();
     if (isActiveView('teams')) {
