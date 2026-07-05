@@ -41,9 +41,6 @@ import type {
 import { renderStaticStageProfile } from '../race-sim/renderProfile';
 import {
   renderDashboardBroadcast,
-  dashboardRiderRows,
-  dashboardTeamRows,
-  rotateSpotlight,
   ensureSpotlightWinsLoaded,
 } from './dashboardBroadcast';
 
@@ -566,17 +563,6 @@ export async function openDashboardStageProfile(stageId: number, selectedClimb: 
   showModal('stageProfile');
 }
 
-// Aktiv-Stil der Punkte/Siege-Umschalter (Fahrer + Teams) togglen.
-function toggleMetricButtons(active: HTMLButtonElement, attrSelector: string): void {
-  const group = active.parentElement;
-  if (!group) return;
-  group.querySelectorAll<HTMLButtonElement>(`button[${attrSelector}]`).forEach((btn) => {
-    const isActive = btn === active;
-    btn.style.background = isActive ? '#22d3ee' : 'transparent';
-    btn.style.color = isActive ? '#061019' : '#7c8aa3';
-  });
-}
-
 export function initDashboardListeners(): void {
   $('pending-stages-list').addEventListener('click', (event) => {
     const editButton = (event.target as Element).closest<HTMLButtonElement>('button[data-edit-stage-roster]');
@@ -608,34 +594,6 @@ export function initDashboardListeners(): void {
   $('view-dashboard').addEventListener('click', (event) => {
     const target = event.target as Element;
 
-    // Top-10 Fahrer: Punkte/Siege-Umschalter
-    const metricButton = target.closest<HTMLButtonElement>('button[data-top10-metric]');
-    if (metricButton) {
-      const byWins = metricButton.dataset['top10Metric'] === 'wins';
-      const container = document.getElementById('dashboard-top10-riders');
-      if (container) container.innerHTML = dashboardRiderRows(byWins);
-      toggleMetricButtons(metricButton, 'data-top10-metric');
-      return;
-    }
-
-    // Top-10 Teams: Punkte/Siege-Umschalter
-    const teamMetricButton = target.closest<HTMLButtonElement>('button[data-top10-team-metric]');
-    if (teamMetricButton) {
-      const byWins = teamMetricButton.dataset['top10TeamMetric'] === 'wins';
-      const container = document.getElementById('dashboard-top10-teams');
-      if (container) container.innerHTML = dashboardTeamRows(byWins);
-      toggleMetricButtons(teamMetricButton, 'data-top10-team-metric');
-      return;
-    }
-
-    // Fahrer im Fokus: Rotation
-    const navButton = target.closest<HTMLButtonElement>('button[data-spotlight-nav]');
-    if (navButton) {
-      rotateSpotlight(navButton.dataset['spotlightNav'] === 'prev' ? -1 : 1);
-      renderDashboard();
-      return;
-    }
-
     // Fokus-Fahrer: Statistik oeffnen
     const spotlightRider = target.closest<HTMLButtonElement>('button[data-dashboard-rider-id]');
     if (spotlightRider) {
@@ -646,17 +604,11 @@ export function initDashboardListeners(): void {
       return;
     }
 
-    // Live-Spotlight: Etappen-Aktionen
+    // Live-Spotlight: Etappen-Aktionen (nur Instant + Starterfeld)
     const editButton = target.closest<HTMLButtonElement>('button[data-edit-stage-roster]');
     if (editButton) {
       const stageId = Number(editButton.dataset['editStageRoster']);
       if (Number.isFinite(stageId)) void openRosterEditor(stageId);
-      return;
-    }
-    const liveButton = target.closest<HTMLButtonElement>('button[data-live-stage]');
-    if (liveButton) {
-      const stageId = Number(liveButton.dataset['liveStage']);
-      if (Number.isFinite(stageId)) void openRealtimeStage(stageId, true);
       return;
     }
     const instantButton = target.closest<HTMLButtonElement>('button[data-instant-stage]');

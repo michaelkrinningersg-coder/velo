@@ -10,14 +10,14 @@
  * Siegliste der Fokus-Karte wird per api.getRiderStats lazy nachgeladen.
  */
 import { api } from '../api';
-import { state, renderMiniJersey, resolveRaceCategoryBadgeStyle } from '../state';
+import { state, resolveRaceCategoryBadgeStyle } from '../state';
 import type { Race, Rider, Team, RiderStatsPayload } from '../../../shared/types';
 
 const MONO = "font-family:'JetBrains Mono',monospace";
 const MONTHS = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
 
-// ---- rotierender Fokus + Siegliste-Cache -----------------------------------
-let spotlightIndex = 0;
+// ---- Fokus-Fahrer (1 zufaelliger Sieger, stabil) + Siegliste-Cache ---------
+let spotlightRiderId: number | null = null;
 interface SpotlightWin { race: string; detail: string; color: string; isGc: boolean; }
 const spotlightWinsCache = new Map<number, SpotlightWin[]>();
 const spotlightWinsInFlight = new Set<number>();
@@ -159,8 +159,7 @@ function renderLiveSpotlight(): string {
   const buttons = pendingStage
     ? `
       <div style="display:flex;gap:9px;margin-top:12px;">
-        <button type="button" data-live-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Live-Simulation ▸</button>
-        <button type="button" data-instant-stage="${pendingStage.stageId}" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:13px;padding:10px 16px;border-radius:9px;">Instant</button>
+        <button type="button" data-instant-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Instant ▸</button>
         <button type="button" data-edit-stage-roster="${pendingStage.stageId}" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:13px;padding:10px 16px;border-radius:9px;">Starterfeld</button>
       </div>`
     : `<div style="${MONO};font-size:11px;color:#7c8aa3;margin-top:12px;">Heutige Etappe abgeschlossen – Tageswechsel freigegeben.</div>`;
@@ -227,23 +226,25 @@ function renderSpotlightRadar(rider: Rider): string {
     </svg>`;
 }
 
-// ---- Fahrer im Fokus (rotierend) -------------------------------------------
-function spotlightCandidates(): Rider[] {
-  const winners = state.riders.filter((r) => (r.seasonWins ?? 0) > 0)
-    .sort((a, b) => (b.seasonWins ?? 0) - (a.seasonWins ?? 0) || (b.seasonPoints ?? 0) - (a.seasonPoints ?? 0));
-  if (winners.length > 0) return winners;
-  // Fallback: beste nach Punkten
-  return [...state.riders].sort((a, b) => (b.seasonPoints ?? 0) - (a.seasonPoints ?? 0)).slice(0, 10);
+// ---- Fahrer im Fokus (1 zufaelliger Sieger) --------------------------------
+// Ein zufaelliger Fahrer aus ALLEN mit mindestens einem Saisonsieg. Die Wahl
+// bleibt stabil, solange der Fahrer weiterhin Siege hat (kein Neuwuerfeln bei
+// jedem Re-Render); erst wenn er keine Siege mehr hat, wird neu gezogen.
+function spotlightRider(): Rider | null {
+  const winners = state.riders.filter((r) => (r.seasonWins ?? 0) > 0);
+  if (winners.length === 0) return null;
+  const current = spotlightRiderId != null ? winners.find((r) => r.id === spotlightRiderId) : undefined;
+  if (current) return current;
+  const pick = winners[Math.floor(Math.random() * winners.length)];
+  spotlightRiderId = pick.id;
+  return pick;
 }
 
 function renderRiderSpotlight(): string {
-  const candidates = spotlightCandidates();
-  if (candidates.length === 0) {
-    return `<div style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);padding:16px;color:#6a7a95;font-size:13px;">Noch keine Fahrerdaten.</div>`;
+  const rider = spotlightRider();
+  if (rider == null) {
+    return `<div style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);padding:16px;color:#6a7a95;font-size:13px;">Noch kein Siegfahrer in dieser Saison.</div>`;
   }
-  if (spotlightIndex >= candidates.length) spotlightIndex = 0;
-  if (spotlightIndex < 0) spotlightIndex = candidates.length - 1;
-  const rider = candidates[spotlightIndex];
   const team = state.teams.find((t) => t.id === rider.activeTeamId) ?? null;
   const teamColor = team?.colorPrimary ?? '#22d3ee';
   const ovr = rider.overallRating ?? 0;
@@ -271,11 +272,6 @@ function renderRiderSpotlight(): string {
     <div style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);padding:15px 16px;display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
         <span style="${MONO};font-size:10px;letter-spacing:.14em;color:#5f6f8a;text-transform:uppercase;">Siegfahrer im Fokus</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" data-spotlight-nav="prev" style="border:1px solid #2b3a55;background:transparent;color:#9fb0c9;cursor:pointer;width:24px;height:22px;border-radius:6px;font-size:12px;line-height:1;">‹</button>
-          <span style="${MONO};font-size:10px;color:#7c8aa3;min-width:34px;text-align:center;">${spotlightIndex + 1}/${candidates.length}</span>
-          <button type="button" data-spotlight-nav="next" style="border:1px solid #2b3a55;background:transparent;color:#9fb0c9;cursor:pointer;width:24px;height:22px;border-radius:6px;font-size:12px;line-height:1;">›</button>
-        </div>
       </div>
       <div style="display:flex;align-items:center;gap:11px;margin:10px 0 4px;">
         <span style="width:5px;height:40px;border-radius:3px;background:${teamColor};flex:0 0 auto;"></span>
@@ -297,68 +293,6 @@ function renderRiderSpotlight(): string {
     </div>`;
 }
 
-// ---- Top-10 Fahrer ---------------------------------------------------------
-export function dashboardRiderRows(byWins: boolean): string {
-  const list = [...state.riders]
-    .sort((a, b) => byWins
-      ? (b.seasonWins ?? 0) - (a.seasonWins ?? 0) || (b.seasonPoints ?? 0) - (a.seasonPoints ?? 0)
-      : (b.seasonPoints ?? 0) - (a.seasonPoints ?? 0))
-    .slice(0, 10);
-  return list.map((r, i) => {
-    const val = byWins ? String(r.seasonWins ?? 0) : (r.seasonPoints ?? 0).toLocaleString('de-DE');
-    const rankColor = i < 3 ? ['#fbbf24', '#cbd5e1', '#d08b5b'][i] : '#5f6f8a';
-    return `
-      <div style="display:grid;grid-template-columns:26px 24px 1fr 54px;gap:9px;align-items:center;padding:8px 16px;border-top:1px solid #14203a;">
-        <span style="${MONO};font-size:12px;font-weight:700;color:${rankColor};">${i + 1}</span>
-        ${renderMiniJersey(r.activeTeamId, undefined)}
-        <span style="font-size:13px;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.firstName?.[0] ?? ''}. ${r.lastName}</span>
-        <span style="${MONO};font-size:13px;font-weight:700;text-align:right;color:${byWins ? '#fbbf24' : '#e2e8f0'};">${val}</span>
-      </div>`;
-  }).join('');
-}
-
-// ---- Top-10 Teams ----------------------------------------------------------
-export function dashboardTeamRows(byWins: boolean): string {
-  const byTeam = aggregateTeamStandings();
-  const player = playerTeam();
-  const rows = [...byTeam.entries()]
-    .map(([teamId, agg]) => ({ teamId, agg, team: state.teams.find((t) => t.id === teamId) }))
-    .sort((a, b) => byWins
-      ? b.agg.wins - a.agg.wins || b.agg.points - a.agg.points
-      : b.agg.points - a.agg.points)
-    .slice(0, 10);
-  if (rows.length === 0) {
-    return '<div style="padding:12px 16px;color:#6a7a95;font-size:12px;">Keine Team-Daten.</div>';
-  }
-  return rows.map((row, i) => {
-    const val = byWins ? String(row.agg.wins) : row.agg.points.toLocaleString('de-DE');
-    const rankColor = i < 3 ? ['#fbbf24', '#cbd5e1', '#d08b5b'][i] : '#5f6f8a';
-    const name = row.team?.name ?? `Team ${row.teamId}`;
-    const isPlayer = player != null && row.teamId === player.id;
-    const rowBg = isPlayer ? 'background:rgba(34,211,238,.08);box-shadow:inset 3px 0 0 #22d3ee;' : '';
-    const nameColor = isPlayer ? '#22d3ee' : '#e2e8f0';
-    return `
-      <div style="display:grid;grid-template-columns:26px 24px 1fr 54px;gap:9px;align-items:center;padding:8px 16px;border-top:1px solid #14203a;${rowBg}">
-        <span style="${MONO};font-size:12px;font-weight:700;color:${rankColor};">${i + 1}</span>
-        ${renderMiniJersey(row.teamId, name)}
-        <span style="font-size:13px;font-weight:600;color:${nameColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
-        <span style="${MONO};font-size:13px;font-weight:700;text-align:right;color:${byWins ? '#fbbf24' : '#e2e8f0'};">${val}</span>
-      </div>`;
-  }).join('');
-}
-
-// ---- Toggle-Buttons --------------------------------------------------------
-function toggleButton(attr: string, metric: 'points' | 'wins', label: string, active: boolean): string {
-  return `<button type="button" ${attr}="${metric}" style="${MONO};font-size:11px;font-weight:700;padding:5px 13px;border-radius:6px;border:none;background:${active ? '#22d3ee' : 'transparent'};color:${active ? '#061019' : '#7c8aa3'};cursor:pointer;">${label}</button>`;
-}
-
-function listHeaderRow(entity: string, valueHead: string): string {
-  return `
-    <div style="display:grid;grid-template-columns:26px 24px 1fr 54px;gap:9px;padding:8px 16px;${MONO};font-size:9px;letter-spacing:.1em;color:#5a6a85;text-transform:uppercase;border-bottom:1px solid #16233c;">
-      <span>#</span><span></span><span>${entity}</span><span style="text-align:right;">${valueHead}</span>
-    </div>`;
-}
-
 // ---- Haupt-Render ----------------------------------------------------------
 export function renderDashboardBroadcast(): string {
   const gs = state.gameState;
@@ -371,7 +305,6 @@ export function renderDashboardBroadcast(): string {
     .slice(0, 6);
 
   const kpis = playerTeamKpis(team);
-  const season = gs?.season ?? '';
   const liveSpotlight = renderLiveSpotlight();
 
   return `
@@ -399,48 +332,12 @@ export function renderDashboardBroadcast(): string {
 
       ${renderRiderSpotlight()}
     </div>
-
-    <!-- Unteres Grid: Top-10 Fahrer | Top-10 Teams -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div style="border-radius:14px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid #1c2b47;">
-          <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Top 10 Fahrer${season ? ` — Saison ${season}` : ''}</span>
-          <div style="display:flex;gap:4px;background:#0a1122;border:1px solid #1c2b47;padding:3px;border-radius:8px;">
-            ${toggleButton('data-top10-metric', 'points', 'Punkte', true)}
-            ${toggleButton('data-top10-metric', 'wins', 'Siege', false)}
-          </div>
-        </div>
-        ${listHeaderRow('Fahrer', 'Punkte')}
-        <div id="dashboard-top10-riders">${dashboardRiderRows(false)}</div>
-      </div>
-
-      <div style="border-radius:14px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid #1c2b47;">
-          <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Top 10 Teams${season ? ` — Saison ${season}` : ''}</span>
-          <div style="display:flex;gap:4px;background:#0a1122;border:1px solid #1c2b47;padding:3px;border-radius:8px;">
-            ${toggleButton('data-top10-team-metric', 'points', 'Punkte', true)}
-            ${toggleButton('data-top10-team-metric', 'wins', 'Siege', false)}
-          </div>
-        </div>
-        ${listHeaderRow('Team', 'Punkte')}
-        <div id="dashboard-top10-teams">${dashboardTeamRows(false)}</div>
-      </div>
-    </div>
   </div>`;
 }
 
-// ---- Fokus-Rotation + Lazy-Siegliste (von dashboard.ts aufgerufen) ---------
-export function rotateSpotlight(dir: 1 | -1): void {
-  spotlightIndex += dir;
-}
-
+// ---- Lazy-Siegliste (von dashboard.ts aufgerufen) --------------------------
 export function focusedSpotlightRiderId(): number | null {
-  const candidates = spotlightCandidates();
-  if (candidates.length === 0) return null;
-  let idx = spotlightIndex;
-  if (idx >= candidates.length) idx = 0;
-  if (idx < 0) idx = candidates.length - 1;
-  return candidates[idx]?.id ?? null;
+  return spotlightRider()?.id ?? null;
 }
 
 // Laedt die Siegliste des fokussierten Fahrers nach (einmal je Fahrer, gecacht).
