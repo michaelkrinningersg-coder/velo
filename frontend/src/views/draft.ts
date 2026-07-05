@@ -859,12 +859,6 @@ export function triggerDraftSchedule(): void {
           showDraftPick(nextIndex);
         } else {
           if (state.gameState?.draftStatus === 'active') {
-            // Pause auto-play for player turn and render it
-            state.draftOverlayAuto = false;
-            const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
-            if (autoCheckbox) {
-              autoCheckbox.checked = false;
-            }
             state.draftOverlayCurrentIndex = nextIndex;
             void renderActivePlayerTurn();
           } else {
@@ -1216,6 +1210,13 @@ async function renderActivePlayerTurn(): Promise<void> {
 
   if (displayWrap) {
     if (draftState.isPlayerTeam) {
+      // Pause auto-play for player turn
+      state.draftOverlayAuto = false;
+      const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
+      if (autoCheckbox) {
+        autoCheckbox.checked = false;
+      }
+
       let selectedId = (state as any).selectedDraftRiderId;
       if (!selectedId && draftState.candidates && draftState.candidates.length > 0) {
         const sorted = [...draftState.candidates].sort((a: any, b: any) => b.overallRating - a.overallRating);
