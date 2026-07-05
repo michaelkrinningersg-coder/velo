@@ -6352,3 +6352,58 @@ tr.calendar-highlight {
 
 /* Broadcast-Redesign: Pulse-Animation fuer laufende Rennen/Live-Indikatoren */
 @keyframes velopulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* Broadcast-Redesign (4A): Ergebnisse / Top-Results / Fatigue-Historie-Tabellen */
+.rider-stats-table-wrap {
+  border: 1px solid #1e2c49;
+  border-radius: 14px;
+  background: #0c1526;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.rider-stats-table thead th {
+  background: #0a1122;
+  color: #5a6a85;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #16233c;
+  padding: 9px 8px;
+}
+
+.rider-stats-table td {
+  color: #cbd5e1;
+  border-bottom: 1px solid #14203a;
+  padding: 9px 8px;
+  font-size: .82rem;
+}
+
+.rider-stats-table tbody tr:hover {
+  background: rgba(34, 211, 238, 0.05);
+}
+
+.rider-stats-table tbody tr.rider-stats-row-final,
+.rider-stats-row-final {
+  background: rgba(34, 211, 238, 0.07);
+}
+
+.rider-stats-table tbody tr.rider-stats-row-final:hover {
+  background: rgba(34, 211, 238, 0.12);
+}
+
+/* Saison-/Rennkopf im Broadcast-Ton */
+.rider-stats-season-head h3 {
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f0;
+}
+
+.rider-stats-season-head span,
+.rider-stats-race-head p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #6a7a95;
+}
