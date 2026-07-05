@@ -39,7 +39,13 @@ import type {
   Rider,
 } from '../../../shared/types';
 import { renderStaticStageProfile } from '../race-sim/renderProfile';
-import { renderDashboardBroadcast, dashboardRiderRows } from './dashboardBroadcast';
+import {
+  renderDashboardBroadcast,
+  dashboardRiderRows,
+  dashboardTeamRows,
+  rotateSpotlight,
+  ensureSpotlightWinsLoaded,
+} from './dashboardBroadcast';
 
 // Dynamically imported or declared interfaces to avoid circular import issues
 import { openRosterEditor, openRealtimeStage, openInstantStage } from './liveRace';
@@ -147,6 +153,12 @@ export function renderDashboard(): void {
   // Broadcast-Redesign (2A): kompletter View-Body als HTML-String.
   // Die Tageswechsel-/Auto-Progress-Steuerung liegt ausserhalb (#game-state-bar).
   $('view-dashboard').innerHTML = renderDashboardBroadcast();
+  // Siegliste des Fokus-Fahrers lazy nachladen und Karte danach neu rendern.
+  void ensureSpotlightWinsLoaded().then((changed) => {
+    if (changed && isActiveView('dashboard')) {
+      $('view-dashboard').innerHTML = renderDashboardBroadcast();
+    }
+  });
 }
 
 export async function loadRaces(): Promise<void> {
@@ -554,6 +566,17 @@ export async function openDashboardStageProfile(stageId: number, selectedClimb: 
   showModal('stageProfile');
 }
 
+// Aktiv-Stil der Punkte/Siege-Umschalter (Fahrer + Teams) togglen.
+function toggleMetricButtons(active: HTMLButtonElement, attrSelector: string): void {
+  const group = active.parentElement;
+  if (!group) return;
+  group.querySelectorAll<HTMLButtonElement>(`button[${attrSelector}]`).forEach((btn) => {
+    const isActive = btn === active;
+    btn.style.background = isActive ? '#22d3ee' : 'transparent';
+    btn.style.color = isActive ? '#061019' : '#7c8aa3';
+  });
+}
+
 export function initDashboardListeners(): void {
   $('pending-stages-list').addEventListener('click', (event) => {
     const editButton = (event.target as Element).closest<HTMLButtonElement>('button[data-edit-stage-roster]');
@@ -581,39 +604,73 @@ export function initDashboardListeners(): void {
   });
 
   // Delegation auf den View-Container, da der Body bei jedem Render neu
-  // gesetzt wird (Broadcast-Redesign). Deckt Renn-Radar + Punkte/Siege-Toggle ab.
+  // gesetzt wird (Broadcast-Redesign). Deckt alle 2A-Bauteile ab.
   $('view-dashboard').addEventListener('click', (event) => {
     const target = event.target as Element;
 
+    // Top-10 Fahrer: Punkte/Siege-Umschalter
     const metricButton = target.closest<HTMLButtonElement>('button[data-top10-metric]');
     if (metricButton) {
       const byWins = metricButton.dataset['top10Metric'] === 'wins';
       const container = document.getElementById('dashboard-top10-riders');
-      if (container) {
-        container.innerHTML = dashboardRiderRows(byWins);
-      }
-      // Aktiv-Stil der beiden Umschalter togglen
-      const group = metricButton.parentElement;
-      if (group) {
-        group.querySelectorAll<HTMLButtonElement>('button[data-top10-metric]').forEach((btn) => {
-          const active = btn === metricButton;
-          btn.style.background = active ? '#22d3ee' : 'transparent';
-          btn.style.color = active ? '#061019' : '#7c8aa3';
-        });
+      if (container) container.innerHTML = dashboardRiderRows(byWins);
+      toggleMetricButtons(metricButton, 'data-top10-metric');
+      return;
+    }
+
+    // Top-10 Teams: Punkte/Siege-Umschalter
+    const teamMetricButton = target.closest<HTMLButtonElement>('button[data-top10-team-metric]');
+    if (teamMetricButton) {
+      const byWins = teamMetricButton.dataset['top10TeamMetric'] === 'wins';
+      const container = document.getElementById('dashboard-top10-teams');
+      if (container) container.innerHTML = dashboardTeamRows(byWins);
+      toggleMetricButtons(teamMetricButton, 'data-top10-team-metric');
+      return;
+    }
+
+    // Fahrer im Fokus: Rotation
+    const navButton = target.closest<HTMLButtonElement>('button[data-spotlight-nav]');
+    if (navButton) {
+      rotateSpotlight(navButton.dataset['spotlightNav'] === 'prev' ? -1 : 1);
+      renderDashboard();
+      return;
+    }
+
+    // Fokus-Fahrer: Statistik oeffnen
+    const spotlightRider = target.closest<HTMLButtonElement>('button[data-dashboard-rider-id]');
+    if (spotlightRider) {
+      const riderId = Number(spotlightRider.dataset['dashboardRiderId']);
+      if (Number.isFinite(riderId)) {
+        void import('./riderStats').then((m) => m.openRiderStats(riderId));
       }
       return;
     }
 
+    // Live-Spotlight: Etappen-Aktionen
+    const editButton = target.closest<HTMLButtonElement>('button[data-edit-stage-roster]');
+    if (editButton) {
+      const stageId = Number(editButton.dataset['editStageRoster']);
+      if (Number.isFinite(stageId)) void openRosterEditor(stageId);
+      return;
+    }
+    const liveButton = target.closest<HTMLButtonElement>('button[data-live-stage]');
+    if (liveButton) {
+      const stageId = Number(liveButton.dataset['liveStage']);
+      if (Number.isFinite(stageId)) void openRealtimeStage(stageId, true);
+      return;
+    }
+    const instantButton = target.closest<HTMLButtonElement>('button[data-instant-stage]');
+    if (instantButton) {
+      const stageId = Number(instantButton.dataset['instantStage']);
+      if (Number.isFinite(stageId)) void openInstantStage(stageId);
+      return;
+    }
+
+    // Renn-Radar-Zeile: Etappenuebersicht
     const raceButton = target.closest<HTMLButtonElement>('button[data-dashboard-race-id]');
-    if (!raceButton) {
-      return;
-    }
-
+    if (!raceButton) return;
     const raceId = Number(raceButton.dataset['dashboardRaceId']);
-    if (!Number.isFinite(raceId)) {
-      return;
-    }
-
+    if (!Number.isFinite(raceId)) return;
     void openDashboardRaceStages(raceId);
   });
 
