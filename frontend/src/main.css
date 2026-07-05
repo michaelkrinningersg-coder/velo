@@ -5,22 +5,23 @@
 
 /* ---- CSS Custom Properties -------------------------------- */
 :root {
-  --bg-900:    #0f172a;
-  --bg-800:    #1e293b;
-  --bg-700:    #253347;
-  --bg-600:    #334155;
-  --border:    #334155;
+  --bg-900:    #0b1120;
+  --bg-800:    #0c1526;
+  --bg-700:    #111c34;
+  --bg-600:    #1c2b47;
+  --border:    #1e2c49;
 
-  --bg-500:    #475569;
+  --bg-500:    #24344f;
 
   --text-100:  #f1f5f9;
   --text-200:  #e2e8f0;
   --text-300:  #cbd5e1;
-  --text-400:  #94a3b8;
-  --text-500:  #64748b;
+  --text-400:  #8494ad;
+  --text-500:  #6a7a95;
 
-  --accent:    #6366f1;
-  --accent-h:  #818cf8;
+  --accent:    #22d3ee;
+  --accent-h:  #67e8f9;
+  --accent-ink:#061019;
   --success:   #22c55e;
   --warning:   #f59e0b;
   --danger:    #ef4444;
@@ -29,8 +30,8 @@
   --gold:      #fbbf24;
   --silver:    #cbd5e1;
   --bronze:    #d08b5b;
-  --card-bg:   linear-gradient(180deg, #1c2740 0%, #172033 100%);
-  --row-hover: rgba(99, 102, 241, .10);
+  --card-bg:   linear-gradient(180deg, #111c34 0%, #0d1628 100%);
+  --row-hover: rgba(34, 211, 238, .08);
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -441,10 +442,10 @@ html, body {
   text-transform: uppercase;
   font-size: .75rem;
   letter-spacing: .07em;
-  border-bottom: 1px solid rgba(148, 163, 184, .28);
+  border-bottom: 1px solid #16233c;
   position: sticky;
   top: 0;
-  background: linear-gradient(180deg, rgba(99, 102, 241, .18) 0%, rgba(28, 39, 64, .96) 100%);
+  background: linear-gradient(180deg, #16233c 0%, #0c1526 100%);
 }
 
 .data-table tbody tr {
@@ -488,7 +489,7 @@ html, body {
 
 .results-toolbar select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, .25);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .22);
 }
 
 .results-type-tabs {
@@ -517,14 +518,15 @@ html, body {
 
 .results-type-btn:hover {
   color: var(--text-100);
-  background: rgba(99, 102, 241, .12);
+  background: rgba(34, 211, 238, .10);
 }
 
 .results-type-btn.active {
-  background: linear-gradient(180deg, var(--accent-h) 0%, var(--accent) 100%);
+  background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, .45);
+  color: var(--accent-ink);
+  font-weight: 700;
+  box-shadow: 0 2px 12px rgba(34, 211, 238, .32);
 }
 
 .results-empty {
@@ -4418,7 +4420,7 @@ html, body {
   transition: background .15s, opacity .15s;
 }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn-primary  { background: var(--accent); color: #fff; }
+.btn-primary  { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
 .btn-secondary { background: var(--bg-700); color: var(--text-100); border: 1px solid var(--border); }
 .btn-secondary:hover:not(:disabled) { background: var(--bg-600); }
