@@ -5723,6 +5723,30 @@ html, body {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* Broadcast-Redesign (3A): Saison-Ribbon (Renndichte je Monat) */
+.calendar-season-ribbon {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 1rem;
+  padding: 8px 6px;
+  background: #0c1526;
+  border: 1px solid #1e2c49;
+  border-radius: 10px;
+}
+
+/* Broadcast-Redesign (3A): Rennliste im Renn-Radar-Stil */
+.calendar-radar-list {
+  background: #0c1526;
+}
+
+.calendar-radar-list > button:first-child {
+  border-top: none !important;
+}
+
+.calendar-radar-list > button:hover {
+  background: rgba(34, 211, 238, 0.06) !important;
+}
+
 /* Cross-Highlighting Hover Classes */
 .calendar-highlight {
   background-color: rgba(59, 130, 246, 0.22) !important;

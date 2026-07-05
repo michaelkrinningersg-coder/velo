@@ -1,22 +1,19 @@
-import { api } from '../api';
 import {
   $,
   esc,
   state,
   formatDate,
-  renderFlag,
-  renderMiniJersey,
   isActiveView,
 } from '../state';
 import {
-  raceCategoryBadge,
-  raceCategoryNameBadge,
   openDashboardRaceStages,
-  openRaceProgramParticipants,
   startAutoProgress,
 } from './dashboard';
 import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type { Race } from '../../../shared/types';
+
+const MONO = "font-family:'JetBrains Mono',monospace";
+const MONTH_ABBR = ['JAN', 'FEB', 'MÄR', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
 
 let currentYear = 2026;
 let currentMonthIndex = 5; // June (0-based)
@@ -146,9 +143,9 @@ export function initCalendarView(): void {
     }
   });
 
-  // Click handler on the races list table on the right
-  $('calendar-races-tbody').addEventListener('click', (event) => {
-    const raceBtn = (event.target as Element).closest<HTMLButtonElement>('.dashboard-race-link');
+  // Click handler on the races list (Renn-Radar-Stil) on the right
+  $('calendar-races-list').addEventListener('click', (event) => {
+    const raceBtn = (event.target as Element).closest<HTMLButtonElement>('[data-dashboard-race-id]');
     if (raceBtn) {
       const raceId = Number(raceBtn.dataset['dashboardRaceId']);
       if (Number.isFinite(raceId)) {
@@ -156,6 +153,16 @@ export function initCalendarView(): void {
       }
       return;
     }
+  });
+
+  // Saison-Ribbon: Klick auf einen Monat navigiert den Kalender dorthin
+  $('calendar-season-ribbon').addEventListener('click', (event) => {
+    const cell = (event.target as Element).closest<HTMLElement>('[data-ribbon-month]');
+    if (!cell) return;
+    const monthIdx = Number(cell.dataset['ribbonMonth']);
+    if (!Number.isFinite(monthIdx)) return;
+    currentMonthIndex = monthIdx;
+    renderCalendar();
   });
 
   // Hover highlighting (Cross-Highlighting)
@@ -200,6 +207,8 @@ export function renderCalendar(): void {
   if (!isActiveView('calendar')) return;
 
   $('calendar-month-label').textContent = `${MONTH_NAMES[currentMonthIndex]} ${currentYear}`;
+
+  renderSeasonRibbon();
 
   const weeks = getCalendarWeeks(currentYear, currentMonthIndex);
   const weeksContainer = $('calendar-weeks');
@@ -312,67 +321,95 @@ export function renderCalendar(): void {
   renderCalendarRaceList();
 }
 
+function raceTotalKm(race: Race): number {
+  return race.isStageRace
+    ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
+    : (race.upcomingStage?.distanceKm ?? 0);
+}
+
+// Rennliste im Renn-Radar-Stil (Datumsblock + Kategorie-Farbbalken + Status).
 export function renderCalendarRaceList(): void {
   const searchInput = $('calendar-race-search') as HTMLInputElement | null;
   const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-  const tbody = $('calendar-races-tbody');
+  const listEl = $('calendar-races-list');
   const currentDate = state.gameState?.currentDate ?? '';
 
-  // Filter and sort races by date ascending
   const filteredRaces = state.races
     .filter((race) => {
       if (!query) return true;
-      return race.name.toLowerCase().includes(query) || (race.category?.name && race.category.name.toLowerCase().includes(query));
+      return race.name.toLowerCase().includes(query)
+        || (race.category?.name != null && race.category.name.toLowerCase().includes(query));
     })
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   if (filteredRaces.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align: center; padding: 20px;">Keine Rennen gefunden.</td></tr>';
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine Rennen gefunden.</div>';
     return;
   }
 
-  tbody.innerHTML = filteredRaces.map((race) => {
+  listEl.innerHTML = filteredRaces.map((race) => {
     const isLive = currentDate >= race.startDate && currentDate <= race.endDate;
     const isDone = currentDate > race.endDate;
-    const statusBadge = isDone
-      ? `<span class="badge badge-done">Abgeschlossen</span>`
-      : isLive
-        ? `<span class="badge badge-live">Läuft</span>`
-        : `<span class="badge badge-todo">Geplant</span>`;
+    const [, mm, dd] = race.startDate.split('-');
+    const mon = MONTH_ABBR[Number(mm) - 1] ?? '';
+    const catStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
+    const country = race.country?.name ?? `Land ${race.countryId}`;
+    const km = raceTotalKm(race);
 
-    const location = race.country?.name ?? `Land ${race.countryId}`;
-    const locationFlag = race.country?.code3 ? renderFlag(race.country.code3) : '';
-    
-    const totalDistanceKm = race.isStageRace
-      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
-      : (race.upcomingStage?.distanceKm ?? null);
-    const totalElevationGain = race.isStageRace
-      ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.elevationGainMeters ?? 0), 0)
-      : (race.upcomingStage?.elevationGainMeters ?? null);
-    
-    const distance = totalDistanceKm != null ? String(totalDistanceKm.toFixed(1)).replace('.', ',') : '-';
-    const elevation = totalElevationGain != null ? String(Math.round(totalElevationGain)) : '-';
+    const status = isDone
+      ? '<span style="font-size:10px;font-weight:700;color:#93a3bd;background:rgba(148,163,184,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;">FERTIG</span>'
+      : isLive
+        ? '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;animation:velopulse 1.6s ease-in-out infinite;">LÄUFT</span>'
+        : '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;letter-spacing:.04em;">GEPLANT</span>';
+
+    const nameColor = isDone ? '#8a97ad' : (isLive ? '#f1f5f9' : '#e2e8f0');
 
     return `
-      <tr data-race-id="${race.id}">
-        <td>${formatDate(race.startDate)}</td>
-        <td>
-          <button type="button" class="dashboard-race-link" data-dashboard-race-id="${race.id}">
-            <strong>${esc(race.name)}</strong>
-          </button>
-        </td>
-        <td>
-          <button type="button" class="dashboard-race-link dashboard-race-link-format" data-dashboard-race-id="${race.id}">
-            ${raceCategoryBadge(race)}
-          </button>
-        </td>
-        <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
-        <td>${raceCategoryNameBadge(race)}</td>
-        <td>${distance}</td>
-        <td>${elevation}</td>
-        <td>${statusBadge}</td>
-      </tr>
+      <button type="button" data-dashboard-race-id="${race.id}" data-race-id="${race.id}"
+        style="width:100%;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:11px 14px;border:none;border-top:1px solid #14203a;${isDone ? 'opacity:.65;' : ''}${isLive ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}"
+        title="${esc(race.name)} (${formatDate(race.startDate)} - ${formatDate(race.endDate)})">
+        <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:19px;font-weight:800;color:${nameColor};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
+        <span style="width:5px;height:34px;border-radius:3px;background:${catStyle.border};flex:0 0 auto;" title="${esc(race.category?.name ?? '')}"></span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${nameColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(race.name)}</span><span style="display:block;${MONO};font-size:11px;color:#8494ad;">${esc(country)}${km ? ' · ' + km.toFixed(0) + ' km' : ''}</span></span>
+        ${status}
+      </button>
+    `;
+  }).join('');
+}
+
+// Saison-Ribbon: Renndichte je Monat des aktuell angezeigten Jahres.
+function renderSeasonRibbon(): void {
+  const ribbon = $('calendar-season-ribbon');
+  const yearStr = String(currentYear);
+
+  // Rennen je Monat (nach Startdatum) im angezeigten Jahr zaehlen.
+  const counts = new Array(12).fill(0);
+  for (const race of state.races) {
+    if (!race.startDate.startsWith(yearStr + '-')) continue;
+    const monthIdx = Number(race.startDate.slice(5, 7)) - 1;
+    if (monthIdx >= 0 && monthIdx < 12) counts[monthIdx]++;
+  }
+  const maxCount = Math.max(1, ...counts);
+
+  const [gy, gm] = (state.gameState?.currentDate ?? '').split('-').map(Number);
+  const gameMonthIdx = gy === currentYear ? (gm - 1) : -1;
+
+  ribbon.innerHTML = counts.map((count, idx) => {
+    const isActive = idx === currentMonthIndex;
+    const isGameMonth = idx === gameMonthIdx;
+    const fill = Math.round((count / maxCount) * 100);
+    const barColor = isActive ? '#22d3ee' : (count > 0 ? 'rgba(34,211,238,.45)' : 'rgba(148,163,184,.18)');
+    return `
+      <button type="button" data-ribbon-month="${idx}"
+        style="flex:1;min-width:0;background:${isActive ? 'rgba(34,211,238,.10)' : 'transparent'};border:1px solid ${isActive ? 'rgba(34,211,238,.4)' : 'transparent'};border-radius:6px;padding:4px 2px 5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;"
+        title="${MONTH_NAMES[idx]}: ${count} Rennen">
+        <span style="width:100%;height:26px;display:flex;align-items:flex-end;justify-content:center;">
+          <span style="width:60%;height:${Math.max(fill, count > 0 ? 12 : 4)}%;background:${barColor};border-radius:2px;"></span>
+        </span>
+        <span style="${MONO};font-size:9px;letter-spacing:.06em;color:${isActive ? '#22d3ee' : (isGameMonth ? '#fbbf24' : '#6a7a95')};">${MONTH_ABBR[idx]}</span>
+        <span style="${MONO};font-size:9px;font-weight:700;color:${count > 0 ? '#93a3bd' : '#3f4c63'};">${count}</span>
+      </button>
     `;
   }).join('');
 }
