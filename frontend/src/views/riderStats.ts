@@ -995,18 +995,7 @@ export function renderRiderStatsFatigueTab(rider: Rider | null, payload: RiderSt
   const shortTermFatigue = payload.shortTermFatigueMalus ?? 0;
   const longTermDecayable = payload.longTermFatigueDecayable ?? 0;
   const longTermLocked = payload.longTermFatigueLocked ?? 0;
-  const longTermTotal = payload.longTermFatigueMalus ?? 0;
   const totalMalus = payload.totalFatigueLoadMalus ?? 0;
-
-  const shortRecoveryDays = (shortTermFatigue / 0.2).toFixed(1).replace('.', ',');
-  const longDecayableRecoveryDays = (longTermDecayable / 0.01).toFixed(0);
-
-  let shortTermFatigueColor = '#fff';
-  if (payload.shortTermFatigueWarning === 'critical') {
-    shortTermFatigueColor = '#ef4444';
-  } else if (payload.shortTermFatigueWarning === 'warning') {
-    shortTermFatigueColor = '#fbbf24';
-  }
 
   const fatigueHistory = payload.fatigueHistory ?? [];
 
@@ -1082,98 +1071,65 @@ export function renderRiderStatsFatigueTab(rider: Rider | null, payload: RiderSt
     }).join('');
   }
 
+  // Broadcast-Werte: Zusammensetzung + dynamischer Max + Renntage
+  const fatShort = shortTermFatigue;
+  const fatLocked = longTermLocked;
+  const fatLong = longTermDecayable;
+  const fatTotal = totalMalus || (fatShort + fatLocked + fatLong);
+  const fatMax = Math.max(25, Math.ceil(fatTotal / 5) * 5);
+  const seasonRaceDays = payload.seasonRaceDaysTotal ?? payload.currentSeasonRaceDays ?? 0;
+  const pct = (v: number): number => Math.max(0, Math.min(100, (v / fatMax) * 100));
+
+  // Last-Ampel
+  const warn = payload.shortTermFatigueWarning;
+  const lastLabel = warn === 'critical' ? 'Hoch' : (warn === 'warning' ? 'Mittel' : 'Niedrig');
+  const lastColor = warn === 'critical' ? '#fca5a5' : (warn === 'warning' ? '#fcd34d' : '#86efac');
+  const lastBg = warn === 'critical' ? 'rgba(239,68,68,.14)' : (warn === 'warning' ? 'rgba(234,179,8,.14)' : 'rgba(34,197,94,.14)');
+  const lastBorder = warn === 'critical' ? 'rgba(239,68,68,.32)' : (warn === 'warning' ? 'rgba(234,179,8,.32)' : 'rgba(34,197,94,.32)');
+
+  // Conic-Ring (Kurzzeit gelb · gesperrte Langzeit lila · Langzeit rot)
+  const t1 = fatShort / fatMax;
+  const t2 = t1 + fatLocked / fatMax;
+  const t3 = Math.min(1, t2 + fatLong / fatMax);
+  const fatRing = `conic-gradient(#eab308 0turn ${t1}turn, #a855f7 ${t1}turn ${t2}turn, #ef4444 ${t2}turn ${t3}turn, #16223a ${t3}turn 1turn)`;
+
   return `
-    <section class="rider-stats-fatigue-tab" style="padding: 1.5rem 0.5rem;">
-      <!-- Main Penalty Box -->
-      <div class="rider-stats-fatigue-total" style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
-        <div>
-          <h3 style="margin: 0 0 0.25rem 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Gesamt-Abzug auf alle Skills</h3>
-          <p style="margin: 0; font-size: 0.85rem; color: #bbb;">
-            Die Summe aus akuter und langfristiger Erschöpfung wird direkt von allen Attributwerten abgezogen.
-          </p>
-        </div>
-        <div style="text-align: right;">
-          <span style="font-size: 2rem; font-weight: 800; color: #ef4444; text-shadow: 0 0 15px rgba(239, 68, 68, 0.25);">
-            -${totalMalus.toFixed(2).replace('.', ',')}
-          </span>
-          <div style="font-size: 0.8rem; color: #888; margin-top: 0.1rem;">
-            (Kurzzeit -${shortTermFatigue.toFixed(2).replace('.', ',')} | Langzeit -${longTermTotal.toFixed(2).replace('.', ',')})
-          </div>
-        </div>
+    <section class="rider-stats-fatigue-tab" style="margin-top: 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <span style="font-size:14px; font-weight:800; color:#e2e8f0;">Erschöpfung <span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; color:#6a7a95;">· aktueller Stand</span></span>
+        <span style="font-size:11px; font-weight:700; color:${lastColor}; background:${lastBg}; border:1px solid ${lastBorder}; padding:4px 11px; border-radius:99px;">Last: ${lastLabel}</span>
       </div>
-
-      <!-- Fatigue Metric Cards -->
-      <div class="rider-stats-fatigue-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-        
-        <!-- Card 1: Short-term Fatigue -->
-        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(251, 191, 36, 0.1); color: #fbbf24;">
-                ${RIDER_STATS_ICONS.shortFatigue}
-              </span>
-              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Akute Erschöpfung (Kurzzeit)</h4>
+      <div style="display:grid; grid-template-columns:280px 1fr; gap:16px; margin-bottom:1.5rem;">
+        <!-- Ring-Karte -->
+        <div style="border-radius:14px; border:1px solid #1e2c49; background:#0c1526; padding:18px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+          <div style="width:128px; height:128px; border-radius:50%; background:${fatRing}; display:flex; align-items:center; justify-content:center;">
+            <div style="width:94px; height:94px; border-radius:50%; background:#0b1424; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:800; color:#e2e8f0;">${fatTotal.toFixed(2).replace('.', ',')}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#6a7a95; margin-top:2px;">/ ${fatMax} GESAMT</span>
             </div>
-            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
-              Steigt durch Rennbelastungen proportional zum Stage Score (ab 10 Pkt.). Sinkt um 0,2 pro tageswechsel.
-            </p>
           </div>
-          <div>
-            <div style="font-size: 1.6rem; font-weight: 700; color: ${shortTermFatigueColor}; margin-bottom: 0.25rem;">
-              -${shortTermFatigue.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
-            </div>
-            <div style="font-size: 0.8rem; color: #aaa;">
-              Erholungszeit: <strong style="color: #fff;">${shortRecoveryDays} Tage</strong> (ohne Belastung)
-            </div>
+          <div style="display:flex; flex-direction:column; gap:6px; width:100%; font-size:11px; color:#cbd5e1;">
+            <span style="display:flex; align-items:center; gap:7px;"><span style="width:10px;height:10px;border-radius:3px;background:#eab308;"></span>Kurzzeit <b style="margin-left:auto; font-family:'JetBrains Mono',monospace;">${fatShort.toFixed(2).replace('.', ',')}</b></span>
+            <span style="display:flex; align-items:center; gap:7px;"><span style="width:10px;height:10px;border-radius:3px;background:#a855f7;"></span>Gesperrte Langzeit <b style="margin-left:auto; font-family:'JetBrains Mono',monospace;">${fatLocked.toFixed(2).replace('.', ',')}</b></span>
+            <span style="display:flex; align-items:center; gap:7px;"><span style="width:10px;height:10px;border-radius:3px;background:#ef4444;"></span>Langzeit <b style="margin-left:auto; font-family:'JetBrains Mono',monospace;">${fatLong.toFixed(2).replace('.', ',')}</b></span>
           </div>
         </div>
-
-        <!-- Card 2: Long-term Decayable Fatigue -->
-        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(239, 68, 68, 0.1); color: #ef4444;">
-                ${RIDER_STATS_ICONS.longFatigue}
-              </span>
-              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Langzeit (Abbaubar)</h4>
-            </div>
-            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
-              Steigt durch Rennbelastungen proportional zum Stage Score. Regeneriert langsam um 0,01 pro tageswechsel.
-            </p>
+        <!-- Zusammensetzung -->
+        <div style="border-radius:14px; border:1px solid #1e2c49; background:#0c1526; padding:18px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:#6a7a95; margin-bottom:10px;">ZUSAMMENSETZUNG (0–${fatMax})</div>
+          <div style="display:flex; height:14px; border-radius:7px; overflow:hidden; background:#0b1424; margin-bottom:16px;">
+            <div style="width:${pct(fatShort)}%; background:#eab308;"></div><div style="width:${pct(fatLocked)}%; background:#a855f7;"></div><div style="width:${pct(fatLong)}%; background:#ef4444;"></div>
           </div>
-          <div>
-            <div style="font-size: 1.6rem; font-weight: 700; color: #ef4444; margin-bottom: 0.25rem;">
-              -${longTermDecayable.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
-            </div>
-            <div style="font-size: 0.8rem; color: #aaa;">
-              Erholungszeit: <strong style="color: #fff;">${longDecayableRecoveryDays} Tage</strong> (ohne Belastung)
-            </div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;">
+            <div style="background:#0b1424; border:1px solid #1c2b47; border-top:2px solid #eab308; border-radius:10px; padding:11px 13px;"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; color:#6a7a95;">KURZZEIT</div><div style="font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:800; color:#facc15; margin-top:3px;">${fatShort.toFixed(2).replace('.', ',')}</div></div>
+            <div style="background:#0b1424; border:1px solid #1c2b47; border-top:2px solid #a855f7; border-radius:10px; padding:11px 13px;"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; color:#6a7a95;">GESPERRT</div><div style="font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:800; color:#c4b5fd; margin-top:3px;">${fatLocked.toFixed(2).replace('.', ',')}</div></div>
+            <div style="background:#0b1424; border:1px solid #1c2b47; border-top:2px solid #ef4444; border-radius:10px; padding:11px 13px;"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; color:#6a7a95;">LANGZEIT</div><div style="font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:800; color:#fca5a5; margin-top:3px;">${fatLong.toFixed(2).replace('.', ',')}</div></div>
+          </div>
+          <div style="padding-top:14px; border-top:1px solid #1c2b47; display:flex; align-items:center; gap:12px;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; color:#6a7a95;">RENNTAGE GESAMT (SAISON)</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; color:#f1f5f9; margin-left:auto;">${seasonRaceDays}</span>
           </div>
         </div>
-
-        <!-- Card 3: Long-term Locked Fatigue -->
-        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-              <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; background: rgba(168, 85, 247, 0.1); color: #a855f7;">
-                <svg class="rider-stats-icon" style="stroke: #a855f7;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </span>
-              <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #fff;">Langzeit (Gesperrt)</h4>
-            </div>
-            <p style="margin: 0 0 1rem 0; font-size: 0.8rem; color: #999; line-height: 1.4;">
-              Steigt mit zunehmender Anzahl an Renntagen (ab 30 Renntagen). Kann unter der Saison nicht abgebaut werden.
-            </p>
-          </div>
-          <div>
-            <div style="font-size: 1.6rem; font-weight: 700; color: #a855f7; margin-bottom: 0.25rem;">
-              -${longTermLocked.toFixed(2).replace('.', ',')} <span style="font-size: 0.85rem; font-weight: 400; color: #888;">Abzug</span>
-            </div>
-            <div style="font-size: 0.8rem; color: #aaa;">
-              Status: <strong style="color: #a855f7;">Gesperrt bis Saisonende</strong>
-            </div>
-          </div>
-        </div>
-
       </div>
 
       <!-- Chronological History Table -->
