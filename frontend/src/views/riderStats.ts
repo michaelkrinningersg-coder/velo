@@ -1488,29 +1488,102 @@ export function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): s
       </section>`;
   }
 
-  return `
-    <section class="rider-stats-program">
-      <div class="rider-stats-season-head">
-        <h3>${esc(payload.program.name)}</h3>
-        <span>${races.length} Rennen</span>
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  const today = state.gameState?.currentDate ?? '';
+  const season = state.gameState?.season
+    ?? (races[0]?.startDate ? Number(races[0].startDate.slice(0, 4)) : new Date().getFullYear());
+  const yearStart = Date.UTC(season, 0, 1);
+  const msDay = 86400000;
+  const dayOfYear = (dateStr: string): number => Math.max(0, Math.min(365, (Date.parse(dateStr + 'T00:00:00Z') - yearStart) / msDay));
+
+  // Ziele = Top-5 nach Prestige
+  const goalIds = new Set([...races].sort((a, b) => (b.prestige ?? 0) - (a.prestige ?? 0)).slice(0, 5).map((r) => r.id));
+  // Tatsaechlich gefahrene Rennen dieser Saison (aus den Ergebnis-Bloecken)
+  const racedIds = new Set<number>();
+  const seasonBlocks = (payload.seasons ?? []).find((s) => s.season === season);
+  for (const b of seasonBlocks?.raceBlocks ?? []) racedIds.add(b.raceId);
+
+  // --- Timeline-SVG ---
+  const W = 1200, H = 116, padL = 12, padR = 12, axisY = 78, innerW = W - padL - padR;
+  const xAt = (d: number): number => padL + (d / 365) * innerW;
+  const monthTicks = Array.from({ length: 12 }, (_, m) => {
+    const x = xAt((Date.UTC(season, m, 1) - yearStart) / msDay);
+    return `<line x1="${x}" y1="20" x2="${x}" y2="${axisY}" stroke="#16233c" stroke-width="1"/><text x="${x + 3}" y="${axisY + 14}" fill="#5f6f8a" font-size="9" font-family="'JetBrains Mono',monospace">${['J','F','M','A','M','J','J','A','S','O','N','D'][m]}</text>`;
+  }).join('');
+  const raceMarks = races.map((race) => {
+    const x1 = xAt(dayOfYear(race.startDate));
+    const x2 = xAt(dayOfYear(race.endDate));
+    const col = resolveRaceCategoryBadgeStyle(race.category?.name).border;
+    const isGoal = goalIds.has(race.id);
+    const star = isGoal ? `<text x="${(x1 + x2) / 2}" y="30" fill="#fbbf24" font-size="12" text-anchor="middle">★</text>` : '';
+    const body = race.isStageRace && x2 - x1 > 2
+      ? `<rect x="${x1}" y="${axisY - 12}" width="${Math.max(3, x2 - x1)}" height="12" rx="3" fill="${col}"><title>${esc(race.name)}</title></rect>`
+      : `<circle cx="${x1}" cy="${axisY - 6}" r="5" fill="${col}"><title>${esc(race.name)}</title></circle>`;
+    return star + body;
+  }).join('');
+  const peakMarks = (payload.peakDates ?? []).map((d) => {
+    if (!d.startsWith(String(season))) return '';
+    const x = xAt(dayOfYear(d.slice(0, 10)));
+    return `<path d="M ${x - 5} ${axisY + 2} Q ${x} ${axisY - 10} ${x + 5} ${axisY + 2} Z" fill="rgba(34,197,94,.5)" stroke="#22c55e" stroke-width="1"><title>Formpeak ${d.slice(0, 10)}</title></path>`;
+  }).join('');
+  const todayLine = today.startsWith(String(season))
+    ? (() => { const x = xAt(dayOfYear(today.slice(0, 10))); return `<line x1="${x}" y1="16" x2="${x}" y2="${axisY + 4}" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3,3"/><text x="${x}" y="12" fill="#22d3ee" font-size="9" text-anchor="middle" font-family="'JetBrains Mono',monospace">HEUTE</text>`; })()
+    : '';
+
+  const timelineSvg = `
+    <div style="border-radius:14px;border:1px solid #1e2c49;background:#0c1526;padding:14px 16px;margin-bottom:16px;overflow-x:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Saison-Timeline</span>
+        <span style="${MONOF};font-size:10px;color:#5f6f8a;">★ Ziel · ▲ Formpeak</span>
       </div>
-      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table rider-stats-table rider-stats-program-table">
-          <thead><tr><th>Datum</th><th class="text-center">Status</th><th>Land</th><th>Rennen</th><th>Rennklasse</th></tr></thead>
-          <tbody>
-            ${races.map((race) => {
-              const isInjured = payload.unavailableUntil ? (race.startDate <= payload.unavailableUntil && race.endDate >= state.gameState!.currentDate) : false;
-              return `
-              <tr>
-                <td>${esc(formatRaceDateRange(race))}</td>
-                <td class="text-center" style="font-size: 1.1rem;">${isInjured ? '<span title="Fällt aus (Verletzung/Krankheit)">🏥</span>' : ''}</td>
-                <td class="results-flag-col-cell">${race.country?.code3 ? renderFlag(race.country.code3) : '–'}</td>
-                <td><strong>${esc(race.name)}</strong></td>
-                <td>${raceCategoryNameBadge(race)}</td>
-              </tr>
-            `}).join('')}
-          </tbody>
-        </table>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:640px;height:auto;display:block;">
+        <line x1="${padL}" y1="${axisY}" x2="${W - padR}" y2="${axisY}" stroke="#1c2b47" stroke-width="1"/>
+        ${monthTicks}${raceMarks}${peakMarks}${todayLine}
+      </svg>
+    </div>`;
+
+  // --- Rennliste im Renn-Radar-Stil mit Status ---
+  const MONTH_ABBR = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
+  const listHtml = races.map((race) => {
+    const isInjured = payload.unavailableUntil ? (race.startDate <= payload.unavailableUntil && race.endDate >= today) : false;
+    const live = today !== '' && race.startDate <= today && race.endDate >= today;
+    const done = today !== '' && race.endDate < today;
+    let status: string;
+    if (live) status = '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;animation:velopulse 1.6s ease-in-out infinite;">LÄUFT</span>';
+    else if (isInjured) status = '<span style="font-size:10px;font-weight:700;color:#fcd34d;background:rgba(234,179,8,.12);padding:4px 10px;border-radius:99px;">FÄLLT AUS</span>';
+    else if (done) status = racedIds.has(race.id)
+      ? '<span style="font-size:10px;font-weight:700;color:#86efac;background:rgba(34,197,94,.12);padding:4px 10px;border-radius:99px;">GEFAHREN</span>'
+      : '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;">NICHT DABEI</span>';
+    else status = '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;">GEPLANT</span>';
+
+    const [, mm, dd] = race.startDate.split('-');
+    const mon = MONTH_ABBR[Number(mm) - 1] ?? '';
+    const col = resolveRaceCategoryBadgeStyle(race.category?.name).border;
+    const country = race.country?.name ?? '';
+    const isGoal = goalIds.has(race.id);
+    const nameColor = done && !racedIds.has(race.id) && !live ? '#8a97ad' : '#e2e8f0';
+    return `
+      <button type="button" data-dashboard-race-id="${race.id}" style="width:100%;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:11px 14px;border:none;border-top:1px solid #14203a;${live ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}">
+        <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:18px;font-weight:800;color:${nameColor};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
+        <span style="width:5px;height:34px;border-radius:3px;background:${col};flex:0 0 auto;" title="${race.category?.name ?? ''}"></span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${nameColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isGoal ? '<span style="color:#fbbf24;">★</span> ' : ''}${esc(race.name)}</span><span style="display:block;${MONOF};font-size:11px;color:#8494ad;">${esc(country)}${race.category?.name ? ' · ' + esc(race.category.name.replace(/^world\s*tour\s*-\s*/i, '')) : ''}</span></span>
+        ${status}
+      </button>`;
+  }).join('');
+
+  return `
+    <section class="rider-stats-program" style="margin-top:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span style="font-size:14px;font-weight:800;color:#e2e8f0;">${esc(payload.program.name)}</span>
+        <span style="${MONOF};font-size:11px;color:#6a7a95;">${races.length} Rennen · ${goalIds.size} Ziele</span>
+      </div>
+      ${timelineSvg}
+      <div style="border-radius:14px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1c2b47;">
+          <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Programmrennen</span>
+          <span style="${MONOF};font-size:10px;letter-spacing:.12em;color:#5f6f8a;text-transform:uppercase;">Status</span>
+        </div>
+        ${listHtml}
       </div>
     </section>`;
 }
