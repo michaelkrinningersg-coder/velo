@@ -744,19 +744,13 @@ export function renderResultsView(): void {
   const markerTabs = $('results-marker-tabs');
   const meta = $('results-stage-meta');
   const empty = $('results-empty');
-  const table = $('results-table');
   const tableCard = $('results-table-card');
-  const headerRow = table.querySelector('thead tr');
+  const gridHead = $('results-grid-head');
+  const cardTitle = $('results-card-title');
+  const cardCount = $('results-card-count');
   const tbody = $('results-tbody');
   const markerClassifications = $('results-marker-classifications');
   const rosterContainer = $('results-roster');
-
-  // Clean up colgroup and table layout from previous renders
-  const existingColgroup = table.querySelector('colgroup');
-  if (existingColgroup) {
-    existingColgroup.remove();
-  }
-  table.style.tableLayout = '';
 
   if (state.stageResults) {
     state.selectedResultsRaceId = state.stageResults.raceId;
@@ -808,18 +802,6 @@ export function renderResultsView(): void {
   const showRoster = state.selectedResultsSpecialView === 'roster';
   if (selectedClassification && !showNonFinishers && !showEvents && !showRoster) {
     state.selectedResultTypeId = selectedClassification.resultTypeId;
-  }
-
-  // Inject colgroup and table-layout if Events view is active
-  if (showEvents) {
-    table.style.tableLayout = 'fixed';
-    const colgroup = document.createElement('colgroup');
-    colgroup.innerHTML = `
-      <col style="width: 100px;">
-      <col style="width: 240px;">
-      <col style="width: auto;">
-    `;
-    table.insertBefore(colgroup, table.firstChild);
   }
 
   if ((!state.stageResults && !showRoster) || (!selectedClassification && !showNonFinishers && !showEvents && !showRoster)) {
@@ -893,6 +875,34 @@ export function renderResultsView(): void {
   const isTeamClassification = selectedClassification?.resultTypeId === 6;
   const isBreakawayClassification = selectedClassification?.resultTypeId === 7;
   const showTrendColumn = isGcClassification || isPointsLikeClassification || isYouthClassification || isTeamClassification || isBreakawayClassification;
+
+  // ---- Broadcast-Grid-Helfer (Ergebnis-Tabelle als Grid statt <table>) ----
+  const RMONO = "font-family:'JetBrains Mono',monospace";
+  const gridRank = (rank: number): string => {
+    const color = rank === 1 ? '#fbbf24' : rank === 2 ? '#cbd5e1' : rank === 3 ? '#d08b5b' : '#5f6f8a';
+    return `<span style="text-align:center;${RMONO};font-size:15px;font-weight:800;color:${color};">${rank}</span>`;
+  };
+  const cCenter = (h: string): string => `<span style="display:flex;justify-content:center;align-items:center;min-width:0;">${h}</span>`;
+  const cRight = (h: string): string => `<span style="text-align:right;${RMONO};font-size:12px;color:#e2e8f0;justify-self:end;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h}</span>`;
+  const cTeam = (h: string): string => `<span style="${RMONO};font-size:11px;color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h}</span>`;
+  const hSpan = (label: string, align: 'l' | 'c' | 'r' = 'l'): string =>
+    `<span style="${align === 'c' ? 'text-align:center;' : align === 'r' ? 'text-align:right;' : ''}">${label}</span>`;
+
+  let resultsCols: string;
+  if (showNonFinishers) {
+    resultsCols = '52px 84px 44px minmax(140px,1fr) 40px minmax(110px,.7fr) minmax(150px,1fr)';
+  } else if (showEvents) {
+    resultsCols = '96px 236px 1fr';
+  } else if (isGcClassification) {
+    resultsCols = '50px 46px 44px minmax(150px,1fr) 40px minmax(110px,.8fr) 82px 82px 96px 54px';
+  } else if (isPointsLikeClassification || isBreakawayClassification) {
+    resultsCols = '50px 52px 44px minmax(150px,1fr) 40px minmax(110px,.8fr) 100px 54px';
+  } else if (isTeamClassification) {
+    resultsCols = '50px 52px 44px minmax(150px,1fr) 40px 82px 82px 54px';
+  } else {
+    resultsCols = `50px ${showTrendColumn ? '52px ' : ''}44px minmax(150px,1fr) 40px minmax(110px,.8fr) 82px 82px 96px 54px`;
+  }
+  const rowBase = `display:grid;grid-template-columns:${resultsCols};gap:9px;align-items:center;padding:10px 16px;border-top:1px solid #14203a;`;
 
   const resultTypeButtons = visibleClassifications.map((classification) => `
     <button
@@ -996,95 +1006,50 @@ export function renderResultsView(): void {
 
   const showStageOverviewTable = showNonFinishers || showEvents || !showMarkerTabs || state.selectedResultsMarkerKey === RESULTS_STAGE_OVERVIEW_KEY;
 
-  if (headerRow && showStageOverviewTable) {
-    headerRow.innerHTML = showNonFinishers
-      ? `
-        <th>Etappe</th>
-        <th>Status</th>
-        <th class="results-jersey-col">Trikot</th>
-        <th>Fahrer</th>
-        <th class="results-flag-col">Flagge</th>
-        <th>Team</th>
-        <th>Grund</th>
-      `
+  if (showStageOverviewTable) {
+    const headHtml = showNonFinishers
+      ? `${hSpan('Et.', 'c')}${hSpan('Status', 'c')}${hSpan('Trikot', 'c')}${hSpan('Fahrer')}${hSpan('Land', 'c')}${hSpan('Team')}${hSpan('Grund')}`
       : showEvents
-      ? `
-        <th>km Marke</th>
-        <th>Fahrer</th>
-        <th>Ereignis</th>
-      `
+      ? `${hSpan('km Marke')}${hSpan('Fahrer')}${hSpan('Ereignis')}`
       : isGcClassification
-      ? `
-        <th>Platz</th>
-        <th>GC</th>
-        <th class="results-jersey-col">Trikot</th>
-        <th>Fahrer / Team</th>
-        <th class="results-flag-col">Flagge</th>
-        <th>Team</th>
-        <th>Zeit</th>
-        <th>Rückstand</th>
-        <th class="results-points-cell">Punktewertung</th>
-        <th>UCI Punkte</th>
-      `
+      ? `${hSpan('Pl.', 'c')}${hSpan('GC', 'c')}${hSpan('Trikot', 'c')}${hSpan('Fahrer / Team')}${hSpan('Land', 'c')}${hSpan('Team')}${hSpan('Zeit', 'r')}${hSpan('Rückstand', 'r')}${hSpan('Punkte', 'r')}${hSpan('UCI', 'r')}`
       : isPointsLikeClassification
-        ? `
-          <th>Platz</th>
-          <th>Trend</th>
-          <th class="results-jersey-col">Trikot</th>
-          <th>Fahrer / Team</th>
-          <th class="results-flag-col">Flagge</th>
-          <th>Team</th>
-          <th class="results-points-cell">Punkte</th>
-          <th>UCI Punkte</th>
-        `
+      ? `${hSpan('Pl.', 'c')}${hSpan('Trend', 'c')}${hSpan('Trikot', 'c')}${hSpan('Fahrer / Team')}${hSpan('Land', 'c')}${hSpan('Team')}${hSpan('Punkte', 'r')}${hSpan('UCI', 'r')}`
       : isBreakawayClassification
-        ? `
-          <th>Platz</th>
-          <th>Trend</th>
-          <th class="results-jersey-col">Trikot</th>
-          <th>Fahrer / Team</th>
-          <th class="results-flag-col">Flagge</th>
-          <th>Team</th>
-          <th class="results-points-cell">Kilometer</th>
-          <th>UCI Punkte</th>
-        `
+      ? `${hSpan('Pl.', 'c')}${hSpan('Trend', 'c')}${hSpan('Trikot', 'c')}${hSpan('Fahrer / Team')}${hSpan('Land', 'c')}${hSpan('Team')}${hSpan('Kilometer', 'r')}${hSpan('UCI', 'r')}`
       : isTeamClassification
-        ? `
-          <th>Platz</th>
-          <th>Trend</th>
-          <th class="results-jersey-col">Trikot</th>
-          <th>Team</th>
-          <th class="results-flag-col">Flagge</th>
-          <th>Zeit</th>
-          <th>Rückstand</th>
-          <th>UCI Punkte</th>
-        `
-      : `
-        <th>Platz</th>
-        ${showTrendColumn ? '<th>Trend</th>' : ''}
-        <th class="results-jersey-col">Trikot</th>
-        <th>Fahrer / Team</th>
-        <th class="results-flag-col">Flagge</th>
-        <th>Team</th>
-        <th>Zeit</th>
-        <th>Rückstand</th>
-        <th class="results-points-cell">Punktewertung</th>
-        <th>UCI Punkte</th>
-      `;
+      ? `${hSpan('Pl.', 'c')}${hSpan('Trend', 'c')}${hSpan('Trikot', 'c')}${hSpan('Team')}${hSpan('Land', 'c')}${hSpan('Zeit', 'r')}${hSpan('Rückstand', 'r')}${hSpan('UCI', 'r')}`
+      : `${hSpan('Pl.', 'c')}${showTrendColumn ? hSpan('Trend', 'c') : ''}${hSpan('Trikot', 'c')}${hSpan('Fahrer / Team')}${hSpan('Land', 'c')}${hSpan('Team')}${hSpan('Zeit', 'r')}${hSpan('Rückstand', 'r')}${hSpan('Punkte', 'r')}${hSpan('UCI', 'r')}`;
+    gridHead.style.gridTemplateColumns = resultsCols;
+    gridHead.innerHTML = headHtml;
+
+    // Karten-Kopf: Titel + Anzahl
+    const stageLabel = state.stageResults ? `Etappe ${state.stageResults.stageNumber}` : '';
+    const cardTitleText = showNonFinishers
+      ? 'Nicht im Ziel · OTL / DNF'
+      : showEvents
+      ? 'Renn-Ereignisse'
+      : `${selectedClassification?.resultTypeName ?? 'Ergebnis'}${stageLabel ? ` · ${stageLabel}` : ''}`;
+    let cardCountN = 0;
+    if (showNonFinishers) cardCountN = state.stageResults?.nonFinishers?.length ?? 0;
+    else if (showEvents) cardCountN = state.stageResults?.events?.length ?? 0;
+    else cardCountN = selectedClassification?.rows.length ?? 0;
+    cardTitle.textContent = cardTitleText;
+    cardCount.textContent = showEvents ? `${cardCountN} Ereignisse` : `${cardCountN} ${showNonFinishers ? 'Fahrer' : 'Fahrer'}`;
   }
 
   tbody.innerHTML = showNonFinishers
     ? (state.stageResults?.nonFinishers ?? []).map((row) => `
-      <tr>
-        <td>${row.stageNumber}</td>
-        <td>${renderNonFinisherStatusBadge(row.isOtl)}</td>
-        <td class="results-jersey-col-cell">${renderResultsJerseyColumn(row.teamId, row.teamName)}</td>
-        <td>${renderResultsParticipant(row.riderName, true, false, row.riderId, row.teamId)}</td>
-        <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
-        <td>${renderTeamNameLink(row.teamName || '–', row.teamId)}</td>
-        <td>${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="7" class="results-empty-cell">Keine OTL/DNF bis zu dieser Etappe.</td></tr>'
+      <div style="${rowBase}">
+        <span style="text-align:center;${RMONO};font-size:12px;color:#9fb0c9;">${row.stageNumber}</span>
+        ${cCenter(renderNonFinisherStatusBadge(row.isOtl))}
+        ${cCenter(renderResultsJerseyColumn(row.teamId, row.teamName))}
+        <span style="min-width:0;overflow:hidden;">${renderResultsParticipant(row.riderName, true, false, row.riderId, row.teamId)}</span>
+        ${cCenter(renderResultsFlagColumn(row.countryCode))}
+        ${cTeam(renderTeamNameLink(row.teamName || '–', row.teamId))}
+        <span style="${RMONO};font-size:11px;color:#8494ad;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(formatNonFinisherReason(row.statusReason, row.isOtl))}</span>
+      </div>
+    `).join('') || '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine OTL/DNF bis zu dieser Etappe.</div>'
     : showEvents
     ? [...(state.stageResults?.events ?? [])]
       .filter((row) => {
@@ -1195,26 +1160,22 @@ export function renderResultsView(): void {
         }
 
         return `
-          <tr>
-            <td>${kmFormatted}</td>
-            <td>
-              <div class="event-rider-info">
-                ${jerseyHtml}
-                ${flagHtml}
-                ${riderHtml}
+          <div style="display:grid;grid-template-columns:${resultsCols};gap:12px;align-items:center;padding:11px 16px;border-top:1px solid #14203a;">
+            <span style="${RMONO};font-size:12px;color:#22d3ee;">${kmFormatted}</span>
+            <div class="event-rider-info">
+              ${jerseyHtml}
+              ${flagHtml}
+              ${riderHtml}
+            </div>
+            <div class="event-content">
+              <div class="event-title-wrapper">
+                <span class="event-title">${formatEventTextWithAllRiders(eventTitle)}</span>
+                ${badgeHtml}
               </div>
-            </td>
-            <td>
-              <div class="event-content">
-                <div class="event-title-wrapper">
-                  <span class="event-title">${formatEventTextWithAllRiders(eventTitle)}</span>
-                  ${badgeHtml}
-                </div>
-                ${row.detail ? `<div class="event-detail">${formatEventTextWithAllRiders(row.detail)}</div>` : ''}
-              </div>
-            </td>
-          </tr>`;
-      }).join('') || '<tr><td colspan="3" class="results-empty-cell">Keine Ereignisse für diese Etappe.</td></tr>'
+              ${row.detail ? `<div class="event-detail">${formatEventTextWithAllRiders(row.detail)}</div>` : ''}
+            </div>
+          </div>`;
+      }).join('') || '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine Ereignisse für diese Etappe.</div>'
     : showStageOverviewTable && selectedClassification
     ? (() => {
         const rows = selectedClassification.rows;
@@ -1228,9 +1189,14 @@ export function renderResultsView(): void {
           const timeCell = row.timeSeconds != null
             ? `${formatRaceTime(row.timeSeconds)}${showAverageSpeed ? ` (${formatAverageSpeed(stageDistanceKm, row.timeSeconds)})` : ''}`
             : '–';
-      const trendCell = showTrendColumn
-        ? `<td class="results-gc-delta-cell">${renderRankDelta(row.previousRank, row.rankDelta)}</td>`
-        : '';
+      const trendCell = showTrendColumn ? cCenter(renderRankDelta(row.previousRank, row.rankDelta)) : '';
+      const podium = row.rank === 1 ? 'box-shadow:inset 3px 0 0 #fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.08),transparent 55%);'
+        : row.rank === 2 ? 'box-shadow:inset 3px 0 0 #cbd5e1;background:linear-gradient(90deg,rgba(203,213,225,.07),transparent 55%);'
+        : row.rank === 3 ? 'box-shadow:inset 3px 0 0 #d08b5b;background:linear-gradient(90deg,rgba(208,139,91,.08),transparent 55%);' : '';
+      const participantWithDots = `<span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">${participantCell}${renderLeaderDots(row.riderId)}</span>`;
+      const gapCell = `<span style="text-align:right;${RMONO};font-size:12px;color:#8494ad;justify-self:end;">${esc(formatRaceGap(row.gapSeconds))}</span>`;
+      const uciCell = `<span style="text-align:right;${RMONO};font-size:11px;color:#6a7a95;justify-self:end;">${row.uciPoints != null ? row.uciPoints : '–'}</span>`;
+      const valueCell = (h: string): string => `<span style="text-align:right;${RMONO};font-size:13px;font-weight:700;color:#e2e8f0;justify-self:end;">${h}</span>`;
       if (isPointsLikeClassification) {
         let pointsHtml = row.points != null ? String(row.points) : '–';
         if (row.points != null && row.riderId != null && selectedClassification) {
@@ -1241,16 +1207,9 @@ export function renderResultsView(): void {
           }
         }
         return `
-          <tr class="results-row${resultsRowRankClass(row.rank)}">
-            ${renderRankCell(row.rank)}
-            ${trendCell}
-            <td class="results-jersey-col-cell">${jerseyCell}</td>
-            <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
-            <td class="results-flag-col-cell">${flagCell}</td>
-            <td>${renderTeamNameLink(teamName, row.teamId)}</td>
-            <td class="results-points-cell">${pointsHtml}</td>
-            <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
-          </tr>`;
+          <div style="${rowBase}${podium}">
+            ${gridRank(row.rank)}${trendCell}${cCenter(jerseyCell)}${participantWithDots}${cCenter(flagCell)}${cTeam(renderTeamNameLink(teamName, row.teamId))}${valueCell(pointsHtml)}${uciCell}
+          </div>`;
       }
       if (isBreakawayClassification) {
         let kmsHtml = row.breakawayKms != null ? `${row.breakawayKms.toFixed(1).replace('.', ',')} km` : '–';
@@ -1261,54 +1220,26 @@ export function renderResultsView(): void {
           }
         }
         return `
-          <tr class="results-row${resultsRowRankClass(row.rank)}">
-            ${renderRankCell(row.rank)}
-            ${trendCell}
-            <td class="results-jersey-col-cell">${jerseyCell}</td>
-            <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
-            <td class="results-flag-col-cell">${flagCell}</td>
-            <td>${renderTeamNameLink(teamName, row.teamId)}</td>
-            <td class="results-points-cell">${kmsHtml}</td>
-            <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
-          </tr>`;
+          <div style="${rowBase}${podium}">
+            ${gridRank(row.rank)}${trendCell}${cCenter(jerseyCell)}${participantWithDots}${cCenter(flagCell)}${cTeam(renderTeamNameLink(teamName, row.teamId))}${valueCell(kmsHtml)}${uciCell}
+          </div>`;
       }
       if (isTeamClassification) {
         return `
-          <tr class="results-row${resultsRowRankClass(row.rank)}">
-            ${renderRankCell(row.rank)}
-            ${trendCell}
-            <td class="results-jersey-col-cell">${jerseyCell}</td>
-            <td>${renderTeamNameLink(row.teamName, row.teamId)}</td>
-            <td class="results-flag-col-cell">${flagCell}</td>
-            <td>${timeCell}</td>
-            <td>${esc(formatRaceGap(row.gapSeconds))}</td>
-            <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
-          </tr>`;
+          <div style="${rowBase}${podium}">
+            ${gridRank(row.rank)}${trendCell}${cCenter(jerseyCell)}${cTeam(renderTeamNameLink(row.teamName, row.teamId))}${cCenter(flagCell)}${cRight(timeCell)}${gapCell}${uciCell}
+          </div>`;
       }
       let pointsCellContent = row.points != null ? String(row.points) : '–';
       if (row.leadoutBonus != null && row.leadoutBonus > 0 && row.leadoutRiderId != null) {
         const popoverHtml = renderLeadoutPopover(row);
-        pointsCellContent = `
-          <div class="leadout-bonus-anchor">
-            ${row.points != null ? row.points : '–'}
-            ${popoverHtml}
-          </div>
-        `;
+        pointsCellContent = `<span class="leadout-bonus-anchor">${row.points != null ? row.points : '–'}${popoverHtml}</span>`;
       }
 
           return `
-            <tr class="results-row${resultsRowRankClass(row.rank)}">
-              ${renderRankCell(row.rank)}
-              ${trendCell}
-              <td class="results-jersey-col-cell">${jerseyCell}</td>
-              <td>${participantCell}${renderLeaderDots(row.riderId)}</td>
-              <td class="results-flag-col-cell">${flagCell}</td>
-              <td>${renderTeamNameLink(teamName, row.teamId)}</td>
-              <td>${timeCell}</td>
-              <td>${esc(formatRaceGap(row.gapSeconds))}</td>
-              <td class="results-points-cell">${pointsCellContent}</td>
-              <td>${row.uciPoints != null ? row.uciPoints : '–'}</td>
-            </tr>`;
+            <div style="${rowBase}${podium}">
+              ${gridRank(row.rank)}${trendCell}${cCenter(jerseyCell)}${participantWithDots}${cCenter(flagCell)}${cTeam(renderTeamNameLink(teamName, row.teamId))}${cRight(timeCell)}${gapCell}${valueCell(pointsCellContent)}${uciCell}
+            </div>`;
         }).join('');
       })()
     : '';

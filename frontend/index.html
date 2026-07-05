@@ -361,22 +361,13 @@
         <div id="results-type-tabs" class="results-type-tabs"></div>
         <div id="results-marker-tabs" class="results-type-tabs hidden"></div>
         <div id="results-empty" class="results-empty">Noch keine Ergebnisse geladen.</div>
-        <div class="data-table-card hidden" id="results-table-card">
-          <table class="data-table" id="results-table">
-            <thead>
-              <tr>
-                <th>Platz</th>
-                <th class="results-jersey-col">Trikot</th>
-                <th>Fahrer / Team</th>
-                <th>Team</th>
-                <th>Zeit</th>
-                <th>Rückstand</th>
-                <th>Punktewertung</th>
-                <th>UCI Punkte</th>
-              </tr>
-            </thead>
-            <tbody id="results-tbody"></tbody>
-          </table>
+        <div class="results-grid-card hidden" id="results-table-card">
+          <div class="results-grid-cardhead">
+            <span id="results-card-title" class="results-card-title"></span>
+            <span id="results-card-count" class="results-card-count"></span>
+          </div>
+          <div id="results-grid-head" class="results-grid-head"></div>
+          <div id="results-tbody" class="results-grid-body"></div>
         </div>
         <div id="results-marker-classifications" class="results-marker-classifications hidden"></div>
         <div id="results-roster" class="results-roster hidden"></div>
