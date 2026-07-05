@@ -6407,3 +6407,167 @@ tr.calendar-highlight {
   font-size: 11px;
   color: #6a7a95;
 }
+
+/* ============================================================
+   Broadcast-Redesign: Results-View (#view-results) — 1:1
+   Nur Optik, gescopet auf die Results-Ansicht. Funktion/Markup
+   der Renderer unveraendert; ueberschreibt die helleren Defaults.
+   ============================================================ */
+
+/* Toolbar (Rennen/Etappe-Auswahl) als Broadcast-Panel */
+#view-results .results-toolbar {
+  background: linear-gradient(180deg, #111c34, #0d1628);
+  border: 1px solid #1e2c49;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+#view-results .results-toolbar label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #6a7a95;
+}
+
+#view-results .results-toolbar select {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: #0a1122;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+#view-results .results-toolbar select:focus {
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
+}
+
+/* Wertungs-Tabs + Marker/Event-Sub-Leiste als Segment-Toggle */
+#view-results .results-type-tabs {
+  gap: 3px;
+  padding: 3px;
+  background: #0a1122;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+}
+
+#view-results .results-type-btn {
+  border: none;
+  background: transparent;
+  color: #7c8aa3;
+  border-radius: 6px;
+  padding: 6px 13px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#view-results .results-type-btn:hover {
+  color: #e2e8f0;
+  background: rgba(34, 211, 238, .08);
+}
+
+#view-results .results-type-btn.active {
+  background: #22d3ee;
+  border: none;
+  color: #061019;
+  box-shadow: none;
+}
+
+/* Leerzustand */
+#view-results .results-empty {
+  border: 1px dashed #1e2c49;
+  border-radius: 14px;
+  background: #0c1526;
+  color: #6a7a95;
+}
+
+/* Tabellen-Karte + Tabelle */
+#view-results .data-table-card {
+  background: #0c1526;
+  border: 1px solid #1e2c49;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+#view-results .data-table thead th {
+  background: #0a1122;
+  color: #5a6a85;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #16233c;
+}
+
+#view-results .data-table td {
+  color: #cbd5e1;
+  border-bottom: 1px solid #14203a;
+  font-size: .82rem;
+}
+
+#view-results .data-table tbody tr:hover {
+  background: rgba(34, 211, 238, .05);
+}
+
+/* Podium-Akzente (Broadcast) */
+#view-results .data-table tbody tr.results-row-rank-1 {
+  box-shadow: inset 3px 0 0 #fbbf24;
+  background: linear-gradient(90deg, rgba(251, 191, 36, .08), transparent 55%);
+}
+#view-results .data-table tbody tr.results-row-rank-2 {
+  box-shadow: inset 3px 0 0 #cbd5e1;
+  background: linear-gradient(90deg, rgba(203, 213, 225, .07), transparent 55%);
+}
+#view-results .data-table tbody tr.results-row-rank-3 {
+  box-shadow: inset 3px 0 0 #d08b5b;
+  background: linear-gradient(90deg, rgba(208, 139, 91, .08), transparent 55%);
+  border-bottom: 1px solid #14203a;
+}
+#view-results .data-table tbody tr.results-row-rank-1:hover,
+#view-results .data-table tbody tr.results-row-rank-2:hover,
+#view-results .data-table tbody tr.results-row-rank-3:hover {
+  background: rgba(34, 211, 238, .06);
+}
+
+/* Marker-Detailkarte */
+#view-results .results-marker-classifications { }
+#view-results .results-marker-card {
+  background: #0c1526;
+  border: 1px solid #1e2c49;
+  border-radius: 14px;
+}
+#view-results .results-marker-row {
+  border-top: 1px solid #14203a;
+}
+
+/* Roster / Teilnehmer-Karten */
+#view-results .results-roster-team {
+  background: #0c1526;
+  border: 1px solid #1e2c49;
+  border-radius: 14px;
+}
+#view-results .results-roster-team-header {
+  border-bottom: 1px solid #1c2b47;
+}
+#view-results .results-roster-rider {
+  border-top: 1px solid #14203a;
+}
+#view-results .results-roster-rider:hover {
+  background: rgba(34, 211, 238, .05);
+}
+#view-results .results-roster-empty {
+  border: 1px dashed #1e2c49;
+  border-radius: 14px;
+  background: #0c1526;
+  color: #6a7a95;
+}
+
+/* Ereignis-Zeilen: dunklere Broadcast-Basis, Badge-Farben bleiben */
+#view-results .event-content { }
+#view-results .data-table tbody tr:hover .event-title { color: #f1f5f9; }
