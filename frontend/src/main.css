@@ -1836,8 +1836,8 @@ html, body {
   width: 100%;
   min-width: 64px;
   padding: .42rem .5rem;
-  background: rgba(15, 23, 42, .78);
-  border: 1px solid rgba(148, 163, 184, .22);
+  background: #0a1122;
+  border: 1px solid #1c2b47;
   border-radius: .45rem;
   color: var(--text-100);
   font: inherit;
@@ -1846,7 +1846,7 @@ html, body {
 .rider-team-editor-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, .18);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, .18);
 }
 
 .rider-team-editor-input-dirty {

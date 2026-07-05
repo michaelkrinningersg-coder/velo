@@ -73,43 +73,29 @@ export function renderInjuriesView(): void {
   if (sortedTeamIds.length === 0) {
     html += '<div class="alert alert-info">Keine verletzten Fahrer in Division 1 Teams.</div>';
   } else {
+    const COLS = '44px minmax(150px,1.3fr) 52px 66px 132px 96px minmax(150px,1.2fr)';
     for (const tid of sortedTeamIds) {
       const riders = grouped.get(tid)!;
       const abbr = riders[0].teamAbbreviation;
       html += `
-        <div style="margin-bottom: 2rem;">
-          <div style="display:flex; align-items:center; gap: 1rem; margin-bottom: 0.5rem;">
-            <img src="/jersey/Jer_${tid}.png" style="width: 128px; height: 128px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));" onerror="this.style.display='none'">
-            <h3 style="margin: 0; font-size: 1.5rem;">${esc(abbr ?? 'Team ' + tid)}</h3>
+        <div class="results-grid-card" style="margin-bottom:16px;">
+          <div class="results-grid-cardhead">
+            <span style="display:flex; align-items:center; gap:11px;">
+              <img src="/jersey/Jer_${tid}.png" style="width:30px; height:30px; object-fit:contain; flex:0 0 auto;" onerror="this.style.display='none'">
+              <span class="results-card-title" style="font-size:15px;">${esc(abbr ?? 'Team ' + tid)}</span>
+            </span>
+            <span class="results-card-count">${riders.length} Ausfall${riders.length === 1 ? '' : 'e'}</span>
           </div>
-          <table class="data-table injuries-table">
-            <colgroup>
-              <col style="width: 8%;">
-              <col style="width: 28%;">
-              <col style="width: 8%;">
-              <col style="width: 14%;">
-              <col style="width: 12%;">
-              <col style="width: 12%;">
-              <col style="width: 18%;">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Land</th>
-                <th>Fahrer</th>
-                <th>Alter</th>
-                <th>Gesamt</th>
-                <th>Typ</th>
-                <th>Ausfallzeit</th>
-                <th>Fit</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div class="results-grid-head" style="grid-template-columns:${COLS};">
+            <span style="justify-self:center;">LAND</span><span>FAHRER</span><span style="justify-self:center;">ALTER</span><span style="justify-self:center;">GESAMT</span><span>TYP</span><span>AUSFALLZEIT</span><span>FIT</span>
+          </div>
+          <div class="results-grid-body">
       `;
       for (const row of riders) {
-        const typeHtml = row.healthStatus === 'injured' 
-          ? '<span class="badge badge-error">Verletzung 🤕</span>' 
-          : '<span class="badge badge-warning">Krankheit 🤒</span>';
-          
+        const typeHtml = row.healthStatus === 'injured'
+          ? '<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fca5a5; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.34); padding:3px 10px; border-radius:99px;">Verletzung 🤕</span>'
+          : '<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fcd34d; background:rgba(234,179,8,.14); border:1px solid rgba(234,179,8,.34); padding:3px 10px; border-radius:99px;">Krankheit 🤒</span>';
+
         let fitHtml = '';
         if (row.fitDate) {
           const formattedFitDate = formatDate(row.fitDate);
@@ -142,18 +128,18 @@ export function renderInjuriesView(): void {
         }
 
         html += `
-          <tr>
-            <td>${renderFlag(row.countryCode)}</td>
-            <td><a href="#" onclick="event.preventDefault(); openRiderStatsFromInjuries(${row.riderId})" style="color: inherit; text-decoration: none;"><strong>${esc(row.riderFirstName)} ${esc(row.riderLastName)}</strong></a></td>
-            <td>${row.age}</td>
-            <td><span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;">${renderRiderOverallRatingBadge(row.overallRating)}</span></td>
-            <td>${typeHtml}</td>
-            <td><strong>${row.unavailableDays} Tage</strong></td>
-            <td>${fitHtml}</td>
-          </tr>
+          <div style="display:grid; grid-template-columns:${COLS}; gap:9px; align-items:center; padding:9px 16px; border-top:1px solid #14203a;">
+            <span style="display:flex; justify-content:center;">${renderFlag(row.countryCode)}</span>
+            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><a href="#" onclick="event.preventDefault(); openRiderStatsFromInjuries(${row.riderId})" style="color:#e2e8f0; text-decoration:none; font-weight:600;">${esc(row.riderFirstName)} ${esc(row.riderLastName)}</a></span>
+            <span style="justify-self:center; font-family:'JetBrains Mono',monospace; color:#9fb0c9;">${row.age}</span>
+            <span style="justify-self:center;">${renderRiderOverallRatingBadge(row.overallRating)}</span>
+            <span>${typeHtml}</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:700; color:#e2e8f0;">${row.unavailableDays} Tage</span>
+            <span style="min-width:0;">${fitHtml}</span>
+          </div>
         `;
       }
-      html += `</tbody></table></div>`;
+      html += `</div></div>`;
     }
   }
 
