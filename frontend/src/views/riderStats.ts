@@ -724,12 +724,12 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
   const defsHtml = `
     <defs>
       <radialGradient id="radarBgGrad" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="rgba(30,32,48,0.95)" />
-        <stop offset="100%" stop-color="rgba(15,16,28,0.98)" />
+        <stop offset="0%" stop-color="rgba(16,29,51,0.95)" />
+        <stop offset="100%" stop-color="rgba(11,20,36,0.98)" />
       </radialGradient>
       <linearGradient id="riderFillGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(129,140,248,0.45)" />
-        <stop offset="100%" stop-color="rgba(79,70,229,0.20)" />
+        <stop offset="0%" stop-color="rgba(34,211,238,0.42)" />
+        <stop offset="100%" stop-color="rgba(8,145,178,0.18)" />
       </linearGradient>
       <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
         <feGaussianBlur stdDeviation="6" result="blur" />
@@ -801,10 +801,10 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
     const px = CX + r * Math.cos(angle);
     const py = CY + r * Math.sin(angle);
     riderPts.push(`${px},${py}`);
-    riderDots.push(`<circle cx="${px}" cy="${py}" r="5" fill="#818cf8" stroke="#fff" stroke-width="2" filter="url(#dotGlow)"><title>${labels[i]}: ${val}</title></circle>`);
+    riderDots.push(`<circle cx="${px}" cy="${py}" r="5" fill="#22d3ee" stroke="#fff" stroke-width="2" filter="url(#dotGlow)"><title>${labels[i]}: ${val}</title></circle>`);
   });
 
-  const riderPolygonHtml = `<polygon points="${riderPts.join(' ')}" fill="url(#riderFillGrad)" stroke="#818cf8" stroke-width="2.5" stroke-linejoin="round" filter="url(#radarGlow)" />`;
+  const riderPolygonHtml = `<polygon points="${riderPts.join(' ')}" fill="url(#riderFillGrad)" stroke="#22d3ee" stroke-width="2.5" stroke-linejoin="round" filter="url(#radarGlow)" />`;
 
   // ---------- Skills list: 2 columns, sorted strongest → weakest ----------
   const skillsList = [
@@ -827,45 +827,122 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
     return sb - sa;
   });
 
-  // Fill two columns: left col gets indices 0,2,4,6,8 – right col gets 1,3,5,7,9
-  const colLeft: string[] = [];
-  const colRight: string[] = [];
-  sortedSkills.forEach((skill, idx) => {
-    const score = (riderSkills as any)[skill.key] ?? 60;
-    const html = `
-      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-900); padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-primary); margin-bottom: 0.75rem;">
-        <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-300);">${skill.label}</span>
-        ${renderRiderSkillBadge(score)}
-      </div>
-    `;
-    if (idx % 2 === 0) colLeft.push(html);
-    else colRight.push(html);
-  });
+  // Broadcast: diskrete Farbschwellen fuer die Skill-Werte
+  const skillBadgeColor = (score: number): string => {
+    if (score >= 75) return '#16a34a';
+    if (score >= 73) return '#65a30d';
+    if (score >= 70) return '#ca8a04';
+    return '#ea580c';
+  };
 
-  const skillsGridHtml = `
-    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; width: 100%; align-content: start;">
-      <div class="skills-col">${colLeft.join('')}</div>
-      <div class="skills-col">${colRight.join('')}</div>
-    </div>
-  `;
+  const skillRowsHtml = sortedSkills.map((skill) => {
+    const score = (riderSkills as any)[skill.key] ?? 60;
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:#0b1424; border:1px solid #1c2b47; border-radius:8px; padding:9px 12px;">
+        <span style="font-size:12.5px; font-weight:600; color:#cbd5e1;">${skill.label}</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:800; color:#fff; background:${skillBadgeColor(score)}; padding:2px 9px; border-radius:6px; min-width:34px; text-align:center;">${score.toFixed(0)}</span>
+      </div>`;
+  }).join('');
+
+  // SPEC-Karten (1-3)
+  const specDefs: Array<{ label: string; border: string; value: string }> = [
+    { label: 'SPEC 1', border: '#22d3ee', value: rider?.specialization1 ? getRiderSpecializationLabel(rider.specialization1) : '–' },
+    { label: 'SPEC 2', border: '#818cf8', value: rider?.specialization2 ? getRiderSpecializationLabel(rider.specialization2) : '–' },
+    { label: 'SPEC 3', border: '#5f6f8a', value: rider?.specialization3 ? getRiderSpecializationLabel(rider.specialization3) : '–' },
+  ];
+  const specCardsHtml = specDefs.map((spec) => `
+    <div style="flex:1; min-width:0; background:#0b1424; border:1px solid #1c2b47; border-top:2px solid ${spec.border}; border-radius:9px; padding:8px 11px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:#6a7a95;">${spec.label}</div>
+      <div style="font-size:13px; font-weight:700; color:#e8edf5; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(spec.value)}</div>
+    </div>`).join('');
+
+  const legendHtml = `
+    <div style="display:flex; gap:16px; margin-top:14px; padding-top:13px; border-top:1px solid #1c2b47; font-size:11px; color:#7c8aa3; flex-wrap:wrap;">
+      <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:#16a34a;"></span>75+</span>
+      <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:#65a30d;"></span>73–74</span>
+      <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:#ca8a04;"></span>70–72</span>
+      <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:#ea580c;"></span>&lt;70</span>
+    </div>`;
+
+  // Terrain-Band (Saisonpunkte nach Terrain, absteigend)
+  const terrainPoints = payload?.pointsByTerrain ?? { flat: 0, hilly: 0, mediumMountain: 0, mountain: 0, timetrial: 0, cobble: 0 };
+  const terrainRows: Array<{ label: string; value: number }> = [
+    { label: 'Hügelig', value: terrainPoints.hilly },
+    { label: 'Mittelgebirge', value: terrainPoints.mediumMountain },
+    { label: 'Flach', value: terrainPoints.flat },
+    { label: 'Hochgebirge', value: terrainPoints.mountain },
+    { label: 'Kopfsteinpfl.', value: terrainPoints.cobble },
+    { label: 'Zeitfahren', value: terrainPoints.timetrial },
+  ].sort((a, b) => b.value - a.value);
+  const maxTerrain = Math.max(1, ...terrainRows.map((t) => t.value));
+  const terrainBarsHtml = terrainRows.map((t) => {
+    const pct = Math.round((t.value / maxTerrain) * 100);
+    return `
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="width:104px; font-size:12px; color:#9fb0c9; flex:0 0 auto;">${t.label}</span>
+        <div style="flex:1; height:9px; background:#0b1424; border-radius:99px; overflow:hidden;"><div style="width:${pct}%; height:100%; background:linear-gradient(90deg,#22d3ee,#0891b2);"></div></div>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:#e2e8f0; width:40px; text-align:right;">${t.value}</span>
+      </div>`;
+  }).join('');
+
+  // Format & Profil
+  const formatPoints = payload?.pointsByRaceFormat ?? { stageRace: 0, oneDay: 0 };
+  const profileId = rider?.weatherProfileId ?? payload?.weatherProfileId ?? 1;
+  const weatherProfile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
+  const pref1Id = weatherProfile.pref[0];
+  const pref2Id = weatherProfile.pref[1];
+  const pref1Name = WEATHER_NAMES[pref1Id];
+  const pref2Name = WEATHER_NAMES[pref2Id];
 
   return `
     <section class="rider-stats-skills-tab" style="margin-top: 1rem;">
-      <div class="rider-stats-skills-container" style="display: grid; grid-template-columns: 540px 1fr; gap: 2rem; align-items: start; background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-primary);">
-        <div class="skills-radar-wrapper" style="display: flex; justify-content: center; align-items: center; background: var(--bg-900); padding: 1.25rem; border-radius: 10px; border: 1px solid var(--border-primary);">
-          <svg width="540" height="440" viewBox="0 0 ${SVG_W} ${SVG_H}" style="overflow: visible;">
-            ${defsHtml}
-            ${bgCircle}
-            ${gridPathsHtml}
-            ${spokesHtml}
-            ${riderPolygonHtml}
-            ${riderDots.join('')}
-            ${labelsHtml}
-          </svg>
+      <div style="display:grid; grid-template-columns:480px 1fr; gap:16px; align-items:stretch; margin-bottom:16px;">
+        <div style="border-radius:14px; border:1px solid #223354; background:linear-gradient(160deg,#101d33,#0b1424); padding:18px; display:flex; flex-direction:column;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:13px; font-weight:800; color:#e2e8f0;">Skill-Radar</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#5f6f8a; letter-spacing:.1em;">6 KERN-ACHSEN · 60–85</span>
+          </div>
+          <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+            <svg width="100%" height="440" viewBox="0 0 ${SVG_W} ${SVG_H}" style="overflow: visible; max-width:540px;">
+              ${defsHtml}
+              ${bgCircle}
+              ${gridPathsHtml}
+              ${spokesHtml}
+              ${riderPolygonHtml}
+              ${riderDots.join('')}
+              ${labelsHtml}
+            </svg>
+          </div>
         </div>
-        <div class="skills-list-wrapper" style="display: flex; flex-direction: column; height: 100%; justify-content: start;">
-          <h4 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; color: var(--text-100); border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; font-weight: bold;">Fahrer-Skills</h4>
-          ${skillsGridHtml}
+
+        <div style="border-radius:14px; border:1px solid #1e2c49; background:#0c1526; padding:16px 18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:13px;">
+            <span style="font-size:13px; font-weight:800; color:#e2e8f0;">Alle Fähigkeiten</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#5f6f8a; letter-spacing:.1em;">STÄRKSTE ZUERST</span>
+          </div>
+          <div style="display:flex; gap:8px; margin-bottom:13px;">${specCardsHtml}</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:9px 14px;">${skillRowsHtml}</div>
+          ${legendHtml}
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px;">
+        <div style="border-radius:14px; border:1px solid #1e2c49; background:#0c1526; padding:16px 18px;">
+          <div style="font-size:13px; font-weight:800; color:#e2e8f0; margin-bottom:13px;">Saisonpunkte nach Terrain</div>
+          <div style="display:flex; flex-direction:column; gap:10px;">${terrainBarsHtml}</div>
+        </div>
+
+        <div style="border-radius:14px; border:1px solid #1e2c49; background:#0c1526; padding:16px 18px;">
+          <div style="font-size:13px; font-weight:800; color:#e2e8f0; margin-bottom:13px;">Format &amp; Profil</div>
+          <div style="display:flex; gap:10px; margin-bottom:14px;">
+            <div style="flex:1; background:#0b1424; border:1px solid #1c2b47; border-radius:10px; padding:11px 13px;"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#6a7a95;">RUNDFAHRTEN</div><div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:800; color:#22d3ee; margin-top:4px;">${formatPoints.stageRace}</div></div>
+            <div style="flex:1; background:#0b1424; border:1px solid #1c2b47; border-radius:10px; padding:11px 13px;"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#6a7a95;">EINTAGES</div><div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:800; color:#e2e8f0; margin-top:4px;">${formatPoints.oneDay}</div></div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#6a7a95; margin-bottom:8px;">WETTER-PRÄFERENZ</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#cbd5e1; background:#0b1424; border:1px solid #1c2b47; padding:5px 11px; border-radius:99px;">${renderWeatherIcon(pref1Id, pref1Name)}${esc(pref1Name)}</span>
+            <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#cbd5e1; background:#0b1424; border:1px solid #1c2b47; padding:5px 11px; border-radius:99px;">${renderWeatherIcon(pref2Id, pref2Name)}${esc(pref2Name)}</span>
+          </div>
         </div>
       </div>
     </section>
