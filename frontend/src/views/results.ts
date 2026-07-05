@@ -879,7 +879,7 @@ export function renderResultsView(): void {
   // ---- Broadcast-Grid-Helfer (Ergebnis-Tabelle als Grid statt <table>) ----
   const RMONO = "font-family:'JetBrains Mono',monospace";
   const gridRank = (rank: number): string => {
-    const color = rank === 1 ? '#fbbf24' : rank === 2 ? '#cbd5e1' : rank === 3 ? '#d08b5b' : '#5f6f8a';
+    const color = rank === 1 ? '#fbbf24' : rank === 2 ? '#cbd5e1' : rank === 3 ? '#d08b5b' : '#9fb0c9';
     return `<span style="text-align:center;${RMONO};font-size:15px;font-weight:800;color:${color};">${rank}</span>`;
   };
   const cCenter = (h: string): string => `<span style="display:flex;justify-content:center;align-items:center;min-width:0;">${h}</span>`;

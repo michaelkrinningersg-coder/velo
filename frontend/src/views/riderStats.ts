@@ -2295,6 +2295,8 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   if (state.riderStatsTopResultsFilterProfile) {
     filteredRows = filteredRows.filter(r => r.profile === state.riderStatsTopResultsFilterProfile);
   }
+  // Top-Results zeigt nur punktebringende Ergebnisse (Design-Vorgabe).
+  filteredRows = filteredRows.filter(r => (r.seasonPoints ?? 0) > 0);
 
   filteredRows.sort((a, b) => {
     if (b.seasonPoints !== a.seasonPoints) {
@@ -2327,7 +2329,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     }
   });
 
-  const itemsPerPage = 200;
+  const itemsPerPage = 25;
   const activeRows = filteredRows.slice(0, 1000);
   const totalPages = Math.max(1, Math.ceil(activeRows.length / itemsPerPage));
   if (state.riderStatsTopResultsPage > totalPages) {
@@ -2656,6 +2658,17 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         </div>`).join('')}
     </div>`;
 
+  const jerseyTotals = Object.values(stats.categories || {}).reduce(
+    (acc, c: any) => ({
+      yellow: acc.yellow + (c.leaderJerseys || 0),
+      green: acc.green + (c.pointsJerseys || 0),
+      mountain: acc.mountain + (c.mountainJerseys || 0),
+      youth: acc.youth + (c.youthJerseys || 0),
+      breakaway: acc.breakaway + (c.breakawayJerseys || 0),
+    }),
+    { yellow: 0, green: 0, mountain: 0, youth: 0, breakaway: 0 }
+  );
+
   return `
     <section class="rider-stats-career" style="margin-top: 1rem;">
       <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:14px;">Karrierestatistiken</div>
@@ -2691,6 +2704,13 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           { label: 'Heimvorteil', value: String(stats.homeAdvantageDays ?? 0), sub: 'Tage', color: '#38bdf8' },
           { label: 'Heimbonus', value: String(stats.superHomeAdvantageDays ?? 0), sub: 'Tage', color: '#facc15' },
           { label: 'Heimmalus', value: String(stats.homePressureDays ?? 0), sub: 'Tage', color: '#fb7185' },
+        ])}
+        ${panel('Getragene Wertungstrikots', [
+          { label: 'Gelbes Trikot', value: String(jerseyTotals.yellow), sub: 'Tage', color: '#fbbf24' },
+          { label: 'Grünes Trikot', value: String(jerseyTotals.green), sub: 'Tage', color: '#4ade80' },
+          { label: 'Bergtrikot', value: String(jerseyTotals.mountain), sub: 'Tage', color: '#f87171' },
+          { label: 'Weißes Trikot', value: String(jerseyTotals.youth), sub: 'Tage', color: '#e2e8f0' },
+          { label: 'Lila Trikot', value: String(jerseyTotals.breakaway), sub: 'Tage', color: '#a855f7' },
         ])}
       </div>
 

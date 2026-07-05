@@ -299,13 +299,15 @@ html, body {
 }
 
 .pending-stage-item {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: .7rem .85rem;
-  background: rgba(99, 102, 241, .12);
-  border: 1px solid rgba(129, 140, 248, .25);
+  padding: .7rem .85rem .7rem 1.05rem;
+  background: linear-gradient(90deg, rgba(239, 68, 68, .16), rgba(239, 68, 68, .035) 62%);
+  border: 1px solid rgba(239, 68, 68, .38);
+  border-left: 3px solid #ef4444;
   border-radius: var(--radius-sm);
 }
 
@@ -315,6 +317,20 @@ html, body {
 
 .pending-stage-title {
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.pending-stage-title::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px 1px rgba(239, 68, 68, .8);
+  animation: velopulse 1.4s ease-in-out infinite;
+  flex: 0 0 auto;
 }
 
 .pending-stage-actions {
