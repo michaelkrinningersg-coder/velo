@@ -18,7 +18,7 @@ import {
   resolveTeamJerseyAssetPath,
 } from '../state';
 import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge, openDashboardStageProfile } from './dashboard';
-import type { Rider, RiderStatsPayload } from '../../../shared/types';
+import type { Rider, RiderStatsPayload, RiderFormHistoryEntry } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -35,6 +35,8 @@ let comparedRiders: Array<{
 let selectedCompareTeamId: number | null = null;
 let chartToggles = {
   form: true,
+  seasonForm: false,
+  raceForm: false,
   combinedFatigue: true,
   shortFatigue: false,
   longFatigue: false
@@ -1256,6 +1258,25 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
     longFatiguePointsHtml = lfPts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#a855f7" stroke-width="2"><title>Langzeitfatigue (${p.date}): ${p.val.toFixed(2)}</title></circle>`).join('');
   }
 
+  // Season-Form (sForm) und Rennform (rForm) — Komponenten der Gesamtform (0-8)
+  const buildFormComponent = (getVal: (e: RiderFormHistoryEntry) => number, stroke: string, label: string): string => {
+    const cpts = history.map((entry) => {
+      const dayOfYear = (new Date(entry.date).getTime() - yearStart) / msPerDay;
+      const x = padL + (dayOfYear / 365) * chartW;
+      const val = getVal(entry);
+      const y = padT + chartH - (Math.min(8, Math.max(0, val)) / 8) * chartH;
+      return { x, y, val, date: entry.date };
+    });
+    if (cpts.length === 0) return '';
+    const path = `<path d="M ${cpts.map((p) => `${p.x},${p.y}`).join(' L ')}" fill="none" stroke="${stroke}" stroke-width="2" stroke-dasharray="5,3" />`;
+    const dots = cpts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="${stroke}" stroke-width="2"><title>${label} (${p.date}): ${p.val.toFixed(2)}</title></circle>`).join('');
+    return path + dots;
+  };
+  const seasonFormHtml = (chartToggles.seasonForm && pts.length > 0)
+    ? buildFormComponent((e) => e.sForm ?? 0, '#fb923c', 'Season-Form') : '';
+  const raceFormHtml = (chartToggles.raceForm && pts.length > 0)
+    ? buildFormComponent((e) => e.rForm ?? 0, '#4ade80', 'Rennform') : '';
+
   // Draw area under curve ONLY for the original rider, in warm yellow
   const fillColor = 'rgba(251, 191, 36, 0.15)'; 
 
@@ -1406,8 +1427,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
   });
 
   const legendContainerHtml = `
-    <div class="rider-stats-compare-legend" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary); max-height: 460px; overflow-y: auto; display: flex; flex-direction: column;">
-      <h4 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; border-bottom: 1px solid var(--border-primary); padding-bottom: 0.5rem; color: var(--text-100); font-weight: bold;">Legende</h4>
+    <div class="rider-stats-compare-legend" style="background: #0c1526; border-radius: 14px; padding: 1rem; border: 1px solid #1e2c49; max-height: 460px; overflow-y: auto; display: flex; flex-direction: column;">
+      <h4 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; border-bottom: 1px solid #1c2b47; padding-bottom: 0.5rem; color: #e2e8f0; font-weight: bold;">Legende</h4>
       
       <!-- Chart Line Toggle Checkboxes -->
       <div class="chart-line-toggles" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -1415,6 +1436,16 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
           <input type="checkbox" id="toggle-chart-form" ${chartToggles.form ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: var(--accent-primary);" />
           <span style="display: inline-block; width: 8px; height: 8px; background: var(--accent-primary); border-radius: 50%;"></span>
           Form (0-8)
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-season-form" ${chartToggles.seasonForm ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #fb923c;" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: #fb923c; border-radius: 50%;"></span>
+          Season-Form (0-8)
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
+          <input type="checkbox" id="toggle-chart-race-form" ${chartToggles.raceForm ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #4ade80;" />
+          <span style="display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%;"></span>
+          Rennform (0-8)
         </label>
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-100); font-size: 0.9rem; margin: 0; user-select: none;">
           <input type="checkbox" id="toggle-chart-combined-fatigue" ${chartToggles.combinedFatigue ? 'checked' : ''} style="cursor: pointer; width: 14px; height: 14px; accent-color: #ef4444;" />
@@ -1445,7 +1476,7 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       </div>
       ${selectorsHtml}
       <div class="rider-stats-form-container" style="display: grid; grid-template-columns: 1fr 240px; gap: 1rem; align-items: start; margin-top: 1rem;">
-        <div class="rider-stats-chart-wrapper" style="overflow-x: auto; background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px solid var(--border-primary);">
+        <div class="rider-stats-chart-wrapper" style="overflow-x: auto; background: #0c1526; border-radius: 14px; padding: 1rem; border: 1px solid #1e2c49;">
           <svg width="100%" height="460" viewBox="0 0 1350 444" style="min-width: 1300px;">
             ${phaseBackgroundsHtml}
             ${gridHtml}
@@ -1454,6 +1485,8 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
             ${fillPath ? `<path d="${fillPath}" fill="${fillColor}" />` : ''}
             ${pathData ? `<path d="${pathData}" fill="none" stroke="var(--accent-primary)" stroke-width="2" />` : ''}
             ${pointsHtml}
+            ${seasonFormHtml}
+            ${raceFormHtml}
             ${combinedFatiguePathHtml}
             ${combinedFatiguePointsHtml}
             ${shortFatiguePathHtml}
@@ -2072,6 +2105,10 @@ export function initRiderStatsListeners(): void {
       const checked = (event.target as HTMLInputElement).checked;
       if (targetId === 'toggle-chart-form') {
         chartToggles.form = checked;
+      } else if (targetId === 'toggle-chart-season-form') {
+        chartToggles.seasonForm = checked;
+      } else if (targetId === 'toggle-chart-race-form') {
+        chartToggles.raceForm = checked;
       } else if (targetId === 'toggle-chart-combined-fatigue') {
         chartToggles.combinedFatigue = checked;
       } else if (targetId === 'toggle-chart-short-fatigue') {
