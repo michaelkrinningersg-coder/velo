@@ -39,6 +39,7 @@ import type {
   Rider,
 } from '../../../shared/types';
 import { renderStaticStageProfile } from '../race-sim/renderProfile';
+import { renderDashboardBroadcast, dashboardRiderRows } from './dashboardBroadcast';
 
 // Dynamically imported or declared interfaces to avoid circular import issues
 import { openRosterEditor, openRealtimeStage, openInstantStage } from './liveRace';
@@ -143,15 +144,9 @@ export function renderGameState(): void {
 }
 
 export function renderDashboard(): void {
-  const playerTeam = state.teams.find(t => t.isPlayerTeam)
-    ?? state.teams.find(t => t.name === state.currentSave?.teamName)
-    ?? null;
-  $('dashboard-career').textContent   = state.currentSave?.careerName ?? '–';
-  $('dashboard-team').textContent     = playerTeam?.name ?? state.currentSave?.teamName ?? '–';
-  $('dashboard-date').textContent     = state.gameState?.formattedDate ?? '–';
-  $('dashboard-season').textContent   = state.gameState ? `Saison ${state.gameState.season}` : '–';
-  $('dashboard-races-today').textContent = String(state.gameStatus?.pendingStages.length ?? state.gameState?.racesTodayCount ?? 0);
-  renderDashboardRaces();
+  // Broadcast-Redesign (2A): kompletter View-Body als HTML-String.
+  // Die Tageswechsel-/Auto-Progress-Steuerung liegt ausserhalb (#game-state-bar).
+  $('view-dashboard').innerHTML = renderDashboardBroadcast();
 }
 
 export async function loadRaces(): Promise<void> {
@@ -163,111 +158,6 @@ export async function loadRaces(): Promise<void> {
   }
 }
 
-function addDays(dateStr: string, days: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + days);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function renderRaceRowHtml(race: Race): string {
-  const isLive = state.gameState != null
-    && race.startDate <= state.gameState.currentDate
-    && race.endDate >= state.gameState.currentDate;
-  const isDone = state.gameState != null && race.endDate < state.gameState.currentDate;
-  const statusBadge = isDone
-    ? `<span class="badge badge-done">Abgeschlossen</span>`
-    : isLive
-      ? `<span class="badge badge-live">Läuft</span>`
-      : `<span class="badge badge-todo">Geplant</span>`;
-  const location = race.country?.name ?? `Land ${race.countryId}`;
-  const locationFlag = race.country?.code3 ? renderFlag(race.country.code3) : '';
-  const totalDistanceKm = race.isStageRace
-    ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.distanceKm ?? 0), 0)
-    : (race.upcomingStage?.distanceKm ?? null);
-  const totalElevationGain = race.isStageRace
-    ? (race.stages ?? []).reduce((sum, stage) => sum + (stage.elevationGainMeters ?? 0), 0)
-    : (race.upcomingStage?.elevationGainMeters ?? null);
-  const distance = totalDistanceKm != null ? String(totalDistanceKm.toFixed(1)).replace('.', ',') : '-';
-  const elevation = totalElevationGain != null ? String(Math.round(totalElevationGain)) : '-';
-  return `
-    <tr>
-      <td>${formatDate(race.startDate)}</td>
-      <td>
-        <button type="button" class="dashboard-race-link" data-dashboard-race-id="${race.id}">
-          <strong>${esc(race.name)}</strong>
-        </button>
-      </td>
-      <td>
-        <button type="button" class="dashboard-race-link dashboard-race-link-format" data-dashboard-race-id="${race.id}">
-          ${raceCategoryBadge(race)}
-        </button>
-      </td>
-      <td><span class="dashboard-race-country">${locationFlag}<span>${esc(location)}</span></span></td>
-      <td>${raceCategoryNameBadge(race)}</td>
-      <td>${distance}</td>
-      <td>${elevation}</td>
-      <td>${statusBadge}</td>
-    </tr>`;
-}
-
-export function renderDashboardRaces(): void {
-  const tbody = $('dashboard-races-tbody');
-  if (!state.gameState) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Kein Spiel geladen.</td></tr>';
-    return;
-  }
-
-  const currentDate = state.gameState.currentDate;
-  const maxDateStr = addDays(currentDate, 7);
-
-  const inProgressRaces = state.races.filter(race =>
-    race.startDate <= currentDate && race.endDate >= currentDate
-  );
-
-  const upcomingRaces = state.races.filter(race =>
-    race.startDate > currentDate && race.startDate <= maxDateStr
-  );
-
-  let html = '';
-
-  // In Progress
-  html += `
-    <tr class="table-subsection-header">
-      <td colspan="8"><strong>In Progress</strong></td>
-    </tr>
-  `;
-  if (inProgressRaces.length === 0) {
-    html += `
-      <tr>
-        <td colspan="8" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine laufenden Rennen.</td>
-      </tr>
-    `;
-  } else {
-    html += inProgressRaces.map(race => renderRaceRowHtml(race)).join('');
-  }
-
-  // Upcoming
-  html += `
-    <tr class="table-subsection-header">
-      <td colspan="8"><strong>Geplant (Nächste 7 Tage)</strong></td>
-    </tr>
-  `;
-  if (upcomingRaces.length === 0) {
-    html += `
-      <tr>
-        <td colspan="8" class="text-muted" style="font-style: italic; text-align: center; padding: 12px;">Keine geplanten Rennen in den nächsten 7 Tagen.</td>
-      </tr>
-    `;
-  } else {
-    html += upcomingRaces.map(race => renderRaceRowHtml(race)).join('');
-  }
-
-  tbody.innerHTML = html;
-}
 
 export function getStageDisplayName(stage: Stage): string {
   return `Etappe ${stage.stageNumber}`;
@@ -679,8 +569,31 @@ export function initDashboardListeners(): void {
     }
   });
 
-  $('dashboard-races-tbody').addEventListener('click', (event) => {
-    const raceButton = (event.target as Element).closest<HTMLButtonElement>('button[data-dashboard-race-id]');
+  // Delegation auf den View-Container, da der Body bei jedem Render neu
+  // gesetzt wird (Broadcast-Redesign). Deckt Renn-Radar + Punkte/Siege-Toggle ab.
+  $('view-dashboard').addEventListener('click', (event) => {
+    const target = event.target as Element;
+
+    const metricButton = target.closest<HTMLButtonElement>('button[data-top10-metric]');
+    if (metricButton) {
+      const byWins = metricButton.dataset['top10Metric'] === 'wins';
+      const container = document.getElementById('dashboard-top10-riders');
+      if (container) {
+        container.innerHTML = dashboardRiderRows(byWins);
+      }
+      // Aktiv-Stil der beiden Umschalter togglen
+      const group = metricButton.parentElement;
+      if (group) {
+        group.querySelectorAll<HTMLButtonElement>('button[data-top10-metric]').forEach((btn) => {
+          const active = btn === metricButton;
+          btn.style.background = active ? '#22d3ee' : 'transparent';
+          btn.style.color = active ? '#061019' : '#7c8aa3';
+        });
+      }
+      return;
+    }
+
+    const raceButton = target.closest<HTMLButtonElement>('button[data-dashboard-race-id]');
     if (!raceButton) {
       return;
     }
