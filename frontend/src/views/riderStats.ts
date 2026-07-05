@@ -2687,38 +2687,6 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
   }, 0);
 
   // Helper function to render badge
-  const renderCareerBadge = (
-    displayValue: string | number,
-    type: 'gold' | 'silver' | 'bronze' | 'green' | 'red' | 'white' | 'purple' | 'breakaway',
-    title: string,
-    value?: number
-  ): string => {
-    const checkVal = value !== undefined ? value : (typeof displayValue === 'number' ? displayValue : parseFloat(String(displayValue)) || 0);
-    let style = 'padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: bold; min-width: 1.8rem; text-align: center; display: inline-block; box-sizing: border-box;';
-    if (checkVal === 0) {
-      style += 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);';
-    } else {
-      if (type === 'gold') {
-        style += 'background: linear-gradient(135deg, #ffd700, #ffa500); color: #000; box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); text-shadow: 0 0 1px rgba(255,255,255,0.3);';
-      } else if (type === 'silver') {
-        style += 'background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; box-shadow: 0 0 5px rgba(229, 231, 235, 0.4);';
-      } else if (type === 'bronze') {
-        style += 'background: linear-gradient(135deg, #d35400, #a04000); color: #fff; box-shadow: 0 0 5px rgba(211, 84, 0, 0.4);';
-      } else if (type === 'purple') {
-        style += 'background: linear-gradient(135deg, #a855f7, #7e22ce); color: #fff; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4);';
-      } else if (type === 'green') {
-        style += 'background: #2ecc71; color: #fff; box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);';
-      } else if (type === 'red') {
-        style += 'background: #e74c3c; color: #fff; box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);';
-      } else if (type === 'white') {
-        style += 'background: #ffffff; color: #000; border: 1px solid #ccc; box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);';
-      } else if (type === 'breakaway') {
-        style += 'background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4);';
-      }
-    }
-    return `<span style="${style}" title="${esc(title)}">${displayValue}</span>`;
-  };
-
   const categoriesToShow = [
     { key: 'World Tour - Tour de France', name: 'Tour de France', isStage: true },
     { key: 'World Tour - Grand Tour', name: 'Grand Tour', isStage: true },
@@ -2793,209 +2761,42 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
       <!-- Categories details -->
       <h3 style="font-size:13px;font-weight:800;color:#e2e8f0;margin:22px 0 12px;padding-bottom:8px;border-bottom:1px solid #1c2b47;">Ergebnisse nach Rennklasse <span style="${MONOF};font-size:10px;font-weight:600;color:#6a7a95;">· Podestplätze</span></h3>
 
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 1.25rem;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;">
         ${categoriesToShow.map(cat => {
-          const catData = stats.categories[cat.key] || {
-            gcWins: 0,
-            gcSecond: 0,
-            gcThird: 0,
-            gcTopTen: 0,
-            stageWins: 0,
-            stageSecond: 0,
-            stageThird: 0,
-            stageTopTen: 0,
-            oneDayWins: 0,
-            oneDaySecond: 0,
-            oneDayThird: 0,
-            oneDayTopTen: 0,
-            mountainWins: 0,
-            pointsWins: 0,
-            youthWins: 0,
-            breakawayWins: 0,
-            raceDays: 0,
-            leaderJerseys: 0,
-            pointsJerseys: 0,
-            mountainJerseys: 0,
-            youthJerseys: 0,
-            breakawayJerseys: 0,
-            sprintWins: 0,
-            climbWinsHC: 0,
-            climbWins1: 0,
-            climbWins2: 0,
-            climbWins3: 0,
-            climbWins4: 0,
-            winFlat: 0,
-            winRolling: 0,
-            winHilly: 0,
-            winHillyDifficult: 0,
-            winMediumMountain: 0,
-            winMountain: 0,
-            winHighMountain: 0,
-            winCobble: 0,
-            winCobbleHill: 0,
-            winITT: 0,
-            winTTT: 0,
-            winWeather1: 0,
-            winWeather2: 0,
-            winWeather3: 0,
-            winWeather4: 0,
-            winWeather5: 0,
-            winWeather6: 0,
-            winWeather7: 0,
-          };
-
+          const catData: any = stats.categories[cat.key] || {};
+          const num = (k: string): number => catData[k] || 0;
+          const placeRow = (title: string, w: number, s: number, t: number, x: number): string => `
+            <div style="${MONOF};font-size:9px;letter-spacing:.08em;color:#6a7a95;margin:6px 0 4px;">${title}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="1. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#ffd700;"></span>${w}</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="2. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#cbd5e1;"></span>${s}</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="3. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#d08b5b;"></span>${t}</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#67e8f9;" title="Top 10 (Plätze 4–10)"><span style="width:11px;height:11px;border-radius:3px;background:#22d3ee;"></span>${x}</span>
+            </div>`;
+          const sections = cat.isStage
+            ? placeRow('GC', num('gcWins'), num('gcSecond'), num('gcThird'), num('gcTopTen')) + placeRow('Etappen', num('stageWins'), num('stageSecond'), num('stageThird'), num('stageTopTen'))
+            : placeRow('One-Day', num('oneDayWins'), num('oneDaySecond'), num('oneDayThird'), num('oneDayTopTen'));
+          const jerseyDef: Array<[string, string, number]> = [
+            ['#fbbf24', 'Gelbes Trikot (GC-Führung) · Tage', num('leaderJerseys')],
+            ['#4ade80', 'Grünes Trikot (Punktewertung) · Tage', num('pointsJerseys')],
+            ['#f87171', 'Bergtrikot (Bergwertung) · Tage', num('mountainJerseys')],
+            ['#e2e8f0', 'Weißes Trikot (Nachwuchswertung) · Tage', num('youthJerseys')],
+            ['#a855f7', 'Ausreißer-Trikot (Aktivster Fahrer) · Tage', num('breakawayJerseys')],
+          ];
+          const jerseys = cat.isStage ? `
+            <div style="${MONOF};font-size:9px;letter-spacing:.08em;color:#6a7a95;margin:9px 0 4px;">TRIKOT-TAGE</div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
+              ${jerseyDef.map(([c, t, v]) => `<span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:${c === '#a855f7' ? '#c4b5fd' : '#cbd5e1'};" title="${esc(t)}"><span style="width:10px;height:10px;border-radius:2px;background:${c};"></span>${v}</span>`).join('')}
+            </div>` : '';
           return `
-            <div style="position: relative; background: #0c1526; border: 1px solid #1e2c49; border-radius: 12px; padding: 1rem; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1c2b47; padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
-                <span style="font-weight: 700; font-size: 0.9rem; color: #e2e8f0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
-                ${renderRiderStatsCategoryBadge(cat.key)}
+            <div style="background:#0c1526;border:1px solid #1e2c49;border-radius:12px;padding:14px 16px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+                <span style="font-size:13px;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(cat.name)}">${esc(cat.name)}</span>
+                <span style="${MONOF};font-size:10px;color:#8494ad;flex:0 0 auto;">${num('raceDays')} Tage</span>
               </div>
-              
-              ${cat.isStage ? `
-                <!-- Stage Race layout: GC & Classifications -->
-                <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">GC & Wertungen</div>
-                  <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
-                    ${renderCareerBadge(catData.gcWins, 'gold', 'Gesamtwertung Siege')}
-                    ${renderCareerBadge(catData.gcSecond, 'silver', 'Gesamtwertung Platz 2')}
-                    ${renderCareerBadge(catData.gcThird, 'bronze', 'Gesamtwertung Platz 3')}
-                    ${renderCareerBadge(catData.gcTopTen || 0, 'purple', 'Gesamtwertung Ränge 4-10')}
-                    <span style="border-left: 1px solid rgba(255,255,255,0.15); height: 1rem; margin: 0 0.1rem; display: inline-block;"></span>
-                    ${renderCareerBadge(catData.mountainWins, 'red', 'Bergwertung Siege')}
-                    ${renderCareerBadge(catData.pointsWins, 'green', 'Punktewertung Siege')}
-                    ${renderCareerBadge(catData.youthWins, 'white', 'Nachwuchswertung Siege')}
-                    ${renderCareerBadge(catData.breakawayWins || 0, 'breakaway', 'Ausreißerwertung Siege')}
-                  </div>
-                </div>
-                
-                <!-- Etappenergebnisse -->
-                <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Etappenergebnisse</div>
-                  <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
-                    ${renderCareerBadge(catData.stageWins, 'gold', 'Etappensiege')}
-                    ${renderCareerBadge(catData.stageSecond, 'silver', 'Etappen Platz 2')}
-                    ${renderCareerBadge(catData.stageThird, 'bronze', 'Etappen Platz 3')}
-                    ${renderCareerBadge(catData.stageTopTen || 0, 'purple', 'Etappen Ränge 4-10')}
-                  </div>
-                </div>
-
-                <!-- Führungstrikots -->
-                <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
-                  <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
-                    <!-- Gelbes Trikot (GC) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.leaderJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #fef08a, #facc15); color: #854d0e; border: 1px solid #f59e0b; box-shadow: 0 0 4px rgba(250, 204, 21, 0.4);'
-                    }" title="Tage im Gelben Trikot (GC)">
-                      🎽 ${catData.leaderJerseys || 0}
-                    </span>
-                    <!-- Grünes Trikot (Punkte) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.pointsJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #bbf7d0, #4ade80); color: #14532d; border: 1px solid #22c55e; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);'
-                    }" title="Tage im Grünen Trikot (Punkte)">
-                      🎽 ${catData.pointsJerseys || 0}
-                    </span>
-                    <!-- Rotes Trikot (Berg) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.mountainJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #fecaca, #f87171); color: #7f1d1d; border: 1px solid #ef4444; box-shadow: 0 0 4px rgba(248, 113, 113, 0.4);'
-                    }" title="Tage im Berg- / Roten Trikot (Berg)">
-                      🎽 ${catData.mountainJerseys || 0}
-                    </span>
-                    <!-- Weißes Trikot (Nachwuchs) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.youthJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #ffffff, #e2e8f0); color: #1e293b; border: 1px solid #94a3b8; box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);'
-                    }" title="Tage im Weißen Trikot (Nachwuchs)">
-                      🎽 ${catData.youthJerseys || 0}
-                    </span>
-                    <!-- Ausreißertrikot (Aktivste Fahrer) -->
-                    <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
-                      (catData.breakawayJerseys || 0) === 0
-                        ? 'background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);'
-                        : 'background: linear-gradient(135deg, #f3e8ff, #d8b4fe); color: #581c87; border: 1px solid #a855f7; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);'
-                    }" title="Tage im Ausreißertrikot (Aktivste Fahrer)">
-                      🎽 ${catData.breakawayJerseys || 0}
-                    </span>
-                  </div>
-                </div>
-              ` : `
-                <!-- One Day Race layout: Platzierungen -->
-                <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Platzierungen</div>
-                  <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
-                    ${renderCareerBadge(catData.oneDayWins, 'gold', 'Siege')}
-                    ${renderCareerBadge(catData.oneDaySecond, 'silver', 'Platz 2')}
-                    ${renderCareerBadge(catData.oneDayThird, 'bronze', 'Platz 3')}
-                    ${renderCareerBadge(catData.oneDayTopTen || 0, 'purple', 'Ränge 4-10')}
-                  </div>
-                </div>
-                
-                <!-- Spacer for Stage results -->
-                <div style="visibility: hidden; font-size: 0.7rem; margin-bottom: 0.2rem; white-space: nowrap;">&nbsp;</div>
-                
-                <!-- Spacer for Jerseys -->
-                <div style="visibility: hidden; font-size: 0.7rem; margin-bottom: 0.2rem; white-space: nowrap;">&nbsp;</div>
-              `}
-              
-              <!-- Checkpoint-Siege -->
-              <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Checkpoint-Siege</div>
-                <div style="display: flex; gap: 0.3rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
-                  ${renderCareerBadge(catData.sprintWins || 0, 'green', 'Sprint: Gewonnene Zwischensprints')}
-                  ${renderCareerBadge(catData.climbWinsHC || 0, 'red', 'HC: Gewonnene HC-Bergwertungen')}
-                  ${renderCareerBadge(catData.climbWins1 || 0, 'red', 'C1: Gewonnene Bergwertungen Kategorie 1')}
-                  ${renderCareerBadge(catData.climbWins2 || 0, 'red', 'C2: Gewonnene Bergwertungen Kategorie 2')}
-                  ${renderCareerBadge(catData.climbWins3 || 0, 'red', 'C3: Gewonnene Bergwertungen Kategorie 3')}
-                  ${renderCareerBadge(catData.climbWins4 || 0, 'red', 'C4: Gewonnene Bergwertungen Kategorie 4')}
-                </div>
-              </div>
-
-              <!-- Profil Siege -->
-              <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Profil Siege</div>
-                <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
-                  ${renderProfileWinBadge(catData.winFlat || 0, 'flat', 'Flach (Flat)')}
-                  ${renderProfileWinBadge(catData.winRolling || 0, 'rolling', 'Hügelig leicht (Rolling)')}
-                  ${renderProfileWinBadge(catData.winHilly || 0, 'hilly', 'Hügelig (Hilly)')}
-                  ${renderProfileWinBadge(catData.winHillyDifficult || 0, 'hilly_difficult', 'Hügelig schwer (Hilly Difficult)')}
-                  ${renderProfileWinBadge(catData.winMediumMountain || 0, 'medium_mountain', 'Mittelgebirge (Medium Mountain)')}
-                  ${renderProfileWinBadge(catData.winMountain || 0, 'mountain', 'Hochgebirge (Mountain)')}
-                  ${renderProfileWinBadge(catData.winHighMountain || 0, 'high_mountain', 'Hochgebirge schwer (High Mountain)')}
-                  ${renderProfileWinBadge(catData.winCobble || 0, 'cobble', 'Kopfsteinpflaster (Cobble)')}
-                  ${renderProfileWinBadge(catData.winCobbleHill || 0, 'cobble_hill', 'Kopfsteinpflaster Hügel (Cobble Hill)')}
-                  ${renderProfileWinBadge(catData.winITT || 0, 'itt', 'Einzelzeitfahren (ITT)')}
-                  ${renderProfileWinBadge(catData.winTTT || 0, 'ttt', 'Mannschaftszeitfahren (TTT)')}
-                </div>
-              </div>
-
-              <!-- Wetter Siege -->
-              <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Wetter Siege</div>
-                <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
-                  ${renderWeatherWinBadge(catData.winWeather1 || 0, 1, 'Sonnig')}
-                  ${renderWeatherWinBadge(catData.winWeather2 || 0, 2, 'Extreme Hitze')}
-                  ${renderWeatherWinBadge(catData.winWeather3 || 0, 3, 'Leichter Regen')}
-                  ${renderWeatherWinBadge(catData.winWeather4 || 0, 4, 'Starkregen')}
-                  ${renderWeatherWinBadge(catData.winWeather5 || 0, 5, 'Starker Wind')}
-                  ${renderWeatherWinBadge(catData.winWeather6 || 0, 6, 'Dichter Nebel')}
-                  ${renderWeatherWinBadge(catData.winWeather7 || 0, 7, 'Schnee/Eis')}
-                </div>
-              </div>
-              
-              <!-- Race Days in bottom right -->
-              <div style="display: flex; justify-content: flex-end; align-items: center; font-size: 0.8rem; color: #888; white-space: nowrap;" title="Renntage in dieser Rennklasse">
-                ${RIDER_STATS_ICONS.raceDays}
-                <span style="font-weight: bold; color: #a855f7; margin-left: 0.25rem;">${catData.raceDays || 0} Tage</span>
-              </div>
-            </div>
-          `;
+              ${sections}
+              ${jerseys}
+            </div>`;
         }).join('')}
       </div>
     </section>
