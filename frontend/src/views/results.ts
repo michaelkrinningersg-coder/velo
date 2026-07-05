@@ -776,6 +776,23 @@ export function renderResultsView(): void {
       .join('');
   stageSelect.innerHTML = '<option value="">– Etappe auswählen –</option>' + stageOptions;
 
+  // Broadcast-Kopf: Rennname als Titel + Kategorie-Pill (aus dem gewaehlten Rennen)
+  const raceTitleEl = $('results-race-title');
+  const categoryPillEl = $('results-category-pill');
+  const headerRaceName = state.stageResults?.raceName
+    ?? state.resultsRoster?.raceName
+    ?? selectedRace?.name
+    ?? null;
+  raceTitleEl.textContent = headerRaceName ?? 'Results';
+  const headerCategory = selectedRace?.category?.name ?? null;
+  if (headerCategory) {
+    categoryPillEl.textContent = headerCategory.replace(/^world\s*tour\s*-\s*/i, '');
+    categoryPillEl.classList.remove('hidden');
+  } else {
+    categoryPillEl.textContent = '';
+    categoryPillEl.classList.add('hidden');
+  }
+
   const visibleClassifications = state.stageResults?.classifications.filter(c => {
     if (selectedRace && !selectedRace.isStageRace && c.resultTypeId !== 1 && c.resultTypeId !== 6) {
       return false;
@@ -808,7 +825,7 @@ export function renderResultsView(): void {
   if ((!state.stageResults && !showRoster) || (!selectedClassification && !showNonFinishers && !showEvents && !showRoster)) {
     const selectedStage = findStageById(state.selectedResultsStageId);
     meta.textContent = selectedStage
-      ? `${selectedStage.race.name} · ${selectedStage.stage.profile} · ${formatDate(selectedStage.stage.date)}`
+      ? `${selectedStage.stage.profile} · ${formatDate(selectedStage.stage.date)}`
       : 'Noch keine Etappe ausgewählt.';
     tabs.innerHTML = '';
     markerTabs.innerHTML = '';
@@ -829,11 +846,11 @@ export function renderResultsView(): void {
   // Roster can be shown without stageResults
   if (showRoster) {
     if (state.resultsRoster) {
-      meta.textContent = `${state.resultsRoster.raceName} · Starterfeld`;
+      meta.textContent = 'Starterfeld';
     }
     // Roster rendering handled after tab setup below
   } else if (state.stageResults) {
-    meta.textContent = `${state.stageResults.raceName} · Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
+    meta.textContent = `Etappe ${state.stageResults.stageNumber} · ${state.stageResults.profile} · ${formatDate(state.stageResults.date)}`;
   }
 
   const resultStage = state.stageResults ? findStageById(state.stageResults.stageId) : null;
