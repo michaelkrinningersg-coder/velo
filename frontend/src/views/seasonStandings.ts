@@ -20,7 +20,6 @@ import {
   formatRaceDateRange,
   raceCategoryBadge,
 } from './dashboard';
-import { resultsRowRankClass, renderRankCell } from './results';
 import type {
   SeasonStandingsPayload,
   SeasonStandingCountryRow,
@@ -140,11 +139,10 @@ export function renderSeasonStandingsView(): void {
   const tabs = $('season-standings-scope-tabs');
   const empty = $('season-standings-empty');
   const tableCard = $('season-standings-table-card');
+  const gridHead = $('season-standings-grid-head');
   const tbody = $('season-standings-tbody');
-  const jerseyHeader = $('season-standings-jersey-header');
-  const primaryHeader = $('season-standings-primary-header');
-  const flagHeader = $('season-standings-flag-header');
-  const secondaryHeader = $('season-standings-secondary-header');
+  const cardTitle = $('season-standings-card-title');
+  const cardCount = $('season-standings-card-count');
 
   const season = state.seasonStandings?.season ?? state.gameState?.season ?? state.currentSave?.currentSeason ?? null;
   meta.textContent = season != null
@@ -160,39 +158,49 @@ export function renderSeasonStandingsView(): void {
     `).join('');
   }
 
+  const scope = state.selectedSeasonStandingScope;
   tabs.innerHTML = `
     <button
       type="button"
-      class="results-type-btn${state.selectedSeasonStandingScope === 'riders' ? ' active' : ''}"
+      class="results-type-btn${scope === 'riders' ? ' active' : ''}"
       data-season-scope="riders"
     >Fahrer</button>
     <button
       type="button"
-      class="results-type-btn${state.selectedSeasonStandingScope === 'teams' ? ' active' : ''}"
+      class="results-type-btn${scope === 'teams' ? ' active' : ''}"
       data-season-scope="teams"
     >Teams</button>
     <button
       type="button"
-      class="results-type-btn${state.selectedSeasonStandingScope === 'countries' ? ' active' : ''}"
+      class="results-type-btn${scope === 'countries' ? ' active' : ''}"
       data-season-scope="countries"
     >Country</button>
   `;
 
-  const isCountryScope = state.selectedSeasonStandingScope === 'countries';
+  const isCountryScope = scope === 'countries';
   const rows = isCountryScope
     ? (state.seasonStandings?.countryStandings ?? [])
-    : state.selectedSeasonStandingScope === 'teams'
+    : scope === 'teams'
       ? (state.seasonStandings?.teamStandings ?? [])
       : (state.seasonStandings?.riderStandings ?? []);
   const countryRows = isCountryScope ? (rows as SeasonStandingCountryRow[]) : [];
   const standardRows = isCountryScope ? [] : (rows as SeasonStandingsPayload['riderStandings']);
 
-  jerseyHeader.textContent = 'Trikot';
-  primaryHeader.textContent = isCountryScope ? 'Land' : state.selectedSeasonStandingScope === 'teams' ? 'Team' : 'Fahrer';
-  flagHeader.textContent = 'Flagge';
-  secondaryHeader.textContent = state.selectedSeasonStandingScope === 'teams' ? 'Land' : 'Team';
-  jerseyHeader.classList.toggle('hidden', isCountryScope);
-  secondaryHeader.classList.toggle('hidden', isCountryScope);
+  // Broadcast-Grid: Spalten je Scope + Kopfzeile
+  const COLS = isCountryScope
+    ? '52px minmax(180px,1.6fr) 44px 84px 96px'
+    : '52px 44px minmax(160px,1.4fr) 44px minmax(130px,1fr) 84px 96px';
+  const MONO = "font-family:'JetBrains Mono',monospace;";
+  const primaryLabel = isCountryScope ? 'LAND' : scope === 'teams' ? 'TEAM' : 'FAHRER';
+  const secondaryLabel = scope === 'teams' ? 'LAND' : 'TEAM';
+
+  cardTitle.textContent = isCountryScope ? 'Länder-Wertung' : scope === 'teams' ? 'Team-Wertung' : 'Fahrer-Wertung';
+  cardCount.textContent = `${rows.length} ${isCountryScope ? 'Länder' : scope === 'teams' ? 'Teams' : 'Fahrer'}`;
+
+  gridHead.style.gridTemplateColumns = COLS;
+  gridHead.innerHTML = isCountryScope
+    ? `<span>PL.</span><span>${primaryLabel}</span><span style="justify-self:center;">FLAGGE</span><span style="justify-self:end;">PUNKTE</span><span style="justify-self:end;">RÜCKSTAND</span>`
+    : `<span>PL.</span><span style="justify-self:center;">TRIKOT</span><span>${primaryLabel}</span><span style="justify-self:center;">FLAGGE</span><span>${secondaryLabel}</span><span style="justify-self:end;">PUNKTE</span><span style="justify-self:end;">RÜCKSTAND</span>`;
 
   if (!state.seasonStandings || rows.length === 0) {
     tbody.innerHTML = '';
@@ -202,37 +210,46 @@ export function renderSeasonStandingsView(): void {
     return;
   }
 
+  const rankColor = (r: number): string => r === 1 ? '#fbbf24' : r === 2 ? '#cbd5e1' : r === 3 ? '#d08b5b' : '#9fb0c9';
+  const podium = (r: number): string => r === 1
+    ? 'box-shadow:inset 3px 0 0 #fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.08),transparent 55%);'
+    : r === 2 ? 'box-shadow:inset 3px 0 0 #cbd5e1;background:linear-gradient(90deg,rgba(203,213,225,.07),transparent 55%);'
+    : r === 3 ? 'box-shadow:inset 3px 0 0 #d08b5b;background:linear-gradient(90deg,rgba(208,139,91,.07),transparent 55%);'
+    : '';
+  const rowBase = (r: number): string => `display:grid;grid-template-columns:${COLS};gap:9px;align-items:center;padding:9px 16px;border-top:1px solid #14203a;${podium(r)}`;
+  const rank = (r: number): string => `<span style="text-align:center;${MONO}font-size:15px;font-weight:800;color:${rankColor(r)};">${r}</span>`;
+  const center = (h: string): string => `<span style="display:flex;justify-content:center;min-width:0;">${h}</span>`;
+  const pts = (v: number): string => `<span style="${MONO}font-weight:800;color:#e2e8f0;justify-self:end;">${v}</span>`;
+  const gap = (v: number): string => `<span style="${MONO}color:#6a7a95;justify-self:end;">${esc(formatPointsGap(v))}</span>`;
+
   tbody.innerHTML = isCountryScope
     ? countryRows.map((row) => `
-      <tr class="results-row${resultsRowRankClass(row.rank)}">
-        ${renderRankCell(row.rank)}
-        <td class="results-jersey-col-cell hidden"></td>
-        <td class="season-standings-country-cell">${renderSeasonCountryNameCell(row)}</td>
-        <td class="results-flag-col-cell">${renderResultsFlagColumn(row.countryCode)}</td>
-        <td class="hidden"></td>
-        <td>${row.points}</td>
-        <td>${esc(formatPointsGap(row.gapPoints))}</td>
-      </tr>`).join('')
+      <div style="${rowBase(row.rank)}">
+        ${rank(row.rank)}
+        <span style="min-width:0;overflow:hidden;">${renderSeasonCountryNameCell(row)}</span>
+        ${center(renderResultsFlagColumn(row.countryCode))}
+        ${pts(row.points)}
+        ${gap(row.gapPoints)}
+      </div>`).join('')
     : standardRows.map((row) => {
       const primary = row.riderName ?? row.teamName;
       const jerseyCell = renderResultsJerseyColumn(row.teamId, row.teamName);
-      const primaryCell = state.selectedSeasonStandingScope === 'teams'
+      const primaryCell = scope === 'teams'
         ? renderSeasonTeamNameCell(row, state.seasonStandings?.riderStandings ?? [])
         : renderResultsParticipant(primary, true, false, row.riderId, row.teamId);
-      const flagCell = renderResultsFlagColumn(row.countryCode);
-      const secondaryCell = state.selectedSeasonStandingScope === 'teams'
-        ? esc(row.countryName ?? row.countryCode ?? '–')
+      const secondaryCell = scope === 'teams'
+        ? `<span style="color:#9fb0c9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.countryName ?? row.countryCode ?? '–')}</span>`
         : renderTeamNameLink(row.teamName ?? '–', row.teamId, false);
       return `
-        <tr class="results-row${resultsRowRankClass(row.rank)}">
-          ${renderRankCell(row.rank)}
-          <td class="results-jersey-col-cell">${jerseyCell}</td>
-          <td>${primaryCell}</td>
-          <td class="results-flag-col-cell">${flagCell}</td>
-          <td>${secondaryCell}</td>
-          <td>${row.points}</td>
-          <td>${esc(formatPointsGap(row.gapPoints))}</td>
-        </tr>`;
+        <div style="${rowBase(row.rank)}">
+          ${rank(row.rank)}
+          ${center(jerseyCell)}
+          <span style="min-width:0;overflow:hidden;">${primaryCell}</span>
+          ${center(renderResultsFlagColumn(row.countryCode))}
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${secondaryCell}</span>
+          ${pts(row.points)}
+          ${gap(row.gapPoints)}
+        </div>`;
     }).join('');
 
   empty.classList.add('hidden');

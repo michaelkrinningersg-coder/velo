@@ -4781,6 +4781,22 @@ html, body {
 .form-group input:focus,
 .form-group select:focus { border-color: var(--accent); }
 
+/* Broadcast field look for class-based controls; defeats legacy inline
+   #222/#444 colours while leaving inline layout (width/display) intact. */
+.form-control {
+  background: #0a1122 !important;
+  border: 1px solid #1c2b47 !important;
+  color: var(--text-200) !important;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-control:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
+}
+.form-control option { background: #0a1122; color: var(--text-200); }
+
 /* ---- Misc ------------------------------------------------- */
 .text-muted { color: var(--text-500); font-size: .85rem; }
 .error-msg  { color: var(--danger); font-size: .83rem; margin-top: .5rem; }
@@ -6650,14 +6666,14 @@ tr.calendar-highlight {
 }
 
 /* Broadcast-Results: Grid-Karte (Tabelle -> Grid-Zeilen) */
-#view-results .results-grid-card {
+.results-grid-card {
   border-radius: 14px;
   border: 1px solid #1e2c49;
   background: #0c1526;
   overflow: hidden;
 }
 
-#view-results .results-grid-cardhead {
+.results-grid-cardhead {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -6665,21 +6681,21 @@ tr.calendar-highlight {
   border-bottom: 1px solid #1c2b47;
 }
 
-#view-results .results-card-title {
+.results-card-title {
   font-size: 13px;
   font-weight: 800;
   color: #e2e8f0;
   letter-spacing: .01em;
 }
 
-#view-results .results-card-count {
+.results-card-count {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   letter-spacing: .1em;
   color: #6a7a95;
 }
 
-#view-results .results-grid-head {
+.results-grid-head {
   display: grid;
   gap: 9px;
   align-items: center;
@@ -6693,3 +6709,4 @@ tr.calendar-highlight {
 }
 
 #view-results .results-grid-body .event-content { min-width: 0; }
+.results-grid-body { min-width: 0; }
