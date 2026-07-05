@@ -2350,181 +2350,128 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     }
   }).join('');
 
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  const selStyle = `${MONOF}; font-size:11px; font-weight:700; color:#e2e8f0; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; padding:6px 9px; cursor:pointer;`;
+  const labStyle = `${MONOF}; font-size:10px; letter-spacing:.1em; color:#6a7a95;`;
+
   const filtersHtml = `
-    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Rennklasse:</label>
-        <select id="rider-stats-filter-category" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
-          <option value="all">Alle Rennklassen</option>
-          ${categoryOptionsHtml}
-        </select>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:16px; flex-wrap:wrap;">
+      <span style="font-size:14px; font-weight:800; color:#e2e8f0;">Top-Results <span style="${MONOF}; font-size:11px; font-weight:600; color:#6a7a95;">· nur Punkte-Ergebnisse · beste zuerst</span></span>
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="${labStyle}">SAISON</span>
+          <select id="rider-stats-filter-season" style="${selStyle}">
+            <option value="all">Gesamt</option>
+            ${seasonsList.map(yr => `<option value="${yr}" ${state.riderStatsTopResultsFilterSeason === yr ? 'selected' : ''}>${yr}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="${labStyle}">KLASSE</span>
+          <select id="rider-stats-filter-category" style="${selStyle}">
+            <option value="all">Alle</option>
+            ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="${labStyle}">PROFIL</span>
+          <select id="rider-stats-filter-profile" style="${selStyle}">
+            <option value="all">Alle</option>
+            ${['Flat','Rolling','Hilly','Hilly Difficult','Medium Mountain','Mountain','High Mountain','Cobble','Cobble Hill','ITT','TTT'].map(p => `<option value="${p}" ${state.riderStatsTopResultsFilterProfile === p ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
       </div>
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Saison:</label>
-        <select id="rider-stats-filter-season" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
-          <option value="all">All Time</option>
-          ${seasonsList.map(yr => `<option value="${yr}" ${state.riderStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Profil:</label>
-        <select id="rider-stats-filter-profile" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444; cursor: pointer;">
-          <option value="all">Alle Profile</option>
-          <option value="Flat" ${state.riderStatsTopResultsFilterProfile === 'Flat' ? 'selected' : ''}>Flat</option>
-          <option value="Rolling" ${state.riderStatsTopResultsFilterProfile === 'Rolling' ? 'selected' : ''}>Rolling</option>
-          <option value="Hilly" ${state.riderStatsTopResultsFilterProfile === 'Hilly' ? 'selected' : ''}>Hilly</option>
-          <option value="Hilly Difficult" ${state.riderStatsTopResultsFilterProfile === 'Hilly Difficult' ? 'selected' : ''}>Hilly Difficult</option>
-          <option value="Medium Mountain" ${state.riderStatsTopResultsFilterProfile === 'Medium Mountain' ? 'selected' : ''}>Medium Mountain</option>
-          <option value="Mountain" ${state.riderStatsTopResultsFilterProfile === 'Mountain' ? 'selected' : ''}>Mountain</option>
-          <option value="High Mountain" ${state.riderStatsTopResultsFilterProfile === 'High Mountain' ? 'selected' : ''}>High Mountain</option>
-          <option value="Cobble" ${state.riderStatsTopResultsFilterProfile === 'Cobble' ? 'selected' : ''}>Cobble</option>
-          <option value="Cobble Hill" ${state.riderStatsTopResultsFilterProfile === 'Cobble Hill' ? 'selected' : ''}>Cobble Hill</option>
-          <option value="ITT" ${state.riderStatsTopResultsFilterProfile === 'ITT' ? 'selected' : ''}>ITT</option>
-          <option value="TTT" ${state.riderStatsTopResultsFilterProfile === 'TTT' ? 'selected' : ''}>TTT</option>
-        </select>
-      </div>
-      
-      <div style="display: grid; grid-template-rows: auto auto; grid-template-columns: repeat(6, 130px); gap: 0.5rem; align-items: center; justify-items: center; text-align: center; margin-left: auto; border-left: 1px solid rgba(255, 255, 255, 0.1); padding-left: 1rem;">
-        <!-- Column 1: Siege / Top 3 -->
-        <div style="grid-row: 1; grid-column: 1;">
-          ${renderFilterButton('Siege', state.riderStatsTopResultsFilterRank === 1, 'linear-gradient(135deg, #fbbf24, #d4af37)', '#000', 'rgba(251, 191, 36, 0.4)', 'data-top-results-rank', '1')}
-        </div>
-        <div style="grid-row: 2; grid-column: 1;">
-          ${renderFilterButton('Top 3', state.riderStatsTopResultsFilterRank === 3, 'linear-gradient(135deg, #e2e8f0, #94a3b8)', '#000', 'rgba(148, 163, 184, 0.4)', 'data-top-results-rank', '3')}
-        </div>
-
-        <!-- Column 2: Top 5 / Top 10 -->
-        <div style="grid-row: 1; grid-column: 2;">
-          ${renderFilterButton('Top 5', state.riderStatsTopResultsFilterRank === 5, 'linear-gradient(135deg, #d97706, #b45309)', '#fff', 'rgba(217, 119, 6, 0.4)', 'data-top-results-rank', '5')}
-        </div>
-        <div style="grid-row: 2; grid-column: 2;">
-          ${renderFilterButton('Top 10', state.riderStatsTopResultsFilterRank === 10, 'linear-gradient(135deg, #a16207, #78350f)', '#fff', 'rgba(161, 98, 7, 0.4)', 'data-top-results-rank', '10')}
-        </div>
-
-        <!-- Column 3: GC / [Empty] -->
-        <div style="grid-row: 1; grid-column: 3;">
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="${labStyle}">WERTUNG</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
           ${renderFilterButton('GC', state.riderStatsTopResultsFilters.gc, 'linear-gradient(135deg, #facc15, #ca8a04)', '#000', 'rgba(234, 179, 8, 0.4)', 'data-top-results-filter', 'gc')}
-        </div>
-        <div style="grid-row: 2; grid-column: 3;">
-          <!-- Empty for GC single layout -->
-        </div>
-
-        <!-- Column 4: Punkte / Berg -->
-        <div style="grid-row: 1; grid-column: 4;">
           ${renderFilterButton('Punkte', state.riderStatsTopResultsFilters.points, 'linear-gradient(135deg, #4ade80, #16a34a)', '#fff', 'rgba(74, 222, 128, 0.4)', 'data-top-results-filter', 'points')}
-        </div>
-        <div style="grid-row: 2; grid-column: 4;">
           ${renderFilterButton('Berg', state.riderStatsTopResultsFilters.mountain, 'linear-gradient(135deg, #f87171, #dc2626)', '#fff', 'rgba(239, 68, 68, 0.4)', 'data-top-results-filter', 'mountain')}
-        </div>
-
-        <!-- Column 5: Nachwuchs / Ausreißer -->
-        <div style="grid-row: 1; grid-column: 5;">
           ${renderFilterButton('Nachwuchs', state.riderStatsTopResultsFilters.youth, 'linear-gradient(135deg, #ffffff, #e2e8f0)', '#0f172a', 'rgba(255, 255, 255, 0.4)', 'data-top-results-filter', 'youth')}
-        </div>
-        <div style="grid-row: 2; grid-column: 5;">
           ${renderFilterButton('Ausreißer', state.riderStatsTopResultsFilters.breakaway, 'linear-gradient(135deg, #c084fc, #7c3aed)', '#fff', 'rgba(168, 85, 247, 0.4)', 'data-top-results-filter', 'breakaway')}
-        </div>
-
-        <!-- Column 6: Etappen / One Day -->
-        <div style="grid-row: 1; grid-column: 6;">
           ${renderFilterButton('Etappen', state.riderStatsTopResultsFilters.stage, 'linear-gradient(135deg, #60a5fa, #2563eb)', '#fff', 'rgba(59, 130, 246, 0.4)', 'data-top-results-filter', 'stage')}
-        </div>
-        <div style="grid-row: 2; grid-column: 6;">
           ${renderFilterButton('One Day', state.riderStatsTopResultsFilters.oneDay, 'linear-gradient(135deg, #b91c1c, #7f1d1d)', '#fff', 'rgba(185, 28, 28, 0.4)', 'data-top-results-filter', 'oneDay')}
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="${labStyle}">RANG</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          ${renderFilterButton('Siege', state.riderStatsTopResultsFilterRank === 1, 'linear-gradient(135deg, #fbbf24, #d4af37)', '#000', 'rgba(251, 191, 36, 0.4)', 'data-top-results-rank', '1')}
+          ${renderFilterButton('Top 3', state.riderStatsTopResultsFilterRank === 3, 'linear-gradient(135deg, #e2e8f0, #94a3b8)', '#000', 'rgba(148, 163, 184, 0.4)', 'data-top-results-rank', '3')}
+          ${renderFilterButton('Top 5', state.riderStatsTopResultsFilterRank === 5, 'linear-gradient(135deg, #d97706, #b45309)', '#fff', 'rgba(217, 119, 6, 0.4)', 'data-top-results-rank', '5')}
+          ${renderFilterButton('Top 10', state.riderStatsTopResultsFilterRank === 10, 'linear-gradient(135deg, #a16207, #78350f)', '#fff', 'rgba(161, 98, 7, 0.4)', 'data-top-results-rank', '10')}
         </div>
       </div>
     </div>
   `;
 
-  const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="9" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+  const TR_COLS = 'grid-template-columns:56px 46px minmax(150px,1.4fr) 132px 80px 56px 34px 46px;';
+
+  const rowsHtml = paginatedRows.length === 0
+    ? '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine Ergebnisse für diese Filterkombination.</div>'
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
-        const raceStageLabel = isFinalRow
+        const label = isFinalRow
           ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
           : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
 
-        let stagePlacementHtml = '–';
-        let gcPlacementHtml = '–';
-
+        let placeCell = '<span style="justify-self:center;color:#5f6f8a;">–</span>';
         if (row.finishStatus === 'otl') {
-          stagePlacementHtml = renderRiderStatsRankBadge('OTL', 'place');
+          placeCell = `<span style="justify-self:center;">${renderRiderStatsRankBadge('OTL', 'place')}</span>`;
         } else if (row.finishStatus === 'dnf') {
-          stagePlacementHtml = renderRiderStatsRankBadge('DNF', 'place');
-        } else if (row.resultRank == null) {
-          // Keep -
-        } else if (isFinalRow) {
-          const className = resolveRiderStatsFinalTypeClassName(row.rowType);
-          gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
-        } else {
-          const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
-          stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+          placeCell = `<span style="justify-self:center;">${renderRiderStatsRankBadge('DNF', 'place')}</span>`;
+        } else if (row.resultRank != null && isFinalRow) {
+          placeCell = `<span style="justify-self:center;"><span class="rider-stats-final-type ${resolveRiderStatsFinalTypeClassName(row.rowType)}" style="font-weight:700;padding:.15rem .45rem;border-radius:4px;border:1px solid;display:inline-block;min-width:1.8rem;text-align:center;">${row.resultRank}</span></span>`;
+        } else if (row.resultRank != null) {
+          const topCls = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
+          placeCell = `<span style="justify-self:center;"><span class="rider-stats-rank-badge rider-stats-rank-badge-place${topCls}">${esc(String(row.resultRank))}</span></span>`;
         }
 
-        const profileBadgeHtml = isFinalRow ? '–' : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background: none; border: none; padding: 0; cursor: pointer; display: inline-flex;">${renderStageProfileBadge(row.profile)}</button>` : '–');
-        const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
-        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null);
+        const profileCell = isFinalRow
+          ? '<span style="justify-self:center;color:#5f6f8a;">–</span>'
+          : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background:none;border:none;padding:0;cursor:pointer;display:inline-flex;justify-self:center;">${renderStageProfileBadge(row.profile)}</button>` : '<span style="justify-self:center;color:#5f6f8a;">–</span>');
+        const scoreCell = !isFinalRow && row.stageScore != null && row.stageScore > 0
+          ? `<span style="justify-self:center;">${renderStageEditorScoreBadge(row.stageScore, 0, 350)}</span>`
+          : '<span style="justify-self:center;color:#5f6f8a;">–</span>';
+        const weatherCell = isFinalRow ? '<span style="justify-self:center;"></span>' : `<span style="justify-self:center;">${renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</span>`;
+        const categoryChip = renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null);
 
         return `
-          <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
-            <td>${stagePlacementHtml}</td>
-            <td>${gcPlacementHtml}</td>
-            <td><strong>${esc(raceStageLabel)}</strong>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
-            <td class="status-cell">${renderStatusDotsColumn(row)}</td>
-            <td>${profileBadgeHtml}</td>
-            <td>${stageScoreBadgeHtml}</td>
-            <td>${categoryBadgeHtml}</td>
-            <td>Saison ${row.season}</td>
-            <td><strong>${row.seasonPoints}</strong></td>
-          </tr>
-        `;
+          <div style="display:grid; ${TR_COLS} gap:9px; align-items:center; padding:9px 14px; border-top:1px solid #14203a;${isFinalRow ? 'background:rgba(34,211,238,.06);' : ''}">
+            <span style="${MONOF}; font-size:11px; color:#8494ad;">${row.season}</span>
+            ${placeCell}
+            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${esc(label)}</span>
+            <span style="min-width:0; overflow:hidden;">${categoryChip}</span>
+            ${profileCell}
+            ${scoreCell}
+            ${weatherCell}
+            <span style="${MONOF}; font-size:12px; font-weight:800; color:${(row.seasonPoints ?? 0) > 0 ? '#22d3ee' : '#5f6f8a'}; justify-self:end;">${row.seasonPoints ?? 0}</span>
+          </div>`;
       }).join('');
 
-  const paginationHtml = totalPages > 1
-    ? `
-      <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; align-items: center;">
-        <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage - 1}" ${state.riderStatsTopResultsPage === 1 ? 'disabled' : ''}>&laquo; Zurück</button>
-        <span style="font-weight: 600; color: #ccc;">Seite ${state.riderStatsTopResultsPage} von ${totalPages}</span>
-        <button type="button" class="btn btn-secondary btn-sm" data-top-results-page="${state.riderStatsTopResultsPage + 1}" ${state.riderStatsTopResultsPage === totalPages ? 'disabled' : ''}>Weiter &raquo;</button>
-      </div>
-    `
-    : '';
+  const pageInfo = `${activeRows.length} Ergebnis${activeRows.length === 1 ? '' : 'se'}${totalPages > 1 ? ` · Seite ${state.riderStatsTopResultsPage}/${totalPages}` : ''}`;
+  const pagerHtml = `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-top:1px solid #16233c; ${MONOF};">
+      <span style="font-size:11px; color:#6a7a95;">${pageInfo}</span>
+      ${totalPages > 1 ? `
+        <div style="display:flex; gap:6px;">
+          <button type="button" data-top-results-page="${state.riderStatsTopResultsPage - 1}" ${state.riderStatsTopResultsPage === 1 ? 'disabled' : ''} style="border:1px solid #2b3a55; background:transparent; color:${state.riderStatsTopResultsPage === 1 ? '#4a5670' : '#9fb0c9'}; cursor:${state.riderStatsTopResultsPage === 1 ? 'default' : 'pointer'}; font-size:12px; padding:5px 12px; border-radius:6px;">‹ Zurück</button>
+          <button type="button" data-top-results-page="${state.riderStatsTopResultsPage + 1}" ${state.riderStatsTopResultsPage === totalPages ? 'disabled' : ''} style="border:1px solid #2b3a55; background:transparent; color:${state.riderStatsTopResultsPage === totalPages ? '#4a5670' : '#9fb0c9'}; cursor:${state.riderStatsTopResultsPage === totalPages ? 'default' : 'pointer'}; font-size:12px; padding:5px 12px; border-radius:6px;">Weiter ›</button>
+        </div>` : ''}
+    </div>
+  `;
 
   return `
-    <section class="rider-stats-top-results" style="margin-top: 1.5rem;">
+    <section class="rider-stats-top-results" style="margin-top: 1rem;">
       ${filtersHtml}
-      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table rider-stats-table">
-          <colgroup>
-            <col style="width: 6%;">
-            <col style="width: 9%;">
-            <col style="width: 28%;">
-            <col style="width: 10%;">
-            <col style="width: 10%;">
-            <col style="width: 5%;">
-            <col style="width: 18%;">
-            <col style="width: 7%;">
-            <col style="width: 7%;">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Platz</th>
-              <th>GC / Wertung</th>
-              <th>Rennen</th>
-              <th>Status</th>
-              <th>Profil</th>
-              <th>Score</th>
-              <th>Klasse</th>
-              <th>Saison</th>
-              <th>Punkte</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRowsHtml}
-          </tbody>
-        </table>
+      <div style="border-radius:14px; overflow:hidden; border:1px solid #1e2c49; background:#0c1526;">
+        <div style="display:grid; ${TR_COLS} gap:9px; padding:8px 14px; ${MONOF}; font-size:9px; letter-spacing:.05em; color:#5a6a85; border-bottom:1px solid #16233c;">
+          <span>SAISON</span><span style="justify-self:center;">PLATZ</span><span>RENNEN / ETAPPE</span><span>KLASSE</span><span style="justify-self:center;">PROFIL</span><span style="justify-self:center;">SCORE</span><span style="justify-self:center;">WTR</span><span style="justify-self:end;">PKT</span>
+        </div>
+        ${rowsHtml}
+        ${pagerHtml}
       </div>
-      ${paginationHtml}
     </section>
   `;
 }
