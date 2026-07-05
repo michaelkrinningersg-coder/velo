@@ -15,6 +15,7 @@ import {
   buildRaceCategoryBadgeCssVariables,
   formatNonFinisherReason,
   renderSeasonFormPhaseIndicator,
+  resolveTeamJerseyAssetPath,
 } from '../state';
 import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge, openDashboardStageProfile } from './dashboard';
 import type { Rider, RiderStatsPayload } from '../../../shared/types';
@@ -493,10 +494,33 @@ export function getSpecializationIcon(specialization: { id: number; name: string
   }
 }
 
+// Conic-Ring (Broadcast): Segmente als [Farbe, Anteil-0..1]-Paare
+function renderBroadcastRing(segments: Array<[string, number]>, label: string, inner: string, title = ''): string {
+  let acc = 0;
+  const stops: string[] = [];
+  for (const [color, frac] of segments) {
+    const f = Math.max(0, Math.min(1, frac));
+    if (f <= 0) continue;
+    const start = acc;
+    acc = Math.min(1, acc + f);
+    stops.push(`${color} ${start}turn ${acc}turn`);
+  }
+  stops.push(`#16223a ${acc}turn 1turn`);
+  const grad = `conic-gradient(${stops.join(', ')})`;
+  return `
+    <div style="display:flex; flex-direction:column; align-items:center; gap:6px;"${title ? ` title="${esc(title)}"` : ''}>
+      <div style="width:66px; height:66px; border-radius:50%; background:${grad}; display:flex; align-items:center; justify-content:center;">
+        <div style="width:52px; height:52px; border-radius:50%; background:#0b1424; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">${inner}</div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:#6a7a95;">${label}</span>
+    </div>`;
+}
+
 export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
   const resolvedCountryCode = payload?.countryCode ?? countryCode ?? null;
   const resolvedCountryFlag = resolvedCountryCode ? renderFlag(resolvedCountryCode) : countryFlag;
   const resolvedRoleName = payload?.roleName ?? rider?.role?.name ?? 'Ohne Rolle';
+  const resolvedRoleId = rider?.roleId ?? null;
   const resolvedOverallRating = payload?.overallRating ?? rider?.overallRating ?? 0;
   const resolvedTeamId = payload?.teamId ?? rider?.activeTeamId ?? null;
   const resolvedTeamName = payload?.teamName ?? teamName ?? 'Ohne aktives Team';
@@ -504,96 +528,114 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
   const programName = payload?.program?.name ?? rider?.seasonProgram?.name ?? '-';
   const formBonus = payload?.formBonus ?? rider?.formBonus ?? 0;
   const raceFormBonus = payload?.raceFormBonus ?? rider?.raceFormBonus ?? 0;
-  const seasonRaceDaysTotal = payload?.seasonRaceDaysTotal ?? rider?.seasonRaceDaysTotal ?? 0;
-  const rolling30dRaceDays = payload?.rolling30dRaceDays ?? rider?.rolling30dRaceDays ?? 0;
-  const longTermFatigueMalus = payload?.longTermFatigueMalus ?? rider?.longTermFatigueMalus ?? 0;
   const shortTermFatigueMalus = payload?.shortTermFatigueMalus ?? rider?.shortTermFatigueMalus ?? 0;
-  const shortTermFatigueWarning = payload?.shortTermFatigueWarning ?? rider?.shortTermFatigueWarning ?? 'none';
+  const longTermLocked = payload?.longTermFatigueLocked ?? rider?.longTermFatigueLocked ?? 0;
+  const longTermDecayable = payload?.longTermFatigueDecayable ?? rider?.longTermFatigueDecayable ?? 0;
+  const totalFatigue = payload?.totalFatigueLoadMalus ?? (shortTermFatigueMalus + longTermLocked + longTermDecayable);
   const currentSeasonPoints = payload?.currentSeasonPoints ?? rider?.seasonPoints ?? 0;
   const currentSeasonRank = payload?.currentSeasonRank ?? resolveCurrentSeasonRank(rider?.id ?? payload?.riderId ?? null);
   const currentSeasonRaceDays = payload?.currentSeasonRaceDays ?? rider?.seasonRaceDays ?? 0;
-  const careerWins = payload?.careerWins ?? rider?.seasonWins ?? 0;
+  const seasonWins = rider?.seasonWins ?? 0;
+  const careerWins = payload?.careerWins ?? 0;
   const currentSeasonBreakawayAttempts = payload?.currentSeasonBreakawayAttempts ?? 0;
-  
-  const terrainPoints = payload?.pointsByTerrain ?? { flat: 0, hilly: 0, mediumMountain: 0, mountain: 0, timetrial: 0, cobble: 0 };
-  const maxTerrain = Math.max(terrainPoints.flat, terrainPoints.hilly, terrainPoints.mediumMountain, terrainPoints.mountain, terrainPoints.timetrial, terrainPoints.cobble);
-  
-  const formatPoints = payload?.pointsByRaceFormat ?? { stageRace: 0, oneDay: 0 };
-  const maxFormat = Math.max(formatPoints.stageRace, formatPoints.oneDay);
+  const age = payload?.age ?? rider?.age
+    ?? (rider?.birthYear ? ((state.gameState?.season ?? new Date().getFullYear()) - rider.birthYear) : null);
 
-  const specLabel1 = rider?.specialization1 ? getRiderSpecializationLabel(rider.specialization1) : '-';
-  const specLabel2 = rider?.specialization2 ? getRiderSpecializationLabel(rider.specialization2) : '-';
-  const specLabel3 = rider?.specialization3 ? getRiderSpecializationLabel(rider.specialization3) : '-';
-  
-  const specIcon1 = getSpecializationIcon(rider?.specialization1 ?? null);
-  const specIcon2 = getSpecializationIcon(rider?.specialization2 ?? null);
-  const specIcon3 = getSpecializationIcon(rider?.specialization3 ?? null);
+  const isCaptain = resolvedRoleId === 1 || payload?.lieutenantInfo != null;
 
-  const profileId = rider?.weatherProfileId ?? payload?.weatherProfileId ?? 1;
-  const weatherProfile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
-  const pref1Id = weatherProfile.pref[0];
-  const pref2Id = weatherProfile.pref[1];
-  const pref1Name = WEATHER_NAMES[pref1Id];
-  const pref2Name = WEATHER_NAMES[pref2Id];
+  // --- OVR-Ring: Fuellgrad = OVR/100 ---
+  const ovrColor = resolvedOverallRating >= 75 ? '#4ade80'
+    : resolvedOverallRating >= 70 ? '#a3e635'
+    : resolvedOverallRating >= 65 ? '#facc15'
+    : resolvedOverallRating >= 60 ? '#fb923c' : '#f87171';
+  const ovrRing = renderBroadcastRing(
+    [[ovrColor, resolvedOverallRating / 100]],
+    'OVR',
+    `<span style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:800; color:${ovrColor};">${Math.round(resolvedOverallRating)}</span>`,
+    `Overall-Stärke ${Math.round(resolvedOverallRating)}`,
+  );
 
-  let lieutenantPill = '';
+  // --- FORM-Ring: Season-Form (gruen) + Rennform (blau), max 8 ---
+  const formRing = renderBroadcastRing(
+    [['#22c55e', Math.max(0, formBonus) / 8], ['#3b82f6', Math.max(0, raceFormBonus) / 8]],
+    'FORM',
+    `<span style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:800; color:#4ade80;">${formBonus >= 0 ? '+' : ''}${formBonus}</span>
+     <span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:800; color:#60a5fa; margin-top:1px;">${raceFormBonus >= 0 ? '+' : ''}${raceFormBonus}</span>`,
+    `Season-Form ${formBonus >= 0 ? '+' : ''}${formBonus} · Rennform ${raceFormBonus >= 0 ? '+' : ''}${raceFormBonus} · max 8`,
+  );
+
+  // --- FATIGUE-Ring: Kurzzeit (gelb) · gesperrte Langzeit (lila) · Langzeit (rot), dynamischer Max ---
+  const fatigueMax = Math.max(25, Math.ceil(totalFatigue / 5) * 5);
+  const fatigueRing = renderBroadcastRing(
+    [['#eab308', shortTermFatigueMalus / fatigueMax], ['#a855f7', longTermLocked / fatigueMax], ['#ef4444', longTermDecayable / fatigueMax]],
+    'FATIGUE',
+    `<span style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; color:#e2e8f0;">${Math.round(totalFatigue)}</span>`,
+    `Gesamtfatigue ${totalFatigue.toFixed(2)} / ${fatigueMax} — Kurzzeit ${shortTermFatigueMalus} (gelb) · gesperrte Langzeit ${longTermLocked} (lila) · Langzeit ${longTermDecayable} (rot)`,
+  );
+
+  // --- Identitaets-Pills (Rolle / Formphase / Programm / Kapitaen / Leutnant / Mentor) ---
+  const pill = (content: string, color: string, bg: string, border: string, title = ''): string =>
+    `<span style="font-size:11px; font-weight:700; color:${color}; background:${bg}; border:1px solid ${border}; padding:4px 11px; border-radius:99px; display:inline-flex; align-items:center; gap:6px;"${title ? ` title="${esc(title)}"` : ''}>${content}</span>`;
+
+  const pills: string[] = [];
+  if (isCaptain) {
+    pills.push(pill(
+      `<span style="display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:4px; background:#eab308; color:#1a1300; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:9px;">K</span>Kapitän`,
+      '#fcd34d', 'rgba(234,179,8,.14)', 'rgba(234,179,8,.34)',
+    ));
+  }
+  pills.push(pill(`${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)} Formphase`, '#86efac', 'rgba(34,197,94,.14)', 'rgba(34,197,94,.32)', 'Aktuelle Formphase'));
+  if (programName && programName !== '-') {
+    pills.push(pill(`Programm: ${esc(programName)}`, '#9fb0c9', '#0c1729', '#24344f'));
+  }
   if (payload?.lieutenantInfo) {
-    lieutenantPill = `
-      <span class="rider-stats-icon-pill" title="Leutnant">🎖️ <span>Leutnant: <a href="#" onclick="event.preventDefault(); openRiderStatsFromRiderStats(${payload.lieutenantInfo.id})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(payload.lieutenantInfo.name)}</a></span></span>
-    `;
+    pills.push(pill(`<span style="font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:800; letter-spacing:.06em; opacity:.75;">LT</span>Leutnant: ${esc(payload.lieutenantInfo.name)}`, '#93c5fd', 'rgba(59,130,246,.14)', 'rgba(59,130,246,.34)', 'Sein Leutnant'));
   } else if (payload?.leaderInfo) {
-    lieutenantPill = `
-      <span class="rider-stats-icon-pill" title="Kapitän/Sprinter">🛡️ <span>Fährt für: <a href="#" onclick="event.preventDefault(); openRiderStatsFromRiderStats(${payload.leaderInfo.id})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(payload.leaderInfo.name)}</a></span></span>
-    `;
+    pills.push(pill(`<span style="font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:800; letter-spacing:.06em; opacity:.75;">C</span>Fährt für: ${esc(payload.leaderInfo.name)}`, '#93c5fd', 'rgba(59,130,246,.14)', 'rgba(59,130,246,.34)', 'Kapitän'));
+  }
+  const mentored = payload?.mentoredRiderNames ?? [];
+  if (mentored.length > 0) {
+    pills.push(pill(`<span style="font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:800; letter-spacing:.06em; opacity:.75;">M</span>Mentor für: ${esc(mentored.join(', '))}`, '#6ee7b7', 'rgba(16,185,129,.12)', 'rgba(16,185,129,.3)', 'Betreut Nachwuchsfahrer'));
   }
 
+  const jerseyHtml = resolvedTeamId
+    ? `<img src="${esc(resolveTeamJerseyAssetPath(resolvedTeamId))}" alt="${esc(resolvedTeamName)}" style="width:76px; height:76px; object-fit:contain; flex:0 0 auto; filter:drop-shadow(0 3px 6px rgba(0,0,0,.55));" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';" />`
+    : '<span style="width:76px; height:76px; flex:0 0 auto;"></span>';
+
+  const identityLine = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; color:#22d3ee; text-transform:uppercase;">
+      <span>${esc(resolvedTeamName)}</span>
+      <span style="color:#3a4a63;">·</span>
+      <span style="display:inline-flex; align-items:center; gap:5px;">${resolvedCountryFlag}${esc(resolvedCountryCode || '')}</span>
+      ${age != null ? `<span style="color:#3a4a63;">·</span><span style="color:#fcd34d; font-weight:800;">${age}</span>` : ''}
+    </div>`;
+
+  // --- Stat-Strip ---
+  const statCell = (label: string, value: string, color = '#f1f5f9', last = false): string =>
+    `<div style="padding:12px 16px;${last ? '' : ' border-right:1px solid #16233c;'}"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:#6a7a95;">${label}</div><div style="font-family:'JetBrains Mono',monospace; font-size:21px; font-weight:800; color:${color}; margin-top:3px;">${value}</div></div>`;
+
   return `
-    <div class="rider-stats-header-grid">
-      <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" title="Land">${resolvedCountryFlag} <span>${esc(resolvedCountryCode || '-')}</span></span>
-        <span class="rider-stats-icon-pill" title="Team">${resolvedTeamId ? renderMiniJersey(resolvedTeamId, resolvedTeamName) : ''} <span>${esc(resolvedTeamName)}</span></span>
-        <span class="rider-stats-icon-pill" title="Rolle">${esc(resolvedRoleName)}</span>
-        <span class="rider-stats-icon-pill" title="Formphase">${renderSeasonFormPhaseIndicator(resolvedSeasonPhase)} <span>Form</span></span>
-        ${lieutenantPill}
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #223354; background:linear-gradient(135deg,#101f36,#0c1526); margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:20px; padding:18px 22px; flex-wrap:wrap;">
+        ${jerseyHtml}
+        <div style="flex:1; min-width:220px;">
+          ${identityLine}
+          <div style="font-size:15px; font-weight:700; color:#e2e8f0;">${esc(resolvedRoleName)}</div>
+          <div style="display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;">${pills.join('')}</div>
+        </div>
+        <div style="display:flex; gap:16px; align-items:flex-start; flex:0 0 auto;">
+          ${ovrRing}
+          ${formRing}
+          ${fatigueRing}
+        </div>
       </div>
-      <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill" style="padding:0; border:none; background:none;" title="Overall-Stärke">${renderRiderOverallRatingBadge(resolvedOverallRating)}</span>
-        <span class="rider-stats-icon-pill" title="Season-Form">${RIDER_STATS_ICONS.seasonForm} ${formBonus >= 0 ? '+' : ''}${formBonus}</span>
-        <span class="rider-stats-icon-pill" title="Rennform">${RIDER_STATS_ICONS.raceForm} ${raceFormBonus >= 0 ? '+' : ''}${raceFormBonus}</span>
-        <span class="rider-stats-icon-pill" title="Programm">${esc(programName)}</span>
-      </div>
-      <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Saisonrenntage">${RIDER_STATS_ICONS.raceDays} <span class="rider-stats-icon-pill-value">${seasonRaceDaysTotal}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Langzeit-Fatigue">${RIDER_STATS_ICONS.longFatigue} <span class="rider-stats-icon-pill-value">${longTermFatigueMalus}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width ${shortTermFatigueWarning !== 'none' ? 'text-error' : ''}" title="Kurzzeitfatigue">${RIDER_STATS_ICONS.shortFatigue} <span class="rider-stats-icon-pill-value">${shortTermFatigueMalus}</span></span>
-      </div>
-      <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Saisonpunkte">${RIDER_STATS_ICONS.seasonPoints} <span class="rider-stats-icon-pill-value">${currentSeasonPoints}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Saisonplatzierung">${RIDER_STATS_ICONS.rank} <span class="rider-stats-icon-pill-value">${renderRiderRankBadge(currentSeasonRank)}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Renntage">${RIDER_STATS_ICONS.raceDays} <span class="rider-stats-icon-pill-value">${currentSeasonRaceDays}</span></span>
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Siege">${RIDER_STATS_ICONS.wins} <span class="rider-stats-icon-pill-value">${careerWins}</span></span>
-      </div>
-      <div class="rider-stats-header-col align-left">
-        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:124;--rider-stats-pill-border-alpha:0.44;--rider-stats-pill-bg-alpha:0.26; font-weight: 500;" title="Spezialisierung 1">${specIcon1} ${esc(specLabel1)}</span>
-        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:41;--rider-stats-pill-border-alpha:0.31;--rider-stats-pill-bg-alpha:0.18; font-weight: 500;" title="Spezialisierung 2">${specIcon2} ${esc(specLabel2)}</span>
-        <span class="rider-stats-icon-pill rider-stats-summary-pill-heat" style="--rider-stats-pill-hue:6;--rider-stats-pill-border-alpha:0.26;--rider-stats-pill-bg-alpha:0.14; font-weight: 500;" title="Spezialisierung 3">${specIcon3} ${esc(specLabel3)}</span>
-        <span class="rider-stats-icon-pill" title="Wetterpräferenzen" style="display: inline-flex; align-items: center; gap: 4px; padding: 0.2rem 0.6rem;">🌤️ ${renderWeatherIcon(pref1Id, pref1Name)} ${renderWeatherIcon(pref2Id, pref2Name)}</span>
-      </div>
-      <div class="rider-stats-header-col align-left">
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.stageRace, 'Rundfahrten Punkte', formatPoints.stageRace, maxFormat)}
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.oneDay, 'Eintagesrennen Punkte', formatPoints.oneDay, maxFormat)}
-        <span class="rider-stats-icon-pill rider-stats-icon-pill-fixed-width" title="Ausreißversuche">${RIDER_STATS_ICONS.breakaway} <span class="rider-stats-icon-pill-value">${currentSeasonBreakawayAttempts}</span></span>
-        <span class="rider-stats-icon-pill" style="visibility: hidden;">&nbsp;</span>
-      </div>
-      <div class="rider-stats-header-col align-left">
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.flat, 'Flach-Punkte', terrainPoints.flat, maxTerrain)}
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.hilly, 'Hügel-Punkte', terrainPoints.hilly, maxTerrain)}
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.mediumMountain, 'Mittelgebirge-Punkte', terrainPoints.mediumMountain, maxTerrain)}
-      </div>
-      <div class="rider-stats-header-col align-left">
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.mountain, 'Hochgebirge-Punkte', terrainPoints.mountain, maxTerrain)}
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.timetrial, 'Zeitfahren-Punkte', terrainPoints.timetrial, maxTerrain)}
-        ${renderRiderStatsIconHeatPill(RIDER_STATS_ICONS.cobble, 'Kopfsteinpflaster-Punkte', terrainPoints.cobble, maxTerrain)}
+      <div style="display:grid; grid-template-columns:repeat(6,1fr); border-top:1px solid #1c2b47;">
+        ${statCell('SAISONPUNKTE', String(currentSeasonPoints))}
+        ${statCell('SAISON-RANG', currentSeasonRank != null ? `#${currentSeasonRank}` : '–')}
+        ${statCell('SIEGE', String(seasonWins), '#fbbf24')}
+        ${statCell('KARRIERESIEGE', String(careerWins), '#fbbf24')}
+        ${statCell('RENNTAGE', String(currentSeasonRaceDays))}
+        ${statCell('AUSREISSER', String(currentSeasonBreakawayAttempts), '#f1f5f9', true)}
       </div>
     </div>
   `;
