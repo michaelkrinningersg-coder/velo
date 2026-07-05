@@ -1885,97 +1885,86 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       </section>`;
   }
 
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  // Broadcast-Grid fuer die Ergebnis-Zeilen (12 Spalten)
+  const RES_COLS = 'grid-template-columns:64px 46px 40px 28px minmax(140px,1fr) 78px 46px 46px 34px 118px 88px 40px;';
+
   const dropdownHtml = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; background: rgba(255, 255, 255, 0.02); padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05);">
-      <h3 style="margin: 0; font-size: 1rem; color: #fff;">Rennergebnisse</h3>
-      <div style="display: flex; align-items: center; gap: 0.5rem;">
-        <label for="rider-stats-results-season-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500; margin: 0;">Saison filtern:</label>
-        <select id="rider-stats-results-season-select" class="form-control" style="background: #222; border: 1px solid #444; color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;">
-          ${availableYears.map(yr => `<option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:14px; font-weight:800; color:#e2e8f0;">Rennergebnisse</span>
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="${MONOF}; font-size:10px; letter-spacing:.1em; color:#6a7a95;">SAISON</span>
+        <select id="rider-stats-results-season-select" style="${MONOF}; font-size:11px; font-weight:700; color:#e2e8f0; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; padding:6px 9px; cursor:pointer;">
+          ${availableYears.map(yr => `<option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>${yr}</option>`).join('')}
         </select>
       </div>
     </div>
   `;
 
+  const renderResultBlock = (block: any): string => {
+    const barColor = resolveRaceCategoryBadgeStyle(block.raceCategoryName).border;
+    const places = block.rows
+      .map((r: any) => (r.rowType === 'stage_result' ? r.resultRank : (r.rowType === 'gc_final' ? r.resultRank : null)))
+      .filter((n: any) => n != null && n > 0) as number[];
+    const best = places.length ? Math.min(...places) : null;
+    const bestText = best != null ? (best === 1 ? '★ Sieg' : `Bester P${best}`) : '';
+    const stageCount = block.rows.filter((r: any) => r.rowType === 'stage_result').length || null;
+
+    const rowsHtml = block.rows.map((row: any) => {
+      const isFinalRow = row.rowType !== 'stage_result';
+      const label = isFinalRow
+        ? getRiderStatsRowTypeLabel(row.rowType)
+        : (row.stageNumber && row.isStageRace ? `Etappe ${row.stageNumber}` : (row.raceName ?? ''));
+      const rowStyle = `display:grid; ${RES_COLS} gap:9px; align-items:center; padding:9px 14px; border-top:1px solid #14203a;${isFinalRow ? 'background:rgba(34,211,238,.06);' : ''}`;
+      const finalBadge = isFinalRow ? `<span style="margin-right:6px;flex:0 0 auto;">${renderRiderStatsFinalTypeBadge(row.rowType)}</span>` : '';
+      const profileCell = isFinalRow
+        ? '<span style="justify-self:center;color:#5f6f8a;">–</span>'
+        : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background:none;border:none;padding:0;cursor:pointer;display:inline-flex;justify-self:center;">${renderStageProfileBadge(row.profile)}</button>` : '<span style="justify-self:center;color:#5f6f8a;">–</span>');
+      const km = isFinalRow ? '–' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(0)) : '–');
+      const hm = isFinalRow ? '–' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–');
+      const weatherCell = isFinalRow ? '<span style="justify-self:center;"></span>' : `<span style="justify-self:center;">${renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</span>`;
+      return `
+        <div style="${rowStyle}">
+          <span style="${MONOF}; font-size:11px; color:#8494ad;">${esc(formatDate(row.date))}</span>
+          <span style="justify-self:center;">${renderRiderStatsPlacement(row)}</span>
+          <span style="justify-self:center;">${renderRiderStatsGcPlacement(row)}</span>
+          <span style="justify-self:center;">${renderRiderStatsBreakaway(row)}</span>
+          <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; min-width:0;">${finalBadge}${esc(label)}</span>
+          ${profileCell}
+          <span style="${MONOF}; font-size:11px; color:#9fb0c9; justify-self:end;">${km}</span>
+          <span style="${MONOF}; font-size:11px; color:#7c8aa3; justify-self:end;">${hm}</span>
+          ${weatherCell}
+          <span style="min-width:0; overflow:hidden;">${renderStatusDotsColumn(row)}</span>
+          <span style="${MONOF}; font-size:11px; color:#cbd5e1; justify-self:end; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(formatRiderStatsResultDetail(row))}</span>
+          <span style="${MONOF}; font-size:12px; font-weight:800; color:${(row.seasonPoints ?? 0) > 0 ? '#22d3ee' : '#5f6f8a'}; justify-self:end;">${row.seasonPoints ?? 0}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="border-radius:14px; overflow:hidden; border:1px solid #1e2c49; background:#0c1526; margin-bottom:12px;">
+        <div style="display:flex; align-items:stretch;">
+          <span style="width:5px; background:${barColor}; flex:0 0 auto;"></span>
+          <div style="flex:1; min-width:0; display:flex; justify-content:space-between; align-items:center; padding:12px 16px; gap:12px;">
+            <div style="min-width:0; overflow:hidden;">
+              <div style="font-size:15px; font-weight:800; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(block.raceName)}</div>
+              <div style="${MONOF}; font-size:11px; color:#8494ad; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(formatRiderStatsRaceBlockMeta(block))}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; flex:0 0 auto;">
+              ${bestText ? `<span style="${MONOF}; font-size:11px; color:${best === 1 ? '#fbbf24' : '#7c8aa3'}; white-space:nowrap;">${bestText}</span>` : ''}
+              ${renderRiderStatsRaceBadge(block.raceCategoryName, block.isStageRace, stageCount)}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid; ${RES_COLS} gap:9px; padding:8px 14px; ${MONOF}; font-size:9px; letter-spacing:.05em; color:#5a6a85; border-bottom:1px solid #16233c; border-top:1px solid #16233c;">
+          <span>DATUM</span><span style="justify-self:center;">PLATZ</span><span style="justify-self:center;">GC</span><span style="justify-self:center;">AUS</span><span>RENNEN / ETAPPE</span><span style="justify-self:center;">PROFIL</span><span style="justify-self:end;">KM</span><span style="justify-self:end;">HM</span><span style="justify-self:center;">WTR</span><span>EREIGNIS</span><span style="justify-self:end;">ERGEBNIS</span><span style="justify-self:end;">PKT</span>
+        </div>
+        ${rowsHtml}
+      </div>`;
+  };
+
   const contentHtml = seasonToRender ? `
     <section class="rider-stats-season" style="margin-top: 0;">
-      <div class="rider-stats-season-head" style="display: none;">
-        <h3>Saison ${seasonToRender.season}</h3>
-        <span>${seasonToRender.raceBlocks.length} Rennen</span>
-      </div>
-      <div class="rider-stats-race-list">
-        ${seasonToRender.raceBlocks.map((block) => `
-          <section class="rider-stats-race-block">
-            <div class="rider-stats-race-head">
-              <div>
-                <h4>${esc(block.raceName)}</h4>
-                <p>${esc(formatRiderStatsRaceBlockMeta(block))}</p>
-              </div>
-              ${renderRiderStatsRaceBadge(block.raceCategoryName, block.isStageRace, block.rows.filter((r: any) => r.rowType === 'stage_result').length || null)}
-            </div>
-            <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-              <table class="data-table rider-stats-table">
-                <colgroup>
-                  <col style="width: 8%;">
-                  <col style="width: 4.5%;">
-                  <col style="width: 3.5%;">
-                  <col style="width: 2.5%;">
-                  <col style="width: 3.5%;">
-                  <col style="width: 11%;">
-                  <col style="width: 20%;">
-                  <col style="width: 8%;">
-                  <col style="width: 9.5%;">
-                  <col style="width: 4.5%;">
-                  <col style="width: 4.5%;">
-                  <col style="width: 15%;">
-                  <col style="width: 5%;">
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Datum</th>
-                    <th>Platz</th>
-                    <th>GC</th>
-                    <th class="rider-stats-breakaway-col"></th>
-                    <th>Wetter</th>
-                    <th>Klasse</th>
-                    <th>Rennen / Etappe</th>
-                    <th>Status</th>
-                    <th>Profil</th>
-                    <th>km</th>
-                    <th>HM</th>
-                    <th>Ergebnis</th>
-                    <th>Punkte</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${block.rows.map((row: any) => {
-                    const isFinalRow = row.rowType !== 'stage_result';
-                    const raceStageLabel = isFinalRow
-                      ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
-                      : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
-
-                    return `
-                      <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
-                        <td>${esc(formatDate(row.date))}</td>
-                        <td>${renderRiderStatsPlacement(row)}</td>
-                        <td>${renderRiderStatsGcPlacement(row)}</td>
-                        <td class="rider-stats-breakaway-col">${renderRiderStatsBreakaway(row)}</td>
-                        <td>${isFinalRow ? '' : renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</td>
-                        <td>${isFinalRow ? renderRiderStatsFinalTypeBadge(row.rowType) : renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, row.isStageRace, null)}</td>
-                        <td>${esc(raceStageLabel)}</td>
-                        <td class="status-cell">${renderStatusDotsColumn(row)}</td>
-                        <td>${isFinalRow ? '–' : (row.profile ? `<button type="button" class="rider-stats-profile-badge-link" data-stage-profile-id="${row.stageId}" style="background: none; border: none; padding: 0; cursor: pointer; display: inline-flex;">${renderStageProfileBadge(row.profile)}</button>` : '–')}</td>
-                        <td>${isFinalRow ? '-' : (row.distanceKm != null ? esc(row.distanceKm.toFixed(1).replace('.', ',')) : '–')}</td>
-                        <td>${isFinalRow ? '-' : (row.elevationGainMeters != null ? esc(String(Math.round(row.elevationGainMeters))) : '–')}</td>
-                        <td>${esc(formatRiderStatsResultDetail(row))}</td>
-                        <td>${row.seasonPoints}</td>
-                      </tr>`;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-          </section>`).join('')}
-      </div>
+      ${seasonToRender.raceBlocks.map(renderResultBlock).join('')}
     </section>
   ` : `
     <section class="rider-stats-placeholder" style="margin-top: 1rem;">
