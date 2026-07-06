@@ -658,7 +658,10 @@ export class RiderRepository {
         isStageRace: true,
       } satisfies RiderStatsRow);
 
-      pointsByTerrain[resolveRiderStatsTerrainBucket(row.profile)] += finalPoints;
+      // Wertungspunkte aus Rundfahrten (GC/Punkte/Berg/Nachwuchs/Ausreisser) NICHT
+      // nach Terrain bucketen — sie lassen sich keinem Terrain klar zuordnen. Nur
+      // Etappenergebnisse und Eintagesrennen fliessen in die Terrain-Auswertung ein
+      // (siehe stageRows-Schleife oben). Das Format-Bucket bleibt unveraendert.
       pointsByRaceFormat.stageRace += finalPoints;
     }
 
