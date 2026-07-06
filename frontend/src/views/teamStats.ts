@@ -644,15 +644,24 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
     </div>`;
 
   // Platzierungs-Zeile mit farbigen Quadraten + Anzahl (1./2./3./Top10) — wie riderStatsView
-  const placeRowHtml = (title: string, w: number, s: number, t: number, x: number): string => `
+  const placeRowHtml = (title: string, w: number, s: number, t: number, x: number, extra: string = ''): string => `
     <div style="${MONOF} font-size:9px;letter-spacing:.08em;color:#6a7a95;margin:6px 0 4px;">${title}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <span style="display:inline-flex;align-items:center;gap:4px;${MONOF} font-size:11px;font-weight:800;color:#e2e8f0;" title="1. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#ffd700;"></span>${w}</span>
       <span style="display:inline-flex;align-items:center;gap:4px;${MONOF} font-size:11px;font-weight:800;color:#e2e8f0;" title="2. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#cbd5e1;"></span>${s}</span>
       <span style="display:inline-flex;align-items:center;gap:4px;${MONOF} font-size:11px;font-weight:800;color:#e2e8f0;" title="3. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#d08b5b;"></span>${t}</span>
       <span style="display:inline-flex;align-items:center;gap:4px;${MONOF} font-size:11px;font-weight:800;color:#67e8f9;" title="Top 10 (Plätze 4–10)"><span style="width:11px;height:11px;border-radius:3px;background:#22d3ee;"></span>${x}</span>
+      ${extra}
     </div>`;
   const jerseyChip = (color: string, value: number, title: string): string => `<span style="display:inline-flex;align-items:center;gap:4px;${MONOF} font-size:11px;font-weight:800;color:${color === '#a855f7' ? '#c4b5fd' : '#cbd5e1'};" title="${esc(title)}"><span style="width:10px;height:10px;border-radius:2px;background:${color};"></span>${value}</span>`;
+  // Gewonnene Wertungstrikots (rot=Berg, grün=Punkte, weiß=Nachwuchs,
+  // lila=Ausreißer) fuer die GC-Zeile eines Etappenrennens.
+  const gcJerseyWinsHtml = (num: (k: string) => number): string => `
+    <span style="width:1px;height:14px;background:#233251;margin:0 2px;"></span>
+    ${jerseyChip('#f87171', num('mountainWins'), 'Bergtrikot gewonnen')}
+    ${jerseyChip('#4ade80', num('pointsWins'), 'Grünes Trikot gewonnen')}
+    ${jerseyChip('#e2e8f0', num('youthWins'), 'Weißes Trikot gewonnen')}
+    ${jerseyChip('#a855f7', num('breakawayWins'), 'Ausreißer-Trikot gewonnen')}`;
 
   const categoriesToShow = [
     { key: 'World Tour - Tour de France', name: 'Tour de France', isStage: true },
@@ -682,6 +691,37 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
   `;
 
   const totalWins = stats.totalGcWins + stats.totalStageWins;
+
+  // Aggregationen ueber alle Rennklassen — analog riderStatsView Karriere.
+  const jerseyTotals = Object.values(stats.categories || {}).reduce(
+    (acc: any, c: any) => ({
+      yellow: acc.yellow + (c.leaderJerseys || 0),
+      green: acc.green + (c.pointsJerseys || 0),
+      mountain: acc.mountain + (c.mountainJerseys || 0),
+      youth: acc.youth + (c.youthJerseys || 0),
+      breakaway: acc.breakaway + (c.breakawayJerseys || 0),
+    }),
+    { yellow: 0, green: 0, mountain: 0, youth: 0, breakaway: 0 }
+  );
+  const jerseyWins = Object.values(stats.categories || {}).reduce(
+    (acc: any, c: any) => ({
+      yellow: acc.yellow + (c.gcWins || 0),
+      green: acc.green + (c.pointsWins || 0),
+      mountain: acc.mountain + (c.mountainWins || 0),
+      youth: acc.youth + (c.youthWins || 0),
+      breakaway: acc.breakaway + (c.breakawayWins || 0),
+    }),
+    { yellow: 0, green: 0, mountain: 0, youth: 0, breakaway: 0 }
+  );
+  const placeTotals = Object.values(stats.categories || {}).reduce(
+    (acc: any, c: any) => ({
+      p1: acc.p1 + (c.gcWins || 0) + (c.stageWins || 0) + (c.oneDayWins || 0),
+      p2: acc.p2 + (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0),
+      p3: acc.p3 + (c.gcThird || 0) + (c.stageThird || 0) + (c.oneDayThird || 0),
+      top10: acc.top10 + (c.gcTopTen || 0) + (c.stageTopTen || 0) + (c.oneDayTopTen || 0),
+    }),
+    { p1: 0, p2: 0, p3: 0, top10: 0 }
+  );
 
   return `
     <section class="rider-stats-career" style="margin-top: 1.5rem;">
@@ -720,6 +760,26 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
           { label: 'Heimbonus', value: String(stats.superHomeAdvantageDays ?? 0), sub: 'Tage', color: '#facc15' },
           { label: 'Heimmalus', value: String(stats.homePressureDays ?? 0), sub: 'Tage', color: '#fb7185' },
         ])}
+        ${panel('Getragene Wertungstrikots', [
+          { label: 'Gelbes Trikot', value: String(jerseyTotals.yellow), sub: 'Tage', color: '#fbbf24' },
+          { label: 'Grünes Trikot', value: String(jerseyTotals.green), sub: 'Tage', color: '#4ade80' },
+          { label: 'Bergtrikot', value: String(jerseyTotals.mountain), sub: 'Tage', color: '#f87171' },
+          { label: 'Weißes Trikot', value: String(jerseyTotals.youth), sub: 'Tage', color: '#e2e8f0' },
+          { label: 'Lila Trikot', value: String(jerseyTotals.breakaway), sub: 'Tage', color: '#a855f7' },
+        ])}
+        ${panel('Gewonnene Wertungstrikots', [
+          { label: 'Gelbes Trikot', value: String(jerseyWins.yellow), sub: 'Siege', color: '#fbbf24' },
+          { label: 'Grünes Trikot', value: String(jerseyWins.green), sub: 'Siege', color: '#4ade80' },
+          { label: 'Bergtrikot', value: String(jerseyWins.mountain), sub: 'Siege', color: '#f87171' },
+          { label: 'Weißes Trikot', value: String(jerseyWins.youth), sub: 'Siege', color: '#e2e8f0' },
+          { label: 'Lila Trikot', value: String(jerseyWins.breakaway), sub: 'Siege', color: '#a855f7' },
+        ])}
+        ${panel('Platzierungen · alle Wertungen', [
+          { label: 'Platz 1', value: String(placeTotals.p1), color: '#ffd700' },
+          { label: 'Platz 2', value: String(placeTotals.p2), color: '#cbd5e1' },
+          { label: 'Platz 3', value: String(placeTotals.p3), color: '#d08b5b' },
+          { label: 'Top 10', value: String(placeTotals.top10), color: '#22d3ee' },
+        ])}
       </div>
 
       <!-- Categories details -->
@@ -730,7 +790,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
           const catData: any = stats.categories[cat.key] || {};
           const num = (k: string): number => catData[k] || 0;
           const sections = cat.isStage
-            ? placeRowHtml('GC', num('gcWins'), num('gcSecond'), num('gcThird'), num('gcTopTen')) + placeRowHtml('Etappen', num('stageWins'), num('stageSecond'), num('stageThird'), num('stageTopTen'))
+            ? placeRowHtml('GC', num('gcWins'), num('gcSecond'), num('gcThird'), num('gcTopTen'), gcJerseyWinsHtml(num)) + placeRowHtml('Etappen', num('stageWins'), num('stageSecond'), num('stageThird'), num('stageTopTen'))
             : placeRowHtml('One-Day', num('oneDayWins'), num('oneDaySecond'), num('oneDayThird'), num('oneDayTopTen'));
           const jerseys = cat.isStage ? `
               <div style="${MONOF} font-size:9px;letter-spacing:.08em;color:#6a7a95;margin:9px 0 4px;">TRIKOT-TAGE</div>

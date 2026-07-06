@@ -332,13 +332,14 @@ export class RiderRepository {
       JOIN riders ON riders.id = ?
       JOIN sta_country ON sta_country.id = riders.country_id
       WHERE race_program_races.program_id = ?
+        AND CAST(substr(races.start_date, 1, 4) AS INTEGER) = ?
         AND (
           race_program_races.allowed_program_group_ids IS NULL
           OR race_program_races.allowed_program_group_ids = ''
           OR ('|' || race_program_races.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
         )
       ORDER BY races.start_date ASC, races.id ASC
-    `).all(riderId, programRow.id) as RaceRow[];
+    `).all(riderId, programRow.id, season) as RaceRow[];
     const stagesByRaceId = new RaceRepository(this.db).getStagesByRaceIds(raceRows.map(row => row.id));
     const currentDate = new GameStateRepository(this.db).getCurrentDate();
     return {
