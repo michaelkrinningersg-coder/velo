@@ -1887,7 +1887,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
 
   const MONOF = "font-family:'JetBrains Mono',monospace";
   // Broadcast-Grid fuer die Ergebnis-Zeilen (12 Spalten)
-  const RES_COLS = 'grid-template-columns:64px 46px 40px 28px minmax(140px,1fr) 78px 46px 46px 34px 118px 88px 40px;';
+  const RES_COLS = 'grid-template-columns:92px 46px 40px 28px minmax(120px,1fr) 78px 46px 46px 34px 118px 88px 40px;';
 
   const dropdownHtml = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
@@ -1925,7 +1925,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       const weatherCell = isFinalRow ? '<span style="justify-self:center;"></span>' : `<span style="justify-self:center;">${renderWeatherIcon(row.rolledWeatherId, row.rolledWetterName)}</span>`;
       return `
         <div style="${rowStyle}">
-          <span style="${MONOF}; font-size:11px; color:#8494ad;">${esc(formatDate(row.date))}</span>
+          <span style="${MONOF}; font-size:11px; color:#8494ad; white-space:nowrap;">${esc(formatDate(row.date))}</span>
           <span style="justify-self:center;">${renderRiderStatsPlacement(row)}</span>
           <span style="justify-self:center;">${renderRiderStatsGcPlacement(row)}</span>
           <span style="justify-self:center;">${renderRiderStatsBreakaway(row)}</span>
