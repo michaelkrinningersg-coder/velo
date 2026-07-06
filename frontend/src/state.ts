@@ -58,7 +58,7 @@ import { RaceSimView } from './race-sim/RaceSimView';
 import { calculateStageFavorites } from './race-sim/stageFavorites';
 
 export type TeamDetailPage = 'skills' | 'form' | 'profile' | 'preferences';
-export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'fatigue' | 'contracts';
+export type RiderStatsTab = 'results' | 'program' | 'form' | 'topResults' | 'skills' | 'career' | 'hallOfFame' | 'fatigue' | 'contracts';
 export type RiderTeamEditorSortKey = keyof RiderTeamEditorRiderRow | 'teamName';
 
 export type TeamTableSortKey = 'name' | 'countryCode' | 'birthYear' | 'age' | 'overallRating' | 'potOverall' | 'formBonus' | 'raceFormBonus' | 'averageForm' | 'longTermFatigueMalus' | 'shortTermFatigueMalus' | 'seasonFormPhase' | 'seasonPoints' | 'seasonRaceDays' | 'seasonWins' | 'contractEndSeason' | 'roleName' | 'mentorName' | 'riderType' | 'specialization1' | 'specialization2' | 'specialization3' | 'skillDevelopment' | 'peak1' | 'peak2' | 'peak3' | keyof Rider['skills'];
@@ -403,7 +403,12 @@ export function resolveTeamJerseyAssetPath(teamId: number): string {
 
 export function renderMiniJersey(teamId: number | null | undefined, teamName: string | null | undefined): string {
   if (teamId == null) {
-    return '<span class="results-team-jersey-placeholder" aria-hidden="true"></span>';
+    // Teamlose Fahrer (z.B. Karriereende) bekommen das Platzhalter-Trikot
+    // statt einer leeren Flaeche — so bleibt die Spalte optisch konsistent.
+    return `
+      <span class="results-team-jersey" title="Ohne Team" aria-label="Ohne Team">
+        <img class="results-team-jersey-img" src="/jersey/Jer_placeholder.svg" alt="" width="18" height="18" loading="lazy" decoding="async">
+      </span>`;
   }
 
   const resolvedTeamName = teamName ?? state.teams.find((team) => team.id === teamId)?.name ?? `Team ${teamId}`;

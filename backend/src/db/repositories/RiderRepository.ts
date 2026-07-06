@@ -1,6 +1,6 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RiderCareerStats, RiderFatigueHistoryEntry } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderHallOfFameStats, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RiderCareerStats, RiderFatigueHistoryEntry } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -411,6 +411,12 @@ export class RiderRepository {
     const currentSeasonRaceStats = { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 };
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);
+    const allTimeRank = this.getAllTimeWinsRank(careerWins);
+    const hallOfFame: RiderHallOfFameStats = {
+      allTimeWins: careerWins,
+      allTimeWinsRank: allTimeRank.rank,
+      rankedRiders: allTimeRank.rankedRiders,
+    };
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
@@ -786,6 +792,7 @@ export class RiderRepository {
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
       currentSeasonBreakawayAttempts,
       careerWins,
+      hallOfFame,
       pointsByTerrain,
       pointsByRaceFormat,
       careerRaceDaysBySeason,
@@ -1147,6 +1154,7 @@ export class RiderRepository {
     mentorName: string | null,
     mentoredRiderNames: string[],
   ): RiderStatsPayload {
+    const allTimeRank = this.getAllTimeWinsRank(careerWins);
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
@@ -1181,6 +1189,11 @@ export class RiderRepository {
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
       currentSeasonBreakawayAttempts,
       careerWins,
+      hallOfFame: {
+        allTimeWins: careerWins,
+        allTimeWinsRank: allTimeRank.rank,
+        rankedRiders: allTimeRank.rankedRiders,
+      },
       pointsByTerrain: emptyRiderStatsPointsByTerrain(),
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
@@ -1450,6 +1463,36 @@ export class RiderRepository {
       superteamCount,
       totalKm,
       categories,
+    };
+  }
+
+  /**
+   * Platz in der ewigen Siegerliste (Karrieresiege ueber alle Kategorien).
+   * Standard-Ranking: Platz = 1 + Anzahl Fahrer mit strikt mehr Siegen —
+   * Gleichstaende teilen sich denselben Platz. Fahrer ohne Sieg sind
+   * unplatziert (rank null). Eine einzelne Aggregat-Query ueber die kleine
+   * rider_career_category_stats-Tabelle, daher unkritisch fuer die Ladezeit.
+   */
+  private getAllTimeWinsRank(careerWins: number): { rank: number | null; rankedRiders: number } {
+    if (!tableExists(this.db, 'rider_career_category_stats')) {
+      return { rank: null, rankedRiders: 0 };
+    }
+
+    const row = this.db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN wins > ? THEN 1 ELSE 0 END), 0) AS better,
+        COUNT(*) AS ranked
+      FROM (
+        SELECT SUM(gc_wins + stage_wins + one_day_wins) AS wins
+        FROM rider_career_category_stats
+        GROUP BY rider_id
+        HAVING wins > 0
+      )
+    `).get(careerWins) as { better: number; ranked: number };
+
+    return {
+      rank: careerWins > 0 ? row.better + 1 : null,
+      rankedRiders: row.ranked,
     };
   }
 

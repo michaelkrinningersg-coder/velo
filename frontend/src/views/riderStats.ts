@@ -602,7 +602,7 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
 
   const jerseyHtml = resolvedTeamId
     ? `<img src="${esc(resolveTeamJerseyAssetPath(resolvedTeamId))}" alt="${esc(resolvedTeamName)}" style="width:76px; height:76px; object-fit:contain; flex:0 0 auto; filter:drop-shadow(0 3px 6px rgba(0,0,0,.55));" onerror="this.onerror=null;this.src='/jersey/Jer_placeholder.svg';" />`
-    : '<span style="width:76px; height:76px; flex:0 0 auto;"></span>';
+    : `<img src="/jersey/Jer_placeholder.svg" alt="Ohne Team" style="width:76px; height:76px; object-fit:contain; flex:0 0 auto; opacity:.75; filter:drop-shadow(0 3px 6px rgba(0,0,0,.55));" />`;
 
   const identityLine = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; color:#22d3ee; text-transform:uppercase;">
@@ -701,6 +701,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'skills' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="skills" aria-selected="${state.riderStatsTab === 'skills' ? 'true' : 'false'}">Skills</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'fatigue' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="fatigue" aria-selected="${state.riderStatsTab === 'fatigue' ? 'true' : 'false'}">Erschöpfung</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="career" aria-selected="${state.riderStatsTab === 'career' ? 'true' : 'false'}">Karrierestatistiken</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'hallOfFame' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="hallOfFame" aria-selected="${state.riderStatsTab === 'hallOfFame' ? 'true' : 'false'}">Hall of Fame</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="contracts" aria-selected="${state.riderStatsTab === 'contracts' ? 'true' : 'false'}">Verträge</button>
     </div>`;
 }
@@ -1871,6 +1872,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsCareerTab(payload)}`;
   }
 
+  if (state.riderStatsTab === 'hallOfFame') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsHallOfFameTab(payload)}`;
+  }
+
   if (state.riderStatsTab === 'contracts') {
     return `
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
@@ -2000,7 +2008,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
 function updateRiderStatsModalWidth(): void {
   const card = document.querySelector('.rider-stats-modal-card') as HTMLElement | null;
   if (!card) return;
-  const wideTabs = ['results', 'topResults', 'career', 'form', 'fatigue'];
+  const wideTabs = ['results', 'topResults', 'career', 'hallOfFame', 'form', 'fatigue'];
   if (wideTabs.includes(state.riderStatsTab)) {
     card.style.minWidth = 'min(1475px, 95vw)';
     card.style.maxWidth = '1687px';
@@ -2200,7 +2208,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career' && nextTab !== 'fatigue' && nextTab !== 'contracts') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career' && nextTab !== 'hallOfFame' && nextTab !== 'fatigue' && nextTab !== 'contracts') {
       return;
     }
 
@@ -2653,6 +2661,133 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
       </div>
     </section>
   `;
+}
+
+// ---- Hall of Fame ----------------------------------------------------------
+// Badge-System: jedes Badge hat 5 Stufen (gold/silber/bronze/cyan/lila).
+// Die Definitionen sind bewusst als Liste aufgebaut, damit weitere Badge-Sets
+// einfach ergaenzt werden koennen.
+
+type HofTierKey = 'gold' | 'silver' | 'bronze' | 'cyan' | 'purple';
+
+const HOF_TIERS: Record<HofTierKey, { label: string; color: string; soft: string; glow: string; text: string }> = {
+  gold:   { label: 'GOLD',   color: '#fbbf24', soft: 'rgba(251,191,36,.13)',  glow: 'rgba(251,191,36,.30)',  text: '#fde68a' },
+  silver: { label: 'SILBER', color: '#cbd5e1', soft: 'rgba(203,213,225,.11)', glow: 'rgba(203,213,225,.24)', text: '#e8edf5' },
+  bronze: { label: 'BRONZE', color: '#d08b5b', soft: 'rgba(208,139,91,.13)',  glow: 'rgba(208,139,91,.28)',  text: '#e8b48d' },
+  cyan:   { label: 'CYAN',   color: '#22d3ee', soft: 'rgba(34,211,238,.11)',  glow: 'rgba(34,211,238,.28)',  text: '#67e8f9' },
+  purple: { label: 'LILA',   color: '#a855f7', soft: 'rgba(168,85,247,.13)',  glow: 'rgba(168,85,247,.30)',  text: '#c4b5fd' },
+};
+
+const HOF_ICON_TROPHY = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M18 4V2H6v2H2v4c0 2.76 2.24 5 5 5h.35A5.99 5.99 0 0 0 11 15.91V19H7v2h10v-2h-4v-3.09A5.99 5.99 0 0 0 16.65 13H17c2.76 0 5-2.24 5-5V4h-4zM4 8V6h2v4.82C4.84 10.4 4 9.3 4 8zm16 0c0 1.3-.84 2.4-2 2.82V6h2v2z"/></svg>`;
+const HOF_ICON_FLAG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6zM9 8H7V6h2v2zm4 0h-2V6h2v2zm-2 4H9v-2h2v2zm4 0h-2v-2h2v2zm2-2h2v2h-2v-2zm0-4h2v2h-2V6z"/></svg>`;
+
+interface HofBadge {
+  key: string;
+  name: string;
+  icon: string;
+  description: string;
+  tier: HofTierKey | null;
+  /** Sichtbare Detailzeile unter dem Badge (nur wenn verdient). */
+  detail: string;
+  /** Hover-Tooltip mit den genauen Werten. */
+  hover: string;
+  /** Anforderungstext im gesperrten Zustand. */
+  requirement: string;
+}
+
+function resolveFirstPlacePilotTier(rank: number | null): HofTierKey | null {
+  if (rank == null) return null;
+  if (rank === 1) return 'gold';
+  if (rank === 2) return 'silver';
+  if (rank === 3) return 'bronze';
+  if (rank <= 10) return 'cyan';
+  if (rank <= 25) return 'purple';
+  return null;
+}
+
+function resolveWinTrackerTier(wins: number): HofTierKey | null {
+  if (wins > 100) return 'gold';
+  if (wins >= 75) return 'silver';
+  if (wins >= 50) return 'bronze';
+  if (wins >= 25) return 'cyan';
+  if (wins >= 10) return 'purple';
+  return null;
+}
+
+function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
+  const hof = payload.hallOfFame ?? { allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0 };
+  const wins = hof.allTimeWins ?? 0;
+  const rank = hof.allTimeWinsRank;
+
+  return [
+    {
+      key: 'firstPlacePilot',
+      name: 'First Place Pilot',
+      icon: HOF_ICON_TROPHY,
+      description: 'Ewige Siegerliste · Rang',
+      tier: resolveFirstPlacePilotTier(rank),
+      detail: rank != null ? `Platz ${rank} · ${wins} Sieg${wins === 1 ? '' : 'e'}` : '',
+      hover: rank != null
+        ? `Meiste Siege (All-Time): Platz ${rank} von ${hof.rankedRiders} · ${wins} Sieg${wins === 1 ? '' : 'e'}`
+        : 'Noch kein Karrieresieg — unplatziert in der ewigen Siegerliste.',
+      requirement: 'Top 25 der ewigen Siegerliste',
+    },
+    {
+      key: 'winTracker',
+      name: 'The Win Tracker',
+      icon: HOF_ICON_FLAG,
+      description: 'Karrieresiege · Meilensteine',
+      tier: resolveWinTrackerTier(wins),
+      detail: `${wins} Karrieresieg${wins === 1 ? '' : 'e'}`,
+      hover: `${wins} Karrieresieg${wins === 1 ? '' : 'e'} (Gold >100 · Silber 75 · Bronze 50 · Cyan 25 · Lila 10)`,
+      requirement: 'Ab 10 Karrieresiegen',
+    },
+  ];
+}
+
+function renderHofBadgeCard(badge: HofBadge): string {
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  if (badge.tier == null) {
+    // Gesperrt: dezente Karte mit Anforderung — zeigt, was es zu holen gibt.
+    return `
+      <div title="${esc(badge.requirement)}" style="border-radius:16px;border:2px dashed #24344f;background:#0a1122;padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;opacity:.72;">
+        <span style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0e1930;border:1px solid #1c2b47;color:#3a4a63;">
+          <svg viewBox="0 0 24 24" style="width:28px;height:28px;" fill="currentColor"><path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6-9h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM9 6a3 3 0 0 1 6 0v2H9V6z"/></svg>
+        </span>
+        <span style="${MONOF};font-size:12px;font-weight:800;letter-spacing:.1em;color:#5f6f8a;text-transform:uppercase;">${esc(badge.name)}</span>
+        <span style="${MONOF};font-size:10px;color:#4a5a75;">${esc(badge.requirement)}</span>
+      </div>`;
+  }
+
+  const tier = HOF_TIERS[badge.tier];
+  return `
+    <div title="${esc(badge.hover)}" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;">
+      <span style="position:absolute;inset:0;background:radial-gradient(circle at 50% 0%, ${tier.soft}, transparent 62%);pointer-events:none;"></span>
+      <span style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%, ${tier.soft}, #0e1930 75%);border:2px solid ${tier.color};color:${tier.color};box-shadow:0 0 18px ${tier.glow};">
+        ${badge.icon}
+      </span>
+      <span style="${MONOF};font-size:13px;font-weight:800;letter-spacing:.1em;color:#f1f5f9;text-transform:uppercase;text-align:center;">${esc(badge.name)}</span>
+      <span style="${MONOF};font-size:9px;letter-spacing:.14em;color:#6a7a95;text-transform:uppercase;">${esc(badge.description)}</span>
+      <span style="${MONOF};font-size:10px;font-weight:800;letter-spacing:.16em;color:${tier.text};background:${tier.soft};border:1px solid ${tier.color};border-radius:999px;padding:3px 12px;">${tier.label}</span>
+      <span style="${MONOF};font-size:11px;font-weight:700;color:#cbd5e1;">${esc(badge.detail)}</span>
+    </div>`;
+}
+
+export function renderRiderStatsHallOfFameTab(payload: RiderStatsPayload): string {
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  const badges = buildHallOfFameBadges(payload);
+  const earned = badges.filter((badge) => badge.tier != null).length;
+
+  return `
+    <section class="rider-stats-hall-of-fame" style="margin-top:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;">
+        <span style="font-size:14px;font-weight:800;color:#e2e8f0;">Hall of Fame <span style="color:#fbbf24;">★</span></span>
+        <span style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;text-transform:uppercase;">${earned} von ${badges.length} Badges verdient</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-items:stretch;">
+        ${badges.map(renderHofBadgeCard).join('')}
+      </div>
+    </section>`;
 }
 
 export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {

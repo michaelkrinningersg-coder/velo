@@ -978,6 +978,15 @@ export interface RiderCareerStats {
   }>;
 }
 
+export interface RiderHallOfFameStats {
+  /** Karrieresiege (All-Time, wie careerWins). */
+  allTimeWins: number;
+  /** Platz in der ewigen Siegerliste (Standard-Ranking, null ohne Sieg). */
+  allTimeWinsRank: number | null;
+  /** Anzahl Fahrer mit mindestens einem Karrieresieg (Ranglistengroesse). */
+  rankedRiders: number;
+}
+
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
@@ -1012,6 +1021,8 @@ export interface RiderStatsPayload {
   shortTermFatigueWarning: RiderLoadWarningLevel;
   currentSeasonBreakawayAttempts: number;
   careerWins: number;
+  /** Basisdaten fuer die Hall-of-Fame-Badges (Allzeit-Siege). */
+  hallOfFame: RiderHallOfFameStats;
   pointsByTerrain: RiderStatsPointsByTerrain;
   pointsByRaceFormat: RiderStatsPointsByRaceFormat;
   careerRaceDaysBySeason: Array<{
