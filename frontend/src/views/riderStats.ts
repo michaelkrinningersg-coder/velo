@@ -2699,6 +2699,12 @@ const HOF_ICON_RAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" 
 const HOF_ICON_HOME = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg>`;
 const HOF_ICON_SPARK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zM5 15l.9 2.6L8.5 18.5 5.9 19.4 5 22l-.9-2.6L1.5 18.5 4.1 17.6 5 15zm14 0l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>`;
 const HOF_ICON_PAVE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 4h7v6H3V4zm11 0h7v6h-7V4zM3 14h7v6H3v-6zm11 0h7v6h-7v-6z"/></svg>`;
+const HOF_ICON_SUN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5h0v3m0 14v3M4.2 4.2l2.1 2.1m11.4 11.4l2.1 2.1M2 12h3m14 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="4"/></svg>`;
+const HOF_ICON_WIND = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M4 10h10a3 3 0 1 0-3-3H9a5 5 0 1 1 5 5H4v-2zm0 4h16a3 3 0 1 1-3 3h2a1 1 0 1 0-1-1H4v-2zm0 4h8a2 2 0 1 1-2 2h2a0 0 0 0 0 0 0H4v-2z"/></svg>`;
+const HOF_ICON_SNOW = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M11 2h2v3.6l2.5-1.4 1 1.7L13 7.7v2.6l2.3-1.3 1.9-1.5 1 1.7-2.4 1.4 2.4 1.4-1 1.7-1.9-1.5L13 13.7v2.6l3.5 1.8-1 1.7L13 18.4V22h-2v-3.6l-2.5 1.4-1-1.7L11 16.3v-2.6l-2.3 1.3-1.9 1.5-1-1.7L7.2 12 4.8 10.6l1-1.7 1.9 1.5L11 10.3V7.7L7.5 5.9l1-1.7L11 5.6V2z"/></svg>`;
+const HOF_ICON_CROSS = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M9 2h6v5h5v6h-5v9H9v-9H4V7h5V2z"/></svg>`;
+const HOF_ICON_HEART = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 21s-7.5-4.9-10-9.3C.3 8.4 1.8 4.5 5.4 4.5c2 0 3.3 1.1 4.1 2.3l.5.8.5-.8c.8-1.2 2.1-2.3 4.1-2.3 3.6 0 5.1 3.9 3.4 7.2C19.5 16.1 12 21 12 21z"/></svg>`;
+const HOF_ICON_CLOCK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2v7z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2816,6 +2822,26 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const rainWins = sum((c) => (c.winWeather3 || 0) + (c.winWeather4 || 0));
   const superformDays = cs.superformDays ?? 0;
   const homeDays = (cs.homeAdvantageDays ?? 0) + (cs.superHomeAdvantageDays ?? 0);
+
+  // Kennzahlen fuer die 18 Zusatz-Badges.
+  const pointsTitles = sum((c) => c.pointsWins);
+  const komTitles = sum((c) => c.mountainWins);
+  const youthTitles = sum((c) => c.youthWins);
+  const flatWins = sum((c) => (c.winFlat || 0) + (c.winRolling || 0));
+  const punchWins = sum((c) => (c.winHilly || 0) + (c.winHillyDifficult || 0));
+  const summitWins = sum((c) => (c.winMountain || 0) + (c.winHighMountain || 0));
+  const sprintWinsTotal = sum((c) => c.sprintWins);
+  const heatWins = sum((c) => c.winWeather2);
+  const windWins = sum((c) => c.winWeather5);
+  const snowWins = sum((c) => c.winWeather7);
+  const topTens = sum((c) => (c.gcTopTen || 0) + (c.stageTopTen || 0) + (c.oneDayTopTen || 0));
+  const secondPlaces = sum((c) => (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0));
+  const injuries = cs.injuries ?? 0;
+  const illnesses = cs.illnesses ?? 0;
+  const hardLuck = (cs.dnfCount ?? 0) + (cs.otlCount ?? 0);
+  const careerSeasons = hof.careerSeasons ?? 0;
+  const mostSeasonsOneTeam = hof.mostSeasonsOneTeam ?? 0;
+  const teamCount = hof.teamCount ?? 0;
 
   // "The Complete Rider": genestete Stufen aus Rundfahrt-, Eintages- und
   // Massensprint-Erfolg. Gold verlangt Grand Tour + Monument, Silber laesst
@@ -3170,6 +3196,132 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
         : completeRiderTier === 'bronze' ? 'Rundfahrt + Eintagesrennen + Sprint' : '',
       hover: 'Gold: Grand Tour + Monument + Massensprint · Silber: + Stage Race High als Rundfahrt · Bronze: Stage Race High + One Day High + Massensprint (Massensprint = Zielgruppe >= 25)',
       requirement: 'Stage Race High + One Day High + Massensprint-Sieg',
+    },
+    {
+      key: 'pointsChampion', name: 'Points Champion', icon: HOF_ICON_JERSEY, description: 'Grüne-Trikot-Titel',
+      tier: resolveThresholdTier(pointsTitles, [1, 2, 4, 6, 10]),
+      detail: `${pointsTitles.toLocaleString('de-DE')} Titel`,
+      hover: `${pointsTitles.toLocaleString('de-DE')} Punktewertungs-Titel (Gold 10 · Silber 6 · Bronze 4 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Punktewertungs-Titel',
+    },
+    {
+      key: 'polkaDotKing', name: 'Polka-Dot King', icon: HOF_ICON_MOUNTAIN, description: 'Bergtrikot-Titel',
+      tier: resolveThresholdTier(komTitles, [1, 2, 4, 6, 10]),
+      detail: `${komTitles.toLocaleString('de-DE')} Titel`,
+      hover: `${komTitles.toLocaleString('de-DE')} Bergwertungs-Titel (Gold 10 · Silber 6 · Bronze 4 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Bergwertungs-Titel',
+    },
+    {
+      key: 'bestYoungRider', name: 'Best Young Rider', icon: HOF_ICON_STAR, description: 'Weiße-Trikot-Titel',
+      tier: resolveThresholdTier(youthTitles, [1, 2, 3, 5, 8]),
+      detail: `${youthTitles.toLocaleString('de-DE')} Titel`,
+      hover: `${youthTitles.toLocaleString('de-DE')} Nachwuchswertungs-Titel (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Nachwuchswertungs-Titel',
+    },
+    {
+      key: 'rouleur', name: 'Rouleur', icon: HOF_ICON_BIKE, description: 'Siege Flach/Rolling',
+      tier: resolveThresholdTier(flatWins, [5, 10, 20, 30, 40]),
+      detail: `${flatWins.toLocaleString('de-DE')} Siege`,
+      hover: `${flatWins.toLocaleString('de-DE')} Siege auf flachem/rolligem Terrain (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Flach-/Rolling-Siegen',
+    },
+    {
+      key: 'puncheur', name: 'Puncheur', icon: HOF_ICON_BOLT, description: 'Siege Hügelig',
+      tier: resolveThresholdTier(punchWins, [5, 10, 20, 30, 40]),
+      detail: `${punchWins.toLocaleString('de-DE')} Siege`,
+      hover: `${punchWins.toLocaleString('de-DE')} Siege auf hügeligem Terrain (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Hügel-Siegen',
+    },
+    {
+      key: 'summitFinisher', name: 'Summit Finisher', icon: HOF_ICON_MOUNTAIN, description: 'Siege Hochgebirge',
+      tier: resolveThresholdTier(summitWins, [5, 10, 20, 30, 40]),
+      detail: `${summitWins.toLocaleString('de-DE')} Siege`,
+      hover: `${summitWins.toLocaleString('de-DE')} Siege im Hochgebirge (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Hochgebirgs-Siegen',
+    },
+    {
+      key: 'sprintHunter', name: 'Sprint Hunter', icon: HOF_ICON_BIKE, description: 'Sprintsiege',
+      tier: resolveThresholdTier(sprintWinsTotal, [10, 20, 30, 50, 75]),
+      detail: `${sprintWinsTotal.toLocaleString('de-DE')} Sprintsiege`,
+      hover: `${sprintWinsTotal.toLocaleString('de-DE')} Sprintsiege (Gold 75 · Silber 50 · Bronze 30 · Cyan 20 · Lila 10)`,
+      requirement: 'Ab 10 Sprintsiegen',
+    },
+    {
+      key: 'heatWarrior', name: 'Heat Warrior', icon: HOF_ICON_SUN, description: 'Siege bei Extremhitze',
+      tier: resolveThresholdTier(heatWins, [3, 6, 10, 15, 20]),
+      detail: `${heatWins.toLocaleString('de-DE')} Siege`,
+      hover: `${heatWins.toLocaleString('de-DE')} Siege bei Extremhitze (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 Siegen bei Extremhitze',
+    },
+    {
+      key: 'echelonMaster', name: 'Echelon Master', icon: HOF_ICON_WIND, description: 'Siege bei Starkwind',
+      tier: resolveThresholdTier(windWins, [2, 4, 8, 12, 15]),
+      detail: `${windWins.toLocaleString('de-DE')} Siege`,
+      hover: `${windWins.toLocaleString('de-DE')} Siege bei Starkwind (Gold 15 · Silber 12 · Bronze 8 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen bei Starkwind',
+    },
+    {
+      key: 'iceBreaker', name: 'Ice Breaker', icon: HOF_ICON_SNOW, description: 'Siege bei Schnee/Eis',
+      tier: resolveThresholdTier(snowWins, [2, 4, 6, 8, 10]),
+      detail: `${snowWins.toLocaleString('de-DE')} Siege`,
+      hover: `${snowWins.toLocaleString('de-DE')} Siege bei Schnee/Eis (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen bei Schnee/Eis',
+    },
+    {
+      key: 'topTenMachine', name: 'Top-10 Machine', icon: HOF_ICON_PODIUM, description: 'Top-10-Platzierungen',
+      tier: resolveThresholdTier(topTens, [25, 50, 100, 150, 200]),
+      detail: `${topTens.toLocaleString('de-DE')} Top-10`,
+      hover: `${topTens.toLocaleString('de-DE')} Top-10-Platzierungen (Gold 200 · Silber 150 · Bronze 100 · Cyan 50 · Lila 25)`,
+      requirement: 'Ab 25 Top-10-Platzierungen',
+    },
+    {
+      key: 'eternalSecond', name: 'Eternal Second', icon: HOF_ICON_PODIUM, description: 'Zweite Plätze',
+      tier: resolveThresholdTier(secondPlaces, [5, 10, 20, 30, 40]),
+      detail: `${secondPlaces.toLocaleString('de-DE')} × Platz 2`,
+      hover: `${secondPlaces.toLocaleString('de-DE')} zweite Plätze — immer Brautjungfer (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 zweiten Plätzen',
+    },
+    {
+      key: 'comebackKing', name: 'Comeback King', icon: HOF_ICON_HEART, description: 'Überstandene Verletzungen',
+      tier: resolveThresholdTier(injuries, [3, 6, 10, 15, 20]),
+      detail: `${injuries.toLocaleString('de-DE')} Comebacks`,
+      hover: `${injuries.toLocaleString('de-DE')} überstandene Verletzungen (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 überstandenen Verletzungen',
+    },
+    {
+      key: 'underTheWeather', name: 'Under the Weather', icon: HOF_ICON_CROSS, description: 'Krankheiten',
+      tier: resolveThresholdTier(illnesses, [3, 6, 10, 15, 20]),
+      detail: `${illnesses.toLocaleString('de-DE')} Krankheiten`,
+      hover: `${illnesses.toLocaleString('de-DE')} überstandene Krankheiten (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 Krankheiten',
+    },
+    {
+      key: 'hardLuck', name: 'Hard Luck', icon: HOF_ICON_CRASH, description: 'Aufgaben + Zeitüberschr.',
+      tier: resolveThresholdTier(hardLuck, [5, 10, 15, 20, 25]),
+      detail: `${hardLuck.toLocaleString('de-DE')} × Pech`,
+      hover: `${hardLuck.toLocaleString('de-DE')} Aufgaben + Zeitüberschreitungen (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Aufgaben/Zeitüberschreitungen',
+    },
+    {
+      key: 'oneClubMan', name: 'One Club Man', icon: HOF_ICON_SHIELD, description: 'Saisons bei einem Team',
+      tier: resolveThresholdTier(mostSeasonsOneTeam, [3, 5, 7, 8, 10]),
+      detail: `${mostSeasonsOneTeam.toLocaleString('de-DE')} Saisons`,
+      hover: `${mostSeasonsOneTeam.toLocaleString('de-DE')} Saisons beim selben Team (Gold 10 · Silber 8 · Bronze 7 · Cyan 5 · Lila 3)`,
+      requirement: 'Ab 3 Saisons beim selben Team',
+    },
+    {
+      key: 'journeyman', name: 'Journeyman', icon: HOF_ICON_GLOBE, description: 'Verschiedene Teams',
+      tier: resolveThresholdTier(teamCount, [3, 4, 5, 6, 7]),
+      detail: `${teamCount.toLocaleString('de-DE')} Teams`,
+      hover: `${teamCount.toLocaleString('de-DE')} verschiedene Teams in der Karriere (Gold 7 · Silber 6 · Bronze 5 · Cyan 4 · Lila 3)`,
+      requirement: 'Ab 3 verschiedenen Teams',
+    },
+    {
+      key: 'evergreen', name: 'Evergreen', icon: HOF_ICON_CLOCK, description: 'Karrieredauer',
+      tier: resolveThresholdTier(careerSeasons, [5, 7, 10, 12, 15]),
+      detail: `${careerSeasons.toLocaleString('de-DE')} Saisons`,
+      hover: `${careerSeasons.toLocaleString('de-DE')} Saisons Karrieredauer (Gold 15 · Silber 12 · Bronze 10 · Cyan 7 · Lila 5)`,
+      requirement: 'Ab 5 Karriere-Saisons',
     },
   ];
 }

@@ -1012,6 +1012,11 @@ export interface RiderHallOfFameStats {
   wonAllMonuments: boolean;
   wonCobbleKing: boolean;
   wonArdennenKing: boolean;
+
+  /** Loyalitaet/Langlebigkeit (aus contracts, nur bereits verstrichene Saisons). */
+  careerSeasons: number;
+  mostSeasonsOneTeam: number;
+  teamCount: number;
 }
 
 export interface RiderStatsPayload {

@@ -1539,6 +1539,7 @@ export class RiderRepository {
     }
 
     const special = this.getSpecialRaceAchievements(riderId);
+    const loyalty = this.getLoyaltyStats(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -1555,6 +1556,45 @@ export class RiderRepository {
       allTimeDistanceKm,
       bunchSprintWins,
       ...special,
+      ...loyalty,
+    };
+  }
+
+  /**
+   * Loyalitaets-/Langlebigkeitskennzahlen aus den Vertraegen. Es zaehlen nur
+   * bereits verstrichene Saisons (bis zur aktuellen), damit zukuenftige
+   * Vertragsjahre keine Erfolge vortaeuschen. Ueberlappungen und Luecken werden
+   * ueber Saison-Mengen sauber behandelt.
+   */
+  private getLoyaltyStats(riderId: number): { careerSeasons: number; mostSeasonsOneTeam: number; teamCount: number } {
+    if (!tableExists(this.db, 'contracts')) {
+      return { careerSeasons: 0, mostSeasonsOneTeam: 0, teamCount: 0 };
+    }
+    const currentSeason = new GameStateRepository(this.db).getCurrentSeason();
+    const rows = this.db.prepare(`
+      SELECT team_id, start_season, end_season FROM contracts WHERE rider_id = ?
+    `).all(riderId) as Array<{ team_id: number; start_season: number; end_season: number }>;
+
+    const allSeasons = new Set<number>();
+    const seasonsByTeam = new Map<number, Set<number>>();
+    for (const c of rows) {
+      const end = Math.min(c.end_season, currentSeason);
+      if (c.start_season > currentSeason) continue;
+      let teamSet = seasonsByTeam.get(c.team_id);
+      if (!teamSet) { teamSet = new Set<number>(); seasonsByTeam.set(c.team_id, teamSet); }
+      for (let s = c.start_season; s <= end; s += 1) {
+        allSeasons.add(s);
+        teamSet.add(s);
+      }
+    }
+    let mostSeasonsOneTeam = 0;
+    for (const teamSet of seasonsByTeam.values()) {
+      if (teamSet.size > mostSeasonsOneTeam) mostSeasonsOneTeam = teamSet.size;
+    }
+    return {
+      careerSeasons: allSeasons.size,
+      mostSeasonsOneTeam,
+      teamCount: seasonsByTeam.size,
     };
   }
 
