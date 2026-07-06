@@ -192,10 +192,10 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
     }).join('');
 
     return `
-      <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.5rem 0.75rem; border-radius: 6px;">
-        <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: var(--accent-primary); border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.25rem;">
+      <div style="background:#0c1526; border:1px solid #1e2c49; padding: 0.6rem 0.8rem; border-radius: 10px;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: 0.8rem; font-weight: 800; color: #22d3ee; border-bottom: 1px solid #16233c; padding-bottom: 0.3rem;">
           ${specName}
-          <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-400); display: block; margin-top: 0.1rem;">Platz ${stats.rank}/${stats.total} · Ø ${avgText}</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size: 0.65rem; font-weight: 600; letter-spacing:.04em; color: #6a7a95; display: block; margin-top: 0.15rem;">Platz ${stats.rank}/${stats.total} · Ø ${avgText}</span>
         </h4>
         <ul style="margin: 0; padding: 0; list-style: none;">${listHtml}</ul>
       </div>
@@ -302,21 +302,21 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
   }).join('');
 
   return `
-    <div style="background: var(--bg-secondary); border: 1px solid var(--border-primary); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+    <div style="background:linear-gradient(135deg,#101f36,#0c1526); border:1px solid #223354; padding: 1rem; border-radius: 14px; margin-bottom: 1.5rem;">
       <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
         ${specsHtml}
       </div>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; border-top: 1px solid var(--border-primary); padding-top: 0.75rem;">
-        <div style="background: rgba(99, 102, 241, 0.02); border: 1px solid rgba(99, 102, 241, 0.08); padding: 0.5rem 0.75rem; border-radius: 6px;">
-          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: var(--accent-h);">Die 10 stärksten Fahrer</h4>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; border-top: 1px solid #1c2b47; padding-top: 0.75rem;">
+        <div style="background:#0c1526; border:1px solid #1e2c49; padding: 0.6rem 0.8rem; border-radius: 10px;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.8rem; font-weight: 800; color: #67e8f9;">Die 10 stärksten Fahrer</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${overallHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Daten vorhanden</li>'}</ul>
         </div>
-        <div style="background: rgba(251, 191, 36, 0.02); border: 1px solid rgba(251, 191, 36, 0.08); padding: 0.5rem 0.75rem; border-radius: 6px;">
-          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #fbbf24;">Die 10 formstärksten Fahrer</h4>
+        <div style="background:#0c1526; border:1px solid #1e2c49; padding: 0.6rem 0.8rem; border-radius: 10px;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.8rem; font-weight: 800; color: #fbbf24;">Die 10 formstärksten Fahrer</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${formHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Daten vorhanden</li>'}</ul>
         </div>
-        <div style="background: rgba(34, 211, 238, 0.03); border: 1px solid rgba(34, 211, 238, 0.14); padding: 0.5rem 0.75rem; border-radius: 6px;">
-          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #22d3ee;">Die 10 besten Fahrer (UCI Weltrangliste)</h4>
+        <div style="background:#0c1526; border:1px solid #1e2c49; padding: 0.6rem 0.8rem; border-radius: 10px;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.8rem; font-weight: 800; color: #22d3ee;">Die 10 besten Fahrer (UCI Weltrangliste)</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${uciHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Fahrer platziert</li>'}</ul>
         </div>
       </div>
@@ -969,13 +969,20 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
     <option value="${yr}" ${yr === selectedYear ? 'selected' : ''}>Kader ${yr}</option>
   `).join('');
 
-  const getSortIcon = (key: string) => {
-    if (state.teamStatsRosterSort.key !== key) return ' <span style="opacity: 0.3; font-size: 0.75rem;">↕</span>';
-    return state.teamStatsRosterSort.direction === 'asc' ? ' <span style="font-size: 0.75rem;">▲</span>' : ' <span style="font-size: 0.75rem;">▼</span>';
+  const MONOF = "font-family:'JetBrains Mono',monospace;";
+  const GRID = 'grid-template-columns:44px minmax(150px,1.4fr) 96px 108px minmax(110px,1fr) 132px;';
+
+  const sortIcon = (key: string): string => {
+    if (state.teamStatsRosterSort.key !== key) return ' <span style="opacity:.35;">↕</span>';
+    return state.teamStatsRosterSort.direction === 'asc' ? ' <span>▲</span>' : ' <span>▼</span>';
+  };
+  const sortHead = (key: string, label: string, align: 'start' | 'center' | 'end'): string => {
+    const active = state.teamStatsRosterSort.key === key;
+    return `<span data-team-roster-sort="${key}" style="cursor:pointer; justify-self:${align}; ${active ? 'color:#22d3ee;' : ''}">${label}${sortIcon(key)}</span>`;
   };
 
-  const tableRowsHtml = sortedRoster.length === 0
-    ? `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem;">Keine Fahrer für dieses Jahr unter Vertrag.</td></tr>`
+  const rowsHtml = sortedRoster.length === 0
+    ? `<div style="padding:22px 16px; text-align:center; color:#6a7a95; ${MONOF} font-size:11px;">Keine Fahrer für dieses Jahr unter Vertrag.</div>`
     : sortedRoster.map(rider => {
         const flagAlpha2 = rider.nationality ? FLAG_CODE_BY_CODE3[rider.nationality] ?? rider.nationality.slice(0, 2).toLowerCase() : null;
         const flagHtml = flagAlpha2
@@ -991,68 +998,53 @@ export function renderTeamStatsContractsTab(payload: TeamStatsPayload): string {
         });
 
         const overallRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.overallRating)}" title="Stärke: ${rider.overallRating.toFixed(2)}">${rider.overallRating.toFixed(1)}</span>`;
-        
-        let potentialRatingHtml = '–';
+
+        let potentialRatingHtml = '<span style="color:#5f6f8a;">–</span>';
         if (rider.potential != null) {
           potentialRatingHtml = `<span class="results-roster-overall-badge" style="color:${getSkillColorForRating(rider.potential)}" title="Potential: ${rider.potential.toFixed(2)}">${rider.potential.toFixed(1)}</span>`;
         }
 
-        const roleText = esc(rider.roleName || '-');
+        const roleText = esc(rider.roleName || '–');
 
         const endText = rider.contractEndSeason ? `Saison ${rider.contractEndSeason}` : 'Ohne Vertrag';
         const isExpiring = rider.contractEndSeason === selectedYear;
         const contractCellHtml = isExpiring
-          ? `<span class="badge badge-race-category" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold; animation: pulse 2s infinite;" title="Vertrag läuft in dieser Saison aus!">${esc(endText)}</span>`
-          : `<span style="font-weight: 500;">${esc(endText)}</span>`;
+          ? `<span style="${MONOF} font-size:11px; font-weight:700; color:#fca5a5; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.4); padding:3px 9px; border-radius:99px; animation: velopulse 1.6s ease-in-out infinite;" title="Vertrag läuft in dieser Saison aus!">${esc(endText)}</span>`
+          : `<span style="${MONOF} font-size:12px; color:#cbd5e1;">${esc(endText)}</span>`;
 
         return `
-          <tr class="rider-stats-row">
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${flagHtml}</td>
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;">${nameLink}</td>
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${overallRatingHtml}</td>
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${potentialRatingHtml}</td>
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center; color: #ccc;">${roleText}</td>
-            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">${contractCellHtml}</td>
-          </tr>
-        `;
+          <div style="display:grid; ${GRID} gap:10px; align-items:center; padding:9px 14px; border-top:1px solid #14203a;">
+            <span style="justify-self:center;">${flagHtml}</span>
+            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nameLink}</span>
+            <span style="justify-self:center;">${overallRatingHtml}</span>
+            <span style="justify-self:center;">${potentialRatingHtml}</span>
+            <span style="justify-self:center; font-size:12.5px; color:#9fb0c9;">${roleText}</span>
+            <span style="justify-self:end;">${contractCellHtml}</span>
+          </div>`;
       }).join('');
 
   return `
     <section class="rider-stats-contracts" style="margin-top: 1.5rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3 style="margin: 0; font-size: 1.15rem; font-weight: bold; color: #fff;">Kaderzusammensetzung</h3>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <label for="team-stats-roster-year-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500;">Jahr auswählen:</label>
-          <select id="team-stats-roster-year-select" class="form-control" style="background: #222; border: 1px solid #444; color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; width: auto; display: inline-block;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <div style="font-size:14px; font-weight:800; color:#e2e8f0;">Kaderzusammensetzung</div>
+        <div style="display: flex; align-items: center;">
+          <label for="team-stats-roster-year-select" style="${MONOF} font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6a7a95; margin-right:8px;">Jahr</label>
+          <select id="team-stats-roster-year-select" class="form-control" style="width:auto; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; ${MONOF} font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;">
             ${yearOptionsHtml}
           </select>
         </div>
       </div>
-      
-      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table rider-stats-table" style="width: 100%; border-collapse: collapse; text-align: left;">
-          <colgroup>
-            <col style="width: 8%;">
-            <col style="width: 32%;">
-            <col style="width: 15%;">
-            <col style="width: 15%;">
-            <col style="width: 15%;">
-            <col style="width: 15%;">
-          </colgroup>
-          <thead>
-            <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02);">
-              <th data-team-roster-sort="nationality" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Nat${getSortIcon('nationality')}</th>
-              <th data-team-roster-sort="name" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: left;">Fahrer${getSortIcon('name')}</th>
-              <th data-team-roster-sort="overallRating" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Gesamtstärke${getSortIcon('overallRating')}</th>
-              <th data-team-roster-sort="potential" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Pot. Gesamtstärke${getSortIcon('potential')}</th>
-              <th data-team-roster-sort="roleName" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Rolle${getSortIcon('roleName')}</th>
-              <th data-team-roster-sort="contractEndSeason" style="padding: 0.75rem 1rem; color: #94a3b8; font-weight: 600; text-align: center;">Vertragsende${getSortIcon('contractEndSeason')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRowsHtml}
-          </tbody>
-        </table>
+
+      <div style="border-radius:14px; overflow:hidden; border:1px solid #1e2c49; background:#0c1526;">
+        <div style="display:grid; ${GRID} gap:10px; padding:8px 14px; ${MONOF} font-size:9px; letter-spacing:.05em; color:#5a6a85; border-bottom:1px solid #16233c;">
+          ${sortHead('nationality', 'NAT', 'center')}
+          ${sortHead('name', 'FAHRER', 'start')}
+          ${sortHead('overallRating', 'GESAMT', 'center')}
+          ${sortHead('potential', 'POT.', 'center')}
+          ${sortHead('roleName', 'ROLLE', 'center')}
+          ${sortHead('contractEndSeason', 'VERTRAGSENDE', 'end')}
+        </div>
+        ${rowsHtml}
       </div>
     </section>
   `;
