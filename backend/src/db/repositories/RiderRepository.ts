@@ -411,12 +411,7 @@ export class RiderRepository {
     const currentSeasonRaceStats = { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 };
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);
-    const allTimeRank = this.getAllTimeWinsRank(careerWins);
-    const hallOfFame: RiderHallOfFameStats = {
-      allTimeWins: careerWins,
-      allTimeWinsRank: allTimeRank.rank,
-      rankedRiders: allTimeRank.rankedRiders,
-    };
+    const hallOfFame = this.buildHallOfFameStats(careerWins, rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
@@ -1154,7 +1149,7 @@ export class RiderRepository {
     mentorName: string | null,
     mentoredRiderNames: string[],
   ): RiderStatsPayload {
-    const allTimeRank = this.getAllTimeWinsRank(careerWins);
+    const hallOfFame = this.buildHallOfFameStats(careerWins, rider.id);
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
@@ -1189,11 +1184,7 @@ export class RiderRepository {
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
       currentSeasonBreakawayAttempts,
       careerWins,
-      hallOfFame: {
-        allTimeWins: careerWins,
-        allTimeWinsRank: allTimeRank.rank,
-        rankedRiders: allTimeRank.rankedRiders,
-      },
+      hallOfFame,
       pointsByTerrain: emptyRiderStatsPointsByTerrain(),
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
@@ -1493,6 +1484,53 @@ export class RiderRepository {
     return {
       rank: careerWins > 0 ? row.better + 1 : null,
       rankedRiders: row.ranked,
+    };
+  }
+
+  /**
+   * Baut die Hall-of-Fame-Kennzahlen fuer einen Fahrer. Renntage, Ausreisser-km
+   * und Ausreissversuche stammen aus rider_career_stats (dort inkrementell
+   * hochgezaehlt). Der Ausreisser-km-Rang nutzt dasselbe Standard-Ranking wie
+   * die Siegerliste. Beide Aggregate laufen ueber die kleine career-stats-
+   * Tabelle und sind fuer die Ladezeit unkritisch.
+   */
+  private buildHallOfFameStats(careerWins: number, riderId: number): RiderHallOfFameStats {
+    const winsRank = this.getAllTimeWinsRank(careerWins);
+
+    let raceDays = 0;
+    let breakawayKms = 0;
+    let breakawayAttempts = 0;
+    let breakawayKmRank: number | null = null;
+    let rankedBreakawayRiders = 0;
+
+    if (tableExists(this.db, 'rider_career_stats')) {
+      const own = this.db.prepare(`
+        SELECT race_days, breakaway_kms, breakaway_attempts
+        FROM rider_career_stats WHERE rider_id = ?
+      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number } | undefined;
+      raceDays = own?.race_days ?? 0;
+      breakawayKms = own?.breakaway_kms ?? 0;
+      breakawayAttempts = own?.breakaway_attempts ?? 0;
+
+      const rankRow = this.db.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN breakaway_kms > ? THEN 1 ELSE 0 END), 0) AS better,
+          COALESCE(SUM(CASE WHEN breakaway_kms > 0 THEN 1 ELSE 0 END), 0) AS ranked
+        FROM rider_career_stats
+      `).get(breakawayKms) as { better: number; ranked: number };
+      breakawayKmRank = breakawayKms > 0 ? rankRow.better + 1 : null;
+      rankedBreakawayRiders = rankRow.ranked;
+    }
+
+    return {
+      allTimeWins: careerWins,
+      allTimeWinsRank: winsRank.rank,
+      rankedRiders: winsRank.rankedRiders,
+      allTimeRaceDays: raceDays,
+      breakawayKms,
+      breakawayAttempts,
+      breakawayKmRank,
+      rankedBreakawayRiders,
     };
   }
 

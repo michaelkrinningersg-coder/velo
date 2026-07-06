@@ -985,6 +985,16 @@ export interface RiderHallOfFameStats {
   allTimeWinsRank: number | null;
   /** Anzahl Fahrer mit mindestens einem Karrieresieg (Ranglistengroesse). */
   rankedRiders: number;
+  /** Karriere-Renntage gesamt (All-Time). */
+  allTimeRaceDays: number;
+  /** Kilometer in Ausreissergruppen gesamt (All-Time). */
+  breakawayKms: number;
+  /** Ausreissversuche zu Etappenbeginn gesamt (All-Time). */
+  breakawayAttempts: number;
+  /** Platz in der ewigen Ausreisser-km-Liste (Standard-Ranking, null ohne km). */
+  breakawayKmRank: number | null;
+  /** Anzahl Fahrer mit mindestens 1 Ausreisser-km (Ranglistengroesse). */
+  rankedBreakawayRiders: number;
 }
 
 export interface RiderStatsPayload {

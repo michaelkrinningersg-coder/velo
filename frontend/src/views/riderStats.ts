@@ -2680,6 +2680,9 @@ const HOF_TIERS: Record<HofTierKey, { label: string; color: string; soft: string
 
 const HOF_ICON_TROPHY = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M18 4V2H6v2H2v4c0 2.76 2.24 5 5 5h.35A5.99 5.99 0 0 0 11 15.91V19H7v2h10v-2h-4v-3.09A5.99 5.99 0 0 0 16.65 13H17c2.76 0 5-2.24 5-5V4h-4zM4 8V6h2v4.82C4.84 10.4 4 9.3 4 8zm16 0c0 1.3-.84 2.4-2 2.82V6h2v2z"/></svg>`;
 const HOF_ICON_FLAG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6zM9 8H7V6h2v2zm4 0h-2V6h2v2zm-2 4H9v-2h2v2zm4 0h-2v-2h2v2zm2-2h2v2h-2v-2zm0-4h2v2h-2V6z"/></svg>`;
+const HOF_ICON_CALENDAR = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zM7 12h5v5H7v-5z"/></svg>`;
+const HOF_ICON_ROUTE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19 15.5c-1.1 0-2.1.4-2.8 1.1l-3.4-2A3.5 3.5 0 0 0 9.5 10H7a1.5 1.5 0 0 1 0-3h9V4l4 3.5L16 11V8H7a3.5 3.5 0 0 0 0 7h2.5a1.5 1.5 0 0 1 1.3 2.3l3.4 2c.1-.1.2-.2.3-.2A3.5 3.5 0 1 1 19 15.5zm0 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>`;
+const HOF_ICON_MOUNTAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`;
 
 interface HofBadge {
   key: string;
@@ -2714,10 +2717,42 @@ function resolveWinTrackerTier(wins: number): HofTierKey | null {
   return null;
 }
 
+// Schwellen-Tier: hoechste erreichte Stufe [lila, cyan, bronze, silber, gold].
+function resolveThresholdTier(value: number, thresholds: [number, number, number, number, number]): HofTierKey | null {
+  if (value >= thresholds[4]) return 'gold';
+  if (value >= thresholds[3]) return 'silver';
+  if (value >= thresholds[2]) return 'bronze';
+  if (value >= thresholds[1]) return 'cyan';
+  if (value >= thresholds[0]) return 'purple';
+  return null;
+}
+
+// Rang-Tier: P1 gold, P2 silber, P3 bronze, P4-10 cyan, P11-25 lila.
+function resolveRankTier(rank: number | null): HofTierKey | null {
+  if (rank == null) return null;
+  if (rank === 1) return 'gold';
+  if (rank === 2) return 'silver';
+  if (rank === 3) return 'bronze';
+  if (rank <= 10) return 'cyan';
+  if (rank <= 25) return 'purple';
+  return null;
+}
+
+function formatKm(km: number): string {
+  return `${Math.round(km).toLocaleString('de-DE')} km`;
+}
+
 function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
-  const hof = payload.hallOfFame ?? { allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0 };
+  const hof = payload.hallOfFame ?? {
+    allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0,
+    allTimeRaceDays: 0, breakawayKms: 0, breakawayAttempts: 0, breakawayKmRank: null, rankedBreakawayRiders: 0,
+  };
   const wins = hof.allTimeWins ?? 0;
   const rank = hof.allTimeWinsRank;
+  const raceDays = hof.allTimeRaceDays ?? 0;
+  const brkKms = hof.breakawayKms ?? 0;
+  const brkAttempts = hof.breakawayAttempts ?? 0;
+  const brkRank = hof.breakawayKmRank;
 
   return [
     {
@@ -2741,6 +2776,48 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       detail: `${wins} Karrieresieg${wins === 1 ? '' : 'e'}`,
       hover: `${wins} Karrieresieg${wins === 1 ? '' : 'e'} (Gold >100 · Silber 75 · Bronze 50 · Cyan 25 · Lila 10)`,
       requirement: 'Ab 10 Karrieresiegen',
+    },
+    {
+      key: 'raceDaySquirrel',
+      name: 'Race Day Squirrel',
+      icon: HOF_ICON_CALENDAR,
+      description: 'Renntage · Meilensteine',
+      tier: resolveThresholdTier(raceDays, [350, 450, 550, 650, 750]),
+      detail: `${raceDays.toLocaleString('de-DE')} Renntage`,
+      hover: `${raceDays.toLocaleString('de-DE')} Karriere-Renntage (Gold 750 · Silber 650 · Bronze 550 · Cyan 450 · Lila 350)`,
+      requirement: 'Ab 350 Renntagen',
+    },
+    {
+      key: 'escapeArtist',
+      name: 'The Escape Artist',
+      icon: HOF_ICON_ROUTE,
+      description: 'Ausreißer-km · Meilensteine',
+      tier: resolveThresholdTier(brkKms, [10000, 12500, 15000, 17500, 20000]),
+      detail: formatKm(brkKms),
+      hover: `${formatKm(brkKms)} in Ausreißergruppen (Gold 20.000 · Silber 17.500 · Bronze 15.000 · Cyan 12.500 · Lila 10.000)`,
+      requirement: 'Ab 10.000 Ausreißer-km',
+    },
+    {
+      key: 'baroudeurSupreme',
+      name: 'Baroudeur Supreme',
+      icon: HOF_ICON_MOUNTAIN,
+      description: 'Ausreißversuche · Meilensteine',
+      tier: resolveThresholdTier(brkAttempts, [75, 100, 150, 200, 250]),
+      detail: `${brkAttempts.toLocaleString('de-DE')} Versuche`,
+      hover: `${brkAttempts.toLocaleString('de-DE')} Ausreißversuche (Gold 250 · Silber 200 · Bronze 150 · Cyan 100 · Lila 75)`,
+      requirement: 'Ab 75 Ausreißversuchen',
+    },
+    {
+      key: 'breakawayKing',
+      name: 'Breakaway King',
+      icon: HOF_ICON_ROUTE,
+      description: 'Ausreißer-km-Rang',
+      tier: resolveRankTier(brkRank),
+      detail: brkRank != null ? `Platz ${brkRank} · ${formatKm(brkKms)}` : '',
+      hover: brkRank != null
+        ? `Ausreißer-km (All-Time): Platz ${brkRank} von ${hof.rankedBreakawayRiders} · ${formatKm(brkKms)} · ${brkAttempts.toLocaleString('de-DE')} Ausreißversuche`
+        : 'Noch keine Ausreißer-km — unplatziert.',
+      requirement: 'Top 25 der ewigen Ausreißer-km-Liste',
     },
   ];
 }
