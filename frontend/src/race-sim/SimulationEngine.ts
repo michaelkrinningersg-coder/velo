@@ -2165,6 +2165,14 @@ export class SimulationEngine {
           if (gapMeters >= dZero + DRAFT_ORDER_DISTANCE_TIE_METERS) {
             break;
           }
+          // Early-Exit: Fuer die Draft-Physik zaehlt nur der NAECHSTE gueltige
+          // Vordermann (closestRider); ridersInZoneCount wird ausschliesslich auf
+          // 0 geprueft und ist hier bereits >= 1. Sobald die Luecke sicher (Tie-
+          // Toleranz der Sortierung) groesser als die des gefundenen closest ist,
+          // kann kein spaeterer Kandidat mehr "closest" werden.
+          if (closestRider !== null && gapMeters > closestGapMeters + DRAFT_ORDER_DISTANCE_TIE_METERS) {
+            break;
+          }
           if (!this.canReceiveDraftFromCandidate(rider, candidate) || this.isActiveBreakawayRider(candidate)) {
             continue;
           }
