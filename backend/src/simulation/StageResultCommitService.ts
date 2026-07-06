@@ -1844,6 +1844,35 @@ export class StageResultCommitService {
         }
       }
 
+      // Dauerhafte Relational-Kopie fuer schnelle rider-/team-bezogene Abfragen
+      // (siehe ensureResultsFlatSchema). Muss VOR der Kompaktierung laufen,
+      // solange results/stage_entries noch als Live-Zeilen vorliegen.
+      // DELETE+INSERT statt UPSERT, damit ein erneuter Commit derselben Etappe
+      // (z.B. nach manuellem Zuruecksetzen) keine Duplikate hinterlaesst.
+      if (tableExists(this.db, 'results_flat')) {
+        this.db.prepare('DELETE FROM results_flat WHERE stage_id = ?').run(stage.id);
+        this.db.prepare(`
+          INSERT INTO results_flat (
+            race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds,
+            points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+          )
+          SELECT
+            race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds,
+            points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+          FROM results
+          WHERE stage_id = ?
+        `).run(stage.id);
+      }
+      if (tableExists(this.db, 'stage_entries_flat')) {
+        this.db.prepare('DELETE FROM stage_entries_flat WHERE stage_id = ?').run(stage.id);
+        this.db.prepare(`
+          INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+          SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+          FROM stage_entries
+          WHERE stage_id = ?
+        `).run(stage.id);
+      }
+
       const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
       if (isRaceFinished) {
         const currentSeason = this.repo.getCurrentSeason();
@@ -2036,19 +2065,29 @@ export class StageResultCommitService {
   }
 
   private ensureStageCanBeSimulated(stage: Stage): void {
-    const existing = this.db.prepare(`
-      SELECT 1
-      FROM all_results
-      WHERE stage_id = ? AND result_type_id = ?
-      LIMIT 1
-    `).get(stage.id, RESULT_TYPES.stage);
+    // Performance: keine all_results-View — deren MAX-Join entpackt sonst bei
+    // jedem Commit alle race_results_compact-Payloads (~55ms, wachsend).
+    // Semantisch aequivalent, weil (a) Ergebnisse eines laufenden Rennens
+    // immer in der Live-Tabelle `results` liegen (Kompaktierung erfolgt erst
+    // beim Rennabschluss) und (b) der Kalender pro Saison mit neuen Race-/
+    // Stage-IDs dupliziert wird, alte Saisons also nicht kollidieren.
+    const raceCompacted = tableExists(this.db, 'race_results_compact')
+      && this.db.prepare('SELECT 1 FROM race_results_compact WHERE race_id = ? LIMIT 1').get(stage.raceId) != null;
+    const existing = raceCompacted
+      ? 1
+      : this.db.prepare(`
+          SELECT 1
+          FROM results
+          WHERE stage_id = ? AND result_type_id = ?
+          LIMIT 1
+        `).get(stage.id, RESULT_TYPES.stage);
     if (existing) {
       throw new Error('Diese Etappe wurde bereits simuliert.');
     }
 
     const row = this.db.prepare(`
       SELECT MAX(stages.stage_number) AS last_stage_number
-      FROM all_results results
+      FROM results
       JOIN stages ON stages.id = results.stage_id
       WHERE stages.race_id = ? AND results.result_type_id = ?
     `).get(stage.raceId, RESULT_TYPES.stage) as { last_stage_number: number | null } | undefined;

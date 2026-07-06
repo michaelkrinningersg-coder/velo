@@ -430,6 +430,13 @@ export class RiderRepository {
       );
     }
 
+    // Performance: results_flat/stage_entries_flat sind dauerhafte Relational-
+    // Kopien (beim Commit gepflegt, einmalig backgefuellt). Die json_each-Views
+    // muessten fuer rider-bezogene Filter saemtliche Kompakt-Payloads entpacken
+    // (~600ms, wachsend); die Flat-Tabellen beantworten das per Index.
+    const resultsSource = tableExists(this.db, 'results_flat') ? 'results_flat' : 'all_results';
+    const entriesSource = tableExists(this.db, 'stage_entries_flat') ? 'stage_entries_flat' : 'all_stage_entries';
+
     const stageRows = this.db.prepare(`
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
@@ -459,22 +466,22 @@ export class RiderRepository {
         wetter.wetter_name AS rolled_wetter_name,
         stages.super_team_id AS super_team_id,
         stage_entries.team_id AS team_id
-      FROM all_stage_entries stage_entries
+      FROM ${entriesSource} stage_entries
       JOIN stages ON stages.id = stage_entries.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
       LEFT JOIN wetter ON wetter.id = stages.rolled_weather_id
-      LEFT JOIN all_results rider_stage_results
+      LEFT JOIN ${resultsSource} rider_stage_results
         ON rider_stage_results.stage_id = stages.id
        AND rider_stage_results.rider_id = stage_entries.rider_id
        AND rider_stage_results.result_type_id = ${RESULT_TYPE_IDS.stage}
-      LEFT JOIN all_results team_stage_results
+      LEFT JOIN ${resultsSource} team_stage_results
         ON team_stage_results.stage_id = stages.id
        AND team_stage_results.team_id = stage_entries.team_id
        AND team_stage_results.rider_id IS NULL
        AND team_stage_results.result_type_id = ${RESULT_TYPE_IDS.stage}
        AND stages.profile = 'TTT'
-      LEFT JOIN all_results gc_results
+      LEFT JOIN ${resultsSource} gc_results
         ON gc_results.stage_id = stages.id
        AND gc_results.rider_id = stage_entries.rider_id
        AND gc_results.result_type_id = ?
@@ -511,7 +518,7 @@ export class RiderRepository {
         stages.stage_score AS stage_score,
         stages.super_team_id AS super_team_id,
         results.team_id AS team_id
-      FROM all_results results
+      FROM ${resultsSource} results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id

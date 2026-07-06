@@ -1433,6 +1433,85 @@ export class DatabaseService {
     `).run();
   }
 
+  /**
+   * Dauerhafte, schlanke Relational-Kopie aller Ergebnisse und Etappen-
+   * Einsaetze ("History-Ablage"). Wird beim Ergebnis-Commit inkrementell
+   * gepflegt und ueberlebt Kompaktierung und Saison-Pruning. Rider-/Team-
+   * bezogene Abfragen (z.B. Fahrer-Statistik) muessen damit nicht mehr die
+   * json_each-Views entpacken (dort ~600ms pro Aufruf, linear wachsend).
+   */
+  private ensureResultsFlatSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS results_flat (
+        race_id          INTEGER NOT NULL,
+        stage_id         INTEGER NOT NULL,
+        rider_id         INTEGER,
+        team_id          INTEGER,
+        result_type_id   INTEGER NOT NULL,
+        rank             INTEGER,
+        time_seconds     INTEGER,
+        points           INTEGER,
+        is_breakaway     INTEGER,
+        leadout_rider_id INTEGER,
+        leadout_bonus    REAL,
+        breakaway_kms    REAL,
+        event_ids        TEXT,
+        jerseys_worn     TEXT
+      )
+    `).run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_results_flat_rider_type ON results_flat(rider_id, result_type_id)').run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_results_flat_stage_type ON results_flat(stage_id, result_type_id)').run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_results_flat_team ON results_flat(team_id)').run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_entries_flat (
+        stage_id      INTEGER NOT NULL,
+        race_id       INTEGER NOT NULL,
+        team_id       INTEGER,
+        rider_id      INTEGER,
+        status        TEXT,
+        status_reason TEXT
+      )
+    `).run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_flat_rider ON stage_entries_flat(rider_id)').run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_stage_entries_flat_stage ON stage_entries_flat(stage_id)').run();
+
+    // Einmaliger Backfill aus den bestehenden Views (live + kompaktiert +
+    // Historie), damit Altdaten vorhandener Saves vollstaendig vorliegen.
+    try {
+      if (!tableExists(db, 'career_meta') || !tableExists(db, 'results')) {
+        return;
+      }
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'results_flat_backfill_v1'`).get() as { value: string } | undefined;
+      if (flag) {
+        return;
+      }
+      db.prepare('DELETE FROM results_flat').run();
+      db.prepare(`
+        INSERT INTO results_flat (
+          race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds,
+          points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+        )
+        SELECT
+          race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds,
+          points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
+        FROM all_results
+      `).run();
+      db.prepare('DELETE FROM stage_entries_flat').run();
+      db.prepare(`
+        INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+        SELECT stage_id, race_id, team_id, rider_id, status, status_reason
+        FROM all_stage_entries
+      `).run();
+      db.prepare(`
+        INSERT INTO career_meta (key, value) VALUES ('results_flat_backfill_v1', '1')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run();
+    } catch (e) {
+      console.error('results_flat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+  }
+
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS stage_entries_compact (
@@ -2255,6 +2334,10 @@ export class DatabaseService {
     this.ensureRiderSeasonRolesSchema(db);
     this.ensureSeasonStandingsSnapshotsSchema(db);
     this.ensureRaceResultsCompactSchema(db);
+    // Nach ensureResultsHistorySchema (all_results-View) und
+    // ensureRiderCategoryStatsSchema (all_stage_entries-View) aufrufen —
+    // der Backfill liest beide Views.
+    this.ensureResultsFlatSchema(db);
     this.ensureTeamPreferencesData(db);
     this.ensureReferenceData(db);
     this.ensureDayChangeIndexes(db);

@@ -97,6 +97,19 @@ describe('StageResultCommitService.commitRealtimeStage', () => {
     // Committing the same stage again must be rejected.
     expect(() => service.commitRealtimeStage(STAGE_ID, entries)).toThrow();
 
+    // Die dauerhafte Relational-Kopie muss die Kompaktierung ueberleben
+    // (das Eintagesrennen ist nach dem Commit bereits kompaktiert, die
+    // Live-Zeilen sind geloescht).
+    const liveCount = db.prepare('SELECT COUNT(*) AS c FROM results WHERE stage_id = ?').get(STAGE_ID) as { c: number };
+    expect(liveCount.c).toBe(0);
+    const flatStage = db
+      .prepare('SELECT rider_id, rank FROM results_flat WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
+      .all(STAGE_ID) as Array<{ rider_id: number; rank: number }>;
+    expect(flatStage.length).toBe(4);
+    expect(flatStage[0].rider_id).toBe(riderIds[0]);
+    const flatEntries = db.prepare('SELECT COUNT(*) AS c FROM stage_entries_flat WHERE stage_id = ?').get(STAGE_ID) as { c: number };
+    expect(flatEntries.c).toBe(4);
+
     // "Im Fokus": der Etappensieger wird als last_stage_winner hinterlegt.
     const meta = db
       .prepare(`SELECT value FROM career_meta WHERE key = 'last_stage_winner'`)
