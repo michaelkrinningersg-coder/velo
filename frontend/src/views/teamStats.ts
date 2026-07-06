@@ -651,6 +651,26 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
     return `<span style="${style}" title="${esc(title)}: ${checkVal} Siege">${displayValue}</span>`;
   };
 
+  const MONOF = "font-family:'JetBrains Mono',monospace;";
+  // Broadcast highlight-Karte (grosse Zahl + Label) — wie riderStatsView Karriere
+  const highlight = (value: string | number, label: string, color: string): string => `
+    <div style="border-radius:12px;border:1px solid #1e2c49;background:#0c1526;padding:15px 16px;text-align:center;">
+      <div style="${MONOF} font-size:26px;font-weight:800;color:${color};letter-spacing:-.02em;">${value}</div>
+      <div style="${MONOF} font-size:9px;letter-spacing:.06em;color:#8494ad;margin-top:5px;text-transform:uppercase;">${label}</div>
+    </div>`;
+  // Broadcast-Panel (Titel + Zeilen) — wie riderStatsView Karriere
+  const panel = (title: string, items: Array<{ label: string; value: string; color: string; sub?: string }>): string => `
+    <div style="border-radius:12px;border:1px solid #1e2c49;background:#0c1526;padding:14px 16px;">
+      <div style="${MONOF} font-size:10px;letter-spacing:.12em;color:#6a7a95;margin-bottom:6px;text-transform:uppercase;">${title}</div>
+      ${items.map((it) => `
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid #131f34;">
+          <span style="width:8px;height:8px;border-radius:2px;background:${it.color};flex:0 0 auto;"></span>
+          <span style="font-size:12.5px;color:#9fb0c9;flex:1;">${it.label}</span>
+          ${it.sub ? `<span style="${MONOF} font-size:10px;color:#6a7a95;margin-right:8px;">${it.sub}</span>` : ''}
+          <span style="${MONOF} font-size:13px;font-weight:800;color:${it.color};">${it.value}</span>
+        </div>`).join('')}
+    </div>`;
+
   const categoriesToShow = [
     { key: 'World Tour - Tour de France', name: 'Tour de France', isStage: true },
     { key: 'World Tour - Grand Tour', name: 'Grand Tour', isStage: true },
@@ -664,11 +684,11 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
   ];
 
   const seasonDropdownHtml = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-      <h3 style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #fff;">Karrierestatistiken (Team)</h3>
-      <div style="display: flex; align-items: center; gap: 0.5rem;">
-        <label for="team-stats-success-season-select" style="font-size: 0.85rem; color: #aaa; font-weight: 500;">Saison filtern:</label>
-        <select id="team-stats-success-season-select" class="form-control" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+      <div style="font-size:14px;font-weight:800;color:#e2e8f0;">Erfolgsbilanz (Team)</div>
+      <div style="display: flex; align-items: center;">
+        <label for="team-stats-success-season-select" style="${MONOF} font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6a7a95;margin-right:8px;">Saison</label>
+        <select id="team-stats-success-season-select" class="form-control" style="width:auto; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; ${MONOF} font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;">
           <option value="all" ${isAllTime ? 'selected' : ''}>Ewig (All-Time)</option>
           ${Object.keys(payload.successStats).filter(k => k !== 'all').sort((a,b) => b.localeCompare(a)).map(yr => `
             <option value="${yr}" ${String(state.teamStatsSelectedSeason) === yr ? 'selected' : ''}>Saison ${yr}</option>
@@ -684,90 +704,45 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
     <section class="rider-stats-career" style="margin-top: 1.5rem;">
       ${seasonDropdownHtml}
       
-      <!-- Career Summary cards -->
-      <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem; margin-bottom: 2rem;">
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Siege</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #fbbf24;">${totalWins}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Renntage</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #a855f7;">${stats.raceDays}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Ausreißversuche</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #3498db;">${stats.breakawayAttempts}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Erf. Ausreißer</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #2ecc71;">${stats.successfulBreakaways}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Ausreißer-Kms</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #c084fc; line-height: 1.25;">${Math.round(stats.breakawayKms ?? 0)}</div>
-          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">km</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Attacken</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #ffd700;">${displayVal(stats.attacks)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Konterattacken</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #e67e22;">${displayVal(stats.counterAttacks)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Stürze</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #e74c3c;">${displayVal(stats.crashes)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Defekte</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #95a5a6;">${displayVal(stats.defects)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">DNS</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #fc8181;">${stats.dnsCount}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">DNF</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #f56565;">${stats.dnfCount}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">OTL</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #e53e3e;">${stats.otlCount}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Krankheiten</div>
-          <div style="font-size: 1.35rem; font-weight: bold; color: #ed64a6; line-height: 1.25;">${displayValDays(stats.illnesses, stats.illnessDays)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;" ${isAllTime ? '' : isSeasonalClassifiedTooltip}>
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Verletzungen</div>
-          <div style="font-size: 1.35rem; font-weight: bold; color: #f6ad55; line-height: 1.25;">${displayValDays(stats.injuries, stats.injuryDays)}</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimvorteil</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #38bdf8; line-height: 1.25;">${stats.homeAdvantageDays ?? 0}</div>
-          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimbonus</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #facc15; line-height: 1.25;">${stats.superHomeAdvantageDays ?? 0}</div>
-          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center;">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Heimmalus</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #fb7185; line-height: 1.25;">${stats.homePressureDays ?? 0}</div>
-          <div style="font-size: 0.85rem; font-weight: 500; color: #cbd5e0; line-height: 1.25;">Tage</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Superteam</div>
-          <div style="font-size: 1.75rem; font-weight: bold; color: #6366f1;">${stats.superteamCount ?? 0}</div>
-        </div>
+      <!-- Highlights -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+        ${highlight(String(totalWins), 'Siege', '#fbbf24')}
+        ${highlight(String(stats.raceDays), 'Renntage', '#a855f7')}
+        ${highlight(Math.round(stats.breakawayKms ?? 0).toLocaleString('de-DE'), 'Ausreißer-km', '#22d3ee')}
+        ${highlight(String(stats.successfulBreakaways ?? 0), 'Erf. Ausreißer', '#4ade80')}
+        ${highlight(String(stats.superteamCount ?? 0), 'Superteam-Starts', '#6366f1')}
+      </div>
+
+      <!-- Gruppierte Panels -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:16px;align-items:start;">
+        ${panel('Aggressivität', [
+          { label: 'Ausreißversuche', value: String(stats.breakawayAttempts), color: '#3498db' },
+          { label: 'Erfolgreiche Ausreißer', value: String(stats.successfulBreakaways ?? 0), color: '#2ecc71' },
+          { label: 'Attacken', value: String(displayVal(stats.attacks)), color: '#ffd700' },
+          { label: 'Konterattacken', value: String(displayVal(stats.counterAttacks)), color: '#e67e22' },
+        ])}
+        ${panel('Ausfälle', [
+          { label: 'DNS', value: String(stats.dnsCount ?? 0), color: '#fc8181' },
+          { label: 'DNF', value: String(stats.dnfCount ?? 0), color: '#f56565' },
+          { label: 'OTL', value: String(stats.otlCount ?? 0), color: '#e53e3e' },
+          { label: 'Stürze', value: String(displayVal(stats.crashes)), color: '#e74c3c' },
+          { label: 'Defekte', value: String(displayVal(stats.defects)), color: '#95a5a6' },
+        ])}
+        ${panel('Gesundheit', [
+          { label: 'Krankheiten', value: isAllTime ? String(stats.illnesses) : '–', sub: isAllTime ? `${stats.illnessDays} Tage` : undefined, color: '#ed64a6' },
+          { label: 'Verletzungen', value: isAllTime ? String(stats.injuries) : '–', sub: isAllTime ? `${stats.injuryDays} Tage` : undefined, color: '#f6ad55' },
+        ])}
+        ${panel('Heim', [
+          { label: 'Heimvorteil', value: String(stats.homeAdvantageDays ?? 0), sub: 'Tage', color: '#38bdf8' },
+          { label: 'Heimbonus', value: String(stats.superHomeAdvantageDays ?? 0), sub: 'Tage', color: '#facc15' },
+          { label: 'Heimmalus', value: String(stats.homePressureDays ?? 0), sub: 'Tage', color: '#fb7185' },
+        ])}
       </div>
 
       <!-- Categories details -->
-      <h3 style="margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 0.5rem; font-weight: 500; font-size: 1.15rem; color: #fff;">Ergebnisse nach Rennklasse</h3>
-      
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 1.25rem;">
+      <h3 style="font-size:13px;font-weight:800;color:#e2e8f0;margin:22px 0 12px;padding-bottom:8px;border-bottom:1px solid #1c2b47;">Ergebnisse nach Rennklasse <span style="${MONOF} font-size:10px;font-weight:600;color:#6a7a95;">· Siege &amp; Platzierungen</span></h3>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 12px;">
         ${categoriesToShow.map(cat => {
           const catData = stats.categories[cat.key] || {
             gcWins: 0, gcSecond: 0, gcThird: 0, gcTopTen: 0,
@@ -780,16 +755,16 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
           };
 
           return `
-            <div style="position: relative; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 1rem; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
-                <span style="font-weight: 600; font-size: 0.9rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
+            <div style="position: relative; background:#0c1526; border:1px solid #1e2c49; border-radius:12px; padding: 14px 16px; height: 415px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #16233c; padding-bottom: 0.4rem; overflow: hidden; white-space: nowrap;">
+                <span style="font-weight: 700; font-size: 13px; color: #e2e8f0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 70%;" title="${esc(cat.name)}">${esc(cat.name)}</span>
                 ${renderRiderStatsCategoryBadge(cat.key)}
               </div>
               
               ${cat.isStage ? `
                 <!-- Stage Race layout: GC & Classifications -->
                 <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">GC & Wertungen</div>
+                  <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">GC & Wertungen</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
                     ${renderTeamCareerBadge(catData.gcWins, 'gold', 'Gesamtwertung Siege')}
                     ${renderTeamCareerBadge(catData.gcSecond, 'silver', 'Gesamtwertung Platz 2')}
@@ -805,7 +780,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
                 
                 <!-- Etappenergebnisse -->
                 <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Etappenergebnisse</div>
+                  <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Etappenergebnisse</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
                     ${renderTeamCareerBadge(catData.stageWins, 'gold', 'Etappensiege')}
                     ${renderTeamCareerBadge(catData.stageSecond, 'silver', 'Etappen Platz 2')}
@@ -816,7 +791,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
 
                 <!-- Führungstrikots -->
                 <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
+                  <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Führungstrikot Tage</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
                     <!-- Gelbes Trikot (GC) -->
                     <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 20px; ${
@@ -863,7 +838,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
               ` : `
                 <!-- One Day Race layout: Platzierungen -->
                 <div style="overflow: hidden; white-space: nowrap;">
-                  <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Platzierungen</div>
+                  <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Platzierungen</div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; overflow: hidden; white-space: nowrap;">
                     ${renderTeamCareerBadge(catData.oneDayWins, 'gold', 'Siege')}
                     ${renderTeamCareerBadge(catData.oneDaySecond, 'silver', 'Platz 2')}
@@ -881,7 +856,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
               
               <!-- Checkpoint-Siege -->
               <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Checkpoint-Siege</div>
+                <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Checkpoint-Siege</div>
                 <div style="display: flex; gap: 0.3rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
                   ${renderTeamCareerBadge(catData.sprintWins || 0, 'green', 'Sprint: Gewonnene Zwischensprints')}
                   ${renderTeamCareerBadge(catData.climbWinsHC || 0, 'red', 'HC: Gewonnene HC-Bergwertungen')}
@@ -894,7 +869,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
 
               <!-- Profil Siege -->
               <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Profil Siege</div>
+                <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Profil Siege</div>
                 <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
                   ${renderProfileWinBadge(catData.winFlat || 0, 'flat', 'Flach (Flat)')}
                   ${renderProfileWinBadge(catData.winRolling || 0, 'rolling', 'Hügelig leicht (Rolling)')}
@@ -912,7 +887,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
 
               <!-- Wetter Siege -->
               <div style="overflow: hidden; white-space: nowrap;">
-                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Wetter Siege</div>
+                <div style="font-size: 0.7rem; color: #6a7a95; text-transform: uppercase; margin-bottom: 0.2rem; letter-spacing: 0.5px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Wetter Siege</div>
                 <div style="display: flex; gap: 0.25rem; align-items: center; overflow: hidden; white-space: nowrap; flex-wrap: nowrap;">
                   ${renderWeatherWinBadge(catData.winWeather1 || 0, 1, 'Sonnig')}
                   ${renderWeatherWinBadge(catData.winWeather2 || 0, 2, 'Extreme Hitze')}
@@ -925,7 +900,7 @@ export function renderTeamStatsCareerTab(payload: TeamStatsPayload): string {
               </div>
               
               <!-- Race Days in bottom right -->
-              <div style="display: flex; justify-content: flex-end; align-items: center; font-size: 0.8rem; color: #888; white-space: nowrap;" title="Renntage in dieser Rennklasse">
+              <div style="display: flex; justify-content: flex-end; align-items: center; font-size: 0.8rem; color: #6a7a95; white-space: nowrap;" title="Renntage in dieser Rennklasse">
                 ${RIDER_STATS_ICONS.raceDays}
                 <span style="font-weight: bold; color: #a855f7; margin-left: 0.25rem;">${catData.raceDays || 0} Tage</span>
               </div>
