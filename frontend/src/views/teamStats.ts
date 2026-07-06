@@ -412,7 +412,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
   });
 
   const MONOF = "font-family:'JetBrains Mono',monospace;";
-  const TR_COLS = 'grid-template-columns:56px 46px minmax(130px,1.1fr) minmax(150px,1.5fr) 120px 60px 52px 46px;';
+  const TR_COLS = 'grid-template-columns:52px 44px minmax(96px,0.8fr) minmax(120px,1.15fr) 128px 96px 58px 44px;';
 
   const itemsPerPage = 25;
   const activeRows = filteredRows.slice(0, 1000);
@@ -439,88 +439,60 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
 
   const selStyle = "background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;";
   const labStyle = "font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6a7a95; margin-right:8px;";
+  const rowLabStyle = "font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:#5a6a85; min-width:82px; flex:0 0 auto;";
   const filtersHtml = `
-    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.25rem; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; background:#0c1526; padding: 12px 16px; border-radius: 14px; border: 1px solid #1e2c49;">
-      <div style="display:flex; align-items:center;">
-        <label style="${labStyle}">Rennklasse</label>
-        <select id="team-stats-filter-category" class="form-control" style="width:auto; ${selStyle}">
-          <option value="all">Alle Rennklassen</option>
-          ${categoryOptionsHtml}
-        </select>
+    <div class="rider-stats-top-results-filters" style="display:flex; flex-direction:column; gap:12px; margin-bottom: 1.25rem; background:#0c1526; padding: 12px 16px; border-radius: 14px; border: 1px solid #1e2c49;">
+      <div style="display:flex; gap:1.25rem; align-items:center; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center;">
+          <label style="${labStyle}">Rennklasse</label>
+          <select id="team-stats-filter-category" class="form-control" style="width:auto; ${selStyle}">
+            <option value="all">Alle Rennklassen</option>
+            ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="${labStyle}">Saison</label>
+          <select id="team-stats-filter-season" class="form-control" style="width:auto; ${selStyle}">
+            <option value="all">All Time</option>
+            ${seasonsList.map(yr => `<option value="${yr}" ${state.teamStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="${labStyle}">Profil</label>
+          <select id="team-stats-filter-profile" class="form-control" style="width:auto; ${selStyle}">
+            <option value="all">Alle Profile</option>
+            <option value="Flat" ${state.teamStatsTopResultsFilterProfile === 'Flat' ? 'selected' : ''}>Flat</option>
+            <option value="Rolling" ${state.teamStatsTopResultsFilterProfile === 'Rolling' ? 'selected' : ''}>Rolling</option>
+            <option value="Hilly" ${state.teamStatsTopResultsFilterProfile === 'Hilly' ? 'selected' : ''}>Hilly</option>
+            <option value="Hilly Difficult" ${state.teamStatsTopResultsFilterProfile === 'Hilly Difficult' ? 'selected' : ''}>Hilly Difficult</option>
+            <option value="Medium Mountain" ${state.teamStatsTopResultsFilterProfile === 'Medium Mountain' ? 'selected' : ''}>Medium Mountain</option>
+            <option value="Mountain" ${state.teamStatsTopResultsFilterProfile === 'Mountain' ? 'selected' : ''}>Mountain</option>
+            <option value="High Mountain" ${state.teamStatsTopResultsFilterProfile === 'High Mountain' ? 'selected' : ''}>High Mountain</option>
+            <option value="Cobble" ${state.teamStatsTopResultsFilterProfile === 'Cobble' ? 'selected' : ''}>Cobble</option>
+            <option value="Cobble Hill" ${state.teamStatsTopResultsFilterProfile === 'Cobble Hill' ? 'selected' : ''}>Cobble Hill</option>
+            <option value="ITT" ${state.teamStatsTopResultsFilterProfile === 'ITT' ? 'selected' : ''}>ITT</option>
+            <option value="TTT" ${state.teamStatsTopResultsFilterProfile === 'TTT' ? 'selected' : ''}>TTT</option>
+          </select>
+        </div>
       </div>
-      <div style="display:flex; align-items:center;">
-        <label style="${labStyle}">Saison</label>
-        <select id="team-stats-filter-season" class="form-control" style="width:auto; ${selStyle}">
-          <option value="all">All Time</option>
-          ${seasonsList.map(yr => `<option value="${yr}" ${state.teamStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
-        </select>
+
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid #16233c; padding-top:12px;">
+        <label style="${rowLabStyle}">Platzierung</label>
+        ${renderFilterButton('Siege', state.teamStatsTopResultsFilterRank === 1, 'linear-gradient(135deg, #fbbf24, #d4af37)', '#000', 'rgba(251, 191, 36, 0.4)', 'data-team-top-results-rank', '1')}
+        ${renderFilterButton('Top 3', state.teamStatsTopResultsFilterRank === 3, 'linear-gradient(135deg, #e2e8f0, #94a3b8)', '#000', 'rgba(148, 163, 184, 0.4)', 'data-team-top-results-rank', '3')}
+        ${renderFilterButton('Top 5', state.teamStatsTopResultsFilterRank === 5, 'linear-gradient(135deg, #d97706, #b45309)', '#fff', 'rgba(217, 119, 6, 0.4)', 'data-team-top-results-rank', '5')}
+        ${renderFilterButton('Top 10', state.teamStatsTopResultsFilterRank === 10, 'linear-gradient(135deg, #a16207, #78350f)', '#fff', 'rgba(161, 98, 7, 0.4)', 'data-team-top-results-rank', '10')}
       </div>
-      <div style="display:flex; align-items:center;">
-        <label style="${labStyle}">Profil</label>
-        <select id="team-stats-filter-profile" class="form-control" style="width:auto; ${selStyle}">
-          <option value="all">Alle Profile</option>
-          <option value="Flat" ${state.teamStatsTopResultsFilterProfile === 'Flat' ? 'selected' : ''}>Flat</option>
-          <option value="Rolling" ${state.teamStatsTopResultsFilterProfile === 'Rolling' ? 'selected' : ''}>Rolling</option>
-          <option value="Hilly" ${state.teamStatsTopResultsFilterProfile === 'Hilly' ? 'selected' : ''}>Hilly</option>
-          <option value="Hilly Difficult" ${state.teamStatsTopResultsFilterProfile === 'Hilly Difficult' ? 'selected' : ''}>Hilly Difficult</option>
-          <option value="Medium Mountain" ${state.teamStatsTopResultsFilterProfile === 'Medium Mountain' ? 'selected' : ''}>Medium Mountain</option>
-          <option value="Mountain" ${state.teamStatsTopResultsFilterProfile === 'Mountain' ? 'selected' : ''}>Mountain</option>
-          <option value="High Mountain" ${state.teamStatsTopResultsFilterProfile === 'High Mountain' ? 'selected' : ''}>High Mountain</option>
-          <option value="Cobble" ${state.teamStatsTopResultsFilterProfile === 'Cobble' ? 'selected' : ''}>Cobble</option>
-          <option value="Cobble Hill" ${state.teamStatsTopResultsFilterProfile === 'Cobble Hill' ? 'selected' : ''}>Cobble Hill</option>
-          <option value="ITT" ${state.teamStatsTopResultsFilterProfile === 'ITT' ? 'selected' : ''}>ITT</option>
-          <option value="TTT" ${state.teamStatsTopResultsFilterProfile === 'TTT' ? 'selected' : ''}>TTT</option>
-        </select>
-      </div>
-      
-      <div style="display: grid; grid-template-rows: auto auto; grid-template-columns: repeat(6, 130px); gap: 0.5rem; align-items: center; justify-items: center; text-align: center; margin-left: auto; border-left: 1px solid rgba(255, 255, 255, 0.1); padding-left: 1rem;">
-        <!-- Column 1: Siege / Top 3 -->
-        <div style="grid-row: 1; grid-column: 1;">
-          ${renderFilterButton('Siege', state.teamStatsTopResultsFilterRank === 1, 'linear-gradient(135deg, #fbbf24, #d4af37)', '#000', 'rgba(251, 191, 36, 0.4)', 'data-team-top-results-rank', '1')}
-        </div>
-        <div style="grid-row: 2; grid-column: 1;">
-          ${renderFilterButton('Top 3', state.teamStatsTopResultsFilterRank === 3, 'linear-gradient(135deg, #e2e8f0, #94a3b8)', '#000', 'rgba(148, 163, 184, 0.4)', 'data-team-top-results-rank', '3')}
-        </div>
 
-        <!-- Column 2: Top 5 / Top 10 -->
-        <div style="grid-row: 1; grid-column: 2;">
-          ${renderFilterButton('Top 5', state.teamStatsTopResultsFilterRank === 5, 'linear-gradient(135deg, #d97706, #b45309)', '#fff', 'rgba(217, 119, 6, 0.4)', 'data-team-top-results-rank', '5')}
-        </div>
-        <div style="grid-row: 2; grid-column: 2;">
-          ${renderFilterButton('Top 10', state.teamStatsTopResultsFilterRank === 10, 'linear-gradient(135deg, #a16207, #78350f)', '#fff', 'rgba(161, 98, 7, 0.4)', 'data-team-top-results-rank', '10')}
-        </div>
-
-        <!-- Column 3: GC / [Empty] -->
-        <div style="grid-row: 1; grid-column: 3;">
-          ${renderFilterButton('GC', state.teamStatsTopResultsFilters.gc, 'linear-gradient(135deg, #facc15, #ca8a04)', '#000', 'rgba(234, 179, 8, 0.4)', 'data-team-top-results-filter', 'gc')}
-        </div>
-        <div style="grid-row: 2; grid-column: 3;">
-          <!-- Empty for GC single layout -->
-        </div>
-
-        <!-- Column 4: Punkte / Berg -->
-        <div style="grid-row: 1; grid-column: 4;">
-          ${renderFilterButton('Punkte', state.teamStatsTopResultsFilters.points, 'linear-gradient(135deg, #4ade80, #16a34a)', '#fff', 'rgba(74, 222, 128, 0.4)', 'data-team-top-results-filter', 'points')}
-        </div>
-        <div style="grid-row: 2; grid-column: 4;">
-          ${renderFilterButton('Berg', state.teamStatsTopResultsFilters.mountain, 'linear-gradient(135deg, #f87171, #dc2626)', '#fff', 'rgba(239, 68, 68, 0.4)', 'data-team-top-results-filter', 'mountain')}
-        </div>
-
-        <!-- Column 5: Nachwuchs / Ausreißer -->
-        <div style="grid-row: 1; grid-column: 5;">
-          ${renderFilterButton('Nachwuchs', state.teamStatsTopResultsFilters.youth, 'linear-gradient(135deg, #ffffff, #e2e8f0)', '#0f172a', 'rgba(255, 255, 255, 0.4)', 'data-team-top-results-filter', 'youth')}
-        </div>
-        <div style="grid-row: 2; grid-column: 5;">
-          ${renderFilterButton('Ausreißer', state.teamStatsTopResultsFilters.breakaway, 'linear-gradient(135deg, #c084fc, #7c3aed)', '#fff', 'rgba(168, 85, 247, 0.4)', 'data-team-top-results-filter', 'breakaway')}
-        </div>
-
-        <!-- Column 6: Etappen / One Day -->
-        <div style="grid-row: 1; grid-column: 6;">
-          ${renderFilterButton('Etappen', state.teamStatsTopResultsFilters.stage, 'linear-gradient(135deg, #60a5fa, #2563eb)', '#fff', 'rgba(59, 130, 246, 0.4)', 'data-team-top-results-filter', 'stage')}
-        </div>
-        <div style="grid-row: 2; grid-column: 6;">
-          ${renderFilterButton('One Day', state.teamStatsTopResultsFilters.oneDay, 'linear-gradient(135deg, #b91c1c, #7f1d1d)', '#fff', 'rgba(185, 28, 28, 0.4)', 'data-team-top-results-filter', 'oneDay')}
-        </div>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <label style="${rowLabStyle}">Wertung</label>
+        ${renderFilterButton('GC', state.teamStatsTopResultsFilters.gc, 'linear-gradient(135deg, #facc15, #ca8a04)', '#000', 'rgba(234, 179, 8, 0.4)', 'data-team-top-results-filter', 'gc')}
+        ${renderFilterButton('Punkte', state.teamStatsTopResultsFilters.points, 'linear-gradient(135deg, #4ade80, #16a34a)', '#fff', 'rgba(74, 222, 128, 0.4)', 'data-team-top-results-filter', 'points')}
+        ${renderFilterButton('Berg', state.teamStatsTopResultsFilters.mountain, 'linear-gradient(135deg, #f87171, #dc2626)', '#fff', 'rgba(239, 68, 68, 0.4)', 'data-team-top-results-filter', 'mountain')}
+        ${renderFilterButton('Nachwuchs', state.teamStatsTopResultsFilters.youth, 'linear-gradient(135deg, #ffffff, #e2e8f0)', '#0f172a', 'rgba(255, 255, 255, 0.4)', 'data-team-top-results-filter', 'youth')}
+        ${renderFilterButton('Ausreißer', state.teamStatsTopResultsFilters.breakaway, 'linear-gradient(135deg, #c084fc, #7c3aed)', '#fff', 'rgba(168, 85, 247, 0.4)', 'data-team-top-results-filter', 'breakaway')}
+        ${renderFilterButton('Etappen', state.teamStatsTopResultsFilters.stage, 'linear-gradient(135deg, #60a5fa, #2563eb)', '#fff', 'rgba(59, 130, 246, 0.4)', 'data-team-top-results-filter', 'stage')}
+        ${renderFilterButton('One Day', state.teamStatsTopResultsFilters.oneDay, 'linear-gradient(135deg, #b91c1c, #7f1d1d)', '#fff', 'rgba(185, 28, 28, 0.4)', 'data-team-top-results-filter', 'oneDay')}
       </div>
     </div>
   `;

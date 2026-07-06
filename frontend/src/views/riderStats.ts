@@ -2066,6 +2066,43 @@ export async function openRiderStats(riderId: number): Promise<void> {
 }
 
 export function initRiderStatsListeners(): void {
+  // Ereignis-Quadrat-Tooltip: beim Hover als position:fixed rendern, damit es
+  // nie vom overflow:hidden der Ergebnis-Karte abgeschnitten wird (z.B. bei der
+  // ersten Etappe direkt unter dem Stage-Race-Header) und immer oben liegt.
+  const positionStatusTooltip = (container: HTMLElement): void => {
+    const tip = container.querySelector<HTMLElement>('.status-tooltip');
+    if (!tip) return;
+    tip.style.position = 'fixed';
+    tip.style.bottom = 'auto';
+    tip.style.margin = '0';
+    tip.style.opacity = '1';
+    tip.style.visibility = 'visible';
+    tip.style.zIndex = '99999';
+    tip.style.transform = 'translateX(-50%)';
+    const c = container.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    let top = c.top - t.height - 8;
+    if (top < 8) top = c.bottom + 8;
+    let left = c.left + c.width / 2;
+    const half = t.width / 2;
+    if (left - half < 8) left = 8 + half;
+    if (left + half > window.innerWidth - 8) left = window.innerWidth - 8 - half;
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+  };
+  $('rider-stats-body').addEventListener('mouseover', (event) => {
+    const container = (event.target as Element).closest<HTMLElement>('.status-dots-container');
+    if (container) positionStatusTooltip(container);
+  });
+  $('rider-stats-body').addEventListener('mouseout', (event) => {
+    const container = (event.target as Element).closest<HTMLElement>('.status-dots-container');
+    if (!container) return;
+    const related = event.relatedTarget as Element | null;
+    if (related && container.contains(related)) return;
+    const tip = container.querySelector<HTMLElement>('.status-tooltip');
+    if (tip) tip.style.cssText = '';
+  });
+
   $('rider-stats-body').addEventListener('click', (event) => {
     const rankBtn = (event.target as Element).closest<HTMLButtonElement>('button[data-top-results-rank]');
     if (rankBtn) {

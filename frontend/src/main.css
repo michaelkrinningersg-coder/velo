@@ -1712,6 +1712,12 @@ html, body {
   background: var(--dashboard-race-category-badge-bg, rgba(100, 116, 139, .2));
   color: var(--dashboard-race-category-badge-color, var(--text-300));
   border: 1px solid var(--dashboard-race-category-badge-border, rgba(148, 163, 184, .3));
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border-radius: 6px;
+  padding: .2rem .5rem;
 }
 
 /* ---- Attribute Bar ---------------------------------------- */
@@ -4537,12 +4543,15 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 5.8rem;
-  padding: .12rem .42rem;
-  border: 1px solid rgba(255, 255, 255, .18);
-  border-radius: .45rem;
-  font-size: .68rem;
-  font-weight: 800;
+  min-width: 5rem;
+  padding: .16rem .45rem;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
   line-height: 1;
   white-space: nowrap;
 }
