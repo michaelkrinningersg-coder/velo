@@ -411,13 +411,17 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     }
   });
 
-  const itemsPerPage = 20;
-  const totalPages = Math.max(1, Math.min(10, Math.ceil(filteredRows.length / itemsPerPage)));
+  const MONOF = "font-family:'JetBrains Mono',monospace;";
+  const TR_COLS = 'grid-template-columns:56px 46px minmax(130px,1.1fr) minmax(150px,1.5fr) 120px 60px 52px 46px;';
+
+  const itemsPerPage = 25;
+  const activeRows = filteredRows.slice(0, 1000);
+  const totalPages = Math.max(1, Math.ceil(activeRows.length / itemsPerPage));
   if (state.teamStatsTopResultsPage > totalPages) {
     state.teamStatsTopResultsPage = totalPages;
   }
   const startIndex = (state.teamStatsTopResultsPage - 1) * itemsPerPage;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedRows = activeRows.slice(startIndex, startIndex + itemsPerPage);
 
   const categoryOptionsHtml = categories.map(cat => {
     const isStage = cat.toLowerCase().includes('stage race') || cat.toLowerCase().includes('grand tour') || cat.toLowerCase().includes('tour de france');
@@ -433,25 +437,27 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     }
   }).join('');
 
+  const selStyle = "background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;";
+  const labStyle = "font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6a7a95; margin-right:8px;";
   const filtersHtml = `
-    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; flex-wrap: wrap; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Rennklasse:</label>
-        <select id="team-stats-filter-category" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
+    <div class="rider-stats-top-results-filters" style="display: flex; gap: 1.25rem; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; background:#0c1526; padding: 12px 16px; border-radius: 14px; border: 1px solid #1e2c49;">
+      <div style="display:flex; align-items:center;">
+        <label style="${labStyle}">Rennklasse</label>
+        <select id="team-stats-filter-category" class="form-control" style="width:auto; ${selStyle}">
           <option value="all">Alle Rennklassen</option>
           ${categoryOptionsHtml}
         </select>
       </div>
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Saison:</label>
-        <select id="team-stats-filter-season" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444;">
+      <div style="display:flex; align-items:center;">
+        <label style="${labStyle}">Saison</label>
+        <select id="team-stats-filter-season" class="form-control" style="width:auto; ${selStyle}">
           <option value="all">All Time</option>
           ${seasonsList.map(yr => `<option value="${yr}" ${state.teamStatsTopResultsFilterSeason === yr ? 'selected' : ''}>Saison ${yr}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" style="margin: 0; display: flex; align-items: center;">
-        <label style="margin-right: 0.5rem; font-weight: 600; white-space: nowrap; color: #ccc;">Profil:</label>
-        <select id="team-stats-filter-profile" class="form-control" style="width: auto; display: inline-block; background: #222; color: #fff; border-color: #444; cursor: pointer;">
+      <div style="display:flex; align-items:center;">
+        <label style="${labStyle}">Profil</label>
+        <select id="team-stats-filter-profile" class="form-control" style="width:auto; ${selStyle}">
           <option value="all">Alle Profile</option>
           <option value="Flat" ${state.teamStatsTopResultsFilterProfile === 'Flat' ? 'selected' : ''}>Flat</option>
           <option value="Rolling" ${state.teamStatsTopResultsFilterProfile === 'Rolling' ? 'selected' : ''}>Rolling</option>
@@ -519,40 +525,41 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     </div>
   `;
 
-  const tableRowsHtml = paginatedRows.length === 0
-    ? `<tr><td colspan="11" class="text-center text-muted" style="padding: 2rem;">Keine Ergebnisse für diese Filterkombination.</td></tr>`
+  const rowsHtml = paginatedRows.length === 0
+    ? `<div style="padding:22px 16px; text-align:center; color:#6a7a95; ${MONOF} font-size:11px;">Keine Ergebnisse für diese Filterkombination.</div>`
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
         const raceStageLabel = isFinalRow
           ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
           : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
 
-        let stagePlacementHtml = '–';
-        let gcPlacementHtml = '–';
-
+        let placeHtml = '<span style="justify-self:center; color:#5f6f8a;">–</span>';
         if (row.finishStatus === 'otl') {
-          stagePlacementHtml = renderRiderStatsRankBadge('OTL', 'place');
+          placeHtml = `<span style="justify-self:center;">${renderRiderStatsRankBadge('OTL', 'place')}</span>`;
         } else if (row.finishStatus === 'dnf') {
-          stagePlacementHtml = renderRiderStatsRankBadge('DNF', 'place');
+          placeHtml = `<span style="justify-self:center;">${renderRiderStatsRankBadge('DNF', 'place')}</span>`;
         } else if (row.resultRank == null) {
-          // Keep -
+          // Keep –
         } else if (isFinalRow) {
           const className = resolveRiderStatsFinalTypeClassName(row.rowType);
-          gcPlacementHtml = `<span class="rider-stats-final-type ${className}" style="font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
+          placeHtml = `<span class="rider-stats-final-type ${className}" style="justify-self:center; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; display: inline-block; min-width: 1.8rem; text-align: center;">${row.resultRank}</span>`;
         } else {
           const topRankClassName = row.resultRank <= 3 ? ` rider-stats-rank-badge-top-${row.resultRank}` : '';
-          stagePlacementHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}">${esc(String(row.resultRank))}</span>`;
+          placeHtml = `<span class="rider-stats-rank-badge rider-stats-rank-badge-place${topRankClassName}" style="justify-self:center;">${esc(String(row.resultRank))}</span>`;
         }
 
-        const profileBadgeHtml = row.profile ? renderStageProfileBadge(row.profile) : '–';
-        const stageScoreBadgeHtml = !isFinalRow && row.stageScore != null && row.stageScore > 0 ? renderStageEditorScoreBadge(row.stageScore, 0, 350) : '–';
-        const categoryBadgeHtml = renderRiderStatsRaceBadge(row.raceCategoryName, true, null); // uses visual formatting helper
+        const profileCell = row.profile
+          ? `<span style="justify-self:center;">${renderStageProfileBadge(row.profile)}</span>`
+          : '<span style="justify-self:center; color:#5f6f8a;">–</span>';
+        const scoreCell = !isFinalRow && row.stageScore != null && row.stageScore > 0
+          ? `<span style="justify-self:center;">${renderStageEditorScoreBadge(row.stageScore, 0, 350)}</span>`
+          : '<span style="justify-self:center; color:#5f6f8a;">–</span>';
+        const categoryChip = renderRiderStatsRaceBadge(row.raceCategoryName ? row.raceCategoryName.replace(/^world\s*tour\s*-\s*/i, '') : row.raceCategoryName, true, null);
 
         const flagAlpha2 = row.riderCountryCode ? FLAG_CODE_BY_CODE3[row.riderCountryCode] ?? row.riderCountryCode.slice(0, 2).toLowerCase() : null;
         const flagHtml = flagAlpha2
-          ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px;" title="${esc(row.riderCountryCode ?? '')}"></span>`
-          : '–';
-
+          ? `<span class="fi fi-${flagAlpha2} results-roster-flag" style="display:inline-block; vertical-align:middle; width:16px; height:12px; margin-right:6px; flex:0 0 auto;" title="${esc(row.riderCountryCode ?? '')}"></span>`
+          : '';
         const nameLink = renderRiderNameLink(row.riderName, {
           riderId: row.riderId,
           teamId: payload.teamId,
@@ -562,75 +569,40 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
         });
 
         return `
-          <tr class="rider-stats-row${isFinalRow ? ' rider-stats-row-final' : ''}">
-            <td>${stagePlacementHtml}</td>
-            <td>${gcPlacementHtml}</td>
-            <td>${flagHtml}</td>
-            <td style="white-space: nowrap;">${nameLink}</td>
-            <td><strong>${esc(raceStageLabel)}</strong></td>
-            <td class="status-cell">${renderStatusDotsColumn(row)}</td>
-            <td>${profileBadgeHtml}</td>
-            <td>${stageScoreBadgeHtml}</td>
-            <td>${categoryBadgeHtml}</td>
-            <td>Saison ${row.season}</td>
-            <td><strong>${row.seasonPoints}</strong></td>
-          </tr>
-        `;
+          <div style="display:grid; ${TR_COLS} gap:9px; align-items:center; padding:9px 14px; border-top:1px solid #14203a;${isFinalRow ? 'background:rgba(34,211,238,.06);' : ''}">
+            <span style="${MONOF} font-size:11px; color:#8494ad;">${row.season}</span>
+            ${placeHtml}
+            <span style="display:flex; align-items:center; min-width:0; overflow:hidden;">${flagHtml}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nameLink}</span></span>
+            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${esc(raceStageLabel)}</span>
+            <span style="min-width:0; overflow:hidden;">${categoryChip}</span>
+            ${profileCell}
+            ${scoreCell}
+            <span style="${MONOF} font-size:12px; font-weight:800; color:${(row.seasonPoints ?? 0) > 0 ? '#22d3ee' : '#5f6f8a'}; justify-self:end;">${row.seasonPoints ?? 0}</span>
+          </div>`;
       }).join('');
 
-  const paginationHtml = totalPages > 1
-    ? `
-      <div class="pagination-wrap" style="display: flex; justify-content: center; gap: 0.25rem; margin-top: 1rem; align-items: center;">
-        <button type="button" class="btn btn-secondary btn-sm" data-team-top-results-page="${state.teamStatsTopResultsPage - 1}" ${state.teamStatsTopResultsPage === 1 ? 'disabled' : ''}>&laquo; Zurück</button>
-        ${Array.from({ length: totalPages }).map((_, idx) => {
-          const pageNum = idx + 1;
-          const isActive = state.teamStatsTopResultsPage === pageNum;
-          return `<button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}" data-team-top-results-page="${pageNum}">${pageNum}</button>`;
-        }).join('')}
-        <button type="button" class="btn btn-secondary btn-sm" data-team-top-results-page="${state.teamStatsTopResultsPage + 1}" ${state.teamStatsTopResultsPage === totalPages ? 'disabled' : ''}>Weiter &raquo;</button>
-      </div>
-    `
-    : '';
+  const pageInfo = `${activeRows.length} Ergebnis${activeRows.length === 1 ? '' : 'se'}${totalPages > 1 ? ` · Seite ${state.teamStatsTopResultsPage}/${totalPages}` : ''}`;
+  const pagerHtml = `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-top:1px solid #16233c; ${MONOF}">
+      <span style="font-size:11px; color:#6a7a95;">${pageInfo}</span>
+      ${totalPages > 1 ? `
+        <div style="display:flex; gap:6px;">
+          <button type="button" data-team-top-results-page="${state.teamStatsTopResultsPage - 1}" ${state.teamStatsTopResultsPage === 1 ? 'disabled' : ''} style="border:1px solid #2b3a55; background:transparent; color:${state.teamStatsTopResultsPage === 1 ? '#4a5670' : '#9fb0c9'}; cursor:${state.teamStatsTopResultsPage === 1 ? 'default' : 'pointer'}; font-size:12px; padding:5px 12px; border-radius:6px;">‹ Zurück</button>
+          <button type="button" data-team-top-results-page="${state.teamStatsTopResultsPage + 1}" ${state.teamStatsTopResultsPage === totalPages ? 'disabled' : ''} style="border:1px solid #2b3a55; background:transparent; color:${state.teamStatsTopResultsPage === totalPages ? '#4a5670' : '#9fb0c9'}; cursor:${state.teamStatsTopResultsPage === totalPages ? 'default' : 'pointer'}; font-size:12px; padding:5px 12px; border-radius:6px;">Weiter ›</button>
+        </div>` : ''}
+    </div>
+  `;
 
   return `
     <section class="rider-stats-top-results" style="margin-top: 1.5rem;">
       ${filtersHtml}
-      <div class="dashboard-race-stages-table-wrap rider-stats-table-wrap">
-        <table class="data-table rider-stats-table">
-          <colgroup>
-            <col style="width: 6%;">
-            <col style="width: 8%;">
-            <col style="width: 4%;">
-            <col style="width: 15%;">
-            <col style="width: 21%;">
-            <col style="width: 10%;">
-            <col style="width: 7%;">
-            <col style="width: 5%;">
-            <col style="width: 12%;">
-            <col style="width: 6%;">
-            <col style="width: 6%;">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Platz</th>
-              <th>GC / Wertung</th>
-              <th>Nat</th>
-              <th>Fahrer</th>
-              <th>Rennen</th>
-              <th>Status</th>
-              <th>Profil</th>
-              <th>Score</th>
-              <th>Klasse</th>
-              <th>Saison</th>
-              <th>Punkte</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRowsHtml}
-          </tbody>
-        </table>
+      <div style="border-radius:14px; overflow:hidden; border:1px solid #1e2c49; background:#0c1526;">
+        <div style="display:grid; ${TR_COLS} gap:9px; padding:8px 14px; ${MONOF} font-size:9px; letter-spacing:.05em; color:#5a6a85; border-bottom:1px solid #16233c;">
+          <span>SAISON</span><span style="justify-self:center;">PLATZ</span><span>FAHRER</span><span>RENNEN / ETAPPE</span><span>KLASSE</span><span style="justify-self:center;">PROFIL</span><span style="justify-self:center;">SCORE</span><span style="justify-self:end;">PKT</span>
+        </div>
+        ${rowsHtml}
+        ${pagerHtml}
       </div>
-      ${paginationHtml}
     </section>
   `;
 }
