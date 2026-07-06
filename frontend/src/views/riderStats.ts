@@ -1554,11 +1554,27 @@ export function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): s
       : `<circle cx="${x1}" cy="${axisY - 6}" r="5" fill="${col}"><title>${esc(race.name)}</title></circle>`;
     return star + body;
   }).join('');
-  const peakMarks = (payload.peakDates ?? []).map((d) => {
-    if (!d.startsWith(String(season))) return '';
-    const x = xAt(dayOfYear(d.slice(0, 10)));
-    return `<path d="M ${x - 5} ${axisY + 2} Q ${x} ${axisY - 10} ${x + 5} ${axisY + 2} Z" fill="rgba(34,197,94,.5)" stroke="#22c55e" stroke-width="1"><title>Formpeak ${d.slice(0, 10)}</title></path>`;
-  }).join('');
+  // Formpeaks als Aufbau- (56 Tage, leichtes Grün) / Peak- (silberne gestrichelte
+  // Linie) / Abbau-Phase (14 Tage, leichtes Rot), begrenzt durch senkrechte Striche.
+  const seasonPeaks = (payload.peakDates ?? [])
+    .filter((d) => d.startsWith(String(season)))
+    .map((d) => ({ date: d.slice(0, 10), day: dayOfYear(d.slice(0, 10)) }))
+    .sort((a, b) => a.day - b.day);
+  const bandTop = 24;
+  let peakPhases = '';
+  let peakLines = '';
+  seasonPeaks.forEach((p, i) => {
+    const prevDeclineEnd = i > 0 ? seasonPeaks[i - 1].day + 14 : Number.NEGATIVE_INFINITY;
+    const buildStart = Math.max(0, Math.max(p.day - 56, prevDeclineEnd));
+    const bx = xAt(buildStart);
+    const px = xAt(p.day);
+    const dx = xAt(Math.min(365, p.day + 14));
+    peakPhases += `<rect x="${bx}" y="${bandTop}" width="${Math.max(0, px - bx)}" height="${axisY - bandTop}" fill="rgba(16,185,129,.13)"/>`;
+    peakPhases += `<rect x="${px}" y="${bandTop}" width="${Math.max(0, dx - px)}" height="${axisY - bandTop}" fill="rgba(239,68,68,.13)"/>`;
+    peakPhases += `<line x1="${bx}" y1="${bandTop}" x2="${bx}" y2="${axisY}" stroke="rgba(74,222,128,.55)" stroke-width="1"/>`;
+    peakPhases += `<line x1="${dx}" y1="${bandTop}" x2="${dx}" y2="${axisY}" stroke="rgba(248,113,113,.55)" stroke-width="1"/>`;
+    peakLines += `<line x1="${px}" y1="${bandTop}" x2="${px}" y2="${axisY}" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,3"><title>Formpeak ${p.date} · Aufbau 56T / Abbau 14T</title></line>`;
+  });
   const todayLine = today.startsWith(String(season))
     ? (() => { const x = xAt(dayOfYear(today.slice(0, 10))); return `<line x1="${x}" y1="16" x2="${x}" y2="${axisY + 4}" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3,3"/><text x="${x}" y="12" fill="#22d3ee" font-size="9" text-anchor="middle" font-family="'JetBrains Mono',monospace">HEUTE</text>`; })()
     : '';
@@ -1567,11 +1583,11 @@ export function renderRiderStatsProgramTab(payload: RiderStatsPayload | null): s
     <div style="border-radius:14px;border:1px solid #1e2c49;background:#0c1526;padding:14px 16px;margin-bottom:16px;overflow-x:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Saison-Timeline</span>
-        <span style="${MONOF};font-size:10px;color:#5f6f8a;">★ Ziel · ▲ Formpeak</span>
+        <span style="${MONOF};font-size:10px;color:#5f6f8a;">★ Ziel · <span style="color:#4ade80;">Aufbau</span> · <span style="color:#cbd5e1;">Peak</span> · <span style="color:#f87171;">Abbau</span></span>
       </div>
       <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:640px;height:auto;display:block;">
         <line x1="${padL}" y1="${axisY}" x2="${W - padR}" y2="${axisY}" stroke="#1c2b47" stroke-width="1"/>
-        ${monthTicks}${raceMarks}${peakMarks}${todayLine}
+        ${monthTicks}${peakPhases}${raceMarks}${peakLines}${todayLine}
       </svg>
     </div>`;
 
