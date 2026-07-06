@@ -1006,22 +1006,38 @@ function resolveDraftPackFactor(groupSize: number): number {
   return DRAFT_PACK_FACTORS[clampedGroupSize];
 }
 
+/**
+ * Pro Gewichtsprofil einmalig aufbereitete Eintragsliste (nur Gewichte != 0,
+ * in Object.entries-Reihenfolge) — vermeidet Object.entries-Allokation und
+ * Reduce-Closure im Substep-Hot-Path. Rechenreihenfolge bleibt identisch.
+ */
+const liveWeightProfileEntriesCache = new WeakMap<MarkerWeightProfile, Array<{ skillKey: RiderSkillKey; weight: number; isStamina: boolean }>>();
+
+function resolveLiveWeightProfileEntries(weights: MarkerWeightProfile): Array<{ skillKey: RiderSkillKey; weight: number; isStamina: boolean }> {
+  let entries = liveWeightProfileEntriesCache.get(weights);
+  if (!entries) {
+    entries = Object.entries(weights)
+      .filter((entry): entry is [string, number] => Boolean(entry[1]))
+      .map(([skillKey, weight]) => ({ skillKey: skillKey as RiderSkillKey, weight, isStamina: skillKey === 'stamina' }));
+    liveWeightProfileEntriesCache.set(weights, entries);
+  }
+  return entries;
+}
+
 function resolveLiveWeightProfileValue(rider: RiderState, weights: MarkerWeightProfile): number {
   const formBonus = rider.conditionFormBonus ?? 0;
-  return Object.entries(weights).reduce((sum, [skillKey, weight]) => {
-    if (!weight) {
-      return sum;
-    }
-
-    const staminaPenalty = skillKey === 'stamina'
+  const skills = rider.rider.skills;
+  const entries = resolveLiveWeightProfileEntries(weights);
+  let sum = 0;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const staminaPenalty = entry.isStamina
       ? rider.staminaSkillPenalty + rider.incidentStaminaPenalty
       : 0;
-    const effectiveSkill = Math.max(
-      0,
-      rider.rider.skills[skillKey as RiderSkillKey] + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus - staminaPenalty,
-    );
-    return sum + (effectiveSkill * weight);
-  }, 0);
+    const effectiveSkill = Math.max(0, skills[entry.skillKey] + formBonus + rider.dailyForm + rider.microForm + rider.teamGroupBonus - staminaPenalty);
+    sum += effectiveSkill * entry.weight;
+  }
+  return sum;
 }
 
 function buildLiveWeightProfileBreakdown(rider: RiderState, weights: MarkerWeightProfile): Array<{
@@ -1168,6 +1184,9 @@ export class SimulationEngine {
 
   private readonly draftOrderScratch: RiderState[] = [];
 
+  /** Persistenter, fast-sortierter Fahrer-Pool fuer buildTeamGroupBonusByRiderId. */
+  private teamGroupBonusScratch: RiderState[] | null = null;
+
   private elapsedSeconds = 0;
 
   private readonly incidentsByRiderId: Map<number, PrecalculatedRaceIncident>;
@@ -1179,6 +1198,9 @@ export class SimulationEngine {
   private readonly activeStageAttacksByRiderId = new Map<number, ActiveStageAttack>();
 
   private readonly breakawayPlan: PrecalculatedStageBreakaway | null;
+
+  /** Set-Spiegel von breakawayPlan.riderIds fuer O(1)-Lookups im Substep-Hot-Path. */
+  private readonly breakawayPlanRiderIdSet: Set<number>;
 
   private readonly breakawayGapPenaltyMarkers: IntermediateMarker[];
 
@@ -1551,6 +1573,7 @@ export class SimulationEngine {
       bootstrap.mountainStandings,
       bootstrap.teams,
     );
+    this.breakawayPlanRiderIdSet = new Set(this.breakawayPlan?.riderIds ?? []);
     const breakawayGapPenaltyConfig = this.buildBreakawayGapPenaltyConfig();
     this.breakawayGapPenaltyMarkers = breakawayGapPenaltyConfig.markers;
     this.breakawayGapPenaltyFallbackCheckpointsMeters = breakawayGapPenaltyConfig.fallbackCheckpointsMeters;
@@ -3388,7 +3411,7 @@ export class SimulationEngine {
   }
 
   private isActiveBreakawayRider(rider: RiderState): boolean {
-    return (this.breakawayPlan?.riderIds.includes(rider.rider.id) ?? false)
+    return this.breakawayPlanRiderIdSet.has(rider.rider.id)
       && this.isBreakawayGroupPhaseActive();
   }
 
@@ -3417,6 +3440,11 @@ export class SimulationEngine {
   }
 
   private canReceiveDraftFromCandidate(rider: RiderState, candidate: RiderState): boolean {
+    // Ohne aktive Attacken liefern beide Map-Lookups null -> immer true.
+    if (this.activeStageAttacksByRiderId.size === 0) {
+      return true;
+    }
+
     const candidateAttack = this.activeStageAttacksByRiderId.get(candidate.rider.id) ?? null;
     if (candidateAttack == null || candidateAttack.isCounterAttack) {
       return true;
@@ -3571,9 +3599,25 @@ export class SimulationEngine {
 
   private buildTeamGroupBonusByRiderId(): TeamGroupBonusByRiderId {
     const bonusByRiderId: TeamGroupBonusByRiderId = new Map();
-    const activeTeamRiders = this.riders
-      .filter((rider) => !isRiderInactive(rider) && rider.rider.activeTeamId != null)
-      .sort((left, right) => left.distanceCoveredMeters - right.distanceCoveredMeters || left.rider.id - right.rider.id);
+    // Persistenter Scratch: Fahrer verlassen den Pool nur einseitig (DNF/Ziel),
+    // die Reihenfolge des Vor-Substeps ist fast sortiert -> adaptiver Sort ist
+    // deutlich billiger. Der Comparator ist eine Totalordnung (ID-Tiebreak),
+    // daher ist das Sortierergebnis identisch zur Neuberechnung.
+    let activeTeamRiders = this.teamGroupBonusScratch;
+    if (activeTeamRiders == null) {
+      activeTeamRiders = this.riders.filter((rider) => rider.rider.activeTeamId != null);
+      this.teamGroupBonusScratch = activeTeamRiders;
+    }
+    let writeIndex = 0;
+    for (let readIndex = 0; readIndex < activeTeamRiders.length; readIndex += 1) {
+      const rider = activeTeamRiders[readIndex];
+      if (!isRiderInactive(rider)) {
+        activeTeamRiders[writeIndex] = rider;
+        writeIndex += 1;
+      }
+    }
+    activeTeamRiders.length = writeIndex;
+    activeTeamRiders.sort((left, right) => left.distanceCoveredMeters - right.distanceCoveredMeters || left.rider.id - right.rider.id);
 
     const teamCounts = new Map<number, number>();
     let startIndex = 0;

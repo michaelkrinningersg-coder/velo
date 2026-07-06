@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
-import { GameState, GameStatus, PendingStage } from '../../../shared/types';
+import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -224,7 +224,23 @@ export class GameStateService {
       draftStatus: state.draftStatus,
       draftCurrentPickNumber: state.draftCurrentPickNumber,
       draftSeason: state.draftSeason,
+      lastStageWinner: this.loadLastStageWinner(),
     };
+  }
+
+  /** Sieger der zuletzt simulierten Etappe (vom Ergebnis-Commit hinterlegt). */
+  private loadLastStageWinner(): LastStageWinner | null {
+    if (!tableExists(this.db, 'career_meta')) return null;
+    const row = this.db
+      .prepare(`SELECT value FROM career_meta WHERE key = 'last_stage_winner'`)
+      .get() as { value: string } | undefined;
+    if (!row?.value) return null;
+    try {
+      const parsed = JSON.parse(row.value) as LastStageWinner;
+      return parsed?.riderId != null ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   public advanceDay(): GameState {

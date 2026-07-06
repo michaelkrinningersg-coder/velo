@@ -1816,6 +1816,34 @@ export class StageResultCommitService {
         }
       }
 
+      // "Im Fokus" auf dem Dashboard: Sieger der zuletzt simulierten Etappe
+      // merken. Bei TTT gibt es keinen Einzelsieger — dann zaehlt der
+      // bestplatzierte Fahrer des Siegerteams laut Etappen-GC.
+      if (tableExists(this.db, 'career_meta')) {
+        const focusWinnerRow = stageRows.find((r: any) => r.rank === 1);
+        let focusRiderId: number | null = null;
+        if (focusWinnerRow) {
+          if (stage.profile === 'TTT') {
+            focusRiderId = gcRows.find((r: any) => r.teamId === focusWinnerRow.teamId)?.riderId ?? null;
+          } else {
+            focusRiderId = focusWinnerRow.riderId ?? null;
+          }
+        }
+        if (focusRiderId != null) {
+          this.db.prepare(`
+            INSERT OR REPLACE INTO career_meta (key, value) VALUES ('last_stage_winner', ?)
+          `).run(JSON.stringify({
+            riderId: focusRiderId,
+            raceId: race.id,
+            stageId: stage.id,
+            raceName: race.name,
+            stageNumber: race.isStageRace ? stage.stageNumber : null,
+            isStageRace: race.isStageRace,
+            isTeamTimeTrial: stage.profile === 'TTT',
+          }));
+        }
+      }
+
       const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
       if (isRaceFinished) {
         const currentSeason = this.repo.getCurrentSeason();

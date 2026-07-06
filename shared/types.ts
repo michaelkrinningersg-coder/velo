@@ -604,6 +604,16 @@ export interface PendingStage {
   isStageRace: boolean;
 }
 
+export interface LastStageWinner {
+  riderId: number;
+  raceId: number;
+  stageId: number;
+  raceName: string;
+  stageNumber: number | null;
+  isStageRace: boolean;
+  isTeamTimeTrial: boolean;
+}
+
 export interface GameStatus {
   currentDate: string;
   season: number;
@@ -613,6 +623,8 @@ export interface GameStatus {
   draftStatus?: 'not_started' | 'active' | 'completed';
   draftCurrentPickNumber?: number;
   draftSeason?: number | null;
+  /** Sieger der zuletzt simulierten Etappe / des letzten Rennens (fuer "Im Fokus"). */
+  lastStageWinner?: LastStageWinner | null;
 }
 
 export interface ResultType {

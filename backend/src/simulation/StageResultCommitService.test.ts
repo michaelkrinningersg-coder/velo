@@ -96,5 +96,59 @@ describe('StageResultCommitService.commitRealtimeStage', () => {
 
     // Committing the same stage again must be rejected.
     expect(() => service.commitRealtimeStage(STAGE_ID, entries)).toThrow();
+
+    // "Im Fokus": der Etappensieger wird als last_stage_winner hinterlegt.
+    const meta = db
+      .prepare(`SELECT value FROM career_meta WHERE key = 'last_stage_winner'`)
+      .get() as { value: string } | undefined;
+    expect(meta).toBeTruthy();
+    const winner = JSON.parse(meta!.value);
+    expect(winner.riderId).toBe(riderIds[0]);
+    expect(winner.stageId).toBe(STAGE_ID);
+    expect(winner.isTeamTimeTrial).toBe(false);
+  });
+
+  it('records the best-placed rider of the winning team as last_stage_winner for TTT stages', () => {
+    // Eigene TTT-Etappe (Eintagesrennen mit TTT-Profil reicht fuer den Commit-Pfad).
+    const TTT_RACE_ID = 2;
+    const TTT_STAGE_ID = 2;
+    db.prepare(`
+      INSERT INTO races (id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige)
+      VALUES (?, 'Test TTT', 1, 1, 0, 1, '2026-04-02', '2026-04-02', 50)
+    `).run(TTT_RACE_ID);
+    db.prepare(`
+      INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
+      VALUES (?, ?, 1, '2026-04-02', 'TTT', 0, 'DDV.csv')
+    `).run(TTT_STAGE_ID, TTT_RACE_ID);
+    const insertEntry = db.prepare(
+      'INSERT INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)',
+    );
+    for (const id of riderIds) {
+      const teamId = db.prepare('SELECT active_team_id AS t FROM riders WHERE id = ?').get(id) as any;
+      insertEntry.run(TTT_RACE_ID, teamId.t, id);
+    }
+
+    // Team 1 (riderIds[0], riderIds[2]) gewinnt; riderIds[0] ist dessen
+    // bestplatzierter Fahrer im Etappen-GC.
+    const timesByIndex = [5000, 5010, 5001, 5011];
+    const entries = riderIds.map((riderId, index) => ({
+      riderId,
+      finishStatus: 'finished' as const,
+      finishTimeSeconds: timesByIndex[index],
+      photoFinishScore: 1000 - index,
+      isBreakaway: false,
+    }));
+
+    const service = new StageResultCommitService(db);
+    service.commitRealtimeStage(TTT_STAGE_ID, entries);
+
+    const meta = db
+      .prepare(`SELECT value FROM career_meta WHERE key = 'last_stage_winner'`)
+      .get() as { value: string } | undefined;
+    expect(meta).toBeTruthy();
+    const winner = JSON.parse(meta!.value);
+    expect(winner.riderId).toBe(riderIds[0]);
+    expect(winner.stageId).toBe(TTT_STAGE_ID);
+    expect(winner.isTeamTimeTrial).toBe(true);
   });
 });

@@ -237,11 +237,20 @@ function renderSpotlightRadar(rider: Rider): string {
     </svg>`;
 }
 
-// ---- Fahrer im Fokus (1 zufaelliger Sieger) --------------------------------
-// Ein zufaelliger Fahrer aus ALLEN mit mindestens einem Saisonsieg. Die Wahl
-// bleibt stabil, solange der Fahrer weiterhin Siege hat (kein Neuwuerfeln bei
-// jedem Re-Render); erst wenn er keine Siege mehr hat, wird neu gezogen.
+// ---- Fahrer im Fokus -------------------------------------------------------
+// Bevorzugt den Sieger der zuletzt simulierten Etappe / des letzten Rennens
+// (bei TTT: bestplatzierter Fahrer des Siegerteams, vom Backend hinterlegt).
+// Fallback: stabiler Zufallsfahrer aus allen mit mindestens einem Saisonsieg.
 function spotlightRider(): Rider | null {
+  const lastWinner = state.gameStatus?.lastStageWinner ?? null;
+  if (lastWinner != null) {
+    const rider = state.riders.find((r) => r.id === lastWinner.riderId);
+    if (rider) {
+      spotlightRiderId = rider.id;
+      return rider;
+    }
+  }
+
   const winners = state.riders.filter((r) => (r.seasonWins ?? 0) > 0);
   if (winners.length === 0) return null;
   const current = spotlightRiderId != null ? winners.find((r) => r.id === spotlightRiderId) : undefined;
@@ -264,6 +273,13 @@ function renderRiderSpotlight(): string {
   const country = rider.country?.code3 ?? rider.nationality ?? '';
   const role = rider.role?.name ?? '';
 
+  // Kontext-Label, wenn der fokussierte Fahrer der Sieger der zuletzt
+  // simulierten Etappe ist (bei TTT: bester Fahrer des Siegerteams).
+  const lastWinner = state.gameStatus?.lastStageWinner ?? null;
+  const lastWinnerLabel = lastWinner != null && lastWinner.riderId === rider.id
+    ? `${lastWinner.isTeamTimeTrial ? 'TTT-Sieg' : 'Sieger'} · ${lastWinner.raceName}${lastWinner.stageNumber != null ? ` · E${lastWinner.stageNumber}` : ''}`
+    : null;
+
   const cachedWins = spotlightWinsCache.get(rider.id);
   let winsHtml: string;
   if (cachedWins == null) {
@@ -281,8 +297,9 @@ function renderRiderSpotlight(): string {
 
   return `
     <div style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);padding:15px 16px;display:flex;flex-direction:column;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px;">
         <span style="${MONO};font-size:10px;letter-spacing:.14em;color:#5f6f8a;text-transform:uppercase;">Siegfahrer im Fokus</span>
+        ${lastWinnerLabel ? `<span style="${MONO};font-size:10px;color:#fbbf24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lastWinnerLabel}</span>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:11px;margin:10px 0 4px;">
         <span style="width:5px;height:40px;border-radius:3px;background:${teamColor};flex:0 0 auto;"></span>
