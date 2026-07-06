@@ -1502,25 +1502,41 @@ export class RiderRepository {
     let breakawayAttempts = 0;
     let breakawayKmRank: number | null = null;
     let rankedBreakawayRiders = 0;
+    let allTimeAttacks = 0;
+    let attacksRank: number | null = null;
+    let rankedAttackers = 0;
+    let allTimeDistanceKm = 0;
+    let bunchSprintWins = 0;
 
     if (tableExists(this.db, 'rider_career_stats')) {
+      const hasBunch = columnExists(this.db, 'rider_career_stats', 'bunch_sprint_wins');
       const own = this.db.prepare(`
-        SELECT race_days, breakaway_kms, breakaway_attempts
+        SELECT race_days, breakaway_kms, breakaway_attempts, attacks, total_km
+               ${hasBunch ? ', bunch_sprint_wins' : ''}
         FROM rider_career_stats WHERE rider_id = ?
-      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number } | undefined;
+      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number; attacks: number; total_km: number; bunch_sprint_wins?: number } | undefined;
       raceDays = own?.race_days ?? 0;
       breakawayKms = own?.breakaway_kms ?? 0;
       breakawayAttempts = own?.breakaway_attempts ?? 0;
+      allTimeAttacks = own?.attacks ?? 0;
+      allTimeDistanceKm = own?.total_km ?? 0;
+      bunchSprintWins = own?.bunch_sprint_wins ?? 0;
 
       const rankRow = this.db.prepare(`
         SELECT
-          COALESCE(SUM(CASE WHEN breakaway_kms > ? THEN 1 ELSE 0 END), 0) AS better,
-          COALESCE(SUM(CASE WHEN breakaway_kms > 0 THEN 1 ELSE 0 END), 0) AS ranked
+          COALESCE(SUM(CASE WHEN breakaway_kms > ? THEN 1 ELSE 0 END), 0) AS brk_better,
+          COALESCE(SUM(CASE WHEN breakaway_kms > 0 THEN 1 ELSE 0 END), 0) AS brk_ranked,
+          COALESCE(SUM(CASE WHEN attacks > ? THEN 1 ELSE 0 END), 0) AS atk_better,
+          COALESCE(SUM(CASE WHEN attacks > 0 THEN 1 ELSE 0 END), 0) AS atk_ranked
         FROM rider_career_stats
-      `).get(breakawayKms) as { better: number; ranked: number };
-      breakawayKmRank = breakawayKms > 0 ? rankRow.better + 1 : null;
-      rankedBreakawayRiders = rankRow.ranked;
+      `).get(breakawayKms, allTimeAttacks) as { brk_better: number; brk_ranked: number; atk_better: number; atk_ranked: number };
+      breakawayKmRank = breakawayKms > 0 ? rankRow.brk_better + 1 : null;
+      rankedBreakawayRiders = rankRow.brk_ranked;
+      attacksRank = allTimeAttacks > 0 ? rankRow.atk_better + 1 : null;
+      rankedAttackers = rankRow.atk_ranked;
     }
+
+    const special = this.getSpecialRaceAchievements(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -1531,6 +1547,51 @@ export class RiderRepository {
       breakawayAttempts,
       breakawayKmRank,
       rankedBreakawayRiders,
+      allTimeAttacks,
+      attacksRank,
+      rankedAttackers,
+      allTimeDistanceKm,
+      bunchSprintWins,
+      ...special,
+    };
+  }
+
+  /**
+   * Ermittelt Spezialrennen-Erfolge aus den Siegen des Fahrers (nach Rennnamen).
+   * Grand-Tour-Siege = GC-Sieg an der Schlussetappe; Klassiker-Siege = Sieg im
+   * Eintagesrennen. Liest aus results_flat (Fallback all_results) und ist damit
+   * eine einzelne fahrergefilterte Query.
+   */
+  private getSpecialRaceAchievements(riderId: number): {
+    wonAllGrandTours: boolean; wonAllMonuments: boolean; wonCobbleKing: boolean; wonArdennenKing: boolean;
+  } {
+    const empty = { wonAllGrandTours: false, wonAllMonuments: false, wonCobbleKing: false, wonArdennenKing: false };
+    if (!tableExists(this.db, 'results') && !tableExists(this.db, 'results_flat')) {
+      return empty;
+    }
+    const src = tableExists(this.db, 'results_flat') ? 'results_flat' : 'all_results';
+    const rows = this.db.prepare(`
+      SELECT DISTINCT races.name AS name
+      FROM ${src} rf
+      JOIN stages ON stages.id = rf.stage_id
+      JOIN races ON races.id = stages.race_id
+      WHERE rf.rider_id = ? AND rf.rank = 1
+        AND (
+          (rf.result_type_id = 2 AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages)
+          OR (rf.result_type_id = 1 AND races.is_stage_race = 0)
+        )
+    `).all(riderId) as Array<{ name: string }>;
+    const won = new Set(rows.map((r) => r.name));
+
+    const has = (name: string) => won.has(name);
+    const grandTours = ['Tour de France', "Giro d'Italia", 'La Vuelta Ciclista a España'];
+    const monuments = ['Milano-Sanremo', 'Ronde van Vlaanderen ME', 'Paris-Roubaix Hauts-de-France', 'Liège-Bastogne-Liège', 'Il Lombardia'];
+
+    return {
+      wonAllGrandTours: grandTours.every(has),
+      wonAllMonuments: monuments.every(has),
+      wonCobbleKing: has('Ronde van Vlaanderen ME') && has('Paris-Roubaix Hauts-de-France'),
+      wonArdennenKing: has('Amstel Gold Race') && has('La Flèche Wallonne') && has('Liège-Bastogne-Liège'),
     };
   }
 

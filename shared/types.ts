@@ -995,6 +995,22 @@ export interface RiderHallOfFameStats {
   breakawayKmRank: number | null;
   /** Anzahl Fahrer mit mindestens 1 Ausreisser-km (Ranglistengroesse). */
   rankedBreakawayRiders: number;
+
+  /** Attacken gesamt (All-Time) + Platz in der ewigen Attacken-Liste. */
+  allTimeAttacks: number;
+  attacksRank: number | null;
+  rankedAttackers: number;
+
+  /** Gefahrene Distanz gesamt (All-Time, km) fuer "Around the World". */
+  allTimeDistanceKm: number;
+  /** Bunch-Sprint-Siege (Zielgruppe > 25 Fahrer, kein Ausreisser). */
+  bunchSprintWins: number;
+
+  /** Spezialrennen-Erfolge (aus Siegen nach Rennnamen ermittelt). */
+  wonAllGrandTours: boolean;
+  wonAllMonuments: boolean;
+  wonCobbleKing: boolean;
+  wonArdennenKing: boolean;
 }
 
 export interface RiderStatsPayload {

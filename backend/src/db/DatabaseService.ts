@@ -8,6 +8,7 @@ import { bootstrap } from '../bootstrapper';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
+import { summarizeStageProfile } from '../simulation/StageParser';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -1564,6 +1565,90 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * Einmalige Backfills fuer die abgeleiteten Karrierewerte, die neu am Commit
+   * gepflegt werden:
+   * - total_km: Historisch nie korrekt akkumuliert (stage.distanceKm war leer).
+   *   Wird aus den geparsten Etappendistanzen der beendeten Etappen neu berechnet
+   *   (Grundlage fuer "Around the World").
+   * - bunch_sprint_wins: Massensprint-Siege (Zielgruppe > 25). Aus results_flat
+   *   rekonstruierbar, solange die volle Zielreihenfolge vorliegt (aktuelle,
+   *   noch nicht am Saisonende geprunte Saison); aeltere Saisons zaehlen ab
+   *   Backfill nur, was an Zieldaten erhalten blieb — vorwaerts zaehlt der
+   *   Commit korrekt weiter.
+   */
+  private ensureCareerDerivedBackfills(db: Database.Database): void {
+    if (!tableExists(db, 'career_meta') || !tableExists(db, 'rider_career_stats')) {
+      return;
+    }
+
+    // --- total_km ---
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'career_total_km_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && tableExists(db, 'stage_entries_flat') && tableExists(db, 'stages')) {
+        const stages = db.prepare('SELECT id, details_csv_file, start_elevation FROM stages').all() as Array<{ id: number; details_csv_file: string; start_elevation: number }>;
+        const distByStage = new Map<number, number>();
+        for (const s of stages) {
+          try {
+            distByStage.set(s.id, summarizeStageProfile(s.details_csv_file, s.start_elevation).distanceKm ?? 0);
+          } catch {
+            distByStage.set(s.id, 0);
+          }
+        }
+        const entries = db.prepare(`SELECT rider_id, stage_id FROM stage_entries_flat WHERE status = 'finished' AND rider_id IS NOT NULL`).all() as Array<{ rider_id: number; stage_id: number }>;
+        const kmByRider = new Map<number, number>();
+        for (const e of entries) {
+          kmByRider.set(e.rider_id, (kmByRider.get(e.rider_id) ?? 0) + (distByStage.get(e.stage_id) ?? 0));
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET total_km = ? WHERE rider_id = ?');
+        db.transaction(() => {
+          for (const [riderId, km] of kmByRider) {
+            upd.run(km, riderId);
+          }
+        })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('career_total_km_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('total_km-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+
+    // --- bunch_sprint_wins ---
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'bunch_sprint_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'bunch_sprint_wins') && tableExists(db, 'results_flat')) {
+        const rows = db.prepare(`
+          SELECT stage_id, rider_id, rank, time_seconds, is_breakaway
+          FROM results_flat
+          WHERE result_type_id = 1 AND rider_id IS NOT NULL AND time_seconds IS NOT NULL
+        `).all() as Array<{ stage_id: number; rider_id: number; rank: number; time_seconds: number; is_breakaway: number }>;
+        const byStage = new Map<number, Array<{ rider_id: number; rank: number; time_seconds: number; is_breakaway: number }>>();
+        for (const r of rows) {
+          let arr = byStage.get(r.stage_id);
+          if (!arr) { arr = []; byStage.set(r.stage_id, arr); }
+          arr.push(r);
+        }
+        const bunchByRider = new Map<number, number>();
+        for (const arr of byStage.values()) {
+          const winner = arr.find((r) => r.rank === 1);
+          if (!winner || winner.is_breakaway) continue;
+          const group = arr.filter((r) => (r.time_seconds - winner.time_seconds) <= 1).length;
+          if (group > 25) {
+            bunchByRider.set(winner.rider_id, (bunchByRider.get(winner.rider_id) ?? 0) + 1);
+          }
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET bunch_sprint_wins = ? WHERE rider_id = ?');
+        db.transaction(() => {
+          for (const [riderId, count] of bunchByRider) {
+            upd.run(count, riderId);
+          }
+        })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('bunch_sprint_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('bunch_sprint-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+  }
+
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS stage_entries_compact (
@@ -1617,6 +1702,7 @@ export class DatabaseService {
       ['super_home_advantage_days', 'INTEGER NOT NULL DEFAULT 0'],
       ['home_pressure_days', 'INTEGER NOT NULL DEFAULT 0'],
       ['total_km', 'REAL NOT NULL DEFAULT 0'],
+      ['bunch_sprint_wins', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
@@ -2390,6 +2476,7 @@ export class DatabaseService {
     // ensureRiderCategoryStatsSchema (all_stage_entries-View) aufrufen —
     // der Backfill liest beide Views.
     this.ensureResultsFlatSchema(db);
+    this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureReferenceData(db);
     this.ensureDayChangeIndexes(db);

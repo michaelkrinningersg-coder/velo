@@ -5,6 +5,7 @@ import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 import { TeamCategoryStatsService } from '../game/TeamCategoryStatsService';
+import { summarizeStageProfile } from './StageParser';
 
 import { GameStateService } from '../game/GameStateService';
 import type {
@@ -100,6 +101,11 @@ interface ResultInsertRow {
 function tableExists(db: Database.Database, tableName: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
+}
+
+function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return rows.some((r) => r.name === columnName);
 }
 
 function parseRankedValues(serialized: string | undefined): number[] {
@@ -1369,7 +1375,30 @@ export class StageResultCommitService {
       const winnerRow = stageRows.find((r: any) => r.rank === 1);
       const isBreakawayWinner = winnerRow && winnerRow.riderId != null && breakawayRiderIds.has(winnerRow.riderId);
 
-      const stageDistanceKm = stage.distanceKm ?? 0;
+      // Etappendistanz aus dem Profil parsen — stage.distanceKm ist im Stage-
+      // Objekt nicht gesetzt, sodass total_km sonst nie akkumuliert (Grundlage
+      // fuer das "Around the World"-Badge).
+      const stageDistanceKm = (() => {
+        try {
+          return summarizeStageProfile(stage.detailsCsvFile, stage.startElevation).distanceKm ?? 0;
+        } catch {
+          return stage.distanceKm ?? 0;
+        }
+      })();
+
+      // Bunch-Sprint-Erkennung: War die erste Zielgruppe (Fahrer innerhalb von
+      // BUNCH_SPRINT_WINDOW_SECONDS zum Sieger) groesser als 25 und der Sieger
+      // kein Ausreisser, zaehlt der Sieg als Massensprint-Sieg.
+      const BUNCH_SPRINT_WINDOW_SECONDS = 1;
+      const bunchSprintWinnerId = (() => {
+        if (!winnerRow || winnerRow.riderId == null || isBreakawayWinner) return null;
+        const winnerTime = winnerRow.timeSeconds;
+        if (winnerTime == null) return null;
+        const groupSize = stageRows.filter((r: any) =>
+          r.riderId != null && r.timeSeconds != null && (r.timeSeconds - winnerTime) <= BUNCH_SPRINT_WINDOW_SECONDS
+        ).length;
+        return groupSize > 25 ? winnerRow.riderId : null;
+      })();
 
       const updateFinishedStats = this.db.prepare(`
         UPDATE rider_career_stats
@@ -1605,6 +1634,15 @@ export class StageResultCommitService {
           w1, w2, w3, w4, w5, w6, w7,
           rId, categoryName
         );
+      }
+
+      // Massensprint-Sieg fuer den Sieger vermerken (Career-Row existiert
+      // bereits aus der Finisher-Schleife oben). Spalte kann in sehr alten
+      // Saves fehlen — dann still ueberspringen.
+      if (bunchSprintWinnerId != null && columnExists(this.db, 'rider_career_stats', 'bunch_sprint_wins')) {
+        this.db.prepare(`
+          UPDATE rider_career_stats SET bunch_sprint_wins = bunch_sprint_wins + 1 WHERE rider_id = ?
+        `).run(bunchSprintWinnerId);
       }
 
       for (const dns of dnsEvents) {

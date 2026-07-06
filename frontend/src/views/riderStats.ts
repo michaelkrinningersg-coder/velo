@@ -2683,6 +2683,18 @@ const HOF_ICON_FLAG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" 
 const HOF_ICON_CALENDAR = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zM7 12h5v5H7v-5z"/></svg>`;
 const HOF_ICON_ROUTE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19 15.5c-1.1 0-2.1.4-2.8 1.1l-3.4-2A3.5 3.5 0 0 0 9.5 10H7a1.5 1.5 0 0 1 0-3h9V4l4 3.5L16 11V8H7a3.5 3.5 0 0 0 0 7h2.5a1.5 1.5 0 0 1 1.3 2.3l3.4 2c.1-.1.2-.2.3-.2A3.5 3.5 0 1 1 19 15.5zm0 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>`;
 const HOF_ICON_MOUNTAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`;
+const HOF_ICON_BOLT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"/></svg>`;
+const HOF_ICON_JERSEY = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M16 3l5 3-2 4-2-1v12H7V9L5 10 3 6l5-3h2a2 2 0 0 0 4 0h2z"/></svg>`;
+const HOF_ICON_PODIUM = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M9 21H3v-8h6v8zm6 0H9V7h6v14zm6 0h-6v-5h6v5zM12 2l1.2 2.6L16 5l-2 2 .5 2.8L12 8.5 9.5 9.8 10 7 8 5l2.8-.4L12 2z"/></svg>`;
+const HOF_ICON_GLOBE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-2.9a15.6 15.6 0 0 0-1.3-3.4A8 8 0 0 1 18.9 8zM12 4c.8 1.2 1.5 2.5 1.9 4h-3.8c.4-1.5 1.1-2.8 1.9-4zM4.3 14A7.9 7.9 0 0 1 4 12c0-.7.1-1.4.3-2h3.3a16.6 16.6 0 0 0 0 4H4.3zm.8 2h2.9c.3 1.2.8 2.4 1.3 3.4A8 8 0 0 1 5.1 16zm2.9-8H5.1a8 8 0 0 1 4.2-3.4C8.8 5.6 8.3 6.8 8 8zm4 12c-.8-1.2-1.5-2.5-1.9-4h3.8c-.4 1.5-1.1 2.8-1.9 4zm2.3-6h-4.6a14.7 14.7 0 0 1 0-4h4.6a14.7 14.7 0 0 1 0 4zm.4 5.4c.5-1 1-2.2 1.3-3.4h2.9a8 8 0 0 1-4.2 3.4zM16.4 14a16.6 16.6 0 0 0 0-4h3.3c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-3.3z"/></svg>`;
+const HOF_ICON_WRENCH = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M22 5.7l-4.6 4.6-2.7-2.7L19.3 3a5.4 5.4 0 0 0-7 6.6L3.3 18.7a1 1 0 0 0 0 1.4l.6.6a1 1 0 0 0 1.4 0l9.1-9a5.4 5.4 0 0 0 6.6-7z"/></svg>`;
+const HOF_ICON_CRASH = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>`;
+const HOF_ICON_CROWN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 6l3 5 4-3-1.5 9h-11L5 8l4 3 3-5zM4 20h16v2H4v-2z"/></svg>`;
+const HOF_ICON_BIKE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M15.5 5.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6.5A2.5 2.5 0 1 1 5 13.5a2.5 2.5 0 0 1 0 5zm5.8-10L13 11v6h-2v-4.5l-2.6-2.3C7.9 9.5 8 9 8.3 8.6l2.4-2.4c.4-.4 1-.4 1.4 0L14 8h3v2h-3.6l-2.6-1.5zM19 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>`;
+const HOF_ICON_SHIELD = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 1L3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11V12z"/></svg>`;
+const HOF_ICON_COLUMN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M4 4h16v2H4V4zm2 3h2v10H6V7zm4 0h2v10h-2V7zm4 0h2v10h-2V7zM3 18h18v2H3v-2z"/></svg>`;
+
+interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
 interface HofBadge {
   key: string;
@@ -2690,12 +2702,23 @@ interface HofBadge {
   icon: string;
   description: string;
   tier: HofTierKey | null;
+  /** Eigener Farbstil fuer Single-Badges (Klassenfarbe/gold/gruen), verdient. */
+  customStyle?: HofTierStyle | null;
   /** Sichtbare Detailzeile unter dem Badge (nur wenn verdient). */
   detail: string;
   /** Hover-Tooltip mit den genauen Werten. */
   hover: string;
   /** Anforderungstext im gesperrten Zustand. */
   requirement: string;
+}
+
+// Vordefinierte Stile fuer Single-Badges.
+const HOF_STYLE_GOLD: HofTierStyle = { label: 'GOLD', ...{ color: '#fbbf24', soft: 'rgba(251,191,36,.13)', glow: 'rgba(251,191,36,.30)', text: '#fde68a' } };
+const HOF_STYLE_GREEN: HofTierStyle = { label: 'GESCHAFFT', color: '#4ade80', soft: 'rgba(74,222,128,.13)', glow: 'rgba(74,222,128,.28)', text: '#86efac' };
+function classColorStyle(categoryName: string, label: string): HofTierStyle {
+  const border = resolveRaceCategoryBadgeStyle(categoryName).border;
+  const bg = resolveRaceCategoryBadgeStyle(categoryName).background;
+  return { label, color: border, soft: bg, glow: border, text: resolveRaceCategoryBadgeStyle(categoryName).color };
 }
 
 function resolveFirstPlacePilotTier(rank: number | null): HofTierKey | null {
@@ -2753,6 +2776,45 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const brkKms = hof.breakawayKms ?? 0;
   const brkAttempts = hof.breakawayAttempts ?? 0;
   const brkRank = hof.breakawayKmRank;
+
+  // Karriere-Kennzahlen aus careerStats (Skalare + Kategorie-Aggregate).
+  const cs: any = payload.careerStats ?? {};
+  const cats: any[] = Object.values(cs.categories ?? {});
+  const sum = (f: (c: any) => number): number => cats.reduce((a, c) => a + (f(c) || 0), 0);
+  const cat = (key: string): any => cs.categories?.[key] ?? {};
+
+  const attacks = hof.allTimeAttacks ?? cs.attacks ?? 0;
+  const counterAttacks = cs.counterAttacks ?? 0;
+  const crashes = cs.crashes ?? 0;
+  const defects = cs.defects ?? 0;
+  const successfulBreakaways = cs.successfulBreakaways ?? 0;
+  const bunchSprintWins = hof.bunchSprintWins ?? 0;
+  const distanceKm = hof.allTimeDistanceKm ?? 0;
+  const earthLoops = Math.floor(distanceKm / 40000);
+
+  const sprintWins = sum((c) => c.sprintWins);
+  const climbWins = sum((c) => (c.climbWinsHC || 0) + (c.climbWins1 || 0) + (c.climbWins2 || 0) + (c.climbWins3 || 0) + (c.climbWins4 || 0));
+  const hcClimbs = sum((c) => c.climbWinsHC);
+  const podiums = sum((c) => (c.gcWins || 0) + (c.stageWins || 0) + (c.oneDayWins || 0) + (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0) + (c.gcThird || 0) + (c.stageThird || 0) + (c.oneDayThird || 0));
+  const yellowDays = sum((c) => c.leaderJerseys);
+  const monumentWins = cat('World Tour - Monument').oneDayWins ?? 0;
+  const grandTourWins = (cat('World Tour - Grand Tour').gcWins ?? 0) + (cat('World Tour - Tour de France').gcWins ?? 0);
+  const tdfWins = cat('World Tour - Tour de France').gcWins ?? 0;
+
+  // Wetter-Abdeckung (7 Typen mit >= 1 Sieg).
+  const weatherCovered = [1, 2, 3, 4, 5, 6, 7].filter((w) => sum((c) => c[`winWeather${w}`]) > 0).length;
+  // Terrain-Abdeckung: TT (ITT|TTT) und Kopfstein (Cobble|Cobble-Hill) je als
+  // eine Gruppe, alle uebrigen einzeln -> 9 Gruppen.
+  const terrainGroups = [
+    sum((c) => c.winFlat), sum((c) => c.winRolling), sum((c) => c.winHilly), sum((c) => c.winHillyDifficult),
+    sum((c) => c.winMediumMountain), sum((c) => c.winMountain), sum((c) => c.winHighMountain),
+    sum((c) => (c.winCobble || 0) + (c.winCobbleHill || 0)),
+    sum((c) => (c.winITT || 0) + (c.winTTT || 0)),
+  ];
+  const terrainCovered = terrainGroups.filter((v) => v > 0).length;
+
+  const singleBadge = (key: string, name: string, icon: string, description: string, earned: boolean, style: HofTierStyle, hover: string, requirement: string, detail = ''): HofBadge =>
+    ({ key, name, icon, description, tier: null, customStyle: earned ? style : null, detail: earned ? detail : '', hover, requirement });
 
   return [
     {
@@ -2819,12 +2881,178 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
         : 'Noch keine Ausreißer-km — unplatziert.',
       requirement: 'Top 25 der ewigen Ausreißer-km-Liste',
     },
+    {
+      key: 'bunchSprintBoss',
+      name: 'Bunch Sprint Boss',
+      icon: HOF_ICON_BIKE,
+      description: 'Massensprint-Siege',
+      tier: resolveThresholdTier(bunchSprintWins, [10, 20, 35, 50, 65]),
+      detail: `${bunchSprintWins.toLocaleString('de-DE')} Siege`,
+      hover: `${bunchSprintWins.toLocaleString('de-DE')} Massensprint-Siege — Zielgruppe > 25 Fahrer (Gold 65 · Silber 50 · Bronze 35 · Cyan 20 · Lila 10)`,
+      requirement: 'Ab 10 Massensprint-Siegen',
+    },
+    {
+      key: 'maillotJaune',
+      name: 'Maillot Jaune',
+      icon: HOF_ICON_JERSEY,
+      description: 'Tage im Gelben Trikot',
+      tier: resolveThresholdTier(yellowDays, [50, 100, 150, 200, 300]),
+      detail: `${yellowDays.toLocaleString('de-DE')} Tage`,
+      hover: `${yellowDays.toLocaleString('de-DE')} Tage in Führung der Gesamtwertung (Gold 300 · Silber 200 · Bronze 150 · Cyan 100 · Lila 50)`,
+      requirement: 'Ab 50 Tagen im Gelben Trikot',
+    },
+    {
+      key: 'podiumMachine',
+      name: 'Podium Machine',
+      icon: HOF_ICON_PODIUM,
+      description: 'Podestplätze gesamt',
+      tier: resolveThresholdTier(podiums, [25, 50, 100, 150, 200]),
+      detail: `${podiums.toLocaleString('de-DE')} Podeste`,
+      hover: `${podiums.toLocaleString('de-DE')} Podestplätze (GC + Etappen + Eintagesrennen) (Gold 200 · Silber 150 · Bronze 100 · Cyan 50 · Lila 25)`,
+      requirement: 'Ab 25 Podestplätzen',
+    },
+    {
+      key: 'mountainGoat',
+      name: 'Mountain Goat',
+      icon: HOF_ICON_MOUNTAIN,
+      description: 'Bergwertungen zuerst',
+      tier: resolveThresholdTier(climbWins, [20, 40, 60, 80, 100]),
+      detail: `${climbWins.toLocaleString('de-DE')} Anstiege`,
+      hover: `${climbWins.toLocaleString('de-DE')} Bergwertungen als Erster überquert (Gold 100 · Silber 80 · Bronze 60 · Cyan 40 · Lila 20)`,
+      requirement: 'Ab 20 Bergwertungen',
+    },
+    {
+      key: 'hcKing',
+      name: 'HC King',
+      icon: HOF_ICON_CROWN,
+      description: 'HC-Berge zuerst',
+      tier: resolveThresholdTier(hcClimbs, [5, 10, 15, 20, 25]),
+      detail: `${hcClimbs.toLocaleString('de-DE')} HC-Anstiege`,
+      hover: `${hcClimbs.toLocaleString('de-DE')} HC-Berge als Erster überquert (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 HC-Bergen',
+    },
+    {
+      key: 'monumentHunter',
+      name: 'Monument Hunter',
+      icon: HOF_ICON_COLUMN,
+      description: 'Monument-Siege',
+      tier: resolveThresholdTier(monumentWins, [1, 2, 5, 8, 10]),
+      detail: `${monumentWins.toLocaleString('de-DE')} Monumente`,
+      hover: `${monumentWins.toLocaleString('de-DE')} Monument-Siege (Gold 10 · Silber 8 · Bronze 5 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Monument-Sieg',
+    },
+    {
+      key: 'attacker',
+      name: 'Attacker',
+      icon: HOF_ICON_BOLT,
+      description: 'Attacken-Rang',
+      tier: resolveRankTier(hof.attacksRank ?? null),
+      detail: hof.attacksRank != null ? `Platz ${hof.attacksRank} · ${attacks.toLocaleString('de-DE')}` : '',
+      hover: hof.attacksRank != null
+        ? `Attacken (All-Time): Platz ${hof.attacksRank} von ${hof.rankedAttackers} · ${attacks.toLocaleString('de-DE')} Attacken`
+        : 'Noch keine Attacke — unplatziert.',
+      requirement: 'Top 25 der ewigen Attacken-Liste',
+    },
+    {
+      key: 'restlessLegs',
+      name: 'Restless Legs',
+      icon: HOF_ICON_BOLT,
+      description: 'Attacken gesamt',
+      tier: resolveThresholdTier(attacks, [15, 30, 45, 60, 75]),
+      detail: `${attacks.toLocaleString('de-DE')} Attacken`,
+      hover: `${attacks.toLocaleString('de-DE')} Attacken (Gold 75 · Silber 60 · Bronze 45 · Cyan 30 · Lila 15)`,
+      requirement: 'Ab 15 Attacken',
+    },
+    {
+      key: 'notWithoutMe',
+      name: 'Not Without Me',
+      icon: HOF_ICON_SHIELD,
+      description: 'Konterattacken gesamt',
+      tier: resolveThresholdTier(counterAttacks, [10, 20, 30, 40, 50]),
+      detail: `${counterAttacks.toLocaleString('de-DE')} Konter`,
+      hover: `${counterAttacks.toLocaleString('de-DE')} Konterattacken (Gold 50 · Silber 40 · Bronze 30 · Cyan 20 · Lila 10)`,
+      requirement: 'Ab 10 Konterattacken',
+    },
+    {
+      key: 'breakawayMaster',
+      name: 'Breakaway Master',
+      icon: HOF_ICON_ROUTE,
+      description: 'Erfolgreiche Ausreißer',
+      tier: resolveThresholdTier(successfulBreakaways, [5, 10, 15, 20, 25]),
+      detail: `${successfulBreakaways.toLocaleString('de-DE')} erfolgreich`,
+      hover: `${successfulBreakaways.toLocaleString('de-DE')} erfolgreiche Ausreißversuche (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 erfolgreichen Ausreißern',
+    },
+    {
+      key: 'pechvogel',
+      name: 'Pechvogel',
+      icon: HOF_ICON_WRENCH,
+      description: 'Defekte gesamt',
+      tier: resolveThresholdTier(defects, [5, 10, 15, 20, 25]),
+      detail: `${defects.toLocaleString('de-DE')} Defekte`,
+      hover: `${defects.toLocaleString('de-DE')} Defekte (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Defekten',
+    },
+    {
+      key: 'sturzpilot',
+      name: 'Sturzpilot',
+      icon: HOF_ICON_CRASH,
+      description: 'Stürze gesamt',
+      tier: resolveThresholdTier(crashes, [5, 10, 15, 20, 25]),
+      detail: `${crashes.toLocaleString('de-DE')} Stürze`,
+      hover: `${crashes.toLocaleString('de-DE')} Stürze (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Stürzen',
+    },
+    {
+      key: 'aroundTheWorld',
+      name: 'Around the World',
+      icon: HOF_ICON_GLOBE,
+      description: 'Erdumrundungen',
+      tier: resolveThresholdTier(earthLoops, [1, 2, 3, 4, 5]),
+      detail: `${earthLoops}× die Erde · ${formatKm(distanceKm)}`,
+      hover: `${formatKm(distanceKm)} gefahren — ${earthLoops} volle Erdumrundung${earthLoops === 1 ? '' : 'en'} (je 40.000 km; Farbe ab 1/2/3/4/5)`,
+      requirement: 'Ab 40.000 gefahrenen km (1 Erdumrundung)',
+    },
+    // --- Single-Badges (verdient/nicht verdient, Klassenfarbe) ---
+    singleBadge('erfolgreicherAusreisser', 'Erfolgreicher Ausreißer', HOF_ICON_ROUTE, 'Ausreißversuch geglückt',
+      successfulBreakaways >= 1, HOF_STYLE_GREEN,
+      successfulBreakaways >= 1 ? `${successfulBreakaways.toLocaleString('de-DE')} geglückte Ausreißversuche` : 'Noch kein geglückter Ausreißversuch.',
+      'Ein geglückter Ausreißversuch', 'Geschafft'),
+    singleBadge('monumentWinner', 'Monument Winner', HOF_ICON_COLUMN, 'Monument gewonnen',
+      monumentWins >= 1, classColorStyle('World Tour - Monument', 'MONUMENT'),
+      monumentWins >= 1 ? `${monumentWins.toLocaleString('de-DE')} Monument-Sieg${monumentWins === 1 ? '' : 'e'}` : 'Noch kein Monument gewonnen.',
+      'Ein Monument gewinnen', 'Sieger'),
+    singleBadge('grandTourWinner', 'Grand Tour Winner', HOF_ICON_TROPHY, 'Grand Tour gewonnen',
+      grandTourWins >= 1, classColorStyle('World Tour - Grand Tour', 'GRAND TOUR'),
+      grandTourWins >= 1 ? `${grandTourWins.toLocaleString('de-DE')} Grand-Tour-Gesamtsieg${grandTourWins === 1 ? '' : 'e'}` : 'Noch keine Grand Tour gewonnen.',
+      'Eine Grand Tour (Gesamt) gewinnen', 'Sieger'),
+    singleBadge('tdfWinner', 'TdF Winner', HOF_ICON_TROPHY, 'Tour de France gewonnen',
+      tdfWins >= 1, classColorStyle('World Tour - Tour de France', 'TOUR DE FRANCE'),
+      tdfWins >= 1 ? `${tdfWins.toLocaleString('de-DE')}× Tour de France gewonnen` : 'Noch keine Tour de France gewonnen.',
+      'Die Tour de France (Gesamt) gewinnen', 'Sieger'),
+    singleBadge('allGrandTourWinner', 'All Grand Tour Winner', HOF_ICON_CROWN, 'Alle Grand Tours',
+      hof.wonAllGrandTours === true, HOF_STYLE_GOLD,
+      hof.wonAllGrandTours ? 'Tour, Giro und Vuelta gewonnen.' : 'Tour, Giro und Vuelta — noch nicht komplett.',
+      'Tour de France, Giro und Vuelta gewinnen', 'Komplett'),
+    singleBadge('allMonumentWinner', 'All Monument Winner', HOF_ICON_CROWN, 'Alle 5 Monumente',
+      hof.wonAllMonuments === true, HOF_STYLE_GOLD,
+      hof.wonAllMonuments ? 'Alle fünf Monumente gewonnen.' : 'Alle fünf Monumente — noch nicht komplett.',
+      'Alle fünf Monumente gewinnen', 'Komplett'),
+    singleBadge('cobbleKing', 'Cobble King', HOF_ICON_CROWN, 'Flandern + Roubaix',
+      hof.wonCobbleKing === true, HOF_STYLE_GOLD,
+      hof.wonCobbleKing ? 'Ronde van Vlaanderen und Paris-Roubaix gewonnen.' : 'Flandern-Rundfahrt und Paris-Roubaix — noch nicht beide.',
+      'Ronde van Vlaanderen und Paris-Roubaix gewinnen', 'Komplett'),
+    singleBadge('ardennenKing', 'Ardennen King', HOF_ICON_CROWN, 'Amstel + Flèche + Liège',
+      hof.wonArdennenKing === true, HOF_STYLE_GOLD,
+      hof.wonArdennenKing ? 'Amstel Gold Race, Flèche Wallonne und Liège gewonnen.' : 'Amstel, Flèche Wallonne und Liège — noch nicht alle drei.',
+      'Amstel Gold Race, Flèche Wallonne und Liège-Bastogne-Liège gewinnen', 'Komplett'),
   ];
 }
 
 function renderHofBadgeCard(badge: HofBadge): string {
   const MONOF = "font-family:'JetBrains Mono',monospace";
-  if (badge.tier == null) {
+  const tierStyle: HofTierStyle | null = badge.customStyle ?? (badge.tier ? HOF_TIERS[badge.tier] : null);
+  if (tierStyle == null) {
     // Gesperrt: dezente Karte mit Anforderung — zeigt, was es zu holen gibt.
     return `
       <div title="${esc(badge.requirement)}" style="border-radius:16px;border:2px dashed #24344f;background:#0a1122;padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;opacity:.72;">
@@ -2836,7 +3064,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
       </div>`;
   }
 
-  const tier = HOF_TIERS[badge.tier];
+  const tier = tierStyle;
   return `
     <div title="${esc(badge.hover)}" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;">
       <span style="position:absolute;inset:0;background:radial-gradient(circle at 50% 0%, ${tier.soft}, transparent 62%);pointer-events:none;"></span>
@@ -2846,7 +3074,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
       <span style="${MONOF};font-size:13px;font-weight:800;letter-spacing:.1em;color:#f1f5f9;text-transform:uppercase;text-align:center;">${esc(badge.name)}</span>
       <span style="${MONOF};font-size:9px;letter-spacing:.14em;color:#6a7a95;text-transform:uppercase;">${esc(badge.description)}</span>
       <span style="${MONOF};font-size:10px;font-weight:800;letter-spacing:.16em;color:${tier.text};background:${tier.soft};border:1px solid ${tier.color};border-radius:999px;padding:3px 12px;">${tier.label}</span>
-      <span style="${MONOF};font-size:11px;font-weight:700;color:#cbd5e1;">${esc(badge.detail)}</span>
+      ${badge.detail ? `<span style="${MONOF};font-size:11px;font-weight:700;color:#cbd5e1;">${esc(badge.detail)}</span>` : ''}
     </div>`;
 }
 
