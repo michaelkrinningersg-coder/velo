@@ -315,8 +315,8 @@ export function renderTeamStatsHeader(payload: TeamStatsPayload): string {
           <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #fbbf24;">Die 10 formstärksten Fahrer</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${formHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Daten vorhanden</li>'}</ul>
         </div>
-        <div style="background: rgba(59, 130, 246, 0.02); border: 1px solid rgba(59, 130, 246, 0.08); padding: 0.5rem 0.75rem; border-radius: 6px;">
-          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #3b82f6;">Die 10 besten Fahrer (UCI Weltrangliste)</h4>
+        <div style="background: rgba(34, 211, 238, 0.03); border: 1px solid rgba(34, 211, 238, 0.14); padding: 0.5rem 0.75rem; border-radius: 6px;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; font-weight: bold; color: #22d3ee;">Die 10 besten Fahrer (UCI Weltrangliste)</h4>
           <ul style="margin: 0; padding: 0; list-style: none;">${uciHtml || '<li class="text-muted" style="font-size:0.85rem;">Keine Fahrer platziert</li>'}</ul>
         </div>
       </div>
