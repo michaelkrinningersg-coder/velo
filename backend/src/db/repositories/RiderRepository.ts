@@ -1251,6 +1251,7 @@ export class RiderRepository {
     const superHomeAdvantageDays = careerStatsRow?.super_home_advantage_days ?? 0;
     const homePressureDays = careerStatsRow?.home_pressure_days ?? 0;
     const totalKm = careerStatsRow?.total_km ?? 0;
+    const superformDays = careerStatsRow?.superform_days ?? 0;
 
     const categories: RiderCareerStats['categories'] = {};
 
@@ -1453,6 +1454,7 @@ export class RiderRepository {
       breakawayKms,
       superteamCount,
       totalKm,
+      superformDays,
       categories,
     };
   }

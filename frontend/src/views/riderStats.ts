@@ -2693,6 +2693,12 @@ const HOF_ICON_CROWN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_BIKE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M15.5 5.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6.5A2.5 2.5 0 1 1 5 13.5a2.5 2.5 0 0 1 0 5zm5.8-10L13 11v6h-2v-4.5l-2.6-2.3C7.9 9.5 8 9 8.3 8.6l2.4-2.4c.4-.4 1-.4 1.4 0L14 8h3v2h-3.6l-2.6-1.5zM19 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>`;
 const HOF_ICON_SHIELD = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 1L3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11V12z"/></svg>`;
 const HOF_ICON_COLUMN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M4 4h16v2H4V4zm2 3h2v10H6V7zm4 0h2v10h-2V7zm4 0h2v10h-2V7zM3 18h18v2H3v-2z"/></svg>`;
+const HOF_ICON_STOPWATCH = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42a9 9 0 1 0-1.41 1.41zM12 20a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>`;
+const HOF_ICON_STAR = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+const HOF_ICON_RAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M17 9a5 5 0 0 0-9.6-1.5A4.5 4.5 0 0 0 6 16h11a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 17 9zM7 18l-1 3h2l1-3H7zm4 0l-1 3h2l1-3h-2zm4 0l-1 3h2l1-3h-2z"/></svg>`;
+const HOF_ICON_HOME = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg>`;
+const HOF_ICON_SPARK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zM5 15l.9 2.6L8.5 18.5 5.9 19.4 5 22l-.9-2.6L1.5 18.5 4.1 17.6 5 15zm14 0l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>`;
+const HOF_ICON_PAVE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 4h7v6H3V4zm11 0h7v6h-7V4zM3 14h7v6H3v-6zm11 0h7v6h-7v-6z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2800,6 +2806,33 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const monumentWins = cat('World Tour - Monument').oneDayWins ?? 0;
   const grandTourWins = (cat('World Tour - Grand Tour').gcWins ?? 0) + (cat('World Tour - Tour de France').gcWins ?? 0);
   const tdfWins = cat('World Tour - Tour de France').gcWins ?? 0;
+
+  // Zusaetzliche Kennzahlen fuer die neuen Badges.
+  const greenDays = sum((c) => c.pointsJerseys);
+  const komDays = sum((c) => c.mountainJerseys);
+  const youthDays = sum((c) => c.youthJerseys);
+  const timeTrialWins = sum((c) => (c.winITT || 0) + (c.winTTT || 0));
+  const cobbleWins = sum((c) => (c.winCobble || 0) + (c.winCobbleHill || 0));
+  const rainWins = sum((c) => (c.winWeather3 || 0) + (c.winWeather4 || 0));
+  const superformDays = cs.superformDays ?? 0;
+  const homeDays = (cs.homeAdvantageDays ?? 0) + (cs.superHomeAdvantageDays ?? 0);
+
+  // "The Complete Rider": genestete Stufen aus Rundfahrt-, Eintages- und
+  // Massensprint-Erfolg. Gold verlangt Grand Tour + Monument, Silber laesst
+  // Stage Race High als Rundfahrt zu, Bronze zusaetzlich One Day High statt
+  // Monument. Ein Massensprint-Sieg (Zielgruppe >= 25) ist ueberall Pflicht.
+  const hasGrandTour = grandTourWins >= 1;
+  const hasStageHigh = (cat('World Tour - Stage Race High').gcWins ?? 0) >= 1;
+  const hasMonument = monumentWins >= 1;
+  const hasOneDayHigh = (cat('World Tour - One Day High').oneDayWins ?? 0) >= 1;
+  const hasBunch = bunchSprintWins >= 1;
+  const completeRiderTier: HofTierKey | null = (() => {
+    if (!hasBunch) return null;
+    if (hasGrandTour && hasMonument) return 'gold';
+    if ((hasGrandTour || hasStageHigh) && hasMonument) return 'silver';
+    if ((hasGrandTour || hasStageHigh) && (hasMonument || hasOneDayHigh)) return 'bronze';
+    return null;
+  })();
 
   // Wetter-Abdeckung (7 Typen mit >= 1 Sieg).
   const weatherCovered = [1, 2, 3, 4, 5, 6, 7].filter((w) => sum((c) => c[`winWeather${w}`]) > 0).length;
@@ -3046,6 +3079,98 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hof.wonArdennenKing === true, HOF_STYLE_GOLD,
       hof.wonArdennenKing ? 'Amstel Gold Race, Flèche Wallonne und Liège gewonnen.' : 'Amstel, Flèche Wallonne und Liège — noch nicht alle drei.',
       'Amstel Gold Race, Flèche Wallonne und Liège-Bastogne-Liège gewinnen', 'Komplett'),
+    {
+      key: 'greenMachine',
+      name: 'Green Machine',
+      icon: HOF_ICON_JERSEY,
+      description: 'Tage im Grünen Trikot',
+      tier: resolveThresholdTier(greenDays, [25, 50, 75, 100, 150]),
+      detail: `${greenDays.toLocaleString('de-DE')} Tage`,
+      hover: `${greenDays.toLocaleString('de-DE')} Tage in Führung der Punktewertung (Gold 150 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
+      requirement: 'Ab 25 Tagen im Grünen Trikot',
+    },
+    {
+      key: 'kingOfTheMountains',
+      name: 'King of the Mountains',
+      icon: HOF_ICON_MOUNTAIN,
+      description: 'Tage im Bergtrikot',
+      tier: resolveThresholdTier(komDays, [25, 50, 75, 100, 150]),
+      detail: `${komDays.toLocaleString('de-DE')} Tage`,
+      hover: `${komDays.toLocaleString('de-DE')} Tage in Führung der Bergwertung (Gold 150 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
+      requirement: 'Ab 25 Tagen im Bergtrikot',
+    },
+    {
+      key: 'youngGun',
+      name: 'Young Gun',
+      icon: HOF_ICON_STAR,
+      description: 'Tage im Weißen Trikot',
+      tier: resolveThresholdTier(youthDays, [25, 50, 75, 100, 125]),
+      detail: `${youthDays.toLocaleString('de-DE')} Tage`,
+      hover: `${youthDays.toLocaleString('de-DE')} Tage in Führung der Nachwuchswertung (Gold 125 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
+      requirement: 'Ab 25 Tagen im Weißen Trikot',
+    },
+    {
+      key: 'chronoMaster',
+      name: 'Chrono Master',
+      icon: HOF_ICON_STOPWATCH,
+      description: 'Zeitfahr-Siege (ITT + TTT)',
+      tier: resolveThresholdTier(timeTrialWins, [5, 10, 15, 20, 25]),
+      detail: `${timeTrialWins.toLocaleString('de-DE')} Zeitfahr-Siege`,
+      hover: `${timeTrialWins.toLocaleString('de-DE')} Zeitfahr-Siege (Einzel + Mannschaft) (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Zeitfahr-Siegen',
+    },
+    {
+      key: 'cobbledClassicsKing',
+      name: 'Cobbled Classics King',
+      icon: HOF_ICON_PAVE,
+      description: 'Kopfstein-Siege',
+      tier: resolveThresholdTier(cobbleWins, [3, 6, 10, 15, 20]),
+      detail: `${cobbleWins.toLocaleString('de-DE')} Siege`,
+      hover: `${cobbleWins.toLocaleString('de-DE')} Siege auf Kopfsteinpflaster (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 Kopfstein-Siegen',
+    },
+    {
+      key: 'rainMaster',
+      name: 'Rain Master',
+      icon: HOF_ICON_RAIN,
+      description: 'Siege bei Regen',
+      tier: resolveThresholdTier(rainWins, [5, 10, 15, 20, 25]),
+      detail: `${rainWins.toLocaleString('de-DE')} Siege`,
+      hover: `${rainWins.toLocaleString('de-DE')} Siege bei Regen (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Siegen bei Regen',
+    },
+    {
+      key: 'inTheZone',
+      name: 'In the Zone',
+      icon: HOF_ICON_SPARK,
+      description: 'Tage in Superform',
+      tier: resolveThresholdTier(superformDays, [5, 10, 20, 25, 30]),
+      detail: `${superformDays.toLocaleString('de-DE')} Tage`,
+      hover: `${superformDays.toLocaleString('de-DE')} Tage in Superform (Gold 30 · Silber 25 · Bronze 20 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5 Tagen in Superform',
+    },
+    {
+      key: 'homeHero',
+      name: 'Home Hero',
+      icon: HOF_ICON_HOME,
+      description: 'Heimvorteil-Tage',
+      tier: resolveThresholdTier(homeDays, [20, 40, 60, 80, 100]),
+      detail: `${homeDays.toLocaleString('de-DE')} Tage`,
+      hover: `${homeDays.toLocaleString('de-DE')} Tage mit Heimvorteil (Gold 100 · Silber 80 · Bronze 60 · Cyan 40 · Lila 20)`,
+      requirement: 'Ab 20 Heimvorteil-Tagen',
+    },
+    {
+      key: 'completeRider',
+      name: 'The Complete Rider',
+      icon: HOF_ICON_CROWN,
+      description: 'Allrounder-Erfolge',
+      tier: completeRiderTier,
+      detail: completeRiderTier === 'gold' ? 'Grand Tour + Monument + Sprint'
+        : completeRiderTier === 'silver' ? 'Rundfahrt + Monument + Sprint'
+        : completeRiderTier === 'bronze' ? 'Rundfahrt + Eintagesrennen + Sprint' : '',
+      hover: 'Gold: Grand Tour + Monument + Massensprint · Silber: + Stage Race High als Rundfahrt · Bronze: Stage Race High + One Day High + Massensprint (Massensprint = Zielgruppe >= 25)',
+      requirement: 'Stage Race High + One Day High + Massensprint-Sieg',
+    },
   ];
 }
 
