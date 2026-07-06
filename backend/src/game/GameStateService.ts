@@ -351,6 +351,29 @@ export class GameStateService {
               updateStmt.run(JSON.stringify(groups), row.race_id);
             }
             console.log(`Pruning finished for season ${currentRow.season}.`);
+
+            // results_flat mit derselben Regel prunen wie die Kompakt-Payloads:
+            // Rang-1-Zeilen immer behalten, sonst nur Zeilen mit Saisonpunkten.
+            // stage_entries_flat bleibt unangetastet (wie stage_entries_compact),
+            // damit DNF-Eintraege in der Fahrer-Historie sichtbar bleiben.
+            if (tableExists(this.db, 'results_flat')) {
+              const pruned = this.db.prepare(`
+                DELETE FROM results_flat
+                WHERE race_id IN (SELECT id FROM races WHERE start_date LIKE ?)
+                  AND (rank IS NULL OR rank != 1)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM season_point_events p
+                    WHERE p.season = ?
+                      AND p.points_awarded > 0
+                      AND p.stage_id = results_flat.stage_id
+                      AND (
+                        (results_flat.rider_id IS NOT NULL AND p.rider_id = results_flat.rider_id)
+                        OR (results_flat.rider_id IS NULL AND p.rider_id IS NULL AND p.team_id = results_flat.team_id)
+                      )
+                  )
+              `).run(`${currentRow.season}-%`, currentRow.season);
+              console.log(`results_flat geprunt: ${pruned.changes} Zeilen der Saison ${currentRow.season} entfernt.`);
+            }
           } catch (pe) {
             console.error('Fehler beim Bereinigen der Saisonergebnisse:', pe);
           }

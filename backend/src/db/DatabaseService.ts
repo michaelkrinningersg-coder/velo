@@ -1436,7 +1436,9 @@ export class DatabaseService {
   /**
    * Dauerhafte, schlanke Relational-Kopie aller Ergebnisse und Etappen-
    * Einsaetze ("History-Ablage"). Wird beim Ergebnis-Commit inkrementell
-   * gepflegt und ueberlebt Kompaktierung und Saison-Pruning. Rider-/Team-
+   * gepflegt und ueberlebt die Kompaktierung beim Rennabschluss. Am Saison-
+   * ende wird sie mit derselben Regel geprunt wie die Kompakt-Payloads
+   * (Rang 1 + Punkte-Zeilen bleiben, siehe advanceDay). Rider-/Team-
    * bezogene Abfragen (z.B. Fahrer-Statistik) muessen damit nicht mehr die
    * json_each-Views entpacken (dort ~600ms pro Aufruf, linear wachsend).
    */
