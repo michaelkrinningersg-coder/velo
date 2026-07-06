@@ -136,6 +136,20 @@ export function initRidersListeners(): void {
         }
         state.riderMenuPage = 1;
         renderRidersMenu();
+        // Die Programm-&-Mentoren-Spalten (Lieblingsrennen) sind im schlanken
+        // Summary-Payload nicht enthalten — beim ersten Oeffnen des Tabs die
+        // vollstaendigen Daten einmalig nachladen und mergen.
+        if (nextPage === 'preferences' && state.riders.some((r) => r.activeTeamId != null && r.favoriteRaces === undefined)) {
+          void import('../api').then(({ api }) => api.getRiders(undefined, false, false).then((res) => {
+            if (res.success && res.data) {
+              const detailedById = new Map(res.data.map((r) => [r.id, r]));
+              state.riders = state.riders.map((r) => detailedById.get(r.id) || r);
+              if (state.riderMenuDetailPage === 'preferences') {
+                renderRidersMenu();
+              }
+            }
+          })).catch(console.error);
+        }
       }
       return;
     }

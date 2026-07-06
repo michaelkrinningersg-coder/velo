@@ -61,19 +61,30 @@ function ovrColor(ovr: number): string {
 }
 
 // ---- Team-Aggregation aus den Fahrern --------------------------------------
-interface TeamAgg { points: number; wins: number; }
+interface TeamAgg { points: number; wins: number; tttWins: number; }
 
 function aggregateTeamStandings(): Map<number, TeamAgg> {
   const byTeam = new Map<number, TeamAgg>();
   for (const rider of state.riders) {
     const teamId = rider.activeTeamId;
     if (teamId == null) continue;
-    const agg = byTeam.get(teamId) ?? { points: 0, wins: 0 };
+    const agg = byTeam.get(teamId) ?? { points: 0, wins: 0, tttWins: 0 };
     agg.points += rider.seasonPoints ?? 0;
     agg.wins += rider.seasonWins ?? 0;
+    agg.tttWins += rider.seasonTttWins ?? 0;
     byTeam.set(teamId, agg);
   }
   return byTeam;
+}
+
+/**
+ * Effektive Team-Siege: Ein TTT-Sieg gibt jedem gefinishten Fahrer einen
+ * Saisonsieg — auf Team-Ebene soll er aber nur 1x zaehlen. Die individuellen
+ * TTT-Siege werden daher herausgerechnet und pro ~8 Finisher als 1 Team-Sieg
+ * wieder addiert.
+ */
+function effectiveTeamWins(agg: TeamAgg): number {
+  return agg.wins - agg.tttWins + Math.round(agg.tttWins / 8);
 }
 
 interface PlayerTeamKpis { worldRank: string; seasonPoints: string; seasonWins: string; totalTeams: number; }
@@ -83,12 +94,12 @@ function playerTeamKpis(team: Team | null): PlayerTeamKpis {
   const ranked = [...byTeam.entries()].sort((a, b) => b[1].points - a[1].points);
   const totalTeams = ranked.length;
   if (team == null) return { worldRank: '–', seasonPoints: '0', seasonWins: '0', totalTeams };
-  const agg = byTeam.get(team.id) ?? { points: 0, wins: 0 };
+  const agg = byTeam.get(team.id) ?? { points: 0, wins: 0, tttWins: 0 };
   const rankIndex = ranked.findIndex(([id]) => id === team.id);
   return {
     worldRank: totalTeams > 0 && rankIndex >= 0 ? `#${rankIndex + 1}` : '–',
     seasonPoints: agg.points.toLocaleString('de-DE'),
-    seasonWins: String(agg.wins),
+    seasonWins: String(effectiveTeamWins(agg)),
     totalTeams,
   };
 }

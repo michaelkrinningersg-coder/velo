@@ -206,7 +206,8 @@ export interface Rider {
   potential: number;
   overallRating: number;
   skills: RiderSkills;
-  potentials: RiderPotentials;
+  /** Im Summary-Modus (GET /riders?summary=true) nicht enthalten. */
+  potentials?: RiderPotentials;
   yearStartSkills?: Record<RiderSkillKey, number>;
   mentorBoosts?: Partial<Record<RiderSkillKey, number>>;
   racePreferenceBoosts?: Partial<Record<RiderSkillKey, number>>;
@@ -222,8 +223,10 @@ export interface Rider {
   hasGrandTourTag: boolean;
   hasStageRaceTag: boolean;
   hasOneDayClassicTag: boolean;
-  favoriteRaces: number[];
-  nonFavoriteRaces: number[];
+  /** Im Summary-Modus (GET /riders?summary=true) nicht enthalten. */
+  favoriteRaces?: number[];
+  /** Im Summary-Modus (GET /riders?summary=true) nicht enthalten. */
+  nonFavoriteRaces?: number[];
   activeTeamId: number | null;
   activeContractId: number | null;
   contractEndSeason?: number | null;
@@ -232,6 +235,8 @@ export interface Rider {
   seasonRaceDaysTotal?: number;
   rolling30dRaceDays?: number;
   seasonWins?: number;
+  /** Anteil der Saisonsiege aus TTT (fuer Team-Aggregation: TTT zaehlt 1 Team-Sieg). */
+  seasonTttWins?: number;
   formBonus?: number;
   raceFormBonus?: number;
   longTermFatigueMalus?: number;

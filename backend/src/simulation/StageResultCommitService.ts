@@ -1773,6 +1773,49 @@ export class StageResultCommitService {
         }
       }
 
+      // Saisonsiege inkrementell pflegen (ersetzt die fruehere taegliche Voll-
+      // Aggregation in syncRiderLoadState, die ~370ms kostete und Siege bereits
+      // kompaktierter Rennen verlor). Muss VOR der Kompaktierung laufen, solange
+      // stage_entries noch als Live-Zeilen vorliegen.
+      if (tableExists(this.db, 'rider_daily_state')) {
+        const hasTttColumn = (this.db.prepare(
+          `SELECT COUNT(*) AS c FROM pragma_table_info('rider_daily_state') WHERE name = 'season_ttt_wins'`,
+        ).get() as { c: number }).c > 0;
+        const bumpSeasonWin = this.db.prepare(`
+          UPDATE rider_daily_state SET season_wins = season_wins + 1 WHERE rider_id = ?
+        `);
+        const bumpSeasonTttWin = hasTttColumn
+          ? this.db.prepare(`
+              UPDATE rider_daily_state SET season_wins = season_wins + 1, season_ttt_wins = season_ttt_wins + 1 WHERE rider_id = ?
+            `)
+          : bumpSeasonWin;
+
+        const stageWinnerRow = stageRows.find((r: any) => r.rank === 1);
+        if (stageWinnerRow) {
+          if (stage.profile === 'TTT') {
+            // Teamsieg: jeder gefinishte Fahrer des Siegerteams erhaelt einen
+            // Sieg (gleiche Semantik wie die alte ttt_wins-CTE). Team-Ansichten
+            // rechnen TTT-Siege wieder auf 1 Team-Sieg herunter.
+            const tttFinishers = this.db.prepare(`
+              SELECT rider_id FROM stage_entries
+              WHERE stage_id = ? AND team_id = ? AND status = 'finished' AND rider_id IS NOT NULL
+            `).all(stage.id, stageWinnerRow.teamId) as Array<{ rider_id: number }>;
+            for (const finisher of tttFinishers) {
+              bumpSeasonTttWin.run(finisher.rider_id);
+            }
+          } else if (stageWinnerRow.riderId != null) {
+            bumpSeasonWin.run(stageWinnerRow.riderId);
+          }
+        }
+
+        if (race.isStageRace && stage.stageNumber === race.numberOfStages) {
+          const gcWinnerRow = gcRows.find((r: any) => r.rank === 1);
+          if (gcWinnerRow?.riderId != null) {
+            bumpSeasonWin.run(gcWinnerRow.riderId);
+          }
+        }
+      }
+
       const isRaceFinished = !race.isStageRace || stage.stageNumber === race.numberOfStages;
       if (isRaceFinished) {
         const currentSeason = this.repo.getCurrentSeason();

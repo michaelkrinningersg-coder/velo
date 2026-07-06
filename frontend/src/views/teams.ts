@@ -606,7 +606,8 @@ export function renderTeamDetail(teamId: number | null): void {
   if (!team) { detail.innerHTML = ''; return; }
   
   const teamRiders = getRidersByTeam(teamId);
-  const needsDetails = teamRiders.some(r => r.yearStartSkills === undefined);
+  // Summary-Payload strippt potentials/favoriteRaces — Details pro Team nachladen.
+  const needsDetails = teamRiders.some(r => r.yearStartSkills === undefined || r.potentials === undefined);
 
   if (needsDetails) {
     detail.innerHTML = '<p class="text-muted" style="padding:1rem 0">Lade Team-Daten...</p>';

@@ -46,6 +46,7 @@ export class RiderRepository {
       ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
       ${useDailyState ? 'rider_state.season_points' : '0'} AS season_points,
       ${useDailyState ? 'rider_state.season_wins' : '0'} AS season_wins,
+      ${useDailyState ? 'rider_state.season_ttt_wins' : '0'} AS season_ttt_wins,
       ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
       ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
       ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,
@@ -175,7 +176,19 @@ export class RiderRepository {
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
       seasonRaceDays: isCurrentSeason ? (row.season_race_days_total ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0),
       seasonWins: isCurrentSeason ? (row.season_wins ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0),
+      seasonTttWins: isCurrentSeason ? ((row as any).season_ttt_wins ?? 0) : 0,
     }));
+    if (!includeDetailedStats) {
+      // Summary-Modus (Standard des Frontends nach jedem Tageswechsel): schwere,
+      // nur in Detail-Ansichten benoetigte Felder strippen. Teams-/Fahrer-Views
+      // laden Details bei Bedarf gezielt nach (needsDetails-Mechanismus).
+      // Spart ~2 MB Serialisierung/Transfer/Parse pro Reload bei 3200 Fahrern.
+      for (const rider of riders) {
+        delete (rider as any).potentials;
+        delete (rider as any).favoriteRaces;
+        delete (rider as any).nonFavoriteRaces;
+      }
+    }
     const ridersWithPrograms = includeDetailedStats ? this.attachProgramData(riders, activeSeason) : riders;
     const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
     return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, activeSeason, currentDate) : ridersWithMentors;
@@ -994,6 +1007,7 @@ export class RiderRepository {
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_points' : '0'} AS season_points,
              ${useDailyState ? 'rider_state.season_wins' : '0'} AS season_wins,
+      ${useDailyState ? 'rider_state.season_ttt_wins' : '0'} AS season_ttt_wins,
              ${useDailyState ? 'rider_state.season_race_days_total' : '0'} AS season_race_days_total,
              ${useDailyState ? 'rider_state.rolling_30d_race_days' : '0'} AS rolling_30d_race_days,
              ${useDailyState ? 'rider_state.short_term_fatigue' : '0.0'} AS short_term_fatigue,

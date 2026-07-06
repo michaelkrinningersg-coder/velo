@@ -102,6 +102,7 @@ export class GameStateService {
   private readonly db: Database.Database;
   private readonly events = new EventEmitter();
   private syncedStateDate: string | null = null;
+  private seasonWinsBackfillChecked = false;
 
   // Caches to avoid repeated schema/peak-date work in the day-change hot path.
   private schemaReady = false;
@@ -380,6 +381,13 @@ export class GameStateService {
         console.error('Failed to run post-season VACUUM:', e);
       }
     }
+
+    // advanceDay stellt den kompletten Tageszustand her (Leutnant-Peaks, Load-
+    // State, Form/Fatigue, Form-History). Den Sync-Marker direkt setzen, damit
+    // der erste ensureState()-Aufruf danach (z.B. GET /riders im Frontend-
+    // Reload) nicht dieselbe Arbeit via syncCurrentSeasonFormState wiederholt
+    // (~650ms pro Tageswechsel eingespart).
+    this.syncedStateDate = nextState.currentDate;
 
     this.events.emit('dayAdvanced', nextState);
     return nextState;
@@ -666,6 +674,17 @@ export class GameStateService {
       `).run();
     }
 
+    if (!columnExists(this.db, 'rider_daily_state', 'season_ttt_wins')) {
+      this.db.prepare(`
+        ALTER TABLE rider_daily_state
+        ADD COLUMN season_ttt_wins INTEGER NOT NULL DEFAULT 0
+      `).run();
+    }
+
+    // Einmaliger, korrekter Neuaufbau der Saisonsiege (inkl. kompaktierter
+    // Rennen) fuer bestehende Saves — danach wird nur noch inkrementell gezaehlt.
+    this.backfillSeasonWinsV2();
+
     this.db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_fatigue_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -687,6 +706,143 @@ export class GameStateService {
       CREATE INDEX IF NOT EXISTS idx_rider_fatigue_history_rider_date
       ON rider_fatigue_history(rider_id, date)
     `).run();
+  }
+
+  /**
+   * Einmaliger Neuaufbau von season_wins/season_ttt_wins fuer die laufende
+   * Saison. Noetig, weil die fruehere taegliche Voll-Aggregation nur die Live-
+   * Tabelle `results` zaehlte — Siege bereits abgeschlossener (kompaktierter)
+   * Rennen gingen dadurch verloren (Bug: Saisonsiege im Fahrer-Header blieben
+   * hinter den Karrieresiegen zurueck). Zaehlt Live-Ergebnisse UND die
+   * race_results_compact-Payloads einmalig zusammen; danach pflegt der
+   * StageResultCommitService die Zaehler inkrementell.
+   */
+  private backfillSeasonWinsV2(): void {
+    if (this.seasonWinsBackfillChecked) {
+      return;
+    }
+    this.seasonWinsBackfillChecked = true;
+
+    if (!tableExists(this.db, 'career_meta') || !tableExists(this.db, 'results') || !tableExists(this.db, 'stages') || !tableExists(this.db, 'races')) {
+      return;
+    }
+    const flag = this.db.prepare(`SELECT value FROM career_meta WHERE key = 'season_wins_backfill_v2'`).get() as { value: string } | undefined;
+    if (flag) {
+      return;
+    }
+
+    const stateRow = this.db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
+    if (!stateRow) {
+      return;
+    }
+    const season = stateRow.season;
+    const seasonPrefix = `${season}-%`;
+
+    const wins = new Map<number, number>();
+    const tttWins = new Map<number, number>();
+    const bump = (map: Map<number, number>, riderId: number): void => {
+      map.set(riderId, (map.get(riderId) ?? 0) + 1);
+    };
+
+    // 1) Live-Tabelle: Etappensiege (Einzel)
+    const liveStageWins = this.db.prepare(`
+      SELECT r.rider_id FROM results r
+      JOIN stages s ON s.id = r.stage_id
+      WHERE r.result_type_id = 1 AND r.rank = 1 AND r.rider_id IS NOT NULL AND s.date LIKE ?
+    `).all(seasonPrefix) as Array<{ rider_id: number }>;
+    for (const row of liveStageWins) bump(wins, row.rider_id);
+
+    // 2) Live-Tabelle: GC-Finalsiege
+    const liveGcWins = this.db.prepare(`
+      SELECT r.rider_id FROM results r
+      JOIN stages s ON s.id = r.stage_id
+      JOIN races ra ON ra.id = s.race_id
+      WHERE r.result_type_id = 2 AND r.rank = 1 AND r.rider_id IS NOT NULL
+        AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages AND s.date LIKE ?
+    `).all(seasonPrefix) as Array<{ rider_id: number }>;
+    for (const row of liveGcWins) bump(wins, row.rider_id);
+
+    // 3) Live-Tabelle: TTT-Siege (je gefinishtem Fahrer des Teams)
+    const liveTttWins = this.db.prepare(`
+      SELECT se.rider_id FROM results r
+      JOIN stages s ON s.id = r.stage_id
+      JOIN stage_entries se ON se.stage_id = r.stage_id AND se.team_id = r.team_id AND se.status = 'finished'
+      WHERE r.result_type_id = 1 AND r.rank = 1 AND r.rider_id IS NULL AND s.date LIKE ?
+    `).all(seasonPrefix) as Array<{ rider_id: number }>;
+    for (const row of liveTttWins) {
+      bump(wins, row.rider_id);
+      bump(tttWins, row.rider_id);
+    }
+
+    // 4) Kompaktierte Rennen der Saison
+    if (tableExists(this.db, 'race_results_compact')) {
+      const finalStageByRace = new Map<number, number>();
+      const finals = this.db.prepare(`
+        SELECT s.race_id AS race_id, s.id AS stage_id
+        FROM stages s JOIN races ra ON ra.id = s.race_id
+        WHERE ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages AND s.date LIKE ?
+      `).all(seasonPrefix) as Array<{ race_id: number; stage_id: number }>;
+      for (const row of finals) finalStageByRace.set(row.race_id, row.stage_id);
+
+      const entriesCompactByRace = new Map<number, any[]>();
+      if (tableExists(this.db, 'stage_entries_compact')) {
+        const entryRows = this.db.prepare(`SELECT race_id, payload FROM stage_entries_compact WHERE season = ?`).all(season) as Array<{ race_id: number; payload: string }>;
+        for (const row of entryRows) {
+          try { entriesCompactByRace.set(row.race_id, JSON.parse(row.payload)); } catch { /* korrupte Payload ueberspringen */ }
+        }
+      }
+
+      const compactRows = this.db.prepare(`SELECT race_id, payload FROM race_results_compact WHERE season = ?`).all(season) as Array<{ race_id: number; payload: string }>;
+      for (const row of compactRows) {
+        let groups: Record<string, any[]>;
+        try { groups = JSON.parse(row.payload); } catch { continue; }
+
+        // Etappensiege + TTT (type1: [stage_id, rider_id, team_id, rank, ...])
+        for (const res of groups['type1'] ?? []) {
+          if (res[3] !== 1) continue;
+          const riderId = res[1];
+          if (riderId != null) {
+            bump(wins, riderId);
+          } else {
+            const teamId = res[2];
+            const stageId = res[0];
+            // Finisher des Teams aus stage_entries_compact: [stage_id, team_id, rider_id, status, reason]
+            for (const entry of entriesCompactByRace.get(row.race_id) ?? []) {
+              if (entry[0] === stageId && entry[1] === teamId && entry[3] === 'finished' && entry[2] != null) {
+                bump(wins, entry[2]);
+                bump(tttWins, entry[2]);
+              }
+            }
+          }
+        }
+
+        // GC-Finalsieg (type2 rank 1 auf der letzten Etappe)
+        const finalStageId = finalStageByRace.get(row.race_id);
+        if (finalStageId != null) {
+          for (const res of groups['type2'] ?? []) {
+            if (res[3] === 1 && res[0] === finalStageId && res[1] != null) {
+              bump(wins, res[1]);
+            }
+          }
+        }
+      }
+    }
+
+    if (tableExists(this.db, 'rider_daily_state')) {
+      const resetStmt = this.db.prepare('UPDATE rider_daily_state SET season_wins = 0, season_ttt_wins = 0');
+      const setStmt = this.db.prepare('UPDATE rider_daily_state SET season_wins = ?, season_ttt_wins = ? WHERE rider_id = ?');
+      this.db.transaction(() => {
+        resetStmt.run();
+        for (const [riderId, count] of wins.entries()) {
+          setStmt.run(count, tttWins.get(riderId) ?? 0, riderId);
+        }
+        this.db.prepare(`
+          INSERT INTO career_meta (key, value) VALUES ('season_wins_backfill_v2', '1')
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run();
+      })();
+      console.log(`Saisonsiege neu aufgebaut (Backfill v2): ${wins.size} Fahrer mit Siegen in Saison ${season}.`);
+    }
   }
 
   private ensureRiderFormTables(): void {
@@ -806,40 +962,7 @@ export class GameStateService {
     }
 
     this.ensureRiderDailyStateRows(currentSeason);
-
-    if (this.isTable('rider_lieutenants')) {
-      this.db.prepare(`
-        UPDATE rider_daily_state
-        SET peak_dates_json = (
-          SELECT lds.peak_dates_json
-          FROM rider_lieutenants rl
-          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
-          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
-        )
-        WHERE EXISTS (
-          SELECT 1
-          FROM rider_lieutenants rl
-          JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
-          WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
-            AND lds.peak_dates_json IS NOT NULL AND lds.peak_dates_json != '[]'
-        )
-      `).run(currentSeason, currentSeason);
-
-      if (this.isTable('lieutenant_all_time_peaks')) {
-        this.db.prepare(`
-          INSERT INTO lieutenant_all_time_peaks (rider_id, max_overall_rating, leader_id, season)
-          SELECT rl.lieutenant_id, r.overall_rating, rl.leader_id, rl.season
-          FROM rider_lieutenants rl
-          JOIN riders r ON r.id = rl.lieutenant_id
-          WHERE rl.season = ?
-          ON CONFLICT(rider_id) DO UPDATE SET
-            leader_id = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.leader_id ELSE leader_id END,
-            season = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.season ELSE season END,
-            max_overall_rating = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.max_overall_rating ELSE max_overall_rating END
-        `).run(currentSeason);
-      }
-    }
-
+    this.syncLieutenantPeakState(currentSeason);
     this.syncRiderLoadState(currentDate, currentSeason);
 
     const rows = this.db.prepare(`
@@ -936,12 +1059,56 @@ export class GameStateService {
     }
   }
 
+  /**
+   * Kopiert die Formpeak-Daten der Kapitaene auf ihre Leutnants und pflegt die
+   * All-Time-Bestwerte der Leutnants. Wird sowohl beim Save-Sync (ensureState)
+   * als auch im Tageswechsel genutzt, damit advanceDay den kompletten Zustand
+   * herstellt und der Re-Sync danach entfallen kann.
+   */
+  private syncLieutenantPeakState(currentSeason: number): void {
+    if (!this.isTable('rider_lieutenants')) {
+      return;
+    }
+
+    this.db.prepare(`
+      UPDATE rider_daily_state
+      SET peak_dates_json = (
+        SELECT lds.peak_dates_json
+        FROM rider_lieutenants rl
+        JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+        WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+      )
+      WHERE EXISTS (
+        SELECT 1
+        FROM rider_lieutenants rl
+        JOIN rider_daily_state lds ON lds.rider_id = rl.leader_id
+        WHERE rl.lieutenant_id = rider_daily_state.rider_id AND rl.season = ?
+          AND lds.peak_dates_json IS NOT NULL AND lds.peak_dates_json != '[]'
+      )
+    `).run(currentSeason, currentSeason);
+
+    if (this.isTable('lieutenant_all_time_peaks')) {
+      this.db.prepare(`
+        INSERT INTO lieutenant_all_time_peaks (rider_id, max_overall_rating, leader_id, season)
+        SELECT rl.lieutenant_id, r.overall_rating, rl.leader_id, rl.season
+        FROM rider_lieutenants rl
+        JOIN riders r ON r.id = rl.lieutenant_id
+        WHERE rl.season = ?
+        ON CONFLICT(rider_id) DO UPDATE SET
+          leader_id = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.leader_id ELSE leader_id END,
+          season = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.season ELSE season END,
+          max_overall_rating = CASE WHEN excluded.max_overall_rating > max_overall_rating THEN excluded.max_overall_rating ELSE max_overall_rating END
+      `).run(currentSeason);
+    }
+  }
+
   private advanceRiderDailyStates(nextDate: string, nextSeason: number): void {
     if (!this.isTable('rider_daily_state')) {
       return;
     }
 
     this.ensureRiderDailyStateRows(nextSeason);
+    this.syncLieutenantPeakState(nextSeason);
     this.removeExpiredRaceFormEvents(nextDate);
     this.syncRiderLoadState(nextDate, nextSeason);
 
@@ -986,11 +1153,28 @@ export class GameStateService {
     const racingRiderIds = new Set(racingRidersRow.map((r: any) => r.rider_id));
 
     const yesterday = addDaysIso(nextDate, -1);
-    const racedYesterdayRow = this.db.prepare(`
-      SELECT se.rider_id, s.stage_score FROM all_stage_entries se
-      JOIN stages s ON s.id = se.stage_id
-      WHERE s.date = ? AND se.status IN ('finished', 'dnf')
-    `).all(yesterday) as Array<{ rider_id: number; stage_score: number }>;
+    // Performance: NICHT ueber die all_stage_entries-View gehen (sie entpackt bei
+    // jeder Query ALLE stage_entries_compact-Payloads per json_each, ~370ms).
+    // Stattdessen live-Tabelle + gezieltes Entpacken NUR der Rennen, die gestern
+    // eine Etappe hatten (idx_stages_date treibt die Suche, 0-3 Payloads).
+    const racedYesterdayRow = (tableExists(this.db, 'stage_entries_compact')
+      ? this.db.prepare(`
+          SELECT se.rider_id, s.stage_score FROM stage_entries se
+          JOIN stages s ON s.id = se.stage_id
+          WHERE s.date = ? AND se.status IN ('finished', 'dnf')
+          UNION ALL
+          SELECT CAST(j.value->>2 AS INTEGER) AS rider_id, s.stage_score
+          FROM stages s
+          JOIN stage_entries_compact c ON c.race_id = s.race_id, json_each(c.payload) j
+          WHERE s.date = ?
+            AND CAST(j.value->>0 AS INTEGER) = s.id
+            AND j.value->>3 IN ('finished', 'dnf')
+        `).all(yesterday, yesterday)
+      : this.db.prepare(`
+          SELECT se.rider_id, s.stage_score FROM stage_entries se
+          JOIN stages s ON s.id = se.stage_id
+          WHERE s.date = ? AND se.status IN ('finished', 'dnf')
+        `).all(yesterday)) as Array<{ rider_id: number; stage_score: number }>;
     const racedYesterdayRiderIds = new Set(racedYesterdayRow.map((r: any) => r.rider_id));
     const racedYesterdayMap = new Map<number, number>();
     for (const r of racedYesterdayRow) {
@@ -1344,52 +1528,12 @@ export class GameStateService {
       rolling_30d_race_days = 0
     `).run(currentSeason);
 
-    this.db.prepare(`
-      WITH individual_wins AS (
-        SELECT results.rider_id, COUNT(*) AS wins
-        FROM results
-        JOIN stages ON stages.id = results.stage_id
-        WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NOT NULL
-          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-        GROUP BY results.rider_id
-      ),
-      ttt_wins AS (
-        SELECT all_stage_entries.rider_id, COUNT(*) AS wins
-        FROM results
-        JOIN stages ON stages.id = results.stage_id
-        JOIN all_stage_entries ON all_stage_entries.stage_id = results.stage_id AND all_stage_entries.team_id = results.team_id
-        WHERE results.result_type_id = 1 AND results.rank = 1 AND results.rider_id IS NULL
-          AND all_stage_entries.status = 'finished'
-          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-        GROUP BY all_stage_entries.rider_id
-      ),
-      gc_wins AS (
-        SELECT results.rider_id, COUNT(*) AS wins
-        FROM results
-        JOIN stages ON stages.id = results.stage_id
-        JOIN races ON races.id = stages.race_id
-        WHERE results.result_type_id = 2 AND results.rank = 1 AND results.rider_id IS NOT NULL
-          AND races.is_stage_race = 1 AND stages.stage_number = races.number_of_stages
-          AND CAST(substr(stages.date, 1, 4) AS INTEGER) = @season
-        GROUP BY results.rider_id
-      ),
-      total_wins AS (
-        SELECT rider_id, SUM(wins) AS season_wins
-        FROM (
-          SELECT rider_id, wins FROM individual_wins
-          UNION ALL
-          SELECT rider_id, wins FROM ttt_wins
-          UNION ALL
-          SELECT rider_id, wins FROM gc_wins
-        )
-        GROUP BY rider_id
-      )
-      UPDATE rider_daily_state
-      SET season_wins = COALESCE((SELECT season_wins FROM total_wins WHERE total_wins.rider_id = rider_daily_state.rider_id), 0)
-      WHERE season = @season
-    `).run({
-      season: currentSeason,
-    });
+    // season_wins wird nicht mehr taeglich per Voll-Aggregation neu berechnet
+    // (die alte CTE joinete gegen die all_stage_entries-View und kostete ~370ms
+    // pro Aufruf — und verlor Siege bereits kompaktierter Rennen, weil sie nur
+    // die Live-Tabelle `results` zaehlte). Stattdessen wird season_wins beim
+    // Ergebnis-Commit inkrementell gepflegt (StageResultCommitService) und beim
+    // Laden alter Saves einmalig korrekt aufgefuellt (backfillSeasonWinsV2).
   }
 
 
@@ -1537,7 +1681,15 @@ export class GameStateService {
       return [];
     }
 
-    const rows = tableExists(this.db, 'all_results')
+    // Performance: kein LEFT JOIN auf die all_results-View (deren json_each-Zweig
+    // entpackt bei jeder Query alle race_results_compact-Payloads, ~70ms).
+    // Semantisch aequivalent: eine Etappe ist erledigt, wenn ein Tageswertungs-
+    // Ergebnis in der Live-Tabelle liegt ODER das Rennen bereits kompaktiert
+    // wurde (Kompaktierung passiert nur beim Rennabschluss, d.h. alle Etappen
+    // sind dann gefahren).
+    const hasResultsTable = tableExists(this.db, 'results');
+    const hasCompactTable = tableExists(this.db, 'race_results_compact');
+    const rows = hasResultsTable
       ? this.db.prepare(`
           SELECT
             stages.id AS stage_id,
@@ -1551,21 +1703,15 @@ export class GameStateService {
             races.is_stage_race AS is_stage_race
           FROM stages
           JOIN races ON races.id = stages.race_id
-          LEFT JOIN all_results stage_results
-            ON stage_results.stage_id = stages.id
-           AND stage_results.result_type_id = 1
           WHERE stages.date = ?
-          GROUP BY
-            stages.id,
-            stages.race_id,
-            races.name,
-            stages.stage_number,
-            stages.date,
-            stages.profile,
-            stages.start_elevation,
-            stages.details_csv_file,
-            races.is_stage_race
-          HAVING COUNT(stage_results.stage_id) = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM results r
+              WHERE r.stage_id = stages.id AND r.result_type_id = 1
+            )
+            ${hasCompactTable ? `AND NOT EXISTS (
+              SELECT 1 FROM race_results_compact c
+              WHERE c.race_id = stages.race_id
+            )` : ''}
           ORDER BY races.id ASC, stages.stage_number ASC
         `).all(currentDate) as PendingStageRow[]
       : this.db.prepare(`
