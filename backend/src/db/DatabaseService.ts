@@ -1614,7 +1614,7 @@ export class DatabaseService {
 
     // --- bunch_sprint_wins ---
     try {
-      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'bunch_sprint_backfill_v1'`).get() as { value: string } | undefined;
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'bunch_sprint_backfill_v2'`).get() as { value: string } | undefined;
       if (!flag && columnExists(db, 'rider_career_stats', 'bunch_sprint_wins') && tableExists(db, 'results_flat')) {
         const rows = db.prepare(`
           SELECT stage_id, rider_id, rank, time_seconds, is_breakaway
@@ -1630,9 +1630,11 @@ export class DatabaseService {
         const bunchByRider = new Map<number, number>();
         for (const arr of byStage.values()) {
           const winner = arr.find((r) => r.rank === 1);
-          if (!winner || winner.is_breakaway) continue;
+          if (!winner) continue;
+          // Tie-Break-Fenster (<= 1 s zum Sieger), mindestens 25 Fahrer.
+          // Terrain und Ausreisser-Status spielen keine Rolle.
           const group = arr.filter((r) => (r.time_seconds - winner.time_seconds) <= 1).length;
-          if (group > 25) {
+          if (group >= 25) {
             bunchByRider.set(winner.rider_id, (bunchByRider.get(winner.rider_id) ?? 0) + 1);
           }
         }
@@ -1642,7 +1644,7 @@ export class DatabaseService {
             upd.run(count, riderId);
           }
         })();
-        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('bunch_sprint_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('bunch_sprint_backfill_v2', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
       }
     } catch (e) {
       console.error('bunch_sprint-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);

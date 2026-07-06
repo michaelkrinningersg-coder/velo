@@ -1386,18 +1386,20 @@ export class StageResultCommitService {
         }
       })();
 
-      // Bunch-Sprint-Erkennung: War die erste Zielgruppe (Fahrer innerhalb von
-      // BUNCH_SPRINT_WINDOW_SECONDS zum Sieger) groesser als 25 und der Sieger
-      // kein Ausreisser, zaehlt der Sieg als Massensprint-Sieg.
+      // Bunch-Sprint-Erkennung: Wurde das Finish im Tie-Break-Zeitfenster
+      // zwischen mindestens 25 Fahrern entschieden, zaehlt der Sieg als
+      // Massensprint-Sieg. Terrain und Ausreisser-Status spielen keine Rolle —
+      // allein die Groesse der ersten Zielgruppe entscheidet.
       const BUNCH_SPRINT_WINDOW_SECONDS = 1;
+      const BUNCH_SPRINT_MIN_GROUP = 25;
       const bunchSprintWinnerId = (() => {
-        if (!winnerRow || winnerRow.riderId == null || isBreakawayWinner) return null;
+        if (!winnerRow || winnerRow.riderId == null) return null;
         const winnerTime = winnerRow.timeSeconds;
         if (winnerTime == null) return null;
         const groupSize = stageRows.filter((r: any) =>
           r.riderId != null && r.timeSeconds != null && (r.timeSeconds - winnerTime) <= BUNCH_SPRINT_WINDOW_SECONDS
         ).length;
-        return groupSize > 25 ? winnerRow.riderId : null;
+        return groupSize >= BUNCH_SPRINT_MIN_GROUP ? winnerRow.riderId : null;
       })();
 
       const updateFinishedStats = this.db.prepare(`
