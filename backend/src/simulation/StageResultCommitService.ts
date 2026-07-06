@@ -1000,6 +1000,13 @@ export class StageResultCommitService {
         }
       }
 
+      // Nachwuchswertung (U25-Gesamtwertung) persistieren — bisher wurde sie
+      // zwar berechnet (Trikot/Statistik), aber nie als Ergebnis abgelegt, daher
+      // fehlte das weisse Trikot in der Fahrer-Ergebnisliste. Wie die GC ueber
+      // alle Etappen geschrieben; die Endwertung liegt an der Schlussetappe.
+      for (const row of youthRows) {
+        this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.youth, row);
+      }
       for (const row of breakawayRows) {
         this.insertResultRow(insert, race.id, stage.id, RESULT_TYPES.breakaway, {
           rank: row.rank,

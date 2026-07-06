@@ -682,7 +682,11 @@ export class RiderRepository {
       // nach Terrain bucketen — sie lassen sich keinem Terrain klar zuordnen. Nur
       // Etappenergebnisse und Eintagesrennen fliessen in die Terrain-Auswertung ein
       // (siehe stageRows-Schleife oben). Das Format-Bucket bleibt unveraendert.
-      pointsByRaceFormat.stageRace += finalPoints;
+      // Nur die aktuelle Saison zaehlen — sonst akkumulieren die Format-Summen
+      // ueber alle Saisons (Bug: 1825 statt 560 Punkte).
+      if (row.season === currentSeason) {
+        pointsByRaceFormat.stageRace += finalPoints;
+      }
     }
 
     const rowTypeOrder: Record<RiderStatsRowType, number> = {

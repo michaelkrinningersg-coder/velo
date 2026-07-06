@@ -2348,8 +2348,12 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   if (state.riderStatsTopResultsFilterProfile) {
     filteredRows = filteredRows.filter(r => r.profile === state.riderStatsTopResultsFilterProfile);
   }
-  // Top-Results zeigt nur punktebringende Ergebnisse (Design-Vorgabe).
-  filteredRows = filteredRows.filter(r => (r.seasonPoints ?? 0) > 0);
+  // Top-Results zeigt nur punktebringende Ergebnisse (Design-Vorgabe). Ausnahme:
+  // Die Ausreisserwertung vergibt keine Meisterschaftspunkte — ihre Podestplaetze
+  // (inkl. Sieg) sollen dennoch als Wertungserfolg erscheinen.
+  filteredRows = filteredRows.filter(r =>
+    (r.seasonPoints ?? 0) > 0
+    || (r.rowType === 'breakaway_final' && r.resultRank != null && r.resultRank <= 3));
 
   filteredRows.sort((a, b) => {
     if (b.seasonPoints !== a.seasonPoints) {
@@ -2722,6 +2726,30 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
     { yellow: 0, green: 0, mountain: 0, youth: 0, breakaway: 0 }
   );
 
+  // Gewonnene Wertungstrikots (Endsiege der jeweiligen Wertung), aggregiert.
+  const jerseyWins = Object.values(stats.categories || {}).reduce(
+    (acc, c: any) => ({
+      yellow: acc.yellow + (c.gcWins || 0),
+      green: acc.green + (c.pointsWins || 0),
+      mountain: acc.mountain + (c.mountainWins || 0),
+      youth: acc.youth + (c.youthWins || 0),
+      breakaway: acc.breakaway + (c.breakawayWins || 0),
+    }),
+    { yellow: 0, green: 0, mountain: 0, youth: 0, breakaway: 0 }
+  );
+
+  // Platzierungen aggregiert ueber ALLE Kategorien und alle Wertungsarten
+  // (GC + Etappenergebnisse + Eintagesrennen).
+  const placeTotals = Object.values(stats.categories || {}).reduce(
+    (acc, c: any) => ({
+      p1: acc.p1 + (c.gcWins || 0) + (c.stageWins || 0) + (c.oneDayWins || 0),
+      p2: acc.p2 + (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0),
+      p3: acc.p3 + (c.gcThird || 0) + (c.stageThird || 0) + (c.oneDayThird || 0),
+      top10: acc.top10 + (c.gcTopTen || 0) + (c.stageTopTen || 0) + (c.oneDayTopTen || 0),
+    }),
+    { p1: 0, p2: 0, p3: 0, top10: 0 }
+  );
+
   return `
     <section class="rider-stats-career" style="margin-top: 1rem;">
       <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:14px;">Karrierestatistiken</div>
@@ -2765,6 +2793,19 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           { label: 'Weißes Trikot', value: String(jerseyTotals.youth), sub: 'Tage', color: '#e2e8f0' },
           { label: 'Lila Trikot', value: String(jerseyTotals.breakaway), sub: 'Tage', color: '#a855f7' },
         ])}
+        ${panel('Gewonnene Wertungstrikots', [
+          { label: 'Gelbes Trikot', value: String(jerseyWins.yellow), sub: 'Siege', color: '#fbbf24' },
+          { label: 'Grünes Trikot', value: String(jerseyWins.green), sub: 'Siege', color: '#4ade80' },
+          { label: 'Bergtrikot', value: String(jerseyWins.mountain), sub: 'Siege', color: '#f87171' },
+          { label: 'Weißes Trikot', value: String(jerseyWins.youth), sub: 'Siege', color: '#e2e8f0' },
+          { label: 'Lila Trikot', value: String(jerseyWins.breakaway), sub: 'Siege', color: '#a855f7' },
+        ])}
+        ${panel('Platzierungen · alle Wertungen', [
+          { label: 'Platz 1', value: String(placeTotals.p1), color: '#ffd700' },
+          { label: 'Platz 2', value: String(placeTotals.p2), color: '#cbd5e1' },
+          { label: 'Platz 3', value: String(placeTotals.p3), color: '#d08b5b' },
+          { label: 'Top 10', value: String(placeTotals.top10), color: '#22d3ee' },
+        ])}
       </div>
 
       <!-- Categories details -->
@@ -2774,16 +2815,28 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         ${categoriesToShow.map(cat => {
           const catData: any = stats.categories[cat.key] || {};
           const num = (k: string): number => catData[k] || 0;
-          const placeRow = (title: string, w: number, s: number, t: number, x: number): string => `
+          const placeRow = (title: string, w: number, s: number, t: number, x: number, extra: string = ''): string => `
             <div style="${MONOF};font-size:9px;letter-spacing:.08em;color:#6a7a95;margin:6px 0 4px;">${title}</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="1. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#ffd700;"></span>${w}</span>
               <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="2. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#cbd5e1;"></span>${s}</span>
               <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#e2e8f0;" title="3. Plätze"><span style="width:11px;height:11px;border-radius:3px;background:#d08b5b;"></span>${t}</span>
               <span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:#67e8f9;" title="Top 10 (Plätze 4–10)"><span style="width:11px;height:11px;border-radius:3px;background:#22d3ee;"></span>${x}</span>
+              ${extra}
             </div>`;
+          // Gewonnene Wertungstrikots (rot=Berg, grün=Punkte, weiß=Nachwuchs,
+          // lila=Ausreißer) in der GC-Zeile eines Etappenrennens, direkt neben
+          // den GC-Platzierungen.
+          const jerseyWinBadge = (color: string, textColor: string, count: number, title: string): string =>
+            `<span style="display:inline-flex;align-items:center;gap:4px;${MONOF};font-size:11px;font-weight:800;color:${textColor};" title="${esc(title)}"><span style="width:11px;height:11px;border-radius:3px;background:${color};"></span>${count}</span>`;
+          const gcJerseyWins = `
+            <span style="width:1px;height:14px;background:#233251;margin:0 2px;"></span>
+            ${jerseyWinBadge('#f87171', '#fca5a5', num('mountainWins'), 'Bergtrikot gewonnen')}
+            ${jerseyWinBadge('#4ade80', '#86efac', num('pointsWins'), 'Grünes Trikot gewonnen')}
+            ${jerseyWinBadge('#e2e8f0', '#e2e8f0', num('youthWins'), 'Weißes Trikot gewonnen')}
+            ${jerseyWinBadge('#a855f7', '#c4b5fd', num('breakawayWins'), 'Ausreißer-Trikot gewonnen')}`;
           const sections = cat.isStage
-            ? placeRow('GC', num('gcWins'), num('gcSecond'), num('gcThird'), num('gcTopTen')) + placeRow('Etappen', num('stageWins'), num('stageSecond'), num('stageThird'), num('stageTopTen'))
+            ? placeRow('GC', num('gcWins'), num('gcSecond'), num('gcThird'), num('gcTopTen'), gcJerseyWins) + placeRow('Etappen', num('stageWins'), num('stageSecond'), num('stageThird'), num('stageTopTen'))
             : placeRow('One-Day', num('oneDayWins'), num('oneDaySecond'), num('oneDayThird'), num('oneDayTopTen'));
           const jerseyDef: Array<[string, string, number]> = [
             ['#fbbf24', 'Gelbes Trikot (GC-Führung) · Tage', num('leaderJerseys')],

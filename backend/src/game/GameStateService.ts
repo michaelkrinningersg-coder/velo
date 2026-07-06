@@ -180,6 +180,7 @@ export class GameStateService {
   public ensureState(): GameState {
     this.ensureSchemaOnce();
     const state = this.loadState();
+    this.repairMissingRaceProgramRaces();
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
@@ -561,6 +562,68 @@ export class GameStateService {
         insertProgramRace.run(pr.program_id, newRaceId, pr.allowed_program_group_ids ?? null);
       }
     }
+  }
+
+  /**
+   * Selbstheilende Reparatur: Aeltere Saves haben den Saisonwechsel unter Code
+   * durchlaufen, der `race_program_races` beim Kalender-Duplizieren noch nicht
+   * mitkopiert hat. Betroffene Saisons haben dann Rennen, aber keinerlei
+   * Programm-Verknuepfungen — Folge: im Programm-Tab ist jeder Fahrer "nicht
+   * dabei" und es gibt keine Form-Peaks/Grenzen (die aus den Programmfenstern
+   * abgeleitet werden). Fehlt fuer eine Saison JEDE Verknuepfung, werden sie
+   * aus einer Vorlagensaison uebernommen (Rennen per Name+Kategorie gematcht;
+   * duplizierte Rennen behalten Name und Kategorie). Der Check ist eine
+   * einzelne guenstige Aggregat-Query; ohne Schaden ist der Aufwand minimal.
+   */
+  private repairMissingRaceProgramRaces(): void {
+    if (!tableExists(this.db, 'races') || !tableExists(this.db, 'race_program_races')) {
+      return;
+    }
+
+    const perSeason = this.db.prepare(`
+      SELECT substr(r.start_date, 1, 4) AS yr,
+             COUNT(DISTINCT r.id) AS race_count,
+             COUNT(rpr.id) AS rpr_count
+      FROM races r
+      LEFT JOIN race_program_races rpr ON rpr.race_id = r.id
+      GROUP BY yr
+    `).all() as Array<{ yr: string; race_count: number; rpr_count: number }>;
+
+    const withLinks = perSeason.filter((s) => s.rpr_count > 0);
+    // Nur ganz fehlende Saisons reparieren (rpr_count === 0) — partielle
+    // Zustaende koennten gewollt sein und werden nicht angetastet.
+    const broken = perSeason.filter((s) => s.race_count > 0 && s.rpr_count === 0);
+    if (broken.length === 0 || withLinks.length === 0) {
+      return;
+    }
+
+    const copyStmt = this.db.prepare(`
+      INSERT OR IGNORE INTO race_program_races (program_id, race_id, allowed_program_group_ids)
+      SELECT src_rpr.program_id, dst.id, src_rpr.allowed_program_group_ids
+      FROM races dst
+      JOIN races src
+        ON src.name = dst.name
+       AND src.category_id = dst.category_id
+       AND substr(src.start_date, 1, 4) = ?
+      JOIN race_program_races src_rpr ON src_rpr.race_id = src.id
+      WHERE substr(dst.start_date, 1, 4) = ?
+    `);
+
+    this.db.transaction(() => {
+      for (const target of broken) {
+        // Vorlage: naechstgelegene Saison mit Links (bevorzugt frueher).
+        const template = withLinks
+          .slice()
+          .sort((a, b) => Math.abs(Number(a.yr) - Number(target.yr)) - Math.abs(Number(b.yr) - Number(target.yr))
+            || Number(a.yr) - Number(b.yr))[0];
+        const res = copyStmt.run(template.yr, target.yr);
+        console.log(`race_program_races repariert: Saison ${target.yr} aus Vorlage ${template.yr} — ${res.changes} Verknuepfungen erzeugt.`);
+      }
+    })();
+
+    // Peak-Fenster-Cache invalidieren, damit die frisch verknuepften Programme
+    // sofort greifen.
+    this.programWindowsBySeason.clear();
   }
 
   public refreshRiderLoadState(currentDate: string, currentSeason: number): void {

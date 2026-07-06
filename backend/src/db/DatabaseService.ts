@@ -1512,6 +1512,56 @@ export class DatabaseService {
     } catch (e) {
       console.error('results_flat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
+
+    this.ensureYouthResultsFlatBackfill(db);
+  }
+
+  /**
+   * Die Nachwuchswertung (Ergebnistyp 5) wurde historisch nie als Ergebnis
+   * abgelegt (nur Trikot/Statistik). Damit das weisse Trikot auch fuer bereits
+   * gefahrene Etappenrennen in der Fahrer-Ergebnisliste erscheint, wird die
+   * U25-Schlusswertung einmalig aus den vorhandenen GC-Ergebnissen (Typ 2) der
+   * Schlussetappen rekonstruiert (Fahrer <= 25 im Rennjahr, neu durchnummeriert)
+   * und in results_flat eingefuegt. Neue Rennen schreiben Typ 5 direkt beim
+   * Commit. Nur Schlussetappen, da nur diese in der Ergebnisliste ausgewertet
+   * werden.
+   */
+  private ensureYouthResultsFlatBackfill(db: Database.Database): void {
+    try {
+      if (!tableExists(db, 'results_flat') || !tableExists(db, 'career_meta')
+        || !tableExists(db, 'riders') || !tableExists(db, 'stages') || !tableExists(db, 'races')) {
+        return;
+      }
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'youth_results_flat_backfill_v1'`).get() as { value: string } | undefined;
+      if (flag) {
+        return;
+      }
+      db.prepare(`
+        INSERT INTO results_flat (race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points)
+        SELECT gc.race_id, gc.stage_id, gc.rider_id, gc.team_id, 5 AS result_type_id,
+               ROW_NUMBER() OVER (PARTITION BY gc.stage_id ORDER BY gc.rank) AS rank,
+               gc.time_seconds, NULL
+        FROM results_flat gc
+        JOIN stages s ON s.id = gc.stage_id
+        JOIN races ra ON ra.id = s.race_id
+        JOIN riders ri ON ri.id = gc.rider_id
+        WHERE gc.result_type_id = 2
+          AND gc.rider_id IS NOT NULL
+          AND ra.is_stage_race = 1
+          AND s.stage_number = ra.number_of_stages
+          AND (CAST(substr(s.date, 1, 4) AS INTEGER) - ri.birth_year) <= 25
+          AND NOT EXISTS (
+            SELECT 1 FROM results_flat y
+            WHERE y.stage_id = gc.stage_id AND y.result_type_id = 5
+          )
+      `).run();
+      db.prepare(`
+        INSERT INTO career_meta (key, value) VALUES ('youth_results_flat_backfill_v1', '1')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run();
+    } catch (e) {
+      console.error('Youth-results_flat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
   }
 
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
