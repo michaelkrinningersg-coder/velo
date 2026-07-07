@@ -2020,6 +2020,7 @@ export class DatabaseService {
       ['jersey_streak_current', 'INTEGER NOT NULL DEFAULT 0'], // laufende Trikot-Serie
       ['jersey_streak_best', 'INTEGER NOT NULL DEFAULT 0'],  // laengste Trikot-Serie (Jersey Guardian)
       ['photo_finish_wins', 'INTEGER NOT NULL DEFAULT 0'],   // Siege per Zielfoto (Photo Finish King)
+      ['so_close', 'INTEGER NOT NULL DEFAULT 0'],            // Zweiter per Zielfoto (So Close)
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

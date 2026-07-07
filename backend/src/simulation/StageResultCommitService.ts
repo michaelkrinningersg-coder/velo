@@ -1915,6 +1915,11 @@ export class StageResultCommitService {
             && (second.timeSeconds - winnerRow.timeSeconds) <= TIME_TIE_THRESHOLD_SECONDS
             && Math.abs(wpfs - spfs) < 0.05) {
             this.db.prepare(`UPDATE rider_career_stats SET photo_finish_wins = photo_finish_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+            // So Close: der Zweite verliert das Zielfoto.
+            if (columnExists(this.db, 'rider_career_stats', 'so_close')) {
+              insertCareerStatsRow.run(second.riderId);
+              this.db.prepare(`UPDATE rider_career_stats SET so_close = so_close + 1 WHERE rider_id = ?`).run(second.riderId);
+            }
           }
         }
         // Podium Lockout: Top-3 alle aus demselben Team.

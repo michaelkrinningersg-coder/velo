@@ -1085,6 +1085,15 @@ export interface RiderHallOfFameStats {
   podiumLockout: number;        // Teil eines Team-Dreifachsiegs (Podium Lockout)
   jerseyStreakBest: number;     // laengste Trikot-Serie in Folge (Jersey Guardian)
   photoFinishWins: number;      // Siege per Zielfoto (Photo Finish King)
+  soClose: number;              // Zweiter per Zielfoto (So Close)
+
+  // Badge-Kennzahlen Welle 10 (rein abgeleitet).
+  pointsPerfectionist: number;  // GT-Punktewertung ohne Etappensieg (Points Perfectionist)
+  thirdWeekWonder: number;      // >= 2 Etappensiege in der letzten GT-Woche (Third Week Wonder)
+  monumentSweep: boolean;       // alle 5 Monumente in einer Saison (Monument Sweep)
+  babyFaceWins: number;         // Siege mit unter 20 (Baby-Faced Assassin)
+  workhorseDays: number;        // Renntage als Edelhelfer/Starke Helfer (The Workhorse)
+  longBreakawayWins: number;    // Siege aus Ausreissern > 150 km (Long Breakaway King)
 
   // Badge-Kennzahlen Welle 8 (rein abgeleitet).
   prologueWins: number;         // Siege auf ITT-Etappe 1 < 10 km (Prologue Prince)

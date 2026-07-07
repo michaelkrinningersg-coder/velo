@@ -1815,6 +1815,45 @@ export class RiderRepository {
     return out;
   }
 
+  /** Badge-Kennzahlen Welle 10 — rein abgeleitet. */
+  private getBadgeWave10Stats(riderId: number): {
+    pointsPerfectionist: number; thirdWeekWonder: number; monumentSweep: boolean;
+    babyFaceWins: number; workhorseDays: number; longBreakawayWins: number;
+  } {
+    const out = { pointsPerfectionist: 0, thirdWeekWonder: 0, monumentSweep: false, babyFaceWins: 0, workhorseDays: 0, longBreakawayWins: 0 };
+    const num = (sql: string, p: any[] = [riderId]): number => {
+      try { return (this.db.prepare(sql).get(...p) as { c: number } | undefined)?.c ?? 0; } catch { return 0; }
+    };
+    out.workhorseDays = num(`SELECT COALESCE(SUM(rss.race_days),0) AS c FROM rider_season_roles rsr JOIN rider_season_stats rss ON rss.rider_id=rsr.rider_id AND rss.season=rsr.season WHERE rsr.rider_id=? AND rsr.role_id IN (3,4)`);
+    if (!tableExists(this.db, 'results_flat')) return out;
+    out.longBreakawayWins = num(`SELECT COUNT(*) AS c FROM results_flat WHERE rider_id=? AND rank=1 AND result_type_id=1 AND is_breakaway=1 AND breakaway_kms > 150`);
+    out.babyFaceWins = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN riders r ON r.id=rf.rider_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND (CAST(substr(s.date,1,4) AS INTEGER) - r.birth_year) < 20
+        AND (rf.result_type_id=1 OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`);
+    // Points Perfectionist: GT-Punktewertung ohne Etappensieg im selben Rennen.
+    out.pointsPerfectionist = num(`SELECT COUNT(*) AS c FROM (
+      SELECT s.race_id FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=3 AND s.stage_number=ra.number_of_stages
+        AND rc.name IN ('World Tour - Tour de France','World Tour - Grand Tour')
+        AND NOT EXISTS (SELECT 1 FROM results_flat rf2 JOIN stages s2 ON s2.id=rf2.stage_id WHERE rf2.rider_id=rf.rider_id AND rf2.rank=1 AND rf2.result_type_id=1 AND s2.race_id=s.race_id))`);
+    // Third Week Wonder: >= 2 Etappensiege in den letzten 7 Etappen einer GT.
+    out.thirdWeekWonder = num(`SELECT COUNT(*) AS c FROM (
+      SELECT s.race_id FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=1 AND s.stage_number >= ra.number_of_stages - 6
+        AND rc.name IN ('World Tour - Tour de France','World Tour - Grand Tour')
+      GROUP BY s.race_id HAVING COUNT(*) >= 2)`);
+    // Monument Sweep: alle 5 Monumente in EINER Saison.
+    try {
+      const rows = this.db.prepare(`SELECT CAST(substr(s.date,1,4) AS INTEGER) AS yr, ra.name AS n FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=1 AND ra.is_stage_race=0
+          AND ra.name IN ('Milano-Sanremo','Ronde van Vlaanderen ME','Paris-Roubaix Hauts-de-France','Liège-Bastogne-Liège','Il Lombardia')`).all(riderId) as Array<{ yr: number; n: string }>;
+      const byYear = new Map<number, Set<string>>();
+      for (const r of rows) { let s = byYear.get(r.yr); if (!s) { s = new Set(); byYear.set(r.yr, s); } s.add(r.n); }
+      for (const s of byYear.values()) if (s.size >= 5) { out.monumentSweep = true; break; }
+    } catch { /* */ }
+    return out;
+  }
+
   /** Badge-Kennzahlen Welle 6 (Saison-Muster) — rein abgeleitet. */
   private getBadgeWave6Stats(riderId: number): {
     mrReliableSeasons: number; instantImpact: boolean; outOfDarkWins: number; hotStreakOpenerSeasons: number;
@@ -1871,6 +1910,7 @@ export class RiderRepository {
     teamEffortPodiums: number; oneManTeam: number; gcBySeconds: number; bitterEndDnf: number;
     winStreakBest: number; peakPerformerWins: number; yoyoRaces: number;
     escapeToVictory: number; podiumLockout: number; jerseyStreakBest: number; photoFinishWins: number;
+    soClose: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
@@ -1879,7 +1919,7 @@ export class RiderRepository {
       lanterneRougeStage: 0, lanterneRougeGt: 0, lanterneRougeSr: 0, timeCutFinishes: 0,
       teamEffortPodiums: 0, oneManTeam: 0, gcBySeconds: 0, bitterEndDnf: 0, winStreakBest: 0,
       peakPerformerWins: 0, yoyoRaces: 0,
-      escapeToVictory: 0, podiumLockout: 0, jerseyStreakBest: 0, photoFinishWins: 0,
+      escapeToVictory: 0, podiumLockout: 0, jerseyStreakBest: 0, photoFinishWins: 0, soClose: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
@@ -1896,7 +1936,7 @@ export class RiderRepository {
          ${hasWave3 ? ', lanterne_rouge_stage, lanterne_rouge_gt, lanterne_rouge_sr, time_cut_finishes, team_effort_podiums, one_man_team, gc_by_seconds, bitter_end_dnf' : ''}
          ${hasWave4 ? ', win_streak_best' : ''}
          ${hasWave7 ? ', peak_performer_wins, yoyo_races' : ''}
-         ${hasWave9 ? ', escape_to_victory, podium_lockout, jersey_streak_best, photo_finish_wins' : ''}
+         ${hasWave9 ? ', escape_to_victory, podium_lockout, jersey_streak_best, photo_finish_wins, so_close' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1925,6 +1965,7 @@ export class RiderRepository {
         out.podiumLockout = c.podium_lockout ?? 0;
         out.jerseyStreakBest = c.jersey_streak_best ?? 0;
         out.photoFinishWins = c.photo_finish_wins ?? 0;
+        out.soClose = c.so_close ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
@@ -2055,6 +2096,7 @@ export class RiderRepository {
     const wave5 = this.getBadgeWave5Stats(riderId);
     const wave6 = this.getBadgeWave6Stats(riderId);
     const wave8 = this.getBadgeWave8Stats(riderId);
+    const wave10 = this.getBadgeWave10Stats(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -2067,6 +2109,7 @@ export class RiderRepository {
       ...wave5,
       ...wave6,
       ...wave8,
+      ...wave10,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,

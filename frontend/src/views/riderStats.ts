@@ -2873,6 +2873,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const podiumLockout = hof.podiumLockout ?? 0;
   const jerseyStreakBest = hof.jerseyStreakBest ?? 0;
   const photoFinishWins = hof.photoFinishWins ?? 0;
+  const soClose = hof.soClose ?? 0;
+  // Welle 10 (rein abgeleitet).
+  const pointsPerfectionist = hof.pointsPerfectionist ?? 0;
+  const thirdWeekWonder = hof.thirdWeekWonder ?? 0;
+  const monumentSweep = hof.monumentSweep === true;
+  const babyFaceWins = hof.babyFaceWins ?? 0;
+  const workhorseDays = hof.workhorseDays ?? 0;
+  const longBreakawayWins = hof.longBreakawayWins ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -4028,6 +4036,54 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${photoFinishWins}× Sieg per Zielfoto (Fotofinish-Abstand unter 0,05) (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Sieg per Zielfoto',
     },
+    {
+      key: 'soClose', name: 'So Close', icon: HOF_ICON_PODIUM, description: 'Zweiter per Zielfoto',
+      tier: resolveThresholdTier(soClose, [1, 3, 5, 8, 12]),
+      detail: soClose > 0 ? `${soClose}×` : '',
+      hover: `${soClose}× Zweiter per Zielfoto — hauchdünn geschlagen (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1× Zweiter per Zielfoto',
+    },
+
+    // --- Badges Welle 10 (rein abgeleitet) ---
+    {
+      key: 'pointsPerfectionist', name: 'Points Perfectionist', icon: HOF_ICON_JERSEY, description: 'GT-Punkte ohne Etappensieg',
+      tier: resolveThresholdTier(pointsPerfectionist, [1, 2, 3, 4, 5]),
+      detail: pointsPerfectionist > 0 ? `${pointsPerfectionist}×` : '',
+      hover: `${pointsPerfectionist}× Punktewertung einer Grand Tour gewonnen — ganz ohne Etappensieg (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× GT-Punktewertung ohne Etappensieg',
+    },
+    {
+      key: 'thirdWeekWonder', name: 'Third Week Wonder', icon: HOF_ICON_MOUNTAIN, description: 'Siege in der GT-Schlusswoche',
+      tier: resolveThresholdTier(thirdWeekWonder, [1, 2, 3, 4, 5]),
+      detail: thirdWeekWonder > 0 ? `${thirdWeekWonder}×` : '',
+      hover: `${thirdWeekWonder}× mindestens 2 Etappensiege in der letzten Woche einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 GT mit 2+ Siegen in der Schlusswoche',
+    },
+    singleBadge('monumentSweep', 'Monument Sweep', HOF_ICON_OLIVE, 'Alle 5 Monumente in einer Saison',
+      monumentSweep, HOF_STYLE_GOLD,
+      monumentSweep ? 'Alle fünf Monumente in einer einzigen Saison gewonnen.' : 'Noch nicht alle fünf Monumente in einer Saison gewonnen.',
+      'Alle 5 Monumente in einer Saison', 'Legendär'),
+    {
+      key: 'babyFace', name: 'Baby-Faced Assassin', icon: HOF_ICON_STAR, description: 'Siege mit unter 20',
+      tier: resolveThresholdTier(babyFaceWins, [1, 3, 5, 8, 12]),
+      detail: babyFaceWins > 0 ? `${babyFaceWins} Siege` : '',
+      hover: `${babyFaceWins} Siege mit unter 20 Jahren (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Sieg mit unter 20',
+    },
+    {
+      key: 'workhorse', name: 'The Workhorse', icon: HOF_ICON_WRENCH, description: 'Renntage als Helfer',
+      tier: resolveThresholdTier(workhorseDays, [100, 200, 300, 400, 500]),
+      detail: workhorseDays > 0 ? `${workhorseDays.toLocaleString('de-DE')} Renntage` : '',
+      hover: `${workhorseDays.toLocaleString('de-DE')} Renntage als Edelhelfer / Starker Helfer (Gold 500 · Silber 400 · Bronze 300 · Cyan 200 · Lila 100)`,
+      requirement: 'Ab 100 Renntagen als Helfer',
+    },
+    {
+      key: 'longBreakaway', name: 'Long Breakaway King', icon: HOF_ICON_ROUTE, description: 'Siege aus langen Ausreißern',
+      tier: resolveThresholdTier(longBreakawayWins, [1, 2, 3, 5, 8]),
+      detail: longBreakawayWins > 0 ? `${longBreakawayWins}×` : '',
+      hover: `${longBreakawayWins} Siege aus einem Ausreißer über 150 km (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Sieg aus einem 150-km-Ausreißer',
+    },
   ];
 }
 
@@ -4068,7 +4124,8 @@ const HOF_GROUPS: string[][] = [
   ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
-   'cleanSweep', 'cleanSweepPlus', 'instantImpact', 'autumnKing', 'theProdigy', 'theUndertaker', 'greenGrandSlam'],
+   'cleanSweep', 'cleanSweepPlus', 'instantImpact', 'autumnKing', 'theProdigy', 'theUndertaker', 'greenGrandSlam',
+   'pointsPerfectionist', 'thirdWeekWonder', 'monumentSweep', 'babyFace'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
@@ -4078,9 +4135,9 @@ const HOF_GROUPS: string[][] = [
   ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
    'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit', 'prologuePrince', 'photoFinishKing'],
   // 5. Ausreißer & Angriff
-  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo', 'escapeToVictory'],
+  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo', 'escapeToVictory', 'longBreakaway'],
   // 5b. Helfer & Team
-  ['waterCarrier', 'superDomestique', 'loyalLieutenant', 'packesel', 'kingmaker', 'theFranchise', 'bandOfBrothers'],
+  ['waterCarrier', 'superDomestique', 'loyalLieutenant', 'packesel', 'kingmaker', 'theFranchise', 'bandOfBrothers', 'workhorse'],
   // 6. Geografie
   ['worldCitizen', 'globetrotter', 'travelKing', 'nationExpress', 'winEurope', 'winAsia', 'winOceania', 'winNorthAmerica',
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
@@ -4094,7 +4151,7 @@ const HOF_GROUPS: string[][] = [
   ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine', 'lastDance'],
   // 10. Pech & Widrigkeiten
   ['comebackKing', 'underTheWeather', 'hardLuck', 'pechvogel', 'sturzpilot', 'restlessLegs', 'gremlin', 'theSlump',
-   'timeCutSpecialist', 'notBitterEnd'],
+   'timeCutSpecialist', 'notBitterEnd', 'soClose'],
   // 11. Kuriositäten (geringste Wichtigkeit)
   ['werewolf', 'ghost', 'theCat', 'groundhogDay', 'nightShift', 'wardrobeMalfunction',
    'lanterneRouge', 'redLanternLegend', 'broomWagonRegular', 'hottestPick'],
