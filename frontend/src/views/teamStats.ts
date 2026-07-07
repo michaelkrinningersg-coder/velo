@@ -15,7 +15,7 @@ import {
   FLAG_CODE_BY_CODE3,
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
-import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
+import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization, TeamChampionTitle } from '../../../shared/types';
 import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn, resolveRiderStatsFinalTypeClassName, getRiderStatsRowTypeLabel, renderFilterButton } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -331,6 +331,7 @@ export function renderTeamStatsTabs(): string {
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="career" aria-selected="${state.teamStatsTab === 'career' ? 'true' : 'false'}">Erfolgsbilanz</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="contracts" aria-selected="${state.teamStatsTab === 'contracts' ? 'true' : 'false'}">Kader & Verträge</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'transfers' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="transfers" aria-selected="${state.teamStatsTab === 'transfers' ? 'true' : 'false'}">Transfers</button>
+      <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'champions' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="champions" aria-selected="${state.teamStatsTab === 'champions' ? 'true' : 'false'}">Meister</button>
     </div>`;
 }
 
@@ -1148,6 +1149,91 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
   `;
 }
 
+// Meister-Tab: WM/EM/Nationale Meistertitel der aktuellen Teamfahrer, je Gruppe
+// getrennt nach Strasse und Zeitfahren.
+export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
+  const champions = payload.champions ?? [];
+
+  const renderChampionRow = (title: TeamChampionTitle): string => {
+    const badge = title.type === 'WM'
+      ? '<span title="Weltmeister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>'
+      : title.type === 'EM'
+      ? '<span title="Europameister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>'
+      : '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>';
+    const flag = title.riderCountryCode ? renderFlag(title.riderCountryCode) : '';
+    const nameHtml = renderRiderNameLink(title.riderName, { riderId: title.riderId, teamId: payload.teamId, strong: true });
+    const context = title.type === 'NAT' && title.countryName ? ` · ${esc(title.countryName)}` : '';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid #14203a;">
+        ${badge}
+        <span style="flex:0 0 auto;">${flag}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:#e2e8f0;">${nameHtml}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;flex:0 0 auto;">Saison ${title.season}${context}</span>
+      </div>`;
+  };
+
+  const disciplines: Array<{ key: 'ROAD' | 'ITT'; label: string }> = [
+    { key: 'ROAD', label: 'Straßenrennen' },
+    { key: 'ITT', label: 'Zeitfahren' },
+  ];
+
+  const renderDisciplineColumn = (
+    type: 'WM' | 'EM' | 'NAT',
+    discipline: 'ROAD' | 'ITT',
+    label: string,
+  ): string => {
+    const rows = champions.filter((c) => c.type === type && c.discipline === discipline);
+    const body = rows.length > 0
+      ? rows.map(renderChampionRow).join('')
+      : '<div style="padding:12px;color:#6a7a95;font-size:12px;">Keine Titel.</div>';
+    return `
+      <div style="border-radius:12px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #1c2b47;">
+          <span style="font-size:12px;font-weight:800;color:#e2e8f0;">${esc(label)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5f6f8a;">${rows.length}</span>
+        </div>
+        ${body}
+      </div>`;
+  };
+
+  const groups: Array<{ type: 'WM' | 'EM' | 'NAT'; title: string; accent: string }> = [
+    { type: 'WM', title: 'Weltmeister', accent: 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)' },
+    { type: 'EM', title: 'Europameister', accent: '#3b82f6' },
+    { type: 'NAT', title: 'Nationale Meister', accent: '#fbbf24' },
+  ];
+
+  const totalTitles = champions.length;
+
+  const groupsHtml = groups.map((group) => {
+    const count = champions.filter((c) => c.type === group.type).length;
+    return `
+      <section style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);overflow:hidden;">
+        <div style="height:4px;background:${group.accent};"></div>
+        <div style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;font-size:15px;font-weight:800;color:#f1f5f9;">${group.title}</h3>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;">${count} ${count === 1 ? 'Titel' : 'Titel'}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            ${disciplines.map((d) => renderDisciplineColumn(group.type, d.key, d.label)).join('')}
+          </div>
+        </div>
+      </section>`;
+  }).join('');
+
+  const emptyHtml = totalTitles === 0
+    ? '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Meistertitel bei den aktuellen Teamfahrern.</div>'
+    : '';
+
+  return `
+    <section class="team-detail-section">
+      ${emptyHtml}
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${groupsHtml}
+      </div>
+    </section>`;
+}
+
 export function renderTeamStatsBody(payload: TeamStatsPayload): string {
   if (state.teamStatsTab === 'career') {
     return `
@@ -1170,6 +1256,14 @@ export function renderTeamStatsBody(payload: TeamStatsPayload): string {
       ${renderTeamStatsHeader(payload)}
       ${renderTeamStatsTabs()}
       ${renderTeamStatsTransfersTab(payload)}
+    `;
+  }
+
+  if (state.teamStatsTab === 'champions') {
+    return `
+      ${renderTeamStatsHeader(payload)}
+      ${renderTeamStatsTabs()}
+      ${renderTeamStatsChampionsTab(payload)}
     `;
   }
 
@@ -1287,7 +1381,7 @@ export function initTeamStatsListeners(): void {
     const tabButton = target.closest<HTMLButtonElement>('button[data-team-stats-tab]');
     if (tabButton) {
       const nextTab = tabButton.dataset['teamStatsTab'] as any;
-      if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers') {
+      if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers' || nextTab === 'champions') {
         state.teamStatsTab = nextTab;
         if (state.teamStatsPayload) {
           $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);

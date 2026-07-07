@@ -1667,6 +1667,21 @@ export interface TeamSuccessStats {
   }>;
 }
 
+/**
+ * Ein von einem (aktuellen) Teamfahrer gewonnener Meistertitel — Welt- (WM),
+ * Europa- (EM) oder nationaler Meister (NAT), je Disziplin (ITT/ROAD) und
+ * Saison. Speist den Teamstats-Tab "Meister".
+ */
+export interface TeamChampionTitle {
+  riderId: number;
+  riderName: string;
+  riderCountryCode: string | null;
+  type: 'WM' | 'EM' | 'NAT';
+  discipline: 'ITT' | 'ROAD';
+  season: number;
+  countryName?: string | null;
+}
+
 export interface TeamStatsPayload {
   teamId: number;
   teamName: string;
@@ -1675,6 +1690,8 @@ export interface TeamStatsPayload {
   countryCode: string | null;
   riders: TeamStatsRider[];
   topResults: TeamStatsTopResult[];
+  /** Meistertitel (WM/EM/National) der aktuellen Teamfahrer, neueste zuerst. */
+  champions: TeamChampionTitle[];
   successStats: {
     [seasonOrAll: string]: TeamSuccessStats;
   };

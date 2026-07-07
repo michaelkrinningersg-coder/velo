@@ -166,7 +166,7 @@ export const state: {
     stage: boolean;
   };
   teamStatsPayload: TeamStatsPayload | null;
-  teamStatsTab: 'topResults' | 'career' | 'contracts' | 'transfers';
+  teamStatsTab: 'topResults' | 'career' | 'contracts' | 'transfers' | 'champions';
   teamStatsSelectedTeamId: number | null;
   teamStatsSelectedRosterYear: number | null;
   teamStatsRosterSort: {
