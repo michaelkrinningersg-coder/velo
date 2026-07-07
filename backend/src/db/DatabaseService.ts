@@ -807,8 +807,78 @@ export class DatabaseService {
         }
       }
 
-      // 3. Cro Race weicht dem WM-Fenster: ein Tag nach hinten (idempotent).
+      // 3. Strassenprofil je Saison an die deterministische Rotation angleichen
+      //    (Saison-Rollover klont sonst das Vorjahresprofil).
+      this.reconcileChampionshipRoadProfiles(db, season);
+
+      // 4. Cro Race weicht dem WM-Fenster: ein Tag nach hinten (idempotent).
       this.shiftCroRaceForSeason(db, season);
+    }
+  }
+
+  // Setzt das Strassenprofil (und den passenden Streckensatz) der WM/EM-Strassen-
+  // rennen einer Saison auf die deterministisch rotierte Wahl. Bereits gefahrene
+  // Editionen (mit Ergebnissen) bleiben unberuehrt.
+  private reconcileChampionshipRoadProfiles(db: Database.Database, season: number): void {
+    const raced = tableExists(db, 'results')
+      ? db.prepare('SELECT 1 FROM results WHERE stage_id = ? LIMIT 1')
+      : null;
+    const findStage = db.prepare(`
+      SELECT s.id AS id, s.profile AS profile, s.details_csv_file AS detailsFile, s.start_elevation AS startElevation
+      FROM stages s
+      JOIN races r ON r.id = s.race_id
+      WHERE r.category_id = ? AND CAST(substr(s.date, 1, 4) AS INTEGER) = ?
+      LIMIT 1
+    `);
+    const updateStage = db.prepare(
+      'UPDATE stages SET profile = ?, details_csv_file = ?, stage_score = ? WHERE id = ?',
+    );
+    const hasClimbTable = tableExists(db, 'stage_climb_scores');
+    const deleteClimbs = hasClimbTable
+      ? db.prepare('DELETE FROM stage_climb_scores WHERE stage_id = ?')
+      : null;
+    const insertClimb = hasClimbTable
+      ? db.prepare(`
+          INSERT INTO stage_climb_scores (
+            stage_id, climb_index, name, category, start_km, end_km, climb_score
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `)
+      : null;
+
+    for (const def of CHAMPIONSHIP_RACE_DEFS) {
+      if (def.discipline !== 'ROAD') {
+        continue;
+      }
+      const stage = findStage.get(def.categoryId, season) as
+        | { id: number; profile: string; detailsFile: string; startElevation: number }
+        | undefined;
+      if (!stage) {
+        continue;
+      }
+      if (raced && raced.get(stage.id)) {
+        continue; // bereits gefahren
+      }
+      const { profile, detailsFile } = championshipStageProfile(def, season);
+      if (stage.profile === profile && stage.detailsFile === detailsFile) {
+        continue;
+      }
+      const segments = readStageScoreSegments(detailsFile, `championship reconcile ${def.raceName} ${season}`);
+      const stageScore = calculateStageScore(segments, stage.startElevation);
+      updateStage.run(profile, detailsFile, stageScore, stage.id);
+      if (deleteClimbs && insertClimb) {
+        deleteClimbs.run(stage.id);
+        for (const climb of calculateClimbScoresForStage(segments, stage.startElevation)) {
+          insertClimb.run(
+            stage.id,
+            climb.climbIndex,
+            climb.name,
+            climb.category,
+            climb.startKm,
+            climb.endKm,
+            climb.score,
+          );
+        }
+      }
     }
   }
 
