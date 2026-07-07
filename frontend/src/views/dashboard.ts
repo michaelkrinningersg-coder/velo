@@ -617,6 +617,12 @@ export function initDashboardListeners(): void {
       if (Number.isFinite(stageId)) void openInstantStage(stageId);
       return;
     }
+    const liveButton = target.closest<HTMLButtonElement>('button[data-live-stage]');
+    if (liveButton) {
+      const stageId = Number(liveButton.dataset['liveStage']);
+      if (Number.isFinite(stageId)) void openRealtimeStage(stageId, true);
+      return;
+    }
 
     // Renn-Radar-Zeile: Etappenuebersicht
     const raceButton = target.closest<HTMLButtonElement>('button[data-dashboard-race-id]');

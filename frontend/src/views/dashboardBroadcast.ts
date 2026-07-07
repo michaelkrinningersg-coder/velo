@@ -116,23 +116,39 @@ function kpiCard(label: string, value: string, sub: string, valueColor = '#f1f5f
 }
 
 // ---- Renn-Radar-Zeile ------------------------------------------------------
+// Rennen mit heute offener Etappe bekommen je Zeile eigene Instant-/Live-
+// Buttons (wichtig bei den ~38 nationalen Meisterschaften am selben Tag, die
+// so einzeln direkt aus dem Radar heraus simuliert werden koennen). Rennen
+// ohne offene Etappe zeigen nur den Status (LÄUFT/GEPLANT).
 function radarRow(race: Race): string {
   const gs = state.gameState;
   const live = gs != null && race.startDate <= gs.currentDate && race.endDate >= gs.currentDate;
   const [, mm, dd] = race.startDate.split('-');
   const mon = MONTHS[Number(mm) - 1] ?? '';
-  const status = live
-    ? '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;">LÄUFT</span>'
-    : '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;letter-spacing:.04em;">GEPLANT</span>';
+  const pendingStage = (state.gameStatus?.pendingStages ?? []).find((p) => p.raceId === race.id) ?? null;
+  let actions: string;
+  if (pendingStage) {
+    actions = `
+      <span style="display:flex;gap:6px;flex:0 0 auto;">
+        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Instant-Simulation" style="border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:11px;padding:6px 11px;border-radius:7px;white-space:nowrap;">Instant ▸</button>
+        <button type="button" data-live-stage="${pendingStage.stageId}" title="Live-Simulation" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:11px;padding:6px 10px;border-radius:7px;white-space:nowrap;">Live</button>
+      </span>`;
+  } else if (live) {
+    actions = '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;flex:0 0 auto;">LÄUFT</span>';
+  } else {
+    actions = '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;letter-spacing:.04em;flex:0 0 auto;">GEPLANT</span>';
+  }
   const country = race.country?.name ?? '';
   const km = raceTotalKm(race);
   return `
-    <button type="button" data-dashboard-race-id="${race.id}" style="width:100%;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:11px 16px;border:none;border-top:1px solid #14203a;${live ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}">
-      <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:19px;font-weight:800;color:${live ? '#f1f5f9' : '#e2e8f0'};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
-      <span style="width:5px;height:34px;border-radius:3px;background:${catColor(race)};flex:0 0 auto;" title="${race.category?.name ?? ''}"></span>
-      <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${live ? '#f1f5f9' : '#e2e8f0'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${race.name}</span><span style="display:block;${MONO};font-size:11px;color:#8494ad;">${country}${km ? ' · ' + km.toFixed(0) + ' km' : ''}</span></span>
-      ${status}
-    </button>`;
+    <div style="display:flex;align-items:center;gap:14px;padding:11px 16px;border-top:1px solid #14203a;${live ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}">
+      <button type="button" data-dashboard-race-id="${race.id}" style="flex:1;min-width:0;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;border:none;padding:0;">
+        <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:19px;font-weight:800;color:${live ? '#f1f5f9' : '#e2e8f0'};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
+        <span style="width:5px;height:34px;border-radius:3px;background:${catColor(race)};flex:0 0 auto;" title="${race.category?.name ?? ''}"></span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${live ? '#f1f5f9' : '#e2e8f0'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${race.name}</span><span style="display:block;${MONO};font-size:11px;color:#8494ad;">${country}${km ? ' · ' + km.toFixed(0) + ' km' : ''}</span></span>
+      </button>
+      ${actions}
+    </div>`;
 }
 
 // ---- Live-Spotlight (aktuelles laufendes Rennen) ---------------------------
@@ -327,10 +343,20 @@ export function renderDashboardBroadcast(): string {
   const team = playerTeam();
   const today = gs?.currentDate ?? '';
   const maxDate = today ? addDays(today, 10) : '';
+  // Rennen mit heute offener Etappe zuerst (z. B. die ~38 nationalen
+  // Meisterschaften am selben Tag), damit sie direkt oben im scrollbaren
+  // Radar mit ihren Instant-Buttons stehen; danach chronologisch.
+  const pendingRaceIds = new Set((state.gameStatus?.pendingStages ?? []).map((p) => p.raceId));
   const upcoming = state.races
     .filter((r) => (r.startDate <= today && r.endDate >= today) || (r.startDate > today && r.startDate <= maxDate))
-    .sort((a, b) => a.startDate.localeCompare(b.startDate))
-    .slice(0, 6);
+    .sort((a, b) => {
+      const ap = pendingRaceIds.has(a.id) ? 0 : 1;
+      const bp = pendingRaceIds.has(b.id) ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+      return a.name.localeCompare(b.name);
+    });
+  const pendingCount = upcoming.filter((r) => pendingRaceIds.has(r.id)).length;
 
   const kpis = playerTeamKpis(team);
   const liveSpotlight = renderLiveSpotlight();
@@ -352,9 +378,11 @@ export function renderDashboardBroadcast(): string {
         <div style="border-radius:14px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1c2b47;">
             <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Renn-Radar</span>
-            <span style="${MONO};font-size:10px;letter-spacing:.12em;color:#5f6f8a;text-transform:uppercase;">Nächste 10 Tage</span>
+            <span style="${MONO};font-size:10px;letter-spacing:.12em;color:#5f6f8a;text-transform:uppercase;">${pendingCount > 0 ? `${pendingCount} offen · ` : ''}Nächste 10 Tage</span>
           </div>
-          ${upcoming.map(radarRow).join('') || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Keine Rennen im Zeitraum.</div>'}
+          <div style="max-height:360px;overflow-y:auto;">
+            ${upcoming.map(radarRow).join('') || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Keine Rennen im Zeitraum.</div>'}
+          </div>
         </div>
       </div>
 
