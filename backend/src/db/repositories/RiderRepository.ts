@@ -1509,20 +1509,24 @@ export class RiderRepository {
     let rankedAttackers = 0;
     let allTimeDistanceKm = 0;
     let bunchSprintWins = 0;
+    let fullMoonWins = 0;
 
     if (tableExists(this.db, 'rider_career_stats')) {
       const hasBunch = columnExists(this.db, 'rider_career_stats', 'bunch_sprint_wins');
+      const hasMoon = columnExists(this.db, 'rider_career_stats', 'full_moon_wins');
       const own = this.db.prepare(`
         SELECT race_days, breakaway_kms, breakaway_attempts, attacks, total_km
                ${hasBunch ? ', bunch_sprint_wins' : ''}
+               ${hasMoon ? ', full_moon_wins' : ''}
         FROM rider_career_stats WHERE rider_id = ?
-      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number; attacks: number; total_km: number; bunch_sprint_wins?: number } | undefined;
+      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number; attacks: number; total_km: number; bunch_sprint_wins?: number; full_moon_wins?: number } | undefined;
       raceDays = own?.race_days ?? 0;
       breakawayKms = own?.breakaway_kms ?? 0;
       breakawayAttempts = own?.breakaway_attempts ?? 0;
       allTimeAttacks = own?.attacks ?? 0;
       allTimeDistanceKm = own?.total_km ?? 0;
       bunchSprintWins = own?.bunch_sprint_wins ?? 0;
+      fullMoonWins = own?.full_moon_wins ?? 0;
 
       const rankRow = this.db.prepare(`
         SELECT
@@ -1555,6 +1559,7 @@ export class RiderRepository {
       rankedAttackers,
       allTimeDistanceKm,
       bunchSprintWins,
+      fullMoonWins,
       ...special,
       ...loyalty,
     };

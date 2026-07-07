@@ -2705,6 +2705,7 @@ const HOF_ICON_SNOW = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" 
 const HOF_ICON_CROSS = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M9 2h6v5h5v6h-5v9H9v-9H4V7h5V2z"/></svg>`;
 const HOF_ICON_HEART = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 21s-7.5-4.9-10-9.3C.3 8.4 1.8 4.5 5.4 4.5c2 0 3.3 1.1 4.1 2.3l.5.8.5-.8c.8-1.2 2.1-2.3 4.1-2.3 3.6 0 5.1 3.9 3.4 7.2C19.5 16.1 12 21 12 21z"/></svg>`;
 const HOF_ICON_CLOCK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2v7z"/></svg>`;
+const HOF_ICON_MOON = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1.6" fill="#0e1930"/><circle cx="15" cy="13" r="2.1" fill="#0e1930"/><circle cx="10" cy="15" r="1.2" fill="#0e1930"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2842,6 +2843,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const careerSeasons = hof.careerSeasons ?? 0;
   const mostSeasonsOneTeam = hof.mostSeasonsOneTeam ?? 0;
   const teamCount = hof.teamCount ?? 0;
+  const fullMoonWins = hof.fullMoonWins ?? 0;
 
   // "The Complete Rider": genestete Stufen aus Rundfahrt-, Eintages- und
   // Massensprint-Erfolg. Gold verlangt Grand Tour + Monument, Silber laesst
@@ -3322,6 +3324,13 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       detail: `${careerSeasons.toLocaleString('de-DE')} Saisons`,
       hover: `${careerSeasons.toLocaleString('de-DE')} Saisons Karrieredauer (Gold 15 · Silber 12 · Bronze 10 · Cyan 7 · Lila 5)`,
       requirement: 'Ab 5 Karriere-Saisons',
+    },
+    {
+      key: 'werewolf', name: 'Werewolf', icon: HOF_ICON_MOON, description: 'Siege bei Vollmond',
+      tier: resolveThresholdTier(fullMoonWins, [1, 2, 3, 5, 8]),
+      detail: `${fullMoonWins.toLocaleString('de-DE')} Vollmond-Siege`,
+      hover: `${fullMoonWins.toLocaleString('de-DE')} Siege an Vollmondtagen (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Sieg bei Vollmond',
     },
   ];
 }

@@ -6,6 +6,7 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 import { TeamCategoryStatsService } from '../game/TeamCategoryStatsService';
 import { summarizeStageProfile } from './StageParser';
+import { isFullMoonDate } from '../util/moonPhase';
 
 import { GameStateService } from '../game/GameStateService';
 import type {
@@ -1645,6 +1646,16 @@ export class StageResultCommitService {
         this.db.prepare(`
           UPDATE rider_career_stats SET bunch_sprint_wins = bunch_sprint_wins + 1 WHERE rider_id = ?
         `).run(bunchSprintWinnerId);
+      }
+
+      // Vollmond-Sieg: faellt der Etappentag auf einen (versteckt berechneten)
+      // Vollmondtag und gibt es einen Einzelsieger, zaehlt der Sieg mit.
+      if (winnerRow && winnerRow.riderId != null
+        && isFullMoonDate(stage.date)
+        && columnExists(this.db, 'rider_career_stats', 'full_moon_wins')) {
+        this.db.prepare(`
+          UPDATE rider_career_stats SET full_moon_wins = full_moon_wins + 1 WHERE rider_id = ?
+        `).run(winnerRow.riderId);
       }
 
       for (const dns of dnsEvents) {

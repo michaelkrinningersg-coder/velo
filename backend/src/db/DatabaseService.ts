@@ -9,6 +9,7 @@ import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
 import { summarizeStageProfile } from '../simulation/StageParser';
+import { isFullMoonDate } from '../util/moonPhase';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -1649,6 +1650,36 @@ export class DatabaseService {
     } catch (e) {
       console.error('bunch_sprint-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
+
+    // --- full_moon_wins ---
+    // Etappensieger (rank 1) ueberleben das Saison-Pruning immer, daher ist die
+    // Vollmond-Siegzahl vollstaendig aus results_flat rekonstruierbar.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'full_moon_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'full_moon_wins') && tableExists(db, 'results_flat') && tableExists(db, 'stages')) {
+        const rows = db.prepare(`
+          SELECT rf.rider_id AS rider_id, s.date AS date
+          FROM results_flat rf
+          JOIN stages s ON s.id = rf.stage_id
+          WHERE rf.result_type_id = 1 AND rf.rank = 1 AND rf.rider_id IS NOT NULL
+        `).all() as Array<{ rider_id: number; date: string }>;
+        const byRider = new Map<number, number>();
+        for (const r of rows) {
+          if (isFullMoonDate(r.date)) {
+            byRider.set(r.rider_id, (byRider.get(r.rider_id) ?? 0) + 1);
+          }
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET full_moon_wins = ? WHERE rider_id = ?');
+        db.transaction(() => {
+          for (const [riderId, count] of byRider) {
+            upd.run(count, riderId);
+          }
+        })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('full_moon_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('full_moon-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
   }
 
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
@@ -1705,6 +1736,7 @@ export class DatabaseService {
       ['home_pressure_days', 'INTEGER NOT NULL DEFAULT 0'],
       ['total_km', 'REAL NOT NULL DEFAULT 0'],
       ['bunch_sprint_wins', 'INTEGER NOT NULL DEFAULT 0'],
+      ['full_moon_wins', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

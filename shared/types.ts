@@ -1006,6 +1006,8 @@ export interface RiderHallOfFameStats {
   allTimeDistanceKm: number;
   /** Bunch-Sprint-Siege (Zielgruppe > 25 Fahrer, kein Ausreisser). */
   bunchSprintWins: number;
+  /** Siege an (versteckt berechneten) Vollmondtagen. */
+  fullMoonWins: number;
 
   /** Spezialrennen-Erfolge (aus Siegen nach Rennnamen ermittelt). */
   wonAllGrandTours: boolean;
