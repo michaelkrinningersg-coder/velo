@@ -1130,24 +1130,18 @@ export class GameStateService {
       if (phase?.phase === 'build') {
         activePeakDate = null;
         peakSForm = 0;
-        // S-Form only accumulates via daily advances (syncRiderDailyStates).
-        // Prevent retroactive form from the previous year: if the build window
-        // started before Jan 1 of this season, the max legitimate form is
-        // (days since Jan 1) * RISE_STEP. If the DB value exceeds this (e.g.
-        // from an older run), reset it to 0 so it builds up correctly.
-        const peakDayForBuild = isoDateToDayNumber(phase.peakDate);
-        const buildWindowStart = peakDayForBuild - SEASON_FORM_RISE_DAYS;
-        const seasonStartDay = isoDateToDayNumber(`${currentSeason}-01-01`);
-        if (buildWindowStart < seasonStartDay || seasonChanged) {
-          const currentDayNum = isoDateToDayNumber(currentDate);
-          const daysSinceSeasonStart = Math.max(0, currentDayNum - seasonStartDay);
-          const maxLegitForm = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, daysSinceSeasonStart * SEASON_FORM_RISE_STEP_RAW));
-          if (formBonus > maxLegitForm) {
-            formBonus = SEASON_FORM_MIN_RAW;
-          }
-        }
+        // Season-Form am Fahrplan ausrichten: Wert der aktuellen Position im
+        // (kanonischen) Aufbaufenster setzen, statt den gespeicherten Wert nur
+        // nach oben zu deckeln. So zeigt ein frisch geladener Spielstand die
+        // Season-Form passend zu den angezeigten Peaks (und nicht 0/veraltet).
+        formBonus = scheduledBuildForm(currentDate, phase.actualBuildStartDay, phase.peakDate);
       } else if (phase?.phase === 'decline') {
-        peakSForm = row.active_peak_date === phase.peakDate ? row.peak_s_form : row.form_bonus;
+        // Von einem echten (aufgezeichneten) Peakwert abbauen, sonst vom
+        // planmaessigen Peakwert — damit der Abbau zu den Peaks passt, auch wenn
+        // der Peaktag in dieser Sitzung nie durchlaufen wurde.
+        peakSForm = row.active_peak_date === phase.peakDate && row.peak_s_form > 0
+          ? row.peak_s_form
+          : scheduledPeakForm(phase.peakDate, phase.actualBuildStartDay);
         formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
         activePeakDate = phase.peakDate;
       } else {
@@ -1420,13 +1414,14 @@ export class GameStateService {
         activePeakDate = null;
         peakSForm = 0;
         peakRForm = 0;
-        // Only accumulate form after Jan 1 of the current season.
-        // If the build window starts in the previous year, riders begin at 0 on Jan 1.
-        const peakDayForBuild2 = isoDateToDayNumber(phase.peakDate);
-        const buildWindowStartDay = peakDayForBuild2 - SEASON_FORM_RISE_DAYS;
+        // Aufbaufenster-Start = kanonischer actualBuildStartDay (fruehestens
+        // Saisonstart bzw. Ende der Abbauphase des vorherigen Peaks), damit der
+        // Formaufbau exakt auf denselben Fenstern laeuft wie die angezeigten
+        // Peaks. Vorher wurde stur peak-56 (nur auf Saisonstart gedeckelt)
+        // verwendet — dadurch lief der Aufbau auf anderen Daten.
         const seasonStart2Day = isoDateToDayNumber(`${nextSeason}-01-01`);
         const nextDayNum = isoDateToDayNumber(nextDate);
-        const effectiveBuildStart = Math.max(buildWindowStartDay, seasonStart2Day);
+        const effectiveBuildStart = phase.actualBuildStartDay ?? Math.max(isoDateToDayNumber(phase.peakDate) - SEASON_FORM_RISE_DAYS, seasonStart2Day);
         if (nextDayNum >= effectiveBuildStart && healthStatus === 'healthy') {
           formBonus = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, formBonus + SEASON_FORM_RISE_STEP_RAW));
         } else if (nextDayNum < effectiveBuildStart) {
@@ -2181,19 +2176,55 @@ function isoDateToDayNumber(isoDate: string): number {
   return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
 }
 
-function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number } | null {
+// Kanonische Formphasen-Aufloesung — identisch zu resolvePeakPhase in
+// db/mappers.ts, das die im Chart gezeichnete Formkurve speist. WICHTIG: Peaks
+// werden sortiert betrachtet und das Aufbaufenster startet fruehestens am
+// Saisonanfang bzw. am Ende der Abbauphase des vorherigen Peaks (prevDeclineEnd).
+// Frueher lief die Spiel-Logik auf einer vereinfachten Variante (Aufbau stur
+// peak-56, unsortiert) — dadurch liefen Formaufbau/-abbau auf anderen Fenstern
+// als die angezeigten Peaks.
+function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number; actualBuildStartDay?: number } | null {
   const currentDay = isoDateToDayNumber(currentDate);
-  for (const peakDate of peakDates) {
+  const sortedPeaks = [...peakDates].sort((a, b) => isoDateToDayNumber(a) - isoDateToDayNumber(b));
+
+  for (let i = 0; i < sortedPeaks.length; i++) {
+    const peakDate = sortedPeaks[i];
     const peakDay = isoDateToDayNumber(peakDate);
+    const prevPeakDay = i > 0 ? isoDateToDayNumber(sortedPeaks[i - 1]) : Number.NEGATIVE_INFINITY;
+
     if (currentDay >= peakDay && currentDay < peakDay + SEASON_FORM_FALL_DAYS) {
       return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
     }
-    if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
-      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
+
+    const seasonYear = peakDate.slice(0, 4);
+    const seasonStartDay = isoDateToDayNumber(`${seasonYear}-01-01`);
+    const idealBuildStart = Math.max(seasonStartDay, peakDay - SEASON_FORM_RISE_DAYS);
+    const prevDeclineEnd = prevPeakDay + SEASON_FORM_FALL_DAYS;
+    const actualBuildStartDay = Math.max(idealBuildStart, prevDeclineEnd);
+
+    if (currentDay >= actualBuildStartDay && currentDay < peakDay) {
+      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay, actualBuildStartDay };
     }
   }
 
   return null;
+}
+
+// Plan-Formwert am Peak = Anzahl Aufbautage (Fensterstart..Peak) * Aufbauschritt,
+// gedeckelt auf das Maximum. Fruehe Peaks (Fenster durch Saisonstart gekuerzt)
+// erreichen dadurch bewusst nicht die volle Form.
+function scheduledPeakForm(peakDate: string, actualBuildStartDay: number | undefined): number {
+  const peakDay = isoDateToDayNumber(peakDate);
+  const startDay = actualBuildStartDay ?? (peakDay - SEASON_FORM_RISE_DAYS);
+  return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(SEASON_FORM_MIN_RAW, (peakDay - startDay) * SEASON_FORM_RISE_STEP_RAW)));
+}
+
+// Plan-Formwert an einem Tag innerhalb der Aufbauphase.
+function scheduledBuildForm(currentDate: string, actualBuildStartDay: number | undefined, peakDate: string): number {
+  const peakDay = isoDateToDayNumber(peakDate);
+  const startDay = actualBuildStartDay ?? (peakDay - SEASON_FORM_RISE_DAYS);
+  const daysBuilt = isoDateToDayNumber(currentDate) - startDay + 1;
+  return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(SEASON_FORM_MIN_RAW, daysBuilt * SEASON_FORM_RISE_STEP_RAW)));
 }
 
 function resolveDeclineValue(peakValue: number, elapsedDays: number): number {
