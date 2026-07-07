@@ -2742,6 +2742,10 @@ interface HofBadge {
 // Vordefinierte Stile fuer Single-Badges.
 const HOF_STYLE_GOLD: HofTierStyle = { label: 'GOLD', ...{ color: '#fbbf24', soft: 'rgba(251,191,36,.13)', glow: 'rgba(251,191,36,.30)', text: '#fde68a' } };
 const HOF_STYLE_GREEN: HofTierStyle = { label: 'GESCHAFFT', color: '#4ade80', soft: 'rgba(74,222,128,.13)', glow: 'rgba(74,222,128,.28)', text: '#86efac' };
+// Weltmeister-Regenbogen: Cyan-Rand mit violettem Kern und pinkem Glow.
+const HOF_STYLE_RAINBOW: HofTierStyle = { label: 'WELTMEISTER', color: '#22d3ee', soft: 'rgba(139,92,246,.18)', glow: 'rgba(236,72,153,.40)', text: '#f0abfc' };
+// Europameister: blauer Rand mit gelben Euro-Sternen-Akzenten.
+const HOF_STYLE_EURO: HofTierStyle = { label: 'EUROPAMEISTER', color: '#3b82f6', soft: 'rgba(59,130,246,.16)', glow: 'rgba(250,204,21,.34)', text: '#fde68a' };
 function classColorStyle(categoryName: string, label: string): HofTierStyle {
   const border = resolveRaceCategoryBadgeStyle(categoryName).border;
   const bg = resolveRaceCategoryBadgeStyle(categoryName).background;
@@ -2874,6 +2878,10 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const jerseyStreakBest = hof.jerseyStreakBest ?? 0;
   const photoFinishWins = hof.photoFinishWins ?? 0;
   const soClose = hof.soClose ?? 0;
+  const worldChampionRoadTitles = hof.worldChampionRoadTitles ?? 0;
+  const worldChampionIttTitles = hof.worldChampionIttTitles ?? 0;
+  const euroChampionRoadTitles = hof.euroChampionRoadTitles ?? 0;
+  const euroChampionIttTitles = hof.euroChampionIttTitles ?? 0;
   // Welle 10 (rein abgeleitet).
   const pointsPerfectionist = hof.pointsPerfectionist ?? 0;
   const thirdWeekWonder = hof.thirdWeekWonder ?? 0;
@@ -3234,6 +3242,22 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       grandTourWins >= 1, classColorStyle('World Tour - Grand Tour', 'GRAND TOUR'),
       grandTourWins >= 1 ? `${grandTourWins.toLocaleString('de-DE')} Grand-Tour-Gesamtsieg${grandTourWins === 1 ? '' : 'e'}` : 'Noch keine Grand Tour gewonnen.',
       'Eine Grand Tour (Gesamt) gewinnen', 'Sieger'),
+    singleBadge('worldChampionRoad', 'Weltmeister', HOF_ICON_CROWN, 'WM-Straßenrennen gewonnen',
+      worldChampionRoadTitles >= 1, HOF_STYLE_RAINBOW,
+      worldChampionRoadTitles >= 1 ? `${worldChampionRoadTitles.toLocaleString('de-DE')}× Weltmeister im Straßenrennen — Regenbogentrikot` : 'Noch kein WM-Straßentitel.',
+      'WM-Straßenrennen gewinnen', worldChampionRoadTitles > 1 ? `${worldChampionRoadTitles}×` : 'Weltmeister'),
+    singleBadge('worldChampionItt', 'Weltmeister ITT', HOF_ICON_STOPWATCH, 'WM-Einzelzeitfahren gewonnen',
+      worldChampionIttTitles >= 1, HOF_STYLE_RAINBOW,
+      worldChampionIttTitles >= 1 ? `${worldChampionIttTitles.toLocaleString('de-DE')}× Weltmeister im Einzelzeitfahren — Regenbogentrikot` : 'Noch kein WM-ITT-Titel.',
+      'WM-Einzelzeitfahren gewinnen', worldChampionIttTitles > 1 ? `${worldChampionIttTitles}×` : 'Weltmeister'),
+    singleBadge('euroChampionRoad', 'Europameister', HOF_ICON_CROWN, 'EM-Straßenrennen gewonnen',
+      euroChampionRoadTitles >= 1, HOF_STYLE_EURO,
+      euroChampionRoadTitles >= 1 ? `${euroChampionRoadTitles.toLocaleString('de-DE')}× Europameister im Straßenrennen` : 'Noch kein EM-Straßentitel.',
+      'EM-Straßenrennen gewinnen', euroChampionRoadTitles > 1 ? `${euroChampionRoadTitles}×` : 'Europameister'),
+    singleBadge('euroChampionItt', 'Europameister ITT', HOF_ICON_STOPWATCH, 'EM-Einzelzeitfahren gewonnen',
+      euroChampionIttTitles >= 1, HOF_STYLE_EURO,
+      euroChampionIttTitles >= 1 ? `${euroChampionIttTitles.toLocaleString('de-DE')}× Europameister im Einzelzeitfahren` : 'Noch kein EM-ITT-Titel.',
+      'EM-Einzelzeitfahren gewinnen', euroChampionIttTitles > 1 ? `${euroChampionIttTitles}×` : 'Europameister'),
     singleBadge('tdfWinner', 'TdF Winner', HOF_ICON_TROPHY, 'Tour de France gewonnen',
       tdfWins >= 1, classColorStyle('World Tour - Tour de France', 'TOUR DE FRANCE'),
       tdfWins >= 1 ? `${tdfWins.toLocaleString('de-DE')}× Tour de France gewonnen` : 'Noch keine Tour de France gewonnen.',
@@ -4121,7 +4145,8 @@ function renderHofBadgeCard(badge: HofBadge): string {
 // Gruppe nach Tier-Staerke einsortiert. Nicht gelistete Keys landen hinten.
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
-  ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
+  ['worldChampionRoad', 'worldChampionItt', 'euroChampionRoad', 'euroChampionItt',
+   'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
    'cleanSweep', 'cleanSweepPlus', 'instantImpact', 'autumnKing', 'theProdigy', 'theUndertaker', 'greenGrandSlam',

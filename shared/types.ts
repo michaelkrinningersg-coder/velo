@@ -1087,6 +1087,12 @@ export interface RiderHallOfFameStats {
   photoFinishWins: number;      // Siege per Zielfoto (Photo Finish King)
   soClose: number;              // Zweiter per Zielfoto (So Close)
 
+  // WM/EM-Titel (Karriere-Zaehler) fuer die vier Meister-Einzelbadges.
+  worldChampionRoadTitles: number;  // Weltmeister (Strasse)
+  worldChampionIttTitles: number;   // Weltmeister ITT
+  euroChampionRoadTitles: number;   // Europameister (Strasse)
+  euroChampionIttTitles: number;    // Europameister ITT
+
   // Badge-Kennzahlen Welle 10 (rein abgeleitet).
   pointsPerfectionist: number;  // GT-Punktewertung ohne Etappensieg (Points Perfectionist)
   thirdWeekWonder: number;      // >= 2 Etappensiege in der letzten GT-Woche (Third Week Wonder)

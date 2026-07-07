@@ -1911,6 +1911,8 @@ export class RiderRepository {
     winStreakBest: number; peakPerformerWins: number; yoyoRaces: number;
     escapeToVictory: number; podiumLockout: number; jerseyStreakBest: number; photoFinishWins: number;
     soClose: number;
+    worldChampionRoadTitles: number; worldChampionIttTitles: number;
+    euroChampionRoadTitles: number; euroChampionIttTitles: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
@@ -1920,6 +1922,7 @@ export class RiderRepository {
       teamEffortPodiums: 0, oneManTeam: 0, gcBySeconds: 0, bitterEndDnf: 0, winStreakBest: 0,
       peakPerformerWins: 0, yoyoRaces: 0,
       escapeToVictory: 0, podiumLockout: 0, jerseyStreakBest: 0, photoFinishWins: 0, soClose: 0,
+      worldChampionRoadTitles: 0, worldChampionIttTitles: 0, euroChampionRoadTitles: 0, euroChampionIttTitles: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
@@ -1929,6 +1932,7 @@ export class RiderRepository {
       const hasWave4 = columnExists(this.db, 'rider_career_stats', 'win_streak_best');
       const hasWave7 = columnExists(this.db, 'rider_career_stats', 'peak_performer_wins');
       const hasWave9 = columnExists(this.db, 'rider_career_stats', 'escape_to_victory');
+      const hasChampion = columnExists(this.db, 'rider_career_stats', 'world_champion_road_titles');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
@@ -1937,6 +1941,7 @@ export class RiderRepository {
          ${hasWave4 ? ', win_streak_best' : ''}
          ${hasWave7 ? ', peak_performer_wins, yoyo_races' : ''}
          ${hasWave9 ? ', escape_to_victory, podium_lockout, jersey_streak_best, photo_finish_wins, so_close' : ''}
+         ${hasChampion ? ', world_champion_road_titles, world_champion_itt_titles, euro_champion_road_titles, euro_champion_itt_titles' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1966,6 +1971,10 @@ export class RiderRepository {
         out.jerseyStreakBest = c.jersey_streak_best ?? 0;
         out.photoFinishWins = c.photo_finish_wins ?? 0;
         out.soClose = c.so_close ?? 0;
+        out.worldChampionRoadTitles = c.world_champion_road_titles ?? 0;
+        out.worldChampionIttTitles = c.world_champion_itt_titles ?? 0;
+        out.euroChampionRoadTitles = c.euro_champion_road_titles ?? 0;
+        out.euroChampionIttTitles = c.euro_champion_itt_titles ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
