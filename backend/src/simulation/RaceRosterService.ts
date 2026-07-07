@@ -12,7 +12,9 @@ import {
   championshipRestrictsToEurope,
   getChampionshipCategoryDef,
   isChampionshipCategory,
+  isNationalChampionshipCategory,
   kaderSizeForRank,
+  NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD,
 } from './championships';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
@@ -1290,12 +1292,49 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   return selected;
 }
 
+// Nominierung nationaler Meisterschaften: es starten ALLE verfuegbaren Fahrer
+// des ausrichtenden Landes (race.countryId) MIT Team. Ausschluss ausschliesslich
+// bei Verletzung/Krankheit oder kombinierter Ermuedung > 12. Keine Begrenzung
+// der Teilnehmerzahl (auch nicht im ITT). Gefahren wird nach Trade-Team.
+export function buildNationalChampionshipRoster(db: Database.Database, repo: any, race: Race, _stage: Stage): Rider[] {
+  const countryId = race.countryId;
+  if (countryId == null) {
+    return [];
+  }
+  const stateRows = tableExists(db, 'rider_daily_state')
+    ? (db.prepare(`
+        SELECT rider_id,
+               health_status,
+               unavailable_until,
+               (short_term_fatigue + long_term_fatigue_decayable + long_term_fatigue_locked) AS combined_fatigue
+        FROM rider_daily_state
+      `).all() as Array<{ rider_id: number; health_status: string; unavailable_until: string | null; combined_fatigue: number }>)
+    : [];
+  const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
+
+  const selected: Rider[] = [];
+  for (const rider of repo.getRiders() as Rider[]) {
+    if (rider.activeTeamId == null || rider.countryId !== countryId) {
+      continue;
+    }
+    const state = stateByRider.get(rider.id);
+    if (state) {
+      if (state.health_status !== 'healthy') continue;
+      if (state.unavailable_until) continue;
+      if (state.combined_fatigue > NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD) continue;
+    }
+    selected.push(rider);
+  }
+  return selected;
+}
+
 function applyChampionshipEntries(
   db: Database.Database,
   repo: any,
   race: Race,
   stage: Stage,
   forceRebuild: boolean,
+  rosterBuilder: (db: Database.Database, repo: any, race: Race, stage: Stage) => Rider[] = buildChampionshipRoster,
 ): Rider[] {
   const existing = repo.getRaceRiders(race.id);
   if (!forceRebuild && existing.length > 0) {
@@ -1303,7 +1342,7 @@ function applyChampionshipEntries(
     return repo.getStageRiders(stage.id);
   }
 
-  const selected = buildChampionshipRoster(db, repo, race, stage);
+  const selected = rosterBuilder(db, repo, race, stage);
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const insertEntry = db.prepare(
@@ -1328,6 +1367,9 @@ function applyChampionshipEntries(
 export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   if (isChampionshipCategory(race.categoryId)) {
     return applyChampionshipEntries(db, repo, race, stage, false);
+  }
+  if (isNationalChampionshipCategory(race.categoryId)) {
+    return applyChampionshipEntries(db, repo, race, stage, false, buildNationalChampionshipRoster);
   }
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
@@ -1361,6 +1403,9 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
 export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
   if (isChampionshipCategory(race.categoryId)) {
     return applyChampionshipEntries(db, repo, race, stage, true);
+  }
+  if (isNationalChampionshipCategory(race.categoryId)) {
+    return applyChampionshipEntries(db, repo, race, stage, true, buildNationalChampionshipRoster);
   }
   const selected = buildRaceRoster(db, repo, race, stage);
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');

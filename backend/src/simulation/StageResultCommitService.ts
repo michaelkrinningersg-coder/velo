@@ -32,7 +32,12 @@ import {
   roundStageResultSeconds,
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
-import { getChampionshipCategoryDef, isChampionshipCategory } from './championships';
+import {
+  getChampionshipCategoryDef,
+  getNationalChampionshipCategoryDef,
+  isChampionshipCategory,
+  isNationalChampionshipCategory,
+} from './championships';
 
 const RESULT_TYPES = {
   stage: 1,
@@ -1766,6 +1771,43 @@ export class StageResultCommitService {
           if (!hadTitle && columnExists(this.db, 'rider_career_stats', titleColumn)) {
             this.db
               .prepare(`UPDATE rider_career_stats SET ${titleColumn} = ${titleColumn} + 1 WHERE rider_id = ?`)
+              .run(winnerRow.riderId);
+          }
+        }
+      }
+
+      // Nationale Meisterschaft: Sieger wird nationaler Meister der Disziplin.
+      if (winnerRow && winnerRow.riderId != null && isNationalChampionshipCategory(race.categoryId)) {
+        const natDef = getNationalChampionshipCategoryDef(race.categoryId);
+        if (natDef) {
+          const titleSeason = Number(stage.date.slice(0, 4));
+          const winnerCountry = this.db
+            .prepare('SELECT country_id FROM riders WHERE id = ?')
+            .get(winnerRow.riderId) as { country_id: number } | undefined;
+          const countryId = race.countryId ?? winnerCountry?.country_id ?? null;
+          const hadTitle = tableExists(this.db, 'national_champion_titles')
+            ? this.db
+                .prepare('SELECT rider_id FROM national_champion_titles WHERE season = ? AND discipline = ? AND country_id IS ?')
+                .get(titleSeason, natDef.discipline, countryId)
+            : undefined;
+          if (tableExists(this.db, 'national_champion_titles')) {
+            this.db.prepare(`
+              INSERT INTO national_champion_titles (
+                season, discipline, country_id, rider_id, race_id, stage_id, awarded_on
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(season, discipline, country_id) DO UPDATE SET
+                rider_id = excluded.rider_id,
+                race_id = excluded.race_id,
+                stage_id = excluded.stage_id,
+                awarded_on = excluded.awarded_on
+            `).run(titleSeason, natDef.discipline, countryId, winnerRow.riderId, race.id, stage.id, stage.date);
+          }
+          const natColumn = natDef.discipline === 'ITT'
+            ? 'national_champion_itt_titles'
+            : 'national_champion_road_titles';
+          if (!hadTitle && columnExists(this.db, 'rider_career_stats', natColumn)) {
+            this.db
+              .prepare(`UPDATE rider_career_stats SET ${natColumn} = ${natColumn} + 1 WHERE rider_id = ?`)
               .run(winnerRow.riderId);
           }
         }
