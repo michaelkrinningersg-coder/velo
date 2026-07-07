@@ -1276,7 +1276,7 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   // 4. Je Land nach Disziplin sortieren und auf die Kadergroesse kuerzen.
   const selected: Rider[] = [];
   for (const [countryId, riders] of eligibleByCountry) {
-    const size = kaderSizeForRank(rankByCountry.get(countryId)!);
+    const size = kaderSizeForRank(rankByCountry.get(countryId)!, def.discipline);
     if (size <= 0) {
       continue;
     }

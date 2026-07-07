@@ -1145,6 +1145,14 @@ export interface RiderHallOfFameStats {
   multiJerseyDays: number;      // Tage mit mehreren Fuehrungstrikots (Wardrobe Malfunction)
 }
 
+// Kategorie-IDs der Welt-/Europameisterschaften (Strasse/ITT × WM/EM). Wird auf
+// Backend UND Frontend fuer die Meisterschafts-Erkennung genutzt.
+export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [10, 11, 12, 13];
+
+export function isChampionshipCategory(categoryId?: number | null): boolean {
+  return categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(categoryId);
+}
+
 export interface ReigningChampionTitle {
   type: 'WM' | 'EM';
   discipline: 'ITT' | 'ROAD';

@@ -86,13 +86,9 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
   },
 ];
 
-export const CHAMPIONSHIP_CATEGORY_IDS: number[] = CHAMPIONSHIP_CATEGORY_DEFS.map(
-  (def) => def.categoryId,
-);
-
-export function isChampionshipCategory(categoryId: number | null | undefined): boolean {
-  return categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(categoryId);
-}
+// Kategorie-IDs + Erkennung liegen in shared/types, damit Frontend und Backend
+// dieselbe Quelle nutzen; hier nur re-exportiert.
+export { CHAMPIONSHIP_CATEGORY_IDS, isChampionshipCategory } from '../../../shared/types';
 
 export function getChampionshipCategoryDef(
   categoryId: number | null | undefined,
@@ -259,11 +255,16 @@ export const CHAMPIONSHIP_KADER_BRACKETS: KaderBracket[] = [
   { maxRank: 60, riders: 1 },
 ];
 
-export function kaderSizeForRank(rank: number): number {
+// Kadergroesse nach Rang und Disziplin. Im Einzelzeitfahren darf jede Nation nur
+// halb so viele Fahrer stellen wie im Strassenrennen (.5 abgerundet):
+// 12->6, 10->5, 8->4, 5->2, 4->2, 3->1, 2->1, 1->0.
+export function kaderSizeForRank(rank: number, discipline: ChampionshipDiscipline = 'ROAD'): number {
+  let road = 0;
   for (const bracket of CHAMPIONSHIP_KADER_BRACKETS) {
     if (rank <= bracket.maxRank) {
-      return bracket.riders;
+      road = bracket.riders;
+      break;
     }
   }
-  return 0;
+  return discipline === 'ITT' ? Math.floor(road / 2) : road;
 }

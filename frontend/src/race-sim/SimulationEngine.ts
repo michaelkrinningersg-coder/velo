@@ -15,6 +15,7 @@ import type {
   StageTerrain,
   RaceSimMessage,
 } from '../../../shared/types';
+import { isChampionshipCategory } from '../../../shared/types';
 import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadConfig, resolveSkillWeightComponents, resolveSkillWeightSimulationMode, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills, FinalSpreadConfig } from './skillWeights';
 import { precalculateRaceIncidents, buildDynamicCrashIncident } from './incidents';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
@@ -1143,6 +1144,10 @@ export class SimulationEngine {
 
   private readonly isTeamTimeTrial: boolean;
 
+  // Bei Welt-/Europameisterschaften bildet die NATION das Team: der Teambonus
+  // (Helfer in der Naehe) zaehlt Landsleute statt Trade-Teamkollegen.
+  private readonly isChampionshipRace: boolean;
+
   private readonly isTimeTrialMode: boolean;
 
   private readonly riders: RiderState[];
@@ -1388,6 +1393,7 @@ export class SimulationEngine {
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
     this.isTeamTimeTrial = bootstrap.stage.profile === 'TTT';
+    this.isChampionshipRace = isChampionshipCategory(bootstrap.race?.categoryId);
     this.isTimeTrialMode = this.isIndividualTimeTrial || this.isTeamTimeTrial;
     this.simulationMode = resolveSkillWeightSimulationMode(bootstrap.stage.profile);
     this.skillWeightRuleMap = buildSkillWeightRuleMap(bootstrap.skillWeightRules ?? []);
@@ -3639,7 +3645,7 @@ export class SimulationEngine {
         endIndex < activeTeamRiders.length
         && (activeTeamRiders[endIndex].distanceCoveredMeters - currentDistanceMeters) < CLUSTER_DISTANCE_METERS
       ) {
-        const teamId = activeTeamRiders[endIndex].rider.activeTeamId;
+        const teamId = this.teamGroupIdOf(activeTeamRiders[endIndex]);
         if (teamId != null) {
           teamCounts.set(teamId, (teamCounts.get(teamId) ?? 0) + 1);
         }
@@ -3650,7 +3656,7 @@ export class SimulationEngine {
         startIndex < activeTeamRiders.length
         && (currentDistanceMeters - activeTeamRiders[startIndex].distanceCoveredMeters) >= CLUSTER_DISTANCE_METERS
       ) {
-        const teamId = activeTeamRiders[startIndex].rider.activeTeamId;
+        const teamId = this.teamGroupIdOf(activeTeamRiders[startIndex]);
         if (teamId != null) {
           const nextCount = (teamCounts.get(teamId) ?? 0) - 1;
           if (nextCount <= 0) {
@@ -3662,7 +3668,7 @@ export class SimulationEngine {
         startIndex += 1;
       }
 
-      const teamId = rider.rider.activeTeamId;
+      const teamId = this.teamGroupIdOf(rider);
       const sameTeamNearbyCount = teamId == null ? 0 : Math.max(0, (teamCounts.get(teamId) ?? 0) - 1);
       bonusByRiderId.set(
         rider.rider.id,
@@ -3673,6 +3679,15 @@ export class SimulationEngine {
     }
 
     return bonusByRiderId;
+  }
+
+  // Gruppierungs-ID fuer Team-Effekte. Im Normalfall das Trade-Team; bei
+  // Meisterschaften die Nation (eigener, kollisionsfreier Zahlenraum).
+  private teamGroupIdOf(rider: RiderState): number | null {
+    if (this.isChampionshipRace) {
+      return rider.rider.countryId != null ? -1 - rider.rider.countryId : null;
+    }
+    return rider.rider.activeTeamId ?? null;
   }
 
   private resolveTeamBonusRoleMultiplier(rider: RiderState): number {
@@ -4277,10 +4292,10 @@ export class SimulationEngine {
         (rider.finishStatus as string) !== 'dns' &&
         rider.finishTimeSeconds != null &&
         rider.rider.skills.sprint >= 73 &&
-        rider.rider.activeTeamId != null &&
+        this.teamGroupIdOf(rider) != null &&
         winnerGroupRiderIds.has(rider.rider.id)
       ) {
-        const teamId = rider.rider.activeTeamId;
+        const teamId = this.teamGroupIdOf(rider)!;
         const list = teamSprintersMap.get(teamId) ?? [];
         list.push(rider);
         teamSprintersMap.set(teamId, list);
@@ -4324,13 +4339,13 @@ export class SimulationEngine {
   }
 
   private calculateSprintLeadoutBonusForRider(rider: RiderState): number {
-    const teamId = rider.rider.activeTeamId;
+    const teamId = this.teamGroupIdOf(rider);
     if (teamId == null) {
       return 0;
     }
 
-    // Find all team riders in the current race (starting roster)
-    const teamRiders = this.riders.filter((r) => r.rider.activeTeamId === teamId);
+    // Bei Meisterschaften sind die "Teamkollegen" die Landsleute (Nations-Gruppe).
+    const teamRiders = this.riders.filter((r) => this.teamGroupIdOf(r) === teamId);
     if (teamRiders.length === 0) {
       return 0;
     }
