@@ -783,6 +783,15 @@ export class GameStateService {
       `).run();
     }
 
+    // Korrektur veralteter Saves: Frueher wurde beim Saisonwechsel season_wins
+    // auf 0 gesetzt, season_ttt_wins aber nicht — dadurch wurden die effektiven
+    // Team-Siege (wins - ttt + ...) negativ ("-2" nach dem Draft). Da die
+    // TTT-Siege stets Teil der Saisonsiege sind, kann season_ttt_wins nie groesser
+    // als season_wins sein; solche Zeilen werden hier idempotent bereinigt.
+    this.db.prepare(`
+      UPDATE rider_daily_state SET season_ttt_wins = 0 WHERE season_ttt_wins > season_wins
+    `).run();
+
     // Einmaliger, korrekter Neuaufbau der Saisonsiege (inkl. kompaktierter
     // Rennen) fuer bestehende Saves — danach wird nur noch inkrementell gezaehlt.
     this.backfillSeasonWinsV2();
@@ -1581,6 +1590,7 @@ export class GameStateService {
         UPDATE rider_daily_state
         SET season_points = 0,
             season_wins = 0,
+            season_ttt_wins = 0,
             season_race_days_total = 0,
             rolling_30d_race_days = 0
         WHERE rider_id = ?
