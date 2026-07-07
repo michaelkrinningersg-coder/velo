@@ -2432,12 +2432,13 @@ function matchesProgramRaces(db: Database.Database | undefined, riderId: number 
       JOIN riders ON riders.id = rsp.rider_id
       JOIN sta_country ON sta_country.id = riders.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
+        AND substr(r.start_date, 1, 4) = ?
         AND (
           rpr.allowed_program_group_ids IS NULL
           OR rpr.allowed_program_group_ids = ''
           OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
         )
-    `).all(riderId, season) as Array<{ start_date: string; end_date: string; is_stage_race: number }>;
+    `).all(riderId, season, String(season)) as Array<{ start_date: string; end_date: string; is_stage_race: number }>;
 
     if (rows.length < 3) return false;
     const raceDays = rows.map(r => {
@@ -2488,12 +2489,13 @@ function generateHighlightBasedPeakDates(
       JOIN riders ON riders.id = rsp.rider_id
       JOIN sta_country ON sta_country.id = riders.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
+        AND substr(r.start_date, 1, 4) = ?
         AND (
           rpr.allowed_program_group_ids IS NULL
           OR rpr.allowed_program_group_ids = ''
           OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
         )
-    `).all(riderId, season) as Array<{ id: number; name: string; start_date: string; end_date: string; is_stage_race: number; prestige: number }>;
+    `).all(riderId, season, String(season)) as Array<{ id: number; name: string; start_date: string; end_date: string; is_stage_race: number; prestige: number }>;
 
     if (rows.length >= 3) {
       const races = rows

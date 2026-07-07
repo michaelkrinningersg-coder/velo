@@ -281,9 +281,11 @@ export class RiderRepository {
                  race_program_races.race_id
           FROM rider_season_programs
           JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+          JOIN races ON races.id = race_program_races.race_id
           JOIN riders ON riders.id = rider_season_programs.rider_id
           JOIN sta_country ON sta_country.id = riders.country_id
           WHERE rider_season_programs.season = ?
+            AND substr(races.start_date, 1, 4) = ?
             AND rider_season_programs.rider_id IN (${placeholders})
             AND (
               race_program_races.allowed_program_group_ids IS NULL
@@ -291,7 +293,7 @@ export class RiderRepository {
               OR ('|' || race_program_races.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
             )
           ORDER BY race_program_races.race_id ASC
-        `).all(season, ...chunk) as any;
+        `).all(season, String(season), ...chunk) as any;
         raceRows.push(...chunkRaces);
       }
     }
