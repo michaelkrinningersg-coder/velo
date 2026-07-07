@@ -19,6 +19,11 @@ export interface LeaderboardRow {
   raceName?: string;
   stageNumber?: number;
   season?: number;
+  gtSlamDetails?: {
+    tdf: number;
+    giro: number;
+    vuelta: number;
+  };
   leadoutDetails?: {
     sprinterLastName: string;
     sprinterNationality?: string;
@@ -1021,6 +1026,37 @@ export class LeaderboardRepository {
       }
     }
 
+    if (metricKey === 'gt_stage_win_slam') {
+      // All-Time: nur Fahrer mit mindestens einem Etappensieg in JEDEM der drei
+      // Grand Tours. Spalten je GT + Gesamtsiege; Sortierung nach Gesamt,
+      // Tie-Break TdF -> Giro -> Vuelta.
+      if (!tableExists(this.db, 'results_flat')) {
+        return [];
+      }
+      query = `
+        SELECT
+          r.id AS id, r.first_name, r.last_name, c.code_3 AS nationality,
+          t.abbreviation AS team_abbr, t.name AS team_name, t.id AS team_id,
+          t.division_id AS team_division_id, r.is_retired AS is_retired,
+          SUM(CASE WHEN races.name = 'Tour de France' THEN 1 ELSE 0 END) AS tdf_wins,
+          SUM(CASE WHEN races.name = 'Giro d''Italia' THEN 1 ELSE 0 END) AS giro_wins,
+          SUM(CASE WHEN races.name = 'La Vuelta Ciclista a España' THEN 1 ELSE 0 END) AS vuelta_wins,
+          COUNT(*) AS val
+        FROM results_flat rf
+        JOIN races ON races.id = rf.race_id
+        JOIN riders r ON r.id = rf.rider_id
+        JOIN sta_country c ON c.id = r.country_id
+        LEFT JOIN teams t ON t.id = r.active_team_id
+        WHERE rf.result_type_id = 1 AND rf.rank = 1 AND rf.rider_id IS NOT NULL
+          AND races.name IN ('Tour de France', 'Giro d''Italia', 'La Vuelta Ciclista a España')
+        GROUP BY r.id
+        HAVING tdf_wins >= 1 AND giro_wins >= 1 AND vuelta_wins >= 1
+        ORDER BY val DESC, tdf_wins DESC, giro_wins DESC, vuelta_wins DESC
+        LIMIT 100
+      `;
+      valueFormatter = (r) => `${r.val}`;
+    }
+
     if (!query) {
       return [];
     }
@@ -1043,6 +1079,11 @@ export class LeaderboardRepository {
         season: r.season !== undefined ? r.season : undefined,
         raceName: r.race_name !== undefined ? r.race_name : undefined,
         stageNumber: r.stage_number !== undefined ? r.stage_number : undefined,
+        gtSlamDetails: r.tdf_wins !== undefined ? {
+          tdf: r.tdf_wins ?? 0,
+          giro: r.giro_wins ?? 0,
+          vuelta: r.vuelta_wins ?? 0,
+        } : undefined,
         lieutenantDetails: r.leader_id ? {
           leaderId: r.leader_id,
           leaderFirstName: r.leader_first_name,

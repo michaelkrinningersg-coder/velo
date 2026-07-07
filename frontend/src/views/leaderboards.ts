@@ -174,6 +174,7 @@ function isLiveMetric(key: string): boolean {
 function isAllTimeOnlyMetric(key: string): boolean {
   return [
     'mentors_ranking',
+    'gt_stage_win_slam',
   ].includes(key) || key.startsWith('youngest_winners');
 }
 
@@ -312,8 +313,10 @@ export async function renderLeaderboard(): Promise<void> {
   const isLeadout = activeMetricKey === 'highest_leadout_bonus';
   const isSpeed = activeMetricKey === 'fastest_avg_speed_stage' || activeMetricKey === 'fastest_avg_speed_oneday'
     || activeMetricKey === 'slowest_avg_speed_stage' || activeMetricKey === 'slowest_avg_speed_oneday';
-  // Beide zeigen die "Rennen / Etappe / Jahr"-Detailspalte (nur Fahrer-Scope).
-  const showRaceDetail = isLeadout || isSpeed;
+  const isGtSlam = activeMetricKey === 'gt_stage_win_slam';
+  // Zeigen eine Detailspalte (nur Fahrer-Scope): Rennen/Etappe/Jahr bzw. bei
+  // Grand Tour Slam die Etappensiege je Grand Tour.
+  const showRaceDetail = isLeadout || isSpeed || isGtSlam;
   const isLieutenant = activeMetricKey === 'strongest_lieutenants';
   const MONO = "font-family:'JetBrains Mono',monospace;";
 
@@ -331,7 +334,7 @@ export async function renderLeaderboard(): Promise<void> {
         ...(isLeadout ? ['minmax(150px,1fr)'] : []),
         '130px']).join(' ');
 
-  const raceDetailHeader = isSpeed ? 'RENNEN / JAHR' : 'RENNEN / ETAPPE / JAHR';
+  const raceDetailHeader = isGtSlam ? 'TDF · GIRO · VUELTA' : (isSpeed ? 'RENNEN / JAHR' : 'RENNEN / ETAPPE / JAHR');
   theadEl.style.gridTemplateColumns = cols;
   theadEl.innerHTML = activeScope === 'riders'
     ? `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span style="justify-self:center;">LAND</span><span>FAHRER</span><span>TEAM</span>${showRaceDetail ? `<span>${raceDetailHeader}</span>` : ''}${isLieutenant ? '<span>FÄHRT FÜR</span>' : ''}<span style="justify-self:end;">WERT</span>`
@@ -356,7 +359,11 @@ export async function renderLeaderboard(): Promise<void> {
     const valueHtml = `<span style="${MONO}text-align:right;justify-self:end;font-weight:800;color:#4ade80;">${esc(String(row.value))}</span>`;
 
     let leadoutCell = '';
-    if (showRaceDetail) {
+    if (isGtSlam) {
+      const gt = row.gtSlamDetails;
+      const parts = gt ? [`TdF ${gt.tdf}`, `Giro ${gt.giro}`, `Vuelta ${gt.vuelta}`] : ['–'];
+      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${parts.map((p) => esc(String(p))).join(' · ')}</span>`;
+    } else if (showRaceDetail) {
       // Eintagesrennen haben keine sinnvolle Etappennummer -> nur Rennen + Jahr.
       const isOnedaySpeed = activeMetricKey === 'fastest_avg_speed_oneday' || activeMetricKey === 'slowest_avg_speed_oneday';
       const parts = isSpeed && isOnedaySpeed
