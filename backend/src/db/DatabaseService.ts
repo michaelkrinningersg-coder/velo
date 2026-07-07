@@ -4,11 +4,22 @@ import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
-import { bootstrap } from '../bootstrapper';
+import { bootstrap, readStageScoreSegments } from '../bootstrapper';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
 import { summarizeStageProfile } from '../simulation/StageParser';
+import {
+  CHAMPIONSHIP_CATEGORY_DEFS,
+  CHAMPIONSHIP_RACE_DEFS,
+  CRO_RACE_NAME,
+  CRO_RACE_ORIGINAL_START_DAY,
+  championshipStageProfile,
+} from '../simulation/championships';
+import {
+  calculateClimbScoresForStage,
+  calculateStageScore,
+} from '../simulation/StageScoreCalculator';
 import { isFullMoonDate } from '../util/moonPhase';
 
 const MASTER_DB_NAME = 'world_data.db';
@@ -657,6 +668,184 @@ export class DatabaseService {
       })();
     } finally {
       masterDb.close();
+    }
+  }
+
+  private ensureChampionshipTitlesSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS championship_titles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season INTEGER NOT NULL,
+        championship_type TEXT NOT NULL,
+        discipline TEXT NOT NULL,
+        rider_id INTEGER NOT NULL,
+        country_id INTEGER,
+        race_id INTEGER,
+        stage_id INTEGER,
+        awarded_on TEXT,
+        UNIQUE(season, championship_type, discipline)
+      )
+    `).run();
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_championship_titles_rider ON championship_titles(rider_id)',
+    ).run();
+  }
+
+  // Ergaenzt den WM/EM-Kalender in einem (neuen wie bestehenden) Spielstand:
+  // vier Meisterschaftskategorien inkl. UCI-Punkte, je Saison vier Titelrennen
+  // (falls noch nicht vorhanden) und die Verschiebung des Cro Race um einen Tag.
+  // Idempotent: Erkennung ueber die stabile Kategorie-ID.
+  private ensureChampionshipCalendar(db: Database.Database): void {
+    if (!tableExists(db, 'races') || !tableExists(db, 'stages')) {
+      return;
+    }
+    if (!tableExists(db, 'race_categories') || !tableExists(db, 'race_categories_bonus')) {
+      return;
+    }
+
+    // 1. Bonus-Systeme (nur Zielpunkte, alles andere null).
+    const insertBonus = db.prepare(`
+      INSERT OR IGNORE INTO race_categories_bonus (
+        id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage,
+        points_mountainstage, points_sprint_finish, points_one_day, points_gc_final,
+        points_jersey_leader_day, points_jersey_sprint_day, points_jersey_mountain_day,
+        points_jersey_youth_day, points_sprint_intermediate, points_mountain_hc,
+        points_mountain_cat1, points_mountain_cat2, points_mountain_cat3, points_mountain_cat4,
+        points_jersey_sprint_final, points_jersey_mountain_final, points_jersey_youth_final
+      ) VALUES (
+        @id, @name, '0', '0', '0', '0', '0', @pointsOneDay, '0',
+        0, 0, 0, 0, '0', '0', '0', '0', '0', '0', '0', '0', '0'
+      )
+    `);
+    const insertCategory = db.prepare(`
+      INSERT OR IGNORE INTO race_categories (
+        id, name, tier, number_of_teams, number_of_riders, bonus_system_id, home_selection_probability
+      ) VALUES (@id, @name, 1, 60, 12, @bonusSystemId, 0.0)
+    `);
+    for (const def of CHAMPIONSHIP_CATEGORY_DEFS) {
+      insertBonus.run({ id: def.bonusSystemId, name: def.bonusName, pointsOneDay: def.pointsOneDay });
+      insertCategory.run({ id: def.categoryId, name: def.categoryName, bonusSystemId: def.bonusSystemId });
+    }
+
+    // 2. Distinct-Saisons anhand vorhandener Etappen.
+    const seasonRows = db
+      .prepare(`SELECT DISTINCT CAST(substr(date, 1, 4) AS INTEGER) AS season FROM stages WHERE date IS NOT NULL`)
+      .all() as Array<{ season: number }>;
+    const seasons = seasonRows.map((row) => row.season).filter((season) => Number.isInteger(season));
+    if (seasons.length === 0) {
+      return;
+    }
+
+    const hasChampionshipStage = db.prepare(`
+      SELECT 1
+      FROM stages
+      JOIN races ON races.id = stages.race_id
+      WHERE races.category_id = ?
+        AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
+      LIMIT 1
+    `);
+    const insertRace = db.prepare(`
+      INSERT INTO races (
+        name, country_id, category_id, is_stage_race, number_of_stages,
+        start_date, end_date, prestige, preferred_nationality_group, required_specs
+      ) VALUES (@name, @countryId, @categoryId, 0, 1, @date, @date, @prestige, NULL, NULL)
+    `);
+    const insertStage = db.prepare(`
+      INSERT INTO stages (
+        race_id, stage_number, date, profile, start_elevation, details_csv_file,
+        final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
+        crash_incident_multiplier, mechanical_incident_multiplier, stage_score, allowed_weather
+      ) VALUES (@raceId, 1, @date, @profile, @startElevation, @detailsFile, 70, 90, 1, 1, 1, @stageScore, '1|3')
+    `);
+    const insertClimb = tableExists(db, 'stage_climb_scores')
+      ? db.prepare(`
+          INSERT INTO stage_climb_scores (
+            stage_id, climb_index, name, category, start_km, end_km, climb_score
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `)
+      : null;
+
+    for (const season of seasons) {
+      for (const def of CHAMPIONSHIP_RACE_DEFS) {
+        if (hasChampionshipStage.get(def.categoryId, season)) {
+          continue;
+        }
+        const date = `${season}-${def.monthDay}`;
+        const { profile, detailsFile } = championshipStageProfile(def, season);
+        const segments = readStageScoreSegments(detailsFile, `championship ${def.raceName} ${season}`);
+        const stageScore = calculateStageScore(segments, def.startElevation);
+
+        const raceResult = insertRace.run({
+          name: def.raceName,
+          countryId: 3, // neutral (Frankreich); Heimvorteil ist deaktiviert (Wahrscheinlichkeit 0)
+          categoryId: def.categoryId,
+          date,
+          prestige: def.prestige,
+        });
+        const raceId = raceResult.lastInsertRowid as number;
+        const stageResult = insertStage.run({
+          raceId,
+          date,
+          profile,
+          startElevation: def.startElevation,
+          detailsFile,
+          stageScore,
+        });
+        const stageId = stageResult.lastInsertRowid as number;
+        if (insertClimb) {
+          for (const climb of calculateClimbScoresForStage(segments, def.startElevation)) {
+            insertClimb.run(
+              stageId,
+              climb.climbIndex,
+              climb.name,
+              climb.category,
+              climb.startKm,
+              climb.endKm,
+              climb.score,
+            );
+          }
+        }
+      }
+
+      // 3. Cro Race weicht dem WM-Fenster: ein Tag nach hinten (idempotent).
+      this.shiftCroRaceForSeason(db, season);
+    }
+  }
+
+  private shiftCroRaceForSeason(db: Database.Database, season: number): void {
+    const croRace = db
+      .prepare(
+        `SELECT id, start_date, end_date FROM races WHERE name = ? AND substr(start_date, 1, 4) = ?`,
+      )
+      .get(CRO_RACE_NAME, String(season)) as
+      | { id: number; start_date: string; end_date: string }
+      | undefined;
+    if (!croRace) {
+      return;
+    }
+    const startDay = Number.parseInt(croRace.start_date.slice(8, 10), 10);
+    if (startDay !== CRO_RACE_ORIGINAL_START_DAY) {
+      return; // bereits verschoben
+    }
+    const shift = (iso: string): string => {
+      const [y, m, d] = iso.split('-').map((value) => Number(value));
+      const shifted = new Date(Date.UTC(y, m - 1, d + 1));
+      const yy = shifted.getUTCFullYear();
+      const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(shifted.getUTCDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    };
+    db.prepare('UPDATE races SET start_date = ?, end_date = ? WHERE id = ?').run(
+      shift(croRace.start_date),
+      shift(croRace.end_date),
+      croRace.id,
+    );
+    const stages = db
+      .prepare('SELECT id, date FROM stages WHERE race_id = ?')
+      .all(croRace.id) as Array<{ id: number; date: string }>;
+    const updateStage = db.prepare('UPDATE stages SET date = ? WHERE id = ?');
+    for (const stage of stages) {
+      updateStage.run(shift(stage.date), stage.id);
     }
   }
 
@@ -2021,6 +2210,13 @@ export class DatabaseService {
       ['jersey_streak_best', 'INTEGER NOT NULL DEFAULT 0'],  // laengste Trikot-Serie (Jersey Guardian)
       ['photo_finish_wins', 'INTEGER NOT NULL DEFAULT 0'],   // Siege per Zielfoto (Photo Finish King)
       ['so_close', 'INTEGER NOT NULL DEFAULT 0'],            // Zweiter per Zielfoto (So Close)
+      // WM/EM-Titel (Karriere-Zaehler; ein Titel je Edition). Speisen die vier
+      // HoF-Einzelbadges Weltmeister / Weltmeister ITT / Europameister /
+      // Europameister ITT.
+      ['world_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
@@ -2777,6 +2973,8 @@ export class DatabaseService {
     this.ensureResultsHistorySchema(db);
     this.ensureRaceCategoryBonusSchema(db);
     this.ensureRaceCategoriesSchema(db);
+    this.ensureChampionshipTitlesSchema(db);
+    this.ensureChampionshipCalendar(db);
     this.ensureRulesData(db);
     this.ensureSkillWeightsData(db);
     this.ensureStageSpreadData(db);

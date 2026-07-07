@@ -245,7 +245,7 @@ function parseStageDetailMarkers(typesValue: string, namesValue: string, categor
   });
 }
 
-function readStageScoreSegments(detailsCsvFile: string, ctx: string): StageScoreSegment[] {
+export function readStageScoreSegments(detailsCsvFile: string, ctx: string): StageScoreSegment[] {
   const filePath = path.join(STAGES_DIR, detailsCsvFile);
   if (!fs.existsSync(filePath)) {
     throw new Error(`${ctx}: Stage-Detail-CSV nicht gefunden: ${detailsCsvFile}`);
