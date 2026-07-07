@@ -6508,6 +6508,47 @@ tr.calendar-highlight {
   box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
 }
 
+/* Rennen-Durchschalter (nach Startdatum) links/rechts vom Auswahlfeld */
+.results-race-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.results-race-nav select {
+  flex: 1;
+  min-width: 0;
+}
+
+.results-race-nav-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  color: #9fb0c9;
+  background: #0a1122;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.results-race-nav-btn:hover:not(:disabled) {
+  color: #22d3ee;
+  border-color: #22d3ee;
+  background: #0d1830;
+}
+
+.results-race-nav-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
 /* Wertungs-Tabs + Marker/Event-Sub-Leiste als Segment-Toggle */
 #view-results .results-type-tabs {
   gap: 3px;

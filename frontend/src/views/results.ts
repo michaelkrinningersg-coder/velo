@@ -729,6 +729,46 @@ function formatEventTextWithAllRiders(text: string): string {
   return escapedHtml;
 }
 
+/**
+ * Auswaehlbare Rennen fuer das Results-Menue, chronologisch nach Startdatum
+ * sortiert (nur Rennen mit mindestens einer Etappe). Basis fuer das Dropdown
+ * und die Vor-/Zurueck-Durchschaltung.
+ */
+function resultsRaceList(): Race[] {
+  return state.races
+    .filter((race) => (race.stages?.length ?? 0) > 0)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name, 'de'));
+}
+
+/**
+ * Schaltet im Results-Menue ein Rennen weiter (direction -1 = zurueck,
+ * +1 = vor) entlang der nach Startdatum sortierten Rennliste und laedt das
+ * erste (Etappen-)Ergebnis des Zielrennens.
+ */
+function navigateResultsRace(direction: -1 | 1): void {
+  const list = resultsRaceList();
+  if (list.length === 0) return;
+  const idx = list.findIndex((race) => race.id === state.selectedResultsRaceId);
+  let nextIdx: number;
+  if (idx === -1) {
+    nextIdx = direction === 1 ? 0 : list.length - 1;
+  } else {
+    nextIdx = idx + direction;
+    if (nextIdx < 0 || nextIdx >= list.length) return; // an den Enden nicht umbrechen
+  }
+  const race = list[nextIdx];
+  state.selectedResultsRaceId = race.id;
+  state.selectedResultsStageId = race.stages?.[0]?.id ?? null;
+  state.selectedResultTypeId = 1;
+  state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
+  state.selectedResultsSpecialView = null;
+  state.stageResults = null;
+  renderResultsView();
+  if (state.selectedResultsStageId != null) {
+    void loadStageResults(state.selectedResultsStageId, true);
+  }
+}
+
 export function renderResultsView(): void {
   // If state.riders is empty, trigger a fetch so that links are rendered properly when data arrives
   if (state.riders.length === 0) {
@@ -759,10 +799,18 @@ export function renderResultsView(): void {
     state.selectedResultsStageId = state.stageResults.stageId;
   }
 
-  raceSelect.innerHTML = '<option value="">– Rennen auswählen –</option>' + state.races
-    .filter((race) => (race.stages?.length ?? 0) > 0)
+  const raceList = resultsRaceList();
+  raceSelect.innerHTML = '<option value="">– Rennen auswählen –</option>' + raceList
     .map((race) => `<option value="${race.id}"${race.id === state.selectedResultsRaceId ? ' selected' : ''}>${esc(race.name)}</option>`)
     .join('');
+
+  // Durchschalt-Buttons: an den Enden der (nach Startdatum sortierten) Liste
+  // deaktivieren; ohne Auswahl beide aktiv (springt an Anfang/Ende).
+  const racePrevBtn = $<HTMLButtonElement>('results-race-prev');
+  const raceNextBtn = $<HTMLButtonElement>('results-race-next');
+  const currentRaceIndex = raceList.findIndex((race) => race.id === state.selectedResultsRaceId);
+  racePrevBtn.disabled = raceList.length === 0 || currentRaceIndex === 0;
+  raceNextBtn.disabled = raceList.length === 0 || (currentRaceIndex >= 0 && currentRaceIndex === raceList.length - 1);
 
   const selectedRace = findRaceById(state.selectedResultsRaceId);
   const stageOptions = selectedRace == null
@@ -1312,6 +1360,9 @@ export function initResultsListeners(): void {
       void loadStageResults(state.selectedResultsStageId, true);
     }
   });
+
+  $('results-race-prev').addEventListener('click', () => navigateResultsRace(-1));
+  $('results-race-next').addEventListener('click', () => navigateResultsRace(1));
 
   $('results-stage-select').addEventListener('change', (e) => {
     const val = (e.target as HTMLSelectElement).value;

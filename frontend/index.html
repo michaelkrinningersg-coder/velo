@@ -350,9 +350,13 @@
         <div class="results-toolbar">
           <div class="form-group">
             <label for="results-race-select">Rennen</label>
-            <select id="results-race-select">
-              <option value="">– Rennen auswählen –</option>
-            </select>
+            <div class="results-race-nav">
+              <button type="button" id="results-race-prev" class="results-race-nav-btn" title="Vorheriges Rennen (nach Startdatum)" aria-label="Vorheriges Rennen">‹</button>
+              <select id="results-race-select">
+                <option value="">– Rennen auswählen –</option>
+              </select>
+              <button type="button" id="results-race-next" class="results-race-nav-btn" title="Nächstes Rennen (nach Startdatum)" aria-label="Nächstes Rennen">›</button>
+            </div>
           </div>
           <div class="form-group">
             <label for="results-stage-select">Etappe</label>
