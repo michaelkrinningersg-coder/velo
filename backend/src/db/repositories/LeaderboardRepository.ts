@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { tableExists, columnExists } from '../mappers';
+import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 
 export interface LeaderboardRow {
   rank: number;
@@ -1281,6 +1282,7 @@ export class LeaderboardRepository {
           SELECT team_id, SUM(points_awarded) AS val
           FROM season_point_events
           WHERE season = ? AND team_id IS NOT NULL
+            AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${CHAMPIONSHIP_CATEGORY_IDS.join(',')}))
           GROUP BY team_id
           ORDER BY val DESC
           LIMIT 100
@@ -1291,6 +1293,7 @@ export class LeaderboardRepository {
           SELECT team_id, SUM(points_awarded) AS val
           FROM season_point_events
           WHERE team_id IS NOT NULL
+            AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${CHAMPIONSHIP_CATEGORY_IDS.join(',')}))
           GROUP BY team_id
           ORDER BY val DESC
           LIMIT 100

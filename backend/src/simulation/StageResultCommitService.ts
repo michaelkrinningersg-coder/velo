@@ -32,6 +32,7 @@ import {
   roundStageResultSeconds,
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
+import { getChampionshipCategoryDef, isChampionshipCategory } from './championships';
 
 const RESULT_TYPES = {
   stage: 1,
@@ -1703,6 +1704,61 @@ export class StageResultCommitService {
         this.db.prepare(`
           UPDATE rider_career_stats SET full_moon_wins = full_moon_wins + 1 WHERE rider_id = ?
         `).run(winnerRow.riderId);
+      }
+
+      // WM/EM: Der Sieger wird Welt- bzw. Europameister der Disziplin. Titel in
+      // championship_titles ablegen (eine Zeile je Edition) und den passenden
+      // Karriere-Zaehler fuer die HoF-Einzelbadges erhoehen.
+      if (winnerRow && winnerRow.riderId != null && isChampionshipCategory(race.categoryId)) {
+        const champDef = getChampionshipCategoryDef(race.categoryId);
+        if (champDef) {
+          const titleSeason = Number(stage.date.slice(0, 4));
+          const winnerCountry = this.db
+            .prepare('SELECT country_id FROM riders WHERE id = ?')
+            .get(winnerRow.riderId) as { country_id: number } | undefined;
+          const hadTitle = tableExists(this.db, 'championship_titles')
+            ? this.db
+                .prepare('SELECT rider_id FROM championship_titles WHERE season = ? AND championship_type = ? AND discipline = ?')
+                .get(titleSeason, champDef.type, champDef.discipline)
+            : undefined;
+          if (tableExists(this.db, 'championship_titles')) {
+            this.db.prepare(`
+              INSERT INTO championship_titles (
+                season, championship_type, discipline, rider_id, country_id, race_id, stage_id, awarded_on
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(season, championship_type, discipline) DO UPDATE SET
+                rider_id = excluded.rider_id,
+                country_id = excluded.country_id,
+                race_id = excluded.race_id,
+                stage_id = excluded.stage_id,
+                awarded_on = excluded.awarded_on
+            `).run(
+              titleSeason,
+              champDef.type,
+              champDef.discipline,
+              winnerRow.riderId,
+              winnerCountry?.country_id ?? null,
+              race.id,
+              stage.id,
+              stage.date,
+            );
+          }
+          const titleColumn =
+            champDef.type === 'WM'
+              ? champDef.discipline === 'ITT'
+                ? 'world_champion_itt_titles'
+                : 'world_champion_road_titles'
+              : champDef.discipline === 'ITT'
+                ? 'euro_champion_itt_titles'
+                : 'euro_champion_road_titles';
+          // Nur beim erstmaligen Ermitteln des Titels hochzaehlen (Schutz gegen
+          // erneutes Commit derselben Etappe).
+          if (!hadTitle && columnExists(this.db, 'rider_career_stats', titleColumn)) {
+            this.db
+              .prepare(`UPDATE rider_career_stats SET ${titleColumn} = ${titleColumn} + 1 WHERE rider_id = ?`)
+              .run(winnerRow.riderId);
+          }
+        }
       }
 
       // Welle 2 (Distanz/Hoehenmeter): Der Sieger einer Etappe bzw. eines

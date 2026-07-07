@@ -1,4 +1,5 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
+import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
 import {
   Country,
@@ -252,6 +253,7 @@ export class TeamRepository {
       WHERE spe.team_id = ?
         AND spe.points_awarded > 0
         AND spe.award_type IN ('stage_result', 'one_day_result', 'gc_final', 'points_final', 'mountain_final', 'youth_final')
+        AND cat.id NOT IN (${CHAMPIONSHIP_CATEGORY_IDS.join(',')})
       ORDER BY spe.points_awarded DESC, stages.date DESC
     `).all(teamId) as Array<{
       season: number;

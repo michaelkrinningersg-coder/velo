@@ -1,4 +1,5 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
+import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
 import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
@@ -110,7 +111,9 @@ export class ResultRepository {
       FROM season_point_events
       JOIN teams ON teams.id = season_point_events.team_id
       JOIN sta_country country ON country.id = teams.country_id
+      JOIN races ON races.id = season_point_events.race_id
       WHERE season_point_events.season = ?
+        AND races.category_id NOT IN (${CHAMPIONSHIP_CATEGORY_IDS.join(',')})
       GROUP BY season_point_events.team_id, teams.name, country.code_3, country.name
       ORDER BY points_total DESC, teams.name ASC
     `).all(season) as TeamSeasonStandingDbRow[];
@@ -783,6 +786,7 @@ export class ResultRepository {
       SELECT team_id, SUM(points_awarded) AS points_total
       FROM season_point_events
       WHERE stage_id = ? AND team_id IS NOT NULL
+        AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${CHAMPIONSHIP_CATEGORY_IDS.join(',')}))
       GROUP BY team_id
     `).all(stageId) as StageTeamSeasonPointDbRow[];
 
