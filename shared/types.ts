@@ -1076,6 +1076,23 @@ export interface RiderHallOfFameStats {
   // Badge-Kennzahl Welle 4 (Back-to-Back).
   winStreakBest: number;        // laengste Siegesserie an aufeinanderfolgenden Renntagen (Hot Streak)
 
+  // Badge-Kennzahlen Welle 5 (Helfer & Team).
+  waterCarrierDays: number;         // Renntage als Wassertraeger (Water Carrier)
+  superDomestiqueLeadouts: number;  // Leadout-Beteiligungen als Anfahrer (Super Domestique)
+  lieutenantSeasons: number;        // Saisons als Leutnant (Loyal Lieutenant)
+  kingmakerCount: number;           // Leutnant eines Grand-Tour-Siegers (Kingmaker)
+  franchiseSeasons: number;         // Saisons mit > 50 % der Teamsiege (The Franchise)
+  bandOfBrothersBest: number;       // meiste gemeinsame Saisons mit einem Teamkollegen (Band of Brothers)
+  cleanSweepCount: number;          // GC+Berg+Punkte+Etappe im selben Rennen (Clean Sweep)
+  cleanSweepPlusCount: number;      // + Nachwuchs (Clean Sweep Plus)
+  hottestPick: boolean;             // erster Draft-Pick (The Hottest Pick)
+
+  // Badge-Kennzahlen Welle 6 (Saison-Muster).
+  mrReliableSeasons: number;        // Saisons ohne DNF/DNS/OTL (Mr Reliable)
+  instantImpact: boolean;           // Sieg in der ersten Vertragssaison (Instant Impact)
+  outOfDarkWins: number;            // Sieg im ersten Rennen der Saison (Out of the Dark)
+  hotStreakOpenerSeasons: number;   // 3+ Siege in den ersten 5 Rennen (Hot Streak Opener)
+
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)
   doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)

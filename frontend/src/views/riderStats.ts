@@ -2719,6 +2719,7 @@ const HOF_ICON_TRAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_FOG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 8a5 5 0 0 1 9.6-1.8A4 4 0 0 1 19 10H7a3 3 0 0 1-1-2zm-2 6h13v1.6H4V14zm3 3h13v1.6H7V17zm-3 3h11v1.6H4V20z" opacity=".9"/></svg>`;
 const HOF_ICON_LANTERN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M10 2h4v2h-4V2zm-1 3h6l1 2v1H8V7l1-2zm-1 4h8l1 10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l1-10zm4 2a2.5 2.5 0 0 0-2.5 2.5c0 1.7 2.5 4.5 2.5 4.5s2.5-2.8 2.5-4.5A2.5 2.5 0 0 0 12 11z"/></svg>`;
 const HOF_ICON_BROOM = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19.4 3.1a1 1 0 0 1 .3 1.4l-6.2 9 1.5 1.3-1.2 1.4-1.1-.9-3.6 4.2a2 2 0 0 1-1.9.7l-4.4-.8 2.8-2.3-1-3.6a2 2 0 0 1 .6-2l3.9-3.4-.9-1.1L9.6 9l1.4 1.2 6.9-6.8a1 1 0 0 1 1.5-.3zM6 17l1.8.3L9 16l-2.2-.6L6 17z"/></svg>`;
+const HOF_ICON_WATER = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11zm-2.5 11a1 1 0 0 0-2 0 4.5 4.5 0 0 0 4.5 4.5 1 1 0 0 0 0-2A2.5 2.5 0 0 1 9.5 13z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2840,6 +2841,21 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const gcBySeconds = hof.gcBySeconds ?? 0;
   const bitterEndDnf = hof.bitterEndDnf ?? 0;
   const winStreakBest = hof.winStreakBest ?? 0;
+  // Welle 5 (Helfer & Team).
+  const waterCarrierDays = hof.waterCarrierDays ?? 0;
+  const superDomestiqueLeadouts = hof.superDomestiqueLeadouts ?? 0;
+  const lieutenantSeasons = hof.lieutenantSeasons ?? 0;
+  const kingmakerCount = hof.kingmakerCount ?? 0;
+  const franchiseSeasons = hof.franchiseSeasons ?? 0;
+  const bandOfBrothersBest = hof.bandOfBrothersBest ?? 0;
+  const cleanSweepCount = hof.cleanSweepCount ?? 0;
+  const cleanSweepPlusCount = hof.cleanSweepPlusCount ?? 0;
+  const hottestPick = hof.hottestPick === true;
+  // Welle 6 (Saison-Muster).
+  const mrReliableSeasons = hof.mrReliableSeasons ?? 0;
+  const instantImpact = hof.instantImpact === true;
+  const outOfDarkWins = hof.outOfDarkWins ?? 0;
+  const hotStreakOpenerSeasons = hof.hotStreakOpenerSeasons ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3801,6 +3817,102 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `Längste Siegesserie von ${winStreakBest} Siegen an aufeinanderfolgenden Renntagen (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen an aufeinanderfolgenden Renntagen',
     },
+
+    // --- Badges Welle 5 (Helfer & Team) ---
+    {
+      key: 'waterCarrier', name: 'Water Carrier', icon: HOF_ICON_WATER, description: 'Renntage als Wasserträger',
+      tier: resolveThresholdTier(waterCarrierDays, [100, 200, 300, 400, 500]),
+      detail: waterCarrierDays > 0 ? `${waterCarrierDays.toLocaleString('de-DE')} Renntage` : '',
+      hover: `${waterCarrierDays.toLocaleString('de-DE')} Renntage in der Rolle Wasserträger (Gold 500 · Silber 400 · Bronze 300 · Cyan 200 · Lila 100)`,
+      requirement: 'Ab 100 Renntagen als Wasserträger',
+    },
+    {
+      key: 'superDomestique', name: 'Super Domestique', icon: HOF_ICON_WRENCH, description: 'Leadout-Beteiligungen',
+      tier: resolveThresholdTier(superDomestiqueLeadouts, [10, 25, 50, 100, 200]),
+      detail: superDomestiqueLeadouts > 0 ? `${superDomestiqueLeadouts} Anfahrten` : '',
+      hover: `${superDomestiqueLeadouts} Leadout-Beteiligungen als Anfahrer (Gold 200 · Silber 100 · Bronze 50 · Cyan 25 · Lila 10)`,
+      requirement: 'Ab 10 Leadout-Beteiligungen',
+    },
+    {
+      key: 'loyalLieutenant', name: 'Loyal Lieutenant', icon: HOF_ICON_SHIELD, description: 'Saisons als Leutnant',
+      tier: resolveThresholdTier(lieutenantSeasons, [2, 4, 6, 8, 10]),
+      detail: lieutenantSeasons > 0 ? `${lieutenantSeasons} Saisons` : '',
+      hover: `${lieutenantSeasons} Saisons als Leutnant (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Saisons als Leutnant',
+    },
+    {
+      key: 'packesel', name: 'Packesel', icon: HOF_ICON_ROUTE, description: 'Ausreißer-Kilometer',
+      tier: resolveThresholdTier(brkKms, [2500, 5000, 7500, 10000, 15000]),
+      detail: brkKms > 0 ? formatKm(brkKms) : '',
+      hover: `${formatKm(brkKms)} in Ausreißversuchen zurückgelegt (Gold 15.000 · Silber 10.000 · Bronze 7.500 · Cyan 5.000 · Lila 2.500 km)`,
+      requirement: 'Ab 2.500 Ausreißer-Kilometern',
+    },
+    {
+      key: 'kingmaker', name: 'Kingmaker', icon: HOF_ICON_CROWN, description: 'Leutnant eines GT-Siegers',
+      tier: resolveThresholdTier(kingmakerCount, [1, 2, 3, 4, 5]),
+      detail: kingmakerCount > 0 ? `${kingmakerCount}×` : '',
+      hover: `${kingmakerCount}× Leutnant eines Grand-Tour-Siegers in derselben Saison (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Leutnant eines Grand-Tour-Siegers',
+    },
+    {
+      key: 'theFranchise', name: 'The Franchise', icon: HOF_ICON_STAR, description: 'Über 50 % der Teamsiege',
+      tier: resolveThresholdTier(franchiseSeasons, [1, 2, 3, 4, 5]),
+      detail: franchiseSeasons > 0 ? `${franchiseSeasons} Saisons` : '',
+      hover: `${franchiseSeasons} Saisons mit über 50 % der Teamsiege (Team mind. 5 Siege) (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Saison mit > 50 % der Teamsiege',
+    },
+    {
+      key: 'bandOfBrothers', name: 'Band of Brothers', icon: HOF_ICON_HEART, description: 'Saisons mit Teamkollegen',
+      tier: resolveThresholdTier(bandOfBrothersBest, [5, 6, 7, 8, 10]),
+      detail: bandOfBrothersBest > 0 ? `${bandOfBrothersBest} Saisons` : '',
+      hover: `${bandOfBrothersBest} gemeinsame Saisons mit demselben Teamkollegen (Gold 10 · Silber 8 · Bronze 7 · Cyan 6 · Lila 5)`,
+      requirement: 'Ab 5 Saisons mit demselben Teamkollegen',
+    },
+    {
+      key: 'cleanSweep', name: 'Clean Sweep', icon: HOF_ICON_JERSEY, description: 'GC + Berg + Punkte + Etappe',
+      tier: resolveThresholdTier(cleanSweepCount, [1, 2, 3, 4, 5]),
+      detail: cleanSweepCount > 0 ? `${cleanSweepCount}×` : '',
+      hover: `${cleanSweepCount}× in einem Etappenrennen GC, Berg, Punkte und eine Etappe gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× GC + Berg + Punkte + Etappe',
+    },
+    {
+      key: 'cleanSweepPlus', name: 'Clean Sweep Plus', icon: HOF_ICON_CROWN, description: '+ Nachwuchs',
+      tier: resolveThresholdTier(cleanSweepPlusCount, [1, 2, 3, 4, 5]),
+      detail: cleanSweepPlusCount > 0 ? `${cleanSweepPlusCount}×` : '',
+      hover: `${cleanSweepPlusCount}× GC, Berg, Punkte, Nachwuchs und eine Etappe im selben Rennen gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× GC + Berg + Punkte + Nachwuchs + Etappe',
+    },
+    singleBadge('hottestPick', 'The Hottest Pick', HOF_ICON_STAR, 'Erster Draft-Pick',
+      hottestPick, HOF_STYLE_GOLD,
+      hottestPick ? 'War einmal der erste Pick im Draft.' : 'War nie der erste Pick im Draft.',
+      'Erster Pick im Draft', 'Nr. 1'),
+
+    // --- Badges Welle 6 (Saison-Muster) ---
+    {
+      key: 'mrReliable', name: 'Mr Reliable', icon: HOF_ICON_SHIELD, description: 'Saisons ohne Ausfall',
+      tier: resolveThresholdTier(mrReliableSeasons, [1, 2, 3, 5, 8]),
+      detail: mrReliableSeasons > 0 ? `${mrReliableSeasons} Saisons` : '',
+      hover: `${mrReliableSeasons} Saisons ohne DNF/DNS/OTL (mind. 30 Renntage) (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 makellosen Saison',
+    },
+    singleBadge('instantImpact', 'Instant Impact', HOF_ICON_SPARK, 'Sieg in Debüt-Saison',
+      instantImpact, HOF_STYLE_GOLD,
+      instantImpact ? 'Sieg bereits in der ersten Vertragssaison.' : 'Noch kein Sieg in der ersten Vertragssaison.',
+      'Sieg in der ersten Vertragssaison', 'Geschafft'),
+    {
+      key: 'outOfDark', name: 'Out of the Dark', icon: HOF_ICON_SUN, description: 'Sieg im Saisonauftakt',
+      tier: resolveThresholdTier(outOfDarkWins, [1, 2, 3, 4, 5]),
+      detail: outOfDarkWins > 0 ? `${outOfDarkWins}×` : '',
+      hover: `${outOfDarkWins}× das erste Rennen der Saison gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Sieg im ersten Rennen der Saison',
+    },
+    {
+      key: 'hotStreakOpener', name: 'Hot Streak Opener', icon: HOF_ICON_SPARK, description: 'Starke Saisoneröffnung',
+      tier: resolveThresholdTier(hotStreakOpenerSeasons, [1, 2, 3, 4, 5]),
+      detail: hotStreakOpenerSeasons > 0 ? `${hotStreakOpenerSeasons} Saisons` : '',
+      hover: `${hotStreakOpenerSeasons} Saisons mit 3+ Siegen in den ersten 5 Rennen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Saison mit 3+ Siegen in den ersten 5 Rennen',
+    },
   ];
 }
 
@@ -3840,7 +3952,8 @@ const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
-   'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds'],
+   'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
+   'cleanSweep', 'cleanSweepPlus', 'instantImpact'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
@@ -3851,12 +3964,14 @@ const HOF_GROUPS: string[][] = [
    'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit'],
   // 5. Ausreißer & Angriff
   ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze'],
+  // 5b. Helfer & Team
+  ['waterCarrier', 'superDomestique', 'loyalLieutenant', 'packesel', 'kingmaker', 'theFranchise', 'bandOfBrothers'],
   // 6. Geografie
   ['worldCitizen', 'globetrotter', 'travelKing', 'nationExpress', 'winEurope', 'winAsia', 'winOceania', 'winNorthAmerica',
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
   ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone',
-   'teamEffort', 'oneManTeam'],
+   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener'],
   // 8. Wetter
   ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität
@@ -3866,7 +3981,7 @@ const HOF_GROUPS: string[][] = [
    'timeCutSpecialist', 'notBitterEnd'],
   // 11. Kuriositäten (geringste Wichtigkeit)
   ['werewolf', 'ghost', 'theCat', 'groundhogDay', 'nightShift', 'wardrobeMalfunction',
-   'lanterneRouge', 'redLanternLegend', 'broomWagonRegular'],
+   'lanterneRouge', 'redLanternLegend', 'broomWagonRegular', 'hottestPick'],
 ];
 const HOF_GROUP_INDEX: Map<string, number> = (() => {
   const m = new Map<string, number>();

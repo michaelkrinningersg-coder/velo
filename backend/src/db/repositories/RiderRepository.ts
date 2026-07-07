@@ -1643,6 +1643,114 @@ export class RiderRepository {
     return out;
   }
 
+  /** Badge-Kennzahlen Welle 5 (Helfer & Team) — rein abgeleitet. */
+  private getBadgeWave5Stats(riderId: number): {
+    waterCarrierDays: number; superDomestiqueLeadouts: number; lieutenantSeasons: number;
+    kingmakerCount: number; franchiseSeasons: number; bandOfBrothersBest: number;
+    cleanSweepCount: number; cleanSweepPlusCount: number; hottestPick: boolean;
+  } {
+    const out = { waterCarrierDays: 0, superDomestiqueLeadouts: 0, lieutenantSeasons: 0, kingmakerCount: 0, franchiseSeasons: 0, bandOfBrothersBest: 0, cleanSweepCount: 0, cleanSweepPlusCount: 0, hottestPick: false };
+    const num = (sql: string, params: any[] = [riderId]): number => {
+      try { const r = this.db.prepare(sql).get(...params) as { c: number } | undefined; return r?.c ?? 0; } catch { return 0; }
+    };
+    out.waterCarrierDays = num(`SELECT COALESCE(SUM(rss.race_days),0) AS c FROM rider_season_roles rsr JOIN rider_season_stats rss ON rss.rider_id = rsr.rider_id AND rss.season = rsr.season WHERE rsr.rider_id = ? AND rsr.role_id = 5`);
+    out.superDomestiqueLeadouts = num(`SELECT COUNT(*) AS c FROM stage_leadouts WHERE contributors_json LIKE ?`, [`%"riderId":${riderId},%`]);
+    out.lieutenantSeasons = num(`SELECT COUNT(DISTINCT season) AS c FROM rider_lieutenants WHERE lieutenant_id = ?`);
+    out.kingmakerCount = num(`SELECT COUNT(*) AS c FROM rider_lieutenants rl WHERE rl.lieutenant_id = ? AND EXISTS (
+      SELECT 1 FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id JOIN race_categories rc ON rc.id = ra.category_id
+      WHERE rf.rider_id = rl.leader_id AND rf.rank = 1 AND rf.result_type_id = 2 AND s.stage_number = ra.number_of_stages
+        AND rc.name IN ('World Tour - Tour de France', 'World Tour - Grand Tour') AND CAST(substr(s.date,1,4) AS INTEGER) = rl.season)`);
+    out.hottestPick = num(`SELECT COUNT(*) AS c FROM draft_history WHERE rider_id = ? AND pick_number = 1`) > 0;
+    // Clean Sweep (+Plus): GC + Berg + Punkte (+ Nachwuchs) + eine Etappe im selben Etappenrennen.
+    try {
+      const rows = this.db.prepare(`
+        SELECT s.race_id AS rid,
+          MAX(CASE WHEN rf.result_type_id=2 AND rf.rank=1 AND s.stage_number=ra.number_of_stages THEN 1 ELSE 0 END) gc,
+          MAX(CASE WHEN rf.result_type_id=4 AND rf.rank=1 AND s.stage_number=ra.number_of_stages THEN 1 ELSE 0 END) kom,
+          MAX(CASE WHEN rf.result_type_id=3 AND rf.rank=1 AND s.stage_number=ra.number_of_stages THEN 1 ELSE 0 END) pts,
+          MAX(CASE WHEN rf.result_type_id=5 AND rf.rank=1 AND s.stage_number=ra.number_of_stages THEN 1 ELSE 0 END) yth,
+          MAX(CASE WHEN rf.result_type_id=1 AND rf.rank=1 THEN 1 ELSE 0 END) stg
+        FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND ra.is_stage_race=1 GROUP BY s.race_id`).all(riderId) as any[];
+      for (const r of rows) {
+        if (r.gc && r.kom && r.pts && r.stg) out.cleanSweepCount += 1;
+        if (r.gc && r.kom && r.pts && r.yth && r.stg) out.cleanSweepPlusCount += 1;
+      }
+    } catch { /* */ }
+    // The Franchise: Saison mit > 50 % der Teamsiege (Team-Gesamtsiege >= 5).
+    try {
+      const rw = this.db.prepare(`
+        SELECT CAST(substr(s.date,1,4) AS INTEGER) AS yr, rf.team_id AS tid, COUNT(*) AS c
+        FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND (rf.result_type_id=1 OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))
+        GROUP BY yr, tid`).all(riderId) as Array<{ yr: number; tid: number; c: number }>;
+      const teamTotal = this.db.prepare(`
+        SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.team_id=? AND CAST(substr(s.date,1,4) AS INTEGER)=? AND rf.rank=1 AND (rf.result_type_id=1 OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`);
+      for (const r of rw) {
+        const tt = (teamTotal.get(r.tid, r.yr) as { c: number } | undefined)?.c ?? 0;
+        if (tt >= 5 && r.c > tt / 2) out.franchiseSeasons += 1;
+      }
+    } catch { /* */ }
+    // Band of Brothers: meiste gemeinsame Saisons mit demselben Teamkollegen.
+    try {
+      const cur = (this.db.prepare(`SELECT season FROM game_state WHERE id=1`).get() as { season: number } | undefined)?.season ?? 99999;
+      const mine = this.db.prepare(`SELECT team_id, start_season, end_season FROM contracts WHERE rider_id=?`).all(riderId) as Array<{ team_id: number; start_season: number; end_season: number }>;
+      const mySet = new Set<string>();
+      for (const c of mine) for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) mySet.add(`${c.team_id}:${y}`);
+      if (mySet.size > 0) {
+        const others = this.db.prepare(`SELECT rider_id, team_id, start_season, end_season FROM contracts WHERE rider_id != ?`).all(riderId) as Array<{ rider_id: number; team_id: number; start_season: number; end_season: number }>;
+        const cnt = new Map<number, number>();
+        for (const c of others) {
+          let n = 0;
+          for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) if (mySet.has(`${c.team_id}:${y}`)) n += 1;
+          if (n > 0) cnt.set(c.rider_id, (cnt.get(c.rider_id) ?? 0) + n);
+        }
+        for (const v of cnt.values()) if (v > out.bandOfBrothersBest) out.bandOfBrothersBest = v;
+      }
+    } catch { /* */ }
+    return out;
+  }
+
+  /** Badge-Kennzahlen Welle 6 (Saison-Muster) — rein abgeleitet. */
+  private getBadgeWave6Stats(riderId: number): {
+    mrReliableSeasons: number; instantImpact: boolean; outOfDarkWins: number; hotStreakOpenerSeasons: number;
+  } {
+    const out = { mrReliableSeasons: 0, instantImpact: false, outOfDarkWins: 0, hotStreakOpenerSeasons: 0 };
+    try {
+      out.mrReliableSeasons = (this.db.prepare(`SELECT COUNT(*) AS c FROM rider_season_stats WHERE rider_id=? AND race_days>=30 AND (dnf_count+dns_count+otl_count)=0`).get(riderId) as { c: number } | undefined)?.c ?? 0;
+    } catch { /* */ }
+    if (!tableExists(this.db, 'results_flat')) return out;
+    // Renn-Siege (Eintagessieg oder GC-Gesamtsieg) als race_id-Menge.
+    const won = new Set<number>();
+    try {
+      for (const r of this.db.prepare(`
+        SELECT DISTINCT s.race_id AS rid FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND ((rf.result_type_id=1 AND ra.is_stage_race=0) OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`).all(riderId) as Array<{ rid: number }>) won.add(r.rid);
+    } catch { /* */ }
+    // Instant Impact: Renn-Sieg in der ersten Vertragssaison.
+    try {
+      const first = (this.db.prepare(`SELECT MIN(start_season) AS m FROM contracts WHERE rider_id=?`).get(riderId) as { m: number | null } | undefined)?.m;
+      if (first != null) {
+        const w = (this.db.prepare(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+          WHERE rf.rider_id=? AND rf.rank=1 AND CAST(substr(s.date,1,4) AS INTEGER)=? AND ((rf.result_type_id=1 AND ra.is_stage_race=0) OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`).get(riderId, first) as { c: number } | undefined)?.c ?? 0;
+        out.instantImpact = w > 0;
+      }
+    } catch { /* */ }
+    // Saisons: Sieg im ersten Rennen bzw. 3+ Siege in den ersten 5 Rennen.
+    try {
+      const races = this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>;
+      const bySeason = new Map<number, number[]>();
+      for (const r of races) { const a = bySeason.get(r.yr) ?? []; a.push(r.id); bySeason.set(r.yr, a); }
+      for (const arr of bySeason.values()) {
+        if (arr.length === 0) continue;
+        if (won.has(arr[0])) out.outOfDarkWins += 1;
+        if (arr.slice(0, 5).filter((id) => won.has(id)).length >= 3) out.hotStreakOpenerSeasons += 1;
+      }
+    } catch { /* */ }
+    return out;
+  }
+
   /**
    * "Wilde" Kennzahlen fuer Kuriositaeten-Badges (Welle A, reine Auslese ohne
    * neues Tracking). Zaehler aus rider_career_stats/rider_season_stats sowie
@@ -1828,6 +1936,8 @@ export class RiderRepository {
     const wild = this.getWildStats(riderId);
     const leadoutTrainRank = this.getBestLeadoutRank(riderId);
     const wave1 = this.getBadgeWave1Stats(riderId);
+    const wave5 = this.getBadgeWave5Stats(riderId);
+    const wave6 = this.getBadgeWave6Stats(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -1837,6 +1947,8 @@ export class RiderRepository {
       ...statRanks,
       ...wild,
       ...wave1,
+      ...wave5,
+      ...wave6,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,
