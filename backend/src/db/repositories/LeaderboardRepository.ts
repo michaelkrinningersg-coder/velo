@@ -765,6 +765,44 @@ export class LeaderboardRepository {
       }
       valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
 
+    } else if (metricKey === 'fastest_avg_speed_stage' || metricKey === 'fastest_avg_speed_oneday') {
+      // Schnellste Durchschnittsgeschwindigkeit (Sieger je Etappe bzw.
+      // Eintagesrennen). Datenquelle ist die beim Stage-Commit gepflegte,
+      // auf Top 50 (Saison und all-time) begrenzte Rekordliste.
+      if (!tableExists(this.db, 'stage_speed_records')) {
+        return [];
+      }
+      const speedKind = metricKey === 'fastest_avg_speed_stage' ? 'stage' : 'oneday';
+      query = `
+        SELECT
+          r.id AS id,
+          r.first_name,
+          r.last_name,
+          c.code_3 AS nationality,
+          t.abbreviation AS team_abbr,
+          t.name AS team_name,
+          t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
+          ssr.season AS season,
+          ssr.race_name AS race_name,
+          ssr.stage_number AS stage_number,
+          ssr.avg_speed_kmh AS val
+        FROM stage_speed_records ssr
+        JOIN riders r ON r.id = ssr.rider_id
+        JOIN sta_country c ON c.id = r.country_id
+        LEFT JOIN teams t ON t.id = r.active_team_id
+        WHERE ssr.kind = ?
+        ${period === 'season' ? 'AND ssr.season = ?' : ''}
+        ORDER BY val DESC, ssr.id ASC
+        LIMIT 50
+      `;
+      params.push(speedKind);
+      if (period === 'season') {
+        params.push(currentSeason);
+      }
+      valueFormatter = (r) => `${r.val.toFixed(1)} km/h`;
+
     } else if (metricKey === 'strongest_lieutenants') {
       if (!tableExists(this.db, 'rider_lieutenants')) {
         return [];

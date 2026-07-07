@@ -310,6 +310,9 @@ export async function renderLeaderboard(): Promise<void> {
 
   // Broadcast-Grid: Kopf + Zeilen
   const isLeadout = activeMetricKey === 'highest_leadout_bonus';
+  const isSpeed = activeMetricKey === 'fastest_avg_speed_stage' || activeMetricKey === 'fastest_avg_speed_oneday';
+  // Beide zeigen die "Rennen / Etappe / Jahr"-Detailspalte (nur Fahrer-Scope).
+  const showRaceDetail = isLeadout || isSpeed;
   const isLieutenant = activeMetricKey === 'strongest_lieutenants';
   const MONO = "font-family:'JetBrains Mono',monospace;";
 
@@ -320,16 +323,17 @@ export async function renderLeaderboard(): Promise<void> {
 
   const cols = (activeScope === 'riders'
     ? ['52px', '44px', '44px', 'minmax(150px,1.4fr)', 'minmax(90px,.8fr)',
-        ...(isLeadout ? ['minmax(160px,1fr)'] : []),
+        ...(showRaceDetail ? ['minmax(160px,1fr)'] : []),
         ...(isLieutenant ? ['minmax(150px,1fr)'] : []),
         '130px']
     : ['52px', '44px', 'minmax(180px,1fr)',
         ...(isLeadout ? ['minmax(150px,1fr)'] : []),
         '130px']).join(' ');
 
+  const raceDetailHeader = isSpeed ? 'RENNEN / JAHR' : 'RENNEN / ETAPPE / JAHR';
   theadEl.style.gridTemplateColumns = cols;
   theadEl.innerHTML = activeScope === 'riders'
-    ? `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span style="justify-self:center;">LAND</span><span>FAHRER</span><span>TEAM</span>${isLeadout ? '<span>RENNEN / ETAPPE / JAHR</span>' : ''}${isLieutenant ? '<span>FÄHRT FÜR</span>' : ''}<span style="justify-self:end;">WERT</span>`
+    ? `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span style="justify-self:center;">LAND</span><span>FAHRER</span><span>TEAM</span>${showRaceDetail ? `<span>${raceDetailHeader}</span>` : ''}${isLieutenant ? '<span>FÄHRT FÜR</span>' : ''}<span style="justify-self:end;">WERT</span>`
     : `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span>TEAM</span>${isLeadout ? '<span>RENNEN / ETAPPE / JAHR</span>' : ''}<span style="justify-self:end;">WERT</span>`;
 
   const rankColor = (r: number): string => r === 1 ? '#fbbf24' : r === 2 ? '#cbd5e1' : r === 3 ? '#d08b5b' : '#9fb0c9';
@@ -351,9 +355,12 @@ export async function renderLeaderboard(): Promise<void> {
     const valueHtml = `<span style="${MONO}text-align:right;justify-self:end;font-weight:800;color:#4ade80;">${esc(String(row.value))}</span>`;
 
     let leadoutCell = '';
-    if (isLeadout) {
-      const stageLabel = row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–';
-      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.raceName ?? '–')} · ${esc(stageLabel)} · ${esc(String(row.season ?? '–'))}</span>`;
+    if (showRaceDetail) {
+      // Eintagesrennen haben keine sinnvolle Etappennummer -> nur Rennen + Jahr.
+      const parts = isSpeed && activeMetricKey === 'fastest_avg_speed_oneday'
+        ? [row.raceName ?? '–', String(row.season ?? '–')]
+        : [row.raceName ?? '–', row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–', String(row.season ?? '–')];
+      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${parts.map((p) => esc(String(p))).join(' · ')}</span>`;
     }
 
     let lieutenantCell = '';

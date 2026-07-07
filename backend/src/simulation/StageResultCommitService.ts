@@ -1387,6 +1387,47 @@ export class StageResultCommitService {
         }
       })();
 
+      // Rekord: schnellste Durchschnittsgeschwindigkeit. Der Sieger einer
+      // Etappe bzw. eines Eintagesrennens hat definitionsgemaess die hoechste
+      // Ø-Geschwindigkeit (kuerzeste Zeit auf der Distanz). Wie der
+      // Leadout-Bonus als Rekordliste gefuehrt, aber pro Saison und all-time
+      // auf die Top 50 begrenzt: nach jedem Eintrag wird der Rest geprunt.
+      // TTT-Etappen haben keinen Einzelsieger (riderId null) und werden
+      // uebersprungen.
+      if (tableExists(this.db, 'stage_speed_records')
+        && winnerRow && winnerRow.riderId != null && winnerRow.timeSeconds != null
+        && winnerRow.timeSeconds > 0 && stageDistanceKm > 0) {
+        const speedSeason = this.repo.getCurrentSeason();
+        const avgSpeedKmh = (stageDistanceKm * 3600) / winnerRow.timeSeconds;
+        const kind = race.isStageRace ? 'stage' : 'oneday';
+        this.db.prepare(`
+          INSERT INTO stage_speed_records
+            (kind, season, race_id, stage_id, rider_id, team_id, race_name, stage_number, profile, distance_km, time_seconds, avg_speed_kmh, date)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          kind, speedSeason, race.id, stage.id, winnerRow.riderId, winnerRow.teamId ?? null,
+          race.name, stage.stageNumber, stage.profile, stageDistanceKm,
+          Math.round(winnerRow.timeSeconds), avgSpeedKmh, stage.date,
+        );
+        // Pruning: je Saison Top 50 UND all-time Top 50 behalten. Eine Zeile
+        // ueberlebt, wenn sie in ihrer Saison ODER all-time unter den ersten 50
+        // liegt; alles andere wird entfernt. Haelt die Tabelle klein (~Saisons*50).
+        this.db.prepare(`
+          WITH season_ranked AS (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY season ORDER BY avg_speed_kmh DESC, id ASC) rn
+            FROM stage_speed_records WHERE kind = ?
+          ),
+          alltime_ranked AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh DESC, id ASC) rn
+            FROM stage_speed_records WHERE kind = ?
+          )
+          DELETE FROM stage_speed_records
+          WHERE kind = ?
+            AND id NOT IN (SELECT id FROM season_ranked WHERE rn <= 50)
+            AND id NOT IN (SELECT id FROM alltime_ranked WHERE rn <= 50)
+        `).run(kind, kind, kind);
+      }
+
       // Bunch-Sprint-Erkennung: Wurde das Finish im Tie-Break-Zeitfenster
       // zwischen mindestens 25 Fahrern entschieden, zaehlt der Sieg als
       // Massensprint-Sieg. Terrain und Ausreisser-Status spielen keine Rolle —

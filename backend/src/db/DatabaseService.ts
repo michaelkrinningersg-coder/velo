@@ -1316,6 +1316,42 @@ export class DatabaseService {
     `).run();
   }
 
+  /**
+   * Rangliste der schnellsten Durchschnittsgeschwindigkeiten (Sieger je Etappe
+   * bzw. Eintagesrennen). Wird beim Stage-Commit befuellt und wie beim
+   * Leadout-Bonus als Rekordliste gefuehrt — jedoch bewusst klein gehalten:
+   * pro Saison und all-time werden nur die Top 50 behalten, der Rest wird nach
+   * jedem Eintrag geprunt (siehe StageResultCommitService).
+   */
+  private ensureStageSpeedRecordsSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS stage_speed_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,                 -- 'stage' | 'oneday'
+        season INTEGER NOT NULL,
+        race_id INTEGER REFERENCES races(id) ON DELETE CASCADE,
+        stage_id INTEGER REFERENCES stages(id) ON DELETE CASCADE,
+        rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+        team_id INTEGER REFERENCES teams(id),
+        race_name TEXT,
+        stage_number INTEGER,
+        profile TEXT,
+        distance_km REAL NOT NULL,
+        time_seconds INTEGER NOT NULL,
+        avg_speed_kmh REAL NOT NULL,
+        date TEXT
+      )
+    `).run();
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_stage_speed_records_lookup
+        ON stage_speed_records(kind, season, avg_speed_kmh DESC)
+    `).run();
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_stage_speed_records_rider
+        ON stage_speed_records(rider_id)
+    `).run();
+  }
+
   private ensureRiderSeasonStatsSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS rider_season_stats (
@@ -2630,6 +2666,7 @@ export class DatabaseService {
     this.ensureRiderSeasonStatsSchema(db);
     this.ensureRiderCategoryStatsSchema(db);
     this.ensureStageLeadoutsSchema(db);
+    this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);
     this.ensureSeasonStandingsSnapshotsSchema(db);
     this.ensureRaceResultsCompactSchema(db);
