@@ -1490,6 +1490,66 @@ export class RiderRepository {
   }
 
   /**
+   * Generischer All-Time-Rang aus einer Ranglisten-Metrik von "Statistiken &
+   * Rekorde". `aggregateSql` muss je Fahrer eine Zeile (rider_id, wert) liefern;
+   * der Rang ist die Zahl der Fahrer mit strikt hoeherem Wert + 1
+   * (Wettkampf-Ranking, Gleichstand teilt sich den Rang). Fahrer ohne Wert bzw.
+   * mit Wert <= 0 gelten als nicht gewertet (null). Fehlt eine Quelltabelle
+   * oder -view, faengt der try/catch das ab und liefert null — die uebrigen
+   * Kennzahlen bleiben unberuehrt.
+   */
+  private getAllTimeAggregateRank(aggregateSql: string, riderId: number, innerParams: unknown[] = []): number | null {
+    try {
+      const row = this.db.prepare(`
+        WITH per_rider(rider_id, v) AS (${aggregateSql})
+        SELECT (SELECT COUNT(*) FROM per_rider p WHERE p.v > me.v) + 1 AS rank, me.v AS value
+        FROM per_rider me WHERE me.rider_id = ?
+      `).get(...innerParams, riderId) as { rank: number; value: number } | undefined;
+      if (!row || row.value == null || row.value <= 0) return null;
+      return row.rank;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * All-Time-Raenge der Ranglisten-basierten Hall-of-Fame-Badges. Jede Metrik
+   * nutzt dieselbe Quelle wie die zugehoerige Rangliste in "Statistiken &
+   * Rekorde" (bzw. bei Gelb-Tagen results_flat, wo die rank-1-GC-Zeilen das
+   * Saison-Pruning ueberleben).
+   */
+  private getStatRecordRanks(riderId: number): {
+    uciPointsRank: number | null; stageScoresRank: number | null;
+    speedStageRank: number | null; speedOnedayRank: number | null;
+    leadoutBonusRank: number | null; counterAttacksRank: number | null;
+    superteamCountRank: number | null; lieutenantPeakRank: number | null;
+    yellowDaysRank: number | null;
+  } {
+    return {
+      uciPointsRank: this.getAllTimeAggregateRank(
+        'SELECT rider_id, SUM(points_awarded) FROM season_point_events GROUP BY rider_id', riderId),
+      stageScoresRank: this.getAllTimeAggregateRank(
+        `SELECT se.rider_id, SUM(s.stage_score) FROM all_stage_entries se
+         JOIN stages s ON s.id = se.stage_id
+         WHERE se.status = 'finished' GROUP BY se.rider_id`, riderId),
+      speedStageRank: this.getAllTimeAggregateRank(
+        `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'stage' GROUP BY rider_id`, riderId),
+      speedOnedayRank: this.getAllTimeAggregateRank(
+        `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'oneday' GROUP BY rider_id`, riderId),
+      leadoutBonusRank: this.getAllTimeAggregateRank(
+        'SELECT sprinter_id, MAX(leadout_bonus) FROM stage_leadouts GROUP BY sprinter_id', riderId),
+      counterAttacksRank: this.getAllTimeAggregateRank(
+        'SELECT rider_id, counter_attacks FROM rider_career_stats', riderId),
+      superteamCountRank: this.getAllTimeAggregateRank(
+        'SELECT rider_id, superteam_count FROM rider_career_stats', riderId),
+      lieutenantPeakRank: this.getAllTimeAggregateRank(
+        'SELECT rider_id, MAX(max_overall_rating) FROM lieutenant_all_time_peaks GROUP BY rider_id', riderId),
+      yellowDaysRank: this.getAllTimeAggregateRank(
+        'SELECT rider_id, COUNT(*) FROM results_flat WHERE result_type_id = 2 AND rank = 1 GROUP BY rider_id', riderId),
+    };
+  }
+
+  /**
    * Baut die Hall-of-Fame-Kennzahlen fuer einen Fahrer. Renntage, Ausreisser-km
    * und Ausreissversuche stammen aus rider_career_stats (dort inkrementell
    * hochgezaehlt). Der Ausreisser-km-Rang nutzt dasselbe Standard-Ranking wie
@@ -1561,10 +1621,13 @@ export class RiderRepository {
     const special = this.getSpecialRaceAchievements(riderId);
     const loyalty = this.getLoyaltyStats(riderId);
     const geography = this.getGeographyAchievements(riderId);
+    const statRanks = this.getStatRecordRanks(riderId);
 
     return {
       allTimeWins: careerWins,
       allTimeWinsRank: winsRank.rank,
+      careerWinsRank: winsRank.rank,
+      ...statRanks,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,

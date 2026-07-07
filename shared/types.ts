@@ -1034,6 +1034,19 @@ export interface RiderHallOfFameStats {
   homeSoilWins: number; // Siege im Heimatland des Fahrers (Home Soil Hero)
   nationExpressCountries: number; // Anzahl verschiedener Laender mit Rennteilnahme (Nation Express)
   tourOfNationHome: boolean; // Heim-Grand-Tour-Gesamtsieg (FR->TdF, IT->Giro, ES->Vuelta)
+
+  // All-Time-Ranglisten-Raenge aus "Statistiken & Rekorde" (null = nicht
+  // gewertet). Tier ueber resolveRankTier (P1 Gold ... P11-25 Lila).
+  uciPointsRank: number | null;        // UCI-Punkte (Karriere)
+  stageScoresRank: number | null;      // Stage-Score-Summe
+  speedStageRank: number | null;       // schnellste Ø-Geschwindigkeit Etappe
+  speedOnedayRank: number | null;      // schnellste Ø-Geschwindigkeit Eintagesrennen
+  leadoutBonusRank: number | null;     // hoechster Leadout-Bonus
+  counterAttacksRank: number | null;   // Konterattacken
+  superteamCountRank: number | null;   // Superteambonus
+  lieutenantPeakRank: number | null;   // staerkster Leutnant (All-Time-Peak)
+  careerWinsRank: number | null;       // Karrieresiege (Rang)
+  yellowDaysRank: number | null;       // Tage im Gelben Trikot (Rang)
 }
 
 export interface RiderStatsPayload {

@@ -2711,6 +2711,8 @@ const HOF_ICON_GHOST = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_CAT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 3l3.5 3H10l3.5-3v4.5C15.4 8.6 17 10.9 17 13.5V21H5v-7.5C5 10.9 6.6 8.6 8.5 7.5L3 3zm5.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm5 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM11 15l-1 1h2l-1-1z"/></svg>`;
 const HOF_ICON_SUITCASE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M9 4V2h6v2h3a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-1v-1H7v1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3zm2 0h2V3.5h-2V4zM7 7v11h1V7H7zm9 0v11h1V7h-1zm-6 0v11h4V7h-4z"/></svg>`;
 const HOF_ICON_PASSPORT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h11a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm5.5 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 1.6a2.4 2.4 0 0 1 2.3 1.7h-1.1a4.7 4.7 0 0 0-.5-1.4c.7.3 1.3.7 1.3.7zm-1.6.3c-.2.3-.4.8-.5 1.4H8.3a2.4 2.4 0 0 1 1.6-1.4zM8 10.2c0-.3 0-.5.1-.7h1.2c0 .5.1 1 .2 1.4H8.3a2.4 2.4 0 0 1-.3-.7zm1.9 1.9c.1.6.3 1.1.5 1.4a2.4 2.4 0 0 1-1.6-1.4h1.1zm1.6 1.7c-.3-.3-.5-.9-.6-1.7h1.3c-.1.8-.4 1.4-.7 1.7zm.7-3.3h-1.4c0-.4-.1-.9 0-1.4h1.3c.1.5.1 1 .1 1.4zm.9 1.6h1.1a2.4 2.4 0 0 1-1.6 1.4c.2-.3.4-.8.5-1.4zm.3-1.6c.1-.4.1-.9.1-1.4h1.2c.1.2.1.4.1.7 0 .2-.1.5-.2.7h-1.3zM9 17h5v1.5H9V17z"/></svg>`;
+const HOF_ICON_SPEED = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4a9 9 0 0 0-9 9 8.9 8.9 0 0 0 1.5 5h15A8.9 8.9 0 0 0 21 13a9 9 0 0 0-9-9zm0 3a1 1 0 0 1 1 1v.6l2.3-1.3.8 1.4-2.3 1.3A2 2 0 1 1 11 9.2V8a1 1 0 0 1 1-1zM5.6 15a2 2 0 1 1 0-2 2 2 0 0 1 0 2zm12.8 0a2 2 0 1 1 0-2 2 2 0 0 1 0 2z"/></svg>`;
+const HOF_ICON_ROCKET = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M13.5 2c3 .3 6 2.4 7.4 5.8-.4 3.6-2.6 6.4-5 8v3.4l-3 2.3v-4.2l-3-3-4.2.1v-3l3.4-3zM15 8.5a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM4 17c1-1 2.6-1 3.6 0S8.7 20 7.6 21c-.9.9-4.6 1.4-4.6 1.4s.5-3.7 1-4.4z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2792,12 +2794,23 @@ function resolveContinentTier(count: number): HofTierKey | null {
 }
 
 function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
-  const hof = payload.hallOfFame ?? {
+  const hof: any = payload.hallOfFame ?? {
     allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0,
     allTimeRaceDays: 0, breakawayKms: 0, breakawayAttempts: 0, breakawayKmRank: null, rankedBreakawayRiders: 0,
   };
   const wins = hof.allTimeWins ?? 0;
   const rank = hof.allTimeWinsRank;
+  // All-Time-Raenge der Ranglisten-Badges (null = nicht gewertet).
+  const uciPointsRank = hof.uciPointsRank ?? null;
+  const stageScoresRank = hof.stageScoresRank ?? null;
+  const speedStageRank = hof.speedStageRank ?? null;
+  const speedOnedayRank = hof.speedOnedayRank ?? null;
+  const leadoutBonusRank = hof.leadoutBonusRank ?? null;
+  const counterAttacksRank = hof.counterAttacksRank ?? null;
+  const superteamCountRank = hof.superteamCountRank ?? null;
+  const lieutenantPeakRank = hof.lieutenantPeakRank ?? null;
+  const careerWinsRank = hof.careerWinsRank ?? hof.allTimeWinsRank ?? null;
+  const yellowDaysRank = hof.yellowDaysRank ?? null;
   const raceDays = hof.allTimeRaceDays ?? 0;
   const brkKms = hof.breakawayKms ?? 0;
   const brkAttempts = hof.breakawayAttempts ?? 0;
@@ -2898,6 +2911,20 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
 
   const singleBadge = (key: string, name: string, icon: string, description: string, earned: boolean, style: HofTierStyle, hover: string, requirement: string, detail = ''): HofBadge =>
     ({ key, name, icon, description, tier: null, customStyle: earned ? style : null, detail: earned ? detail : '', hover, requirement });
+
+  // Ranglisten-Badge: Tier ausschliesslich ueber den All-Time-Rang. `listLabel`
+  // benennt die Rangliste (z.B. "der ewigen Siegerliste"). Rang null/undefined
+  // (> Platz 25 oder unplatziert) -> gesperrt.
+  const rankBadge = (key: string, name: string, icon: string, description: string, rank: number | null, listLabel: string): HofBadge =>
+    ({
+      key, name, icon, description,
+      tier: resolveRankTier(rank),
+      detail: rank != null ? `Platz ${rank}` : '',
+      hover: rank != null
+        ? `Platz ${rank} ${listLabel} (Gold P1 · Silber P2 · Bronze P3 · Cyan P4–10 · Lila P11–25)`
+        : 'Noch nicht unter den Top 25 — unplatziert.',
+      requirement: `Top 25 ${listLabel}`,
+    });
 
   return [
     {
@@ -3435,6 +3462,20 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${catPodiums.toLocaleString('de-DE')}× Podium trotz Sturz in derselben Etappe (Gold 9 · Silber 7 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Podium trotz Sturz im selben Rennen',
     },
+
+    // --- Ranglisten-Badges (All-Time-Rang aus Statistiken & Rekorde) ---
+    // Tier ueber resolveRankTier: P1 Gold · P2 Silber · P3 Bronze · P4-10 Cyan
+    // · P11-25 Lila. rankBadge() vereinheitlicht Anzeige/Locked-Zustand.
+    rankBadge('recUciPoints', 'UCI Overlord', HOF_ICON_COLUMN, 'UCI-Punkte-Rang', uciPointsRank, 'der ewigen UCI-Punkte-Liste'),
+    rankBadge('recStageScores', 'Score Titan', HOF_ICON_STAR, 'Stage-Score-Rang', stageScoresRank, 'der ewigen Stage-Score-Liste'),
+    rankBadge('recSpeedStage', 'Speed Demon', HOF_ICON_SPEED, 'Ø-Speed Etappe (Rang)', speedStageRank, 'der ewigen Ø-Geschwindigkeit (Etappe)'),
+    rankBadge('recSpeedOneday', 'Classics Rocket', HOF_ICON_ROCKET, 'Ø-Speed Eintagesrennen (Rang)', speedOnedayRank, 'der ewigen Ø-Geschwindigkeit (Eintagesrennen)'),
+    rankBadge('recLeadout', 'Leadout Maestro', HOF_ICON_BOLT, 'Leadout-Bonus-Rang', leadoutBonusRank, 'der ewigen Leadout-Bonus-Liste'),
+    rankBadge('recCounterAttacks', 'Counter Puncher', HOF_ICON_SPARK, 'Konterattacken-Rang', counterAttacksRank, 'der ewigen Konterattacken-Liste'),
+    rankBadge('recSuperteam', 'Superteam Icon', HOF_ICON_SHIELD, 'Superteambonus-Rang', superteamCountRank, 'der ewigen Superteambonus-Liste'),
+    rankBadge('recLieutenant', 'Ultimate Domestique', HOF_ICON_WRENCH, 'Leutnant-Rang', lieutenantPeakRank, 'der ewigen Leutnant-Bestwert-Liste'),
+    rankBadge('recCareerWins', 'Peloton Legend', HOF_ICON_CROWN, 'Karrieresiege-Rang', careerWinsRank, 'der ewigen Siegerliste'),
+    rankBadge('recYellowDays', 'Yellow Sovereign', HOF_ICON_JERSEY, 'Gelbtrikot-Tage-Rang', yellowDaysRank, 'der ewigen Gelbtrikot-Tage-Liste'),
   ];
 }
 
