@@ -929,6 +929,7 @@ export interface RiderCareerStats {
   superteamCount: number;
   totalKm?: number;
   superformDays?: number;
+  supermalusDays?: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;

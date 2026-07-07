@@ -4408,6 +4408,8 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         ${panel('Gesundheit', [
           { label: 'Krankheiten', value: String(stats.illnesses ?? 0), sub: `${stats.illnessDays ?? 0} Tage`, color: '#ed64a6' },
           { label: 'Verletzungen', value: String(stats.injuries ?? 0), sub: `${stats.injuryDays ?? 0} Tage`, color: '#f6ad55' },
+          { label: 'Superform', value: String(stats.superformDays ?? 0), sub: 'Tage', color: '#4ade80' },
+          { label: 'Supermalus', value: String(stats.supermalusDays ?? 0), sub: 'Tage', color: '#fb7185' },
         ])}
         ${panel('Heim', [
           { label: 'Heimvorteil', value: String(stats.homeAdvantageDays ?? 0), sub: 'Tage', color: '#38bdf8' },
@@ -4433,6 +4435,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           { label: 'Platz 2', value: String(placeTotals.p2), color: '#cbd5e1' },
           { label: 'Platz 3', value: String(placeTotals.p3), color: '#d08b5b' },
           { label: 'Top 10', value: String(placeTotals.top10), color: '#22d3ee' },
+          { label: 'Back-to-Back', value: String((payload.hallOfFame as any)?.winStreakBest ?? 0), sub: 'Siege in Folge', color: '#f59e0b' },
         ])}
       </div>
 
