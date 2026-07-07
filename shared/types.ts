@@ -1080,6 +1080,16 @@ export interface RiderHallOfFameStats {
   peakPerformerWins: number;    // Siege mit kombinierter R+S-Form > 7,5 (Peak Performer)
   yoyoRaces: number;            // Etappenrennen mit >= 10 Attacken (The Yoyo)
 
+  // Badge-Kennzahlen Welle 8 (rein abgeleitet).
+  prologueWins: number;         // Siege auf ITT-Etappe 1 < 10 km (Prologue Prince)
+  autumnWins: number;           // One Day High/Monument-Siege 01.09.-31.10. (Autumn King)
+  grandFinaleWins: number;      // Sieg im letzten Rennen der Saison (Grand Finale)
+  prodigyWins: number;          // Monument/GT-Sieg mit unter 23 (The Prodigy)
+  lastDanceWin: boolean;        // Sieg in der letzten Karrieresaison (Last Dance)
+  gtRunnerUp: number;           // Zweiter im GC einer Grand Tour (GT Runner-Up)
+  undertakerWins: number;       // Sieg auf der GT-Schlussetappe (The Undertaker)
+  greenGrandSlam: boolean;      // Punktewertung in allen 3 Grand Tours (Green Grand Slam)
+
   // Badge-Kennzahlen Welle 5 (Helfer & Team).
   waterCarrierDays: number;         // Renntage als Wassertraeger (Water Carrier)
   superDomestiqueLeadouts: number;  // Leadout-Beteiligungen als Anfahrer (Super Domestique)

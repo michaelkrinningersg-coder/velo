@@ -2859,6 +2859,15 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   // Welle 7 (Commit-getrackt).
   const peakPerformerWins = hof.peakPerformerWins ?? 0;
   const yoyoRaces = hof.yoyoRaces ?? 0;
+  // Welle 8 (rein abgeleitet).
+  const prologueWins = hof.prologueWins ?? 0;
+  const autumnWins = hof.autumnWins ?? 0;
+  const grandFinaleWins = hof.grandFinaleWins ?? 0;
+  const prodigyWins = hof.prodigyWins ?? 0;
+  const lastDanceWin = hof.lastDanceWin === true;
+  const gtRunnerUp = hof.gtRunnerUp ?? 0;
+  const undertakerWins = hof.undertakerWins ?? 0;
+  const greenGrandSlam = hof.greenGrandSlam === true;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3932,6 +3941,58 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${yoyoRaces} Etappenrennen mit mindestens 10 Attacken (Gold 12 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Rundfahrt mit 10+ Attacken',
     },
+
+    // --- Badges Welle 8 (rein abgeleitet) ---
+    {
+      key: 'prologuePrince', name: 'Prologue Prince', icon: HOF_ICON_STOPWATCH, description: 'Prolog-Siege',
+      tier: resolveThresholdTier(prologueWins, [1, 2, 3, 5, 8]),
+      detail: prologueWins > 0 ? `${prologueWins} Prologe` : '',
+      hover: `${prologueWins} Siege auf ITT-Auftaktetappen unter 10 km (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Prolog-Sieg (ITT < 10 km, Etappe 1)',
+    },
+    {
+      key: 'autumnKing', name: 'Autumn King', icon: HOF_ICON_OLIVE, description: 'Herbst-Klassiker-Siege',
+      tier: resolveThresholdTier(autumnWins, [2, 4, 6, 8, 10]),
+      detail: autumnWins > 0 ? `${autumnWins} Siege` : '',
+      hover: `${autumnWins} Siege in One Day High / Monument zwischen 01.09. und 31.10. (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Herbst-Klassiker-Siegen',
+    },
+    {
+      key: 'grandFinale', name: 'Grand Finale', icon: HOF_ICON_SPARK, description: 'Sieg im Saisonfinale',
+      tier: resolveThresholdTier(grandFinaleWins, [1, 2, 3, 4, 5]),
+      detail: grandFinaleWins > 0 ? `${grandFinaleWins}×` : '',
+      hover: `${grandFinaleWins}× das letzte Rennen der Saison gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Sieg im letzten Rennen der Saison',
+    },
+    {
+      key: 'theProdigy', name: 'The Prodigy', icon: HOF_ICON_STAR, description: 'Großsieg mit unter 23',
+      tier: resolveThresholdTier(prodigyWins, [1, 2, 3, 4, 5]),
+      detail: prodigyWins > 0 ? `${prodigyWins}×` : '',
+      hover: `${prodigyWins}× Monument- oder Grand-Tour-Sieg mit unter 23 Jahren (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Großsieg mit unter 23',
+    },
+    singleBadge('lastDance', 'Last Dance', HOF_ICON_CLOCK, 'Sieg in der letzten Saison',
+      lastDanceWin, HOF_STYLE_GOLD,
+      lastDanceWin ? 'Noch ein Sieg in der letzten Karrieresaison.' : 'Kein Sieg in der letzten Karrieresaison.',
+      'Sieg in der letzten Karrieresaison', 'Abschiedssieg'),
+    {
+      key: 'gtRunnerUp', name: 'GT Runner-Up', icon: HOF_ICON_PODIUM, description: 'Zweiter im GT-GC',
+      tier: resolveThresholdTier(gtRunnerUp, [1, 2, 3, 4, 5]),
+      detail: gtRunnerUp > 0 ? `${gtRunnerUp}×` : '',
+      hover: `${gtRunnerUp}× Zweiter im Gesamtklassement einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Zweiter im GT-Gesamtklassement',
+    },
+    {
+      key: 'theUndertaker', name: 'The Undertaker', icon: HOF_ICON_FLAG, description: 'GT-Schlussetappen-Sieg',
+      tier: resolveThresholdTier(undertakerWins, [1, 2, 3, 4, 5]),
+      detail: undertakerWins > 0 ? `${undertakerWins}×` : '',
+      hover: `${undertakerWins}× Sieg auf der Schlussetappe einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× GT-Schlussetappen-Sieg',
+    },
+    singleBadge('greenGrandSlam', 'Green Grand Slam', HOF_ICON_JERSEY, 'Punkte in allen 3 GTs',
+      greenGrandSlam, HOF_STYLE_GREEN,
+      greenGrandSlam ? 'Punktewertung in allen drei Grand Tours gewonnen.' : 'Punktewertung noch nicht in allen drei Grand Tours gewonnen.',
+      'Punktewertung in TdF, Giro und Vuelta', 'Komplett'),
   ];
 }
 
@@ -3972,7 +4033,7 @@ const HOF_GROUPS: string[][] = [
   ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
-   'cleanSweep', 'cleanSweepPlus', 'instantImpact'],
+   'cleanSweep', 'cleanSweepPlus', 'instantImpact', 'autumnKing', 'theProdigy', 'theUndertaker', 'greenGrandSlam'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
@@ -3980,7 +4041,7 @@ const HOF_GROUPS: string[][] = [
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung
   ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
-   'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit'],
+   'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit', 'prologuePrince'],
   // 5. Ausreißer & Angriff
   ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo'],
   // 5b. Helfer & Team
@@ -3990,11 +4051,11 @@ const HOF_GROUPS: string[][] = [
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
   ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone',
-   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener', 'peakPerformer'],
+   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener', 'peakPerformer', 'grandFinale', 'gtRunnerUp'],
   // 8. Wetter
   ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität
-  ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine'],
+  ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine', 'lastDance'],
   // 10. Pech & Widrigkeiten
   ['comebackKing', 'underTheWeather', 'hardLuck', 'pechvogel', 'sturzpilot', 'restlessLegs', 'gremlin', 'theSlump',
    'timeCutSpecialist', 'notBitterEnd'],

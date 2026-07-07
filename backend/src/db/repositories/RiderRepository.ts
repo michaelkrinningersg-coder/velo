@@ -1759,6 +1759,62 @@ export class RiderRepository {
     return out;
   }
 
+  /** Badge-Kennzahlen Welle 8 — rein abgeleitet. */
+  private getBadgeWave8Stats(riderId: number): {
+    prologueWins: number; autumnWins: number; grandFinaleWins: number; prodigyWins: number;
+    lastDanceWin: boolean; gtRunnerUp: number; undertakerWins: number; greenGrandSlam: boolean;
+  } {
+    const out = { prologueWins: 0, autumnWins: 0, grandFinaleWins: 0, prodigyWins: 0, lastDanceWin: false, gtRunnerUp: 0, undertakerWins: 0, greenGrandSlam: false };
+    if (!tableExists(this.db, 'results_flat')) return out;
+    const num = (sql: string, p: any[] = [riderId]): number => {
+      try { return (this.db.prepare(sql).get(...p) as { c: number } | undefined)?.c ?? 0; } catch { return 0; }
+    };
+    out.autumnWins = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND ra.is_stage_race=0 AND rc.name IN ('World Tour - One Day High','World Tour - Monument')
+        AND substr(s.date,6,5) >= '09-01' AND substr(s.date,6,5) <= '10-31'`);
+    out.prodigyWins = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id JOIN riders r ON r.id=rf.rider_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND (CAST(substr(s.date,1,4) AS INTEGER) - r.birth_year) < 23 AND (
+        (rf.result_type_id=1 AND ra.is_stage_race=0 AND rc.name='World Tour - Monument')
+        OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages AND rc.name IN ('World Tour - Tour de France','World Tour - Grand Tour')))`);
+    out.gtRunnerUp = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id
+      WHERE rf.rider_id=? AND rf.rank=2 AND rf.result_type_id=2 AND s.stage_number=ra.number_of_stages AND rc.name IN ('World Tour - Tour de France','World Tour - Grand Tour')`);
+    out.undertakerWins = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id JOIN race_categories rc ON rc.id=ra.category_id
+      WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=1 AND s.stage_number=ra.number_of_stages AND rc.name IN ('World Tour - Tour de France','World Tour - Grand Tour')`);
+    // Green Grand Slam: Punktewertung (Typ 3, Schlussetappe) in allen 3 GTs.
+    try {
+      const names = new Set((this.db.prepare(`SELECT DISTINCT ra.name AS n FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=3 AND s.stage_number=ra.number_of_stages
+          AND ra.name IN ('Tour de France', 'Giro d''Italia', 'La Vuelta Ciclista a España')`).all(riderId) as Array<{ n: string }>).map((r) => r.n));
+      out.greenGrandSlam = names.has('Tour de France') && names.has("Giro d'Italia") && names.has('La Vuelta Ciclista a España');
+    } catch { /* */ }
+    // Prologue Prince: Sieg auf ITT-Etappe 1 mit < 10 km (Distanz aus dem Profil).
+    try {
+      const rows = this.db.prepare(`SELECT s.details_csv_file AS csv, s.start_elevation AS elev FROM results_flat rf JOIN stages s ON s.id=rf.stage_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND rf.result_type_id=1 AND s.profile='ITT' AND s.stage_number=1`).all(riderId) as Array<{ csv: string | null; elev: number | null }>;
+      for (const r of rows) { try { const d = summarizeStageProfile(r.csv ?? '', r.elev ?? 0).distanceKm ?? 0; if (d > 0 && d < 10) out.prologueWins += 1; } catch { /* */ } }
+    } catch { /* */ }
+    // Grand Finale (Sieg im letzten Rennen der Saison) + Last Dance (Sieg in
+    // der letzten Karrieresaison eines zurueckgetretenen Fahrers).
+    try {
+      const won = new Set<number>();
+      for (const r of this.db.prepare(`SELECT DISTINCT s.race_id AS rid FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+        WHERE rf.rider_id=? AND rf.rank=1 AND ((rf.result_type_id=1 AND ra.is_stage_race=0) OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`).all(riderId) as Array<{ rid: number }>) won.add(r.rid);
+      const races = this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>;
+      const bySeason = new Map<number, number[]>();
+      for (const r of races) { const a = bySeason.get(r.yr) ?? []; a.push(r.id); bySeason.set(r.yr, a); }
+      for (const arr of bySeason.values()) if (arr.length && won.has(arr[arr.length - 1])) out.grandFinaleWins += 1;
+      const retired = (this.db.prepare(`SELECT is_retired AS r FROM riders WHERE id=?`).get(riderId) as { r: number } | undefined)?.r;
+      if (retired) {
+        const lastSeason = (this.db.prepare(`SELECT MAX(season) AS m FROM rider_season_stats WHERE rider_id=? AND race_days>0`).get(riderId) as { m: number | null } | undefined)?.m;
+        if (lastSeason != null) {
+          out.lastDanceWin = num(`SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
+            WHERE rf.rider_id=? AND rf.rank=1 AND CAST(substr(s.date,1,4) AS INTEGER)=? AND ((rf.result_type_id=1 AND ra.is_stage_race=0) OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`, [riderId, lastSeason]) > 0;
+        }
+      }
+    } catch { /* */ }
+    return out;
+  }
+
   /** Badge-Kennzahlen Welle 6 (Saison-Muster) — rein abgeleitet. */
   private getBadgeWave6Stats(riderId: number): {
     mrReliableSeasons: number; instantImpact: boolean; outOfDarkWins: number; hotStreakOpenerSeasons: number;
@@ -1990,6 +2046,7 @@ export class RiderRepository {
     const wave1 = this.getBadgeWave1Stats(riderId);
     const wave5 = this.getBadgeWave5Stats(riderId);
     const wave6 = this.getBadgeWave6Stats(riderId);
+    const wave8 = this.getBadgeWave8Stats(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -2001,6 +2058,7 @@ export class RiderRepository {
       ...wave1,
       ...wave5,
       ...wave6,
+      ...wave8,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,
