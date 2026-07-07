@@ -1063,6 +1063,16 @@ export interface RiderHallOfFameStats {
   staminaWins: number;          // Siege > 240 km (Stamina Machine)
   verticalLimitWins: number;    // Etappensiege > 4000 hm (Vertical Limit)
 
+  // Badge-Kennzahlen Welle 3 (Positionen; ab jetzt gepflegt).
+  lanterneRougeStage: number;   // letzter Finisher Etappe/Eintagesrennen (Lanterne Rouge)
+  lanterneRougeGt: number;      // letzter GC Grand Tour (Red Lantern Legend)
+  lanterneRougeSr: number;      // letzter GC uebrige Stage Races (Broom Wagon Regular)
+  timeCutFinishes: number;      // Zielankunft < 60 s vor dem Zeitlimit (Time Cut Specialist)
+  teamEffortPodiums: number;    // Top-3 mit >= 2 Teamkollegen Top 10 (Team Effort)
+  oneManTeam: number;           // einziger Team-Fahrer Top 50 (One Man Team)
+  gcBySeconds: number;          // GT-Sieg < 20 s Vorsprung (GC by Seconds)
+  bitterEndDnf: number;         // DNS/DNF/OTL Schlussetappe Grand Tour (Not to the bitter end)
+
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)
   doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)

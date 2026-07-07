@@ -1656,20 +1656,26 @@ export class RiderRepository {
     veteranWins: number; awayWins: number; breakawayWins: number; groundhogStreak: number;
     fullMoonPodiums: number; cleanStreakBest: number; grandToursFinished: number; multiJerseyDays: number;
     longHaulWins: number; staminaWins: number; verticalLimitWins: number;
+    lanterneRougeStage: number; lanterneRougeGt: number; lanterneRougeSr: number; timeCutFinishes: number;
+    teamEffortPodiums: number; oneManTeam: number; gcBySeconds: number; bitterEndDnf: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
       breakawayWins: 0, groundhogStreak: 0, fullMoonPodiums: 0, cleanStreakBest: 0, grandToursFinished: 0, multiJerseyDays: 0,
       longHaulWins: 0, staminaWins: 0, verticalLimitWins: 0,
+      lanterneRougeStage: 0, lanterneRougeGt: 0, lanterneRougeSr: 0, timeCutFinishes: 0,
+      teamEffortPodiums: 0, oneManTeam: 0, gcBySeconds: 0, bitterEndDnf: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
       const hasWaveB = columnExists(this.db, 'rider_career_stats', 'multi_jersey_days');
       const hasWave2 = columnExists(this.db, 'rider_career_stats', 'long_haul_wins');
+      const hasWave3 = columnExists(this.db, 'rider_career_stats', 'lanterne_rouge_stage');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
          ${hasWave2 ? ', long_haul_wins, stamina_wins, vertical_limit_wins' : ''}
+         ${hasWave3 ? ', lanterne_rouge_stage, lanterne_rouge_gt, lanterne_rouge_sr, time_cut_finishes, team_effort_podiums, one_man_team, gc_by_seconds, bitter_end_dnf' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1683,6 +1689,14 @@ export class RiderRepository {
         out.longHaulWins = c.long_haul_wins ?? 0;
         out.staminaWins = c.stamina_wins ?? 0;
         out.verticalLimitWins = c.vertical_limit_wins ?? 0;
+        out.lanterneRougeStage = c.lanterne_rouge_stage ?? 0;
+        out.lanterneRougeGt = c.lanterne_rouge_gt ?? 0;
+        out.lanterneRougeSr = c.lanterne_rouge_sr ?? 0;
+        out.timeCutFinishes = c.time_cut_finishes ?? 0;
+        out.teamEffortPodiums = c.team_effort_podiums ?? 0;
+        out.oneManTeam = c.one_man_team ?? 0;
+        out.gcBySeconds = c.gc_by_seconds ?? 0;
+        out.bitterEndDnf = c.bitter_end_dnf ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {

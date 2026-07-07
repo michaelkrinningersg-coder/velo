@@ -1797,6 +1797,66 @@ export class StageResultCommitService {
         for (const row of gcRows) { if (row.riderId != null) { insertCareerStatsRow.run(row.riderId); mfStmt.run(row.riderId); } }
       }
 
+      // --- Welle 3: Positions-Badges (ab jetzt, kein Backfill) ---
+      const isTTT = stage.profile === 'TTT';
+      // Lanterne Rouge: letzter klassierter Finisher der Etappe/des Eintagesrennens.
+      if (!isTTT && columnExists(this.db, 'rider_career_stats', 'lanterne_rouge_stage')) {
+        let last: any = null;
+        for (const r of stageRows) if (r.riderId != null && (last == null || r.rank > last.rank)) last = r;
+        if (last) this.db.prepare(`UPDATE rider_career_stats SET lanterne_rouge_stage = lanterne_rouge_stage + 1 WHERE rider_id = ?`).run(last.riderId);
+      }
+      // Time Cut Specialist: Zielankunft <= 60 s vor dem Zeitlimit.
+      if (!isTTT && columnExists(this.db, 'rider_career_stats', 'time_cut_finishes')) {
+        const times = stageRows.filter((r: any) => r.riderId != null && r.timeSeconds != null).map((r: any) => r.timeSeconds);
+        const limit = resolveStageTimeLimitSeconds(stage.profile, times);
+        if (limit != null) {
+          const st = this.db.prepare(`UPDATE rider_career_stats SET time_cut_finishes = time_cut_finishes + 1 WHERE rider_id = ?`);
+          for (const r of stageRows) if (r.riderId != null && r.timeSeconds != null && r.timeSeconds <= limit && (limit - r.timeSeconds) <= 60) st.run(r.riderId);
+        }
+      }
+      // Team Effort: Top-3, waehrend >= 2 Teamkollegen ebenfalls Top 10.
+      if (!isTTT && columnExists(this.db, 'rider_career_stats', 'team_effort_podiums')) {
+        const top10 = stageRows.filter((r: any) => r.riderId != null && r.rank <= 10);
+        const st = this.db.prepare(`UPDATE rider_career_stats SET team_effort_podiums = team_effort_podiums + 1 WHERE rider_id = ?`);
+        for (const r of stageRows) {
+          if (r.riderId != null && r.rank <= 3) {
+            const mates = top10.filter((o: any) => o.teamId === r.teamId && o.riderId !== r.riderId).length;
+            if (mates >= 2) st.run(r.riderId);
+          }
+        }
+      }
+      // One Man Team: einziger Fahrer seines Teams in den Top 50.
+      if (!isTTT && columnExists(this.db, 'rider_career_stats', 'one_man_team')) {
+        const byTeam = new Map<number, number[]>();
+        for (const r of stageRows) if (r.riderId != null && r.rank <= 50) { const a = byTeam.get(r.teamId) ?? []; a.push(r.riderId); byTeam.set(r.teamId, a); }
+        const st = this.db.prepare(`UPDATE rider_career_stats SET one_man_team = one_man_team + 1 WHERE rider_id = ?`);
+        for (const arr of byTeam.values()) if (arr.length === 1) st.run(arr[0]);
+      }
+      // Schlussetappe eines Etappenrennens: GC-Lanterne, GC by Seconds, bitter end.
+      if (race.isStageRace && stage.stageNumber === race.numberOfStages) {
+        const isGT = GRAND_TOUR_NAMES.has(race.name);
+        if (columnExists(this.db, 'rider_career_stats', 'lanterne_rouge_gt')) {
+          let last: any = null;
+          for (const r of gcRows) if (r.riderId != null && (last == null || r.rank > last.rank)) last = r;
+          if (last) {
+            const col = isGT ? 'lanterne_rouge_gt' : 'lanterne_rouge_sr';
+            this.db.prepare(`UPDATE rider_career_stats SET ${col} = ${col} + 1 WHERE rider_id = ?`).run(last.riderId);
+          }
+        }
+        if (isGT && columnExists(this.db, 'rider_career_stats', 'gc_by_seconds')) {
+          const sorted = gcRows.filter((r: any) => r.riderId != null && r.timeSeconds != null).sort((a: any, b: any) => a.rank - b.rank);
+          if (sorted.length >= 2) {
+            const margin = sorted[1].timeSeconds - sorted[0].timeSeconds;
+            if (margin >= 0 && margin < 20) this.db.prepare(`UPDATE rider_career_stats SET gc_by_seconds = gc_by_seconds + 1 WHERE rider_id = ?`).run(sorted[0].riderId);
+          }
+        }
+        if (isGT && columnExists(this.db, 'rider_career_stats', 'bitter_end_dnf')) {
+          const st = this.db.prepare(`UPDATE rider_career_stats SET bitter_end_dnf = bitter_end_dnf + 1 WHERE rider_id = ?`);
+          for (const e of dnfEntries) if (e.riderId != null) { insertCareerStatsRow.run(e.riderId); st.run(e.riderId); }
+          for (const d of dnsEvents) if (d.riderId != null) { insertCareerStatsRow.run(d.riderId); st.run(d.riderId); }
+        }
+      }
+
       for (const dns of dnsEvents) {
         if (dns.riderId != null) {
           insertCareerStatsRow.run(dns.riderId);

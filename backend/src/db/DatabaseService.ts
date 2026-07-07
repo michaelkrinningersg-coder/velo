@@ -1990,6 +1990,16 @@ export class DatabaseService {
       ['long_haul_wins', 'INTEGER NOT NULL DEFAULT 0'],       // Long Haul Specialist (> 200 km)
       ['stamina_wins', 'INTEGER NOT NULL DEFAULT 0'],         // Stamina Machine (> 240 km)
       ['vertical_limit_wins', 'INTEGER NOT NULL DEFAULT 0'],  // Vertical Limit (> 4000 hm)
+      // Welle 3 (Positionen; ab jetzt beim Commit gepflegt, kein Backfill —
+      // Nicht-Sieger-/Endpositionszeilen werden geprunt).
+      ['lanterne_rouge_stage', 'INTEGER NOT NULL DEFAULT 0'], // Lanterne Rouge (Etappe/Eintagesrennen)
+      ['lanterne_rouge_gt', 'INTEGER NOT NULL DEFAULT 0'],    // Red Lantern Legend (Grand-Tour-GC)
+      ['lanterne_rouge_sr', 'INTEGER NOT NULL DEFAULT 0'],    // Broom Wagon Regular (uebrige Stage-Race-GC)
+      ['time_cut_finishes', 'INTEGER NOT NULL DEFAULT 0'],    // Time Cut Specialist
+      ['team_effort_podiums', 'INTEGER NOT NULL DEFAULT 0'],  // Team Effort
+      ['one_man_team', 'INTEGER NOT NULL DEFAULT 0'],         // One Man Team
+      ['gc_by_seconds', 'INTEGER NOT NULL DEFAULT 0'],        // GC by Seconds
+      ['bitter_end_dnf', 'INTEGER NOT NULL DEFAULT 0'],       // Not to the bitter end
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

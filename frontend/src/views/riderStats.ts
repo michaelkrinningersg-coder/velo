@@ -2717,6 +2717,8 @@ const HOF_ICON_WINE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" 
 const HOF_ICON_LOOP = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 6 6 6 6 0 0 1-1 3.3l1.5 1.5A8 8 0 0 0 12 4zm0 14a6 6 0 0 1-6-6 6 6 0 0 1 1-3.3L5.5 7.2A8 8 0 0 0 12 20v3l4-4-4-4v3z"/></svg>`;
 const HOF_ICON_TRAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3l1.6 2.4-.8.6L16 17h-2l-1 2h-2l-1-2H8l-1.8 3-.8-.6L7 17a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h-1zm0 4v4h5V6H6zm7 0v4h5V6h-5zM8.5 12a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>`;
 const HOF_ICON_FOG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 8a5 5 0 0 1 9.6-1.8A4 4 0 0 1 19 10H7a3 3 0 0 1-1-2zm-2 6h13v1.6H4V14zm3 3h13v1.6H7V17zm-3 3h11v1.6H4V20z" opacity=".9"/></svg>`;
+const HOF_ICON_LANTERN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M10 2h4v2h-4V2zm-1 3h6l1 2v1H8V7l1-2zm-1 4h8l1 10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l1-10zm4 2a2.5 2.5 0 0 0-2.5 2.5c0 1.7 2.5 4.5 2.5 4.5s2.5-2.8 2.5-4.5A2.5 2.5 0 0 0 12 11z"/></svg>`;
+const HOF_ICON_BROOM = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M19.4 3.1a1 1 0 0 1 .3 1.4l-6.2 9 1.5 1.3-1.2 1.4-1.1-.9-3.6 4.2a2 2 0 0 1-1.9.7l-4.4-.8 2.8-2.3-1-3.6a2 2 0 0 1 .6-2l3.9-3.4-.9-1.1L9.6 9l1.4 1.2 6.9-6.8a1 1 0 0 1 1.5-.3zM6 17l1.8.3L9 16l-2.2-.6L6 17z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2828,6 +2830,15 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const longHaulWins = hof.longHaulWins ?? 0;
   const staminaWins = hof.staminaWins ?? 0;
   const verticalLimitWins = hof.verticalLimitWins ?? 0;
+  // Welle 3 (Positionen).
+  const lanterneRougeStage = hof.lanterneRougeStage ?? 0;
+  const lanterneRougeGt = hof.lanterneRougeGt ?? 0;
+  const lanterneRougeSr = hof.lanterneRougeSr ?? 0;
+  const timeCutFinishes = hof.timeCutFinishes ?? 0;
+  const teamEffortPodiums = hof.teamEffortPodiums ?? 0;
+  const oneManTeam = hof.oneManTeam ?? 0;
+  const gcBySeconds = hof.gcBySeconds ?? 0;
+  const bitterEndDnf = hof.bitterEndDnf ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3722,6 +3733,64 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${verticalLimitWins} Etappensiege mit über 4000 Höhenmetern (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen mit über 4000 hm',
     },
+
+    // --- Badges Welle 3 (Positionen; zählen ab jetzt) ---
+    {
+      key: 'lanterneRouge', name: 'Lanterne Rouge', icon: HOF_ICON_LANTERN, description: 'Letzter Finisher',
+      tier: resolveThresholdTier(lanterneRougeStage, [1, 3, 5, 10, 20]),
+      detail: lanterneRougeStage > 0 ? `${lanterneRougeStage}×` : '',
+      hover: `${lanterneRougeStage}× letzter klassierter Finisher einer Etappe/eines Eintagesrennens (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1× letzter Finisher',
+    },
+    {
+      key: 'redLanternLegend', name: 'Red Lantern Legend', icon: HOF_ICON_LANTERN, description: 'Letzter im Grand-Tour-GC',
+      tier: resolveThresholdTier(lanterneRougeGt, [1, 2, 3, 5, 8]),
+      detail: lanterneRougeGt > 0 ? `${lanterneRougeGt}×` : '',
+      hover: `${lanterneRougeGt}× Letzter der Gesamtwertung einer Grand Tour (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Lanterne Rouge einer Grand Tour',
+    },
+    {
+      key: 'broomWagonRegular', name: 'Broom Wagon Regular', icon: HOF_ICON_BROOM, description: 'Letzter im Stage-Race-GC',
+      tier: resolveThresholdTier(lanterneRougeSr, [1, 3, 5, 8, 12]),
+      detail: lanterneRougeSr > 0 ? `${lanterneRougeSr}×` : '',
+      hover: `${lanterneRougeSr}× Letzter der Gesamtwertung eines (Nicht-Grand-Tour-)Etappenrennens (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1× Letzter im Stage-Race-GC',
+    },
+    {
+      key: 'timeCutSpecialist', name: 'Time Cut Specialist', icon: HOF_ICON_STOPWATCH, description: 'Knapp im Zeitlimit',
+      tier: resolveThresholdTier(timeCutFinishes, [1, 3, 5, 10, 20]),
+      detail: timeCutFinishes > 0 ? `${timeCutFinishes}×` : '',
+      hover: `${timeCutFinishes}× Ziel unter 60 s vor dem Zeitlimit erreicht (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1× knapp im Zeitlimit',
+    },
+    {
+      key: 'teamEffort', name: 'Team Effort', icon: HOF_ICON_SHIELD, description: 'Top-3 mit starkem Team',
+      tier: resolveThresholdTier(teamEffortPodiums, [1, 3, 6, 10, 15]),
+      detail: teamEffortPodiums > 0 ? `${teamEffortPodiums}×` : '',
+      hover: `${teamEffortPodiums}× Top-3, während mindestens 2 Teamkollegen ebenfalls Top 10 waren (Gold 15 · Silber 10 · Bronze 6 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1× Top-3 mit 2+ Teamkollegen in den Top 10',
+    },
+    {
+      key: 'oneManTeam', name: 'One Man Team', icon: HOF_ICON_BIKE, description: 'Einziger im Team in Top 50',
+      tier: resolveThresholdTier(oneManTeam, [5, 10, 15, 20, 25]),
+      detail: oneManTeam > 0 ? `${oneManTeam}×` : '',
+      hover: `${oneManTeam}× einziger Fahrer seines Teams in den Top 50 (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
+      requirement: 'Ab 5× einziger Team-Fahrer in den Top 50',
+    },
+    {
+      key: 'gcBySeconds', name: 'GC by Seconds', icon: HOF_ICON_CLOCK, description: 'GT knapp gewonnen',
+      tier: resolveThresholdTier(gcBySeconds, [1, 2, 3, 4, 5]),
+      detail: gcBySeconds > 0 ? `${gcBySeconds}×` : '',
+      hover: `${gcBySeconds}× Grand Tour mit weniger als 20 Sekunden Vorsprung gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× GT-Sieg mit < 20 s Vorsprung',
+    },
+    {
+      key: 'notBitterEnd', name: 'Not to the Bitter End', icon: HOF_ICON_CROSS, description: 'Aufgabe auf GT-Schlussetappe',
+      tier: resolveThresholdTier(bitterEndDnf, [1, 2, 3, 4, 5]),
+      detail: bitterEndDnf > 0 ? `${bitterEndDnf}×` : '',
+      hover: `${bitterEndDnf}× auf der Schlussetappe einer Grand Tour nicht ins Ziel gekommen (DNS/DNF/OTL) (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Aufgabe auf der GT-Schlussetappe',
+    },
   ];
 }
 
@@ -3761,7 +3830,7 @@ const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
-   'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer'],
+   'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator'],
@@ -3776,15 +3845,18 @@ const HOF_GROUPS: string[][] = [
   ['worldCitizen', 'globetrotter', 'travelKing', 'nationExpress', 'winEurope', 'winAsia', 'winOceania', 'winNorthAmerica',
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
-  ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone'],
+  ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone',
+   'teamEffort', 'oneManTeam'],
   // 8. Wetter
   ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität
   ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine'],
   // 10. Pech & Widrigkeiten
-  ['comebackKing', 'underTheWeather', 'hardLuck', 'pechvogel', 'sturzpilot', 'restlessLegs', 'gremlin', 'theSlump'],
+  ['comebackKing', 'underTheWeather', 'hardLuck', 'pechvogel', 'sturzpilot', 'restlessLegs', 'gremlin', 'theSlump',
+   'timeCutSpecialist', 'notBitterEnd'],
   // 11. Kuriositäten (geringste Wichtigkeit)
-  ['werewolf', 'ghost', 'theCat', 'groundhogDay', 'nightShift', 'wardrobeMalfunction'],
+  ['werewolf', 'ghost', 'theCat', 'groundhogDay', 'nightShift', 'wardrobeMalfunction',
+   'lanterneRouge', 'redLanternLegend', 'broomWagonRegular'],
 ];
 const HOF_GROUP_INDEX: Map<string, number> = (() => {
   const m = new Map<string, number>();
