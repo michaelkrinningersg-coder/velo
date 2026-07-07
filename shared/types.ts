@@ -1096,6 +1096,9 @@ export interface RiderHallOfFameStats {
   euroChampionIttTitles: number;    // Europameister ITT
   nationalChampionRoadTitles: number; // Nationaler Meister (Strasse)
   nationalChampionIttTitles: number;  // Nationaler Meister ITT
+  gtStageWinsTdf: number;             // Etappensiege Tour de France (All-Time)
+  gtStageWinsGiro: number;            // Etappensiege Giro (All-Time)
+  gtStageWinsVuelta: number;          // Etappensiege Vuelta (All-Time)
 
   // Badge-Kennzahlen Welle 10 (rein abgeleitet).
   pointsPerfectionist: number;  // GT-Punktewertung ohne Etappensieg (Points Perfectionist)

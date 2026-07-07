@@ -2081,6 +2081,28 @@ export class RiderRepository {
     return out;
   }
 
+  // Etappensiege je Grand Tour (All-Time, aus results_flat — Siegzeilen ueber-
+  // leben das Saison-Pruning). Speist die Badges "Grand Tour Slam" / "Missing
+  // Out One" und die gleichnamige Rekorde-Rangliste.
+  public getGrandTourStageWins(riderId: number): { tdf: number; giro: number; vuelta: number } {
+    const out = { tdf: 0, giro: 0, vuelta: 0 };
+    if (!tableExists(this.db, 'results_flat')) return out;
+    const rows = this.db.prepare(`
+      SELECT races.name AS name, COUNT(*) AS wins
+      FROM results_flat rf
+      JOIN races ON races.id = rf.race_id
+      WHERE rf.rider_id = ? AND rf.result_type_id = 1 AND rf.rank = 1
+        AND races.name IN ('Tour de France', 'Giro d''Italia', 'La Vuelta Ciclista a España')
+      GROUP BY races.name
+    `).all(riderId) as Array<{ name: string; wins: number }>;
+    for (const row of rows) {
+      if (row.name === 'Tour de France') out.tdf = row.wins;
+      else if (row.name === "Giro d'Italia") out.giro = row.wins;
+      else out.vuelta = row.wins;
+    }
+    return out;
+  }
+
   private buildHallOfFameStats(careerWins: number, riderId: number): RiderHallOfFameStats {
     const winsRank = this.getAllTimeWinsRank(careerWins);
 
@@ -2154,12 +2176,16 @@ export class RiderRepository {
     const wave6 = this.getBadgeWave6Stats(riderId);
     const wave8 = this.getBadgeWave8Stats(riderId);
     const wave10 = this.getBadgeWave10Stats(riderId);
+    const gtStageWins = this.getGrandTourStageWins(riderId);
 
     return {
       allTimeWins: careerWins,
       allTimeWinsRank: winsRank.rank,
       careerWinsRank: winsRank.rank,
       leadoutTrainRank,
+      gtStageWinsTdf: gtStageWins.tdf,
+      gtStageWinsGiro: gtStageWins.giro,
+      gtStageWinsVuelta: gtStageWins.vuelta,
       ...statRanks,
       ...wild,
       ...wave1,

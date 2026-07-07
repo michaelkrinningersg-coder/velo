@@ -2905,6 +2905,11 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const euroChampionIttTitles = hof.euroChampionIttTitles ?? 0;
   const nationalChampionRoadTitles = hof.nationalChampionRoadTitles ?? 0;
   const nationalChampionIttTitles = hof.nationalChampionIttTitles ?? 0;
+  const gtStageWinsTdf = hof.gtStageWinsTdf ?? 0;
+  const gtStageWinsGiro = hof.gtStageWinsGiro ?? 0;
+  const gtStageWinsVuelta = hof.gtStageWinsVuelta ?? 0;
+  const gtWithStageWin = [gtStageWinsTdf, gtStageWinsGiro, gtStageWinsVuelta].filter((n) => n >= 1).length;
+  const gtStageWinsTotal = gtStageWinsTdf + gtStageWinsGiro + gtStageWinsVuelta;
   // Welle 10 (rein abgeleitet).
   const pointsPerfectionist = hof.pointsPerfectionist ?? 0;
   const thirdWeekWonder = hof.thirdWeekWonder ?? 0;
@@ -3295,6 +3300,18 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${nationalChampionIttTitles.toLocaleString('de-DE')} nationale Zeitfahr-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 nationalem Zeitfahr-Meistertitel',
     },
+    singleBadge('grandTourStageSlam', 'Grand Tour Slam', HOF_ICON_CROWN, 'Etappensieg in allen 3 Grand Tours',
+      gtWithStageWin === 3, classColorStyle('World Tour - Grand Tour', 'GT SLAM'),
+      gtWithStageWin === 3
+        ? `Etappensiege in allen drei Grand Tours (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta})`
+        : `Erst in ${gtWithStageWin} von 3 Grand Tours eine Etappe gewonnen.`,
+      'In allen drei Grand Tours eine Etappe gewinnen', gtStageWinsTotal > 0 ? `${gtStageWinsTotal} GT-Etappen` : ''),
+    singleBadge('missingOutOne', 'Missing Out One', HOF_ICON_PODIUM, 'Etappensieg in 2 von 3 Grand Tours',
+      gtWithStageWin === 2, HOF_STYLE_GREEN,
+      gtWithStageWin === 2
+        ? `Etappensiege in 2 von 3 Grand Tours — einer fehlt noch (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta})`
+        : (gtWithStageWin === 3 ? 'Bereits in allen drei Grand Tours gewonnen — siehe Grand Tour Slam.' : `Erst in ${gtWithStageWin} von 3 Grand Tours eine Etappe gewonnen.`),
+      'In 2 von 3 Grand Tours eine Etappe gewinnen', gtWithStageWin === 2 ? '2 / 3' : ''),
     singleBadge('tdfWinner', 'TdF Winner', HOF_ICON_TROPHY, 'Tour de France gewonnen',
       tdfWins >= 1, classColorStyle('World Tour - Tour de France', 'TOUR DE FRANCE'),
       tdfWins >= 1 ? `${tdfWins.toLocaleString('de-DE')}× Tour de France gewonnen` : 'Noch keine Tour de France gewonnen.',
@@ -4184,7 +4201,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['worldChampionRoad', 'worldChampionItt', 'euroChampionRoad', 'euroChampionItt',
-   'nationalChampionRoad', 'nationalChampionItt',
+   'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'missingOutOne',
    'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
