@@ -1076,6 +1076,10 @@ export interface RiderHallOfFameStats {
   // Badge-Kennzahl Welle 4 (Back-to-Back).
   winStreakBest: number;        // laengste Siegesserie an aufeinanderfolgenden Renntagen (Hot Streak)
 
+  // Badge-Kennzahlen Welle 7 (Commit-getrackt).
+  peakPerformerWins: number;    // Siege mit kombinierter R+S-Form > 7,5 (Peak Performer)
+  yoyoRaces: number;            // Etappenrennen mit >= 10 Attacken (The Yoyo)
+
   // Badge-Kennzahlen Welle 5 (Helfer & Team).
   waterCarrierDays: number;         // Renntage als Wassertraeger (Water Carrier)
   superDomestiqueLeadouts: number;  // Leadout-Beteiligungen als Anfahrer (Super Domestique)

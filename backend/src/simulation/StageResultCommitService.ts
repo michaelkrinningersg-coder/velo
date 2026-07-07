@@ -1717,6 +1717,21 @@ export class StageResultCommitService {
         if (stageElevationGain > 4000 && columnExists(this.db, 'rider_career_stats', 'vertical_limit_wins')) {
           this.db.prepare(`UPDATE rider_career_stats SET vertical_limit_wins = vertical_limit_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
         }
+        // Peak Performer: Sieg mit kombinierter R+S-Form > 7,5. Form wie im
+        // Leaderboard: form_bonus + MIN(4, race_form_bonus + freie R-Form).
+        if (columnExists(this.db, 'rider_career_stats', 'peak_performer_wins') && tableExists(this.db, 'rider_daily_state')) {
+          try {
+            const rds = this.db.prepare(`SELECT form_bonus AS fb, race_form_bonus AS rfb FROM rider_daily_state WHERE rider_id = ?`).get(winnerRow.riderId) as { fb: number; rfb: number } | undefined;
+            if (rds) {
+              let freeR = 0;
+              if (tableExists(this.db, 'rider_r_form_events')) {
+                freeR = (this.db.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM rider_r_form_events WHERE rider_id = ?`).get(winnerRow.riderId) as { s: number } | undefined)?.s ?? 0;
+              }
+              const combined = (rds.fb ?? 0) + Math.min(4.0, (rds.rfb ?? 0) + freeR);
+              if (combined > 7.5) this.db.prepare(`UPDATE rider_career_stats SET peak_performer_wins = peak_performer_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+            }
+          } catch { /* Form-Quelle fehlt */ }
+        }
       }
 
       // The Cat (Neun Leben): Podium (Top 3) in einer Etappe, in der der Fahrer
@@ -1880,6 +1895,26 @@ export class StageResultCommitService {
           }
         }
         for (const e of dnfEntries) if (e.riderId != null) { insertCareerStatsRow.run(e.riderId); resetC.run(e.riderId); }
+      }
+
+      // The Yoyo: >= 10 Attacken in einem einzigen Etappenrennen (Summe ueber
+      // alle Etappen). An der Schlussetappe: Vor-Etappen aus results_flat
+      // (event_ids Code 5) plus die aktuelle Etappe aus attackCounts.
+      if (race.isStageRace && stage.stageNumber === race.numberOfStages
+        && columnExists(this.db, 'rider_career_stats', 'yoyo_races') && tableExists(this.db, 'results_flat')) {
+        const attacksByRider = new Map<number, number>();
+        try {
+          const rows = this.db.prepare(`
+            SELECT rf.rider_id AS rid, rf.event_ids AS ev FROM results_flat rf JOIN stages s ON s.id = rf.stage_id
+            WHERE s.race_id = ? AND rf.result_type_id = 1 AND rf.rider_id IS NOT NULL AND rf.event_ids IS NOT NULL
+          `).all(race.id) as Array<{ rid: number; ev: string }>;
+          for (const r of rows) {
+            for (const p of String(r.ev).split('|')) if (p.startsWith('5:')) { const n = parseInt(p.slice(2), 10); if (Number.isFinite(n)) attacksByRider.set(r.rid, (attacksByRider.get(r.rid) ?? 0) + n); }
+          }
+        } catch { /* */ }
+        for (const [rid, n] of attackCounts.entries()) attacksByRider.set(rid, (attacksByRider.get(rid) ?? 0) + n);
+        const yStmt = this.db.prepare(`UPDATE rider_career_stats SET yoyo_races = yoyo_races + 1 WHERE rider_id = ?`);
+        for (const [rid, total] of attacksByRider.entries()) if (rid != null && total >= 10) { insertCareerStatsRow.run(rid); yStmt.run(rid); }
       }
 
       for (const dns of dnsEvents) {

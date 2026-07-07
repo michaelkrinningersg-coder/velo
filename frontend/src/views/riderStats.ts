@@ -2856,6 +2856,9 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const instantImpact = hof.instantImpact === true;
   const outOfDarkWins = hof.outOfDarkWins ?? 0;
   const hotStreakOpenerSeasons = hof.hotStreakOpenerSeasons ?? 0;
+  // Welle 7 (Commit-getrackt).
+  const peakPerformerWins = hof.peakPerformerWins ?? 0;
+  const yoyoRaces = hof.yoyoRaces ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3913,6 +3916,22 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${hotStreakOpenerSeasons} Saisons mit 3+ Siegen in den ersten 5 Rennen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Saison mit 3+ Siegen in den ersten 5 Rennen',
     },
+
+    // --- Badges Welle 7 (Commit-getrackt) ---
+    {
+      key: 'peakPerformer', name: 'Peak Performer', icon: HOF_ICON_STAR, description: 'Sieg in Topform',
+      tier: resolveThresholdTier(peakPerformerWins, [1, 3, 5, 8, 12]),
+      detail: peakPerformerWins > 0 ? `${peakPerformerWins} Siege` : '',
+      hover: `${peakPerformerWins} Siege mit kombinierter R+S-Form über 7,5 (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Sieg in absoluter Topform',
+    },
+    {
+      key: 'theYoyo', name: 'The Yoyo', icon: HOF_ICON_BOLT, description: '10+ Attacken je Rundfahrt',
+      tier: resolveThresholdTier(yoyoRaces, [1, 3, 5, 10, 12]),
+      detail: yoyoRaces > 0 ? `${yoyoRaces}×` : '',
+      hover: `${yoyoRaces} Etappenrennen mit mindestens 10 Attacken (Gold 12 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Rundfahrt mit 10+ Attacken',
+    },
   ];
 }
 
@@ -3963,7 +3982,7 @@ const HOF_GROUPS: string[][] = [
   ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
    'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit'],
   // 5. Ausreißer & Angriff
-  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze'],
+  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo'],
   // 5b. Helfer & Team
   ['waterCarrier', 'superDomestique', 'loyalLieutenant', 'packesel', 'kingmaker', 'theFranchise', 'bandOfBrothers'],
   // 6. Geografie
@@ -3971,7 +3990,7 @@ const HOF_GROUPS: string[][] = [
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
   ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone',
-   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener'],
+   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener', 'peakPerformer'],
   // 8. Wetter
   ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität

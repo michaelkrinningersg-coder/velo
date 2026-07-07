@@ -2011,6 +2011,9 @@ export class DatabaseService {
       // nicht). Ab jetzt gepflegt, kein Backfill (Nicht-Sieg-Renntage geprunt).
       ['win_streak_current', 'INTEGER NOT NULL DEFAULT 0'],
       ['win_streak_best', 'INTEGER NOT NULL DEFAULT 0'],
+      // Welle 7 (ab jetzt gepflegt, kein Backfill).
+      ['peak_performer_wins', 'INTEGER NOT NULL DEFAULT 0'], // Sieg mit kombinierter R+S-Form > 7,5
+      ['yoyo_races', 'INTEGER NOT NULL DEFAULT 0'],          // >= 10 Attacken in einem Etappenrennen
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
