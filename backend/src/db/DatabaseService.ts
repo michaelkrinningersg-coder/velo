@@ -1717,6 +1717,55 @@ export class DatabaseService {
       console.error('full_moon-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
 
+    // --- Night Shift: Podium (Top 3) an Vollmondtagen ---
+    // Teilweise rekonstruierbar: rank-1-Zeilen ueberleben immer, rank 2/3 nur
+    // bei Punktevergabe. Seed aus dem Vorhandenen; ab jetzt wird beim Commit
+    // vollstaendig weitergezaehlt.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'full_moon_podium_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'full_moon_podiums') && tableExists(db, 'results_flat') && tableExists(db, 'stages')) {
+        const rows = db.prepare(`
+          SELECT rf.rider_id AS rider_id, s.date AS date
+          FROM results_flat rf
+          JOIN stages s ON s.id = rf.stage_id
+          WHERE rf.result_type_id = 1 AND rf.rank <= 3 AND rf.rider_id IS NOT NULL
+        `).all() as Array<{ rider_id: number; date: string }>;
+        const byRider = new Map<number, number>();
+        for (const r of rows) {
+          if (isFullMoonDate(r.date)) byRider.set(r.rider_id, (byRider.get(r.rider_id) ?? 0) + 1);
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET full_moon_podiums = ? WHERE rider_id = ?');
+        db.transaction(() => { for (const [rid, c] of byRider) upd.run(c, rid); })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('full_moon_podium_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('full_moon_podium-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+
+    // --- Wardrobe Malfunction: mehrere Fuehrungstrikots an einem Tag ---
+    // jerseys_worn (kommagetrennt) liegt auf den Etappenzeilen; rank-1 ueberlebt
+    // immer, sonst nur bei Punktevergabe. Seed aus dem Vorhandenen.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'multi_jersey_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'multi_jersey_days') && tableExists(db, 'results_flat')) {
+        const rows = db.prepare(`
+          SELECT rider_id, jerseys_worn FROM results_flat
+          WHERE result_type_id = 1 AND rider_id IS NOT NULL AND jerseys_worn IS NOT NULL AND jerseys_worn != ''
+        `).all() as Array<{ rider_id: number; jerseys_worn: string }>;
+        const byRider = new Map<number, number>();
+        for (const r of rows) {
+          if (r.jerseys_worn.split(',').filter((t) => t.trim() !== '').length >= 2) {
+            byRider.set(r.rider_id, (byRider.get(r.rider_id) ?? 0) + 1);
+          }
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET multi_jersey_days = ? WHERE rider_id = ?');
+        db.transaction(() => { for (const [rid, c] of byRider) upd.run(c, rid); })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('multi_jersey_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('multi_jersey-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+
     // --- The Cat: Podium (Top 3) mit Sturz-Event in derselben Etappe ---
     // Top-3-Zeilen ueberleben das Pruning (Punktevergabe), event_ids ist dort
     // hinterlegt (Sturz = Code "1"). Damit vollstaendig rekonstruierbar.
@@ -1900,6 +1949,12 @@ export class DatabaseService {
       // (kommagetrennt). Persistenter Akkumulator, da Teilnahme-Rohdaten dem
       // Saison-Pruning zum Opfer fallen.
       ['raced_country_ids', 'TEXT'],
+      // Kuriositaeten-Badges Welle B (beim Commit gepflegt).
+      ['full_moon_podiums', 'INTEGER NOT NULL DEFAULT 0'],   // Night Shift
+      ['clean_streak_current', 'INTEGER NOT NULL DEFAULT 0'], // Iron Horse (laufend)
+      ['clean_streak_best', 'INTEGER NOT NULL DEFAULT 0'],    // Iron Horse (Rekord)
+      ['grand_tours_finished', 'INTEGER NOT NULL DEFAULT 0'], // Marathon Finisher
+      ['multi_jersey_days', 'INTEGER NOT NULL DEFAULT 0'],    // Wardrobe Malfunction
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

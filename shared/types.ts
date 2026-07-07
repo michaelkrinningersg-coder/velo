@@ -1057,6 +1057,12 @@ export interface RiderHallOfFameStats {
   awayWins: number;             // Siege im Ausland (Road Warrior)
   breakawayWins: number;        // Siege aus dem Ausreisser (Smash & Grab)
   groundhogStreak: number;      // dasselbe Rennen X Saisons in Folge gewonnen (Groundhog Day)
+
+  // Kuriositaeten Welle B (beim Commit gepflegt).
+  fullMoonPodiums: number;      // Podeste an Vollmondtagen (Night Shift)
+  cleanStreakBest: number;      // laengste Serie sauberer Renntage (Iron Horse)
+  grandToursFinished: number;   // komplett beendete Grand Tours (Marathon Finisher)
+  multiJerseyDays: number;      // Tage mit mehreren Fuehrungstrikots (Wardrobe Malfunction)
 }
 
 export interface RiderStatsPayload {

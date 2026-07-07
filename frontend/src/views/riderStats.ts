@@ -2823,6 +2823,11 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const breakawayWins = hof.breakawayWins ?? 0;
   const groundhogStreak = hof.groundhogStreak ?? 0;
   const kamikazeRatio = (hof.allTimeAttacks ?? 0) / Math.max(1, hof.allTimeWins ?? 0);
+  // "Wilde" Kuriositaeten (Welle B, Commit-getrackt).
+  const fullMoonPodiums = hof.fullMoonPodiums ?? 0;
+  const cleanStreakBest = hof.cleanStreakBest ?? 0;
+  const grandToursFinished = hof.grandToursFinished ?? 0;
+  const multiJerseyDays = hof.multiJerseyDays ?? 0;
   const raceDays = hof.allTimeRaceDays ?? 0;
   const brkKms = hof.breakawayKms ?? 0;
   const brkAttempts = hof.breakawayAttempts ?? 0;
@@ -3552,6 +3557,36 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       detail: groundhogStreak >= 2 ? `${groundhogStreak}× in Folge` : '',
       hover: `Dasselbe Rennen ${groundhogStreak}× in aufeinanderfolgenden Saisons gewonnen (Gold 7 · Silber 6 · Bronze 5 · Cyan 4 · Lila 3)`,
       requirement: 'Dasselbe Rennen 3 Saisons in Folge gewinnen',
+    },
+
+    // --- Kuriositaeten-Badges (Welle B, Commit-getrackt) ---
+    {
+      key: 'nightShift', name: 'Night Shift', icon: HOF_ICON_MOON, description: 'Podeste bei Vollmond',
+      tier: resolveThresholdTier(fullMoonPodiums, [1, 3, 5, 8, 12]),
+      detail: fullMoonPodiums > 0 ? `${fullMoonPodiums.toLocaleString('de-DE')} Podeste` : '',
+      hover: `${fullMoonPodiums.toLocaleString('de-DE')} Podestplätze an Vollmondtagen (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Podium bei Vollmond',
+    },
+    {
+      key: 'ironHorse', name: 'Iron Horse', icon: HOF_ICON_STOPWATCH, description: 'Serie sauberer Renntage',
+      tier: resolveThresholdTier(cleanStreakBest, [20, 40, 60, 90, 120]),
+      detail: cleanStreakBest > 0 ? `${cleanStreakBest.toLocaleString('de-DE')} Renntage` : '',
+      hover: `Längste Serie von ${cleanStreakBest.toLocaleString('de-DE')} Renntagen ohne DNF/DNS/OTL (Gold 120 · Silber 90 · Bronze 60 · Cyan 40 · Lila 20)`,
+      requirement: 'Ab 20 Renntagen ohne Ausfall in Folge',
+    },
+    {
+      key: 'marathonFinisher', name: 'Marathon Finisher', icon: HOF_ICON_FLAG, description: 'Beendete Grand Tours',
+      tier: resolveThresholdTier(grandToursFinished, [1, 3, 6, 10, 15]),
+      detail: grandToursFinished > 0 ? `${grandToursFinished.toLocaleString('de-DE')} Grand Tours` : '',
+      hover: `${grandToursFinished.toLocaleString('de-DE')} komplett beendete Grand Tours (Tour/Giro/Vuelta) (Gold 15 · Silber 10 · Bronze 6 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 komplett beendeten Grand Tour',
+    },
+    {
+      key: 'wardrobeMalfunction', name: 'Wardrobe Malfunction', icon: HOF_ICON_JERSEY, description: 'Tage mit Mehrfach-Trikot',
+      tier: resolveThresholdTier(multiJerseyDays, [1, 5, 15, 30, 50]),
+      detail: multiJerseyDays > 0 ? `${multiJerseyDays.toLocaleString('de-DE')} Tage` : '',
+      hover: `${multiJerseyDays.toLocaleString('de-DE')} Tage mit mehreren Führungstrikots gleichzeitig (Gold 50 · Silber 30 · Bronze 15 · Cyan 5 · Lila 1)`,
+      requirement: 'Ab 1 Tag mit mehreren Führungstrikots',
     },
   ];
 }

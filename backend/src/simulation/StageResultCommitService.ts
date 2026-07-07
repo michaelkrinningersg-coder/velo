@@ -43,6 +43,10 @@ const RESULT_TYPES = {
   breakaway: 7,
 } as const;
 
+// Die drei grossen Rundfahrten (Marathon Finisher). Namen wie in der
+// Master-DB / RiderRepository.getSpecialRaceAchievements.
+const GRAND_TOUR_NAMES = new Set<string>(['Tour de France', "Giro d'Italia", 'La Vuelta Ciclista a España']);
+
 const SUPPORTED_RESULT_TYPES: ResultType[] = [
   { id: RESULT_TYPES.stage, name: 'Stage' },
   { id: RESULT_TYPES.gc, name: 'GC' },
@@ -1736,6 +1740,45 @@ export class StageResultCommitService {
             }
           }
         }
+      }
+
+      // Night Shift: Podium (Top 3) an einem (versteckt berechneten) Vollmondtag.
+      if (isFullMoonDate(stage.date) && columnExists(this.db, 'rider_career_stats', 'full_moon_podiums')) {
+        const nsStmt = this.db.prepare(`UPDATE rider_career_stats SET full_moon_podiums = full_moon_podiums + 1 WHERE rider_id = ?`);
+        for (const row of stageRows) {
+          if (row.riderId != null && row.rank <= 3) nsStmt.run(row.riderId);
+        }
+      }
+
+      // Wardrobe Malfunction: an einem Tag mehrere Fuehrungstrikots gleichzeitig
+      // getragen (>= 2 Wertungen angefuehrt).
+      if (columnExists(this.db, 'rider_career_stats', 'multi_jersey_days')) {
+        const wStmt = this.db.prepare(`UPDATE rider_career_stats SET multi_jersey_days = multi_jersey_days + 1 WHERE rider_id = ?`);
+        for (const [rId, ledList] of leadersAfterStage.entries()) {
+          if (rId != null && ledList.length >= 2) wStmt.run(rId);
+        }
+      }
+
+      // Iron Horse: laufende Serie sauberer Renntage (Zielankunft) je Fahrer;
+      // DNF/OTL/DNS setzen zurueck. Rekord in clean_streak_best. Kein Backfill
+      // (Reihenfolge alter Renntage ist nach dem Pruning verloren) -> zaehlt ab
+      // jetzt.
+      if (columnExists(this.db, 'rider_career_stats', 'clean_streak_best')) {
+        const bump = this.db.prepare(`UPDATE rider_career_stats SET clean_streak_current = clean_streak_current + 1, clean_streak_best = MAX(clean_streak_best, clean_streak_current + 1) WHERE rider_id = ?`);
+        const reset = this.db.prepare(`UPDATE rider_career_stats SET clean_streak_current = 0 WHERE rider_id = ?`);
+        for (const rid of completedRiderIds) { if (rid != null) { insertCareerStatsRow.run(rid); bump.run(rid); } }
+        for (const e of dnfEntries) { if (e.riderId != null) { insertCareerStatsRow.run(e.riderId); reset.run(e.riderId); } }
+        for (const dns of dnsEvents) { if (dns.riderId != null) { insertCareerStatsRow.run(dns.riderId); reset.run(dns.riderId); } }
+      }
+
+      // Marathon Finisher: eine der drei grossen Rundfahrten komplett beendet
+      // (in der Schluss-GC klassiert). Kein Backfill (Nicht-Sieger-GC-Zeilen
+      // werden geprunt) -> zaehlt ab jetzt.
+      if (race.isStageRace && stage.stageNumber === race.numberOfStages
+        && columnExists(this.db, 'rider_career_stats', 'grand_tours_finished')
+        && GRAND_TOUR_NAMES.has(race.name)) {
+        const mfStmt = this.db.prepare(`UPDATE rider_career_stats SET grand_tours_finished = grand_tours_finished + 1 WHERE rider_id = ?`);
+        for (const row of gcRows) { if (row.riderId != null) { insertCareerStatsRow.run(row.riderId); mfStmt.run(row.riderId); } }
       }
 
       for (const dns of dnsEvents) {

@@ -1560,17 +1560,28 @@ export class RiderRepository {
   private getWildStats(riderId: number): {
     defects: number; doomedEscapes: number; supermalusDays: number; bestSeasonRaceDays: number;
     veteranWins: number; awayWins: number; breakawayWins: number; groundhogStreak: number;
+    fullMoonPodiums: number; cleanStreakBest: number; grandToursFinished: number; multiJerseyDays: number;
   } {
-    const out = { defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0, breakawayWins: 0, groundhogStreak: 0 };
+    const out = {
+      defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
+      breakawayWins: 0, groundhogStreak: 0, fullMoonPodiums: 0, cleanStreakBest: 0, grandToursFinished: 0, multiJerseyDays: 0,
+    };
 
     if (tableExists(this.db, 'rider_career_stats')) {
+      const hasWaveB = columnExists(this.db, 'rider_career_stats', 'multi_jersey_days');
       const c = this.db.prepare(
-        'SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days FROM rider_career_stats WHERE rider_id = ?'
-      ).get(riderId) as { defects: number; breakaway_attempts: number; successful_breakaways: number; supermalus_days: number } | undefined;
+        `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
+         ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
+         FROM rider_career_stats WHERE rider_id = ?`
+      ).get(riderId) as any;
       if (c) {
         out.defects = c.defects ?? 0;
         out.doomedEscapes = Math.max(0, (c.breakaway_attempts ?? 0) - (c.successful_breakaways ?? 0));
         out.supermalusDays = c.supermalus_days ?? 0;
+        out.fullMoonPodiums = c.full_moon_podiums ?? 0;
+        out.cleanStreakBest = c.clean_streak_best ?? 0;
+        out.grandToursFinished = c.grand_tours_finished ?? 0;
+        out.multiJerseyDays = c.multi_jersey_days ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
