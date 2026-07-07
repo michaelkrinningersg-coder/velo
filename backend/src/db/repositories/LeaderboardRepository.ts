@@ -766,14 +766,18 @@ export class LeaderboardRepository {
       }
       valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
 
-    } else if (metricKey === 'fastest_avg_speed_stage' || metricKey === 'fastest_avg_speed_oneday') {
-      // Schnellste Durchschnittsgeschwindigkeit (Sieger je Etappe bzw.
-      // Eintagesrennen). Datenquelle ist die beim Stage-Commit gepflegte,
-      // auf Top 50 (Saison und all-time) begrenzte Rekordliste.
+    } else if (
+      metricKey === 'fastest_avg_speed_stage' || metricKey === 'fastest_avg_speed_oneday'
+      || metricKey === 'slowest_avg_speed_stage' || metricKey === 'slowest_avg_speed_oneday'
+    ) {
+      // Schnellste bzw. langsamste Durchschnittsgeschwindigkeit (Sieger je Etappe
+      // bzw. Eintagesrennen). Datenquelle ist die beim Stage-Commit gepflegte,
+      // auf je 50 schnellste und langsamste (Saison und all-time) begrenzte Liste.
       if (!tableExists(this.db, 'stage_speed_records')) {
         return [];
       }
-      const speedKind = metricKey === 'fastest_avg_speed_stage' ? 'stage' : 'oneday';
+      const isSlowest = metricKey === 'slowest_avg_speed_stage' || metricKey === 'slowest_avg_speed_oneday';
+      const speedKind = (metricKey === 'fastest_avg_speed_stage' || metricKey === 'slowest_avg_speed_stage') ? 'stage' : 'oneday';
       query = `
         SELECT
           r.id AS id,
@@ -795,7 +799,7 @@ export class LeaderboardRepository {
         LEFT JOIN teams t ON t.id = r.active_team_id
         WHERE ssr.kind = ?
         ${period === 'season' ? 'AND ssr.season = ?' : ''}
-        ORDER BY val DESC, ssr.id ASC
+        ORDER BY val ${isSlowest ? 'ASC' : 'DESC'}, ssr.id ASC
         LIMIT 50
       `;
       params.push(speedKind);

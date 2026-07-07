@@ -1510,11 +1510,11 @@ export class RiderRepository {
    * oder -view, faengt der try/catch das ab und liefert null — die uebrigen
    * Kennzahlen bleiben unberuehrt.
    */
-  private getAllTimeAggregateRank(aggregateSql: string, riderId: number, innerParams: unknown[] = []): number | null {
+  private getAllTimeAggregateRank(aggregateSql: string, riderId: number, innerParams: unknown[] = [], ascending = false): number | null {
     try {
       const row = this.db.prepare(`
         WITH per_rider(rider_id, v) AS (${aggregateSql})
-        SELECT (SELECT COUNT(*) FROM per_rider p WHERE p.v > me.v) + 1 AS rank, me.v AS value
+        SELECT (SELECT COUNT(*) FROM per_rider p WHERE ${ascending ? 'p.v < me.v' : 'p.v > me.v'}) + 1 AS rank, me.v AS value
         FROM per_rider me WHERE me.rider_id = ?
       `).get(...innerParams, riderId) as { rank: number; value: number } | undefined;
       if (!row || row.value == null || row.value <= 0) return null;
@@ -1545,8 +1545,8 @@ export class RiderRepository {
    * `aggregateSql` liefert je Fahrer genau zwei Spalten (id, wert). Faellt bei
    * fehlendem Datenstand-Stempel auf die Einzelberechnung zurueck.
    */
-  private getCachedRank(version: string | null, metricKey: string, aggregateSql: string, riderId: number, innerParams: unknown[] = []): number | null {
-    if (version == null) return this.getAllTimeAggregateRank(aggregateSql, riderId, innerParams);
+  private getCachedRank(version: string | null, metricKey: string, aggregateSql: string, riderId: number, innerParams: unknown[] = [], ascending = false): number | null {
+    if (version == null) return this.getAllTimeAggregateRank(aggregateSql, riderId, innerParams, ascending);
     if (!HOF_RANK_CACHE || HOF_RANK_CACHE.version !== version) {
       HOF_RANK_CACHE = { version, maps: new Map() };
     }
@@ -1558,7 +1558,7 @@ export class RiderRepository {
         const parsed = rows
           .map((r) => { const vals = Object.values(r); return { id: Number(vals[0]), v: Number(vals[1]) }; })
           .filter((r) => Number.isFinite(r.id) && Number.isFinite(r.v) && r.v > 0)
-          .sort((a, b) => b.v - a.v);
+          .sort((a, b) => ascending ? a.v - b.v : b.v - a.v);
         let prevV: number | null = null, prevRank = 0;
         parsed.forEach((r, i) => {
           const rank = (prevV != null && r.v === prevV) ? prevRank : i + 1;
@@ -1580,18 +1580,23 @@ export class RiderRepository {
   private getStatRecordRanks(riderId: number): {
     uciPointsRank: number | null; stageScoresRank: number | null;
     speedStageRank: number | null; speedOnedayRank: number | null;
+    slowestStageRank: number | null; slowestOnedayRank: number | null;
     leadoutBonusRank: number | null; counterAttacksRank: number | null;
     superteamCountRank: number | null; lieutenantPeakRank: number | null;
     yellowDaysRank: number | null;
   } {
     const v = this.getDataVersion();
-    const rank = (key: string, sql: string) => this.getCachedRank(v, key, sql, riderId);
+    const rank = (key: string, sql: string, ascending = false) => this.getCachedRank(v, key, sql, riderId, [], ascending);
     return {
       uciPointsRank: rank('uciPointsRank', 'SELECT rider_id, SUM(points_awarded) FROM season_point_events GROUP BY rider_id'),
       stageScoresRank: rank('stageScoresRank', `SELECT se.rider_id, SUM(s.stage_score) FROM all_stage_entries se
          JOIN stages s ON s.id = se.stage_id WHERE se.status = 'finished' GROUP BY se.rider_id`),
       speedStageRank: rank('speedStageRank', `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'stage' GROUP BY rider_id`),
       speedOnedayRank: rank('speedOnedayRank', `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'oneday' GROUP BY rider_id`),
+      // Langsamste Etappen/Eintagesrennen: Rang nach der GERINGSTEN Ø-Geschwindigkeit
+      // eines Siegs (aufsteigend, langsamster = Rang 1).
+      slowestStageRank: rank('slowestStageRank', `SELECT rider_id, MIN(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'stage' GROUP BY rider_id`, true),
+      slowestOnedayRank: rank('slowestOnedayRank', `SELECT rider_id, MIN(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'oneday' GROUP BY rider_id`, true),
       leadoutBonusRank: rank('leadoutBonusRank', 'SELECT sprinter_id, MAX(leadout_bonus) FROM stage_leadouts GROUP BY sprinter_id'),
       counterAttacksRank: rank('counterAttacksRank', 'SELECT rider_id, counter_attacks FROM rider_career_stats'),
       superteamCountRank: rank('superteamCountRank', 'SELECT rider_id, superteam_count FROM rider_career_stats'),

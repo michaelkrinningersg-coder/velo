@@ -1416,23 +1416,33 @@ export class StageResultCommitService {
           race.name, stage.stageNumber, stage.profile, stageDistanceKm,
           Math.round(winnerRow.timeSeconds), avgSpeedKmh, stage.date,
         );
-        // Pruning: je Saison Top 50 UND all-time Top 50 behalten. Eine Zeile
-        // ueberlebt, wenn sie in ihrer Saison ODER all-time unter den ersten 50
-        // liegt; alles andere wird entfernt. Haelt die Tabelle klein (~Saisons*50).
+        // Pruning: je Saison und all-time die 50 SCHNELLSTEN UND die 50
+        // LANGSAMSTEN behalten. Eine Zeile ueberlebt, wenn sie in einer der vier
+        // Ranglisten unter den ersten 50 liegt. Haelt die Tabelle klein.
         this.db.prepare(`
-          WITH season_ranked AS (
+          WITH season_fast AS (
             SELECT id, ROW_NUMBER() OVER (PARTITION BY season ORDER BY avg_speed_kmh DESC, id ASC) rn
             FROM stage_speed_records WHERE kind = ?
           ),
-          alltime_ranked AS (
+          alltime_fast AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh DESC, id ASC) rn
+            FROM stage_speed_records WHERE kind = ?
+          ),
+          season_slow AS (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY season ORDER BY avg_speed_kmh ASC, id ASC) rn
+            FROM stage_speed_records WHERE kind = ?
+          ),
+          alltime_slow AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh ASC, id ASC) rn
             FROM stage_speed_records WHERE kind = ?
           )
           DELETE FROM stage_speed_records
           WHERE kind = ?
-            AND id NOT IN (SELECT id FROM season_ranked WHERE rn <= 50)
-            AND id NOT IN (SELECT id FROM alltime_ranked WHERE rn <= 50)
-        `).run(kind, kind, kind);
+            AND id NOT IN (SELECT id FROM season_fast WHERE rn <= 50)
+            AND id NOT IN (SELECT id FROM alltime_fast WHERE rn <= 50)
+            AND id NOT IN (SELECT id FROM season_slow WHERE rn <= 50)
+            AND id NOT IN (SELECT id FROM alltime_slow WHERE rn <= 50)
+        `).run(kind, kind, kind, kind, kind);
       }
 
       // Bunch-Sprint-Erkennung: Wurde das Finish im Tie-Break-Zeitfenster

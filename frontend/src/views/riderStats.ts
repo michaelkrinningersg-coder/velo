@@ -2832,6 +2832,8 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const stageScoresRank = hof.stageScoresRank ?? null;
   const speedStageRank = hof.speedStageRank ?? null;
   const speedOnedayRank = hof.speedOnedayRank ?? null;
+  const slowestStageRank = hof.slowestStageRank ?? null;
+  const slowestOnedayRank = hof.slowestOnedayRank ?? null;
   const leadoutBonusRank = hof.leadoutBonusRank ?? null;
   const counterAttacksRank = hof.counterAttacksRank ?? null;
   const superteamCountRank = hof.superteamCountRank ?? null;
@@ -3607,6 +3609,8 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     rankBadge('recStageScores', 'Score Titan', HOF_ICON_STAR, 'Stage-Score-Rang', stageScoresRank, 'der ewigen Stage-Score-Liste'),
     rankBadge('recSpeedStage', 'Speed Demon', HOF_ICON_SPEED, 'Ø-Speed Etappe (Rang)', speedStageRank, 'der ewigen Ø-Geschwindigkeit (Etappe)'),
     rankBadge('recSpeedOneday', 'Classics Rocket', HOF_ICON_ROCKET, 'Ø-Speed Eintagesrennen (Rang)', speedOnedayRank, 'der ewigen Ø-Geschwindigkeit (Eintagesrennen)'),
+    rankBadge('recSlowestStage', 'Diesel Engine', HOF_ICON_ROUTE, 'Langsamster Etappensieg (Rang)', slowestStageRank, 'der ewigen langsamsten Ø-Geschwindigkeit (Etappe)'),
+    rankBadge('recSlowestOneday', 'Sunday Cruiser', HOF_ICON_ROUTE, 'Langsamster Eintagessieg (Rang)', slowestOnedayRank, 'der ewigen langsamsten Ø-Geschwindigkeit (Eintagesrennen)'),
     rankBadge('recLeadout', 'Leadout Maestro', HOF_ICON_BOLT, 'Leadout-Bonus-Rang', leadoutBonusRank, 'der ewigen Leadout-Bonus-Liste'),
     rankBadge('recCounterAttacks', 'Counter Puncher', HOF_ICON_SPARK, 'Konterattacken-Rang', counterAttacksRank, 'der ewigen Konterattacken-Liste'),
     rankBadge('recSuperteam', 'Superteam Icon', HOF_ICON_SHIELD, 'Superteambonus-Rang', superteamCountRank, 'der ewigen Superteambonus-Liste'),
@@ -4167,6 +4171,7 @@ const HOF_GROUPS: string[][] = [
    'pointsPerfectionist', 'thirdWeekWonder', 'monumentSweep', 'babyFace'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
+   'recSlowestStage', 'recSlowestOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
   // 3. Wertungen & Trikots
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],

@@ -310,7 +310,8 @@ export async function renderLeaderboard(): Promise<void> {
 
   // Broadcast-Grid: Kopf + Zeilen
   const isLeadout = activeMetricKey === 'highest_leadout_bonus';
-  const isSpeed = activeMetricKey === 'fastest_avg_speed_stage' || activeMetricKey === 'fastest_avg_speed_oneday';
+  const isSpeed = activeMetricKey === 'fastest_avg_speed_stage' || activeMetricKey === 'fastest_avg_speed_oneday'
+    || activeMetricKey === 'slowest_avg_speed_stage' || activeMetricKey === 'slowest_avg_speed_oneday';
   // Beide zeigen die "Rennen / Etappe / Jahr"-Detailspalte (nur Fahrer-Scope).
   const showRaceDetail = isLeadout || isSpeed;
   const isLieutenant = activeMetricKey === 'strongest_lieutenants';
@@ -357,7 +358,8 @@ export async function renderLeaderboard(): Promise<void> {
     let leadoutCell = '';
     if (showRaceDetail) {
       // Eintagesrennen haben keine sinnvolle Etappennummer -> nur Rennen + Jahr.
-      const parts = isSpeed && activeMetricKey === 'fastest_avg_speed_oneday'
+      const isOnedaySpeed = activeMetricKey === 'fastest_avg_speed_oneday' || activeMetricKey === 'slowest_avg_speed_oneday';
+      const parts = isSpeed && isOnedaySpeed
         ? [row.raceName ?? '–', String(row.season ?? '–')]
         : [row.raceName ?? '–', row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–', String(row.season ?? '–')];
       leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${parts.map((p) => esc(String(p))).join(' · ')}</span>`;

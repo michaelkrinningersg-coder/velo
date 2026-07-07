@@ -1041,6 +1041,8 @@ export interface RiderHallOfFameStats {
   stageScoresRank: number | null;      // Stage-Score-Summe
   speedStageRank: number | null;       // schnellste Ø-Geschwindigkeit Etappe
   speedOnedayRank: number | null;      // schnellste Ø-Geschwindigkeit Eintagesrennen
+  slowestStageRank: number | null;     // langsamste Ø-Geschwindigkeit Etappe
+  slowestOnedayRank: number | null;    // langsamste Ø-Geschwindigkeit Eintagesrennen
   leadoutBonusRank: number | null;     // hoechster Leadout-Bonus
   counterAttacksRank: number | null;   // Konterattacken
   superteamCountRank: number | null;   // Superteambonus
