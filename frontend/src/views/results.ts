@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { setReigningChampionMarkers } from '../riderStatsUi';
 import {
   $,
   esc,
@@ -162,6 +163,7 @@ export async function loadRaceRoster(raceId: number): Promise<void> {
     const standingsRes = await api.getSeasonStandings();
     if (standingsRes.success && standingsRes.data) {
       state.seasonStandings = standingsRes.data;
+      setReigningChampionMarkers(standingsRes.data.reigningChampions);
     }
   }
 

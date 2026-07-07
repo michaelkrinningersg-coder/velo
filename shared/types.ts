@@ -1151,6 +1151,13 @@ export interface ReigningChampionTitle {
   season: number;
 }
 
+export interface ReigningChampionHolder {
+  riderId: number;
+  type: 'WM' | 'EM';
+  discipline: 'ITT' | 'ROAD';
+  season: number;
+}
+
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
@@ -1266,6 +1273,8 @@ export interface SeasonStandingsPayload {
   teamStandings: SeasonStandingRow[];
   countryStandings: SeasonStandingCountryRow[];
   availableSeasons?: number[];
+  /** Regierende Welt-/Europameister (je Disziplin die juengste Edition). */
+  reigningChampions?: ReigningChampionHolder[];
 }
 
 // ------ Generische API-Response ------------------------------

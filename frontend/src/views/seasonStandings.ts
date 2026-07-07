@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { setReigningChampionMarkers } from '../riderStatsUi';
 import {
   $,
   esc,
@@ -129,6 +130,7 @@ export async function loadSeasonStandings(silent: boolean): Promise<void> {
   }
 
   state.seasonStandings = res.data ?? null;
+  setReigningChampionMarkers(res.data?.reigningChampions);
   if (isActiveView('season-standings')) {
     renderSeasonStandingsView();
   }

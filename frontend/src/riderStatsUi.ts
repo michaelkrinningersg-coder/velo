@@ -63,10 +63,46 @@ export function buildRaceCategoryBadgeCssVariables(style: RaceCategoryBadgeStyle
   return `--dashboard-race-category-badge-bg:${style.background};--dashboard-race-category-badge-color:${style.color};--dashboard-race-category-badge-border:${style.border};`;
 }
 
+// Kompakte Champion-Marker (regierende WM/EM-Titeltraeger) je Fahrer-ID. Wird aus
+// dem Saison-Wertungs-Payload gespeist und in allen Fahrer-Namenslinks angezeigt
+// (Ergebnisse, Top Results, Wertungen, Dashboard).
+const reigningChampionMarkersByRider = new Map<number, string>();
+
+export function setReigningChampionMarkers(
+  holders: Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD' }> | undefined | null,
+): void {
+  reigningChampionMarkersByRider.clear();
+  if (!holders) {
+    return;
+  }
+  const byRider = new Map<number, Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD' }>>();
+  for (const holder of holders) {
+    const bucket = byRider.get(holder.riderId) ?? [];
+    bucket.push({ type: holder.type, discipline: holder.discipline });
+    byRider.set(holder.riderId, bucket);
+  }
+  for (const [riderId, titles] of byRider) {
+    reigningChampionMarkersByRider.set(riderId, renderReigningChampionMarkers(titles));
+  }
+}
+
+function renderReigningChampionMarkers(titles: Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD' }>): string {
+  return titles
+    .map((title) => {
+      const disc = title.discipline === 'ITT' ? ' ITT' : '';
+      if (title.type === 'WM') {
+        return `<span title="Regierender Weltmeister${disc}" style="margin-left:5px;font-size:11px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>`;
+      }
+      return `<span title="Regierender Europameister${disc}" style="margin-left:5px;font-size:11px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>`;
+    })
+    .join('');
+}
+
 export function renderRiderNameLink(name: string, options: RiderLinkRenderOptions = {}): string {
   const labelTag = options.strong === false ? 'span' : 'strong';
   const labelClassName = joinClassNames('app-rider-link-label', options.labelClassName);
   const label = `<${labelTag} class="${labelClassName}">${esc(name)}</${labelTag}>`;
+  const marker = options.riderId != null ? (reigningChampionMarkersByRider.get(options.riderId) ?? '') : '';
 
   if (options.riderId == null) {
     return label;
@@ -82,7 +118,7 @@ export function renderRiderNameLink(name: string, options: RiderLinkRenderOption
     attributes.push(`data-team-id="${options.teamId}"`);
   }
 
-  return `<button ${attributes.join(' ')}>${label}</button>`;
+  return `<button ${attributes.join(' ')}>${label}</button>${marker}`;
 }
 
 export function renderTeamNameLink(name: string, teamId: number | null | undefined, strong = true, extraClass = ''): string {

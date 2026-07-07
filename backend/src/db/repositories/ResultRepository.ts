@@ -137,7 +137,26 @@ export class ResultRepository {
       teamStandings: this.mapTeamSeasonStandings(teamRows),
       countryStandings: this.mapCountrySeasonStandings(countryRows, riderRows),
       availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
+      reigningChampions: this.getReigningChampions(),
     };
+  }
+
+  // Regierende Welt-/Europameister: je (Typ, Disziplin) der Sieger der juengsten
+  // Edition. Speist die Champion-Marker in Ergebnissen, Top Results und Dashboard.
+  private getReigningChampions(): Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }> {
+    if (!tableExists(this.db, 'championship_titles')) {
+      return [];
+    }
+    return this.db.prepare(`
+      SELECT ct.rider_id AS riderId, ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
+      FROM championship_titles ct
+      WHERE ct.season = (
+        SELECT MAX(inner_ct.season)
+        FROM championship_titles inner_ct
+        WHERE inner_ct.championship_type = ct.championship_type
+          AND inner_ct.discipline = ct.discipline
+      )
+    `).all() as Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
   }
 
 
