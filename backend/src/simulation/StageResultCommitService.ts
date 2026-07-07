@@ -1897,6 +1897,45 @@ export class StageResultCommitService {
         for (const e of dnfEntries) if (e.riderId != null) { insertCareerStatsRow.run(e.riderId); resetC.run(e.riderId); }
       }
 
+      // --- Welle 9: Solo/Team/Foto-Badges (ab jetzt) ---
+      if (!isTTT) {
+        const second = stageRows.find((r: any) => r.rank === 2);
+        // Escape to Victory: Solo-Sieg mit > 60 s Vorsprung auf den Zweiten.
+        if (winnerRow && winnerRow.riderId != null && winnerRow.timeSeconds != null && second && second.timeSeconds != null
+          && columnExists(this.db, 'rider_career_stats', 'escape_to_victory')
+          && (second.timeSeconds - winnerRow.timeSeconds) > 60) {
+          this.db.prepare(`UPDATE rider_career_stats SET escape_to_victory = escape_to_victory + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+        }
+        // Photo Finish King: Top-2 im Tie-Fenster und Photo-Finish-Abstand < 0.05.
+        if (winnerRow && winnerRow.riderId != null && second && second.riderId != null
+          && columnExists(this.db, 'rider_career_stats', 'photo_finish_wins')) {
+          const wpfs = performanceByRiderId.get(winnerRow.riderId)?.photoFinishScore;
+          const spfs = performanceByRiderId.get(second.riderId)?.photoFinishScore;
+          if (wpfs != null && spfs != null && winnerRow.timeSeconds != null && second.timeSeconds != null
+            && (second.timeSeconds - winnerRow.timeSeconds) <= TIME_TIE_THRESHOLD_SECONDS
+            && Math.abs(wpfs - spfs) < 0.05) {
+            this.db.prepare(`UPDATE rider_career_stats SET photo_finish_wins = photo_finish_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+          }
+        }
+        // Podium Lockout: Top-3 alle aus demselben Team.
+        if (columnExists(this.db, 'rider_career_stats', 'podium_lockout')) {
+          const top3 = stageRows.filter((r: any) => r.riderId != null && r.rank <= 3);
+          if (top3.length === 3 && top3[0].teamId === top3[1].teamId && top3[1].teamId === top3[2].teamId) {
+            const pStmt = this.db.prepare(`UPDATE rider_career_stats SET podium_lockout = podium_lockout + 1 WHERE rider_id = ?`);
+            for (const r of top3) pStmt.run(r.riderId);
+          }
+        }
+        // Jersey Guardian: Serie aufeinanderfolgender Etappen im Fuehrungstrikot.
+        if (columnExists(this.db, 'rider_career_stats', 'jersey_streak_best')) {
+          const jbump = this.db.prepare(`UPDATE rider_career_stats SET jersey_streak_current = jersey_streak_current + 1, jersey_streak_best = MAX(jersey_streak_best, jersey_streak_current + 1) WHERE rider_id = ?`);
+          const jreset = this.db.prepare(`UPDATE rider_career_stats SET jersey_streak_current = 0 WHERE rider_id = ?`);
+          const leaders = new Set<number>();
+          for (const [rid, list] of leadersAfterStage.entries()) if (rid != null && list.length > 0) leaders.add(rid);
+          for (const rid of leaders) { insertCareerStatsRow.run(rid); jbump.run(rid); }
+          for (const rid of completedRiderIds) if (rid != null && !leaders.has(rid)) { insertCareerStatsRow.run(rid); jreset.run(rid); }
+        }
+      }
+
       // The Yoyo: >= 10 Attacken in einem einzigen Etappenrennen (Summe ueber
       // alle Etappen). An der Schlussetappe: Vor-Etappen aus results_flat
       // (event_ids Code 5) plus die aktuelle Etappe aus attackCounts.

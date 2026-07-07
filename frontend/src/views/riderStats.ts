@@ -2868,6 +2868,11 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const gtRunnerUp = hof.gtRunnerUp ?? 0;
   const undertakerWins = hof.undertakerWins ?? 0;
   const greenGrandSlam = hof.greenGrandSlam === true;
+  // Welle 9 (Commit-getrackt).
+  const escapeToVictory = hof.escapeToVictory ?? 0;
+  const podiumLockout = hof.podiumLockout ?? 0;
+  const jerseyStreakBest = hof.jerseyStreakBest ?? 0;
+  const photoFinishWins = hof.photoFinishWins ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3993,6 +3998,36 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       greenGrandSlam, HOF_STYLE_GREEN,
       greenGrandSlam ? 'Punktewertung in allen drei Grand Tours gewonnen.' : 'Punktewertung noch nicht in allen drei Grand Tours gewonnen.',
       'Punktewertung in TdF, Giro und Vuelta', 'Komplett'),
+
+    // --- Badges Welle 9 (Commit-getrackt) ---
+    {
+      key: 'escapeToVictory', name: 'Escape to Victory', icon: HOF_ICON_ROUTE, description: 'Solo-Siege',
+      tier: resolveThresholdTier(escapeToVictory, [1, 3, 5, 8, 12]),
+      detail: escapeToVictory > 0 ? `${escapeToVictory}×` : '',
+      hover: `${escapeToVictory}× Solo-Sieg mit über 1 Minute Vorsprung (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Solo-Sieg mit > 1 min Vorsprung',
+    },
+    {
+      key: 'podiumLockout', name: 'Podium Lockout', icon: HOF_ICON_PODIUM, description: 'Team-Dreifachsieg',
+      tier: resolveThresholdTier(podiumLockout, [1, 2, 3, 5, 8]),
+      detail: podiumLockout > 0 ? `${podiumLockout}×` : '',
+      hover: `${podiumLockout}× Teil eines Team-Dreifachsiegs (Plätze 1-2-3 einer Etappe) (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1× Team-Dreifachsieg (1-2-3)',
+    },
+    {
+      key: 'jerseyGuardian', name: 'Jersey Guardian', icon: HOF_ICON_JERSEY, description: 'Trikot-Serie',
+      tier: resolveThresholdTier(jerseyStreakBest, [3, 6, 10, 15, 21]),
+      detail: jerseyStreakBest > 0 ? `${jerseyStreakBest} Tage` : '',
+      hover: `Längste Serie von ${jerseyStreakBest} aufeinanderfolgenden Etappen in einem Führungstrikot (Gold 21 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 Etappen in Folge im Führungstrikot',
+    },
+    {
+      key: 'photoFinishKing', name: 'Photo Finish King', icon: HOF_ICON_STOPWATCH, description: 'Siege per Zielfoto',
+      tier: resolveThresholdTier(photoFinishWins, [1, 3, 5, 8, 12]),
+      detail: photoFinishWins > 0 ? `${photoFinishWins}×` : '',
+      hover: `${photoFinishWins}× Sieg per Zielfoto (Fotofinish-Abstand unter 0,05) (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Sieg per Zielfoto',
+    },
   ];
 }
 
@@ -4041,9 +4076,9 @@ const HOF_GROUPS: string[][] = [
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung
   ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
-   'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit', 'prologuePrince'],
+   'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit', 'prologuePrince', 'photoFinishKing'],
   // 5. Ausreißer & Angriff
-  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo'],
+  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze', 'theYoyo', 'escapeToVictory'],
   // 5b. Helfer & Team
   ['waterCarrier', 'superDomestique', 'loyalLieutenant', 'packesel', 'kingmaker', 'theFranchise', 'bandOfBrothers'],
   // 6. Geografie
@@ -4051,7 +4086,8 @@ const HOF_GROUPS: string[][] = [
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
   ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone',
-   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener', 'peakPerformer', 'grandFinale', 'gtRunnerUp'],
+   'teamEffort', 'oneManTeam', 'mrReliable', 'outOfDark', 'hotStreakOpener', 'peakPerformer', 'grandFinale', 'gtRunnerUp',
+   'podiumLockout', 'jerseyGuardian'],
   // 8. Wetter
   ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität

@@ -2014,6 +2014,12 @@ export class DatabaseService {
       // Welle 7 (ab jetzt gepflegt, kein Backfill).
       ['peak_performer_wins', 'INTEGER NOT NULL DEFAULT 0'], // Sieg mit kombinierter R+S-Form > 7,5
       ['yoyo_races', 'INTEGER NOT NULL DEFAULT 0'],          // >= 10 Attacken in einem Etappenrennen
+      // Welle 9 (ab jetzt gepflegt, kein Backfill).
+      ['escape_to_victory', 'INTEGER NOT NULL DEFAULT 0'],   // Solo-Sieg mit > 1 min Vorsprung
+      ['podium_lockout', 'INTEGER NOT NULL DEFAULT 0'],      // Teil eines Team-Dreifachsiegs (1-2-3)
+      ['jersey_streak_current', 'INTEGER NOT NULL DEFAULT 0'], // laufende Trikot-Serie
+      ['jersey_streak_best', 'INTEGER NOT NULL DEFAULT 0'],  // laengste Trikot-Serie (Jersey Guardian)
+      ['photo_finish_wins', 'INTEGER NOT NULL DEFAULT 0'],   // Siege per Zielfoto (Photo Finish King)
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

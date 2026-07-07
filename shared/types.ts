@@ -1080,6 +1080,12 @@ export interface RiderHallOfFameStats {
   peakPerformerWins: number;    // Siege mit kombinierter R+S-Form > 7,5 (Peak Performer)
   yoyoRaces: number;            // Etappenrennen mit >= 10 Attacken (The Yoyo)
 
+  // Badge-Kennzahlen Welle 9 (Commit-getrackt).
+  escapeToVictory: number;      // Solo-Siege mit > 1 min Vorsprung (Escape to Victory)
+  podiumLockout: number;        // Teil eines Team-Dreifachsiegs (Podium Lockout)
+  jerseyStreakBest: number;     // laengste Trikot-Serie in Folge (Jersey Guardian)
+  photoFinishWins: number;      // Siege per Zielfoto (Photo Finish King)
+
   // Badge-Kennzahlen Welle 8 (rein abgeleitet).
   prologueWins: number;         // Siege auf ITT-Etappe 1 < 10 km (Prologue Prince)
   autumnWins: number;           // One Day High/Monument-Siege 01.09.-31.10. (Autumn King)
