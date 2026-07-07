@@ -2706,6 +2706,7 @@ const HOF_ICON_CROSS = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_HEART = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 21s-7.5-4.9-10-9.3C.3 8.4 1.8 4.5 5.4 4.5c2 0 3.3 1.1 4.1 2.3l.5.8.5-.8c.8-1.2 2.1-2.3 4.1-2.3 3.6 0 5.1 3.9 3.4 7.2C19.5 16.1 12 21 12 21z"/></svg>`;
 const HOF_ICON_CLOCK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2v7z"/></svg>`;
 const HOF_ICON_MOON = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1.6" fill="#0e1930"/><circle cx="15" cy="13" r="2.1" fill="#0e1930"/><circle cx="10" cy="15" r="1.2" fill="#0e1930"/></svg>`;
+const HOF_ICON_OLIVE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 20c6 0 12-4 16-12 0 0-9-1-13 5-2 3-3 7-3 7z" opacity=".55"/><ellipse cx="15" cy="7" rx="1.6" ry="2.2" transform="rotate(35 15 7)"/><ellipse cx="11" cy="11" rx="1.6" ry="2.2" transform="rotate(35 11 11)"/><ellipse cx="7.5" cy="15" rx="1.6" ry="2.2" transform="rotate(35 7.5 15)"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2778,6 +2779,14 @@ function formatKm(km: number): string {
   return `${Math.round(km).toLocaleString('de-DE')} km`;
 }
 
+// Geo-Tier: 2 Kontinente Bronze, 3 Silber, 4 Gold.
+function resolveContinentTier(count: number): HofTierKey | null {
+  if (count >= 4) return 'gold';
+  if (count >= 3) return 'silver';
+  if (count >= 2) return 'bronze';
+  return null;
+}
+
 function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const hof = payload.hallOfFame ?? {
     allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0,
@@ -2844,6 +2853,9 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const mostSeasonsOneTeam = hof.mostSeasonsOneTeam ?? 0;
   const teamCount = hof.teamCount ?? 0;
   const fullMoonWins = hof.fullMoonWins ?? 0;
+  const continentsWon = hof.continentsWon ?? [];
+  const worldCitizenBestYear = hof.worldCitizenBestYear ?? 0;
+  const wonContinent = (c: string) => continentsWon.includes(c);
 
   // "The Complete Rider": genestete Stufen aus Rundfahrt-, Eintages- und
   // Massensprint-Erfolg. Gold verlangt Grand Tour + Monument, Silber laesst
@@ -3332,6 +3344,48 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${fullMoonWins.toLocaleString('de-DE')} Siege an Vollmondtagen (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Sieg bei Vollmond',
     },
+    {
+      key: 'worldCitizen', name: 'World Citizen', icon: HOF_ICON_GLOBE, description: 'Kontinente in einer Saison',
+      tier: resolveContinentTier(worldCitizenBestYear),
+      detail: worldCitizenBestYear >= 2 ? `${worldCitizenBestYear} Kontinente in einer Saison` : '',
+      hover: `Beste Saison: Siege auf ${worldCitizenBestYear} Kontinent${worldCitizenBestYear === 1 ? '' : 'en'} (Gold 4 · Silber 3 · Bronze 2)`,
+      requirement: 'In einer Saison auf 2 Kontinenten siegen',
+    },
+    {
+      key: 'globetrotter', name: 'Globetrotter', icon: HOF_ICON_GLOBE, description: 'Kontinente in der Karriere',
+      tier: resolveContinentTier(continentsWon.length),
+      detail: continentsWon.length >= 2 ? `${continentsWon.length} Kontinente (All-Time)` : '',
+      hover: `Siege auf ${continentsWon.length} Kontinent${continentsWon.length === 1 ? '' : 'en'} in der Karriere (Gold 4 · Silber 3 · Bronze 2)`,
+      requirement: 'Auf 2 Kontinenten siegen (Karriere)',
+    },
+    singleBadge('winEurope', 'Europe', HOF_ICON_GLOBE, 'Sieg in Europa',
+      wonContinent('Europe'), HOF_STYLE_GREEN,
+      wonContinent('Europe') ? 'Mindestens ein Sieg in Europa.' : 'Noch kein Sieg in Europa.',
+      'Ein Sieg in Europa', 'Geschafft'),
+    singleBadge('winAsia', 'Asia', HOF_ICON_GLOBE, 'Sieg in Asien',
+      wonContinent('Asia'), HOF_STYLE_GREEN,
+      wonContinent('Asia') ? 'Mindestens ein Sieg in Asien.' : 'Noch kein Sieg in Asien.',
+      'Ein Sieg in Asien', 'Geschafft'),
+    singleBadge('winOceania', 'Oceania', HOF_ICON_GLOBE, 'Sieg in Ozeanien',
+      wonContinent('Oceania'), HOF_STYLE_GREEN,
+      wonContinent('Oceania') ? 'Mindestens ein Sieg in Ozeanien.' : 'Noch kein Sieg in Ozeanien.',
+      'Ein Sieg in Ozeanien', 'Geschafft'),
+    singleBadge('winNorthAmerica', 'North America', HOF_ICON_GLOBE, 'Sieg in Nordamerika',
+      wonContinent('North America'), HOF_STYLE_GREEN,
+      wonContinent('North America') ? 'Mindestens ein Sieg in Nordamerika.' : 'Noch kein Sieg in Nordamerika.',
+      'Ein Sieg in Nordamerika', 'Geschafft'),
+    singleBadge('mediterraneanMaster', 'Mediterranean Master', HOF_ICON_OLIVE, 'PT + ES + FR + IT',
+      hof.mediterraneanMaster === true, HOF_STYLE_GOLD,
+      hof.mediterraneanMaster ? 'Siege in Portugal, Spanien, Frankreich und Italien.' : 'Portugal, Spanien, Frankreich und Italien — noch nicht alle.',
+      'Siege in Portugal, Spanien, Frankreich und Italien', 'Komplett'),
+    singleBadge('scandinavianMaster', 'Scandinavian Master', HOF_ICON_SNOW, 'DK + NO',
+      hof.scandinavianMaster === true, HOF_STYLE_GOLD,
+      hof.scandinavianMaster ? 'Siege in Dänemark und Norwegen.' : 'Dänemark und Norwegen — noch nicht beide.',
+      'Siege in Dänemark und Norwegen', 'Komplett'),
+    singleBadge('beneluxMaster', 'Benelux Master', HOF_ICON_SHIELD, 'BE + NL + LU',
+      hof.beneluxMaster === true, HOF_STYLE_GOLD,
+      hof.beneluxMaster ? 'Siege in Belgien, Niederlande und Luxemburg.' : 'Belgien, Niederlande und Luxemburg — noch nicht alle.',
+      'Siege in Belgien, Niederlande und Luxemburg', 'Komplett'),
   ];
 }
 

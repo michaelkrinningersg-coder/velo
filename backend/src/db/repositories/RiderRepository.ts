@@ -1544,6 +1544,7 @@ export class RiderRepository {
 
     const special = this.getSpecialRaceAchievements(riderId);
     const loyalty = this.getLoyaltyStats(riderId);
+    const geography = this.getGeographyAchievements(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -1562,6 +1563,56 @@ export class RiderRepository {
       fullMoonWins,
       ...special,
       ...loyalty,
+      ...geography,
+    };
+  }
+
+  /**
+   * Geografie-Erfolge aus Etappensiegen (rank 1). Kontinente pro Saison (World
+   * Citizen), Kontinente all-time (Globetrotter) und Laender-Meister. rank-1-
+   * Zeilen ueberleben das Saison-Pruning, daher vollstaendig aus results_flat
+   * rekonstruierbar (eine fahrergefilterte Query).
+   */
+  private getGeographyAchievements(riderId: number): {
+    worldCitizenBestYear: number; continentsWon: string[];
+    mediterraneanMaster: boolean; scandinavianMaster: boolean; beneluxMaster: boolean;
+  } {
+    const empty = { worldCitizenBestYear: 0, continentsWon: [] as string[], mediterraneanMaster: false, scandinavianMaster: false, beneluxMaster: false };
+    if (!tableExists(this.db, 'results_flat') || !tableExists(this.db, 'sta_country')) {
+      return empty;
+    }
+    const rows = this.db.prepare(`
+      SELECT substr(s.date, 1, 4) AS yr, co.continent AS continent, co.name AS country
+      FROM results_flat rf
+      JOIN stages s ON s.id = rf.stage_id
+      JOIN races ra ON ra.id = s.race_id
+      JOIN sta_country co ON co.id = ra.country_id
+      WHERE rf.rider_id = ? AND rf.rank = 1 AND rf.result_type_id = 1
+    `).all(riderId) as Array<{ yr: string; continent: string | null; country: string | null }>;
+
+    const continentsByYear = new Map<string, Set<string>>();
+    const allContinents = new Set<string>();
+    const countriesWon = new Set<string>();
+    for (const r of rows) {
+      if (r.continent) {
+        allContinents.add(r.continent);
+        let set = continentsByYear.get(r.yr);
+        if (!set) { set = new Set<string>(); continentsByYear.set(r.yr, set); }
+        set.add(r.continent);
+      }
+      if (r.country) countriesWon.add(r.country);
+    }
+    let worldCitizenBestYear = 0;
+    for (const set of continentsByYear.values()) {
+      if (set.size > worldCitizenBestYear) worldCitizenBestYear = set.size;
+    }
+    const won = (c: string) => countriesWon.has(c);
+    return {
+      worldCitizenBestYear,
+      continentsWon: [...allContinents],
+      mediterraneanMaster: won('Portugal') && won('Spain') && won('France') && won('Italy'),
+      scandinavianMaster: won('Denmark') && won('Norway'),
+      beneluxMaster: won('Belgium') && won('Netherlands') && won('Luxembourg'),
     };
   }
 

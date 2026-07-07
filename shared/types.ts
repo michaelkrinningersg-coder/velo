@@ -1019,6 +1019,13 @@ export interface RiderHallOfFameStats {
   careerSeasons: number;
   mostSeasonsOneTeam: number;
   teamCount: number;
+
+  /** Geografie: Kontinente/Laender aus Etappensiegen. */
+  worldCitizenBestYear: number; // meiste Kontinente mit Sieg in EINER Saison
+  continentsWon: string[]; // Kontinente mit mind. 1 Sieg (All-Time)
+  mediterraneanMaster: boolean; // Sieg in PT + ES + FR + IT
+  scandinavianMaster: boolean; // Sieg in DK + NO
+  beneluxMaster: boolean; // Sieg in BE + NL + LU
 }
 
 export interface RiderStatsPayload {
