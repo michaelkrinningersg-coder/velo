@@ -8,6 +8,14 @@ import { ResultRepository } from './ResultRepository';
 import { RaceRepository } from './RaceRepository';
 import { TeamRepository } from './TeamRepository';
 
+// Modulweiter, versionsgebundener Cache fuer die teuren All-Time-Ranglisten der
+// Hall of Fame. Jede Metrik ist eine Map<riderId, Rang> ueber ALLE Fahrer.
+// Der Cache wird verworfen, sobald sich der Datenstand aendert (Anzahl
+// results_flat-Zeilen + aktuelle Saison). So zahlt nur das erste Oeffnen eines
+// Fahrers den vollen Tabellen-Scan; jedes weitere Oeffnen ist ein O(1)-Lookup,
+// solange keine Etappe committet wurde. Nur lesende Nutzung — bei Datenaenderung
+// automatisch invalidiert.
+let HOF_RANK_CACHE: { version: string; maps: Map<string, Map<number, number>> } | null = null;
 
 export class RiderRepository {
   private readonly db: Database.Database;
@@ -1513,6 +1521,53 @@ export class RiderRepository {
   }
 
   /**
+   * Billiger Datenstand-Stempel zur Cache-Invalidierung: Anzahl results_flat-
+   * Zeilen plus aktuelle Saison. Aendert sich bei jedem Etappen-Commit und
+   * Saisonwechsel. null => kein Cache moeglich (dann Einzelberechnung).
+   */
+  private getDataVersion(): string | null {
+    try {
+      const a = (this.db.prepare(`SELECT COUNT(*) AS c FROM results_flat`).get() as { c: number } | undefined)?.c ?? 0;
+      const b = (this.db.prepare(`SELECT value FROM career_meta WHERE key = 'current_season'`).get() as { value: string } | undefined)?.value ?? '';
+      return `${a}:${b}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Cache-gestuetzter All-Time-Rang: berechnet die vollstaendige Rangliste einer
+   * Metrik einmal pro Datenstand (Map<riderId, Rang>) und liest danach O(1).
+   * `aggregateSql` liefert je Fahrer genau zwei Spalten (id, wert). Faellt bei
+   * fehlendem Datenstand-Stempel auf die Einzelberechnung zurueck.
+   */
+  private getCachedRank(version: string | null, metricKey: string, aggregateSql: string, riderId: number, innerParams: unknown[] = []): number | null {
+    if (version == null) return this.getAllTimeAggregateRank(aggregateSql, riderId, innerParams);
+    if (!HOF_RANK_CACHE || HOF_RANK_CACHE.version !== version) {
+      HOF_RANK_CACHE = { version, maps: new Map() };
+    }
+    let map = HOF_RANK_CACHE.maps.get(metricKey);
+    if (!map) {
+      map = new Map<number, number>();
+      try {
+        const rows = this.db.prepare(aggregateSql).all(...innerParams) as Array<Record<string, unknown>>;
+        const parsed = rows
+          .map((r) => { const vals = Object.values(r); return { id: Number(vals[0]), v: Number(vals[1]) }; })
+          .filter((r) => Number.isFinite(r.id) && Number.isFinite(r.v) && r.v > 0)
+          .sort((a, b) => b.v - a.v);
+        let prevV: number | null = null, prevRank = 0;
+        parsed.forEach((r, i) => {
+          const rank = (prevV != null && r.v === prevV) ? prevRank : i + 1;
+          prevV = r.v; prevRank = rank;
+          map!.set(r.id, rank);
+        });
+      } catch { /* leere Map -> null */ }
+      HOF_RANK_CACHE.maps.set(metricKey, map);
+    }
+    return map.get(riderId) ?? null;
+  }
+
+  /**
    * All-Time-Raenge der Ranglisten-basierten Hall-of-Fame-Badges. Jede Metrik
    * nutzt dieselbe Quelle wie die zugehoerige Rangliste in "Statistiken &
    * Rekorde" (bzw. bei Gelb-Tagen results_flat, wo die rank-1-GC-Zeilen das
@@ -1525,27 +1580,19 @@ export class RiderRepository {
     superteamCountRank: number | null; lieutenantPeakRank: number | null;
     yellowDaysRank: number | null;
   } {
+    const v = this.getDataVersion();
+    const rank = (key: string, sql: string) => this.getCachedRank(v, key, sql, riderId);
     return {
-      uciPointsRank: this.getAllTimeAggregateRank(
-        'SELECT rider_id, SUM(points_awarded) FROM season_point_events GROUP BY rider_id', riderId),
-      stageScoresRank: this.getAllTimeAggregateRank(
-        `SELECT se.rider_id, SUM(s.stage_score) FROM all_stage_entries se
-         JOIN stages s ON s.id = se.stage_id
-         WHERE se.status = 'finished' GROUP BY se.rider_id`, riderId),
-      speedStageRank: this.getAllTimeAggregateRank(
-        `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'stage' GROUP BY rider_id`, riderId),
-      speedOnedayRank: this.getAllTimeAggregateRank(
-        `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'oneday' GROUP BY rider_id`, riderId),
-      leadoutBonusRank: this.getAllTimeAggregateRank(
-        'SELECT sprinter_id, MAX(leadout_bonus) FROM stage_leadouts GROUP BY sprinter_id', riderId),
-      counterAttacksRank: this.getAllTimeAggregateRank(
-        'SELECT rider_id, counter_attacks FROM rider_career_stats', riderId),
-      superteamCountRank: this.getAllTimeAggregateRank(
-        'SELECT rider_id, superteam_count FROM rider_career_stats', riderId),
-      lieutenantPeakRank: this.getAllTimeAggregateRank(
-        'SELECT rider_id, MAX(max_overall_rating) FROM lieutenant_all_time_peaks GROUP BY rider_id', riderId),
-      yellowDaysRank: this.getAllTimeAggregateRank(
-        'SELECT rider_id, COUNT(*) FROM results_flat WHERE result_type_id = 2 AND rank = 1 GROUP BY rider_id', riderId),
+      uciPointsRank: rank('uciPointsRank', 'SELECT rider_id, SUM(points_awarded) FROM season_point_events GROUP BY rider_id'),
+      stageScoresRank: rank('stageScoresRank', `SELECT se.rider_id, SUM(s.stage_score) FROM all_stage_entries se
+         JOIN stages s ON s.id = se.stage_id WHERE se.status = 'finished' GROUP BY se.rider_id`),
+      speedStageRank: rank('speedStageRank', `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'stage' GROUP BY rider_id`),
+      speedOnedayRank: rank('speedOnedayRank', `SELECT rider_id, MAX(avg_speed_kmh) FROM stage_speed_records WHERE kind = 'oneday' GROUP BY rider_id`),
+      leadoutBonusRank: rank('leadoutBonusRank', 'SELECT sprinter_id, MAX(leadout_bonus) FROM stage_leadouts GROUP BY sprinter_id'),
+      counterAttacksRank: rank('counterAttacksRank', 'SELECT rider_id, counter_attacks FROM rider_career_stats'),
+      superteamCountRank: rank('superteamCountRank', 'SELECT rider_id, superteam_count FROM rider_career_stats'),
+      lieutenantPeakRank: rank('lieutenantPeakRank', 'SELECT rider_id, MAX(max_overall_rating) FROM lieutenant_all_time_peaks GROUP BY rider_id'),
+      yellowDaysRank: rank('yellowDaysRank', 'SELECT rider_id, COUNT(*) FROM results_flat WHERE result_type_id = 2 AND rank = 1 GROUP BY rider_id'),
     };
   }
 
