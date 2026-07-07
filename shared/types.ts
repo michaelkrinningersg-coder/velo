@@ -1049,6 +1049,15 @@ export interface RiderHallOfFameStats {
   yellowDaysRank: number | null;       // Tage im Gelben Trikot (Rang)
   leadoutTrainRank: number | null;     // bester Team-Leadout, an dem der Fahrer beteiligt war (nur Top 10)
 
+  // Badge-Kennzahlen Welle 1.
+  bestSeasonUciPoints: number;  // meiste UCI-Punkte in EINER Saison (Point Accumulator)
+  phantomGcWins: number;        // GC-Siege ohne je Fuehrender vor der Schlussetappe (Phantom GC)
+  firstBloodWins: number;       // Eroeffnungsetappen-Siege in TdF/GT/Stage Race High (First Blood)
+  hatTrickRaces: number;        // Rundfahrten mit >= 3 Etappensiegen (Hat-Trick Hero)
+  whereHillsWins: number;       // Etappensiege mit Stage Score < 20 (Where are the Hills?)
+  springWins: number;           // One Day High/Monument-Siege 01.03.-02.05. (Spring King)
+  gcStayerTopTen: number;       // Grand-Tour-GC-Top-10 (GC Stayer)
+
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)
   doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)

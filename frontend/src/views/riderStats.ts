@@ -2716,6 +2716,7 @@ const HOF_ICON_ROCKET = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;
 const HOF_ICON_WINE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M7 2h10l-.6 6.2A5 5 0 0 1 13 12.9V19h3v2H8v-2h3v-6.1a5 5 0 0 1-3.4-4.7L7 2zm1.8 2 .2 2h6l.2-2H8.8z"/></svg>`;
 const HOF_ICON_LOOP = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 6 6 6 6 0 0 1-1 3.3l1.5 1.5A8 8 0 0 0 12 4zm0 14a6 6 0 0 1-6-6 6 6 0 0 1 1-3.3L5.5 7.2A8 8 0 0 0 12 20v3l4-4-4-4v3z"/></svg>`;
 const HOF_ICON_TRAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3l1.6 2.4-.8.6L16 17h-2l-1 2h-2l-1-2H8l-1.8 3-.8-.6L7 17a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h-1zm0 4v4h5V6H6zm7 0v4h5V6h-5zM8.5 12a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>`;
+const HOF_ICON_FOG = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 8a5 5 0 0 1 9.6-1.8A4 4 0 0 1 19 10H7a3 3 0 0 1-1-2zm-2 6h13v1.6H4V14zm3 3h13v1.6H7V17zm-3 3h11v1.6H4V20z" opacity=".9"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2815,6 +2816,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const careerWinsRank = hof.careerWinsRank ?? hof.allTimeWinsRank ?? null;
   const yellowDaysRank = hof.yellowDaysRank ?? null;
   const leadoutTrainRank = hof.leadoutTrainRank ?? null;
+  // Badge-Kennzahlen Welle 1.
+  const bestSeasonUciPoints = hof.bestSeasonUciPoints ?? 0;
+  const phantomGcWins = hof.phantomGcWins ?? 0;
+  const firstBloodWins = hof.firstBloodWins ?? 0;
+  const hatTrickRaces = hof.hatTrickRaces ?? 0;
+  const whereHillsWins = hof.whereHillsWins ?? 0;
+  const springWins = hof.springWins ?? 0;
+  const gcStayerTopTen = hof.gcStayerTopTen ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -2851,6 +2860,19 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const earthLoops = Math.floor(distanceKm / 40000);
 
   const sprintWins = sum((c) => c.sprintWins);
+  // Welle-1-Ableitungen aus den Kategorie-Aggregaten.
+  const fogWins = sum((c) => c.winWeather6);
+  const stormWins = sum((c) => c.winWeather4);
+  const HOF_RACE_CLASSES = [
+    'World Tour - Tour de France', 'World Tour - Grand Tour', 'World Tour - Monument',
+    'World Tour - Stage Race High', 'World Tour - Stage Race Middle', 'World Tour - Stage Race Low',
+    'World Tour - One Day High', 'World Tour - One Day Middle', 'World Tour - One Day Low',
+  ];
+  const classWon = (n: string): boolean => (((cat(n).gcWins || 0) + (cat(n).stageWins || 0) + (cat(n).oneDayWins || 0)) > 0);
+  const careerSlamDone = HOF_RACE_CLASSES.every(classWon);
+  const punchyClimberDone = sum((c) => (c.winHilly || 0) + (c.winHillyDifficult || 0)) >= 1
+    && sum((c) => (c.winMountain || 0) + (c.winHighMountain || 0)) >= 1;
+  const perennialSecondDone = sum((c) => (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0)) > 10 && wins === 0;
   const climbWins = sum((c) => (c.climbWinsHC || 0) + (c.climbWins1 || 0) + (c.climbWins2 || 0) + (c.climbWins3 || 0) + (c.climbWins4 || 0));
   const hcClimbs = sum((c) => c.climbWinsHC);
   const podiums = sum((c) => (c.gcWins || 0) + (c.stageWins || 0) + (c.oneDayWins || 0) + (c.gcSecond || 0) + (c.stageSecond || 0) + (c.oneDaySecond || 0) + (c.gcThird || 0) + (c.stageThird || 0) + (c.oneDayThird || 0));
@@ -3485,7 +3507,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Ranglisten-Badges (All-Time-Rang aus Statistiken & Rekorde) ---
     // Tier ueber resolveRankTier: P1 Gold · P2 Silber · P3 Bronze · P4-10 Cyan
     // · P11-25 Lila. rankBadge() vereinheitlicht Anzeige/Locked-Zustand.
-    rankBadge('recUciPoints', 'UCI Overlord', HOF_ICON_COLUMN, 'UCI-Punkte-Rang', uciPointsRank, 'der ewigen UCI-Punkte-Liste'),
+    rankBadge('recUciPoints', uciPointsRank === 1 ? 'Best of All Time' : 'UCI Overlord', HOF_ICON_COLUMN, 'UCI-Punkte-Rang', uciPointsRank, 'der ewigen UCI-Punkte-Liste'),
     rankBadge('recStageScores', 'Score Titan', HOF_ICON_STAR, 'Stage-Score-Rang', stageScoresRank, 'der ewigen Stage-Score-Liste'),
     rankBadge('recSpeedStage', 'Speed Demon', HOF_ICON_SPEED, 'Ø-Speed Etappe (Rang)', speedStageRank, 'der ewigen Ø-Geschwindigkeit (Etappe)'),
     rankBadge('recSpeedOneday', 'Classics Rocket', HOF_ICON_ROCKET, 'Ø-Speed Eintagesrennen (Rang)', speedOnedayRank, 'der ewigen Ø-Geschwindigkeit (Eintagesrennen)'),
@@ -3599,6 +3621,83 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${multiJerseyDays.toLocaleString('de-DE')} Tage mit mehreren Führungstrikots gleichzeitig (Gold 50 · Silber 30 · Bronze 15 · Cyan 5 · Lila 1)`,
       requirement: 'Ab 1 Tag mit mehreren Führungstrikots',
     },
+
+    // --- Badges Welle 1 ---
+    {
+      key: 'pointAccumulator', name: 'Point Accumulator', icon: HOF_ICON_COLUMN, description: 'UCI-Punkte in einer Saison',
+      tier: resolveThresholdTier(bestSeasonUciPoints, [2000, 3000, 4000, 5000, 6000]),
+      detail: bestSeasonUciPoints > 0 ? `${bestSeasonUciPoints.toLocaleString('de-DE')} Pkt.` : '',
+      hover: `${bestSeasonUciPoints.toLocaleString('de-DE')} UCI-Punkte in der besten Saison (Gold 6000 · Silber 5000 · Bronze 4000 · Cyan 3000 · Lila 2000)`,
+      requirement: 'Ab 2000 UCI-Punkten in einer Saison',
+    },
+    singleBadge('careerSlam', 'Career Slam', HOF_ICON_CROWN, 'Sieg in jeder Rennklasse',
+      careerSlamDone, HOF_STYLE_GOLD,
+      careerSlamDone ? 'Mindestens ein Sieg in jeder Rennklasse.' : 'Noch nicht in jeder Rennklasse gesiegt.',
+      'Ein Sieg in jeder Rennklasse', 'Komplett'),
+    {
+      key: 'phantomGc', name: 'Phantom GC', icon: HOF_ICON_GHOST, description: 'GC-Sieg ohne Führung zuvor',
+      tier: resolveThresholdTier(phantomGcWins, [1, 2, 3, 4, 5]),
+      detail: phantomGcWins > 0 ? `${phantomGcWins}× Phantom` : '',
+      hover: `${phantomGcWins}× GC gewonnen, ohne vor der Schlussetappe je Gesamtführender zu sein (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 GC-Sieg ohne vorherige Führung',
+    },
+    {
+      key: 'firstBlood', name: 'First Blood', icon: HOF_ICON_BOLT, description: 'Eröffnungsetappen-Siege',
+      tier: resolveThresholdTier(firstBloodWins, [1, 3, 5, 7, 10]),
+      detail: firstBloodWins > 0 ? `${firstBloodWins}× Auftakt` : '',
+      hover: `${firstBloodWins} Siege auf der Eröffnungsetappe (TdF / Grand Tour / Stage Race High) (Gold 10 · Silber 7 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Eröffnungsetappen-Sieg',
+    },
+    {
+      key: 'hatTrickHero', name: 'Hat-Trick Hero', icon: HOF_ICON_STAR, description: '3+ Etappensiege je Rundfahrt',
+      tier: resolveThresholdTier(hatTrickRaces, [1, 2, 3, 4, 5]),
+      detail: hatTrickRaces > 0 ? `${hatTrickRaces}× Hattrick` : '',
+      hover: `${hatTrickRaces} Rundfahrten mit mindestens 3 Etappensiegen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Rundfahrt mit 3+ Etappensiegen',
+    },
+    {
+      key: 'whereHills', name: 'Where are the Hills?', icon: HOF_ICON_ROUTE, description: 'Siege auf flachen Etappen',
+      tier: resolveThresholdTier(whereHillsWins, [2, 4, 6, 8, 10]),
+      detail: whereHillsWins > 0 ? `${whereHillsWins} Siege` : '',
+      hover: `${whereHillsWins} Etappensiege mit Stage Score unter 20 (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen auf sehr flachen Etappen',
+    },
+    {
+      key: 'springKing', name: 'Spring King', icon: HOF_ICON_SUN, description: 'Frühjahrs-Klassiker-Siege',
+      tier: resolveThresholdTier(springWins, [2, 4, 6, 8, 10]),
+      detail: springWins > 0 ? `${springWins} Siege` : '',
+      hover: `${springWins} Siege in One Day High / Monument zwischen 01.03. und 02.05. (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Frühjahrs-Klassiker-Siegen',
+    },
+    {
+      key: 'gcStayer', name: 'GC Stayer', icon: HOF_ICON_SHIELD, description: 'Grand-Tour-GC-Top-10',
+      tier: resolveThresholdTier(gcStayerTopTen, [2, 4, 6, 8, 10]),
+      detail: gcStayerTopTen > 0 ? `${gcStayerTopTen}× Top 10` : '',
+      hover: `${gcStayerTopTen} Grand-Tour-Gesamtwertungen in den Top 10 (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Grand-Tour-Top-10 im GC',
+    },
+    {
+      key: 'fogRider', name: 'Fog Rider', icon: HOF_ICON_FOG, description: 'Siege bei Nebel',
+      tier: resolveThresholdTier(fogWins, [2, 4, 6, 8, 10]),
+      detail: fogWins > 0 ? `${fogWins} Siege` : '',
+      hover: `${fogWins} Siege bei dichtem Nebel (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen bei Nebel',
+    },
+    {
+      key: 'stormRider', name: 'Storm Rider', icon: HOF_ICON_RAIN, description: 'Siege bei Starkregen',
+      tier: resolveThresholdTier(stormWins, [2, 4, 6, 8, 10]),
+      detail: stormWins > 0 ? `${stormWins} Siege` : '',
+      hover: `${stormWins} Siege bei Starkregen (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen bei Starkregen',
+    },
+    singleBadge('punchyClimber', 'Punchy Climber', HOF_ICON_MOUNTAIN, 'Hügel + Berg',
+      punchyClimberDone, HOF_STYLE_GOLD,
+      punchyClimberDone ? 'Siege auf hügeligem UND bergigem Terrain.' : 'Noch nicht auf hügeligem und bergigem Terrain gesiegt.',
+      'Sieg auf Hügel- und Bergterrain', 'Komplett'),
+    singleBadge('perennialSecond', 'Perennial Second', HOF_ICON_PODIUM, '10+ Zweite, kein Sieg',
+      perennialSecondDone, HOF_STYLE_GREEN,
+      perennialSecondDone ? 'Über 10 zweite Plätze — und noch kein Sieg.' : 'Weniger als 11 zweite Plätze oder bereits ein Sieg.',
+      'Über 10 zweite Plätze ohne Sieg', 'Ewiger Zweiter'),
   ];
 }
 
@@ -3637,23 +3736,25 @@ function renderHofBadgeCard(badge: HofBadge): string {
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
-   'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing'],
+   'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
+   'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
-   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain'],
+   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator'],
   // 3. Wertungen & Trikots
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung
-  ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss'],
+  ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
+   'whereHills', 'punchyClimber'],
   // 5. Ausreißer & Angriff
   ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze'],
   // 6. Geografie
   ['worldCitizen', 'globetrotter', 'travelKing', 'nationExpress', 'winEurope', 'winAsia', 'winOceania', 'winNorthAmerica',
    'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
   // 7. Konstanz & Volumen
-  ['podiumMachine', 'topTenMachine', 'eternalSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone'],
+  ['podiumMachine', 'topTenMachine', 'eternalSecond', 'perennialSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone'],
   // 8. Wetter
-  ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker'],
+  ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker', 'fogRider', 'stormRider'],
   // 9. Karriere & Loyalität
   ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine'],
   // 10. Pech & Widrigkeiten

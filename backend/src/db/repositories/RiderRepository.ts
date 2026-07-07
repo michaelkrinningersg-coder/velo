@@ -1589,6 +1589,61 @@ export class RiderRepository {
   }
 
   /**
+   * Badge-Kennzahlen Welle 1: aus results_flat (rank-1- und punktende Zeilen
+   * ueberleben das Pruning) sowie season_point_events abgeleitet. Kategorie-
+   * Namen ueber race_categories.
+   */
+  private getBadgeWave1Stats(riderId: number): {
+    bestSeasonUciPoints: number; phantomGcWins: number; firstBloodWins: number;
+    hatTrickRaces: number; whereHillsWins: number; springWins: number; gcStayerTopTen: number;
+  } {
+    const out = { bestSeasonUciPoints: 0, phantomGcWins: 0, firstBloodWins: 0, hatTrickRaces: 0, whereHillsWins: 0, springWins: 0, gcStayerTopTen: 0 };
+    try {
+      const r = this.db.prepare(`SELECT MAX(v) AS m FROM (SELECT SUM(points_awarded) AS v FROM season_point_events WHERE rider_id = ? GROUP BY season)`).get(riderId) as { m: number | null } | undefined;
+      out.bestSeasonUciPoints = r?.m ?? 0;
+    } catch { /* Quelle fehlt */ }
+    if (!tableExists(this.db, 'results_flat')) return out;
+    // Phantom GC: Etappenrennen-GC-Sieg, ohne je zuvor (Vor-Etappe) GC-Fuehrender gewesen zu sein.
+    try {
+      const rows = this.db.prepare(`
+        SELECT s.race_id AS rid, ra.number_of_stages AS nos, s.stage_number AS sn, rf.rank AS rk
+        FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id
+        WHERE rf.rider_id = ? AND rf.result_type_id = 2 AND ra.is_stage_race = 1
+      `).all(riderId) as Array<{ rid: number; nos: number; sn: number; rk: number }>;
+      const byRace = new Map<number, { final: number | null; priorLeader: boolean }>();
+      for (const r of rows) {
+        let e = byRace.get(r.rid);
+        if (!e) { e = { final: null, priorLeader: false }; byRace.set(r.rid, e); }
+        if (r.sn === r.nos) e.final = r.rk; else if (r.rk === 1) e.priorLeader = true;
+      }
+      for (const e of byRace.values()) if (e.final === 1 && !e.priorLeader) out.phantomGcWins += 1;
+    } catch { /* */ }
+    const scalar = (sql: string): number => {
+      try { const r = this.db.prepare(sql).get(riderId) as { c: number } | undefined; return r?.c ?? 0; } catch { return 0; }
+    };
+    out.firstBloodWins = scalar(`
+      SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id JOIN race_categories rc ON rc.id = ra.category_id
+      WHERE rf.rider_id = ? AND rf.result_type_id = 1 AND rf.rank = 1 AND s.stage_number = 1 AND ra.is_stage_race = 1
+        AND rc.name IN ('World Tour - Tour de France', 'World Tour - Grand Tour', 'World Tour - Stage Race High')`);
+    out.hatTrickRaces = scalar(`
+      SELECT COUNT(*) AS c FROM (SELECT s.race_id FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id
+        WHERE rf.rider_id = ? AND rf.result_type_id = 1 AND rf.rank = 1 AND ra.is_stage_race = 1 GROUP BY s.race_id HAVING COUNT(*) >= 3)`);
+    out.whereHillsWins = scalar(`
+      SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id = rf.stage_id
+      WHERE rf.rider_id = ? AND rf.result_type_id = 1 AND rf.rank = 1 AND s.stage_score IS NOT NULL AND s.stage_score < 20`);
+    out.springWins = scalar(`
+      SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id JOIN race_categories rc ON rc.id = ra.category_id
+      WHERE rf.rider_id = ? AND rf.result_type_id = 1 AND rf.rank = 1 AND ra.is_stage_race = 0
+        AND rc.name IN ('World Tour - One Day High', 'World Tour - Monument')
+        AND substr(s.date, 6, 5) >= '03-01' AND substr(s.date, 6, 5) <= '05-02'`);
+    out.gcStayerTopTen = scalar(`
+      SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id JOIN race_categories rc ON rc.id = ra.category_id
+      WHERE rf.rider_id = ? AND rf.result_type_id = 2 AND s.stage_number = ra.number_of_stages AND rf.rank <= 10
+        AND rc.name IN ('World Tour - Tour de France', 'World Tour - Grand Tour')`);
+    return out;
+  }
+
+  /**
    * "Wilde" Kennzahlen fuer Kuriositaeten-Badges (Welle A, reine Auslese ohne
    * neues Tracking). Zaehler aus rider_career_stats/rider_season_stats sowie
    * sieg-basierte Groessen aus results_flat (rank-1-Zeilen ueberleben das
@@ -1747,6 +1802,7 @@ export class RiderRepository {
     const statRanks = this.getStatRecordRanks(riderId);
     const wild = this.getWildStats(riderId);
     const leadoutTrainRank = this.getBestLeadoutRank(riderId);
+    const wave1 = this.getBadgeWave1Stats(riderId);
 
     return {
       allTimeWins: careerWins,
@@ -1755,6 +1811,7 @@ export class RiderRepository {
       leadoutTrainRank,
       ...statRanks,
       ...wild,
+      ...wave1,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,
