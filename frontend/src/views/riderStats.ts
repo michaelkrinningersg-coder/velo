@@ -3620,10 +3620,70 @@ function renderHofBadgeCard(badge: HofBadge): string {
     </div>`;
 }
 
+// Hall-of-Fame-Gruppen nach Art, geordnet nach Wichtigkeit (hoch -> niedrig).
+// Verdiente Badges werden nach Gruppe (oben links = wichtig) und innerhalb der
+// Gruppe nach Tier-Staerke einsortiert. Nicht gelistete Keys landen hinten.
+const HOF_GROUPS: string[][] = [
+  // 1. Große Siege & Titel
+  ['firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
+   'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing'],
+  // 2. Ranglisten-Rekorde (All-Time)
+  ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
+   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant'],
+  // 3. Wertungen & Trikots
+  ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
+  // 4. Terrain & Spezialisierung
+  ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss'],
+  // 5. Ausreißer & Angriff
+  ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze'],
+  // 6. Geografie
+  ['worldCitizen', 'globetrotter', 'travelKing', 'nationExpress', 'winEurope', 'winAsia', 'winOceania', 'winNorthAmerica',
+   'mediterraneanMaster', 'scandinavianMaster', 'beneluxMaster', 'tourOfNation', 'homeHero', 'homeSoilHero', 'roadWarrior'],
+  // 7. Konstanz & Volumen
+  ['podiumMachine', 'topTenMachine', 'eternalSecond', 'raceDaySquirrel', 'aroundTheWorld', 'everPresent', 'ironHorse', 'marathonFinisher', 'notWithoutMe', 'inTheZone'],
+  // 8. Wetter
+  ['rainMaster', 'heatWarrior', 'echelonMaster', 'iceBreaker'],
+  // 9. Karriere & Loyalität
+  ['oneClubMan', 'journeyman', 'evergreen', 'vintageWine'],
+  // 10. Pech & Widrigkeiten
+  ['comebackKing', 'underTheWeather', 'hardLuck', 'pechvogel', 'sturzpilot', 'restlessLegs', 'gremlin', 'theSlump'],
+  // 11. Kuriositäten (geringste Wichtigkeit)
+  ['werewolf', 'ghost', 'theCat', 'groundhogDay', 'nightShift', 'wardrobeMalfunction'],
+];
+const HOF_GROUP_INDEX: Map<string, number> = (() => {
+  const m = new Map<string, number>();
+  HOF_GROUPS.forEach((keys, i) => keys.forEach((k) => { if (!m.has(k)) m.set(k, i); }));
+  return m;
+})();
+const HOF_TIER_STRENGTH: Record<string, number> = { gold: 6, silver: 5, bronze: 4, cyan: 3, purple: 2 };
+function hofBadgeStrength(b: HofBadge): number {
+  if (b.tier) return HOF_TIER_STRENGTH[b.tier] ?? 0;
+  if (b.customStyle) return 4; // verdientes Single-Badge ~ Bronze/Silber
+  return 0;
+}
+
 export function renderRiderStatsHallOfFameTab(payload: RiderStatsPayload): string {
   const MONOF = "font-family:'JetBrains Mono',monospace";
   const badges = buildHallOfFameBadges(payload);
-  const earned = badges.filter((badge) => badge.tier != null).length;
+  // Nur verdiente Badges (Tier gesetzt ODER verdientes Single-Badge), gruppiert
+  // nach Art und nach Wichtigkeit sortiert: oben links wichtig, unten rechts
+  // gering. Innerhalb einer Gruppe zuerst das staerkste Tier.
+  const fallbackGroup = HOF_GROUPS.length;
+  const earnedBadges = badges
+    .filter((badge) => badge.tier != null || badge.customStyle != null)
+    .sort((a, b) => {
+      const ga = HOF_GROUP_INDEX.get(a.key) ?? fallbackGroup;
+      const gb = HOF_GROUP_INDEX.get(b.key) ?? fallbackGroup;
+      if (ga !== gb) return ga - gb;
+      return hofBadgeStrength(b) - hofBadgeStrength(a);
+    });
+  const earned = earnedBadges.length;
+
+  const body = earned === 0
+    ? `<div style="padding:28px 16px;text-align:center;color:#6a7a95;font-size:12px;">Noch keine Badges verdient — auf geht's!</div>`
+    : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-items:stretch;">
+        ${earnedBadges.map(renderHofBadgeCard).join('')}
+      </div>`;
 
   return `
     <section class="rider-stats-hall-of-fame" style="margin-top:1rem;">
@@ -3631,9 +3691,7 @@ export function renderRiderStatsHallOfFameTab(payload: RiderStatsPayload): strin
         <span style="font-size:14px;font-weight:800;color:#e2e8f0;">Hall of Fame <span style="color:#fbbf24;">★</span></span>
         <span style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;text-transform:uppercase;">${earned} von ${badges.length} Badges verdient</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-items:stretch;">
-        ${badges.map(renderHofBadgeCard).join('')}
-      </div>
+      ${body}
     </section>`;
 }
 
