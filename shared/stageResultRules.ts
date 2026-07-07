@@ -9,17 +9,17 @@ export interface StageResultRankingEntry {
 export const TIME_TIE_THRESHOLD_SECONDS = 1;
 
 export const TIME_LIMIT_PERCENT_BY_PROFILE: Record<StageProfile, number> = {
-  Flat: 14,
-  Rolling: 15,
-  Hilly: 16,
-  Hilly_Difficult: 17,
-  Medium_Mountain: 18,
-  Mountain: 25,
-  High_Mountain: 27,
-  ITT: 30,
-  TTT: 40,
-  Cobble: 18,
-  Cobble_Hill: 20,
+  Flat: 16,
+  Rolling: 17,
+  Hilly: 18,
+  Hilly_Difficult: 19,
+  Medium_Mountain: 20,
+  Mountain: 27,
+  High_Mountain: 29,
+  ITT: 32,
+  TTT: 42,
+  Cobble: 20,
+  Cobble_Hill: 22,
 };
 
 export function roundStageResultSeconds(value: number): number {
