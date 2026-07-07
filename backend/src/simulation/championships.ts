@@ -98,6 +98,69 @@ export function getChampionshipCategoryDef(
 }
 
 // ---------------------------------------------------------------------------
+// Nationale Meisterschaften
+// ---------------------------------------------------------------------------
+//
+// Anders als WM/EM: Fahrer treten fuer ihre TRADE-TEAMS an (normaler Teambonus).
+// Je qualifiziertem Land eigenes ITT (25.06.) + Strassenrennen (28.06.). Erzeugt
+// am 01.06. anhand der Nationenwertung der laufenden Saison. Qualifiziert sind
+// Laender unter den Top 40 der Nationenwertung ODER mit >= 15 Fahrern mit Team.
+// Es starten ALLE verfuegbaren Fahrer des Landes mit Team; Ausschluss nur bei
+// Verletzung/Krankheit oder kombinierter Ermuedung > 12.
+
+export interface NationalChampionshipCategoryDef {
+  categoryId: number;
+  bonusSystemId: number;
+  discipline: ChampionshipDiscipline;
+  categoryName: string;
+  bonusName: string;
+  pointsOneDay: string;
+}
+
+// Reale UCI-Punkte nationaler Meisterschaften (Kategorie A).
+export const NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS: NationalChampionshipCategoryDef[] = [
+  {
+    categoryId: 14,
+    bonusSystemId: 14,
+    discipline: 'ROAD',
+    categoryName: 'Nationale Meisterschaft - Strasse',
+    bonusName: 'Nationale Meisterschaft Strasse Punkte',
+    pointsOneDay: '100|75|50|40|30|25|20|15|10|5',
+  },
+  {
+    categoryId: 15,
+    bonusSystemId: 15,
+    discipline: 'ITT',
+    categoryName: 'Nationale Meisterschaft - Einzelzeitfahren',
+    bonusName: 'Nationale Meisterschaft ITT Punkte',
+    pointsOneDay: '50|40|30|25|20|15|10|5',
+  },
+];
+
+export const NATIONAL_CHAMPIONSHIP_CATEGORY_IDS: number[] = NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS.map(
+  (def) => def.categoryId,
+);
+
+export function isNationalChampionshipCategory(categoryId: number | null | undefined): boolean {
+  return categoryId != null && NATIONAL_CHAMPIONSHIP_CATEGORY_IDS.includes(categoryId);
+}
+
+export function getNationalChampionshipCategoryDef(
+  categoryId: number | null | undefined,
+): NationalChampionshipCategoryDef | undefined {
+  if (categoryId == null) return undefined;
+  return NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS.find((def) => def.categoryId === categoryId);
+}
+
+// Erzeugungsdatum, Renn-Termine und Qualifikationsregeln.
+export const NATIONAL_CHAMPIONSHIP_GENERATION_MONTH_DAY = '06-01';
+export const NATIONAL_CHAMPIONSHIP_ITT_MONTH_DAY = '06-25';
+export const NATIONAL_CHAMPIONSHIP_ROAD_MONTH_DAY = '06-28';
+export const NATIONAL_CHAMPIONSHIP_TOP_STANDINGS = 40;
+export const NATIONAL_CHAMPIONSHIP_MIN_TEAM_RIDERS = 15;
+export const NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD = 12; // Ausschluss ab > 12
+
+// ---------------------------------------------------------------------------
 // Kalender
 // ---------------------------------------------------------------------------
 
@@ -219,6 +282,29 @@ export function championshipStageProfile(
   }
   const roadProfile = championshipRoadProfileForSeason(season);
   return { profile: roadProfile, detailsFile: CHAMPIONSHIP_ROAD_DETAILS[def.type][roadProfile] };
+}
+
+// Profil + Streckensatz einer nationalen Meisterschaft. Deterministisch je
+// (Saison, Land), damit sich Profilart und -laenge ueber die Jahre und zwischen
+// den Laendern zufaellig-stabil unterscheiden (wie bei EM/WM rotierend).
+const NATIONAL_ITT_DETAILS = ['dummy_itt_k.csv', 'dummy_itt_l.csv'];
+
+export function nationalChampionshipStageProfile(
+  discipline: ChampionshipDiscipline,
+  season: number,
+  countryId: number,
+): { profile: string; detailsFile: string } {
+  const seed = ((season * 1000003) ^ (countryId * 2654435761)) >>> 0;
+  if (discipline === 'ITT') {
+    const idx = Math.floor(deterministicUnit(seed ^ 0x9e3779b9) * NATIONAL_ITT_DETAILS.length);
+    return { profile: 'ITT', detailsFile: NATIONAL_ITT_DETAILS[Math.min(idx, NATIONAL_ITT_DETAILS.length - 1)] };
+  }
+  const roadProfile = CHAMPIONSHIP_ROAD_PROFILES[
+    Math.min(Math.floor(deterministicUnit(seed) * CHAMPIONSHIP_ROAD_PROFILES.length), CHAMPIONSHIP_ROAD_PROFILES.length - 1)
+  ];
+  // Streckensatz aus dem EM- oder WM-Pool (variiert die Laenge je Land/Saison).
+  const pool = (deterministicUnit(seed ^ 0x5bd1e995) < 0.5 ? 'EM' : 'WM') as ChampionshipType;
+  return { profile: roadProfile, detailsFile: CHAMPIONSHIP_ROAD_DETAILS[pool][roadProfile] };
 }
 
 // ---------------------------------------------------------------------------
