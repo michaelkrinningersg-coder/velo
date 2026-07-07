@@ -1857,6 +1857,31 @@ export class StageResultCommitService {
         }
       }
 
+      // --- Welle 4: Back-to-Back-Siege ---
+      // Sieg an einem Renntag setzt die laufende Serie +1 (Karriere-Rekord +
+      // Saison-Rekord als Maximum); ein Renntag ohne Sieg (Zielankunft ohne
+      // Sieg oder DNF/OTL) setzt zurueck. Tage ohne Rennen zaehlen nicht. TTT
+      // (kein Einzelsieger) bleibt neutral. Kein Backfill.
+      if (!isTTT && columnExists(this.db, 'rider_career_stats', 'win_streak_best')) {
+        const winnerId = winnerRow && winnerRow.riderId != null ? winnerRow.riderId : null;
+        const bumpC = this.db.prepare(`UPDATE rider_career_stats SET win_streak_current = win_streak_current + 1, win_streak_best = MAX(win_streak_best, win_streak_current + 1) WHERE rider_id = ?`);
+        const resetC = this.db.prepare(`UPDATE rider_career_stats SET win_streak_current = 0 WHERE rider_id = ?`);
+        const bumpS = columnExists(this.db, 'rider_season_stats', 'win_streak_best')
+          ? this.db.prepare(`UPDATE rider_season_stats SET win_streak_best = MAX(win_streak_best, (SELECT win_streak_current FROM rider_career_stats WHERE rider_id = ?)) WHERE rider_id = ? AND season = ?`)
+          : null;
+        for (const rid of completedRiderIds) {
+          if (rid == null) continue;
+          insertCareerStatsRow.run(rid);
+          if (rid === winnerId) {
+            bumpC.run(rid);
+            if (bumpS) { insertSeasonStatsRow.run(rid, currentSeason); bumpS.run(rid, rid, currentSeason); }
+          } else {
+            resetC.run(rid);
+          }
+        }
+        for (const e of dnfEntries) if (e.riderId != null) { insertCareerStatsRow.run(e.riderId); resetC.run(e.riderId); }
+      }
+
       for (const dns of dnsEvents) {
         if (dns.riderId != null) {
           insertCareerStatsRow.run(dns.riderId);

@@ -2839,6 +2839,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const oneManTeam = hof.oneManTeam ?? 0;
   const gcBySeconds = hof.gcBySeconds ?? 0;
   const bitterEndDnf = hof.bitterEndDnf ?? 0;
+  const winStreakBest = hof.winStreakBest ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3791,6 +3792,15 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${bitterEndDnf}× auf der Schlussetappe einer Grand Tour nicht ins Ziel gekommen (DNS/DNF/OTL) (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Aufgabe auf der GT-Schlussetappe',
     },
+
+    // --- Badge Welle 4 (Back-to-Back) ---
+    {
+      key: 'hotStreak', name: 'Hot Streak', icon: HOF_ICON_SPARK, description: 'Siege in Folge',
+      tier: resolveThresholdTier(winStreakBest, [2, 4, 6, 8, 10]),
+      detail: winStreakBest > 0 ? `${winStreakBest} in Folge` : '',
+      hover: `Längste Siegesserie von ${winStreakBest} Siegen an aufeinanderfolgenden Renntagen (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen an aufeinanderfolgenden Renntagen',
+    },
   ];
 }
 
@@ -3833,7 +3843,7 @@ const HOF_GROUPS: string[][] = [
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
-   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator'],
+   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
   // 3. Wertungen & Trikots
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung

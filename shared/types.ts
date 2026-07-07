@@ -1073,6 +1073,9 @@ export interface RiderHallOfFameStats {
   gcBySeconds: number;          // GT-Sieg < 20 s Vorsprung (GC by Seconds)
   bitterEndDnf: number;         // DNS/DNF/OTL Schlussetappe Grand Tour (Not to the bitter end)
 
+  // Badge-Kennzahl Welle 4 (Back-to-Back).
+  winStreakBest: number;        // laengste Siegesserie an aufeinanderfolgenden Renntagen (Hot Streak)
+
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)
   doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)

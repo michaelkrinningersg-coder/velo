@@ -1397,6 +1397,12 @@ export class DatabaseService {
         ADD COLUMN superform_days INTEGER NOT NULL DEFAULT 0
       `).run();
     }
+    if (!columnExists(db, 'rider_season_stats', 'win_streak_best')) {
+      db.prepare(`
+        ALTER TABLE rider_season_stats
+        ADD COLUMN win_streak_best INTEGER NOT NULL DEFAULT 0
+      `).run();
+    }
     if (!columnExists(db, 'rider_season_stats', 'supermalus_days')) {
       db.prepare(`
         ALTER TABLE rider_season_stats
@@ -2000,6 +2006,11 @@ export class DatabaseService {
       ['one_man_team', 'INTEGER NOT NULL DEFAULT 0'],         // One Man Team
       ['gc_by_seconds', 'INTEGER NOT NULL DEFAULT 0'],        // GC by Seconds
       ['bitter_end_dnf', 'INTEGER NOT NULL DEFAULT 0'],       // Not to the bitter end
+      // Welle 4 (Back-to-Back-Siege): laufende und beste Siegesserie an
+      // aufeinanderfolgenden Renntagen des Fahrers (Tage ohne Rennen zaehlen
+      // nicht). Ab jetzt gepflegt, kein Backfill (Nicht-Sieg-Renntage geprunt).
+      ['win_streak_current', 'INTEGER NOT NULL DEFAULT 0'],
+      ['win_streak_best', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

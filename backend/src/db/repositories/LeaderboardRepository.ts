@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { tableExists } from '../mappers';
+import { tableExists, columnExists } from '../mappers';
 
 export interface LeaderboardRow {
   rank: number;
@@ -802,6 +802,42 @@ export class LeaderboardRepository {
         params.push(currentSeason);
       }
       valueFormatter = (r) => `${r.val.toFixed(1)} km/h`;
+
+    } else if (metricKey === 'back_to_back') {
+      // Back-to-Back-Siege: beste Siegesserie an aufeinanderfolgenden Renntagen.
+      // Saison aus rider_season_stats, All-Time aus rider_career_stats.
+      const streakCol = 'win_streak_best';
+      if (period === 'season') {
+        if (!tableExists(this.db, 'rider_season_stats') || !columnExists(this.db, 'rider_season_stats', streakCol)) return [];
+        query = `
+          SELECT r.id AS id, r.first_name, r.last_name, c.code_3 AS nationality,
+                 t.abbreviation AS team_abbr, t.name AS team_name, t.id AS team_id,
+                 t.division_id AS team_division_id, r.is_retired AS is_retired,
+                 rss.${streakCol} AS val
+          FROM rider_season_stats rss
+          JOIN riders r ON r.id = rss.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE rss.season = ? AND rss.${streakCol} > 0 AND r.is_retired = 0
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100`;
+        params.push(currentSeason);
+      } else {
+        if (!tableExists(this.db, 'rider_career_stats') || !columnExists(this.db, 'rider_career_stats', streakCol)) return [];
+        query = `
+          SELECT r.id AS id, r.first_name, r.last_name, c.code_3 AS nationality,
+                 t.abbreviation AS team_abbr, t.name AS team_name, t.id AS team_id,
+                 t.division_id AS team_division_id, r.is_retired AS is_retired,
+                 rcs.${streakCol} AS val
+          FROM rider_career_stats rcs
+          JOIN riders r ON r.id = rcs.rider_id
+          JOIN sta_country c ON c.id = r.country_id
+          LEFT JOIN teams t ON t.id = r.active_team_id
+          WHERE rcs.${streakCol} > 0
+          ORDER BY val DESC, r.last_name ASC
+          LIMIT 100`;
+      }
+      valueFormatter = (r) => `${r.val}× in Folge`;
 
     } else if (metricKey === 'strongest_lieutenants') {
       if (!tableExists(this.db, 'rider_lieutenants')) {
