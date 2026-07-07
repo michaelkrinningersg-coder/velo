@@ -2836,7 +2836,6 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const counterAttacksRank = hof.counterAttacksRank ?? null;
   const superteamCountRank = hof.superteamCountRank ?? null;
   const lieutenantPeakRank = hof.lieutenantPeakRank ?? null;
-  const careerWinsRank = hof.careerWinsRank ?? hof.allTimeWinsRank ?? null;
   const yellowDaysRank = hof.yellowDaysRank ?? null;
   const leadoutTrainRank = hof.leadoutTrainRank ?? null;
   // Badge-Kennzahlen Welle 1.
@@ -3388,17 +3387,17 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     },
     {
       key: 'pointsChampion', name: 'Points Champion', icon: HOF_ICON_JERSEY, description: 'Grüne-Trikot-Titel',
-      tier: resolveThresholdTier(pointsTitles, [1, 2, 4, 6, 10]),
+      tier: resolveThresholdTier(pointsTitles, [2, 3, 5, 7, 11]),
       detail: `${pointsTitles.toLocaleString('de-DE')} Titel`,
-      hover: `${pointsTitles.toLocaleString('de-DE')} Punktewertungs-Titel (Gold 10 · Silber 6 · Bronze 4 · Cyan 2 · Lila 1)`,
-      requirement: 'Ab 1 Punktewertungs-Titel',
+      hover: `${pointsTitles.toLocaleString('de-DE')} Punktewertungs-Titel (Gold 11 · Silber 7 · Bronze 5 · Cyan 3 · Lila 2)`,
+      requirement: 'Ab 2 Punktewertungs-Titeln',
     },
     {
       key: 'polkaDotKing', name: 'Polka-Dot King', icon: HOF_ICON_MOUNTAIN, description: 'Bergtrikot-Titel',
-      tier: resolveThresholdTier(komTitles, [1, 2, 4, 6, 10]),
+      tier: resolveThresholdTier(komTitles, [2, 3, 5, 7, 11]),
       detail: `${komTitles.toLocaleString('de-DE')} Titel`,
-      hover: `${komTitles.toLocaleString('de-DE')} Bergwertungs-Titel (Gold 10 · Silber 6 · Bronze 4 · Cyan 2 · Lila 1)`,
-      requirement: 'Ab 1 Bergwertungs-Titel',
+      hover: `${komTitles.toLocaleString('de-DE')} Bergwertungs-Titel (Gold 11 · Silber 7 · Bronze 5 · Cyan 3 · Lila 2)`,
+      requirement: 'Ab 2 Bergwertungs-Titeln',
     },
     {
       key: 'bestYoungRider', name: 'Best Young Rider', icon: HOF_ICON_STAR, description: 'Weiße-Trikot-Titel',
@@ -3612,7 +3611,6 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     rankBadge('recCounterAttacks', 'Counter Puncher', HOF_ICON_SPARK, 'Konterattacken-Rang', counterAttacksRank, 'der ewigen Konterattacken-Liste'),
     rankBadge('recSuperteam', 'Superteam Icon', HOF_ICON_SHIELD, 'Superteambonus-Rang', superteamCountRank, 'der ewigen Superteambonus-Liste'),
     rankBadge('recLieutenant', 'Ultimate Domestique', HOF_ICON_WRENCH, 'Leutnant-Rang', lieutenantPeakRank, 'der ewigen Leutnant-Bestwert-Liste'),
-    rankBadge('recCareerWins', 'Peloton Legend', HOF_ICON_CROWN, 'Karrieresiege-Rang', careerWinsRank, 'der ewigen Siegerliste'),
     rankBadge('recYellowDays', 'Yellow Sovereign', HOF_ICON_JERSEY, 'Gelbtrikot-Tage-Rang', yellowDaysRank, 'der ewigen Gelbtrikot-Tage-Liste'),
     {
       key: 'leadoutTrain', name: 'Sprint Train', icon: HOF_ICON_TRAIN, description: 'Bester Team-Leadout',
@@ -4168,7 +4166,7 @@ const HOF_GROUPS: string[][] = [
    'cleanSweep', 'cleanSweepPlus', 'instantImpact', 'autumnKing', 'theProdigy', 'theUndertaker', 'greenGrandSlam',
    'pointsPerfectionist', 'thirdWeekWonder', 'monumentSweep', 'babyFace'],
   // 2. Ranglisten-Rekorde (All-Time)
-  ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
+  ['recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
    'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain', 'pointAccumulator', 'hotStreak'],
   // 3. Wertungen & Trikots
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
