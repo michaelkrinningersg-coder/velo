@@ -769,6 +769,34 @@ function navigateResultsRace(direction: -1 | 1): void {
   }
 }
 
+/**
+ * Schaltet im Results-Menue eine Etappe des aktuell gewaehlten Rennens weiter
+ * (direction -1 = zurueck, +1 = vor) entlang der Etappenreihenfolge und laedt
+ * deren Ergebnis.
+ */
+function navigateResultsStage(direction: -1 | 1): void {
+  const race = findRaceById(state.selectedResultsRaceId);
+  const stages = race?.stages ?? [];
+  if (stages.length === 0) return;
+  const idx = stages.findIndex((stage) => stage.id === state.selectedResultsStageId);
+  let nextIdx: number;
+  if (idx === -1) {
+    nextIdx = direction === 1 ? 0 : stages.length - 1;
+  } else {
+    nextIdx = idx + direction;
+    if (nextIdx < 0 || nextIdx >= stages.length) return; // an den Enden nicht umbrechen
+  }
+  state.selectedResultsStageId = stages[nextIdx].id;
+  state.selectedResultTypeId = 1;
+  state.selectedResultsMarkerKey = RESULTS_STAGE_OVERVIEW_KEY;
+  state.selectedResultsSpecialView = null;
+  state.stageResults = null;
+  renderResultsView();
+  if (state.selectedResultsStageId != null) {
+    void loadStageResults(state.selectedResultsStageId, true);
+  }
+}
+
 export function renderResultsView(): void {
   // If state.riders is empty, trigger a fetch so that links are rendered properly when data arrives
   if (state.riders.length === 0) {
@@ -819,6 +847,15 @@ export function renderResultsView(): void {
       .map((stage) => `<option value="${stage.id}"${stage.id === state.selectedResultsStageId ? ' selected' : ''}>${esc(formatResultsStageLabel(selectedRace, stage))}</option>`)
       .join('');
   stageSelect.innerHTML = '<option value="">– Etappe auswählen –</option>' + stageOptions;
+
+  // Etappen-Durchschalter: an den Enden der Etappenliste des gewaehlten Rennens
+  // deaktivieren.
+  const stagePrevBtn = $<HTMLButtonElement>('results-stage-prev');
+  const stageNextBtn = $<HTMLButtonElement>('results-stage-next');
+  const stageList = selectedRace?.stages ?? [];
+  const currentStageIndex = stageList.findIndex((stage) => stage.id === state.selectedResultsStageId);
+  stagePrevBtn.disabled = stageList.length === 0 || currentStageIndex === 0;
+  stageNextBtn.disabled = stageList.length === 0 || (currentStageIndex >= 0 && currentStageIndex === stageList.length - 1);
 
   // Broadcast-Kopf: Rennname als Titel + Kategorie-Pill (aus dem gewaehlten Rennen)
   const raceTitleEl = $('results-race-title');
@@ -1363,6 +1400,8 @@ export function initResultsListeners(): void {
 
   $('results-race-prev').addEventListener('click', () => navigateResultsRace(-1));
   $('results-race-next').addEventListener('click', () => navigateResultsRace(1));
+  $('results-stage-prev').addEventListener('click', () => navigateResultsStage(-1));
+  $('results-stage-next').addEventListener('click', () => navigateResultsStage(1));
 
   $('results-stage-select').addEventListener('change', (e) => {
     const val = (e.target as HTMLSelectElement).value;

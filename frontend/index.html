@@ -360,9 +360,13 @@
           </div>
           <div class="form-group">
             <label for="results-stage-select">Etappe</label>
-            <select id="results-stage-select">
-              <option value="">– Etappe auswählen –</option>
-            </select>
+            <div class="results-race-nav">
+              <button type="button" id="results-stage-prev" class="results-race-nav-btn" title="Vorherige Etappe" aria-label="Vorherige Etappe">‹</button>
+              <select id="results-stage-select">
+                <option value="">– Etappe auswählen –</option>
+              </select>
+              <button type="button" id="results-stage-next" class="results-race-nav-btn" title="Nächste Etappe" aria-label="Nächste Etappe">›</button>
+            </div>
           </div>
         </div>
         <div id="results-type-tabs" class="results-type-tabs"></div>
