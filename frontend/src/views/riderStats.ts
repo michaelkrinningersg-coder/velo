@@ -2707,6 +2707,8 @@ const HOF_ICON_HEART = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_CLOCK = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2v7z"/></svg>`;
 const HOF_ICON_MOON = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1.6" fill="#0e1930"/><circle cx="15" cy="13" r="2.1" fill="#0e1930"/><circle cx="10" cy="15" r="1.2" fill="#0e1930"/></svg>`;
 const HOF_ICON_OLIVE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 20c6 0 12-4 16-12 0 0-9-1-13 5-2 3-3 7-3 7z" opacity=".55"/><ellipse cx="15" cy="7" rx="1.6" ry="2.2" transform="rotate(35 15 7)"/><ellipse cx="11" cy="11" rx="1.6" ry="2.2" transform="rotate(35 11 11)"/><ellipse cx="7.5" cy="15" rx="1.6" ry="2.2" transform="rotate(35 7.5 15)"/></svg>`;
+const HOF_ICON_GHOST = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a8 8 0 0 0-8 8v11l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V10a8 8 0 0 0-8-8zm-3 8a1.3 1.3 0 1 1 0-2.6A1.3 1.3 0 0 1 9 10zm6 0a1.3 1.3 0 1 1 0-2.6A1.3 1.3 0 0 1 15 10z"/></svg>`;
+const HOF_ICON_CAT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 3l3.5 3H10l3.5-3v4.5C15.4 8.6 17 10.9 17 13.5V21H5v-7.5C5 10.9 6.6 8.6 8.5 7.5L3 3zm5.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm5 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM11 15l-1 1h2l-1-1z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2853,6 +2855,8 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const mostSeasonsOneTeam = hof.mostSeasonsOneTeam ?? 0;
   const teamCount = hof.teamCount ?? 0;
   const fullMoonWins = hof.fullMoonWins ?? 0;
+  const catPodiums = hof.catPodiums ?? 0;
+  const ghostTop10 = hof.ghostTop10 ?? 0;
   const continentsWon = hof.continentsWon ?? [];
   const worldCitizenBestYear = hof.worldCitizenBestYear ?? 0;
   const wonContinent = (c: string) => continentsWon.includes(c);
@@ -3386,6 +3390,20 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hof.beneluxMaster === true, HOF_STYLE_GOLD,
       hof.beneluxMaster ? 'Siege in Belgien, Niederlande und Luxemburg.' : 'Belgien, Niederlande und Luxemburg — noch nicht alle.',
       'Siege in Belgien, Niederlande und Luxemburg', 'Komplett'),
+    {
+      key: 'ghost', name: 'Ghost', icon: HOF_ICON_GHOST, description: 'GC-Top-10 aus dem Nichts',
+      tier: resolveThresholdTier(ghostTop10, [1, 2, 3, 5, 8]),
+      detail: `${ghostTop10.toLocaleString('de-DE')}×`,
+      hover: `${ghostTop10.toLocaleString('de-DE')}× GC-Top-10 einer Rundfahrt, ohne je in der GC-Top-30 aufzutauchen (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'GC-Top-10 ohne je GC-Top-30',
+    },
+    {
+      key: 'theCat', name: 'The Cat', icon: HOF_ICON_CAT, description: 'Neun Leben',
+      tier: resolveThresholdTier(catPodiums, [1, 3, 5, 7, 9]),
+      detail: `${catPodiums.toLocaleString('de-DE')} Podeste`,
+      hover: `${catPodiums.toLocaleString('de-DE')}× Podium trotz Sturz in derselben Etappe (Gold 9 · Silber 7 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Podium trotz Sturz im selben Rennen',
+    },
   ];
 }
 

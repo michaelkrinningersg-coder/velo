@@ -1658,6 +1658,45 @@ export class StageResultCommitService {
         `).run(winnerRow.riderId);
       }
 
+      // The Cat (Neun Leben): Podium (Top 3) in einer Etappe, in der der Fahrer
+      // gestuerzt ist.
+      if (columnExists(this.db, 'rider_career_stats', 'cat_podiums')) {
+        const catStmt = this.db.prepare(`UPDATE rider_career_stats SET cat_podiums = cat_podiums + 1 WHERE rider_id = ?`);
+        for (const row of stageRows) {
+          if (row.riderId != null && row.rank <= 3 && (crashCounts.get(row.riderId) ?? 0) > 0) {
+            catStmt.run(row.riderId);
+          }
+        }
+      }
+
+      // Ghost: An der Schlussetappe einer Rundfahrt GC-Top-10, ohne je zuvor in
+      // der GC-Top-30 aufgetaucht zu sein (Vor-Etappen aus results_flat).
+      if (race.isStageRace && stage.stageNumber === race.numberOfStages
+        && columnExists(this.db, 'rider_career_stats', 'ghost_top10')
+        && tableExists(this.db, 'results_flat')) {
+        const top10 = gcRows.filter((r: any) => r.riderId != null && r.rank <= 10).map((r: any) => r.riderId);
+        if (top10.length > 0) {
+          const placeholders = top10.map(() => '?').join(',');
+          const priorRows = this.db.prepare(`
+            SELECT rf.rider_id AS rid, MIN(rf.rank) AS best
+            FROM results_flat rf
+            JOIN stages s ON s.id = rf.stage_id
+            WHERE rf.result_type_id = 2 AND s.race_id = ? AND s.stage_number < ?
+              AND rf.rider_id IN (${placeholders})
+            GROUP BY rf.rider_id
+          `).all(race.id, stage.stageNumber, ...top10) as Array<{ rid: number; best: number }>;
+          const bestByRider = new Map(priorRows.map((r) => [r.rid, r.best]));
+          const ghostStmt = this.db.prepare(`UPDATE rider_career_stats SET ghost_top10 = ghost_top10 + 1 WHERE rider_id = ?`);
+          for (const rid of top10) {
+            const best = bestByRider.get(rid);
+            // Nur zaehlen, wenn Vor-Etappen-GC vorliegt und stets schlechter als 30.
+            if (best != null && best > 30) {
+              ghostStmt.run(rid);
+            }
+          }
+        }
+      }
+
       for (const dns of dnsEvents) {
         if (dns.riderId != null) {
           insertCareerStatsRow.run(dns.riderId);

@@ -1008,6 +1008,10 @@ export interface RiderHallOfFameStats {
   bunchSprintWins: number;
   /** Siege an (versteckt berechneten) Vollmondtagen. */
   fullMoonWins: number;
+  /** Podeste (Top 3) in einer Etappe mit Sturz (The Cat). */
+  catPodiums: number;
+  /** GC-Top-10 an der Schlussetappe ohne je GC-Top-30 (Ghost). */
+  ghostTop10: number;
 
   /** Spezialrennen-Erfolge (aus Siegen nach Rennnamen ermittelt). */
   wonAllGrandTours: boolean;

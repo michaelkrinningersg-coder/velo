@@ -1680,6 +1680,67 @@ export class DatabaseService {
     } catch (e) {
       console.error('full_moon-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
+
+    // --- The Cat: Podium (Top 3) mit Sturz-Event in derselben Etappe ---
+    // Top-3-Zeilen ueberleben das Pruning (Punktevergabe), event_ids ist dort
+    // hinterlegt (Sturz = Code "1"). Damit vollstaendig rekonstruierbar.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'cat_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'cat_podiums') && tableExists(db, 'results_flat')) {
+        const rows = db.prepare(`
+          SELECT rider_id, event_ids FROM results_flat
+          WHERE result_type_id = 1 AND rank <= 3 AND rider_id IS NOT NULL AND event_ids IS NOT NULL
+        `).all() as Array<{ rider_id: number; event_ids: string }>;
+        const hasCrash = (eventIds: string) => eventIds.split('|').some((p) => p.startsWith('1:'));
+        const byRider = new Map<number, number>();
+        for (const r of rows) {
+          if (hasCrash(r.event_ids)) byRider.set(r.rider_id, (byRider.get(r.rider_id) ?? 0) + 1);
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET cat_podiums = ? WHERE rider_id = ?');
+        db.transaction(() => { for (const [rid, c] of byRider) upd.run(c, rid); })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('cat_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('cat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+
+    // --- Ghost: GC-Top-10 an der Schlussetappe ohne je GC-Top-30 ---
+    // Nur zaehlbar, wo die GC-Historie der Vor-Etappen erhalten ist (aktuelle,
+    // noch nicht am Saisonende geprunte Saison). Fehlt sie, wird abstiniert.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'ghost_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'ghost_top10') && tableExists(db, 'results_flat') && tableExists(db, 'stages')) {
+        const rows = db.prepare(`
+          SELECT rf.rider_id AS rider_id, s.race_id AS race_id, s.stage_number AS stage_number,
+                 ra.number_of_stages AS num_stages, rf.rank AS rank
+          FROM results_flat rf
+          JOIN stages s ON s.id = rf.stage_id
+          JOIN races ra ON ra.id = s.race_id
+          WHERE rf.result_type_id = 2 AND rf.rider_id IS NOT NULL AND ra.is_stage_race = 1
+        `).all() as Array<{ rider_id: number; race_id: number; stage_number: number; num_stages: number; rank: number }>;
+        // Pro (race, rider): Endrang und bester Vor-Etappen-Rang.
+        const acc = new Map<string, { finalRank: number | null; priorBest: number | null; numStages: number }>();
+        for (const r of rows) {
+          const key = `${r.race_id}:${r.rider_id}`;
+          let e = acc.get(key);
+          if (!e) { e = { finalRank: null, priorBest: null, numStages: r.num_stages }; acc.set(key, e); }
+          if (r.stage_number === r.num_stages) e.finalRank = r.rank;
+          else e.priorBest = e.priorBest == null ? r.rank : Math.min(e.priorBest, r.rank);
+        }
+        const byRider = new Map<number, number>();
+        for (const [key, e] of acc) {
+          const rid = Number(key.split(':')[1]);
+          if (e.finalRank != null && e.finalRank <= 10 && e.priorBest != null && e.priorBest > 30) {
+            byRider.set(rid, (byRider.get(rid) ?? 0) + 1);
+          }
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET ghost_top10 = ? WHERE rider_id = ?');
+        db.transaction(() => { for (const [rid, c] of byRider) upd.run(c, rid); })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('ghost_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('ghost-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
   }
 
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
@@ -1737,6 +1798,8 @@ export class DatabaseService {
       ['total_km', 'REAL NOT NULL DEFAULT 0'],
       ['bunch_sprint_wins', 'INTEGER NOT NULL DEFAULT 0'],
       ['full_moon_wins', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cat_podiums', 'INTEGER NOT NULL DEFAULT 0'],
+      ['ghost_top10', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
