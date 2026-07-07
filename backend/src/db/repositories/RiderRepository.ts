@@ -1655,17 +1655,21 @@ export class RiderRepository {
     defects: number; doomedEscapes: number; supermalusDays: number; bestSeasonRaceDays: number;
     veteranWins: number; awayWins: number; breakawayWins: number; groundhogStreak: number;
     fullMoonPodiums: number; cleanStreakBest: number; grandToursFinished: number; multiJerseyDays: number;
+    longHaulWins: number; staminaWins: number; verticalLimitWins: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
       breakawayWins: 0, groundhogStreak: 0, fullMoonPodiums: 0, cleanStreakBest: 0, grandToursFinished: 0, multiJerseyDays: 0,
+      longHaulWins: 0, staminaWins: 0, verticalLimitWins: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
       const hasWaveB = columnExists(this.db, 'rider_career_stats', 'multi_jersey_days');
+      const hasWave2 = columnExists(this.db, 'rider_career_stats', 'long_haul_wins');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
+         ${hasWave2 ? ', long_haul_wins, stamina_wins, vertical_limit_wins' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1676,6 +1680,9 @@ export class RiderRepository {
         out.cleanStreakBest = c.clean_streak_best ?? 0;
         out.grandToursFinished = c.grand_tours_finished ?? 0;
         out.multiJerseyDays = c.multi_jersey_days ?? 0;
+        out.longHaulWins = c.long_haul_wins ?? 0;
+        out.staminaWins = c.stamina_wins ?? 0;
+        out.verticalLimitWins = c.vertical_limit_wins ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {

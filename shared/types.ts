@@ -1058,6 +1058,11 @@ export interface RiderHallOfFameStats {
   springWins: number;           // One Day High/Monument-Siege 01.03.-02.05. (Spring King)
   gcStayerTopTen: number;       // Grand-Tour-GC-Top-10 (GC Stayer)
 
+  // Badge-Kennzahlen Welle 2 (Distanz/Hoehenmeter der Siegetappe).
+  longHaulWins: number;         // Etappensiege > 200 km (Long Haul Specialist)
+  staminaWins: number;          // Siege > 240 km (Stamina Machine)
+  verticalLimitWins: number;    // Etappensiege > 4000 hm (Vertical Limit)
+
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)
   doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)

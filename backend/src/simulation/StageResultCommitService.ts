@@ -1383,13 +1383,15 @@ export class StageResultCommitService {
       // Etappendistanz aus dem Profil parsen — stage.distanceKm ist im Stage-
       // Objekt nicht gesetzt, sodass total_km sonst nie akkumuliert (Grundlage
       // fuer das "Around the World"-Badge).
-      const stageDistanceKm = (() => {
+      const stageProfileSummary = (() => {
         try {
-          return summarizeStageProfile(stage.detailsCsvFile, stage.startElevation).distanceKm ?? 0;
+          return summarizeStageProfile(stage.detailsCsvFile, stage.startElevation);
         } catch {
-          return stage.distanceKm ?? 0;
+          return null;
         }
       })();
+      const stageDistanceKm = stageProfileSummary?.distanceKm ?? stage.distanceKm ?? 0;
+      const stageElevationGain = stageProfileSummary?.elevationGainMeters ?? 0;
 
       // Rekord: schnellste Durchschnittsgeschwindigkeit. Der Sieger einer
       // Etappe bzw. eines Eintagesrennens hat definitionsgemaess die hoechste
@@ -1701,6 +1703,20 @@ export class StageResultCommitService {
         this.db.prepare(`
           UPDATE rider_career_stats SET full_moon_wins = full_moon_wins + 1 WHERE rider_id = ?
         `).run(winnerRow.riderId);
+      }
+
+      // Welle 2 (Distanz/Hoehenmeter): Der Sieger einer Etappe bzw. eines
+      // Eintagesrennens sammelt Marken je nach Streckenlaenge/Anstieg.
+      if (winnerRow && winnerRow.riderId != null) {
+        if (stageDistanceKm > 200 && columnExists(this.db, 'rider_career_stats', 'long_haul_wins')) {
+          this.db.prepare(`UPDATE rider_career_stats SET long_haul_wins = long_haul_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+        }
+        if (stageDistanceKm > 240 && columnExists(this.db, 'rider_career_stats', 'stamina_wins')) {
+          this.db.prepare(`UPDATE rider_career_stats SET stamina_wins = stamina_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+        }
+        if (stageElevationGain > 4000 && columnExists(this.db, 'rider_career_stats', 'vertical_limit_wins')) {
+          this.db.prepare(`UPDATE rider_career_stats SET vertical_limit_wins = vertical_limit_wins + 1 WHERE rider_id = ?`).run(winnerRow.riderId);
+        }
       }
 
       // The Cat (Neun Leben): Podium (Top 3) in einer Etappe, in der der Fahrer

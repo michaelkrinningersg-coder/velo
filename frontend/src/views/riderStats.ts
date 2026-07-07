@@ -2824,6 +2824,10 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const whereHillsWins = hof.whereHillsWins ?? 0;
   const springWins = hof.springWins ?? 0;
   const gcStayerTopTen = hof.gcStayerTopTen ?? 0;
+  // Welle 2 (Distanz/Höhenmeter).
+  const longHaulWins = hof.longHaulWins ?? 0;
+  const staminaWins = hof.staminaWins ?? 0;
+  const verticalLimitWins = hof.verticalLimitWins ?? 0;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3698,6 +3702,26 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       perennialSecondDone, HOF_STYLE_GREEN,
       perennialSecondDone ? 'Über 10 zweite Plätze — und noch kein Sieg.' : 'Weniger als 11 zweite Plätze oder bereits ein Sieg.',
       'Über 10 zweite Plätze ohne Sieg', 'Ewiger Zweiter'),
+
+    // --- Badges Welle 2 (Distanz / Höhenmeter) ---
+    {
+      key: 'longHaul', name: 'Long Haul Specialist', icon: HOF_ICON_ROUTE, description: 'Siege auf langen Etappen',
+      tier: resolveThresholdTier(longHaulWins, [2, 4, 6, 8, 10]),
+      detail: longHaulWins > 0 ? `${longHaulWins} Siege` : '',
+      hover: `${longHaulWins} Siege auf Etappen über 200 km (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen auf Etappen > 200 km',
+    },
+    singleBadge('staminaMachine', 'Stamina Machine', HOF_ICON_HEART, 'Sieg über 240 km',
+      staminaWins >= 1, HOF_STYLE_GREEN,
+      staminaWins >= 1 ? `${staminaWins.toLocaleString('de-DE')} Sieg(e) auf über 240 km.` : 'Noch kein Sieg auf über 240 km.',
+      'Ein Sieg auf über 240 km', 'Geschafft'),
+    {
+      key: 'verticalLimit', name: 'Vertical Limit', icon: HOF_ICON_MOUNTAIN, description: 'Siege mit 4000+ hm',
+      tier: resolveThresholdTier(verticalLimitWins, [2, 4, 6, 8, 10]),
+      detail: verticalLimitWins > 0 ? `${verticalLimitWins} Siege` : '',
+      hover: `${verticalLimitWins} Etappensiege mit über 4000 Höhenmetern (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
+      requirement: 'Ab 2 Siegen mit über 4000 hm',
+    },
   ];
 }
 
@@ -3745,7 +3769,7 @@ const HOF_GROUPS: string[][] = [
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung
   ['mountainGoat', 'summitFinisher', 'hcKing', 'puncheur', 'rouleur', 'sprintHunter', 'chronoMaster', 'cobbledClassicsKing', 'bunchSprintBoss',
-   'whereHills', 'punchyClimber'],
+   'whereHills', 'punchyClimber', 'longHaul', 'staminaMachine', 'verticalLimit'],
   // 5. Ausreißer & Angriff
   ['breakawayKing', 'breakawayMaster', 'baroudeurSupreme', 'escapeArtist', 'erfolgreicherAusreisser', 'attacker', 'smashGrab', 'doomedEscapee', 'kamikaze'],
   // 6. Geografie

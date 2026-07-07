@@ -1766,6 +1766,37 @@ export class DatabaseService {
       console.error('multi_jersey-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
 
+    // --- Welle 2: Distanz-/Hoehenmeter-Siege (Long Haul / Stamina / Vertical) ---
+    // Etappensieger (rank 1, Typ 1) ueberleben das Pruning; Distanz und Anstieg
+    // werden aus dem Streckenprofil rekonstruiert. Ein Sieger je Etappe.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'wave2_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'long_haul_wins') && tableExists(db, 'results_flat') && tableExists(db, 'stages')) {
+        const rows = db.prepare(`
+          SELECT rf.rider_id AS rider_id, s.details_csv_file AS csv, s.start_elevation AS elev
+          FROM results_flat rf JOIN stages s ON s.id = rf.stage_id
+          WHERE rf.result_type_id = 1 AND rf.rank = 1 AND rf.rider_id IS NOT NULL
+        `).all() as Array<{ rider_id: number; csv: string | null; elev: number | null }>;
+        const longH = new Map<number, number>(), stam = new Map<number, number>(), vert = new Map<number, number>();
+        for (const r of rows) {
+          let dist = 0, gain = 0;
+          try {
+            const sum = summarizeStageProfile(r.csv ?? '', r.elev ?? 0);
+            dist = sum.distanceKm ?? 0; gain = sum.elevationGainMeters ?? 0;
+          } catch { continue; }
+          if (dist > 200) longH.set(r.rider_id, (longH.get(r.rider_id) ?? 0) + 1);
+          if (dist > 240) stam.set(r.rider_id, (stam.get(r.rider_id) ?? 0) + 1);
+          if (gain > 4000) vert.set(r.rider_id, (vert.get(r.rider_id) ?? 0) + 1);
+        }
+        const upd = db.prepare('UPDATE rider_career_stats SET long_haul_wins = ?, stamina_wins = ?, vertical_limit_wins = ? WHERE rider_id = ?');
+        const ids = new Set<number>([...longH.keys(), ...stam.keys(), ...vert.keys()]);
+        db.transaction(() => { for (const id of ids) upd.run(longH.get(id) ?? 0, stam.get(id) ?? 0, vert.get(id) ?? 0, id); })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('wave2_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('wave2-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+
     // --- The Cat: Podium (Top 3) mit Sturz-Event in derselben Etappe ---
     // Top-3-Zeilen ueberleben das Pruning (Punktevergabe), event_ids ist dort
     // hinterlegt (Sturz = Code "1"). Damit vollstaendig rekonstruierbar.
@@ -1955,6 +1986,10 @@ export class DatabaseService {
       ['clean_streak_best', 'INTEGER NOT NULL DEFAULT 0'],    // Iron Horse (Rekord)
       ['grand_tours_finished', 'INTEGER NOT NULL DEFAULT 0'], // Marathon Finisher
       ['multi_jersey_days', 'INTEGER NOT NULL DEFAULT 0'],    // Wardrobe Malfunction
+      // Welle 2 (Distanz/Hoehenmeter der Siegetappe).
+      ['long_haul_wins', 'INTEGER NOT NULL DEFAULT 0'],       // Long Haul Specialist (> 200 km)
+      ['stamina_wins', 'INTEGER NOT NULL DEFAULT 0'],         // Stamina Machine (> 240 km)
+      ['vertical_limit_wins', 'INTEGER NOT NULL DEFAULT 0'],  // Vertical Limit (> 4000 hm)
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
