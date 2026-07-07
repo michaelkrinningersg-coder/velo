@@ -1922,6 +1922,7 @@ export class RiderRepository {
     soClose: number;
     worldChampionRoadTitles: number; worldChampionIttTitles: number;
     euroChampionRoadTitles: number; euroChampionIttTitles: number;
+    nationalChampionRoadTitles: number; nationalChampionIttTitles: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
@@ -1932,6 +1933,7 @@ export class RiderRepository {
       peakPerformerWins: 0, yoyoRaces: 0,
       escapeToVictory: 0, podiumLockout: 0, jerseyStreakBest: 0, photoFinishWins: 0, soClose: 0,
       worldChampionRoadTitles: 0, worldChampionIttTitles: 0, euroChampionRoadTitles: 0, euroChampionIttTitles: 0,
+      nationalChampionRoadTitles: 0, nationalChampionIttTitles: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
@@ -1942,6 +1944,7 @@ export class RiderRepository {
       const hasWave7 = columnExists(this.db, 'rider_career_stats', 'peak_performer_wins');
       const hasWave9 = columnExists(this.db, 'rider_career_stats', 'escape_to_victory');
       const hasChampion = columnExists(this.db, 'rider_career_stats', 'world_champion_road_titles');
+      const hasNational = columnExists(this.db, 'rider_career_stats', 'national_champion_road_titles');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
@@ -1951,6 +1954,7 @@ export class RiderRepository {
          ${hasWave7 ? ', peak_performer_wins, yoyo_races' : ''}
          ${hasWave9 ? ', escape_to_victory, podium_lockout, jersey_streak_best, photo_finish_wins, so_close' : ''}
          ${hasChampion ? ', world_champion_road_titles, world_champion_itt_titles, euro_champion_road_titles, euro_champion_itt_titles' : ''}
+         ${hasNational ? ', national_champion_road_titles, national_champion_itt_titles' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1984,6 +1988,8 @@ export class RiderRepository {
         out.worldChampionIttTitles = c.world_champion_itt_titles ?? 0;
         out.euroChampionRoadTitles = c.euro_champion_road_titles ?? 0;
         out.euroChampionIttTitles = c.euro_champion_itt_titles ?? 0;
+        out.nationalChampionRoadTitles = c.national_champion_road_titles ?? 0;
+        out.nationalChampionIttTitles = c.national_champion_itt_titles ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
@@ -2044,21 +2050,35 @@ export class RiderRepository {
    */
   // Aktuell gehaltene WM/EM-Titel des Fahrers: je Disziplin gilt der Sieger der
   // jeweils juengsten Edition als regierender Meister (bis zur naechsten).
-  private getReigningChampionTitles(riderId: number): Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }> {
-    if (!tableExists(this.db, 'championship_titles')) {
-      return [];
+  private getReigningChampionTitles(riderId: number): Array<{ type: 'WM' | 'EM' | 'NAT'; discipline: 'ITT' | 'ROAD'; season: number }> {
+    const out: Array<{ type: 'WM' | 'EM' | 'NAT'; discipline: 'ITT' | 'ROAD'; season: number }> = [];
+    if (tableExists(this.db, 'championship_titles')) {
+      out.push(...(this.db.prepare(`
+        SELECT ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
+        FROM championship_titles ct
+        WHERE ct.rider_id = ?
+          AND ct.season = (
+            SELECT MAX(inner_ct.season)
+            FROM championship_titles inner_ct
+            WHERE inner_ct.championship_type = ct.championship_type
+              AND inner_ct.discipline = ct.discipline
+          )
+      `).all(riderId) as Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>));
     }
-    return this.db.prepare(`
-      SELECT ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
-      FROM championship_titles ct
-      WHERE ct.rider_id = ?
-        AND ct.season = (
-          SELECT MAX(inner_ct.season)
-          FROM championship_titles inner_ct
-          WHERE inner_ct.championship_type = ct.championship_type
-            AND inner_ct.discipline = ct.discipline
-        )
-    `).all(riderId) as Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
+    if (tableExists(this.db, 'national_champion_titles')) {
+      out.push(...(this.db.prepare(`
+        SELECT 'NAT' AS type, nct.discipline AS discipline, nct.season AS season
+        FROM national_champion_titles nct
+        WHERE nct.rider_id = ?
+          AND nct.season = (
+            SELECT MAX(inner_nct.season)
+            FROM national_champion_titles inner_nct
+            WHERE inner_nct.country_id IS nct.country_id
+              AND inner_nct.discipline = nct.discipline
+          )
+      `).all(riderId) as Array<{ type: 'NAT'; discipline: 'ITT' | 'ROAD'; season: number }>));
+    }
+    return out;
   }
 
   private buildHallOfFameStats(careerWins: number, riderId: number): RiderHallOfFameStats {

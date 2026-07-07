@@ -1094,6 +1094,8 @@ export interface RiderHallOfFameStats {
   worldChampionIttTitles: number;   // Weltmeister ITT
   euroChampionRoadTitles: number;   // Europameister (Strasse)
   euroChampionIttTitles: number;    // Europameister ITT
+  nationalChampionRoadTitles: number; // Nationaler Meister (Strasse)
+  nationalChampionIttTitles: number;  // Nationaler Meister ITT
 
   // Badge-Kennzahlen Welle 10 (rein abgeleitet).
   pointsPerfectionist: number;  // GT-Punktewertung ohne Etappensieg (Points Perfectionist)
@@ -1156,7 +1158,7 @@ export function isChampionshipCategory(categoryId?: number | null): boolean {
 }
 
 export interface ReigningChampionTitle {
-  type: 'WM' | 'EM';
+  type: 'WM' | 'EM' | 'NAT';
   discipline: 'ITT' | 'ROAD';
   season: number;
 }

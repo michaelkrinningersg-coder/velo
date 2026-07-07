@@ -520,15 +520,19 @@ function renderBroadcastRing(segments: Array<[string, number]>, label: string, i
 
 // Marker fuer regierende Welt-/Europameister. Eigene Signaturfarben:
 // Regenbogen-Rand (WM) bzw. Blau mit gelbem Euro-Stern (EM).
-export function renderReigningChampionChip(title: { type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD' }): string {
+export function renderReigningChampionChip(title: { type: 'WM' | 'EM' | 'NAT'; discipline: 'ITT' | 'ROAD' }): string {
   const suffix = title.discipline === 'ITT' ? ' ITT' : '';
   const base = "display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;";
   if (title.type === 'WM') {
     const label = `Weltmeister${suffix}`;
     return `<span title="Regierender ${esc(label)}" style="${base}color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);">🌈 ${esc(label)}</span>`;
   }
-  const label = `Europameister${suffix}`;
-  return `<span title="Regierender ${esc(label)}" style="${base}color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);">⭐ ${esc(label)}</span>`;
+  if (title.type === 'EM') {
+    const label = `Europameister${suffix}`;
+    return `<span title="Regierender ${esc(label)}" style="${base}color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);">⭐ ${esc(label)}</span>`;
+  }
+  const label = `Nationaler Meister${suffix}`;
+  return `<span title="Regierender ${esc(label)}" style="${base}color:#fed7aa;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);">🏅 ${esc(label)}</span>`;
 }
 
 export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
@@ -2899,6 +2903,8 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const worldChampionIttTitles = hof.worldChampionIttTitles ?? 0;
   const euroChampionRoadTitles = hof.euroChampionRoadTitles ?? 0;
   const euroChampionIttTitles = hof.euroChampionIttTitles ?? 0;
+  const nationalChampionRoadTitles = hof.nationalChampionRoadTitles ?? 0;
+  const nationalChampionIttTitles = hof.nationalChampionIttTitles ?? 0;
   // Welle 10 (rein abgeleitet).
   const pointsPerfectionist = hof.pointsPerfectionist ?? 0;
   const thirdWeekWonder = hof.thirdWeekWonder ?? 0;
@@ -3275,6 +3281,20 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       euroChampionIttTitles >= 1, HOF_STYLE_EURO,
       euroChampionIttTitles >= 1 ? `${euroChampionIttTitles.toLocaleString('de-DE')}× Europameister im Einzelzeitfahren` : 'Noch kein EM-ITT-Titel.',
       'EM-Einzelzeitfahren gewinnen', euroChampionIttTitles > 1 ? `${euroChampionIttTitles}×` : 'Europameister'),
+    {
+      key: 'nationalChampionRoad', name: 'Nationaler Meister', icon: HOF_ICON_JERSEY, description: 'Nationale-Meisterschaft-Titel (Straße)',
+      tier: resolveThresholdTier(nationalChampionRoadTitles, [1, 3, 5, 8, 12]),
+      detail: nationalChampionRoadTitles > 0 ? `${nationalChampionRoadTitles.toLocaleString('de-DE')} Titel` : '',
+      hover: `${nationalChampionRoadTitles.toLocaleString('de-DE')} nationale Straßen-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 nationalem Straßen-Meistertitel',
+    },
+    {
+      key: 'nationalChampionItt', name: 'Nationaler Meister ITT', icon: HOF_ICON_STOPWATCH, description: 'Nationale-Meisterschaft-Titel (ITT)',
+      tier: resolveThresholdTier(nationalChampionIttTitles, [1, 3, 5, 8, 12]),
+      detail: nationalChampionIttTitles > 0 ? `${nationalChampionIttTitles.toLocaleString('de-DE')} Titel` : '',
+      hover: `${nationalChampionIttTitles.toLocaleString('de-DE')} nationale Zeitfahr-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 nationalem Zeitfahr-Meistertitel',
+    },
     singleBadge('tdfWinner', 'TdF Winner', HOF_ICON_TROPHY, 'Tour de France gewonnen',
       tdfWins >= 1, classColorStyle('World Tour - Tour de France', 'TOUR DE FRANCE'),
       tdfWins >= 1 ? `${tdfWins.toLocaleString('de-DE')}× Tour de France gewonnen` : 'Noch keine Tour de France gewonnen.',
@@ -4164,6 +4184,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['worldChampionRoad', 'worldChampionItt', 'euroChampionRoad', 'euroChampionItt',
+   'nationalChampionRoad', 'nationalChampionItt',
    'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
