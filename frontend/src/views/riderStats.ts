@@ -2715,6 +2715,7 @@ const HOF_ICON_SPEED = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;"
 const HOF_ICON_ROCKET = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M13.5 2c3 .3 6 2.4 7.4 5.8-.4 3.6-2.6 6.4-5 8v3.4l-3 2.3v-4.2l-3-3-4.2.1v-3l3.4-3zM15 8.5a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM4 17c1-1 2.6-1 3.6 0S8.7 20 7.6 21c-.9.9-4.6 1.4-4.6 1.4s.5-3.7 1-4.4z"/></svg>`;
 const HOF_ICON_WINE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M7 2h10l-.6 6.2A5 5 0 0 1 13 12.9V19h3v2H8v-2h3v-6.1a5 5 0 0 1-3.4-4.7L7 2zm1.8 2 .2 2h6l.2-2H8.8z"/></svg>`;
 const HOF_ICON_LOOP = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 6 6 6 6 0 0 1-1 3.3l1.5 1.5A8 8 0 0 0 12 4zm0 14a6 6 0 0 1-6-6 6 6 0 0 1 1-3.3L5.5 7.2A8 8 0 0 0 12 20v3l4-4-4-4v3z"/></svg>`;
+const HOF_ICON_TRAIN = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3l1.6 2.4-.8.6L16 17h-2l-1 2h-2l-1-2H8l-1.8 3-.8-.6L7 17a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h-1zm0 4v4h5V6H6zm7 0v4h5V6h-5zM8.5 12a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2813,6 +2814,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const lieutenantPeakRank = hof.lieutenantPeakRank ?? null;
   const careerWinsRank = hof.careerWinsRank ?? hof.allTimeWinsRank ?? null;
   const yellowDaysRank = hof.yellowDaysRank ?? null;
+  const leadoutTrainRank = hof.leadoutTrainRank ?? null;
   // "Wilde" Kuriositaeten (Welle A).
   const defectsCount = hof.defects ?? 0;
   const doomedEscapes = hof.doomedEscapes ?? 0;
@@ -3493,6 +3495,15 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     rankBadge('recLieutenant', 'Ultimate Domestique', HOF_ICON_WRENCH, 'Leutnant-Rang', lieutenantPeakRank, 'der ewigen Leutnant-Bestwert-Liste'),
     rankBadge('recCareerWins', 'Peloton Legend', HOF_ICON_CROWN, 'Karrieresiege-Rang', careerWinsRank, 'der ewigen Siegerliste'),
     rankBadge('recYellowDays', 'Yellow Sovereign', HOF_ICON_JERSEY, 'Gelbtrikot-Tage-Rang', yellowDaysRank, 'der ewigen Gelbtrikot-Tage-Liste'),
+    {
+      key: 'leadoutTrain', name: 'Sprint Train', icon: HOF_ICON_TRAIN, description: 'Bester Team-Leadout',
+      tier: resolveRankTier(leadoutTrainRank),
+      detail: leadoutTrainRank != null ? `Platz ${leadoutTrainRank}` : '',
+      hover: leadoutTrainRank != null
+        ? `Beteiligt am ${leadoutTrainRank}. besten Team-Leadout aller Zeiten (Gold 1 · Silber 2 · Bronze 3 · Cyan 4–10)`
+        : 'Noch nicht unter den Top 10 der besten Team-Leadouts.',
+      requirement: 'Beteiligt an einem der 10 besten Team-Leadouts',
+    },
 
     // --- Kuriositaeten-Badges (Welle A) ---
     {
@@ -3629,7 +3640,7 @@ const HOF_GROUPS: string[][] = [
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing'],
   // 2. Ranglisten-Rekorde (All-Time)
   ['recCareerWins', 'recUciPoints', 'recYellowDays', 'recStageScores', 'recSpeedStage', 'recSpeedOneday',
-   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant'],
+   'recLeadout', 'recCounterAttacks', 'recSuperteam', 'recLieutenant', 'leadoutTrain'],
   // 3. Wertungen & Trikots
   ['maillotJaune', 'greenMachine', 'kingOfTheMountains', 'youngGun', 'pointsChampion', 'polkaDotKing', 'bestYoungRider'],
   // 4. Terrain & Spezialisierung

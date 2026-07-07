@@ -1047,6 +1047,7 @@ export interface RiderHallOfFameStats {
   lieutenantPeakRank: number | null;   // staerkster Leutnant (All-Time-Peak)
   careerWinsRank: number | null;       // Karrieresiege (Rang)
   yellowDaysRank: number | null;       // Tage im Gelben Trikot (Rang)
+  leadoutTrainRank: number | null;     // bester Team-Leadout, an dem der Fahrer beteiligt war (nur Top 10)
 
   // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
   defects: number;              // mechanische Defekte (Gremlin's Favourite)

@@ -1550,6 +1550,45 @@ export class RiderRepository {
   }
 
   /**
+   * Bester (niedrigster) All-Time-Rang eines Team-Leadouts, an dem der Fahrer
+   * beteiligt war — als Anfahrer (contributors_json) ODER als angefahrener
+   * Sprinter. Rangliste wie in "Statistiken & Rekorde" (Team-Leadout): nach
+   * leadout_bonus absteigend, dedupliziert je (Team, Sprinter, Anfahrer-Set).
+   * Nur die Top 10 sind relevant (Gold 1 · Silber 2 · Bronze 3 · Cyan 4-10);
+   * darunter/ausserhalb -> null.
+   */
+  private getBestLeadoutRank(riderId: number): number | null {
+    if (!tableExists(this.db, 'stage_leadouts')) return null;
+    let rows: Array<{ team_id: number; sprinter_id: number; contributors_json: string }>;
+    try {
+      rows = this.db.prepare(
+        'SELECT team_id, sprinter_id, contributors_json FROM stage_leadouts ORDER BY leadout_bonus DESC LIMIT 300'
+      ).all() as Array<{ team_id: number; sprinter_id: number; contributors_json: string }>;
+    } catch {
+      return null;
+    }
+    const seen = new Set<string>();
+    let rank = 0;
+    for (const row of rows) {
+      let contributorIds: number[] = [];
+      try {
+        contributorIds = (JSON.parse(row.contributors_json) as Array<{ riderId: number }>).map((c) => c.riderId);
+      } catch {
+        continue;
+      }
+      const key = `${row.team_id}:${row.sprinter_id}:${[...contributorIds].sort((a, b) => a - b).join(',')}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rank += 1;
+      if (rank > 10) break;
+      if (row.sprinter_id === riderId || contributorIds.includes(riderId)) {
+        return rank; // Zeilen absteigend sortiert -> erster Treffer ist der beste Rang.
+      }
+    }
+    return null;
+  }
+
+  /**
    * "Wilde" Kennzahlen fuer Kuriositaeten-Badges (Welle A, reine Auslese ohne
    * neues Tracking). Zaehler aus rider_career_stats/rider_season_stats sowie
    * sieg-basierte Groessen aus results_flat (rank-1-Zeilen ueberleben das
@@ -1707,11 +1746,13 @@ export class RiderRepository {
     const geography = this.getGeographyAchievements(riderId);
     const statRanks = this.getStatRecordRanks(riderId);
     const wild = this.getWildStats(riderId);
+    const leadoutTrainRank = this.getBestLeadoutRank(riderId);
 
     return {
       allTimeWins: careerWins,
       allTimeWinsRank: winsRank.rank,
       careerWinsRank: winsRank.rank,
+      leadoutTrainRank,
       ...statRanks,
       ...wild,
       rankedRiders: winsRank.rankedRiders,
