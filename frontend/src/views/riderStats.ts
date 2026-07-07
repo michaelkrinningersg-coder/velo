@@ -518,6 +518,19 @@ function renderBroadcastRing(segments: Array<[string, number]>, label: string, i
     </div>`;
 }
 
+// Marker fuer regierende Welt-/Europameister. Eigene Signaturfarben:
+// Regenbogen-Rand (WM) bzw. Blau mit gelbem Euro-Stern (EM).
+export function renderReigningChampionChip(title: { type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD' }): string {
+  const suffix = title.discipline === 'ITT' ? ' ITT' : '';
+  const base = "display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;";
+  if (title.type === 'WM') {
+    const label = `Weltmeister${suffix}`;
+    return `<span title="Regierender ${esc(label)}" style="${base}color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);">🌈 ${esc(label)}</span>`;
+  }
+  const label = `Europameister${suffix}`;
+  return `<span title="Regierender ${esc(label)}" style="${base}color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);">⭐ ${esc(label)}</span>`;
+}
+
 export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
   const resolvedCountryCode = payload?.countryCode ?? countryCode ?? null;
   const resolvedCountryFlag = resolvedCountryCode ? renderFlag(resolvedCountryCode) : countryFlag;
@@ -622,6 +635,9 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
         ${jerseyHtml}
         <div style="flex:1; min-width:220px;">
           ${identityLine}
+          ${(payload?.reigningChampionTitles ?? []).length
+            ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:7px;">${(payload!.reigningChampionTitles ?? []).map(renderReigningChampionChip).join('')}</div>`
+            : ''}
           <div style="font-size:15px; font-weight:700; color:#e2e8f0;">${esc(resolvedRoleName)}</div>
           <div style="display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;">${pills.join('')}</div>
         </div>

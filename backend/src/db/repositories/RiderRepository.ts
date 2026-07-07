@@ -796,6 +796,7 @@ export class RiderRepository {
       currentSeasonBreakawayAttempts,
       careerWins,
       hallOfFame,
+      reigningChampionTitles: this.getReigningChampionTitles(rider.id),
       pointsByTerrain,
       pointsByRaceFormat,
       careerRaceDaysBySeason,
@@ -1193,6 +1194,7 @@ export class RiderRepository {
       currentSeasonBreakawayAttempts,
       careerWins,
       hallOfFame,
+      reigningChampionTitles: this.getReigningChampionTitles(rider.id),
       pointsByTerrain: emptyRiderStatsPointsByTerrain(),
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
@@ -2033,6 +2035,25 @@ export class RiderRepository {
    * die Siegerliste. Beide Aggregate laufen ueber die kleine career-stats-
    * Tabelle und sind fuer die Ladezeit unkritisch.
    */
+  // Aktuell gehaltene WM/EM-Titel des Fahrers: je Disziplin gilt der Sieger der
+  // jeweils juengsten Edition als regierender Meister (bis zur naechsten).
+  private getReigningChampionTitles(riderId: number): Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }> {
+    if (!tableExists(this.db, 'championship_titles')) {
+      return [];
+    }
+    return this.db.prepare(`
+      SELECT ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
+      FROM championship_titles ct
+      WHERE ct.rider_id = ?
+        AND ct.season = (
+          SELECT MAX(inner_ct.season)
+          FROM championship_titles inner_ct
+          WHERE inner_ct.championship_type = ct.championship_type
+            AND inner_ct.discipline = ct.discipline
+        )
+    `).all(riderId) as Array<{ type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
+  }
+
   private buildHallOfFameStats(careerWins: number, riderId: number): RiderHallOfFameStats {
     const winsRank = this.getAllTimeWinsRank(careerWins);
 

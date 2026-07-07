@@ -1145,6 +1145,12 @@ export interface RiderHallOfFameStats {
   multiJerseyDays: number;      // Tage mit mehreren Fuehrungstrikots (Wardrobe Malfunction)
 }
 
+export interface ReigningChampionTitle {
+  type: 'WM' | 'EM';
+  discipline: 'ITT' | 'ROAD';
+  season: number;
+}
+
 export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
@@ -1160,6 +1166,8 @@ export interface RiderStatsPayload {
   seasonFormPhase: RiderSeasonFormPhase;
   formBonus: number;
   raceFormBonus: number;
+  /** Aktuell gehaltene WM/EM-Titel (regierender Meister bis zur naechsten Edition). */
+  reigningChampionTitles?: ReigningChampionTitle[];
   program: RaceProgram | null;
   programRaces: Race[];
   isUnavailable: boolean;
