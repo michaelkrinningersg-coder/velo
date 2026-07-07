@@ -160,10 +160,13 @@ export const CHAMPIONSHIP_RACE_DEFS: ChampionshipRaceDef[] = [
   },
 ];
 
-// Cro Race muss dem WM-Fenster (21./23.09.) weichen und wird einen Tag nach
-// hinten geschoben.
+// Cro Race muss dem WM-Fenster (21./23.09.) weichen. Es startet urspruenglich am
+// 22.09. und haette damit eine Etappe auf dem WM-Strassentermin (23.09.). Daher
+// wird es so verschoben, dass es ERST NACH dem WM-Strassenrennen beginnt
+// (24.09.), womit der 23.09. komplett frei bleibt.
 export const CRO_RACE_NAME = 'CRO Race';
 export const CRO_RACE_ORIGINAL_START_DAY = 22; // urspruenglich 22.09.
+export const CRO_RACE_TARGET_START_DAY = 24; // nach WM-Strasse (23.09.)
 
 // Streckenprofil-Rotation des Strassenrennens.
 export const CHAMPIONSHIP_ROAD_PROFILES: ChampionshipRoadProfile[] = [

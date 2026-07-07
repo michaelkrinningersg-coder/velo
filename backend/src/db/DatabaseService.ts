@@ -14,6 +14,7 @@ import {
   CHAMPIONSHIP_RACE_DEFS,
   CRO_RACE_NAME,
   CRO_RACE_ORIGINAL_START_DAY,
+  CRO_RACE_TARGET_START_DAY,
   championshipStageProfile,
 } from '../simulation/championships';
 import {
@@ -894,12 +895,15 @@ export class DatabaseService {
       return;
     }
     const startDay = Number.parseInt(croRace.start_date.slice(8, 10), 10);
-    if (startDay !== CRO_RACE_ORIGINAL_START_DAY) {
-      return; // bereits verschoben
+    // Nur aus dem Original- (22.) oder dem frueheren Zwischenstand (23.) auf den
+    // Zieltag (24.) schieben; ist es bereits verschoben, nichts tun.
+    if (startDay < CRO_RACE_ORIGINAL_START_DAY || startDay >= CRO_RACE_TARGET_START_DAY) {
+      return;
     }
+    const deltaDays = CRO_RACE_TARGET_START_DAY - startDay;
     const shift = (iso: string): string => {
       const [y, m, d] = iso.split('-').map((value) => Number(value));
-      const shifted = new Date(Date.UTC(y, m - 1, d + 1));
+      const shifted = new Date(Date.UTC(y, m - 1, d + deltaDays));
       const yy = shifted.getUTCFullYear();
       const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0');
       const dd = String(shifted.getUTCDate()).padStart(2, '0');
