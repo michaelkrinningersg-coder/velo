@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
+import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -420,6 +421,14 @@ export class GameStateService {
       } catch (e) {
         console.error('Failed to run post-season VACUUM:', e);
       }
+    }
+
+    // Nationale Meisterschaften erzeugen, sobald der 01.06. erreicht ist —
+    // auch mitten im Spiel (nicht nur beim Laden). Idempotent.
+    try {
+      ensureNationalChampionships(this.db);
+    } catch (e) {
+      console.error('Nationale Meisterschaften konnten nicht erzeugt werden:', e);
     }
 
     // advanceDay stellt den kompletten Tageszustand her (Leutnant-Peaks, Load-
