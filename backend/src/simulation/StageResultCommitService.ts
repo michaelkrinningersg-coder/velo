@@ -327,7 +327,7 @@ export class StageResultCommitService {
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
-    const sanitizedEntries = [...entries]
+    const mappedEntries = [...entries]
       .filter((entry: any) => Number.isFinite(entry.riderId))
       .map((entry: any) => ({
         riderId: entry.riderId,
@@ -343,20 +343,45 @@ export class StageResultCommitService {
       }))
       .sort((left: any, right: any) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
-    if (sanitizedEntries.length !== riders.length) {
-      throw new Error('Die Live-Simulation muss genau einen Zielstatus für jeden Starter übergeben.');
-    }
-
+    // Ergebnisse gegen die zum Commit-Zeitpunkt gueltige Startliste (getStageRiders)
+    // abgleichen, statt bei jeder Abweichung das komplette Etappenergebnis zu
+    // verwerfen. Zwischen Bootstrap (Startliste, auf der die Live-/Instant-Sim lief)
+    // und Commit kann sich die Liste um einzelne Fahrer unterscheiden — z. B. wird ein
+    // Fahrer krankheits-/verletzungsbedingt (auch ausserhalb des Rennens) oder wegen
+    // Erschoepfung nachtraeglich auf DNS gesetzt und faellt aus getStageRiders. Frueher
+    // brach der Commit dann mit "genau einen Zielstatus je Starter" ab (haeufig auf
+    // spaeten GT-Etappen mit viel OTL/DNF/DNS). Reconciliation:
+    // - Ergebnisse fuer Fahrer, die nicht (mehr) auf der Startliste stehen, verwerfen.
+    // - Starter ohne uebergebenes Ergebnis als DNF ergaenzen (kein Sim-Ergebnis).
     const seenRiderIds = new Set<number>();
-    for (const entry of sanitizedEntries) {
-      if (seenRiderIds.has(entry.riderId)) {
-        throw new Error(`Live-Ergebnis für Fahrer ${entry.riderId} wurde doppelt übergeben.`);
+    const sanitizedEntries: typeof mappedEntries = [];
+    for (const entry of mappedEntries) {
+      if (!rosterById.has(entry.riderId) || seenRiderIds.has(entry.riderId)) {
+        continue;
       }
       if (entry.finishStatus === 'finished' && entry.finishTimeSeconds == null) {
         throw new Error(`Fahrer ${entry.riderId} wurde als Finisher ohne Zielzeit uebergeben.`);
       }
       seenRiderIds.add(entry.riderId);
+      sanitizedEntries.push(entry);
     }
+    for (const rider of riders) {
+      if (seenRiderIds.has(rider.id)) {
+        continue;
+      }
+      seenRiderIds.add(rider.id);
+      sanitizedEntries.push({
+        riderId: rider.id,
+        finishStatus: 'dnf',
+        isBreakaway: false,
+        statusReason: 'Nicht simuliert',
+        finishTimeSeconds: null,
+        photoFinishScore: 0,
+        leadoutRiderId: null,
+        leadoutBonus: null,
+      });
+    }
+    sanitizedEntries.sort((left: any, right: any) => (left.finishTimeSeconds ?? Number.POSITIVE_INFINITY) - (right.finishTimeSeconds ?? Number.POSITIVE_INFINITY) || (right.photoFinishScore ?? 0) - (left.photoFinishScore ?? 0) || left.riderId - right.riderId);
 
     const finishedEntries = sanitizedEntries.filter((entry: any) => entry.finishStatus === 'finished');
     const dnfEntries = sanitizedEntries.filter((entry: any) => entry.finishStatus === 'dnf');
