@@ -1591,13 +1591,25 @@ export class RiderRepository {
     if (!tableExists(this.db, 'results_flat') || !tableExists(this.db, 'sta_country')) {
       return empty;
     }
+    // Es zaehlen alle Siege im jeweiligen Land: Etappensiege und Eintagesrennen
+    // (result_type_id = 1) sowie GC-Gesamtsiege von Rundfahrten
+    // (result_type_id = 2). GC-Zwischenwertungen tragen aber ebenfalls rank = 1
+    // fuer den Fuehrenden nach jeder Etappe — daher wird der Gesamtsieg nur an
+    // der Schlussetappe (hoechste stage_number des Rennens) gewertet. Bei
+    // Eintagesrennen fallen Etappen- und GC-Zeile auf dasselbe Land; die
+    // Set-Aggregation weiter unten entdoppelt das sauber.
     const rows = this.db.prepare(`
       SELECT substr(s.date, 1, 4) AS yr, co.continent AS continent, co.name AS country
       FROM results_flat rf
       JOIN stages s ON s.id = rf.stage_id
       JOIN races ra ON ra.id = s.race_id
       JOIN sta_country co ON co.id = ra.country_id
-      WHERE rf.rider_id = ? AND rf.rank = 1 AND rf.result_type_id = 1
+      WHERE rf.rider_id = ? AND rf.rank = 1 AND (
+        rf.result_type_id = 1
+        OR (rf.result_type_id = 2 AND s.stage_number = (
+          SELECT MAX(s2.stage_number) FROM stages s2 WHERE s2.race_id = ra.id
+        ))
+      )
     `).all(riderId) as Array<{ yr: string; continent: string | null; country: string | null }>;
 
     const continentsByYear = new Map<string, Set<string>>();
