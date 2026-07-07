@@ -7,6 +7,13 @@ import { TeamRepository } from "../db/repositories/TeamRepository";
 
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
 import { isWinterBreak, tableExists } from '../db/mappers';
+import {
+  CHAMPIONSHIP_FATIGUE_THRESHOLD,
+  championshipRestrictsToEurope,
+  getChampionshipCategoryDef,
+  isChampionshipCategory,
+  kaderSizeForRank,
+} from './championships';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
   1: 'WorldTour',
@@ -1193,7 +1200,135 @@ export function applyRaceRosterSelection(db: Database.Database, repo: any, race:
   return repo.getStageRiders(stage.id);
 }
 
+// Nominierung fuer Welt-/Europameisterschaften. Fahrer treten fuer ihre Laender
+// an; der Kader wird komplett getrennt vom Rennprogramm hart gesetzt.
+//
+//   * Nationenwertung der laufenden Saison (Summe season_point_events je Land).
+//     Fuer die EM ausschliesslich europaeische Laender.
+//   * Kadergroesse nach Rang (RANK() => Gleichstand: beide Nationen erhalten die
+//     hoehere Anzahl).
+//   * Ausschluesse (alle Laender gleich): kein Team, in "fall"-Form, kombinierte
+//     Ermuedung >= Schwelle (WM 8 / EM 10), krank/verletzt bzw. gesperrt.
+//   * Reihenfolge je Disziplin: ITT nach Zeitfahrskill, Strasse nach Gesamtstaerke.
+export function buildChampionshipRoster(db: Database.Database, repo: any, race: Race, _stage: Stage): Rider[] {
+  const def = getChampionshipCategoryDef(race.categoryId);
+  if (!def) {
+    return [];
+  }
+  const season = repo.getCurrentSeason();
+  const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.type];
+  const europeOnly = championshipRestrictsToEurope(def.type);
+
+  // 1. Nationenwertung -> Rang je Land (bei Gleichstand gleicher Rang).
+  const rankRows = db.prepare(`
+    WITH nation_points AS (
+      SELECT country.id AS country_id, SUM(spe.points_awarded) AS pts
+      FROM season_point_events spe
+      JOIN riders r ON r.id = spe.rider_id
+      JOIN sta_country country ON country.id = r.country_id
+      WHERE spe.season = ?${europeOnly ? " AND country.continent = 'Europe'" : ''}
+      GROUP BY country.id
+      HAVING SUM(spe.points_awarded) > 0
+    )
+    SELECT country_id, RANK() OVER (ORDER BY pts DESC) AS rank
+    FROM nation_points
+  `).all(season) as Array<{ country_id: number; rank: number }>;
+  const rankByCountry = new Map<number, number>(rankRows.map((row) => [row.country_id, row.rank]));
+  if (rankByCountry.size === 0) {
+    return [];
+  }
+
+  // 2. Tagesaktueller Zustand (Gesundheit + kombinierte Ermuedung).
+  const stateRows = tableExists(db, 'rider_daily_state')
+    ? (db.prepare(`
+        SELECT rider_id,
+               health_status,
+               unavailable_until,
+               (short_term_fatigue + long_term_fatigue_decayable + long_term_fatigue_locked) AS combined_fatigue
+        FROM rider_daily_state
+      `).all() as Array<{ rider_id: number; health_status: string; unavailable_until: string | null; combined_fatigue: number }>)
+    : [];
+  const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
+
+  // 3. Waehlbare Fahrer je Land sammeln.
+  const eligibleByCountry = new Map<number, Rider[]>();
+  for (const rider of repo.getRiders() as Rider[]) {
+    if (rider.activeTeamId == null || rider.countryId == null) {
+      continue;
+    }
+    if (!rankByCountry.has(rider.countryId)) {
+      continue; // Land nicht in der (ggf. europaeischen) Nationenwertung
+    }
+    if (rider.seasonFormPhase === 'fall') {
+      continue;
+    }
+    const state = stateByRider.get(rider.id);
+    if (state) {
+      if (state.health_status !== 'healthy') continue;
+      if (state.unavailable_until) continue;
+      if (state.combined_fatigue >= fatigueThreshold) continue;
+    }
+    const bucket = eligibleByCountry.get(rider.countryId) ?? [];
+    bucket.push(rider);
+    eligibleByCountry.set(rider.countryId, bucket);
+  }
+
+  // 4. Je Land nach Disziplin sortieren und auf die Kadergroesse kuerzen.
+  const selected: Rider[] = [];
+  for (const [countryId, riders] of eligibleByCountry) {
+    const size = kaderSizeForRank(rankByCountry.get(countryId)!);
+    if (size <= 0) {
+      continue;
+    }
+    riders.sort((left, right) =>
+      def.discipline === 'ITT'
+        ? (right.skills?.timeTrial ?? 0) - (left.skills?.timeTrial ?? 0)
+        : right.overallRating - left.overallRating,
+    );
+    selected.push(...riders.slice(0, size));
+  }
+  return selected;
+}
+
+function applyChampionshipEntries(
+  db: Database.Database,
+  repo: any,
+  race: Race,
+  stage: Stage,
+  forceRebuild: boolean,
+): Rider[] {
+  const existing = repo.getRaceRiders(race.id);
+  if (!forceRebuild && existing.length > 0) {
+    repo.ensureStageEntries(stage);
+    return repo.getStageRiders(stage.id);
+  }
+
+  const selected = buildChampionshipRoster(db, repo, race, stage);
+  const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
+  const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
+  const insertEntry = db.prepare(
+    'INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)',
+  );
+
+  db.transaction(() => {
+    deleteStageEntries.run(race.id);
+    deleteRaceEntries.run(race.id);
+    for (const rider of selected) {
+      if (rider.activeTeamId == null) {
+        continue;
+      }
+      insertEntry.run(race.id, rider.activeTeamId, rider.id);
+    }
+  })();
+
+  repo.ensureStageEntries(stage);
+  return repo.getStageRiders(stage.id);
+}
+
 export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
+  if (isChampionshipCategory(race.categoryId)) {
+    return applyChampionshipEntries(db, repo, race, stage, false);
+  }
   const existingEntries = repo.getRaceRiders(race.id);
   if (existingEntries.length > 0) {
     if (race.isStageRace) {
@@ -1224,6 +1359,9 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
 }
 
 export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
+  if (isChampionshipCategory(race.categoryId)) {
+    return applyChampionshipEntries(db, repo, race, stage, true);
+  }
   const selected = buildRaceRoster(db, repo, race, stage);
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
