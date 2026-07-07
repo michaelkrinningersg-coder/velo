@@ -1512,20 +1512,23 @@ export class RiderRepository {
     let fullMoonWins = 0;
     let catPodiums = 0;
     let ghostTop10 = 0;
+    let nationExpressCountries = 0;
 
     if (tableExists(this.db, 'rider_career_stats')) {
       const hasBunch = columnExists(this.db, 'rider_career_stats', 'bunch_sprint_wins');
       const hasMoon = columnExists(this.db, 'rider_career_stats', 'full_moon_wins');
       const hasCat = columnExists(this.db, 'rider_career_stats', 'cat_podiums');
       const hasGhost = columnExists(this.db, 'rider_career_stats', 'ghost_top10');
+      const hasNation = columnExists(this.db, 'rider_career_stats', 'raced_country_ids');
       const own = this.db.prepare(`
         SELECT race_days, breakaway_kms, breakaway_attempts, attacks, total_km
                ${hasBunch ? ', bunch_sprint_wins' : ''}
                ${hasMoon ? ', full_moon_wins' : ''}
                ${hasCat ? ', cat_podiums' : ''}
                ${hasGhost ? ', ghost_top10' : ''}
+               ${hasNation ? ', raced_country_ids' : ''}
         FROM rider_career_stats WHERE rider_id = ?
-      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number; attacks: number; total_km: number; bunch_sprint_wins?: number; full_moon_wins?: number; cat_podiums?: number; ghost_top10?: number } | undefined;
+      `).get(riderId) as { race_days: number; breakaway_kms: number; breakaway_attempts: number; attacks: number; total_km: number; bunch_sprint_wins?: number; full_moon_wins?: number; cat_podiums?: number; ghost_top10?: number; raced_country_ids?: string | null } | undefined;
       raceDays = own?.race_days ?? 0;
       breakawayKms = own?.breakaway_kms ?? 0;
       breakawayAttempts = own?.breakaway_attempts ?? 0;
@@ -1535,6 +1538,11 @@ export class RiderRepository {
       fullMoonWins = own?.full_moon_wins ?? 0;
       catPodiums = own?.cat_podiums ?? 0;
       ghostTop10 = own?.ghost_top10 ?? 0;
+      if (own?.raced_country_ids) {
+        nationExpressCountries = new Set(
+          String(own.raced_country_ids).split(',').map((t) => Number(t)).filter((n) => Number.isInteger(n))
+        ).size;
+      }
 
       const rankRow = this.db.prepare(`
         SELECT
@@ -1571,6 +1579,7 @@ export class RiderRepository {
       fullMoonWins,
       catPodiums,
       ghostTop10,
+      nationExpressCountries,
       ...special,
       ...loyalty,
       ...geography,
@@ -1586,8 +1595,9 @@ export class RiderRepository {
   private getGeographyAchievements(riderId: number): {
     worldCitizenBestYear: number; continentsWon: string[];
     mediterraneanMaster: boolean; scandinavianMaster: boolean; beneluxMaster: boolean;
+    countriesWonCount: number; homeSoilWins: number;
   } {
-    const empty = { worldCitizenBestYear: 0, continentsWon: [] as string[], mediterraneanMaster: false, scandinavianMaster: false, beneluxMaster: false };
+    const empty = { worldCitizenBestYear: 0, continentsWon: [] as string[], mediterraneanMaster: false, scandinavianMaster: false, beneluxMaster: false, countriesWonCount: 0, homeSoilWins: 0 };
     if (!tableExists(this.db, 'results_flat') || !tableExists(this.db, 'sta_country')) {
       return empty;
     }
@@ -1628,6 +1638,25 @@ export class RiderRepository {
     for (const set of continentsByYear.values()) {
       if (set.size > worldCitizenBestYear) worldCitizenBestYear = set.size;
     }
+    // Home Soil Hero: Siege im Heimatland des Fahrers. Saubere Sieg-Semantik
+    // (Etappen-/Eintagessiege + GC-Gesamtsiege an der Schlussetappe) ohne die
+    // Doppelzaehlung von Eintagesrennen aus der Set-Query oben.
+    let homeSoilWins = 0;
+    const homeRow = this.db.prepare('SELECT country_id AS cid FROM riders WHERE id = ?').get(riderId) as { cid: number | null } | undefined;
+    if (homeRow?.cid != null) {
+      const hs = this.db.prepare(`
+        SELECT COUNT(*) AS c
+        FROM results_flat rf
+        JOIN stages s ON s.id = rf.stage_id
+        JOIN races ra ON ra.id = s.race_id
+        WHERE rf.rider_id = ? AND rf.rank = 1 AND ra.country_id = ? AND (
+          rf.result_type_id = 1
+          OR (rf.result_type_id = 2 AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages)
+        )
+      `).get(riderId, homeRow.cid) as { c: number };
+      homeSoilWins = hs.c;
+    }
+
     const won = (c: string) => countriesWon.has(c);
     return {
       worldCitizenBestYear,
@@ -1635,6 +1664,8 @@ export class RiderRepository {
       mediterraneanMaster: won('Portugal') && won('Spain') && won('France') && won('Italy'),
       scandinavianMaster: won('Denmark') && won('Norway'),
       beneluxMaster: won('Belgium') && won('Netherlands') && won('Luxembourg'),
+      countriesWonCount: countriesWon.size,
+      homeSoilWins,
     };
   }
 
@@ -1684,8 +1715,9 @@ export class RiderRepository {
    */
   private getSpecialRaceAchievements(riderId: number): {
     wonAllGrandTours: boolean; wonAllMonuments: boolean; wonCobbleKing: boolean; wonArdennenKing: boolean;
+    tourOfNationHome: boolean;
   } {
-    const empty = { wonAllGrandTours: false, wonAllMonuments: false, wonCobbleKing: false, wonArdennenKing: false };
+    const empty = { wonAllGrandTours: false, wonAllMonuments: false, wonCobbleKing: false, wonArdennenKing: false, tourOfNationHome: false };
     if (!tableExists(this.db, 'results') && !tableExists(this.db, 'results_flat')) {
       return empty;
     }
@@ -1707,11 +1739,26 @@ export class RiderRepository {
     const grandTours = ['Tour de France', "Giro d'Italia", 'La Vuelta Ciclista a España'];
     const monuments = ['Milano-Sanremo', 'Ronde van Vlaanderen ME', 'Paris-Roubaix Hauts-de-France', 'Liège-Bastogne-Liège', 'Il Lombardia'];
 
+    // Tour of Nation: Gesamtsieg bei der Heim-Grand-Tour — franzoesischer
+    // Fahrer bei der Tour de France, italienischer beim Giro, spanischer bei
+    // der Vuelta. Heimatland ueber die Landeszuordnung des Fahrers.
+    const homeCountry = this.db.prepare(
+      'SELECT co.name AS name FROM riders r JOIN sta_country co ON co.id = r.country_id WHERE r.id = ?'
+    ).get(riderId) as { name: string | null } | undefined;
+    const homeGtByCountry: Record<string, string> = {
+      France: 'Tour de France',
+      Italy: "Giro d'Italia",
+      Spain: 'La Vuelta Ciclista a España',
+    };
+    const homeGt = homeCountry?.name ? homeGtByCountry[homeCountry.name] : undefined;
+    const tourOfNationHome = homeGt ? has(homeGt) : false;
+
     return {
       wonAllGrandTours: grandTours.every(has),
       wonAllMonuments: monuments.every(has),
       wonCobbleKing: has('Ronde van Vlaanderen ME') && has('Paris-Roubaix Hauts-de-France'),
       wonArdennenKing: has('Amstel Gold Race') && has('La Flèche Wallonne') && has('Liège-Bastogne-Liège'),
+      tourOfNationHome,
     };
   }
 

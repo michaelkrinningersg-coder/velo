@@ -1741,6 +1741,65 @@ export class DatabaseService {
     } catch (e) {
       console.error('ghost-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
+
+    // --- Nation Express: verschiedene Laender mit Rennteilnahme ---
+    // Seed aus der besten verfuegbaren Quelle: den Teilnahmelisten
+    // (race_entries_compact, vollstaendig fuer die erhaltenen Saisons) und
+    // ergaenzend results_flat (deckt aeltere Sieg-/Punktespuren ausserhalb der
+    // Compact-Retention ab). Ab dem Seed wird der Zaehler beim Commit gepflegt.
+    try {
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'nation_express_backfill_v1'`).get() as { value: string } | undefined;
+      if (!flag && columnExists(db, 'rider_career_stats', 'raced_country_ids') && tableExists(db, 'races')) {
+        const byRider = new Map<number, Set<number>>();
+        const add = (rid: number | null | undefined, cid: number | null | undefined) => {
+          if (rid == null || cid == null) return;
+          let s = byRider.get(rid);
+          if (!s) { s = new Set<number>(); byRider.set(rid, s); }
+          s.add(cid);
+        };
+        const countryByRace = new Map<number, number>();
+        for (const r of db.prepare('SELECT id, country_id FROM races').all() as Array<{ id: number; country_id: number | null }>) {
+          if (r.country_id != null) countryByRace.set(r.id, r.country_id);
+        }
+        // Quelle 1: Teilnahmelisten [[team_id, rider_id], ...] pro Rennen.
+        if (tableExists(db, 'race_entries_compact')) {
+          for (const row of db.prepare('SELECT race_id, payload FROM race_entries_compact').all() as Array<{ race_id: number; payload: string }>) {
+            const cid = countryByRace.get(row.race_id);
+            if (cid == null) continue;
+            try {
+              const arr = JSON.parse(row.payload);
+              if (Array.isArray(arr)) for (const e of arr) { if (Array.isArray(e)) add(e[1] as number, cid); }
+            } catch { /* defektes Payload ueberspringen */ }
+          }
+        }
+        // Quelle 2: results_flat (aeltere erhaltene Spuren).
+        if (tableExists(db, 'results_flat') && tableExists(db, 'stages')) {
+          for (const r of db.prepare(`
+            SELECT DISTINCT rf.rider_id AS rid, ra.country_id AS cid
+            FROM results_flat rf
+            JOIN stages s ON s.id = rf.stage_id
+            JOIN races ra ON ra.id = s.race_id
+            WHERE rf.rider_id IS NOT NULL AND ra.country_id IS NOT NULL
+          `).all() as Array<{ rid: number; cid: number }>) {
+            add(r.rid, r.cid);
+          }
+        }
+        const existing = db.prepare('SELECT rider_id, raced_country_ids FROM rider_career_stats').all() as Array<{ rider_id: number; raced_country_ids: string | null }>;
+        const upd = db.prepare('UPDATE rider_career_stats SET raced_country_ids = ? WHERE rider_id = ?');
+        db.transaction(() => {
+          for (const row of existing) {
+            const s = byRider.get(row.rider_id) ?? new Set<number>();
+            if (row.raced_country_ids) {
+              for (const tok of String(row.raced_country_ids).split(',')) { const n = Number(tok); if (Number.isInteger(n)) s.add(n); }
+            }
+            if (s.size > 0) upd.run([...s].sort((a, b) => a - b).join(','), row.rider_id);
+          }
+        })();
+        db.prepare(`INSERT INTO career_meta (key, value) VALUES ('nation_express_backfill_v1', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+      }
+    } catch (e) {
+      console.error('nation-express-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
   }
 
   private ensureRiderCategoryStatsSchema(db: Database.Database): void {
@@ -1800,6 +1859,11 @@ export class DatabaseService {
       ['full_moon_wins', 'INTEGER NOT NULL DEFAULT 0'],
       ['cat_podiums', 'INTEGER NOT NULL DEFAULT 0'],
       ['ghost_top10', 'INTEGER NOT NULL DEFAULT 0'],
+      // Nation Express: serialisierte, aufsteigend sortierte Liste der
+      // Laender-IDs, in denen der Fahrer an einem Rennen teilgenommen hat
+      // (kommagetrennt). Persistenter Akkumulator, da Teilnahme-Rohdaten dem
+      // Saison-Pruning zum Opfer fallen.
+      ['raced_country_ids', 'TEXT'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

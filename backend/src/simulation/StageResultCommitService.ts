@@ -2016,6 +2016,34 @@ export class StageResultCommitService {
           VALUES (?, ?, ?)
         `).run(race.id, currentSeason, JSON.stringify(compactRaceEntries));
 
+        // Nation Express: das Land dieses Rennens fuer alle Teilnehmer in den
+        // persistenten Laender-Set aufnehmen. Muss hier geschehen, solange die
+        // vollstaendige Teilnehmerliste (raceEntries) noch vorliegt — die
+        // Rohdaten werden gleich darunter geloescht bzw. saisonal geprunt.
+        if (columnExists(this.db, 'rider_career_stats', 'raced_country_ids')) {
+          const countryRow = this.db.prepare('SELECT country_id AS cid FROM races WHERE id = ?').get(race.id) as { cid: number | null } | undefined;
+          const cid = countryRow?.cid ?? null;
+          const participants = raceEntries.map((r: any) => r.rider_id).filter((x: any) => x != null) as number[];
+          if (cid != null && participants.length > 0) {
+            const ph = participants.map(() => '?').join(',');
+            const current = this.db.prepare(
+              `SELECT rider_id AS rid, raced_country_ids AS v FROM rider_career_stats WHERE rider_id IN (${ph})`
+            ).all(...participants) as Array<{ rid: number; v: string | null }>;
+            const curMap = new Map(current.map((r) => [r.rid, r.v]));
+            const writeStmt = this.db.prepare('UPDATE rider_career_stats SET raced_country_ids = ? WHERE rider_id = ?');
+            for (const rid of participants) {
+              if (!curMap.has(rid)) continue; // ohne Karriere-Datensatz nicht pflegbar
+              const set = new Set<number>();
+              const v = curMap.get(rid);
+              if (v) for (const tok of String(v).split(',')) { const n = Number(tok); if (Number.isInteger(n)) set.add(n); }
+              if (!set.has(cid)) {
+                set.add(cid);
+                writeStmt.run([...set].sort((a, b) => a - b).join(','), rid);
+              }
+            }
+          }
+        }
+
         this.db.prepare(`
           DELETE FROM active_race_entries
           WHERE race_id = ?

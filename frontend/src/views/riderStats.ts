@@ -2709,6 +2709,8 @@ const HOF_ICON_MOON = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" 
 const HOF_ICON_OLIVE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 20c6 0 12-4 16-12 0 0-9-1-13 5-2 3-3 7-3 7z" opacity=".55"/><ellipse cx="15" cy="7" rx="1.6" ry="2.2" transform="rotate(35 15 7)"/><ellipse cx="11" cy="11" rx="1.6" ry="2.2" transform="rotate(35 11 11)"/><ellipse cx="7.5" cy="15" rx="1.6" ry="2.2" transform="rotate(35 7.5 15)"/></svg>`;
 const HOF_ICON_GHOST = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 2a8 8 0 0 0-8 8v11l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V10a8 8 0 0 0-8-8zm-3 8a1.3 1.3 0 1 1 0-2.6A1.3 1.3 0 0 1 9 10zm6 0a1.3 1.3 0 1 1 0-2.6A1.3 1.3 0 0 1 15 10z"/></svg>`;
 const HOF_ICON_CAT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M3 3l3.5 3H10l3.5-3v4.5C15.4 8.6 17 10.9 17 13.5V21H5v-7.5C5 10.9 6.6 8.6 8.5 7.5L3 3zm5.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm5 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM11 15l-1 1h2l-1-1z"/></svg>`;
+const HOF_ICON_SUITCASE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M9 4V2h6v2h3a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-1v-1H7v1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3zm2 0h2V3.5h-2V4zM7 7v11h1V7H7zm9 0v11h1V7h-1zm-6 0v11h4V7h-4z"/></svg>`;
+const HOF_ICON_PASSPORT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h11a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm5.5 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 1.6a2.4 2.4 0 0 1 2.3 1.7h-1.1a4.7 4.7 0 0 0-.5-1.4c.7.3 1.3.7 1.3.7zm-1.6.3c-.2.3-.4.8-.5 1.4H8.3a2.4 2.4 0 0 1 1.6-1.4zM8 10.2c0-.3 0-.5.1-.7h1.2c0 .5.1 1 .2 1.4H8.3a2.4 2.4 0 0 1-.3-.7zm1.9 1.9c.1.6.3 1.1.5 1.4a2.4 2.4 0 0 1-1.6-1.4h1.1zm1.6 1.7c-.3-.3-.5-.9-.6-1.7h1.3c-.1.8-.4 1.4-.7 1.7zm.7-3.3h-1.4c0-.4-.1-.9 0-1.4h1.3c.1.5.1 1 .1 1.4zm.9 1.6h1.1a2.4 2.4 0 0 1-1.6 1.4c.2-.3.4-.8.5-1.4zm.3-1.6c.1-.4.1-.9.1-1.4h1.2c.1.2.1.4.1.7 0 .2-.1.5-.2.7h-1.3zM9 17h5v1.5H9V17z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2860,6 +2862,10 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const continentsWon = hof.continentsWon ?? [];
   const worldCitizenBestYear = hof.worldCitizenBestYear ?? 0;
   const wonContinent = (c: string) => continentsWon.includes(c);
+  const countriesWonCount = hof.countriesWonCount ?? 0;
+  const homeSoilWins = hof.homeSoilWins ?? 0;
+  const nationExpressCountries = hof.nationExpressCountries ?? 0;
+  const tourOfNationHome = hof.tourOfNationHome === true;
 
   // "The Complete Rider": genestete Stufen aus Rundfahrt-, Eintages- und
   // Massensprint-Erfolg. Gold verlangt Grand Tour + Monument, Silber laesst
@@ -3390,6 +3396,31 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hof.beneluxMaster === true, HOF_STYLE_GOLD,
       hof.beneluxMaster ? 'Siege in Belgien, Niederlande und Luxemburg.' : 'Belgien, Niederlande und Luxemburg — noch nicht alle.',
       'Siege in Belgien, Niederlande und Luxemburg', 'Komplett'),
+    {
+      key: 'travelKing', name: 'Travel King', icon: HOF_ICON_SUITCASE, description: 'Siege in verschiedenen Ländern',
+      tier: resolveThresholdTier(countriesWonCount, [3, 5, 8, 12, 20]),
+      detail: countriesWonCount > 0 ? `${countriesWonCount.toLocaleString('de-DE')} Länder` : '',
+      hover: `Siege in ${countriesWonCount.toLocaleString('de-DE')} verschiedenen Ländern (Gold 20 · Silber 12 · Bronze 8 · Cyan 5 · Lila 3)`,
+      requirement: 'Siege in mind. 3 Ländern',
+    },
+    {
+      key: 'homeSoilHero', name: 'Home Soil Hero', icon: HOF_ICON_HOME, description: 'Siege im Heimatland',
+      tier: resolveThresholdTier(homeSoilWins, [1, 5, 10, 20, 30]),
+      detail: homeSoilWins > 0 ? `${homeSoilWins.toLocaleString('de-DE')} Heimsiege` : '',
+      hover: `${homeSoilWins.toLocaleString('de-DE')} Siege im Heimatland (Gold 30 · Silber 20 · Bronze 10 · Cyan 5 · Lila 1)`,
+      requirement: 'Mind. 1 Sieg im Heimatland',
+    },
+    {
+      key: 'nationExpress', name: 'Nation Express', icon: HOF_ICON_PASSPORT, description: 'Rennteilnahme in vielen Ländern',
+      tier: resolveThresholdTier(nationExpressCountries, [10, 15, 20, 25, 30]),
+      detail: nationExpressCountries > 0 ? `${nationExpressCountries.toLocaleString('de-DE')} Länder` : '',
+      hover: `Rennteilnahme in ${nationExpressCountries.toLocaleString('de-DE')} verschiedenen Ländern (Gold 30 · Silber 25 · Bronze 20 · Cyan 15 · Lila 10)`,
+      requirement: 'Teilnahme in mind. 10 Ländern',
+    },
+    singleBadge('tourOfNation', 'Tour of Nation', HOF_ICON_TROPHY, 'Heim-Grand-Tour-Gesamtsieg',
+      tourOfNationHome, HOF_STYLE_GOLD,
+      tourOfNationHome ? 'Gesamtsieg bei der Heim-Grand-Tour.' : 'Noch kein Gesamtsieg bei der Heim-Grand-Tour (FR → Tour, IT → Giro, ES → Vuelta).',
+      'Gesamtsieg bei der Heim-Grand-Tour (FR → Tour, IT → Giro, ES → Vuelta)', 'Geschafft'),
     {
       key: 'ghost', name: 'Ghost', icon: HOF_ICON_GHOST, description: 'GC-Top-10 aus dem Nichts',
       tier: resolveThresholdTier(ghostTop10, [1, 2, 3, 5, 8]),

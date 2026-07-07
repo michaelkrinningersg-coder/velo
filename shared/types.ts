@@ -1030,6 +1030,10 @@ export interface RiderHallOfFameStats {
   mediterraneanMaster: boolean; // Sieg in PT + ES + FR + IT
   scandinavianMaster: boolean; // Sieg in DK + NO
   beneluxMaster: boolean; // Sieg in BE + NL + LU
+  countriesWonCount: number; // Anzahl verschiedener Laender mit mind. 1 Sieg (Travel King)
+  homeSoilWins: number; // Siege im Heimatland des Fahrers (Home Soil Hero)
+  nationExpressCountries: number; // Anzahl verschiedener Laender mit Rennteilnahme (Nation Express)
+  tourOfNationHome: boolean; // Heim-Grand-Tour-Gesamtsieg (FR->TdF, IT->Giro, ES->Vuelta)
 }
 
 export interface RiderStatsPayload {
