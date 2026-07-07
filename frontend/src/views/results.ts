@@ -1181,6 +1181,11 @@ export function renderResultsView(): void {
     : showStageOverviewTable && selectedClassification
     ? (() => {
         const rows = selectedClassification.rows;
+        // Regierender Weltmeister (Strassen-WM = Regenbogentrikot) fuer den
+        // kleinen Marker hinter den Punkten (nur Stage- und GC-Wertung).
+        const worldChampionRiderId = state.seasonStandings?.reigningChampions
+          ?.find((c) => c.type === 'WM' && c.discipline === 'ROAD')?.riderId ?? null;
+        const worldChampionBadge = '<span title="Regierender Weltmeister" style="display:inline-block;width:16px;height:11px;margin-left:5px;border-radius:2px;vertical-align:middle;background:#fff;background-image:linear-gradient(#0d6bb0 0 20%,#00a3e0 20% 40%,#c8102e 40% 60%,#ffd200 60% 80%,#009639 80% 100%);border:1px solid rgba(0,0,0,.25);"></span>';
         return rows.map((row) => {
           const participant = row.riderName ?? row.teamName;
           const teamName = row.riderName ? row.teamName : '–';
@@ -1236,6 +1241,12 @@ export function renderResultsView(): void {
       if (row.leadoutBonus != null && row.leadoutBonus > 0 && row.leadoutRiderId != null) {
         const popoverHtml = renderLeadoutPopover(row);
         pointsCellContent = `<span class="leadout-bonus-anchor">${row.points != null ? row.points : '–'}${popoverHtml}</span>`;
+      }
+      // Regenbogen-Marker des regierenden Weltmeisters — nur in Stage- und
+      // GC-Wertung, direkt hinter den Punkten.
+      if (worldChampionRiderId != null && row.riderId === worldChampionRiderId
+        && (selectedClassification?.resultTypeId === 1 || selectedClassification?.resultTypeId === GC_RESULT_TYPE_ID)) {
+        pointsCellContent += worldChampionBadge;
       }
 
           return `
