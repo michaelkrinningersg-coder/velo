@@ -2713,6 +2713,8 @@ const HOF_ICON_SUITCASE = `<svg viewBox="0 0 24 24" style="width:34px;height:34p
 const HOF_ICON_PASSPORT = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M6 2h11a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm5.5 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 1.6a2.4 2.4 0 0 1 2.3 1.7h-1.1a4.7 4.7 0 0 0-.5-1.4c.7.3 1.3.7 1.3.7zm-1.6.3c-.2.3-.4.8-.5 1.4H8.3a2.4 2.4 0 0 1 1.6-1.4zM8 10.2c0-.3 0-.5.1-.7h1.2c0 .5.1 1 .2 1.4H8.3a2.4 2.4 0 0 1-.3-.7zm1.9 1.9c.1.6.3 1.1.5 1.4a2.4 2.4 0 0 1-1.6-1.4h1.1zm1.6 1.7c-.3-.3-.5-.9-.6-1.7h1.3c-.1.8-.4 1.4-.7 1.7zm.7-3.3h-1.4c0-.4-.1-.9 0-1.4h1.3c.1.5.1 1 .1 1.4zm.9 1.6h1.1a2.4 2.4 0 0 1-1.6 1.4c.2-.3.4-.8.5-1.4zm.3-1.6c.1-.4.1-.9.1-1.4h1.2c.1.2.1.4.1.7 0 .2-.1.5-.2.7h-1.3zM9 17h5v1.5H9V17z"/></svg>`;
 const HOF_ICON_SPEED = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4a9 9 0 0 0-9 9 8.9 8.9 0 0 0 1.5 5h15A8.9 8.9 0 0 0 21 13a9 9 0 0 0-9-9zm0 3a1 1 0 0 1 1 1v.6l2.3-1.3.8 1.4-2.3 1.3A2 2 0 1 1 11 9.2V8a1 1 0 0 1 1-1zM5.6 15a2 2 0 1 1 0-2 2 2 0 0 1 0 2zm12.8 0a2 2 0 1 1 0-2 2 2 0 0 1 0 2z"/></svg>`;
 const HOF_ICON_ROCKET = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M13.5 2c3 .3 6 2.4 7.4 5.8-.4 3.6-2.6 6.4-5 8v3.4l-3 2.3v-4.2l-3-3-4.2.1v-3l3.4-3zM15 8.5a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM4 17c1-1 2.6-1 3.6 0S8.7 20 7.6 21c-.9.9-4.6 1.4-4.6 1.4s.5-3.7 1-4.4z"/></svg>`;
+const HOF_ICON_WINE = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M7 2h10l-.6 6.2A5 5 0 0 1 13 12.9V19h3v2H8v-2h3v-6.1a5 5 0 0 1-3.4-4.7L7 2zm1.8 2 .2 2h6l.2-2H8.8z"/></svg>`;
+const HOF_ICON_LOOP = `<svg viewBox="0 0 24 24" style="width:34px;height:34px;" fill="currentColor"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 6 6 6 6 0 0 1-1 3.3l1.5 1.5A8 8 0 0 0 12 4zm0 14a6 6 0 0 1-6-6 6 6 0 0 1 1-3.3L5.5 7.2A8 8 0 0 0 12 20v3l4-4-4-4v3z"/></svg>`;
 
 interface HofTierStyle { label: string; color: string; soft: string; glow: string; text: string }
 
@@ -2811,6 +2813,16 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const lieutenantPeakRank = hof.lieutenantPeakRank ?? null;
   const careerWinsRank = hof.careerWinsRank ?? hof.allTimeWinsRank ?? null;
   const yellowDaysRank = hof.yellowDaysRank ?? null;
+  // "Wilde" Kuriositaeten (Welle A).
+  const defectsCount = hof.defects ?? 0;
+  const doomedEscapes = hof.doomedEscapes ?? 0;
+  const supermalusDays = hof.supermalusDays ?? 0;
+  const bestSeasonRaceDays = hof.bestSeasonRaceDays ?? 0;
+  const veteranWins = hof.veteranWins ?? 0;
+  const awayWins = hof.awayWins ?? 0;
+  const breakawayWins = hof.breakawayWins ?? 0;
+  const groundhogStreak = hof.groundhogStreak ?? 0;
+  const kamikazeRatio = (hof.allTimeAttacks ?? 0) / Math.max(1, hof.allTimeWins ?? 0);
   const raceDays = hof.allTimeRaceDays ?? 0;
   const brkKms = hof.breakawayKms ?? 0;
   const brkAttempts = hof.breakawayAttempts ?? 0;
@@ -3476,6 +3488,71 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     rankBadge('recLieutenant', 'Ultimate Domestique', HOF_ICON_WRENCH, 'Leutnant-Rang', lieutenantPeakRank, 'der ewigen Leutnant-Bestwert-Liste'),
     rankBadge('recCareerWins', 'Peloton Legend', HOF_ICON_CROWN, 'Karrieresiege-Rang', careerWinsRank, 'der ewigen Siegerliste'),
     rankBadge('recYellowDays', 'Yellow Sovereign', HOF_ICON_JERSEY, 'Gelbtrikot-Tage-Rang', yellowDaysRank, 'der ewigen Gelbtrikot-Tage-Liste'),
+
+    // --- Kuriositaeten-Badges (Welle A) ---
+    {
+      key: 'gremlin', name: "Gremlin's Favourite", icon: HOF_ICON_WRENCH, description: 'Mechanische Defekte',
+      tier: resolveThresholdTier(defectsCount, [3, 6, 10, 15, 20]),
+      detail: `${defectsCount.toLocaleString('de-DE')} Defekte`,
+      hover: `${defectsCount.toLocaleString('de-DE')} mechanische Defekte in der Karriere (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
+      requirement: 'Ab 3 Defekten',
+    },
+    {
+      key: 'doomedEscapee', name: 'Doomed Escapee', icon: HOF_ICON_ROUTE, description: 'Eingeholte Ausreißversuche',
+      tier: resolveThresholdTier(doomedEscapes, [40, 80, 120, 180, 250]),
+      detail: `${doomedEscapes.toLocaleString('de-DE')}× gestellt`,
+      hover: `${doomedEscapes.toLocaleString('de-DE')} eingeholte Ausreißversuche (Versuche minus erfolgreiche) (Gold 250 · Silber 180 · Bronze 120 · Cyan 80 · Lila 40)`,
+      requirement: 'Ab 40 eingeholten Ausreißversuchen',
+    },
+    {
+      key: 'theSlump', name: 'The Slump', icon: HOF_ICON_RAIN, description: 'Formtief-Tage',
+      tier: resolveThresholdTier(supermalusDays, [15, 30, 60, 100, 150]),
+      detail: `${supermalusDays.toLocaleString('de-DE')} Tage`,
+      hover: `${supermalusDays.toLocaleString('de-DE')} Tage in ausgeprägtem Formtief (Supermalus) (Gold 150 · Silber 100 · Bronze 60 · Cyan 30 · Lila 15)`,
+      requirement: 'Ab 15 Formtief-Tagen',
+    },
+    {
+      key: 'everPresent', name: 'The Ever-Present', icon: HOF_ICON_CALENDAR, description: 'Renntage in einer Saison',
+      tier: resolveThresholdTier(bestSeasonRaceDays, [50, 65, 80, 95, 110]),
+      detail: bestSeasonRaceDays > 0 ? `${bestSeasonRaceDays.toLocaleString('de-DE')} Renntage` : '',
+      hover: `${bestSeasonRaceDays.toLocaleString('de-DE')} Renntage in der stärksten Saison (Gold 110 · Silber 95 · Bronze 80 · Cyan 65 · Lila 50)`,
+      requirement: 'Ab 50 Renntagen in einer Saison',
+    },
+    {
+      key: 'vintageWine', name: 'Vintage Wine', icon: HOF_ICON_WINE, description: 'Siege mit 35+',
+      tier: resolveThresholdTier(veteranWins, [1, 2, 3, 5, 8]),
+      detail: veteranWins > 0 ? `${veteranWins.toLocaleString('de-DE')} Alt-Siege` : '',
+      hover: `${veteranWins.toLocaleString('de-DE')} Siege mit 35 Jahren oder älter (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
+      requirement: 'Ab 1 Sieg mit 35+',
+    },
+    {
+      key: 'roadWarrior', name: 'Road Warrior', icon: HOF_ICON_GLOBE, description: 'Siege im Ausland',
+      tier: resolveThresholdTier(awayWins, [5, 15, 30, 50, 80]),
+      detail: awayWins > 0 ? `${awayWins.toLocaleString('de-DE')} Auslandssiege` : '',
+      hover: `${awayWins.toLocaleString('de-DE')} Siege außerhalb des Heimatlands (Gold 80 · Silber 50 · Bronze 30 · Cyan 15 · Lila 5)`,
+      requirement: 'Ab 5 Siegen im Ausland',
+    },
+    {
+      key: 'kamikaze', name: 'Kamikaze', icon: HOF_ICON_BOLT, description: 'Attacken je Sieg',
+      tier: resolveThresholdTier((hof.allTimeAttacks ?? 0) >= 20 ? kamikazeRatio : 0, [15, 30, 50, 80, 120]),
+      detail: (hof.allTimeAttacks ?? 0) >= 20 ? `${kamikazeRatio.toFixed(1)} Att./Sieg` : '',
+      hover: `${(hof.allTimeAttacks ?? 0).toLocaleString('de-DE')} Attacken bei ${(hof.allTimeWins ?? 0).toLocaleString('de-DE')} Siegen — ${kamikazeRatio.toFixed(1)} Attacken je Sieg (ab 20 Attacken; Gold 120 · Silber 80 · Bronze 50 · Cyan 30 · Lila 15)`,
+      requirement: 'Viele Attacken, wenig Ertrag (ab 20 Attacken)',
+    },
+    {
+      key: 'smashGrab', name: 'Smash & Grab', icon: HOF_ICON_BIKE, description: 'Siege aus dem Ausreißer',
+      tier: resolveThresholdTier(breakawayWins, [1, 3, 5, 10, 20]),
+      detail: breakawayWins > 0 ? `${breakawayWins.toLocaleString('de-DE')} Coups` : '',
+      hover: `${breakawayWins.toLocaleString('de-DE')} Siege aus einem Ausreißer heraus (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
+      requirement: 'Ab 1 Sieg aus dem Ausreißer',
+    },
+    {
+      key: 'groundhogDay', name: 'Groundhog Day', icon: HOF_ICON_LOOP, description: 'Dasselbe Rennen in Serie',
+      tier: resolveThresholdTier(groundhogStreak, [3, 4, 5, 6, 7]),
+      detail: groundhogStreak >= 2 ? `${groundhogStreak}× in Folge` : '',
+      hover: `Dasselbe Rennen ${groundhogStreak}× in aufeinanderfolgenden Saisons gewonnen (Gold 7 · Silber 6 · Bronze 5 · Cyan 4 · Lila 3)`,
+      requirement: 'Dasselbe Rennen 3 Saisons in Folge gewinnen',
+    },
   ];
 }
 

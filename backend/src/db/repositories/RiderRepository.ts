@@ -1550,6 +1550,79 @@ export class RiderRepository {
   }
 
   /**
+   * "Wilde" Kennzahlen fuer Kuriositaeten-Badges (Welle A, reine Auslese ohne
+   * neues Tracking). Zaehler aus rider_career_stats/rider_season_stats sowie
+   * sieg-basierte Groessen aus results_flat (rank-1-Zeilen ueberleben das
+   * Saison-Pruning). "Sieg des Rennens" = Etappen-/Eintagessieg (Typ 1) bzw.
+   * GC-Gesamtsieg an der Schlussetappe (Typ 2); Groundhog wertet nur den
+   * Gesamt-/Eintagessieg (nicht einzelne Etappensiege).
+   */
+  private getWildStats(riderId: number): {
+    defects: number; doomedEscapes: number; supermalusDays: number; bestSeasonRaceDays: number;
+    veteranWins: number; awayWins: number; breakawayWins: number; groundhogStreak: number;
+  } {
+    const out = { defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0, breakawayWins: 0, groundhogStreak: 0 };
+
+    if (tableExists(this.db, 'rider_career_stats')) {
+      const c = this.db.prepare(
+        'SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days FROM rider_career_stats WHERE rider_id = ?'
+      ).get(riderId) as { defects: number; breakaway_attempts: number; successful_breakaways: number; supermalus_days: number } | undefined;
+      if (c) {
+        out.defects = c.defects ?? 0;
+        out.doomedEscapes = Math.max(0, (c.breakaway_attempts ?? 0) - (c.successful_breakaways ?? 0));
+        out.supermalusDays = c.supermalus_days ?? 0;
+      }
+    }
+    if (tableExists(this.db, 'rider_season_stats')) {
+      const s = this.db.prepare('SELECT MAX(race_days) AS m FROM rider_season_stats WHERE rider_id = ?').get(riderId) as { m: number | null } | undefined;
+      out.bestSeasonRaceDays = s?.m ?? 0;
+    }
+
+    if (tableExists(this.db, 'results_flat')) {
+      const rider = this.db.prepare('SELECT birth_year AS by, country_id AS cid FROM riders WHERE id = ?').get(riderId) as { by: number | null; cid: number | null } | undefined;
+      const birthYear = rider?.by ?? null;
+      const homeCid = rider?.cid ?? null;
+      const winRows = this.db.prepare(`
+        SELECT CAST(substr(s.date, 1, 4) AS INTEGER) AS yr, ra.country_id AS rc, rf.is_breakaway AS ib,
+               rf.result_type_id AS rt, ra.name AS rn, ra.is_stage_race AS isr
+        FROM results_flat rf
+        JOIN stages s ON s.id = rf.stage_id
+        JOIN races ra ON ra.id = s.race_id
+        WHERE rf.rider_id = ? AND rf.rank = 1 AND (
+          rf.result_type_id = 1
+          OR (rf.result_type_id = 2 AND ra.is_stage_race = 1 AND s.stage_number = ra.number_of_stages)
+        )
+      `).all(riderId) as Array<{ yr: number; rc: number | null; ib: number | null; rt: number; rn: string | null; isr: number }>;
+
+      const raceSeasons = new Map<string, Set<number>>();
+      for (const w of winRows) {
+        if (birthYear != null && w.yr - birthYear >= 35) out.veteranWins += 1;
+        if (homeCid != null && w.rc != null && w.rc !== homeCid) out.awayWins += 1;
+        if (w.rt === 1 && w.ib === 1) out.breakawayWins += 1;
+        // Groundhog nur auf Renn-Gesamtsiegen: GC-Gesamtsieg (Typ 2) oder
+        // Eintagessieg (Typ 1 & kein Etappenrennen).
+        const isRaceWin = w.rt === 2 || (w.rt === 1 && w.isr === 0);
+        if (isRaceWin && w.rn) {
+          let set = raceSeasons.get(w.rn);
+          if (!set) { set = new Set<number>(); raceSeasons.set(w.rn, set); }
+          set.add(w.yr);
+        }
+      }
+      // Laengste Serie aufeinanderfolgender Saisons mit Sieg desselben Rennens.
+      for (const seasons of raceSeasons.values()) {
+        const sorted = [...seasons].sort((a, b) => a - b);
+        let run = 1, best = 1;
+        for (let i = 1; i < sorted.length; i++) {
+          run = sorted[i] === sorted[i - 1] + 1 ? run + 1 : 1;
+          if (run > best) best = run;
+        }
+        if (best > out.groundhogStreak) out.groundhogStreak = best;
+      }
+    }
+    return out;
+  }
+
+  /**
    * Baut die Hall-of-Fame-Kennzahlen fuer einen Fahrer. Renntage, Ausreisser-km
    * und Ausreissversuche stammen aus rider_career_stats (dort inkrementell
    * hochgezaehlt). Der Ausreisser-km-Rang nutzt dasselbe Standard-Ranking wie
@@ -1622,12 +1695,14 @@ export class RiderRepository {
     const loyalty = this.getLoyaltyStats(riderId);
     const geography = this.getGeographyAchievements(riderId);
     const statRanks = this.getStatRecordRanks(riderId);
+    const wild = this.getWildStats(riderId);
 
     return {
       allTimeWins: careerWins,
       allTimeWinsRank: winsRank.rank,
       careerWinsRank: winsRank.rank,
       ...statRanks,
+      ...wild,
       rankedRiders: winsRank.rankedRiders,
       allTimeRaceDays: raceDays,
       breakawayKms,

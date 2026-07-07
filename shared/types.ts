@@ -1047,6 +1047,16 @@ export interface RiderHallOfFameStats {
   lieutenantPeakRank: number | null;   // staerkster Leutnant (All-Time-Peak)
   careerWinsRank: number | null;       // Karrieresiege (Rang)
   yellowDaysRank: number | null;       // Tage im Gelben Trikot (Rang)
+
+  // "Wilde" Kuriositaeten-Badges (Welle A, reine Auslese).
+  defects: number;              // mechanische Defekte (Gremlin's Favourite)
+  doomedEscapes: number;        // eingeholte Ausreissversuche (Doomed Escapee)
+  supermalusDays: number;       // Formtief-Tage (The Slump)
+  bestSeasonRaceDays: number;   // meiste Renntage in EINER Saison (The Ever-Present)
+  veteranWins: number;          // Siege mit >= 35 Jahren (Vintage Wine)
+  awayWins: number;             // Siege im Ausland (Road Warrior)
+  breakawayWins: number;        // Siege aus dem Ausreisser (Smash & Grab)
+  groundhogStreak: number;      // dasselbe Rennen X Saisons in Folge gewonnen (Groundhog Day)
 }
 
 export interface RiderStatsPayload {
