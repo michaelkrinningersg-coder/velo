@@ -8,6 +8,8 @@ import { TeamRepository } from "../db/repositories/TeamRepository";
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
 import { isWinterBreak, tableExists } from '../db/mappers';
 import {
+  championshipAgeBounds,
+  championshipAllowsTeamless,
   CHAMPIONSHIP_FATIGUE_THRESHOLD,
   championshipRestrictsToEurope,
   getChampionshipCategoryDef,
@@ -15,6 +17,7 @@ import {
   isNationalChampionshipCategory,
   kaderSizeForRank,
   NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD,
+  NATIONAL_SELECTION_TEAM_ID,
 } from './championships';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
@@ -1218,8 +1221,10 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
     return [];
   }
   const season = repo.getCurrentSeason();
-  const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.type];
-  const europeOnly = championshipRestrictsToEurope(def.type);
+  const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.courseType];
+  const europeOnly = championshipRestrictsToEurope(def.courseType);
+  const { minAge, maxAge } = championshipAgeBounds(def.ageClass);
+  const allowTeamless = championshipAllowsTeamless(def.ageClass);
 
   // 1. Nationenwertung -> Rang je Land (bei Gleichstand gleicher Rang).
   const rankRows = db.prepare(`
@@ -1255,7 +1260,19 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   // 3. Waehlbare Fahrer je Land sammeln.
   const eligibleByCountry = new Map<number, Rider[]>();
   for (const rider of repo.getRiders() as Rider[]) {
-    if (rider.activeTeamId == null || rider.countryId == null) {
+    if (rider.countryId == null) {
+      continue;
+    }
+    // Teamlose Fahrer nur bei U23/Junioren zulassen (dort ausdruecklich erlaubt).
+    if (rider.activeTeamId == null && !allowTeamless) {
+      continue;
+    }
+    // Altersfilter je Klasse (Alter = Saison - Geburtsjahr).
+    const age = season - rider.birthYear;
+    if (minAge != null && age < minAge) {
+      continue;
+    }
+    if (maxAge != null && age > maxAge) {
       continue;
     }
     if (!rankByCountry.has(rider.countryId)) {
@@ -1343,6 +1360,8 @@ function applyChampionshipEntries(
   }
 
   const selected = rosterBuilder(db, repo, race, stage);
+  const champDef = getChampionshipCategoryDef(race.categoryId);
+  const allowTeamless = champDef ? championshipAllowsTeamless(champDef.ageClass) : false;
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const insertEntry = db.prepare(
@@ -1353,10 +1372,13 @@ function applyChampionshipEntries(
     deleteStageEntries.run(race.id);
     deleteRaceEntries.run(race.id);
     for (const rider of selected) {
-      if (rider.activeTeamId == null) {
+      // Teamlose U23/Junioren-Starter laufen ueber das Pseudo-Team; sonst wird
+      // ein teamloser Fahrer uebersprungen (Elite/National/Olympia).
+      const teamId = rider.activeTeamId ?? (allowTeamless ? NATIONAL_SELECTION_TEAM_ID : null);
+      if (teamId == null) {
         continue;
       }
-      insertEntry.run(race.id, rider.activeTeamId, rider.id);
+      insertEntry.run(race.id, teamId, rider.id);
     }
   })();
 

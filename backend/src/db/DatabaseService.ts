@@ -16,9 +16,12 @@ import {
   CRO_RACE_ORIGINAL_START_DAY,
   CRO_RACE_TARGET_START_DAY,
   championshipStageProfile,
+  NATIONAL_SELECTION_TEAM_ID,
+  NATIONAL_SELECTION_TEAM_NAME,
 } from '../simulation/championships';
 import { ensureContractRenewals as ensureContractRenewalsSchedule } from '../simulation/contractRenewalSchedule';
 import { ensureNationalChampionships as ensureNationalChampionshipsSchedule } from '../simulation/nationalChampionshipsSchedule';
+import { ensureOlympicGames as ensureOlympicGamesSchedule } from '../simulation/olympicGamesSchedule';
 import {
   calculateClimbScoresForStage,
   calculateStageScore,
@@ -680,6 +683,37 @@ export class DatabaseService {
         season INTEGER PRIMARY KEY
       )
     `).run();
+  }
+
+  // Reserviertes Pseudo-Team fuer teamlose Starter der U23-/Junioren-Rennen
+  // (active_race_entries.team_id ist NOT NULL). Attribute werden von einem
+  // bestehenden Team kopiert, damit alle Fremdschluessel gueltig sind. Wird aus
+  // Team-Listen ausgeblendet (getTeams) und faellt aus den Team-Standings, da
+  // Meisterschaftspunkte dort ausgeschlossen sind.
+  private ensureNationalSelectionTeam(db: Database.Database): void {
+    if (!tableExists(db, 'teams')) return;
+    const exists = db.prepare('SELECT 1 FROM teams WHERE id = ?').get(NATIONAL_SELECTION_TEAM_ID);
+    if (exists) return;
+    const template = db
+      .prepare('SELECT division_id, country_id, ai_focus_1, ai_focus_2, ai_focus_3 FROM teams ORDER BY id LIMIT 1')
+      .get() as
+      | { division_id: number; country_id: number; ai_focus_1: number; ai_focus_2: number; ai_focus_3: number }
+      | undefined;
+    if (!template) return; // Noch keine Teams (frische Master-DB) — nichts zu tun.
+    db.prepare(`
+      INSERT INTO teams (
+        id, name, abbreviation, division_id, is_player_team, country_id,
+        color_primary, color_secondary, ai_focus_1, ai_focus_2, ai_focus_3
+      ) VALUES (?, ?, 'NAT', ?, 0, ?, '#334155', '#e2e8f0', ?, ?, ?)
+    `).run(
+      NATIONAL_SELECTION_TEAM_ID,
+      NATIONAL_SELECTION_TEAM_NAME,
+      template.division_id,
+      template.country_id,
+      template.ai_focus_1,
+      template.ai_focus_2,
+      template.ai_focus_3,
+    );
   }
 
   private ensureChampionshipTitlesSchema(db: Database.Database): void {
@@ -2331,6 +2365,18 @@ export class DatabaseService {
       // Nationale Meistertitel (Karriere-Zaehler) fuer HoF-Badges.
       ['national_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
       ['national_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      // U23-/Junioren-WM+EM sowie Olympia (Karriere-Zaehler) fuer die goldenen
+      // Hall-of-Fame-Badges (ein Titel je Edition).
+      ['world_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['olympic_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['olympic_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
@@ -3091,6 +3137,7 @@ export class DatabaseService {
     this.ensureChampionshipCalendar(db);
     this.ensureNationalChampionshipTitlesSchema(db);
     this.ensureNationalChampionships(db);
+    ensureOlympicGamesSchedule(db);
     this.ensureContractRenewalSchema(db);
     ensureContractRenewalsSchedule(db);
     this.ensureRulesData(db);
@@ -3114,6 +3161,7 @@ export class DatabaseService {
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureReferenceData(db);
+    this.ensureNationalSelectionTeam(db);
     this.ensureDayChangeIndexes(db);
     this.ensurePerformanceIndexes(db);
   }

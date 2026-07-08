@@ -147,15 +147,18 @@ export class ResultRepository {
     if (!tableExists(this.db, 'championship_titles')) {
       return [];
     }
+    // Nur die Elite-WM/EM speisen die Marker in Ergebnissen/Broadcast; die
+    // Altersklassen- und Olympia-Titel erscheinen ausschliesslich in riderStats.
     return this.db.prepare(`
       SELECT ct.rider_id AS riderId, ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
       FROM championship_titles ct
-      WHERE ct.season = (
-        SELECT MAX(inner_ct.season)
-        FROM championship_titles inner_ct
-        WHERE inner_ct.championship_type = ct.championship_type
-          AND inner_ct.discipline = ct.discipline
-      )
+      WHERE ct.championship_type IN ('WM', 'EM')
+        AND ct.season = (
+          SELECT MAX(inner_ct.season)
+          FROM championship_titles inner_ct
+          WHERE inner_ct.championship_type = ct.championship_type
+            AND inner_ct.discipline = ct.discipline
+        )
     `).all() as Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
   }
 

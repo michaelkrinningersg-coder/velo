@@ -1,5 +1,5 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
-import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
+import { CHAMPIONSHIP_CATEGORY_IDS, NATIONAL_SELECTION_TEAM_ID } from '../../simulation/championships';
 import Database from 'better-sqlite3';
 import {
   Country,
@@ -46,6 +46,7 @@ import {
   StageNonFinisherRow,
   StageResultsPayload,
   StageScoringRule,
+  ChampionTitleType,
   Team,
   TeamChampionTitle,
   TeamStatsPayload,
@@ -165,6 +166,7 @@ export class TeamRepository {
       JOIN sta_country country ON country.id = t.country_id
       LEFT JOIN teams u23 ON u23.id = t.u23_team
       LEFT JOIN teams main ON main.u23_team = t.id
+      WHERE t.id != ${NATIONAL_SELECTION_TEAM_ID}
       ORDER BY dt.tier ASC, t.name ASC
     `).all() as TeamRow[];
     return rows.map(mapTeam);
@@ -867,7 +869,7 @@ export class TeamRepository {
         JOIN sta_country c ON c.id = r.country_id
         WHERE ct.rider_id IN (${placeholders})
       `).all(...riderIds) as Array<{
-        rider_id: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number;
+        rider_id: number; type: ChampionTitleType; discipline: 'ITT' | 'ROAD'; season: number;
         first_name: string; last_name: string; country_code: string | null;
       }>;
       for (const row of rows) {

@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
 import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
 import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
+import { ensureOlympicGames } from '../simulation/olympicGamesSchedule';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -430,6 +431,14 @@ export class GameStateService {
       ensureNationalChampionships(this.db);
     } catch (e) {
       console.error('Nationale Meisterschaften konnten nicht erzeugt werden:', e);
+    }
+
+    // Olympische Spiele erzeugen, sobald der 22.06. eines Olympia-Jahres
+    // erreicht ist — auch mitten im Spiel. Idempotent.
+    try {
+      ensureOlympicGames(this.db);
+    } catch (e) {
+      console.error('Olympische Spiele konnten nicht erzeugt werden:', e);
     }
 
     // Automatische Vertragsverlaengerung erzeugen, sobald der 01.08. erreicht

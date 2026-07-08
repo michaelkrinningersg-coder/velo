@@ -1097,6 +1097,18 @@ export interface RiderHallOfFameStats {
   euroChampionIttTitles: number;    // Europameister ITT
   nationalChampionRoadTitles: number; // Nationaler Meister (Strasse)
   nationalChampionIttTitles: number;  // Nationaler Meister ITT
+  // U23-/Junioren-WM+EM sowie Olympia (Karriere-Zaehler) fuer die goldenen
+  // Einzelbadges (ein Titel je Edition).
+  worldU23ChampionRoadTitles: number;
+  worldU23ChampionIttTitles: number;
+  euroU23ChampionRoadTitles: number;
+  euroU23ChampionIttTitles: number;
+  worldJuniorChampionRoadTitles: number;
+  worldJuniorChampionIttTitles: number;
+  euroJuniorChampionRoadTitles: number;
+  euroJuniorChampionIttTitles: number;
+  olympicChampionRoadTitles: number;
+  olympicChampionIttTitles: number;
   gtStageWinsTdf: number;             // Etappensiege Tour de France (All-Time)
   gtStageWinsGiro: number;            // Etappensiege Giro (All-Time)
   gtStageWinsVuelta: number;          // Etappensiege Vuelta (All-Time)
@@ -1153,16 +1165,30 @@ export interface RiderHallOfFameStats {
   multiJerseyDays: number;      // Tage mit mehreren Fuehrungstrikots (Wardrobe Malfunction)
 }
 
-// Kategorie-IDs der Welt-/Europameisterschaften (Strasse/ITT × WM/EM). Wird auf
-// Backend UND Frontend fuer die Meisterschafts-Erkennung genutzt.
-export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [10, 11, 12, 13];
+// Kategorie-IDs aller Meisterschaften (Strasse/ITT). Elite-WM/EM (10-13),
+// U23/Junioren (16-23) und Olympia (24/25). Wird auf Backend UND Frontend fuer
+// die Meisterschafts-Erkennung (Roster, Titelvergabe) genutzt.
+export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [
+  10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+];
 
 export function isChampionshipCategory(categoryId?: number | null): boolean {
   return categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(categoryId);
 }
 
+// Titeltyp fuer Header-Chip (riderStats) und Team-Meisterliste (teamStats).
+export type ChampionTitleType =
+  | 'WM'
+  | 'EM'
+  | 'NAT'
+  | 'WM_U23'
+  | 'WM_JUN'
+  | 'EM_U23'
+  | 'EM_JUN'
+  | 'OLY';
+
 export interface ReigningChampionTitle {
-  type: 'WM' | 'EM' | 'NAT';
+  type: ChampionTitleType;
   discipline: 'ITT' | 'ROAD';
   season: number;
 }
@@ -1676,7 +1702,7 @@ export interface TeamChampionTitle {
   riderId: number;
   riderName: string;
   riderCountryCode: string | null;
-  type: 'WM' | 'EM' | 'NAT';
+  type: ChampionTitleType;
   discipline: 'ITT' | 'ROAD';
   season: number;
   countryName?: string | null;

@@ -33,6 +33,7 @@ import {
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
 import {
+  championshipTitleColumn,
   getChampionshipCategoryDef,
   getNationalChampionshipCategoryDef,
   isChampionshipCategory,
@@ -1783,17 +1784,10 @@ export class StageResultCommitService {
               stage.date,
             );
           }
-          const titleColumn =
-            champDef.type === 'WM'
-              ? champDef.discipline === 'ITT'
-                ? 'world_champion_itt_titles'
-                : 'world_champion_road_titles'
-              : champDef.discipline === 'ITT'
-                ? 'euro_champion_itt_titles'
-                : 'euro_champion_road_titles';
+          const titleColumn = championshipTitleColumn(champDef.type, champDef.discipline);
           // Nur beim erstmaligen Ermitteln des Titels hochzaehlen (Schutz gegen
           // erneutes Commit derselben Etappe).
-          if (!hadTitle && columnExists(this.db, 'rider_career_stats', titleColumn)) {
+          if (!hadTitle && titleColumn && columnExists(this.db, 'rider_career_stats', titleColumn)) {
             this.db
               .prepare(`UPDATE rider_career_stats SET ${titleColumn} = ${titleColumn} + 1 WHERE rider_id = ?`)
               .run(winnerRow.riderId);

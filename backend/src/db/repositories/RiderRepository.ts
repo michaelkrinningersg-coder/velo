@@ -1925,6 +1925,11 @@ export class RiderRepository {
     worldChampionRoadTitles: number; worldChampionIttTitles: number;
     euroChampionRoadTitles: number; euroChampionIttTitles: number;
     nationalChampionRoadTitles: number; nationalChampionIttTitles: number;
+    worldU23ChampionRoadTitles: number; worldU23ChampionIttTitles: number;
+    euroU23ChampionRoadTitles: number; euroU23ChampionIttTitles: number;
+    worldJuniorChampionRoadTitles: number; worldJuniorChampionIttTitles: number;
+    euroJuniorChampionRoadTitles: number; euroJuniorChampionIttTitles: number;
+    olympicChampionRoadTitles: number; olympicChampionIttTitles: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
@@ -1936,6 +1941,9 @@ export class RiderRepository {
       escapeToVictory: 0, podiumLockout: 0, jerseyStreakBest: 0, photoFinishWins: 0, soClose: 0,
       worldChampionRoadTitles: 0, worldChampionIttTitles: 0, euroChampionRoadTitles: 0, euroChampionIttTitles: 0,
       nationalChampionRoadTitles: 0, nationalChampionIttTitles: 0,
+      worldU23ChampionRoadTitles: 0, worldU23ChampionIttTitles: 0, euroU23ChampionRoadTitles: 0, euroU23ChampionIttTitles: 0,
+      worldJuniorChampionRoadTitles: 0, worldJuniorChampionIttTitles: 0, euroJuniorChampionRoadTitles: 0, euroJuniorChampionIttTitles: 0,
+      olympicChampionRoadTitles: 0, olympicChampionIttTitles: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
@@ -1947,6 +1955,7 @@ export class RiderRepository {
       const hasWave9 = columnExists(this.db, 'rider_career_stats', 'escape_to_victory');
       const hasChampion = columnExists(this.db, 'rider_career_stats', 'world_champion_road_titles');
       const hasNational = columnExists(this.db, 'rider_career_stats', 'national_champion_road_titles');
+      const hasAgeClassTitles = columnExists(this.db, 'rider_career_stats', 'olympic_champion_road_titles');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
@@ -1957,6 +1966,7 @@ export class RiderRepository {
          ${hasWave9 ? ', escape_to_victory, podium_lockout, jersey_streak_best, photo_finish_wins, so_close' : ''}
          ${hasChampion ? ', world_champion_road_titles, world_champion_itt_titles, euro_champion_road_titles, euro_champion_itt_titles' : ''}
          ${hasNational ? ', national_champion_road_titles, national_champion_itt_titles' : ''}
+         ${hasAgeClassTitles ? ', world_u23_champion_road_titles, world_u23_champion_itt_titles, euro_u23_champion_road_titles, euro_u23_champion_itt_titles, world_junior_champion_road_titles, world_junior_champion_itt_titles, euro_junior_champion_road_titles, euro_junior_champion_itt_titles, olympic_champion_road_titles, olympic_champion_itt_titles' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -1992,6 +2002,16 @@ export class RiderRepository {
         out.euroChampionIttTitles = c.euro_champion_itt_titles ?? 0;
         out.nationalChampionRoadTitles = c.national_champion_road_titles ?? 0;
         out.nationalChampionIttTitles = c.national_champion_itt_titles ?? 0;
+        out.worldU23ChampionRoadTitles = c.world_u23_champion_road_titles ?? 0;
+        out.worldU23ChampionIttTitles = c.world_u23_champion_itt_titles ?? 0;
+        out.euroU23ChampionRoadTitles = c.euro_u23_champion_road_titles ?? 0;
+        out.euroU23ChampionIttTitles = c.euro_u23_champion_itt_titles ?? 0;
+        out.worldJuniorChampionRoadTitles = c.world_junior_champion_road_titles ?? 0;
+        out.worldJuniorChampionIttTitles = c.world_junior_champion_itt_titles ?? 0;
+        out.euroJuniorChampionRoadTitles = c.euro_junior_champion_road_titles ?? 0;
+        out.euroJuniorChampionIttTitles = c.euro_junior_champion_itt_titles ?? 0;
+        out.olympicChampionRoadTitles = c.olympic_champion_road_titles ?? 0;
+        out.olympicChampionIttTitles = c.olympic_champion_itt_titles ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
