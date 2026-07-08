@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
+import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
 import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
@@ -429,6 +430,14 @@ export class GameStateService {
       ensureNationalChampionships(this.db);
     } catch (e) {
       console.error('Nationale Meisterschaften konnten nicht erzeugt werden:', e);
+    }
+
+    // Automatische Vertragsverlaengerung erzeugen, sobald der 01.08. erreicht
+    // ist — auch mitten im Spiel (nicht nur beim Laden). Idempotent.
+    try {
+      ensureContractRenewals(this.db);
+    } catch (e) {
+      console.error('Vertragsverlaengerungen konnten nicht verarbeitet werden:', e);
     }
 
     // advanceDay stellt den kompletten Tageszustand her (Leutnant-Peaks, Load-

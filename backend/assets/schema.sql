@@ -165,6 +165,12 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS idx_contracts_rider_season ON contracts(rider_id, start_season, end_season);
 CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 
+-- Idempotenz-Marker fuer die automatische Vertragsverlaengerung zum 01.08.
+-- (eine Zeile je Saison, in der der Lauf bereits stattgefunden hat).
+CREATE TABLE IF NOT EXISTS contract_renewal_runs (
+  season INTEGER PRIMARY KEY
+);
+
 -- ---- Rennkategorien / Punkte- und Bonussysteme -------------
 CREATE TABLE IF NOT EXISTS race_categories_bonus (
   id                           INTEGER PRIMARY KEY,

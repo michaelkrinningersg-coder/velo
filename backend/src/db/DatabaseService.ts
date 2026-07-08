@@ -17,6 +17,7 @@ import {
   CRO_RACE_TARGET_START_DAY,
   championshipStageProfile,
 } from '../simulation/championships';
+import { ensureContractRenewals as ensureContractRenewalsSchedule } from '../simulation/contractRenewalSchedule';
 import { ensureNationalChampionships as ensureNationalChampionshipsSchedule } from '../simulation/nationalChampionshipsSchedule';
 import {
   calculateClimbScoresForStage,
@@ -671,6 +672,14 @@ export class DatabaseService {
     } finally {
       masterDb.close();
     }
+  }
+
+  private ensureContractRenewalSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_runs (
+        season INTEGER PRIMARY KEY
+      )
+    `).run();
   }
 
   private ensureChampionshipTitlesSchema(db: Database.Database): void {
@@ -3082,6 +3091,8 @@ export class DatabaseService {
     this.ensureChampionshipCalendar(db);
     this.ensureNationalChampionshipTitlesSchema(db);
     this.ensureNationalChampionships(db);
+    this.ensureContractRenewalSchema(db);
+    ensureContractRenewalsSchedule(db);
     this.ensureRulesData(db);
     this.ensureSkillWeightsData(db);
     this.ensureStageSpreadData(db);
