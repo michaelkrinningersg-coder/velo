@@ -18,7 +18,7 @@ import {
   resolveTeamJerseyAssetPath,
 } from '../state';
 import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge, openDashboardStageProfile } from './dashboard';
-import type { Rider, RiderStatsPayload, RiderFormHistoryEntry } from '../../../shared/types';
+import type { Rider, RiderStatsPayload, RiderFormHistoryEntry, ReigningChampionTitle } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -518,21 +518,30 @@ function renderBroadcastRing(segments: Array<[string, number]>, label: string, i
     </div>`;
 }
 
-// Marker fuer regierende Welt-/Europameister. Eigene Signaturfarben:
-// Regenbogen-Rand (WM) bzw. Blau mit gelbem Euro-Stern (EM).
-export function renderReigningChampionChip(title: { type: 'WM' | 'EM' | 'NAT'; discipline: 'ITT' | 'ROAD' }): string {
+// Marker fuer regierende Meister. Eigene Signaturfarben je Wettbewerb:
+// Regenbogen-Rand (WM/U23/Junioren), Blau + Euro-Stern (EM), Gold (Olympia),
+// Orange (National). U23/Junioren teilen die Signatur mit der Elite, im Label
+// per Zusatz unterschieden. Olympiasieger bleiben bis zu den naechsten Spielen.
+export function renderReigningChampionChip(title: ReigningChampionTitle): string {
   const suffix = title.discipline === 'ITT' ? ' ITT' : '';
   const base = "display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;";
-  if (title.type === 'WM') {
-    const label = `Weltmeister${suffix}`;
-    return `<span title="Regierender ${esc(label)}" style="${base}color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);">🌈 ${esc(label)}</span>`;
-  }
-  if (title.type === 'EM') {
-    const label = `Europameister${suffix}`;
-    return `<span title="Regierender ${esc(label)}" style="${base}color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);">⭐ ${esc(label)}</span>`;
-  }
-  const label = `Nationaler Meister${suffix}`;
-  return `<span title="Regierender ${esc(label)}" style="${base}color:#fed7aa;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);">🏅 ${esc(label)}</span>`;
+  const RAINBOW = 'color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);';
+  const EM_STYLE = 'color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);';
+  const OLY_STYLE = 'color:#fde68a;border:1.5px solid #fbbf24;background:linear-gradient(90deg,#1c1405,#2a1d05);box-shadow:0 0 12px rgba(251,191,36,.42);';
+  const NAT_STYLE = 'color:#fed7aa;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);';
+  const CHIPS: Record<string, { emoji: string; label: string; style: string }> = {
+    WM: { emoji: '🌈', label: 'Weltmeister', style: RAINBOW },
+    WM_U23: { emoji: '🌈', label: 'Weltmeister U23', style: RAINBOW },
+    WM_JUN: { emoji: '🌈', label: 'Weltmeister Junioren', style: RAINBOW },
+    EM: { emoji: '⭐', label: 'Europameister', style: EM_STYLE },
+    EM_U23: { emoji: '⭐', label: 'Europameister U23', style: EM_STYLE },
+    EM_JUN: { emoji: '⭐', label: 'Europameister Junioren', style: EM_STYLE },
+    OLY: { emoji: '🥇', label: 'Olympiasieger', style: OLY_STYLE },
+    NAT: { emoji: '🏅', label: 'Nationaler Meister', style: NAT_STYLE },
+  };
+  const chip = CHIPS[title.type] ?? CHIPS.NAT;
+  const label = `${chip.label}${suffix}`;
+  return `<span title="Regierender ${esc(label)}" style="${base}${chip.style}">${chip.emoji} ${esc(label)}</span>`;
 }
 
 export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
@@ -2905,6 +2914,16 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const euroChampionIttTitles = hof.euroChampionIttTitles ?? 0;
   const nationalChampionRoadTitles = hof.nationalChampionRoadTitles ?? 0;
   const nationalChampionIttTitles = hof.nationalChampionIttTitles ?? 0;
+  const worldU23ChampionRoadTitles = hof.worldU23ChampionRoadTitles ?? 0;
+  const worldU23ChampionIttTitles = hof.worldU23ChampionIttTitles ?? 0;
+  const euroU23ChampionRoadTitles = hof.euroU23ChampionRoadTitles ?? 0;
+  const euroU23ChampionIttTitles = hof.euroU23ChampionIttTitles ?? 0;
+  const worldJuniorChampionRoadTitles = hof.worldJuniorChampionRoadTitles ?? 0;
+  const worldJuniorChampionIttTitles = hof.worldJuniorChampionIttTitles ?? 0;
+  const euroJuniorChampionRoadTitles = hof.euroJuniorChampionRoadTitles ?? 0;
+  const euroJuniorChampionIttTitles = hof.euroJuniorChampionIttTitles ?? 0;
+  const olympicChampionRoadTitles = hof.olympicChampionRoadTitles ?? 0;
+  const olympicChampionIttTitles = hof.olympicChampionIttTitles ?? 0;
   const gtStageWinsTdf = hof.gtStageWinsTdf ?? 0;
   const gtStageWinsGiro = hof.gtStageWinsGiro ?? 0;
   const gtStageWinsVuelta = hof.gtStageWinsVuelta ?? 0;
@@ -3300,6 +3319,56 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       hover: `${nationalChampionIttTitles.toLocaleString('de-DE')} nationale Zeitfahr-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 nationalem Zeitfahr-Meistertitel',
     },
+    // U23-/Junioren-WM+EM und Olympia: je ein goldenes Badge ("einmal gewonnen"),
+    // ohne Schwellen-Tier.
+    singleBadge('worldU23ChampionRoad', 'Weltmeister U23', HOF_ICON_CROWN, 'WM-U23-Straßenrennen gewonnen',
+      worldU23ChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      worldU23ChampionRoadTitles >= 1 ? `${worldU23ChampionRoadTitles.toLocaleString('de-DE')}× Weltmeister U23 im Straßenrennen` : 'Noch kein WM-U23-Straßentitel.',
+      'WM-U23-Straßenrennen gewinnen', worldU23ChampionRoadTitles > 1 ? `${worldU23ChampionRoadTitles}×` : 'Weltmeister U23'),
+    singleBadge('worldU23ChampionItt', 'Weltmeister U23 ITT', HOF_ICON_STOPWATCH, 'WM-U23-Einzelzeitfahren gewonnen',
+      worldU23ChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      worldU23ChampionIttTitles >= 1 ? `${worldU23ChampionIttTitles.toLocaleString('de-DE')}× Weltmeister U23 im Einzelzeitfahren` : 'Noch kein WM-U23-ITT-Titel.',
+      'WM-U23-Einzelzeitfahren gewinnen', worldU23ChampionIttTitles > 1 ? `${worldU23ChampionIttTitles}×` : 'Weltmeister U23'),
+    singleBadge('euroU23ChampionRoad', 'Europameister U23', HOF_ICON_CROWN, 'EM-U23-Straßenrennen gewonnen',
+      euroU23ChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      euroU23ChampionRoadTitles >= 1 ? `${euroU23ChampionRoadTitles.toLocaleString('de-DE')}× Europameister U23 im Straßenrennen` : 'Noch kein EM-U23-Straßentitel.',
+      'EM-U23-Straßenrennen gewinnen', euroU23ChampionRoadTitles > 1 ? `${euroU23ChampionRoadTitles}×` : 'Europameister U23'),
+    singleBadge('euroU23ChampionItt', 'Europameister U23 ITT', HOF_ICON_STOPWATCH, 'EM-U23-Einzelzeitfahren gewonnen',
+      euroU23ChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      euroU23ChampionIttTitles >= 1 ? `${euroU23ChampionIttTitles.toLocaleString('de-DE')}× Europameister U23 im Einzelzeitfahren` : 'Noch kein EM-U23-ITT-Titel.',
+      'EM-U23-Einzelzeitfahren gewinnen', euroU23ChampionIttTitles > 1 ? `${euroU23ChampionIttTitles}×` : 'Europameister U23'),
+    singleBadge('worldJuniorChampionRoad', 'Weltmeister Junioren', HOF_ICON_CROWN, 'WM-Junioren-Straßenrennen gewonnen',
+      worldJuniorChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      worldJuniorChampionRoadTitles >= 1 ? `${worldJuniorChampionRoadTitles.toLocaleString('de-DE')}× Weltmeister der Junioren im Straßenrennen` : 'Noch kein WM-Junioren-Straßentitel.',
+      'WM-Junioren-Straßenrennen gewinnen', worldJuniorChampionRoadTitles > 1 ? `${worldJuniorChampionRoadTitles}×` : 'Weltmeister Junioren'),
+    singleBadge('worldJuniorChampionItt', 'Weltmeister Junioren ITT', HOF_ICON_STOPWATCH, 'WM-Junioren-Einzelzeitfahren gewonnen',
+      worldJuniorChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      worldJuniorChampionIttTitles >= 1 ? `${worldJuniorChampionIttTitles.toLocaleString('de-DE')}× Weltmeister der Junioren im Einzelzeitfahren` : 'Noch kein WM-Junioren-ITT-Titel.',
+      'WM-Junioren-Einzelzeitfahren gewinnen', worldJuniorChampionIttTitles > 1 ? `${worldJuniorChampionIttTitles}×` : 'Weltmeister Junioren'),
+    singleBadge('euroJuniorChampionRoad', 'Europameister Junioren', HOF_ICON_CROWN, 'EM-Junioren-Straßenrennen gewonnen',
+      euroJuniorChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      euroJuniorChampionRoadTitles >= 1 ? `${euroJuniorChampionRoadTitles.toLocaleString('de-DE')}× Europameister der Junioren im Straßenrennen` : 'Noch kein EM-Junioren-Straßentitel.',
+      'EM-Junioren-Straßenrennen gewinnen', euroJuniorChampionRoadTitles > 1 ? `${euroJuniorChampionRoadTitles}×` : 'Europameister Junioren'),
+    singleBadge('euroJuniorChampionItt', 'Europameister Junioren ITT', HOF_ICON_STOPWATCH, 'EM-Junioren-Einzelzeitfahren gewonnen',
+      euroJuniorChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      euroJuniorChampionIttTitles >= 1 ? `${euroJuniorChampionIttTitles.toLocaleString('de-DE')}× Europameister der Junioren im Einzelzeitfahren` : 'Noch kein EM-Junioren-ITT-Titel.',
+      'EM-Junioren-Einzelzeitfahren gewinnen', euroJuniorChampionIttTitles > 1 ? `${euroJuniorChampionIttTitles}×` : 'Europameister Junioren'),
+    singleBadge('olympicChampionRoad', 'Olympiasieger', HOF_ICON_TROPHY, 'Olympisches Straßenrennen gewonnen',
+      olympicChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      olympicChampionRoadTitles >= 1 ? `${olympicChampionRoadTitles.toLocaleString('de-DE')}× Olympiasieger im Straßenrennen` : 'Noch kein olympischer Straßentitel.',
+      'Olympisches Straßenrennen gewinnen', olympicChampionRoadTitles > 1 ? `${olympicChampionRoadTitles}×` : 'Olympiasieger'),
+    singleBadge('olympicChampionItt', 'Olympiasieger ITT', HOF_ICON_STOPWATCH, 'Olympisches Einzelzeitfahren gewonnen',
+      olympicChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      olympicChampionIttTitles >= 1 ? `${olympicChampionIttTitles.toLocaleString('de-DE')}× Olympiasieger im Einzelzeitfahren` : 'Noch kein olympischer ITT-Titel.',
+      'Olympisches Einzelzeitfahren gewinnen', olympicChampionIttTitles > 1 ? `${olympicChampionIttTitles}×` : 'Olympiasieger'),
+    // Meta-Badge: WM-Titel in Junioren + U23 + Elite gesammelt (Regenbogen-Signatur).
+    singleBadge('careerRainbow', 'Karriere-Regenbogen', HOF_ICON_CROWN, 'WM-Titel in Junioren, U23 und Elite',
+      (worldJuniorChampionRoadTitles + worldJuniorChampionIttTitles) >= 1
+        && (worldU23ChampionRoadTitles + worldU23ChampionIttTitles) >= 1
+        && (worldChampionRoadTitles + worldChampionIttTitles) >= 1,
+      HOF_STYLE_RAINBOW,
+      'Weltmeistertitel in allen drei Altersklassen — Junioren, U23 und Elite',
+      'Je einen WM-Titel als Junior, U23 und Elite gewinnen', 'Regenbogen-Karriere'),
     singleBadge('grandTourStageSlam', 'Grand Tour Slam', HOF_ICON_CROWN, 'Etappensieg in allen 3 Grand Tours',
       gtWithStageWin === 3, classColorStyle('World Tour - Grand Tour', 'GT SLAM'),
       gtWithStageWin === 3
@@ -4201,6 +4270,9 @@ function renderHofBadgeCard(badge: HofBadge): string {
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['worldChampionRoad', 'worldChampionItt', 'euroChampionRoad', 'euroChampionItt',
+   'careerRainbow', 'olympicChampionRoad', 'olympicChampionItt',
+   'worldU23ChampionRoad', 'worldU23ChampionItt', 'euroU23ChampionRoad', 'euroU23ChampionItt',
+   'worldJuniorChampionRoad', 'worldJuniorChampionItt', 'euroJuniorChampionRoad', 'euroJuniorChampionItt',
    'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'missingOutOne',
    'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',

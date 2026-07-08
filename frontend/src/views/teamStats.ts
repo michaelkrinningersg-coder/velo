@@ -15,7 +15,7 @@ import {
   FLAG_CODE_BY_CODE3,
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
-import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization, TeamChampionTitle } from '../../../shared/types';
+import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization, TeamChampionTitle, ChampionTitleType } from '../../../shared/types';
 import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn, resolveRiderStatsFinalTypeClassName, getRiderStatsRowTypeLabel, renderFilterButton } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -1154,12 +1154,19 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
 export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
   const champions = payload.champions ?? [];
 
+  const CHAMPION_BADGE: Record<ChampionTitleType, string> = {
+    WM: '<span title="Weltmeister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    WM_U23: '<span title="Weltmeister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    WM_JUN: '<span title="Weltmeister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    EM: '<span title="Europameister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    EM_U23: '<span title="Europameister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    EM_JUN: '<span title="Europameister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    OLY: '<span title="Olympiasieger" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(251,191,36,.7));">🥇</span>',
+    NAT: '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>',
+  };
+
   const renderChampionRow = (title: TeamChampionTitle): string => {
-    const badge = title.type === 'WM'
-      ? '<span title="Weltmeister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>'
-      : title.type === 'EM'
-      ? '<span title="Europameister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>'
-      : '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>';
+    const badge = CHAMPION_BADGE[title.type] ?? CHAMPION_BADGE.NAT;
     const flag = title.riderCountryCode ? renderFlag(title.riderCountryCode) : '';
     const nameHtml = renderRiderNameLink(title.riderName, { riderId: title.riderId, teamId: payload.teamId, strong: true });
     const context = title.type === 'NAT' && title.countryName ? ` · ${esc(title.countryName)}` : '';
@@ -1178,7 +1185,7 @@ export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
   ];
 
   const renderDisciplineColumn = (
-    type: 'WM' | 'EM' | 'NAT',
+    type: ChampionTitleType,
     discipline: 'ROAD' | 'ITT',
     label: string,
   ): string => {
@@ -1196,15 +1203,21 @@ export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
       </div>`;
   };
 
-  const groups: Array<{ type: 'WM' | 'EM' | 'NAT'; title: string; accent: string }> = [
-    { type: 'WM', title: 'Weltmeister', accent: 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)' },
+  const RAINBOW_ACCENT = 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)';
+  const groups: Array<{ type: ChampionTitleType; title: string; accent: string }> = [
+    { type: 'OLY', title: 'Olympiasieger', accent: '#fbbf24' },
+    { type: 'WM', title: 'Weltmeister', accent: RAINBOW_ACCENT },
     { type: 'EM', title: 'Europameister', accent: '#3b82f6' },
+    { type: 'WM_U23', title: 'Weltmeister U23', accent: RAINBOW_ACCENT },
+    { type: 'EM_U23', title: 'Europameister U23', accent: '#3b82f6' },
+    { type: 'WM_JUN', title: 'Weltmeister Junioren', accent: RAINBOW_ACCENT },
+    { type: 'EM_JUN', title: 'Europameister Junioren', accent: '#3b82f6' },
     { type: 'NAT', title: 'Nationale Meister', accent: '#fbbf24' },
   ];
 
   const totalTitles = champions.length;
 
-  const groupsHtml = groups.map((group) => {
+  const groupsHtml = groups.filter((group) => champions.some((c) => c.type === group.type)).map((group) => {
     const count = champions.filter((c) => c.type === group.type).length;
     return `
       <section style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);overflow:hidden;">
