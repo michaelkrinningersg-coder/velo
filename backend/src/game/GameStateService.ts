@@ -18,6 +18,7 @@ import { RiderProgramService } from './RiderProgramService';
 import { RiderRoleService } from './RiderRoleService';
 import { RiderDraftService } from './RiderDraftService';
 import { RiderNewgenService } from './RiderNewgenService';
+import { BadgeMaterializationService } from './BadgeMaterializationService';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -399,6 +400,12 @@ export class GameStateService {
               draft_season = ?
           WHERE id = 1
         `).run(nextSeason);
+
+        // Hall-of-Fame-Badges einmal jaehrlich beim Saisonwechsel neu
+        // materialisieren (die Karrierestatistiken der abgeschlossenen Saison
+        // sind hier final). Bewusst nur hier statt bei jedem Load — der volle
+        // Rebuild ist teuer (~26 Queries je Fahrer).
+        new BadgeMaterializationService(this.db).rebuildAllRiderBadges();
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);

@@ -3270,9 +3270,16 @@ export class DatabaseService {
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
-    // Hall-of-Fame-Badges bei jedem Load frisch materialisieren (nicht im
-    // heissen Tageswechsel-Pfad). Ermoeglicht globale Badge-Filterung.
-    new BadgeMaterializationService(this.activeConnection).rebuildAllRiderBadges();
+    // Hall-of-Fame-Badges werden regulaer beim Saisonwechsel materialisiert
+    // (GameStateService). Hier nur Erstbefuellung, falls die Tabelle noch leer
+    // ist (frische bzw. Alt-Savegames) — der volle Rebuild ist teuer (~21 s bei
+    // ~2900 Fahrern) und soll nicht jeden Load blockieren.
+    const badgeCount = this.activeConnection
+      .prepare('SELECT 1 FROM rider_badges LIMIT 1')
+      .get();
+    if (!badgeCount) {
+      new BadgeMaterializationService(this.activeConnection).rebuildAllRiderBadges();
+    }
     return this.activeConnection;
   }
 
