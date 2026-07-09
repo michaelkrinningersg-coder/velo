@@ -2874,8 +2874,11 @@ export class StageResultCommitService {
       if (validColumns.length === 0) continue;
 
       const selectedColumn = validColumns[Math.floor(Math.random() * validColumns.length)];
+      // Potenziale sind REAL (Nachkommastellen); ein Wert wie 84.5 erfuellt zwar
+      // den < 85-Filter, wuerde nach +1 aber die CHECK(... BETWEEN 0 AND 85)-
+      // Constraint verletzen. Deshalb hart auf 85 deckeln.
       this.db.prepare(`
-        UPDATE riders SET ${selectedColumn} = ${selectedColumn} + 1 WHERE id = ?
+        UPDATE riders SET ${selectedColumn} = MIN(85, ${selectedColumn} + 1) WHERE id = ?
       `).run(riderId);
     }
   }
