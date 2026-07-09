@@ -34,13 +34,21 @@ function render(): void {
     const disabled = !on && atLimit;
     const border = on ? '#22d3ee' : '#1c2b47';
     const bg = on ? 'rgba(34,211,238,.08)' : '#0b1424';
+    const mono = "font-family:'JetBrains Mono',monospace";
     return `
-      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:26px 30px 1fr 60px 56px;align-items:center;gap:10px;padding:9px 12px;border:1px solid ${border};border-radius:9px;background:${bg};cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
+      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:26px 30px 1fr 56px 52px 52px;align-items:center;gap:10px;padding:9px 12px;border:1px solid ${border};border-radius:9px;background:${bg};cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
         <span style="width:18px;height:18px;border-radius:5px;border:2px solid ${on ? '#22d3ee' : '#334155'};background:${on ? '#22d3ee' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#0b1424;font-weight:900;font-size:12px;">${on ? '✓' : ''}</span>
         <span style="display:flex;justify-content:center;">${c.countryCode ? renderFlag(c.countryCode) : ''}</span>
         <span style="font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.lastName)} <span style="color:#8494ad;font-weight:500;">${esc(c.firstName)}</span></span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;">${c.age} J.</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:#fbbf24;text-align:right;">${Number(c.overallRating).toFixed(1)}</span>
+        <span style="${mono};font-size:11px;color:#8494ad;">${c.age} J.</span>
+        <span style="text-align:right;line-height:1;">
+          <span style="${mono};font-size:8px;letter-spacing:.08em;color:#64748b;display:block;">POT</span>
+          <span style="${mono};font-weight:800;color:#94a3b8;">${Number(c.potential).toFixed(1)}</span>
+        </span>
+        <span style="text-align:right;line-height:1;">
+          <span style="${mono};font-size:8px;letter-spacing:.08em;color:#64748b;display:block;">OVR</span>
+          <span style="${mono};font-weight:800;color:#fbbf24;">${Number(c.overallRating).toFixed(1)}</span>
+        </span>
       </div>`;
   }).join('');
 

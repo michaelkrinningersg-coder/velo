@@ -17,6 +17,7 @@ export interface RenewalCandidate {
   lastName: string;
   countryCode: string | null;
   overallRating: number;
+  potential: number;
   age: number;
   endSeason: number;
   maxExtensionYears: number;
@@ -48,7 +49,8 @@ export function getEligibleRenewalCandidates(db: Database.Database, season: numb
   const rows = db.prepare(`
     SELECT c.rider_id AS riderId, r.first_name AS firstName, r.last_name AS lastName,
            r.birth_year AS birthYear, r.retirement_age AS retirementAge,
-           r.overall_rating AS overallRating, country.code_3 AS countryCode, c.end_season AS endSeason
+           r.overall_rating AS overallRating, r.pot_overall AS potential,
+           country.code_3 AS countryCode, c.end_season AS endSeason
     FROM contracts c
     JOIN riders r ON r.id = c.rider_id
     JOIN sta_country country ON country.id = r.country_id
@@ -56,7 +58,7 @@ export function getEligibleRenewalCandidates(db: Database.Database, season: numb
     ORDER BY r.overall_rating DESC, r.last_name ASC
   `).all(teamId, season) as Array<{
     riderId: number; firstName: string; lastName: string; birthYear: number;
-    retirementAge: number; overallRating: number; countryCode: string | null; endSeason: number;
+    retirementAge: number; overallRating: number; potential: number; countryCode: string | null; endSeason: number;
   }>;
 
   const candidates: RenewalCandidate[] = [];
@@ -66,7 +68,7 @@ export function getEligibleRenewalCandidates(db: Database.Database, season: numb
     if (maxExtensionYears < 1) continue; // wuerde Retirement-Age erreichen -> nicht waehlbar
     candidates.push({
       riderId: r.riderId, firstName: r.firstName, lastName: r.lastName,
-      countryCode: r.countryCode, overallRating: r.overallRating,
+      countryCode: r.countryCode, overallRating: r.overallRating, potential: r.potential,
       age: season - r.birthYear, endSeason: r.endSeason, maxExtensionYears,
     });
   }
