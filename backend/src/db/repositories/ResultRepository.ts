@@ -48,10 +48,14 @@ export class ResultRepository {
   // Rekordteilnahme (Fahrer mit >=3 Saisons mit erzielten UCI-Punkten).
   // Quelle: season_point_events (survives Kompaktierung) — keine neuen Tabellen.
   public getRacePalmares(raceId: number): RacePalmaresPayload {
-    const raceRow = this.db.prepare('SELECT is_stage_race FROM races WHERE id = ?').get(raceId) as { is_stage_race: number } | undefined;
+    const raceRow = this.db.prepare('SELECT is_stage_race, name FROM races WHERE id = ?').get(raceId) as { is_stage_race: number; name: string } | undefined;
     const isStageRace = (raceRow?.is_stage_race ?? 0) === 1;
+    // Renn-IDs werden je Saison neu vergeben -> Palmarès ueber ALLE Editionen
+    // desselben Rennens (nach Name) aggregieren, damit auch Sieger frueherer
+    // Jahre erscheinen (die aktuelle Edition hat evtl. noch keinen Sieger).
+    const raceName = raceRow?.name ?? null;
 
-    if (!tableExists(this.db, 'season_point_events')) {
+    if (!tableExists(this.db, 'season_point_events') || raceName == null) {
       return { raceId, isStageRace, seasons: [], participation: [] };
     }
 
@@ -75,13 +79,13 @@ export class ResultRepository {
       LEFT JOIN teams ON teams.id = spe.team_id
       LEFT JOIN type_rider spec1 ON spec1.id = riders.specialization_1_id
       LEFT JOIN type_rider spec2 ON spec2.id = riders.specialization_2_id
-      WHERE spe.race_id = ?
+      WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?)
         AND (
           (spe.award_type = ? AND spe.rank <= 3)
           OR (spe.award_type IN ('points_final', 'mountain_final', 'youth_final') AND spe.rank = 1)
         )
       ORDER BY spe.season DESC, spe.rank ASC
-    `).all(raceId, podiumAward) as Array<{
+    `).all(raceName, podiumAward) as Array<{
       season: number; award_type: string; rank: number; rider_id: number;
       first_name: string; last_name: string; country_code: string | null;
       team_id: number | null; team_name: string | null; spec1: string | null; spec2: string | null;
@@ -136,11 +140,11 @@ export class ResultRepository {
       FROM season_point_events spe
       JOIN riders ON riders.id = spe.rider_id
       JOIN sta_country country ON country.id = riders.country_id
-      WHERE spe.race_id = ? AND spe.points_awarded > 0
+      WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?) AND spe.points_awarded > 0
       GROUP BY spe.rider_id, riders.first_name, riders.last_name, country.code_3
       HAVING COUNT(DISTINCT spe.season) >= 3
       ORDER BY seasons DESC, total_points DESC, riders.last_name ASC
-    `).all(raceId) as Array<{ rider_id: number; first_name: string; last_name: string; country_code: string | null; seasons: number; total_points: number }>;
+    `).all(raceName) as Array<{ rider_id: number; first_name: string; last_name: string; country_code: string | null; seasons: number; total_points: number }>;
 
     const participation: PalmaresParticipationRow[] = participationRows.map((r) => ({
       riderId: r.rider_id,

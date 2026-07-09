@@ -173,6 +173,7 @@ export function computeRiderBadgeTiers(input: RiderBadgeTierInput): RiderBadgeTi
   const gtStageWinsGiro = hof.gtStageWinsGiro ?? 0;
   const gtStageWinsVuelta = hof.gtStageWinsVuelta ?? 0;
   const gtWithStageWin = [gtStageWinsTdf, gtStageWinsGiro, gtStageWinsVuelta].filter((n) => n >= 1).length;
+  const gtStageWinsTotal = gtStageWinsTdf + gtStageWinsGiro + gtStageWinsVuelta;
   // Welle 10 (rein abgeleitet).
   const pointsPerfectionist = hof.pointsPerfectionist ?? 0;
   const thirdWeekWonder = hof.thirdWeekWonder ?? 0;
@@ -338,6 +339,7 @@ export function computeRiderBadgeTiers(input: RiderBadgeTierInput): RiderBadgeTi
         && (worldU23ChampionRoadTitles + worldU23ChampionIttTitles) >= 1
         && (worldChampionRoadTitles + worldChampionIttTitles) >= 1),
     single('grandTourStageSlam', gtWithStageWin === 3),
+    threshold('gtStageHunter', resolveThresholdTier(gtStageWinsTotal, [3, 8, 15, 25, 40])),
     single('missingOutOne', gtWithStageWin === 2),
     single('tdfWinner', tdfWins >= 1),
     single('allGrandTourWinner', hof.wonAllGrandTours === true),

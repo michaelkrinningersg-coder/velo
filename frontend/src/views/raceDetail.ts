@@ -147,10 +147,14 @@ function renderDetailTab(race: Race): string {
   const stageList = stages.map((st) => {
     const active = st.id === stage.id ? ' race-detail-stage-row-active' : '';
     const label = race.isStageRace ? getStageDisplayName(st) : 'Eintagesrennen';
+    // Zweizeilig: 1. Zeile Datum + "Etappe x", 2. Zeile Profil-Badge — damit
+    // bei schmaler Spalte nichts abgeschnitten wird.
     return `<button type="button" class="race-detail-stage-row${active}" data-race-detail-stage-id="${st.id}">
-      <span class="rd-stage-date">${esc(formatDate(st.date))}</span>
-      <span class="rd-stage-name">${esc(label)}</span>
-      ${renderStageProfileBadge(st.profile)}
+      <span class="rd-stage-line1">
+        <span class="rd-stage-date">${esc(formatDate(st.date))}</span>
+        <span class="rd-stage-name">${esc(label)}</span>
+      </span>
+      <span class="rd-stage-line2">${renderStageProfileBadge(st.profile)}</span>
     </button>`;
   }).join('');
 

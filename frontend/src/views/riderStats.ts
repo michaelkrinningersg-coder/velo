@@ -782,7 +782,9 @@ export function renderRiderSkillBadge(score: number): string {
 }
 
 export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderStatsPayload | null): string {
-  const riderSkills = rider?.skills ?? {
+  // Fallback auf die Payload-Skills (eingefroren beim Retirement) — retired
+  // Fahrer stehen nicht in der aktiven Liste, daher waere `rider` null.
+  const riderSkills = rider?.skills ?? payload?.skills ?? {
     mountain: 60, hill: 60, sprint: 60, timeTrial: 60, cobble: 60, attack: 60,
     mediumMountain: 60, flat: 60, prologue: 60, acceleration: 60
   };
@@ -936,9 +938,11 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
 
   // SPEC-Karten (1-3)
   const specDefs: Array<{ label: string; border: string; value: string }> = [
-    { label: 'SPEC 1', border: '#22d3ee', value: rider?.specialization1 ? getRiderSpecializationLabel(rider.specialization1) : '–' },
-    { label: 'SPEC 2', border: '#818cf8', value: rider?.specialization2 ? getRiderSpecializationLabel(rider.specialization2) : '–' },
-    { label: 'SPEC 3', border: '#5f6f8a', value: rider?.specialization3 ? getRiderSpecializationLabel(rider.specialization3) : '–' },
+    // Fallback auf die Payload-Spezialisierungen (eingefroren beim Retirement),
+    // da retired Fahrer nicht in der aktiven Liste stehen (rider == null).
+    { label: 'SPEC 1', border: '#22d3ee', value: (rider?.specialization1 ?? payload?.specialization1) ? getRiderSpecializationLabel((rider?.specialization1 ?? payload?.specialization1)!) : '–' },
+    { label: 'SPEC 2', border: '#818cf8', value: (rider?.specialization2 ?? payload?.specialization2) ? getRiderSpecializationLabel((rider?.specialization2 ?? payload?.specialization2)!) : '–' },
+    { label: 'SPEC 3', border: '#5f6f8a', value: (rider?.specialization3 ?? payload?.specialization3) ? getRiderSpecializationLabel((rider?.specialization3 ?? payload?.specialization3)!) : '–' },
   ];
   const specCardsHtml = specDefs.map((spec) => `
     <div style="flex:1; min-width:0; background:#0b1424; border:1px solid #1c2b47; border-top:2px solid ${spec.border}; border-radius:9px; padding:8px 11px;">
@@ -3386,6 +3390,16 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
         ? `Etappensiege in allen drei Grand Tours (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta})`
         : `Erst in ${gtWithStageWin} von 3 Grand Tours eine Etappe gewonnen.`,
       'In allen drei Grand Tours eine Etappe gewinnen', gtStageWinsTotal > 0 ? `${gtStageWinsTotal} GT-Etappen` : ''),
+    {
+      key: 'gtStageHunter',
+      name: 'Grand Tour Etappenjäger',
+      icon: HOF_ICON_FLAG,
+      description: 'Grand-Tour-Etappensiege',
+      tier: T('gtStageHunter'),
+      detail: `${gtStageWinsTotal.toLocaleString('de-DE')} GT-Etappensiege`,
+      hover: `${gtStageWinsTotal.toLocaleString('de-DE')} Etappensiege in den Grand Tours (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta}) (Gold 40 · Silber 25 · Bronze 15 · Cyan 8 · Lila 3)`,
+      requirement: 'Ab 3 Grand-Tour-Etappensiegen',
+    },
     singleBadge('missingOutOne', 'Missing Out One', HOF_ICON_PODIUM, 'Etappensieg in 2 von 3 Grand Tours',
       gtWithStageWin === 2, HOF_STYLE_GREEN,
       gtWithStageWin === 2
@@ -4284,7 +4298,7 @@ const HOF_GROUPS: string[][] = [
    'careerRainbow', 'olympicChampionRoad', 'olympicChampionItt',
    'worldU23ChampionRoad', 'worldU23ChampionItt', 'euroU23ChampionRoad', 'euroU23ChampionItt',
    'worldJuniorChampionRoad', 'worldJuniorChampionItt', 'euroJuniorChampionRoad', 'euroJuniorChampionItt',
-   'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'missingOutOne',
+   'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'gtStageHunter', 'missingOutOne',
    'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',

@@ -1265,6 +1265,13 @@ export interface RiderStatsPayload {
   mentorName?: string | null;
   mentoredRiderNames?: string[];
   overallRating: number;
+  // Skills + Spezialisierungen des Fahrers (eingefroren beim Retirement). Als
+  // Fallback fuer die Anzeige zurueckgetretener Fahrer, die nicht mehr in der
+  // aktiven Fahrerliste stehen (dort waere das Rider-Objekt null -> 60/"-").
+  skills?: RiderSkills;
+  specialization1?: RiderSpecialization | null;
+  specialization2?: RiderSpecialization | null;
+  specialization3?: RiderSpecialization | null;
   seasonFormPhase: RiderSeasonFormPhase;
   formBonus: number;
   raceFormBonus: number;

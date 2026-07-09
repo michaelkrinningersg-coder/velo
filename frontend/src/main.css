@@ -6784,10 +6784,10 @@ tr.calendar-highlight {
   padding-right: 4px;
 }
 .race-detail-stage-row {
-  display: grid;
-  grid-template-columns: 64px 1fr auto;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
   text-align: left;
   padding: 9px 11px;
   border: 1px solid #1c2b47;
@@ -6802,10 +6802,36 @@ tr.calendar-highlight {
   box-shadow: inset 3px 0 0 #22d3ee;
   background: linear-gradient(90deg, rgba(34, 211, 238, .12), transparent 70%);
 }
-.rd-stage-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; }
-.rd-stage-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Zeile 1: Datum + "Etappe x" (nimmt volle Breite, damit der Name nicht mit dem
+   Badge um Platz konkurriert). Zeile 2: Profil-Badge. */
+.rd-stage-line1 { display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0; }
+.rd-stage-line2 { display: flex; }
+.rd-stage-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; flex: none; }
+.rd-stage-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .race-detail-main-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.race-detail-nav { justify-content: flex-start; }
+.race-detail-nav { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+/* Etappen-Auswahl zwischen den Pfeilen im Broadcast-Stil. */
+#race-detail-stage-select {
+  flex: 1;
+  min-width: 0;
+  background: #0a1122;
+  color: #e2e8f0;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+#race-detail-stage-select:hover { border-color: #2b3a55; }
+#race-detail-stage-select:focus {
+  outline: none;
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, .22);
+}
 .race-detail-profile { min-width: 0; }
 .race-detail-profile-loading {
   height: 220px;
