@@ -39,9 +39,19 @@ const BADGE_DEFS: BadgeDef[] = [
   { key: 'breakawayMaster', category: 'Action', label: 'Ausreißer-Meister (erfolgreiche Ausreißer)', icon: '🎯', metricKey: 'successful_breakaways', thresholds: [5, 10, 15, 20, 25] },
   // Wertungen
   { key: 'maillotJaune', category: 'Wertungen', label: 'Maillot Jaune (Gelbe Trikottage)', icon: '💛', metricKey: 'jersey_gc', thresholds: [50, 100, 150, 200, 300] },
+  { key: 'summitFinisher', category: 'Rennerfolg', label: 'Summit Finisher (Hochgebirgs-Siege)', icon: '⛰️', metricKey: 'wins_terrain_High_Mountain', thresholds: [5, 10, 20, 30, 40] },
+  // Wertungen
+  { key: 'greenMachine', category: 'Wertungen', label: 'Green Machine (Grüne Trikottage)', icon: '💚', metricKey: 'jersey_points', thresholds: [25, 50, 75, 100, 150] },
+  { key: 'kingOfTheMountains', category: 'Wertungen', label: 'King of the Mountains (Bergtrikottage)', icon: '⛰️', metricKey: 'jersey_mountain', thresholds: [25, 50, 75, 100, 150] },
+  { key: 'youngGun', category: 'Wertungen', label: 'Young Gun (Weiße Trikottage)', icon: '🤍', metricKey: 'jersey_youth', thresholds: [25, 50, 75, 100, 125] },
+  { key: 'pointsChampion', category: 'Wertungen', label: 'Points Champion (Grüne-Trikot-Titel)', icon: '🟢', metricKey: 'final_points_wins', thresholds: [2, 3, 5, 7, 11] },
+  { key: 'polkaDotKing', category: 'Wertungen', label: 'Polka-Dot King (Bergtrikot-Titel)', icon: '🔴', metricKey: 'final_mountain_wins', thresholds: [2, 3, 5, 7, 11] },
+  { key: 'bestYoungRider', category: 'Wertungen', label: 'Best Young Rider (Weiße-Trikot-Titel)', icon: '⭐', metricKey: 'final_youth_wins', thresholds: [1, 2, 3, 5, 8] },
   // Ereignisse
   { key: 'pechvogel', category: 'Ereignisse', label: 'Pechvogel (Defekte)', icon: '🔧', metricKey: 'defects', thresholds: [5, 10, 15, 20, 25] },
   { key: 'sturzpilot', category: 'Ereignisse', label: 'Sturzpilot (Stürze)', icon: '🩹', metricKey: 'crashes', thresholds: [5, 10, 15, 20, 25] },
+  { key: 'comebackKing', category: 'Ereignisse', label: 'Comeback King (überstandene Verletzungen)', icon: '❤️‍🩹', metricKey: 'injuries', thresholds: [3, 6, 10, 15, 20] },
+  { key: 'underTheWeather', category: 'Ereignisse', label: 'Under the Weather (Krankheiten)', icon: '🤒', metricKey: 'illnesses', thresholds: [3, 6, 10, 15, 20] },
   // Rekorde (Rang-Badges, ohne Schwelle → Halterliste)
   { key: 'recUciPoints', category: 'Rekorde', label: 'UCI-Punkte (All-Time)', icon: '📊', metricKey: 'uci_points' },
   { key: 'recStageScores', category: 'Rekorde', label: 'Etappen-Scores (All-Time)', icon: '📈', metricKey: 'stage_scores' },
