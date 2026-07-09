@@ -71,6 +71,7 @@ import { initRaceDetailListeners } from './views/raceDetail';
 import {
   initLeaderboardsView,
   showLeaderboardsView,
+  openBadgeInLeaderboards,
 } from './views/leaderboards';
 import {
   initCalendarView,
@@ -170,6 +171,22 @@ function initAppListeners(): void {
     }
 
     openRiderStats(riderId);
+  });
+
+  // Klick auf ein Badge in der riderStats-Ansicht -> Badge-Tab in
+  // Statistiken & Rekorde mit allen Fahrern, die dieses Badge halten.
+  document.body.addEventListener('click', (event) => {
+    const badgeCard = (event.target as Element).closest<HTMLElement>('[data-hof-badge-key]');
+    if (!badgeCard) {
+      return;
+    }
+    const badgeKey = badgeCard.dataset['hofBadgeKey'];
+    if (!badgeKey) {
+      return;
+    }
+    hideModal('riderStats');
+    activateView('leaderboards');
+    openBadgeInLeaderboards(badgeKey);
   });
 
   // Global shared body team link click listener

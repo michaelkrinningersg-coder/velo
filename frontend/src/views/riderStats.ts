@@ -4259,7 +4259,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
 
   const tier = tierStyle;
   return `
-    <div title="${esc(badge.hover)}" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;">
+    <div data-hof-badge-key="${esc(badge.key)}" role="button" tabindex="0" title="${esc(badge.hover)} · Klick: alle Fahrer mit diesem Badge" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;cursor:pointer;">
       <span style="position:absolute;inset:0;background:radial-gradient(circle at 50% 0%, ${tier.soft}, transparent 62%);pointer-events:none;"></span>
       <span style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%, ${tier.soft}, #0e1930 75%);border:2px solid ${tier.color};color:${tier.color};box-shadow:0 0 18px ${tier.glow};">
         ${badge.icon}

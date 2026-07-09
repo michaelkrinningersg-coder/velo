@@ -197,6 +197,37 @@ export function showLeaderboardsView(): void {
   renderLeaderboard();
 }
 
+/**
+ * Oeffnet das Badge-Tab direkt auf einem bestimmten Badge (alle Halter). Wird
+ * vom Klick auf ein Badge in der riderStats-Ansicht aufgerufen. Setzt Scope,
+ * Kategorie und Badge und loest die bestehenden Change-Handler aus (die den
+ * Badge-Select fuellen, den State setzen und rendern).
+ */
+export function openBadgeInLeaderboards(badgeKey: string): void {
+  const metricDef = BADGE_DEFS.find((b) => b.key === badgeKey);
+  const bespokeDef = BESPOKE_BADGE_DEFS.find((b) => b.key === badgeKey);
+  const category = metricDef?.category ?? bespokeDef?.category;
+  if (!category) return;
+
+  // Scope-Tabs auf "badge" schalten (UI-Aktivzustand + Logik/Panels).
+  const scopeTabs = $('leaderboards-scope-tabs');
+  if (scopeTabs) {
+    scopeTabs.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-scope') === 'badge');
+    });
+  }
+  setScope('badge');
+
+  // Kategorie + Badge setzen und die vorhandenen Change-Handler ausloesen.
+  const catSel = $('leaderboard-badge-category') as HTMLSelectElement | null;
+  const badgeSel = $('leaderboard-badge-badge') as HTMLSelectElement | null;
+  if (!catSel || !badgeSel) return;
+  catSel.value = category;
+  catSel.dispatchEvent(new Event('change'));
+  badgeSel.value = badgeKey;
+  badgeSel.dispatchEvent(new Event('change'));
+}
+
 function initBadgeControls(): void {
   const catSel = $('leaderboard-badge-category') as HTMLSelectElement | null;
   const badgeSel = $('leaderboard-badge-badge') as HTMLSelectElement | null;
