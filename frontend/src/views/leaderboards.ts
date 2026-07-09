@@ -9,10 +9,48 @@ import {
 import { openRiderStats } from './riderStats';
 import { openTeamStats } from './teamStats';
 
-let activeScope: 'riders' | 'teams' = 'riders';
+let activeScope: 'riders' | 'teams' | 'badge' = 'riders';
 let activePeriod: 'season' | 'alltime' | 'live' = 'season';
 let savedUserPeriod: 'season' | 'alltime' = 'season'; // to restore period when unlocking
 let activeMetricKey = '';
+
+// ---- Badge-Tab -------------------------------------------------------------
+// Globale Filterung nach Hall-of-Fame-Badge: alle Fahrer mit dem Badge, sortiert
+// nach Bedingung absteigend. Reuse des /api/leaderboards-Datenpfads (performant).
+// Schwellenbadges: thresholds (5 Tier-Stufen, aufsteigend); ohne thresholds = Halterliste.
+interface BadgeDef {
+  key: string;
+  category: string;
+  label: string;
+  icon: string;
+  metricKey: string;
+  thresholds?: number[];
+}
+const BADGE_DEFS: BadgeDef[] = [
+  // Rennerfolg
+  { key: 'winTracker', category: 'Rennerfolg', label: 'Win Tracker (Karrieresiege)', icon: '🏆', metricKey: 'wins', thresholds: [10, 25, 50, 75, 100] },
+  // Belastung
+  { key: 'raceDaySquirrel', category: 'Belastung', label: 'Renntage-Eichhörnchen', icon: '📅', metricKey: 'race_days', thresholds: [350, 450, 550, 650, 750] },
+  // Action / Ausreißer
+  { key: 'escapeArtist', category: 'Action', label: 'Entfesselungskünstler (Ausreißer-km)', icon: '🧗', metricKey: 'breakaway_kms', thresholds: [10000, 12500, 15000, 17500, 20000] },
+  { key: 'baroudeurSupreme', category: 'Action', label: 'Baroudeur Supreme (Ausreißversuche)', icon: '💨', metricKey: 'breakaway_attempts', thresholds: [75, 100, 150, 200, 250] },
+  { key: 'restlessLegs', category: 'Action', label: 'Ruhelose Beine (Attacken)', icon: '⚡', metricKey: 'attacks', thresholds: [15, 30, 45, 60, 75] },
+  { key: 'notWithoutMe', category: 'Action', label: 'Nicht ohne mich (Konterattacken)', icon: '↩️', metricKey: 'counter_attacks', thresholds: [10, 20, 30, 40, 50] },
+  { key: 'breakawayMaster', category: 'Action', label: 'Ausreißer-Meister (erfolgreiche Ausreißer)', icon: '🎯', metricKey: 'successful_breakaways', thresholds: [5, 10, 15, 20, 25] },
+  // Wertungen
+  { key: 'maillotJaune', category: 'Wertungen', label: 'Maillot Jaune (Gelbe Trikottage)', icon: '💛', metricKey: 'jersey_gc', thresholds: [50, 100, 150, 200, 300] },
+  // Ereignisse
+  { key: 'pechvogel', category: 'Ereignisse', label: 'Pechvogel (Defekte)', icon: '🔧', metricKey: 'defects', thresholds: [5, 10, 15, 20, 25] },
+  { key: 'sturzpilot', category: 'Ereignisse', label: 'Sturzpilot (Stürze)', icon: '🩹', metricKey: 'crashes', thresholds: [5, 10, 15, 20, 25] },
+  // Rekorde (Rang-Badges, ohne Schwelle → Halterliste)
+  { key: 'recUciPoints', category: 'Rekorde', label: 'UCI-Punkte (All-Time)', icon: '📊', metricKey: 'uci_points' },
+  { key: 'recStageScores', category: 'Rekorde', label: 'Etappen-Scores (All-Time)', icon: '📈', metricKey: 'stage_scores' },
+  { key: 'recSuperteam', category: 'Rekorde', label: 'Superteam-Tage', icon: '🛡️', metricKey: 'superteam_count' },
+];
+const BADGE_CATEGORIES = Array.from(new Set(BADGE_DEFS.map((b) => b.category)));
+let badgeMetricKey = '';
+let badgeThreshold: number | null = null;
+let badgeLabel = '';
 
 // List of all select IDs
 const SELECT_IDS = [
@@ -33,7 +71,7 @@ export function initLeaderboardsView(): void {
       btn.addEventListener('click', () => {
         buttons.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        const scope = btn.getAttribute('data-scope') as 'riders' | 'teams';
+        const scope = btn.getAttribute('data-scope') as 'riders' | 'teams' | 'badge';
         setScope(scope);
       });
     });
@@ -77,6 +115,8 @@ export function initLeaderboardsView(): void {
     }
   });
 
+  initBadgeControls();
+
   // Expose global callback for openRiderStats from leaderboard links
   (window as any).openRiderStatsFromLeaderboard = openRiderStats;
   (window as any).openTeamStatsFromLeaderboard = openTeamStats;
@@ -101,14 +141,58 @@ export function showLeaderboardsView(): void {
   renderLeaderboard();
 }
 
-function setScope(scope: 'riders' | 'teams'): void {
+function initBadgeControls(): void {
+  const catSel = $('leaderboard-badge-category') as HTMLSelectElement | null;
+  const badgeSel = $('leaderboard-badge-badge') as HTMLSelectElement | null;
+  const thrSel = $('leaderboard-badge-threshold') as HTMLSelectElement | null;
+  if (!catSel || !badgeSel || !thrSel) return;
+
+  catSel.innerHTML = '<option value="">– Wählen –</option>'
+    + BADGE_CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  catSel.addEventListener('change', () => {
+    const defs = BADGE_DEFS.filter((b) => b.category === catSel.value);
+    badgeSel.innerHTML = '<option value="">– Wählen –</option>'
+      + defs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('');
+    thrSel.innerHTML = '<option value="">– Wählen –</option>';
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = '';
+    renderLeaderboard();
+  });
+
+  badgeSel.addEventListener('change', () => {
+    const def = BADGE_DEFS.find((b) => b.key === badgeSel.value);
+    if (!def) { badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; renderLeaderboard(); return; }
+    badgeMetricKey = def.metricKey;
+    badgeLabel = `${def.icon} ${def.label}`;
+    if (def.thresholds && def.thresholds.length) {
+      const tiers = ['Lila', 'Cyan', 'Bronze', 'Silber', 'Gold'];
+      thrSel.innerHTML = def.thresholds.map((t, i) => `<option value="${t}">≥ ${t.toLocaleString('de-DE')} · ${tiers[i] ?? ''}</option>`).join('');
+      badgeThreshold = def.thresholds[0]; // niedrigste Stufe = alle Badge-Halter
+    } else {
+      thrSel.innerHTML = '<option value="0">Alle Halter</option>';
+      badgeThreshold = 0;
+    }
+    renderLeaderboard();
+  });
+
+  thrSel.addEventListener('change', () => {
+    badgeThreshold = thrSel.value === '' ? null : Number(thrSel.value);
+    renderLeaderboard();
+  });
+}
+
+function setScope(scope: 'riders' | 'teams' | 'badge'): void {
   activeScope = scope;
-  
-  // Show/hide physis & form select group
+
+  // Panels je Scope umschalten
   const physisGroup = $('leaderboard-group-physis');
-  if (physisGroup) {
-    physisGroup.style.display = scope === 'teams' ? 'none' : 'block';
-  }
+  if (physisGroup) physisGroup.style.display = scope === 'riders' ? 'block' : 'none';
+  const metricToolbar = $('leaderboard-metric-toolbar');
+  if (metricToolbar) metricToolbar.style.display = scope === 'badge' ? 'none' : 'flex';
+  const badgePanel = $('leaderboard-badge-panel');
+  if (badgePanel) badgePanel.style.display = scope === 'badge' ? 'flex' : 'none';
+  const periodTabs = $('leaderboards-period-tabs');
+  if (periodTabs) periodTabs.style.display = scope === 'badge' ? 'none' : 'flex';
 
   // Handle teams scope restrictions
   if (scope === 'teams') {
@@ -248,13 +332,20 @@ export async function renderLeaderboard(): Promise<void> {
 
   if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
 
+  const isBadge = activeScope === 'badge';
+  const fetchScope: 'riders' | 'teams' = activeScope === 'badge' ? 'riders' : activeScope;
+  const metricKey = isBadge ? badgeMetricKey : activeMetricKey;
+  const period: 'season' | 'alltime' | 'live' = isBadge ? 'alltime' : activePeriod;
+
   const filterContainer = $('leaderboard-filter-container');
   if (filterContainer) {
-    filterContainer.style.display = activeScope === 'teams' ? 'none' : 'flex';
+    filterContainer.style.display = (fetchScope === 'teams' || isBadge) ? 'none' : 'flex';
   }
 
-  if (!activeMetricKey) {
-    emptyEl.textContent = 'Wähle eine Statistik aus den Dropdowns oben aus, um die Rangliste zu laden.';
+  if (!metricKey) {
+    emptyEl.textContent = isBadge
+      ? 'Wähle Kategorie, Badge und Schwelle aus, um alle Fahrer mit diesem Badge zu sehen.'
+      : 'Wähle eine Statistik aus den Dropdowns oben aus, um die Rangliste zu laden.';
     emptyEl.classList.remove('hidden');
     tableEl.classList.add('hidden');
     return;
@@ -265,8 +356,8 @@ export async function renderLeaderboard(): Promise<void> {
   emptyEl.classList.remove('hidden');
   tableEl.classList.add('hidden');
 
-  const res = await api.getLeaderboards(activeScope, activeMetricKey, activePeriod);
-  
+  const res = await api.getLeaderboards(fetchScope, metricKey, period);
+
   if (!isActiveView('leaderboards')) {
     return; // User navigated away
   }
@@ -280,7 +371,16 @@ export async function renderLeaderboard(): Promise<void> {
 
   // Live filtering
   let filteredData = res.data;
-  if (activeScope === 'riders') {
+  if (isBadge) {
+    const thr = badgeThreshold ?? 0;
+    filteredData = res.data.filter((row: any) => Number(row.value) >= thr);
+    if (filteredData.length === 0) {
+      emptyEl.textContent = 'Kein Fahrer erfüllt diese Badge-Bedingung.';
+      emptyEl.classList.remove('hidden');
+      tableEl.classList.add('hidden');
+      return;
+    }
+  } else if (activeScope === 'riders') {
     const wtChecked = ($('leaderboard-filter-wt') as HTMLInputElement)?.checked ?? true;
     const ptChecked = ($('leaderboard-filter-pt') as HTMLInputElement)?.checked ?? true;
     const otherChecked = ($('leaderboard-filter-other') as HTMLInputElement)?.checked ?? false;
@@ -322,10 +422,10 @@ export async function renderLeaderboard(): Promise<void> {
 
   const cardTitle = $('leaderboard-card-title');
   const cardCount = $('leaderboard-card-count');
-  if (cardTitle) cardTitle.textContent = activeScope === 'teams' ? 'Team-Rangliste' : 'Fahrer-Rangliste';
-  if (cardCount) cardCount.textContent = `${filteredData.length} ${activeScope === 'teams' ? 'Teams' : 'Fahrer'}`;
+  if (cardTitle) cardTitle.textContent = isBadge ? badgeLabel : (activeScope === 'teams' ? 'Team-Rangliste' : 'Fahrer-Rangliste');
+  if (cardCount) cardCount.textContent = `${filteredData.length} ${fetchScope === 'teams' ? 'Teams' : 'Fahrer'}`;
 
-  const cols = (activeScope === 'riders'
+  const cols = (fetchScope === 'riders'
     ? ['52px', '44px', '44px', 'minmax(150px,1.4fr)', 'minmax(90px,.8fr)',
         ...(showRaceDetail ? ['minmax(160px,1fr)'] : []),
         ...(isLieutenant ? ['minmax(150px,1fr)'] : []),
@@ -336,7 +436,7 @@ export async function renderLeaderboard(): Promise<void> {
 
   const raceDetailHeader = isGtSlam ? 'TDF · GIRO · VUELTA' : (isSpeed ? 'RENNEN / JAHR' : 'RENNEN / ETAPPE / JAHR');
   theadEl.style.gridTemplateColumns = cols;
-  theadEl.innerHTML = activeScope === 'riders'
+  theadEl.innerHTML = fetchScope === 'riders'
     ? `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span style="justify-self:center;">LAND</span><span>FAHRER</span><span>TEAM</span>${showRaceDetail ? `<span>${raceDetailHeader}</span>` : ''}${isLieutenant ? '<span>FÄHRT FÜR</span>' : ''}<span style="justify-self:end;">WERT</span>`
     : `<span>PLATZ</span><span style="justify-self:center;">TRIKOT</span><span>TEAM</span>${isLeadout ? '<span>RENNEN / ETAPPE / JAHR</span>' : ''}<span style="justify-self:end;">WERT</span>`;
 
@@ -346,7 +446,7 @@ export async function renderLeaderboard(): Promise<void> {
     : r === 2 ? 'box-shadow:inset 3px 0 0 #cbd5e1;background:linear-gradient(90deg,rgba(203,213,225,.07),transparent 55%);'
     : r === 3 ? 'box-shadow:inset 3px 0 0 #d08b5b;background:linear-gradient(90deg,rgba(208,139,91,.07),transparent 55%);'
     : '';
-  const rowAlign = activeScope === 'teams' ? 'start' : 'center';
+  const rowAlign = fetchScope === 'teams' ? 'start' : 'center';
 
   // Render rows
   let html = '';
@@ -392,7 +492,7 @@ export async function renderLeaderboard(): Promise<void> {
       }
     }
 
-    if (activeScope === 'riders') {
+    if (fetchScope === 'riders') {
       const flagHtml = `<span style="display:flex;justify-content:center;">${row.nationality ? renderFlag(row.nationality) : '—'}</span>`;
       const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color: #60a5fa; text-decoration: none; font-weight: bold; hover: text-decoration: underline;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
       const teamHtml = (row.teamAbbr && row.teamId != null)

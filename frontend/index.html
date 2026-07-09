@@ -421,11 +421,27 @@
           <div class="results-type-tabs" style="margin: 0;" id="leaderboards-scope-tabs">
             <button class="results-type-btn active" data-scope="riders">Fahrer</button>
             <button class="results-type-btn" data-scope="teams">Teams</button>
+            <button class="results-type-btn" data-scope="badge">Badge</button>
           </div>
 
           <div class="results-type-tabs" style="margin: 0;" id="leaderboards-period-tabs">
             <button class="results-type-btn active" data-period="season">Aktuelle Saison</button>
             <button class="results-type-btn" data-period="alltime">All-Time</button>
+          </div>
+        </div>
+
+        <div id="leaderboard-badge-panel" class="results-toolbar" style="display:none; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+          <div class="form-group">
+            <label for="leaderboard-badge-category">Kategorie ▾</label>
+            <select id="leaderboard-badge-category"><option value="">– Wählen –</option></select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-badge-badge">Badge ▾</label>
+            <select id="leaderboard-badge-badge"><option value="">– Wählen –</option></select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-badge-threshold">Schwelle ▾</label>
+            <select id="leaderboard-badge-threshold"><option value="">– Wählen –</option></select>
           </div>
         </div>
 
@@ -441,7 +457,7 @@
           </label>
         </div>
 
-        <div class="results-toolbar" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <div id="leaderboard-metric-toolbar" class="results-toolbar" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
           <div class="form-group">
             <label for="leaderboard-select-performance">Rennerfolg ▾</label>
             <select id="leaderboard-select-performance">
