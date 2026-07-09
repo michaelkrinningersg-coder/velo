@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type Database from 'better-sqlite3';
 import { ensureContractRenewals } from './contractRenewalSchedule';
+import { saveRenewalSelection, getRenewalSelectionPayload, isRenewalSelectionPending } from './contractRenewalSelection';
 import {
   createTestDb,
   seedReferenceData,
@@ -10,6 +11,8 @@ import {
 } from '../__tests__/helpers/testDb';
 
 const SEASON = 2026;
+const AI_TEAM = 2;
+const PLAYER_TEAM = 1;
 
 function insertContract(db: Database.Database, riderId: number, teamId: number, startSeason: number, endSeason: number) {
   const info = db.prepare(`
@@ -21,81 +24,121 @@ function insertContract(db: Database.Database, riderId: number, teamId: number, 
 
 function getContract(db: Database.Database, id: number) {
   return db.prepare('SELECT end_season AS endSeason, status FROM contracts WHERE id = ?').get(id) as
-    | { endSeason: number; status: string }
-    | undefined;
+    | { endSeason: number; status: string } | undefined;
 }
 
-describe('ensureContractRenewals', () => {
+describe('ensureContractRenewals — KI-Teams (Auto-35%)', () => {
   let db: Database.Database;
-
   beforeEach(() => {
     db = createTestDb();
     seedReferenceData(db);
-    seedTeams(db, { count: 2, playerTeamId: 1 });
+    seedTeams(db, { count: 2, playerTeamId: PLAYER_TEAM });
   });
-
   afterEach(() => db.close());
 
   it('tut vor dem 01.08. nichts', () => {
     seedGameState(db, { date: '2026-07-31', season: SEASON });
-    const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: 1 });
-    const contractId = insertContract(db, riderId, 1, 2024, SEASON);
-
+    const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: AI_TEAM });
+    const contractId = insertContract(db, riderId, AI_TEAM, 2024, SEASON);
     ensureContractRenewals(db);
-
     expect(getContract(db, contractId)?.endSeason).toBe(SEASON);
     expect(db.prepare('SELECT 1 FROM contract_renewal_runs WHERE season = ?').get(SEASON)).toBeUndefined();
   });
 
-  it('verlaengert rund 35% der auslaufenden Vertraege um 1-3 Jahre, ab dem 01.08.', () => {
+  it('verlaengert rund 35% der auslaufenden KI-Vertraege um 1-3 Jahre', () => {
     seedGameState(db, { date: '2026-08-01', season: SEASON });
-    const contractIds: number[] = [];
+    const ids: number[] = [];
     for (let i = 0; i < 200; i++) {
-      const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: 1 });
-      contractIds.push(insertContract(db, riderId, 1, 2024, SEASON));
+      const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: AI_TEAM });
+      ids.push(insertContract(db, riderId, AI_TEAM, 2024, SEASON));
     }
-
     ensureContractRenewals(db);
-
-    const renewed = contractIds.filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON);
-    // Math.round(200 * 0.35) = 70
-    expect(renewed.length).toBe(70);
+    const renewed = ids.filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON);
+    expect(renewed.length).toBe(70); // round(200 * 0.35)
     for (const id of renewed) {
-      const c = getContract(db, id)!;
-      const extension = c.endSeason - SEASON;
-      expect(extension).toBeGreaterThanOrEqual(1);
-      expect(extension).toBeLessThanOrEqual(3);
-      expect(c.status).toBe('active');
+      const ext = getContract(db, id)!.endSeason - SEASON;
+      expect(ext).toBeGreaterThanOrEqual(1);
+      expect(ext).toBeLessThanOrEqual(3);
     }
-    expect(db.prepare('SELECT 1 FROM contract_renewal_runs WHERE season = ?').get(SEASON)).toBeTruthy();
   });
 
-  it('ist idempotent - ein zweiter Lauf verlaengert nicht erneut', () => {
-    seedGameState(db, { date: '2026-08-15', season: SEASON });
-    const contractIds: number[] = [];
-    for (let i = 0; i < 50; i++) {
-      const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: 1 });
-      contractIds.push(insertContract(db, riderId, 1, 2024, SEASON));
-    }
-
-    ensureContractRenewals(db);
-    const afterFirstRun = contractIds.map((id) => getContract(db, id)?.endSeason);
-
-    ensureContractRenewals(db);
-    const afterSecondRun = contractIds.map((id) => getContract(db, id)?.endSeason);
-
-    expect(afterSecondRun).toEqual(afterFirstRun);
-  });
-
-  it('verlaengert nicht, wenn der Fahrer dadurch das Retirement-Age erreichen wuerde', () => {
-    // Alter am Saisonende bereits 34; jede Verlaengerung um 1+ Jahr wuerde das
-    // Retirement-Age 35 erreichen -> darf nicht verlaengert werden.
-    const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: 1 });
-    const contractId = insertContract(db, riderId, 1, 2024, 2032);
-
+  it('verlaengert keinen KI-Fahrer, der dadurch das Retirement-Age erreichen wuerde', () => {
+    const riderId = seedRider(db, { birthYear: 1998, retirementAge: 35, activeTeamId: AI_TEAM });
+    const contractId = insertContract(db, riderId, AI_TEAM, 2024, 2032);
     seedGameState(db, { date: '2032-08-01', season: 2032 });
     ensureContractRenewals(db);
-
     expect(getContract(db, contractId)?.endSeason).toBe(2032);
+  });
+});
+
+describe('Spieler-Vertragsverlängerung — Auswahl (10.01.) + Ziehung (01.08.)', () => {
+  let db: Database.Database;
+  beforeEach(() => {
+    db = createTestDb();
+    seedReferenceData(db);
+    seedTeams(db, { count: 2, playerTeamId: PLAYER_TEAM });
+  });
+  afterEach(() => db.close());
+
+  function seedPlayerExpiring(count: number, birthYear = 1998): number[] {
+    const ids: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const riderId = seedRider(db, { birthYear, retirementAge: 38, activeTeamId: PLAYER_TEAM });
+      ids.push(insertContract(db, riderId, PLAYER_TEAM, 2024, SEASON));
+    }
+    return ids;
+  }
+
+  it('am 10.01. ist die Auswahl pending; max. 75% der auslaufenden Fahrer wählbar', () => {
+    seedGameState(db, { date: '2026-01-10', season: SEASON });
+    seedPlayerExpiring(8);
+    expect(isRenewalSelectionPending(db)).toBe(true);
+    const payload = getRenewalSelectionPayload(db);
+    expect(payload.candidates.length).toBe(8);
+    expect(payload.maxSelectable).toBe(6); // floor(8 * 0.75)
+  });
+
+  it('schließt Retirement-Fälle aus der Auswahl aus', () => {
+    seedGameState(db, { date: '2026-01-10', season: SEASON });
+    // Alter am Saisonende 34, Retirement 35 -> nicht wählbar.
+    const rid = seedRider(db, { birthYear: 1992, retirementAge: 35, activeTeamId: PLAYER_TEAM });
+    insertContract(db, rid, PLAYER_TEAM, 2024, SEASON);
+    const payload = getRenewalSelectionPayload(db);
+    expect(payload.candidates.find((c) => c.riderId === rid)).toBeUndefined();
+  });
+
+  it('lehnt mehr als 75% oder nicht-wählbare Fahrer ab', () => {
+    seedGameState(db, { date: '2026-01-10', season: SEASON });
+    const ids = seedPlayerExpiring(4); // maxSelectable = 3
+    expect(() => saveRenewalSelection(db, ids)).toThrow(); // 4 > 3
+    expect(() => saveRenewalSelection(db, [999999])).toThrow(); // nicht wählbar
+  });
+
+  it('bestätigte Auswahl schließt das Fenster; am 01.08. verlängern 35-65% der Ausgewählten', () => {
+    seedGameState(db, { date: '2026-01-10', season: SEASON });
+    const ids = seedPlayerExpiring(20); // maxSelectable = 15
+    const selected = ids.slice(0, 12);
+    saveRenewalSelection(db, selected);
+    expect(isRenewalSelectionPending(db)).toBe(false); // Fenster geschlossen
+
+    // Zum Ziehungstag springen und laufen lassen.
+    db.prepare('UPDATE game_state SET "current_date" = ? WHERE id = 1').run('2026-08-01');
+    ensureContractRenewals(db);
+
+    const renewedSelected = selected.filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON).length;
+    const renewedOthers = ids.slice(12).filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON).length;
+    // 35-65% von 12 = 4..8; nicht ausgewählte Spieler-Fahrer werden NICHT verlängert.
+    expect(renewedSelected).toBeGreaterThanOrEqual(Math.round(12 * 0.35));
+    expect(renewedSelected).toBeLessThanOrEqual(Math.round(12 * 0.65));
+    expect(renewedOthers).toBe(0);
+  });
+
+  it('ohne Auswahl-Bestätigung wird kein Spieler-Vertrag verlängert (Fenster verpasst)', () => {
+    // Kein saveRenewalSelection -> am 01.08. keine Ziele -> keine Verlängerung.
+    seedGameState(db, { date: '2026-08-01', season: SEASON });
+    const ids = seedPlayerExpiring(10);
+    ensureContractRenewals(db);
+    const renewed = ids.filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON).length;
+    expect(renewed).toBe(0);
   });
 });

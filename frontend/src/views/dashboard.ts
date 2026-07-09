@@ -145,6 +145,14 @@ export function renderGameState(): void {
     pendingStagesContainer.classList.add('hidden');
     advanceButton.disabled = false;
   }
+
+  // Blockierendes Auswahlfenster (10.01.): Vertragsverlängerungs-Ziele wählen.
+  if (state.gameState.renewalSelectionPending) {
+    hint.textContent = 'Wähle deine Ziele für Vertragsverlängerungen, um fortzufahren.';
+    hint.classList.remove('hidden');
+    advanceButton.disabled = true;
+    void import('./contractRenewal').then((m) => m.openContractRenewalModal());
+  }
 }
 
 export function renderDashboard(): void {

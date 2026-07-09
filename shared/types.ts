@@ -642,6 +642,8 @@ export interface GameState {
   draftStatus?: 'not_started' | 'active' | 'completed';
   draftCurrentPickNumber?: number;
   draftSeason?: number | null;
+  /** Spieler muss am 10.01. seine Vertragsverlängerungs-Ziele wählen (blockiert). */
+  renewalSelectionPending?: boolean;
 }
 
 export interface PendingStage {
@@ -675,6 +677,8 @@ export interface GameStatus {
   draftStatus?: 'not_started' | 'active' | 'completed';
   draftCurrentPickNumber?: number;
   draftSeason?: number | null;
+  /** Spieler muss am 10.01. seine Vertragsverlängerungs-Ziele wählen (blockiert). */
+  renewalSelectionPending?: boolean;
   /** Sieger der zuletzt simulierten Etappe / des letzten Rennens (fuer "Im Fokus"). */
   lastStageWinner?: LastStageWinner | null;
 }

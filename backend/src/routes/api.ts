@@ -8,6 +8,7 @@ import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
 import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
+import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
@@ -846,6 +847,20 @@ export function createRouter(dbService: DatabaseService): Router {
   router.post('/state/advance', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().advanceDay()); }
     catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  // Spieler-Vertragsverlängerungen: Auswahlfenster (10.01.)
+  router.get('/contract-renewals', (_req: Request, res: Response) => {
+    try { ok(res, getRenewalSelectionPayload(dbService.getActiveConnection())); }
+    catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/contract-renewals/select', (req: Request, res: Response) => {
+    try {
+      const riderIds = Array.isArray(req.body?.riderIds) ? req.body.riderIds.map((n: any) => Number(n)) : [];
+      saveRenewalSelection(dbService.getActiveConnection(), riderIds);
+      ok(res, getRenewalSelectionPayload(dbService.getActiveConnection()));
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   

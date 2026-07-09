@@ -684,6 +684,21 @@ export class DatabaseService {
         season INTEGER PRIMARY KEY
       )
     `).run();
+    // Vom Spieler am 10.01. ausgewaehlte Verlaengerungsziele je Saison.
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_selection (
+        season INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL,
+        PRIMARY KEY (season, rider_id)
+      )
+    `).run();
+    // Markiert, dass der Spieler die Auswahl fuer die Saison bestaetigt hat
+    // (auch wenn 0 Fahrer gewaehlt wurden) — schliesst das Auswahlfenster.
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_selection_runs (
+        season INTEGER PRIMARY KEY
+      )
+    `).run();
   }
 
   // Reserviertes Pseudo-Team fuer teamlose Starter der U23-/Junioren-Rennen

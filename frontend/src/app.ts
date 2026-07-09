@@ -68,6 +68,7 @@ import {
   initTeamStatsListeners,
 } from './views/teamStats';
 import { initRaceDetailListeners } from './views/raceDetail';
+import { initContractRenewalView } from './views/contractRenewal';
 import {
   initLeaderboardsView,
   showLeaderboardsView,
@@ -239,6 +240,7 @@ function initAppListeners(): void {
   initTeamStatsListeners();
   initRaceDetailListeners();
   initSeasonStandingsListeners();
+  initContractRenewalView();
   initLeaderboardsView();
   initRaceProgramsView();
   initDraftListeners();

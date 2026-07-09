@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
 import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
+import { isRenewalSelectionPending } from '../simulation/contractRenewalSelection';
 import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
 import { ensureOlympicGames } from '../simulation/olympicGamesSchedule';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
@@ -229,6 +230,7 @@ export class GameStateService {
       draftStatus: state.draftStatus,
       draftCurrentPickNumber: state.draftCurrentPickNumber,
       draftSeason: state.draftSeason,
+      renewalSelectionPending: isRenewalSelectionPending(this.db),
       lastStageWinner: this.loadLastStageWinner(),
     };
   }
@@ -262,6 +264,12 @@ export class GameStateService {
       const pendingStages = this.getPendingStages(currentRow.current_date);
       if (pendingStages.length > 0) {
         throw new Error('Der Tag kann nicht beendet werden, solange offene Rennen oder Etappen simuliert werden muessen.');
+      }
+
+      // Blockierendes Auswahlfenster (10.01.): der Spieler muss zuerst seine
+      // Vertragsverlängerungs-Ziele wählen und bestätigen.
+      if (isRenewalSelectionPending(this.db)) {
+        throw new Error('Bitte zuerst die Ziele für Vertragsverlängerungen auswählen und bestätigen.');
       }
 
       const nextDate = addDaysIso(currentRow.current_date, 1);
@@ -1896,6 +1904,7 @@ export class GameStateService {
       draftStatus:    (row.draft_status as any) ?? 'completed',
       draftCurrentPickNumber: row.draft_current_pick_number ?? 1,
       draftSeason:    row.draft_season ?? null,
+      renewalSelectionPending: isRenewalSelectionPending(this.db),
     };
   }
 
