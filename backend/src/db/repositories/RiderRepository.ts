@@ -767,6 +767,7 @@ export class RiderRepository {
       leaderInfo,
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
+      isRetired: rider.isRetired ?? false,
       age: rider.age ?? (new GameStateRepository(this.db).getCurrentSeason() - rider.birthYear),
       teamId: rider.activeTeamId ?? null,
       teamName: rider.activeTeamId != null ? new TeamRepository(this.db).getTeamById(rider.activeTeamId)?.name ?? null : null,
@@ -1168,6 +1169,7 @@ export class RiderRepository {
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
+      isRetired: rider.isRetired ?? false,
       age: rider.age ?? (new GameStateRepository(this.db).getCurrentSeason() - rider.birthYear),
       teamId: rider.activeTeamId ?? null,
       teamName: rider.activeTeamId != null ? new TeamRepository(this.db).getTeamById(rider.activeTeamId)?.name ?? null : null,

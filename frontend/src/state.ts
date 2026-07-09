@@ -112,7 +112,7 @@ export const state: {
   draftOverlayCurrentIndex: number;
   draftSpeedMultiplier: number;
   draftPaused: boolean;
-  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries' | 'nationalChampions' | 'internationalChampions';
+  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries' | 'nationalChampions' | 'internationalChampions' | 'raceWinners';
   teamTableSort: {
     key: TeamTableSortKey;
     direction: 'asc' | 'desc';

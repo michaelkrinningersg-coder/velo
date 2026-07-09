@@ -28,6 +28,8 @@ import type {
   SeasonReigningTitle,
   SeasonChampionHolder,
   ChampionTitleType,
+  RaceWinnerEntry,
+  PalmaresRiderRef,
 } from '../../../shared/types';
 
 export function formatPointsGap(points: number): string {
@@ -191,11 +193,20 @@ export function renderSeasonStandingsView(): void {
       class="results-type-btn${scope === 'internationalChampions' ? ' active' : ''}"
       data-season-scope="internationalChampions"
     >WM / EM / Olympia</button>
+    <button
+      type="button"
+      class="results-type-btn${scope === 'raceWinners' ? ' active' : ''}"
+      data-season-scope="raceWinners"
+    >Jahressieger</button>
   `;
 
-  // Die beiden Meister-Uebersichten nutzen ein eigenes Layout (kein Broadcast-Grid).
+  // Eigenständige Layouts ohne Broadcast-Grid.
   if (scope === 'nationalChampions' || scope === 'internationalChampions') {
     renderChampionsScope(scope);
+    return;
+  }
+  if (scope === 'raceWinners') {
+    renderRaceWinnersScope();
     return;
   }
 
@@ -403,13 +414,72 @@ function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampio
   tableCard.classList.remove('hidden');
 }
 
+// Jahresuebersicht der Renn-Sieger nach Prestige-Stufe (Design: Sektionen,
+// Plaetze 1/2/3 in eigenen Spalten einzeilig nebeneinander).
+const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
+  { ids: [1], label: 'Tour de France', color: '#facc15' },
+  { ids: [2], label: 'Grand Tours', color: '#fb923c' },
+  { ids: [3], label: 'Monumente', color: '#f472b6' },
+  { ids: [4], label: 'World Tour High', color: '#22d3ee' },
+  { ids: [7], label: 'One Day High', color: '#a78bfa' },
+];
+
+function renderWinnerCell(ref: PalmaresRiderRef | null, medalColor: string): string {
+  if (!ref) return '<span style="color:#4a5a75;font-size:13px;">–</span>';
+  const flag = ref.countryCode ? renderResultsFlagColumn(ref.countryCode) : '';
+  const name = renderRiderNameLink(ref.lastName, { riderId: ref.riderId, strong: medalColor === '#facc15' });
+  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${flag}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
+}
+
+function renderRaceWinnersScope(): void {
+  const empty = $('season-standings-empty');
+  const tableCard = $('season-standings-table-card');
+  const gridHead = $('season-standings-grid-head');
+  const tbody = $('season-standings-tbody');
+  const cardTitle = $('season-standings-card-title');
+  const cardCount = $('season-standings-card-count');
+
+  gridHead.style.display = 'none';
+  const winners = state.seasonStandings?.raceWinners ?? [];
+  cardTitle.textContent = 'Jahressieger';
+  cardCount.textContent = `${winners.length} ${winners.length === 1 ? 'Rennen' : 'Rennen'}`;
+
+  const COLS = 'grid-template-columns:minmax(150px,1.25fr) 1fr 1fr 1fr;gap:14px;';
+  const sections = WINNER_TIERS.map((tier) => {
+    const races = winners.filter((w) => tier.ids.includes(w.categoryId));
+    if (races.length === 0) return '';
+    const header = `<div style="display:grid;${COLS}padding:6px 14px;">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:#6a7a95;text-transform:uppercase;">Rennen</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:#facc15;text-transform:uppercase;">Sieger</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:#cbd5e1;text-transform:uppercase;">2. Platz</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:#cd7c3b;text-transform:uppercase;">3. Platz</span>
+    </div>`;
+    const rows = races.map((w) => `<div style="display:grid;${COLS}padding:10px 14px;border-top:1px solid #14203a;align-items:center;">
+      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.raceName)}</span>
+      ${renderWinnerCell(w.winner, '#facc15')}
+      ${renderWinnerCell(w.second, '#cbd5e1')}
+      ${renderWinnerCell(w.third, '#cd7c3b')}
+    </div>`).join('');
+    return `<section style="border:1px solid #1e2c49;border-radius:12px;background:#0c1526;overflow:hidden;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid #1c2b47;background:linear-gradient(90deg,${tier.color}22,transparent 60%);">
+        <span style="width:8px;height:20px;border-radius:3px;background:${tier.color};"></span>
+        <span style="font-weight:800;font-size:14px;color:#f1f5f9;">${tier.label}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6a7a95;letter-spacing:.1em;">${races.length} RENNEN</span>
+      </div>${header}${rows}</section>`;
+  }).join('');
+
+  tbody.innerHTML = sections || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Sieger in dieser Saison.</div>';
+  empty.classList.add('hidden');
+  tableCard.classList.remove('hidden');
+}
+
 export function initSeasonStandingsListeners(): void {
   $('season-standings-scope-tabs').addEventListener('click', (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button[data-season-scope]');
     if (!button) return;
     const scope = button.dataset['seasonScope'];
     if (scope !== 'riders' && scope !== 'teams' && scope !== 'countries'
-      && scope !== 'nationalChampions' && scope !== 'internationalChampions') return;
+      && scope !== 'nationalChampions' && scope !== 'internationalChampions' && scope !== 'raceWinners') return;
     state.selectedSeasonStandingScope = scope;
     renderSeasonStandingsView();
   });

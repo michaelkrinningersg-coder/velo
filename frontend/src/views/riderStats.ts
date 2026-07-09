@@ -606,6 +606,12 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
     `<span style="font-size:11px; font-weight:700; color:${color}; background:${bg}; border:1px solid ${border}; padding:4px 11px; border-radius:99px; display:inline-flex; align-items:center; gap:6px;"${title ? ` title="${esc(title)}"` : ''}>${content}</span>`;
 
   const pills: string[] = [];
+  if (payload?.isRetired) {
+    pills.push(pill(
+      `<span style="display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:4px; background:#ef4444; color:#2a0a0a; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:9px;">R</span>RETIRED`,
+      '#fca5a5', 'rgba(239,68,68,.16)', 'rgba(239,68,68,.45)', 'Karriere beendet',
+    ));
+  }
   if (isCaptain) {
     pills.push(pill(
       `<span style="display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:4px; background:#eab308; color:#1a1300; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:9px;">K</span>Kapitän`,
@@ -2681,7 +2687,8 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
   const GRID = 'display:grid;grid-template-columns:70px minmax(120px,1fr) 96px 104px 74px 56px 82px 52px;gap:10px;align-items:center;';
   const MONOF = "font-family:'JetBrains Mono',monospace";
 
-  const rowsHtml = yearlySteps.map((step) => {
+  const retiredPill = '<span style="font-size:11px;font-weight:800;color:#fca5a5;background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.45);padding:3px 9px;border-radius:99px;">Retired</span>';
+  const rowsHtml = yearlySteps.map((step, index) => {
     const agg = seasonAgg.get(step.season);
     const raceDays = raceDaysBySeason.get(step.season) ?? (step.season === currentSeason ? (payload?.currentSeasonRaceDays ?? 0) : 0);
     const wins = step.status === 'future' ? '–' : String(agg?.wins ?? 0);
@@ -2695,7 +2702,7 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
         <span style="${MONOF};font-size:13px;font-weight:700;color:#e2e8f0;">${step.season}</span>
         ${teamCell}
         <span style="font-size:12px;color:#9fb0c9;">${esc(step.roleName || '-')}</span>
-        <span>${statusPill(step.status)}</span>
+        <span>${payload?.isRetired && index === 0 ? retiredPill : statusPill(step.status)}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${step.status === 'future' ? '–' : raceDays}</span>
         <span style="${MONOF};font-size:12px;color:#fbbf24;justify-self:end;">${wins}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${points}</span>

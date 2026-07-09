@@ -130,6 +130,7 @@ export interface RiderRow {
   specialization_3: Rider['specialization3'];
   is_stage_racer: number;
   is_one_day_racer: number;
+  is_retired: number;
   has_grand_tour_tag: number;
   has_stage_race_tag: number;
   has_one_day_classic_tag: number;
@@ -853,6 +854,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     specialization3: row.specialization_3,
     isStageRacer: row.is_stage_racer === 1,
     isOneDayRacer: row.is_one_day_racer === 1,
+    isRetired: row.is_retired === 1,
     hasGrandTourTag: row.has_grand_tour_tag === 1,
     hasStageRaceTag: row.has_stage_race_tag === 1,
     hasOneDayClassicTag: row.has_one_day_classic_tag === 1,

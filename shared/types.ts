@@ -230,6 +230,7 @@ export interface Rider {
   activeTeamId: number | null;
   activeContractId: number | null;
   contractEndSeason?: number | null;
+  isRetired?: boolean;
   seasonPoints?: number;
   seasonRaceDays?: number;
   seasonRaceDaysTotal?: number;
@@ -544,6 +545,16 @@ export interface RacePalmaresPayload {
   isStageRace: boolean;
   seasons: PalmaresSeasonEntry[];
   participation: PalmaresParticipationRow[];
+}
+
+/** Sieger + Podium eines Rennens (fuer die Season-Standings-Jahresuebersicht). */
+export interface RaceWinnerEntry {
+  raceId: number;
+  raceName: string;
+  categoryId: number;
+  winner: PalmaresRiderRef | null;
+  second: PalmaresRiderRef | null;
+  third: PalmaresRiderRef | null;
 }
 
 export interface Stage {
@@ -1245,6 +1256,7 @@ export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
   age?: number;
+  isRetired: boolean;
   teamId: number | null;
   teamName: string | null;
   weatherProfileId?: number;
@@ -1389,6 +1401,8 @@ export interface SeasonStandingsPayload {
   nationalChampions?: SeasonNationalChampionGroup[];
   /** Aktuell gueltige internationale Titel (WM/EM/U23/Junioren/Olympia). */
   reigningTitles?: SeasonReigningTitle[];
+  /** Jahresuebersicht der Renn-Sieger nach Prestige-Stufe (TdF/GT/Monument/High). */
+  raceWinners?: RaceWinnerEntry[];
 }
 
 // ------ Generische API-Response ------------------------------
