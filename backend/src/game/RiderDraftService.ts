@@ -18,6 +18,22 @@ function hasMetQuota(specId: number, counts: { spec1: number; spec23: number }):
   return s1 >= 4;
 }
 
+// --- Top-Fahrer-Kappe im Draft ------------------------------------------------
+// Verhindert die Akkumulation sehr starker Fahrer bei einzelnen Teams.
+// Zwei Baender (strikt groesser): >77 (Basiskappe 4) und >74 (Basiskappe 10).
+// "Weiche Rampe + hartes Deckel-Limit": je naeher ein Team an der Kappe, desto
+// staerker die Gewichts-Strafe; bei Erreichen der (ggf. eskalierten) Kappe ist
+// der Fahrer fuer dieses Team hart gesperrt. Eskalation paritaetsgesteuert:
+// erst wenn JEDES Team die aktuelle Kappe erreicht hat, steigt sie um 1
+// (4->5->6 …, 10->11->12 …), damit der Draft nie blockiert.
+const TOP_CAP_77_BASE = 4;
+const TOP_CAP_74_BASE = 10;
+const TOP_THRESHOLD_77 = 77; // strikt groesser
+const TOP_THRESHOLD_74 = 74; // strikt groesser
+const TOP77_RAMP = 3.0;      // Strafe je bereits vorhandenem >77-Fahrer
+const TOP74_SOFT_START = 7;  // ab so vielen >74-Fahrern beginnt die weiche Rampe
+const TOP74_RAMP = 1.5;      // Strafe je >74-Fahrer oberhalb TOP74_SOFT_START
+
 const draftSequenceChunks = [
   [0, 4],   // Runde 0: Plätze 1-5
   [0, 4],   // Runde 1: Plätze 1-5
@@ -328,6 +344,10 @@ export class RiderDraftService {
     // Spec counts for quotas
     const teamMap = this.getTeamSpecCounts(season, teamId);
 
+    // Top-Fahrer-Kappe: aktuelle (eskalierte) Kappen + Zaehlung dieses Teams.
+    const { cap77, cap74, countsByTeam } = this.computeTopRiderCaps(season);
+    const teamTop = countsByTeam.get(teamId) ?? { c77: 0, c74: 0 };
+
     // Count active strong riders (OVR >= 75) in each specialization for this team
     const strongRiders = this.db.prepare(`
       SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
@@ -434,11 +454,26 @@ export class RiderDraftService {
         }
       }
 
+      // Top-Fahrer-Kappe: weiche Rampe unterhalb der Kappe, harte Sperre bei
+      // Erreichen der (eskalierten) Kappe. Renewals des eigenen Fahrers sind
+      // ausgenommen (der Fahrer zaehlt bereits fuer das Team).
+      const capOut = this.topCapOutcome(rider.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74);
+      let blocked = false;
+      if (rider.old_team_id !== teamId) {
+        if (capOut.blocked) {
+          blocked = true;
+          if (capOut.factor) factors.push(capOut.factor);
+        } else if (capOut.penalty > 0) {
+          weight -= capOut.penalty;
+          if (capOut.factor) factors.push(capOut.factor);
+        }
+      }
+
       if (weight < 0.01) {
         weight = 0.01;
       }
 
-      return { rider, weight, factors };
+      return { rider, weight, factors, blocked };
     });
 
     const weights = poolDetails.map(p => p.weight);
@@ -447,25 +482,47 @@ export class RiderDraftService {
     let selectedIdx = -1;
     if (selectedRiderId !== undefined) {
       selectedIdx = poolDetails.findIndex(p => p.rider.id === selectedRiderId);
-    }
-
-    if (selectedIdx === -1) {
-      // Automatic KI selection
-      selectedIdx = 0;
-      if (totalWeight > 0) {
-        const randomVal = Math.random() * totalWeight;
-        let cumulative = 0;
-        for (let idx = 0; idx < pool.length; idx++) {
-          cumulative += weights[idx];
-          if (randomVal <= cumulative) {
-            selectedIdx = idx;
-            break;
-          }
-        }
+      // Harte Sperre: ein gesperrter Fahrer darf nicht gewaehlt werden, solange
+      // es nicht-gesperrte Alternativen im Pool gibt.
+      if (selectedIdx !== -1 && poolDetails[selectedIdx].blocked && poolDetails.some(p => !p.blocked)) {
+        throw new Error('Dieser Fahrer ist im Draft gesperrt: Das Team hat sein Limit an Top-Fahrern erreicht.');
       }
     }
 
-    const selected = poolDetails[selectedIdx];
+    let selectedOverride: { rider: any; weight: number; factors: string[] } | null = null;
+    if (selectedIdx === -1) {
+      // Automatische KI-Auswahl unter den nicht-gesperrten Pool-Kandidaten.
+      const eligibleIdx = poolDetails.map((p, idx) => (p.blocked ? -1 : idx)).filter(idx => idx >= 0);
+      if (eligibleIdx.length > 0) {
+        const candTotal = eligibleIdx.reduce((sum, idx) => sum + weights[idx], 0);
+        selectedIdx = eligibleIdx[0];
+        if (candTotal > 0) {
+          const randomVal = Math.random() * candTotal;
+          let cumulative = 0;
+          for (const idx of eligibleIdx) {
+            cumulative += weights[idx];
+            if (randomVal <= cumulative) {
+              selectedIdx = idx;
+              break;
+            }
+          }
+        }
+      } else {
+        // Der Pool (beste 30 nach Wert) ist komplett gesperrt (Team am Top-Limit,
+        // nur noch Top-Fahrer verfuegbar). Statt das Limit zu verletzen, den besten
+        // WAEHLBAREN Free Agent ausserhalb des Pools nehmen. Nur wenn es gar keinen
+        // waehlbaren Fahrer gibt, dient der Pool als letztes Ventil.
+        selectedOverride = (() => {
+          const alt = freeAgents.find((r: any) =>
+            r.old_team_id === teamId ||
+            !this.topCapOutcome(r.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74).blocked);
+          return alt ? { rider: alt, weight: 0.01, factors: ['Ausweich: Team am Top-Limit'] } : null;
+        })();
+        if (!selectedOverride) selectedIdx = 0;
+      }
+    }
+
+    const selected = selectedOverride ?? poolDetails[selectedIdx];
     const draftedRider = selected.rider;
 
     // Logging
@@ -529,6 +586,76 @@ export class RiderDraftService {
 
     // Update game_state current pick number
     this.db.prepare('UPDATE game_state SET draft_current_pick_number = ? WHERE id = 1').run(pickNumber + 1);
+  }
+
+  // Aktuelle >77/>74-Zaehlung je Draft-Team (aktive + zukuenftige Vertraege) plus
+  // die daraus abgeleiteten, paritaetsgesteuert eskalierten Kappen.
+  private computeTopRiderCaps(season: number): {
+    cap77: number; cap74: number; countsByTeam: Map<number, { c77: number; c74: number }>;
+  } {
+    const teamIds = this.getRankedTeamIds(season);
+    const countsByTeam = new Map<number, { c77: number; c74: number }>();
+    for (const id of teamIds) countsByTeam.set(id, { c77: 0, c74: 0 });
+
+    const rows = this.db.prepare(`
+      SELECT c.team_id AS teamId,
+             SUM(CASE WHEN r.overall_rating > ${TOP_THRESHOLD_77} THEN 1 ELSE 0 END) AS c77,
+             SUM(CASE WHEN r.overall_rating > ${TOP_THRESHOLD_74} THEN 1 ELSE 0 END) AS c74
+      FROM contracts c
+      JOIN riders r ON r.id = c.rider_id
+      WHERE c.status IN ('active', 'future') AND r.is_retired = 0
+      GROUP BY c.team_id
+    `).all() as Array<{ teamId: number; c77: number; c74: number }>;
+    for (const row of rows) {
+      if (countsByTeam.has(row.teamId)) countsByTeam.set(row.teamId, { c77: row.c77, c74: row.c74 });
+    }
+
+    // Kaderbelegung je Team + Maximalgroesse — nur Teams MIT freiem Kaderplatz
+    // gaten die Eskalation (ein volles Team kann ohnehin nicht mehr picken und
+    // darf die Kappe nicht dauerhaft blockieren).
+    const rosterRows = this.db.prepare(`
+      SELECT t.id AS teamId, dt.max_roster_size AS maxSize,
+             (SELECT COUNT(*) FROM contracts c WHERE c.team_id = t.id AND c.status IN ('active','future')) AS rosterSize
+      FROM teams t JOIN division_teams dt ON dt.id = t.division_id
+    `).all() as Array<{ teamId: number; maxSize: number; rosterSize: number }>;
+    const hasSpace = new Map<number, boolean>();
+    for (const r of rosterRows) hasSpace.set(r.teamId, r.rosterSize < r.maxSize);
+
+    let min77 = Infinity, min74 = Infinity;
+    for (const [id, v] of countsByTeam.entries()) {
+      if (hasSpace.get(id) === false) continue; // volle Teams ausklammern
+      min77 = Math.min(min77, v.c77); min74 = Math.min(min74, v.c74);
+    }
+    if (!isFinite(min77)) { min77 = 0; min74 = 0; }
+
+    // Kappe steigt erst, wenn ALLE noch pickenden Teams die aktuelle Kappe erreicht haben.
+    const cap77 = Math.max(TOP_CAP_77_BASE, min77 + 1);
+    const cap74 = Math.max(TOP_CAP_74_BASE, min74 + 1);
+    return { cap77, cap74, countsByTeam };
+  }
+
+  // Wirkung der Top-Kappe auf einen Kandidaten fuer ein Team: harte Sperre bei
+  // Erreichen der Kappe, sonst weiche Gewichts-Strafe (Rampe).
+  private topCapOutcome(
+    overall: number, c77: number, c74: number, cap77: number, cap74: number,
+  ): { blocked: boolean; penalty: number; factor: string | null } {
+    const is77 = overall > TOP_THRESHOLD_77;
+    const is74 = overall > TOP_THRESHOLD_74;
+    if (is77 && c77 >= cap77) return { blocked: true, penalty: 0, factor: `Sperre: ${cap77} Fahrer >${TOP_THRESHOLD_77} erreicht` };
+    if (is74 && c74 >= cap74) return { blocked: true, penalty: 0, factor: `Sperre: ${cap74} Fahrer >${TOP_THRESHOLD_74} erreicht` };
+    let penalty = 0;
+    const parts: string[] = [];
+    if (is77 && c77 > 0) {
+      const p = TOP77_RAMP * c77;
+      penalty += p;
+      parts.push(`>${TOP_THRESHOLD_77}-Stacking (-${p.toFixed(1)})`);
+    }
+    if (is74 && c74 >= TOP74_SOFT_START) {
+      const p = TOP74_RAMP * (c74 - TOP74_SOFT_START + 1);
+      penalty += p;
+      parts.push(`>${TOP_THRESHOLD_74}-Stacking (-${p.toFixed(1)})`);
+    }
+    return { blocked: false, penalty, factor: parts.length ? parts.join(', ') : null };
   }
 
   private getTeamSpecCounts(season: number, teamId: number): Map<number, { spec1: number; spec23: number }> {
@@ -667,6 +794,10 @@ export class RiderDraftService {
     // Spec counts for quotas
     const teamMap = this.getTeamSpecCounts(season, teamId);
 
+    // Top-Fahrer-Kappe: aktuelle (eskalierte) Kappen + Zaehlung dieses Teams.
+    const { cap77, cap74, countsByTeam } = this.computeTopRiderCaps(season);
+    const teamTop = countsByTeam.get(teamId) ?? { c77: 0, c74: 0 };
+
     // Count active strong riders (OVR >= 75) in each specialization for this team
     const strongRiders = this.db.prepare(`
       SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
@@ -773,11 +904,26 @@ export class RiderDraftService {
         }
       }
 
+      // Top-Fahrer-Kappe: weiche Rampe unterhalb der Kappe, harte Sperre bei
+      // Erreichen der (eskalierten) Kappe. Renewals des eigenen Fahrers sind
+      // ausgenommen (der Fahrer zaehlt bereits fuer das Team).
+      const capOut = this.topCapOutcome(rider.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74);
+      let blocked = false;
+      if (rider.old_team_id !== teamId) {
+        if (capOut.blocked) {
+          blocked = true;
+          if (capOut.factor) factors.push(capOut.factor);
+        } else if (capOut.penalty > 0) {
+          weight -= capOut.penalty;
+          if (capOut.factor) factors.push(capOut.factor);
+        }
+      }
+
       if (weight < 0.01) {
         weight = 0.01;
       }
 
-      return { rider, weight, factors };
+      return { rider, weight, factors, blocked };
     });
 
     const totalWeight = poolDetails.map(p => p.weight).reduce((sum, w) => sum + w, 0);
@@ -842,7 +988,14 @@ export class RiderDraftService {
         birthYear: p.rider.birth_year,
         uciRank: uciRanks.get(p.rider.id) ?? null,
         wins: winsMap.get(p.rider.id) ?? 0,
-        factors: p.factors
+        factors: p.factors,
+        // Top-Fahrer-Kappe: gesperrte Kandidaten werden in der UI ausgegraut.
+        blocked: (p as any).blocked === true,
+        blockReason: (p as any).blocked
+          ? (p.rider.overall_rating > TOP_THRESHOLD_77
+            ? `Team-Limit erreicht: ${cap77} Fahrer >${TOP_THRESHOLD_77}`
+            : `Team-Limit erreicht: ${cap74} Fahrer >${TOP_THRESHOLD_74}`)
+          : null,
       };
     });
   }

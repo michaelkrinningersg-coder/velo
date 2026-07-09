@@ -479,9 +479,13 @@ function formatSpecName(spec: string | null | undefined): string | null {
 }
 
 function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: number, isPlayerTurn = false): string {
-  const borderStyle = isSelected ? 'border: 2px solid var(--accent, #38bdf8); background: rgba(56, 189, 248, 0.08);' : 'border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);';
-  const cursorStyle = isPlayerTurn ? 'cursor: pointer;' : '';
-  const clickClass = isPlayerTurn ? 'draft-candidate-clickable' : '';
+  // Top-Fahrer-Kappe: gesperrte Kandidaten sind nicht wählbar (ausgegraut + Grund).
+  const blocked = c.blocked === true;
+  const borderStyle = blocked
+    ? 'border: 1px dashed rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.05); opacity: 0.55;'
+    : isSelected ? 'border: 2px solid var(--accent, #38bdf8); background: rgba(56, 189, 248, 0.08);' : 'border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);';
+  const cursorStyle = blocked ? 'cursor: not-allowed;' : (isPlayerTurn ? 'cursor: pointer;' : '');
+  const clickClass = (isPlayerTurn && !blocked) ? 'draft-candidate-clickable' : '';
   
   const specs: string[] = [];
   const s1 = formatSpecName(c.specialization1);
@@ -510,7 +514,7 @@ function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: num
   }
   
   return `
-    <div class="${clickClass}" data-rider-id="${c.riderId}" style="display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0.4rem; border-radius: 6px; transition: all 0.2s; ${borderStyle} ${cursorStyle}">
+    <div class="${clickClass}" data-rider-id="${c.riderId}" ${blocked ? `title="${esc(c.blockReason ?? 'Im Draft gesperrt')}"` : ''} style="display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0.4rem; border-radius: 6px; transition: all 0.2s; ${borderStyle} ${cursorStyle}">
       <div style="display: flex; align-items: center; gap: 0.45rem;">
         ${jerseyHtml ? `
         <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
@@ -538,7 +542,9 @@ function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: num
         <div style="text-align: right; line-height: 1.1;">
           <div style="font-size: 0.62rem; color: #64748b; text-transform: uppercase; font-weight: bold;">POT</div>
           <div style="font-size: 0.72rem; font-weight: bold; color: #94a3b8;">${c.potential.toFixed(1)}</div>
-          <div style="font-size: 0.65rem; color: var(--accent, #38bdf8); font-weight: bold; margin-top: 0.02rem;">${c.probability.toFixed(1)}%</div>
+          ${blocked
+            ? `<div style="font-size: 0.6rem; color: #f87171; font-weight: bold; margin-top: 0.02rem;">🔒 GESPERRT</div>`
+            : `<div style="font-size: 0.65rem; color: var(--accent, #38bdf8); font-weight: bold; margin-top: 0.02rem;">${c.probability.toFixed(1)}%</div>`}
         </div>
         <div style="border: 1px solid #fbbf24; border-radius: 4px; padding: 0.15rem 0.3rem; color: #fbbf24; font-weight: bold; font-size: 0.85rem; min-width: 2.2rem; text-align: center; background: rgba(251, 191, 36, 0.05); line-height: 1.1;">
           ${c.overallRating.toFixed(1)}
