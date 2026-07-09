@@ -20,6 +20,7 @@ import { RiderRoleService } from './RiderRoleService';
 import { RiderDraftService } from './RiderDraftService';
 import { RiderNewgenService } from './RiderNewgenService';
 import { BadgeMaterializationService } from './BadgeMaterializationService';
+import { RivalryService } from './RivalryService';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -414,6 +415,8 @@ export class GameStateService {
         // sind hier final). Bewusst nur hier statt bei jedem Load — der volle
         // Rebuild ist teuer (~26 Queries je Fahrer).
         new BadgeMaterializationService(this.db).rebuildAllRiderBadges();
+        // Liga-Rivalitaeten der abgeschlossenen Saison neu materialisieren.
+        new RivalryService(this.db).rebuildRivalries();
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);

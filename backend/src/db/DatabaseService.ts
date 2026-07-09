@@ -9,6 +9,7 @@ import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
 import { BadgeMaterializationService } from '../game/BadgeMaterializationService';
+import { RivalryService } from '../game/RivalryService';
 import { summarizeStageProfile } from '../simulation/StageParser';
 import {
   CHAMPIONSHIP_CATEGORY_DEFS,
@@ -3153,6 +3154,36 @@ export class DatabaseService {
     `);
   }
 
+  /**
+   * Materialisierte Liga-Rivalitaeten je Saison (max. 10). Wird beim
+   * Saisonwechsel neu berechnet (RivalryService), analog zu rider_badges.
+   */
+  private ensureRivalriesSchema(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS rivalries (
+        season          INTEGER NOT NULL,
+        rank            INTEGER NOT NULL,
+        rider_a_id      INTEGER NOT NULL,
+        rider_b_id      INTEGER NOT NULL,
+        idx             INTEGER NOT NULL,
+        intensity       REAL    NOT NULL,
+        encounters      INTEGER NOT NULL,
+        win_a           INTEGER NOT NULL,
+        win_b           INTEGER NOT NULL,
+        season_win_a    INTEGER NOT NULL,
+        season_win_b    INTEGER NOT NULL,
+        top_category_id INTEGER,
+        discipline      TEXT,
+        PRIMARY KEY (season, rider_a_id, rider_b_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rivalries_season_rank
+        ON rivalries(season, rank);
+      CREATE INDEX IF NOT EXISTS idx_rivalries_rider_a ON rivalries(rider_a_id);
+      CREATE INDEX IF NOT EXISTS idx_rivalries_rider_b ON rivalries(rider_b_id);
+    `);
+  }
+
   private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
@@ -3186,6 +3217,7 @@ export class DatabaseService {
     this.ensureRiderSeasonStatsSchema(db);
     this.ensureRiderCategoryStatsSchema(db);
     this.ensureRiderBadgesSchema(db);
+    this.ensureRivalriesSchema(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);
@@ -3294,6 +3326,14 @@ export class DatabaseService {
       .get();
     if (!badgeCount) {
       new BadgeMaterializationService(this.activeConnection).rebuildAllRiderBadges();
+    }
+    // Liga-Rivalitaeten: Erstbefuellung, falls noch keine Saison materialisiert
+    // ist (regulaer beim Saisonwechsel in GameStateService).
+    const rivalryCount = this.activeConnection
+      .prepare('SELECT 1 FROM rivalries LIMIT 1')
+      .get();
+    if (!rivalryCount) {
+      new RivalryService(this.activeConnection).rebuildRivalries();
     }
     return this.activeConnection;
   }

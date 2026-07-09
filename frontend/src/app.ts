@@ -78,6 +78,11 @@ import {
   initCalendarView,
   showCalendarView,
 } from './views/calendar';
+import {
+  initRivalriesView,
+  showRivalriesView,
+  openRivalryCard,
+} from './views/rivalries';
 import { RaceSimView } from './race-sim/RaceSimView';
 import {
   initRaceProgramsView,
@@ -152,6 +157,7 @@ function initAppListeners(): void {
       if (view === 'injuries') void loadInjuries();
       if (view === 'season-standings') void loadSeasonStandings(true);
       if (view === 'leaderboards') void showLeaderboardsView();
+      if (view === 'rivalries') showRivalriesView();
       if (view === 'calendar') showCalendarView();
       if (view === 'race-programs') void loadRaceProgramsData();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
@@ -188,6 +194,22 @@ function initAppListeners(): void {
     hideModal('riderStats');
     activateView('leaderboards');
     openBadgeInLeaderboards(badgeKey);
+  });
+
+  // Klick auf den Rivalen-Chip im riderStats-Header -> Rivalen-View mit der
+  // Rivalitaetskarte des Paares.
+  document.body.addEventListener('click', (event) => {
+    const chip = (event.target as Element).closest<HTMLElement>('[data-rivalry-pair]');
+    if (!chip) {
+      return;
+    }
+    const key = chip.dataset['rivalryPair'];
+    if (!key) {
+      return;
+    }
+    hideModal('riderStats');
+    activateView('rivalries');
+    openRivalryCard(key);
   });
 
   // Global shared body team link click listener
@@ -242,6 +264,7 @@ function initAppListeners(): void {
   initSeasonStandingsListeners();
   initContractRenewalView();
   initLeaderboardsView();
+  initRivalriesView();
   initRaceProgramsView();
   initDraftListeners();
 }

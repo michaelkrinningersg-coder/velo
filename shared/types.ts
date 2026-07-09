@@ -1281,6 +1281,8 @@ export interface RiderStatsPayload {
   raceFormBonus: number;
   /** Aktuell gehaltene WM/EM-Titel (regierender Meister bis zur naechsten Edition). */
   reigningChampionTitles?: ReigningChampionTitle[];
+  /** Aktueller Top-Rivale (falls dieser Fahrer in einer Liga-Rivalitaet steckt). */
+  topRival?: RiderTopRival | null;
   program: RaceProgram | null;
   programRaces: Race[];
   isUnavailable: boolean;
@@ -1330,6 +1332,94 @@ export interface RiderStatsPayload {
     season: number;
     roleName: string;
   }>;
+}
+
+// ==== Rivalen =================================================
+export type RivalryDuelKind = 'GC' | 'Etappe' | 'Eintages';
+
+export interface RivalryRiderRef {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  roleId: number | null;
+  roleName: string | null;
+  overallRating: number;
+}
+
+export interface RivalryOverviewItem {
+  rank: number;
+  index: number;
+  discipline: string;
+  topCategoryId: number | null;
+  topCategoryName: string | null;
+  encounters: number;
+  seasonWinA: number;
+  seasonWinB: number;
+  riderA: RivalryRiderRef;
+  riderB: RivalryRiderRef;
+}
+
+export interface RivalryOverviewPayload {
+  season: number;
+  seasons: number[];
+  rivalries: RivalryOverviewItem[];
+}
+
+export interface RivalryDetailRider extends RivalryRiderRef {
+  age: number;
+  careerWins: number;
+  allTimeUciPoints: number;
+  seasonProgram: string | null;
+}
+
+export interface RivalryDuelRow {
+  date: string;
+  season: number;
+  raceName: string;
+  categoryId: number;
+  categoryName: string | null;
+  type: RivalryDuelKind;
+  rankA: number;
+  rankB: number;
+  teamAId: number | null;
+  teamAName: string | null;
+  teamBId: number | null;
+  teamBName: string | null;
+  winner: 'A' | 'B' | null;
+}
+
+export interface RivalryDetailPayload {
+  season: number;
+  rank: number;
+  index: number;
+  discipline: string;
+  topCategoryId: number | null;
+  topCategoryName: string | null;
+  seasonWinA: number;
+  seasonWinB: number;
+  seasonEncounters: number;
+  gesamtWinA: number;
+  gesamtWinB: number;
+  encounters: number;
+  riderA: RivalryDetailRider;
+  riderB: RivalryDetailRider;
+  duels: RivalryDuelRow[];
+}
+
+export interface RiderTopRival {
+  season: number;
+  riderAId: number;
+  riderBId: number;
+  rivalRiderId: number;
+  rivalFirstName: string;
+  rivalLastName: string;
+  rivalCountryCode: string | null;
+  index: number;
+  selfWins: number;
+  rivalWins: number;
 }
 
 export interface RiderFatigueHistoryEntry {

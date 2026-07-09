@@ -663,6 +663,7 @@ export type ViewName =
   | 'stage-editor-stages'
   | 'stage-editor-climbs'
   | 'leaderboards'
+  | 'rivalries'
   | 'race-programs';
 
 interface ActiveViewListener {

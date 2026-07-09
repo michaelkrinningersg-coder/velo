@@ -10,6 +10,7 @@ import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
 import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
+import { RivalryService } from '../game/RivalryService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
@@ -29,6 +30,8 @@ import {
   RaceRosterSelectionRequest,
   RiderProgramRaceSummary,
   RiderStatsPayload,
+  RivalryOverviewPayload,
+  RivalryDetailPayload,
   TeamStatsPayload,
   RiderTeamEditorExportPayload,
   RiderTeamEditorPayload,
@@ -414,7 +417,32 @@ export function createRouter(dbService: DatabaseService): Router {
       const excludeFatigue = req.query['excludeFatigue'] === 'true';
       const payload = new RiderRepository(db).getRiderStats(riderId, excludeFatigue);
       if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
+      payload.topRival = new RivalryService(db).getTopRivalForRider(riderId);
       ok<RiderStatsPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  // ---- Rivalen ----------------------------------------------------------
+  router.get('/rivalries', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const season = req.query['season'] != null ? Number(req.query['season']) : undefined;
+      ok<RivalryOverviewPayload>(res, new RivalryService(db).getOverview(Number.isFinite(season as number) ? season : undefined));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/rivalries/:aId/:bId', (req: Request, res: Response) => {
+    const aId = Number(req.params['aId']);
+    const bId = Number(req.params['bId']);
+    if (!Number.isFinite(aId) || !Number.isFinite(bId)) return fail(res, 400, 'Ungueltige Rivalen-IDs.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const season = req.query['season'] != null ? Number(req.query['season']) : undefined;
+      const payload = new RivalryService(db).getDetail(aId, bId, Number.isFinite(season as number) ? season : undefined);
+      if (!payload) return fail(res, 404, 'Rivalitaet nicht gefunden.');
+      ok<RivalryDetailPayload>(res, payload);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

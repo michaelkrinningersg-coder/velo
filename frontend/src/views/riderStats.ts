@@ -666,6 +666,9 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
           ${(payload?.reigningChampionTitles ?? []).length
             ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:7px;">${(payload!.reigningChampionTitles ?? []).map(renderReigningChampionChip).join('')}</div>`
             : ''}
+          ${payload?.topRival
+            ? `<div data-rivalry-pair="${payload.topRival.riderAId}-${payload.topRival.riderBId}" role="button" tabindex="0" title="Zum Head-to-Head" style="display:inline-flex; align-items:center; gap:9px; margin-bottom:8px; cursor:pointer; border:1px solid rgba(251,191,36,.4); border-radius:11px; padding:6px 12px; background:rgba(251,191,36,.06);"><span style="font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:.16em; color:#b58f2e;">RIVALE</span><span style="display:inline-flex; align-items:center; gap:6px; font-weight:800; font-size:13px; color:#e2e8f0;">${renderFlag(payload.topRival.rivalCountryCode ?? '')} ${esc(payload.topRival.rivalLastName)}</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8b9ab4;">H2H ${payload.topRival.selfWins}–${payload.topRival.rivalWins}</span><span style="font-family:'JetBrains Mono',monospace; color:#fbbf24; font-size:13px;">→</span></div>`
+            : ''}
           <div style="font-size:15px; font-weight:700; color:#e2e8f0;">${esc(resolvedRoleName)}</div>
           <div style="display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;">${pills.join('')}</div>
         </div>
