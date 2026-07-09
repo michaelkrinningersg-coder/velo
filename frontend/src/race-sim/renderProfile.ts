@@ -430,7 +430,7 @@ function buildProfileGeom(summary: ParsedStageSummary, width: number, height: nu
   };
 }
 
-interface ClimbFeature {
+export interface ClimbFeature {
   startKm: number;
   topKm: number;
   startElevation: number;
@@ -441,14 +441,14 @@ interface ClimbFeature {
   avgGradient: number;
   finish: boolean;
 }
-interface SprintFeature { km: number; elevation: number; name: string; }
-interface StageFeatures { climbs: ClimbFeature[]; sprints: SprintFeature[]; finishHasSummit: boolean; }
+export interface SprintFeature { km: number; elevation: number; name: string; }
+export interface StageFeatures { climbs: ClimbFeature[]; sprints: SprintFeature[]; finishHasSummit: boolean; }
 
 // Leitet Anstiege (climb_start↔climb_top/finish-summit), Zwischensprints und
 // Bergankunft aus den eingebetteten StageMarkern ab — dieselbe Paarungslogik
 // wie zuvor buildProfileEvents, aber mit vollem Start/Top-Bereich für die
 // farbige Anstiegs-Schattierung und die Namens-Chips.
-function extractStageFeatures(summary: ParsedStageSummary): StageFeatures {
+export function extractStageFeatures(summary: ParsedStageSummary): StageFeatures {
   const climbs: ClimbFeature[] = [];
   const sprints: SprintFeature[] = [];
   const pending: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
@@ -652,7 +652,7 @@ function broadcastDistanceTicks(summary: ParsedStageSummary, geom: ProfileGeom, 
   const finishMeter = ticks.length > 0 ? ticks[ticks.length - 1] : stageDistanceMeters;
   // Regel-Labels, die zu nah an der Zielbeschriftung liegen, weglassen (sonst
   // berühren sich z. B. „175 km" und die Zielangabe). Start links-, Ziel rechtsbündig.
-  const minGapMeters = stageDistanceMeters * 0.04;
+  const minGapMeters = Math.max(stageDistanceMeters * 0.06, 12000);
   return ticks.map((distanceMeter, index) => {
     const x = geom.x(distanceMeter / 1000);
     const tickLength = markerMeters.has(distanceMeter) ? 8 : 5;
@@ -701,13 +701,16 @@ function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: Sta
     </svg>`;
 }
 
-export function renderStaticStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string, options?: StaticStageProfileOptions): void {
+// Grosses statisches Profil als HTML-String (für innerHTML-Einbettung, z. B. Renndetails).
+export function renderStaticStageProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, options?: StaticStageProfileOptions): string {
   if (summary.points.length < 2) {
-    container.innerHTML = '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
-    return;
+    return '<div class="stage-editor-empty">Noch keine Profildaten vorhanden.</div>';
   }
+  return `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false, options)}</div>`;
+}
 
-  container.innerHTML = `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false, options)}</div>`;
+export function renderStaticStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string, options?: StaticStageProfileOptions): void {
+  container.innerHTML = renderStaticStageProfileMarkup(summary, stageProfile, label, options);
 }
 
 // Kompaktes Mini-Profil als HTML-String (für innerHTML-Einbettung, z. B. Dashboard-Spotlight).

@@ -6764,3 +6764,82 @@ tr.calendar-highlight {
 
 #view-results .results-grid-body .event-content { min-width: 0; }
 .results-grid-body { min-width: 0; }
+
+/* ===== Renndetails (Race Detail) — Broadcast ===== */
+.race-detail-body { padding: 0; }
+#race-detail-header h2 { font-size: 20px; }
+.race-detail-tabs { margin-bottom: 16px; }
+.race-detail-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.race-detail-stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.race-detail-stage-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid #1c2b47;
+  border-radius: 10px;
+  background: #0b1424;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+.race-detail-stage-row:hover { border-color: #2b3a55; background: #0e1930; }
+.race-detail-stage-row-active {
+  border-color: #22d3ee;
+  box-shadow: inset 3px 0 0 #22d3ee;
+  background: linear-gradient(90deg, rgba(34, 211, 238, .12), transparent 70%);
+}
+.rd-stage-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; }
+.rd-stage-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-detail-main-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.race-detail-nav { justify-content: flex-start; }
+.race-detail-profile { min-width: 0; }
+.race-detail-profile-loading {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #1c2b47;
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: #6a7a95;
+}
+.race-detail-details { display: flex; flex-direction: column; gap: 14px; }
+.race-detail-stats-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 4px 2px; }
+.race-detail-stat { display: flex; flex-direction: column; gap: 3px; }
+.rd-stat-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .14em; color: #6a7a95; }
+.rd-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.race-detail-detail-group { display: flex; flex-direction: column; gap: 6px; }
+.rd-group-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
+.race-detail-climb-row {
+  display: grid;
+  grid-template-columns: 12px minmax(120px, 0.9fr) 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid #1c2b47;
+  border-radius: 9px;
+  background: #0b1424;
+}
+.rd-climb-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.rd-climb-name { font-size: 13px; font-weight: 700; color: #e8eef7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-climb-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; text-align: right; }
+@media (max-width: 900px) {
+  .race-detail-layout { grid-template-columns: 1fr; }
+  .race-detail-stage-col { max-height: 220px; flex-direction: row; overflow-x: auto; }
+}

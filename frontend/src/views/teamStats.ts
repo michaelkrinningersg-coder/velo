@@ -371,6 +371,9 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
     }
   }
+  if (state.teamStatsTopResultsFilterRaceId != null) {
+    filteredRows = filteredRows.filter(r => r.raceId === state.teamStatsTopResultsFilterRaceId);
+  }
   if (state.teamStatsTopResultsFilterSeason != null) {
     filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
   }
@@ -438,6 +441,22 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     }
   }).join('');
 
+  // Rennen-Optionen, vorgefiltert durch die aktuell gewaehlte Rennklasse.
+  const rawTeamCatFilter = state.teamStatsTopResultsFilterCategory;
+  const effectiveTeamCatName = rawTeamCatFilter
+    ? (rawTeamCatFilter.endsWith('-etappen') ? rawTeamCatFilter.slice(0, -'-etappen'.length)
+      : rawTeamCatFilter.endsWith('-gc') ? rawTeamCatFilter.slice(0, -'-gc'.length)
+        : rawTeamCatFilter)
+    : null;
+  const teamRaceOptions = Array.from(new Map(
+    payload.topResults
+      .filter(r => !effectiveTeamCatName || r.raceCategoryName === effectiveTeamCatName)
+      .map(r => [r.raceId as number, r.raceName as string]),
+  ).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de'));
+  const teamRaceOptionsHtml = teamRaceOptions
+    .map(([id, name]) => `<option value="${id}" ${state.teamStatsTopResultsFilterRaceId === id ? 'selected' : ''}>${esc(String(name))}</option>`)
+    .join('');
+
   const selStyle = "background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;";
   const labStyle = "font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6a7a95; margin-right:8px;";
   const rowLabStyle = "font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:#5a6a85; min-width:82px; flex:0 0 auto;";
@@ -449,6 +468,13 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
           <select id="team-stats-filter-category" class="form-control" style="width:auto; ${selStyle}">
             <option value="all">Alle Rennklassen</option>
             ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="${labStyle}">Rennen</label>
+          <select id="team-stats-filter-race" class="form-control" style="width:auto; ${selStyle}">
+            <option value="all">Alle Rennen</option>
+            ${teamRaceOptionsHtml}
           </select>
         </div>
         <div style="display:flex; align-items:center;">
@@ -1441,6 +1467,14 @@ export function initTeamStatsListeners(): void {
     if (target.id === 'team-stats-filter-category') {
       const select = target as HTMLSelectElement;
       state.teamStatsTopResultsFilterCategory = select.value === 'all' ? null : select.value;
+      state.teamStatsTopResultsFilterRaceId = null;
+      state.teamStatsTopResultsPage = 1;
+      if (state.teamStatsPayload) {
+        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+      }
+    } else if (target.id === 'team-stats-filter-race') {
+      const select = target as HTMLSelectElement;
+      state.teamStatsTopResultsFilterRaceId = select.value === 'all' ? null : Number(select.value);
       state.teamStatsTopResultsPage = 1;
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);

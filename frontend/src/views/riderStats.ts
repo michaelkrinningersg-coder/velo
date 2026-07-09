@@ -2255,6 +2255,13 @@ export function initRiderStatsListeners(): void {
     const target = event.target as HTMLInputElement;
     if (target.id === 'rider-stats-filter-category') {
       state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
+      // Rennen-Filter zuruecksetzen: das gewaehlte Rennen liegt evtl. nicht in der neuen Klasse.
+      state.riderStatsTopResultsFilterRaceId = null;
+      state.riderStatsTopResultsPage = 1;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.id === 'rider-stats-filter-race') {
+      state.riderStatsTopResultsFilterRaceId = target.value === 'all' ? null : Number(target.value);
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
@@ -2382,6 +2389,9 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   if (state.riderStatsTopResultsFilterRank != null && !isNaN(state.riderStatsTopResultsFilterRank)) {
     filteredRows = filteredRows.filter(r => r.resultRank != null && r.resultRank <= state.riderStatsTopResultsFilterRank!);
   }
+  if (state.riderStatsTopResultsFilterRaceId != null) {
+    filteredRows = filteredRows.filter(r => r.raceId === state.riderStatsTopResultsFilterRaceId);
+  }
   if (state.riderStatsTopResultsFilterProfile) {
     filteredRows = filteredRows.filter(r => r.profile === state.riderStatsTopResultsFilterProfile);
   }
@@ -2446,6 +2456,22 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     }
   }).join('');
 
+  // Rennen-Optionen, vorgefiltert durch die aktuell gewaehlte Rennklasse.
+  const rawCatFilter = state.riderStatsTopResultsFilterCategory;
+  const effectiveCatName = rawCatFilter
+    ? (rawCatFilter.endsWith('-etappen') ? rawCatFilter.slice(0, -'-etappen'.length)
+      : rawCatFilter.endsWith('-gc') ? rawCatFilter.slice(0, -'-gc'.length)
+        : rawCatFilter)
+    : null;
+  const raceOptions = Array.from(new Map(
+    allRows
+      .filter(r => !effectiveCatName || r.raceCategoryName === effectiveCatName)
+      .map(r => [r.raceId as number, r.raceName as string]),
+  ).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de'));
+  const raceOptionsHtml = raceOptions
+    .map(([id, name]) => `<option value="${id}" ${state.riderStatsTopResultsFilterRaceId === id ? 'selected' : ''}>${esc(String(name))}</option>`)
+    .join('');
+
   const MONOF = "font-family:'JetBrains Mono',monospace";
   const selStyle = `${MONOF}; font-size:11px; font-weight:700; color:#e2e8f0; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; padding:6px 9px; cursor:pointer;`;
   const labStyle = `${MONOF}; font-size:10px; letter-spacing:.1em; color:#6a7a95;`;
@@ -2466,6 +2492,13 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
           <select id="rider-stats-filter-category" style="${selStyle}">
             <option value="all">Alle</option>
             ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="${labStyle}">RENNEN</span>
+          <select id="rider-stats-filter-race" style="${selStyle}">
+            <option value="all">Alle</option>
+            ${raceOptionsHtml}
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:7px;">

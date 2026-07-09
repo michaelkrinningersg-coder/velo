@@ -93,6 +93,9 @@ export const state: {
   selectedDashboardRaceId: number | null;
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
+  selectedRaceDetailRaceId: number | null;
+  raceDetailTab: 'detail' | 'palmares' | 'analysis' | 'record';
+  selectedRaceDetailStageId: number | null;
   stageSummariesByStageId: Record<number, ParsedStageSummary | undefined>;
   stageSummaryErrorsByStageId: Record<number, string | undefined>;
   selectedRealtimeStageId: number | null;
@@ -152,6 +155,7 @@ export const state: {
   riderStatsSelectedRiderId: number | null;
   riderStatsSelectedSeason: number | null;
   riderStatsTopResultsFilterCategory: string | null;
+  riderStatsTopResultsFilterRaceId: number | null;
   riderStatsTopResultsFilterSeason: number | null;
   riderStatsTopResultsFilterRank: number | null;
   riderStatsTopResultsFilterProfile: string | null;
@@ -175,6 +179,7 @@ export const state: {
   };
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
+  teamStatsTopResultsFilterRaceId: number | null;
   teamStatsTopResultsFilterSeason: number | null;
   teamStatsTopResultsFilterRank: number | null;
   teamStatsTopResultsFilterProfile: string | null;
@@ -217,6 +222,9 @@ export const state: {
   selectedDashboardRaceId: null,
   selectedRaceParticipantsRaceId: null,
   selectedDashboardProfileStageId: null,
+  selectedRaceDetailRaceId: null,
+  raceDetailTab: 'detail',
+  selectedRaceDetailStageId: null,
   stageSummariesByStageId: {},
   stageSummaryErrorsByStageId: {},
   selectedRealtimeStageId: null,
@@ -276,6 +284,7 @@ export const state: {
   riderStatsSelectedRiderId: null,
   riderStatsSelectedSeason: null,
   riderStatsTopResultsFilterCategory: null,
+  riderStatsTopResultsFilterRaceId: null,
   riderStatsTopResultsFilterSeason: null,
   riderStatsTopResultsFilterRank: null,
   riderStatsTopResultsFilterProfile: null,
@@ -299,6 +308,7 @@ export const state: {
   },
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
+  teamStatsTopResultsFilterRaceId: null,
   teamStatsTopResultsFilterSeason: null,
   teamStatsTopResultsFilterRank: null,
   teamStatsTopResultsFilterProfile: null,

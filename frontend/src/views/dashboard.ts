@@ -342,10 +342,11 @@ export async function openDashboardRaceStages(raceId: number): Promise<void> {
   if (!race) {
     return;
   }
-
   state.selectedDashboardRaceId = raceId;
-  renderDashboardRaceStagesModal();
-  showModal('raceStages');
+  // Renndetails-View im Broadcast-Stil (ersetzt die alte raceStages-Tabelle).
+  // Dynamischer Import bricht den Zyklus raceDetail.ts -> dashboard.ts.
+  const { openRaceDetail } = await import('./raceDetail');
+  await openRaceDetail(raceId);
 }
 
 export function renderProgramRaceRows(payload: RiderProgramRaceSummary): string {

@@ -67,6 +67,7 @@ import {
   openTeamStats,
   initTeamStatsListeners,
 } from './views/teamStats';
+import { initRaceDetailListeners } from './views/raceDetail';
 import {
   initLeaderboardsView,
   showLeaderboardsView,
@@ -189,6 +190,7 @@ function initAppListeners(): void {
   // Global modals closes events registration
   $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
   $('btn-close-race-stages').addEventListener('click', () => hideModal('raceStages'));
+  $('btn-close-race-detail').addEventListener('click', () => hideModal('raceDetail'));
   $('btn-close-stage-profile').addEventListener('click', () => hideModal('stageProfile'));
   $('btn-close-rider-program').addEventListener('click', () => hideModal('riderProgram'));
   $('btn-close-rider-stats').addEventListener('click', () => hideModal('riderStats'));
@@ -218,6 +220,7 @@ function initAppListeners(): void {
   initStageEditorListeners();
   initRiderStatsListeners();
   initTeamStatsListeners();
+  initRaceDetailListeners();
   initSeasonStandingsListeners();
   initLeaderboardsView();
   initRaceProgramsView();
