@@ -8,6 +8,7 @@ import { bootstrap, readStageScoreSegments } from '../bootstrapper';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
+import { BadgeMaterializationService } from '../game/BadgeMaterializationService';
 import { summarizeStageProfile } from '../simulation/StageParser';
 import {
   CHAMPIONSHIP_CATEGORY_DEFS,
@@ -3117,6 +3118,26 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * Materialisierungs-Tabelle fuer Hall-of-Fame-Badges. Wird bei jedem
+   * Savegame-Load komplett neu aufgebaut (siehe BadgeMaterializationService).
+   * `tier` ist gold/silver/bronze/cyan/purple oder 'earned' fuer Single-/
+   * Binaer-Badges ohne Schwellen-Tier.
+   */
+  private ensureRiderBadgesSchema(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS rider_badges (
+        rider_id INTEGER NOT NULL,
+        badge_key TEXT NOT NULL,
+        tier TEXT,
+        PRIMARY KEY (rider_id, badge_key)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rider_badges_key
+        ON rider_badges(badge_key);
+    `);
+  }
+
   private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
@@ -3149,6 +3170,7 @@ export class DatabaseService {
     this.ensureRiderCareerStatsSchema(db);
     this.ensureRiderSeasonStatsSchema(db);
     this.ensureRiderCategoryStatsSchema(db);
+    this.ensureRiderBadgesSchema(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);
@@ -3248,6 +3270,9 @@ export class DatabaseService {
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
+    // Hall-of-Fame-Badges bei jedem Load frisch materialisieren (nicht im
+    // heissen Tageswechsel-Pfad). Ermoeglicht globale Badge-Filterung.
+    new BadgeMaterializationService(this.activeConnection).rebuildAllRiderBadges();
     return this.activeConnection;
   }
 

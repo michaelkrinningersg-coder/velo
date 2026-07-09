@@ -6,6 +6,7 @@ import { GameRepository } from '../db/GameRepository';
 import { RiderRepository } from '../db/repositories/RiderRepository';
 import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
+import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
 import { RiderDraftService } from '../game/RiderDraftService';
 import { RouteImporter } from '../simulation/RouteImporter';
@@ -822,6 +823,21 @@ export function createRouter(dbService: DatabaseService): Router {
       const includeAll = req.query['all'] === '1' || req.query['all'] === 'true';
       const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason, includeAll);
       ok(res, data);
+    } catch (e) {
+      fail(res, 400, (e as Error).message);
+    }
+  });
+
+  // Halter eines (bespoke) Hall-of-Fame-Badges aus der materialisierten
+  // Tabelle rider_badges — inkl. WorldTour/ProTour/sonstige/zurueckgetreten.
+  router.get('/badges/holders', (req: Request, res: Response) => {
+    const badgeKey = req.query['badgeKey'] as string;
+    if (!badgeKey) {
+      return fail(res, 400, 'Missing badgeKey parameter.');
+    }
+    try {
+      const db = dbService.getActiveConnection();
+      ok(res, new BadgeRepository(db).getBadgeHolders(badgeKey));
     } catch (e) {
       fail(res, 400, (e as Error).message);
     }

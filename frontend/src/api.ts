@@ -97,6 +97,7 @@ export const api = {
   getStageResults:     (stageId: number) => call<StageResultsPayload>('GET', `/api/results/${stageId}`),
   getSeasonStandings:  (season?: number) => call<SeasonStandingsPayload>('GET', `/api/season-standings${season ? `?season=${season}` : ''}`),
   getBadgeLeaderboard: (metricKey: string) => call<any[]>('GET', `/api/leaderboards?scope=riders&metricKey=${encodeURIComponent(metricKey)}&period=alltime&all=1`),
+  getBadgeHolders:     (badgeKey: string) => call<any[]>('GET', `/api/badges/holders?badgeKey=${encodeURIComponent(badgeKey)}`),
   listStageEditorStages: () => call<StageEditorExistingStageListResponse>('GET', '/api/stage-editor/stages'),
   listStageEditorCountries: () => call<Array<{ id: number; name: string; code3: string }>>('GET', '/api/stage-editor/countries'),
   listStageEditorRaceCategories: () => call<Array<{ id: number; name: string }>>('GET', '/api/stage-editor/race-categories'),

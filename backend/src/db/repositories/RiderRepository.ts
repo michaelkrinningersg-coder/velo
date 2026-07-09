@@ -2434,6 +2434,29 @@ export class RiderRepository {
     return row?.wins ?? 0;
   }
 
+  /**
+   * Alle Fahrer-Ids (inkl. zurueckgetretener und teamloser). Basis fuer die
+   * Badge-Materialisierung, die jeden jemals existierenden Fahrer beruecksichtigt.
+   */
+  public getAllRiderIds(): number[] {
+    return (this.db.prepare('SELECT id FROM riders ORDER BY id').all() as Array<{ id: number }>)
+      .map((r) => r.id);
+  }
+
+  /**
+   * Liefert die drei Skalar-Eingaben, die `computeRiderBadgeTiers`
+   * (shared/hallOfFameBadges) benoetigt. Duenner oeffentlicher Wrapper um die
+   * bestehenden privaten Ableitungen — keine Logik-Duplikation.
+   */
+  public getBadgeInputsForRider(riderId: number): { hallOfFame: RiderHallOfFameStats; careerStats: RiderCareerStats; careerWins: number } {
+    const careerWins = this.getCareerWins(riderId);
+    return {
+      careerWins,
+      hallOfFame: this.buildHallOfFameStats(careerWins, riderId),
+      careerStats: this.getRiderCareerStats(riderId),
+    };
+  }
+
   private getSeasonBreakawayAttempts(season: number, riderId: number): number {
     if (!tableExists(this.db, 'rider_season_stats')) {
       return 0;

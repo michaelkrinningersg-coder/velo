@@ -6,7 +6,7 @@ import {
   renderMiniJersey,
   isActiveView,
 } from '../state';
-import { openRiderStats } from './riderStats';
+import { openRiderStats, getHofBadgeCatalog } from './riderStats';
 import { openTeamStats } from './teamStats';
 
 let activeScope: 'riders' | 'teams' | 'badge' = 'riders';
@@ -76,11 +76,36 @@ const BADGE_DEFS: BadgeDef[] = [
   { key: 'recStageScores', category: 'Rekorde', label: 'Etappen-Scores (All-Time)', icon: '📈', metricKey: 'stage_scores' },
   { key: 'recSuperteam', category: 'Rekorde', label: 'Superteam-Tage', icon: '🛡️', metricKey: 'superteam_count' },
 ];
-const BADGE_CATEGORIES = Array.from(new Set(BADGE_DEFS.map((b) => b.category)));
+// ---- Bespoke-Badges (Hall-of-Fame ohne Ranglisten-Metrik) -------------------
+// Alle Badge-Keys, die NICHT bereits metrik-gestuetzt sind (BADGE_DEFS), werden
+// aus der materialisierten Halterliste (/api/badges/holders) gespeist und nach
+// Tier gruppiert dargestellt.
+interface BespokeBadgeDef { key: string; category: string; label: string; icon: string; }
+const METRIC_BADGE_KEYS = new Set(BADGE_DEFS.map((b) => b.key));
+const BESPOKE_BADGE_DEFS: BespokeBadgeDef[] = getHofBadgeCatalog()
+  .filter((b) => !METRIC_BADGE_KEYS.has(b.key))
+  .map((b) => ({ key: b.key, category: b.category, label: b.name, icon: b.icon }));
+// Kombinierte Kategorienliste: erst die Metrik-Kategorien, dann neue Bespoke-Kategorien.
+const BADGE_CATEGORIES = Array.from(new Set([
+  ...BADGE_DEFS.map((b) => b.category),
+  ...BESPOKE_BADGE_DEFS.map((b) => b.category),
+]));
+
+// Tier-Metadaten fuer die Halter-Gruppierung (Reihenfolge = Anzeigereihenfolge).
+const BADGE_TIER_ORDER: Array<{ key: string; label: string; color: string }> = [
+  { key: 'gold', label: 'Gold', color: '#fbbf24' },
+  { key: 'silver', label: 'Silber', color: '#cbd5e1' },
+  { key: 'bronze', label: 'Bronze', color: '#d08b5b' },
+  { key: 'cyan', label: 'Cyan', color: '#22d3ee' },
+  { key: 'purple', label: 'Lila', color: '#a855f7' },
+  { key: 'earned', label: 'Verdient', color: '#4ade80' },
+];
+
 let badgeMetricKey = '';
 let badgeThreshold: number | null = null;
 let badgeLabel = '';
 let badgePage = 1;
+let badgeBespokeKey = ''; // aktiv gewaehltes Bespoke-Badge (leer = Metrik-Modus)
 const BADGE_PAGE_SIZE = 25;
 
 // List of all select IDs
@@ -182,29 +207,48 @@ function initBadgeControls(): void {
     + BADGE_CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
   catSel.addEventListener('change', () => {
-    const defs = BADGE_DEFS.filter((b) => b.category === catSel.value);
+    const metricDefs = BADGE_DEFS.filter((b) => b.category === catSel.value);
+    const bespokeDefs = BESPOKE_BADGE_DEFS.filter((b) => b.category === catSel.value);
     badgeSel.innerHTML = '<option value="">– Wählen –</option>'
-      + defs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('');
+      + metricDefs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('')
+      + bespokeDefs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('');
     thrSel.innerHTML = '<option value="">– Wählen –</option>';
-    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgePage = 1;
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; badgePage = 1;
     renderLeaderboard();
   });
 
   badgeSel.addEventListener('change', () => {
     const def = BADGE_DEFS.find((b) => b.key === badgeSel.value);
-    if (!def) { badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; renderLeaderboard(); return; }
-    badgeMetricKey = def.metricKey;
-    badgeLabel = `${def.icon} ${def.label}`;
-    if (def.thresholds && def.thresholds.length) {
-      const tiers = ['Lila', 'Cyan', 'Bronze', 'Silber', 'Gold'];
-      thrSel.innerHTML = def.thresholds.map((t, i) => `<option value="${t}">≥ ${t.toLocaleString('de-DE')} · ${tiers[i] ?? ''}</option>`).join('');
-      badgeThreshold = def.thresholds[0]; // niedrigste Stufe = alle Badge-Halter
-    } else {
-      thrSel.innerHTML = '<option value="0">Alle Halter</option>';
-      badgeThreshold = 0;
+    if (def) {
+      // Metrik-gestuetztes Badge (bestehendes Verhalten).
+      badgeBespokeKey = '';
+      badgeMetricKey = def.metricKey;
+      badgeLabel = `${def.icon} ${def.label}`;
+      if (def.thresholds && def.thresholds.length) {
+        const tiers = ['Lila', 'Cyan', 'Bronze', 'Silber', 'Gold'];
+        thrSel.innerHTML = def.thresholds.map((t, i) => `<option value="${t}">≥ ${t.toLocaleString('de-DE')} · ${tiers[i] ?? ''}</option>`).join('');
+        badgeThreshold = def.thresholds[0]; // niedrigste Stufe = alle Badge-Halter
+      } else {
+        thrSel.innerHTML = '<option value="0">Alle Halter</option>';
+        badgeThreshold = 0;
+      }
+      badgePage = 1;
+      renderLeaderboard();
+      return;
     }
-    badgePage = 1;
-    renderLeaderboard();
+    const bespoke = BESPOKE_BADGE_DEFS.find((b) => b.key === badgeSel.value);
+    if (bespoke) {
+      // Bespoke-Badge: keine Schwelle, stattdessen Tier-Gruppierung aller Halter.
+      badgeBespokeKey = bespoke.key;
+      badgeMetricKey = '';
+      badgeThreshold = null;
+      badgeLabel = `${bespoke.icon} ${bespoke.label}`;
+      thrSel.innerHTML = '<option value="0">Alle Halter</option>';
+      badgePage = 1;
+      renderLeaderboard();
+      return;
+    }
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; renderLeaderboard();
   });
 
   thrSel.addEventListener('change', () => {
@@ -375,6 +419,12 @@ export async function renderLeaderboard(): Promise<void> {
   const tbodyEl = $('leaderboard-tbody');
 
   if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
+
+  // Bespoke-Badge (ohne Metrik): eigener Renderpfad mit Tier-Gruppierung.
+  if (activeScope === 'badge' && badgeBespokeKey) {
+    await renderBespokeBadgeHolders();
+    return;
+  }
 
   const isBadge = activeScope === 'badge';
   const fetchScope: 'riders' | 'teams' = activeScope === 'badge' ? 'riders' : activeScope;
@@ -632,6 +682,98 @@ export async function renderLeaderboard(): Promise<void> {
           ${valueHtml}
         </div>
       `;
+    }
+  }
+
+  tbodyEl.innerHTML = html;
+}
+
+// Bespoke-Badge: alle Halter aus /api/badges/holders, gruppiert nach Tier
+// (Gold zuerst). Header mit Gesamtzahl + Tier-Zaehlern.
+async function renderBespokeBadgeHolders(): Promise<void> {
+  const emptyEl = $('leaderboard-empty');
+  const tableEl = $('leaderboard-table');
+  const theadEl = $('leaderboard-thead');
+  const tbodyEl = $('leaderboard-tbody');
+  const pager = $('leaderboard-pagination');
+  const filterContainer = $('leaderboard-filter-container');
+  if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
+
+  if (filterContainer) filterContainer.style.display = 'none';
+  if (pager) { pager.style.display = 'none'; pager.innerHTML = ''; }
+
+  const selectedKey = badgeBespokeKey;
+  emptyEl.textContent = 'Lade Daten...';
+  emptyEl.classList.remove('hidden');
+  tableEl.classList.add('hidden');
+
+  const res = await api.getBadgeHolders(selectedKey);
+
+  if (!isActiveView('leaderboards')) return;
+  // Auswahl inzwischen geaendert? -> Ergebnis verwerfen.
+  if (activeScope !== 'badge' || badgeBespokeKey !== selectedKey) return;
+
+  if (!res.success || !res.data || res.data.length === 0) {
+    emptyEl.textContent = res.error || 'Kein Fahrer besitzt dieses Badge.';
+    emptyEl.classList.remove('hidden');
+    tableEl.classList.add('hidden');
+    return;
+  }
+
+  const holders = res.data as any[];
+  const byTier = new Map<string, any[]>();
+  for (const h of holders) {
+    const t = (h.tier as string) ?? 'earned';
+    if (!byTier.has(t)) byTier.set(t, []);
+    byTier.get(t)!.push(h);
+  }
+
+  emptyEl.classList.add('hidden');
+  tableEl.classList.remove('hidden');
+  theadEl.innerHTML = '';
+  theadEl.style.gridTemplateColumns = '';
+
+  const MONO = "font-family:'JetBrains Mono',monospace;";
+  const cardTitle = $('leaderboard-card-title');
+  const cardCount = $('leaderboard-card-count');
+  if (cardTitle) cardTitle.textContent = badgeLabel;
+  if (cardCount) cardCount.textContent = `${holders.length.toLocaleString('de-DE')} Halter`;
+
+  // Kopfzeile: Gesamt + Tier-Zaehler.
+  const tierCountsHtml = BADGE_TIER_ORDER
+    .filter((t) => (byTier.get(t.key)?.length ?? 0) > 0)
+    .map((t) => `<span style="${MONO}font-size:11px;font-weight:800;color:${t.color};background:rgba(148,163,184,.08);border:1px solid ${t.color};border-radius:999px;padding:2px 10px;">${t.label} · ${(byTier.get(t.key)?.length ?? 0).toLocaleString('de-DE')}</span>`)
+    .join('');
+
+  let html = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid #14203a;">
+      <span style="${MONO}font-size:12px;font-weight:800;color:#e2e8f0;">${holders.length.toLocaleString('de-DE')} Halter</span>
+      ${tierCountsHtml}
+    </div>`;
+
+  for (const tierMeta of BADGE_TIER_ORDER) {
+    const group = byTier.get(tierMeta.key);
+    if (!group || group.length === 0) continue;
+    html += `
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-top:1px solid #14203a;background:rgba(148,163,184,.04);">
+        <span style="width:10px;height:10px;border-radius:50%;background:${tierMeta.color};box-shadow:0 0 8px ${tierMeta.color};"></span>
+        <span style="${MONO}font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${tierMeta.color};">${tierMeta.label}</span>
+        <span style="${MONO}font-size:10px;color:#6a7a95;">${group.length.toLocaleString('de-DE')}</span>
+      </div>`;
+    for (const row of group) {
+      const flagHtml = row.nationality ? renderFlag(row.nationality) : '—';
+      const jerseyHtml = renderMiniJersey(row.teamId, row.teamName);
+      const teamLabel = row.teamAbbr
+        ? `<span class="text-muted" title="${esc(row.teamName ?? '')}" style="color:#94a3b8;">${esc(row.teamAbbr)}</span>`
+        : (row.isRetired ? '<span class="text-muted" style="color:#94a3b8;">zurückgetreten</span>' : '<span class="text-muted" style="color:#94a3b8;">—</span>');
+      const riderName = `<a href="#" onclick="event.preventDefault(); openRiderStatsFromLeaderboard(${row.riderId})" style="color:#60a5fa;text-decoration:none;font-weight:bold;">${esc(row.firstName)} ${esc(row.lastName)}</a>`;
+      html += `
+        <div style="display:grid;grid-template-columns:44px 44px minmax(150px,1.6fr) minmax(90px,.8fr);gap:9px;align-items:center;padding:8px 16px;border-top:1px solid #0e1930;">
+          <span style="display:flex;justify-content:center;">${flagHtml}</span>
+          <span style="display:flex;justify-content:center;">${jerseyHtml}</span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${riderName}</span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teamLabel}</span>
+        </div>`;
     }
   }
 
