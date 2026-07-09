@@ -371,8 +371,9 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
     }
   }
-  if (state.teamStatsTopResultsFilterRaceId != null) {
-    filteredRows = filteredRows.filter(r => r.raceId === state.teamStatsTopResultsFilterRaceId);
+  if (state.teamStatsTopResultsFilterRaceName != null) {
+    // Nach Rennname filtern -> alle Saisons dieses Rennens (Renn-IDs wechseln je Saison).
+    filteredRows = filteredRows.filter(r => r.raceName === state.teamStatsTopResultsFilterRaceName);
   }
   if (state.teamStatsTopResultsFilterSeason != null) {
     filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
@@ -448,13 +449,15 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
       : rawTeamCatFilter.endsWith('-gc') ? rawTeamCatFilter.slice(0, -'-gc'.length)
         : rawTeamCatFilter)
     : null;
-  const teamRaceOptions = Array.from(new Map(
+  // Nur EINDEUTIGE Rennen (nach Name) — Renn-IDs wechseln je Saison, daher wuerde
+  // dasselbe Rennen sonst mehrfach erscheinen. Auswahl filtert nach Name -> alle Saisons.
+  const teamRaceOptions = Array.from(new Set(
     payload.topResults
       .filter(r => !effectiveTeamCatName || r.raceCategoryName === effectiveTeamCatName)
-      .map(r => [r.raceId as number, r.raceName as string]),
-  ).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de'));
+      .map(r => r.raceName as string),
+  )).sort((a, b) => a.localeCompare(b, 'de'));
   const teamRaceOptionsHtml = teamRaceOptions
-    .map(([id, name]) => `<option value="${id}" ${state.teamStatsTopResultsFilterRaceId === id ? 'selected' : ''}>${esc(String(name))}</option>`)
+    .map(name => `<option value="${esc(name)}" ${state.teamStatsTopResultsFilterRaceName === name ? 'selected' : ''}>${esc(name)}</option>`)
     .join('');
 
   const selStyle = "background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;";
@@ -1467,14 +1470,14 @@ export function initTeamStatsListeners(): void {
     if (target.id === 'team-stats-filter-category') {
       const select = target as HTMLSelectElement;
       state.teamStatsTopResultsFilterCategory = select.value === 'all' ? null : select.value;
-      state.teamStatsTopResultsFilterRaceId = null;
+      state.teamStatsTopResultsFilterRaceName = null;
       state.teamStatsTopResultsPage = 1;
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
       }
     } else if (target.id === 'team-stats-filter-race') {
       const select = target as HTMLSelectElement;
-      state.teamStatsTopResultsFilterRaceId = select.value === 'all' ? null : Number(select.value);
+      state.teamStatsTopResultsFilterRaceName = select.value === 'all' ? null : select.value;
       state.teamStatsTopResultsPage = 1;
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);

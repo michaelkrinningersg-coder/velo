@@ -182,7 +182,7 @@ export class LeaderboardRepository {
       `;
       valueFormatter = (r) => `${r.val} J. (${r.race_category.replace('World Tour - ', '')})`;
 
-    } else if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey === 'wins') {
+    } else if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey.startsWith('wins_class_') || metricKey === 'wins') {
       // 3. Stage Wins
       let extraFilter = '';
       let terrainOrWeather: any = null;
@@ -192,6 +192,12 @@ export class LeaderboardRepository {
       } else if (metricKey.startsWith('wins_weather_')) {
         terrainOrWeather = parseInt(metricKey.replace('wins_weather_', ''), 10);
         extraFilter = `AND s.rolled_weather_id = ?`;
+      } else if (metricKey.startsWith('wins_class_')) {
+        // Siege in einer Rennklasse (Kategorie-ID), z.B. Monument (3),
+        // One Day High (7) / Middle (8) / Low (9). Subquery statt JOIN, damit
+        // die bestehende Params-Push-Logik (terrainOrWeather) unveraendert bleibt.
+        terrainOrWeather = parseInt(metricKey.replace('wins_class_', ''), 10);
+        extraFilter = `AND s.race_id IN (SELECT id FROM races WHERE category_id = ?)`;
       }
 
       if (period === 'season') {

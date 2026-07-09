@@ -155,7 +155,9 @@ export const state: {
   riderStatsSelectedRiderId: number | null;
   riderStatsSelectedSeason: number | null;
   riderStatsTopResultsFilterCategory: string | null;
-  riderStatsTopResultsFilterRaceId: number | null;
+  // Rennen-Filter nach Rennname (Renn-IDs wechseln je Saison -> Name ist die
+  // stabile Identitaet; Auswahl zeigt alle Saisons dieses Rennens).
+  riderStatsTopResultsFilterRaceName: string | null;
   riderStatsTopResultsFilterSeason: number | null;
   riderStatsTopResultsFilterRank: number | null;
   riderStatsTopResultsFilterProfile: string | null;
@@ -179,7 +181,7 @@ export const state: {
   };
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
-  teamStatsTopResultsFilterRaceId: number | null;
+  teamStatsTopResultsFilterRaceName: string | null;
   teamStatsTopResultsFilterSeason: number | null;
   teamStatsTopResultsFilterRank: number | null;
   teamStatsTopResultsFilterProfile: string | null;
@@ -284,7 +286,7 @@ export const state: {
   riderStatsSelectedRiderId: null,
   riderStatsSelectedSeason: null,
   riderStatsTopResultsFilterCategory: null,
-  riderStatsTopResultsFilterRaceId: null,
+  riderStatsTopResultsFilterRaceName: null,
   riderStatsTopResultsFilterSeason: null,
   riderStatsTopResultsFilterRank: null,
   riderStatsTopResultsFilterProfile: null,
@@ -308,7 +310,7 @@ export const state: {
   },
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
-  teamStatsTopResultsFilterRaceId: null,
+  teamStatsTopResultsFilterRaceName: null,
   teamStatsTopResultsFilterSeason: null,
   teamStatsTopResultsFilterRank: null,
   teamStatsTopResultsFilterProfile: null,

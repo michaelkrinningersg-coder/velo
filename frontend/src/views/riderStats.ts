@@ -2272,12 +2272,12 @@ export function initRiderStatsListeners(): void {
     if (target.id === 'rider-stats-filter-category') {
       state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
       // Rennen-Filter zuruecksetzen: das gewaehlte Rennen liegt evtl. nicht in der neuen Klasse.
-      state.riderStatsTopResultsFilterRaceId = null;
+      state.riderStatsTopResultsFilterRaceName = null;
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
     } else if (target.id === 'rider-stats-filter-race') {
-      state.riderStatsTopResultsFilterRaceId = target.value === 'all' ? null : Number(target.value);
+      state.riderStatsTopResultsFilterRaceName = target.value === 'all' ? null : target.value;
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
@@ -2405,8 +2405,9 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   if (state.riderStatsTopResultsFilterRank != null && !isNaN(state.riderStatsTopResultsFilterRank)) {
     filteredRows = filteredRows.filter(r => r.resultRank != null && r.resultRank <= state.riderStatsTopResultsFilterRank!);
   }
-  if (state.riderStatsTopResultsFilterRaceId != null) {
-    filteredRows = filteredRows.filter(r => r.raceId === state.riderStatsTopResultsFilterRaceId);
+  if (state.riderStatsTopResultsFilterRaceName != null) {
+    // Nach Rennname filtern -> alle Saisons dieses Rennens (Renn-IDs wechseln je Saison).
+    filteredRows = filteredRows.filter(r => r.raceName === state.riderStatsTopResultsFilterRaceName);
   }
   if (state.riderStatsTopResultsFilterProfile) {
     filteredRows = filteredRows.filter(r => r.profile === state.riderStatsTopResultsFilterProfile);
@@ -2479,13 +2480,16 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
       : rawCatFilter.endsWith('-gc') ? rawCatFilter.slice(0, -'-gc'.length)
         : rawCatFilter)
     : null;
-  const raceOptions = Array.from(new Map(
+  // Nur EINDEUTIGE Rennen (nach Name) — dasselbe Rennen erscheint sonst je Saison
+  // mehrfach (Renn-IDs werden je Saison neu vergeben). Auswahl filtert nach Name
+  // und zeigt damit alle Saisons.
+  const raceOptions = Array.from(new Set(
     allRows
       .filter(r => !effectiveCatName || r.raceCategoryName === effectiveCatName)
-      .map(r => [r.raceId as number, r.raceName as string]),
-  ).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de'));
+      .map(r => r.raceName as string),
+  )).sort((a, b) => a.localeCompare(b, 'de'));
   const raceOptionsHtml = raceOptions
-    .map(([id, name]) => `<option value="${id}" ${state.riderStatsTopResultsFilterRaceId === id ? 'selected' : ''}>${esc(String(name))}</option>`)
+    .map(name => `<option value="${esc(name)}" ${state.riderStatsTopResultsFilterRaceName === name ? 'selected' : ''}>${esc(name)}</option>`)
     .join('');
 
   const MONOF = "font-family:'JetBrains Mono',monospace";
