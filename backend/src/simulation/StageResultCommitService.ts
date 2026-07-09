@@ -33,11 +33,13 @@ import {
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
 import {
+  championshipAllowsTeamless,
   championshipTitleColumn,
   getChampionshipCategoryDef,
   getNationalChampionshipCategoryDef,
   isChampionshipCategory,
   isNationalChampionshipCategory,
+  NATIONAL_SELECTION_TEAM_ID,
 } from './championships';
 
 const RESULT_TYPES = {
@@ -298,6 +300,7 @@ export class StageResultCommitService {
       getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
       // TeamRepository methods
       getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
+      getTeamById: (id: number) => (teamRepo as any).getTeamById(id),
       // RiderRepository methods
       getRiders: (teamId?: number) => (riderRepo as any).getRiders(teamId),
       // GameStateRepository methods
@@ -589,6 +592,31 @@ export class StageResultCommitService {
     }
 
     const teamsById = new Map<number, Team>(this.repo.getTeams().map((team: any) => [team.id, team]));
+
+    // U23-/Junioren-Meisterschaften lassen teamlose Fahrer zu; diese starten
+    // über das Nationalmannschafts-Pseudo-Team (siehe applyChampionshipEntries).
+    // getStageRiders liefert für sie activeTeamId = null (aus riders.active_team_id)
+    // und getTeams blendet das Pseudo-Team aus. Ohne Auflösung würde der Commit
+    // hier abbrechen und das Rennen ließe sich nicht abschließen. Wir mappen die
+    // teamlosen Starter daher auf das Pseudo-Team und stellen es in teamsById bereit.
+    const champDef = getChampionshipCategoryDef(race.categoryId);
+    const allowsTeamless = champDef ? championshipAllowsTeamless(champDef.ageClass) : false;
+    if (allowsTeamless && riders.some((rider: any) => rider.activeTeamId == null)) {
+      if (!teamsById.has(NATIONAL_SELECTION_TEAM_ID)) {
+        const nationalTeam = this.repo.getTeamById(NATIONAL_SELECTION_TEAM_ID);
+        if (nationalTeam) {
+          teamsById.set(NATIONAL_SELECTION_TEAM_ID, nationalTeam);
+        }
+      }
+      if (teamsById.has(NATIONAL_SELECTION_TEAM_ID)) {
+        for (const rider of riders as any[]) {
+          if (rider.activeTeamId == null) {
+            rider.activeTeamId = NATIONAL_SELECTION_TEAM_ID;
+          }
+        }
+      }
+    }
+
     const missingTeam = riders.find((rider: any) => rider.activeTeamId == null || !teamsById.has(rider.activeTeamId));
     if (missingTeam) {
       throw new Error(`Team für Fahrer ${missingTeam.firstName} ${missingTeam.lastName} konnte nicht aufgelöst werden.`);
