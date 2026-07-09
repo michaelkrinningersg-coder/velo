@@ -1,4 +1,4 @@
-import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageMarkerType, StageProfile } from '../../../shared/types';
+import type { ParsedStageSummary, RealtimeSimulationBootstrap, Rider, StageMarkerCategory, StageProfile } from '../../../shared/types';
 import type { RiderCluster, RealtimeRiderSnapshot, SimulationSnapshot } from './SimulationEngine';
 import { renderFlag } from './flags';
 import { buildNamedRaceGroups, mergeDisplayedClusters } from './groupClusters';
@@ -17,14 +17,6 @@ function formatKm(meters: number): string {
   return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
 }
 
-interface ProfileEvent {
-  x: number;
-  anchorY: number;
-  primaryLabel: string;
-  secondaryLabel: string | null;
-  distanceLabel: string;
-  accentColor: string;
-}
 
 interface TimingRailEntry {
   rider: RealtimeRiderSnapshot;
@@ -109,143 +101,6 @@ function formatElevationLabel(value: number): string {
   return `${Math.round(value)} m`;
 }
 
-function formatClimbLength(lengthKm: number): string {
-  return `${lengthKm.toFixed(1).replace('.', ',')} km`;
-}
-
-function formatGradient(value: number): string {
-  return `${value.toFixed(1).replace('.', ',')}%`;
-}
-
-function formatProfileCategory(category: StageMarkerCategory | null): string | null {
-  if (!category || category === 'Sprint') {
-    return null;
-  }
-  return `Kat. ${category}`;
-}
-
-function resolveMarkerAccent(category: StageMarkerCategory | null, markerType: StageMarkerType): { accentColor: string; fillColor: string } {
-  if (markerType === 'sprint_intermediate') {
-    return {
-      accentColor: '#15803d',
-      fillColor: '#ecfdf5',
-    };
-  }
-
-  switch (category) {
-    case 'HC':
-      return { accentColor: '#b91c1c', fillColor: '#fef2f2' };
-    case '1':
-      return { accentColor: '#ea580c', fillColor: '#fff7ed' };
-    case '2':
-      return { accentColor: '#d97706', fillColor: '#fffbeb' };
-    case '3':
-      return { accentColor: '#ca8a04', fillColor: '#fefce8' };
-    case '4':
-      return { accentColor: '#65a30d', fillColor: '#f7fee7' };
-    default:
-      return { accentColor: '#1f2937', fillColor: '#f8fafc' };
-  }
-}
-
-function buildProfileEvents(summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, height: number, paddingTop: number, paddingBottom: number, axisMinElevation: number, axisMaxElevation: number): ProfileEvent[] {
-  const rawEvents: ProfileEvent[] = [];
-  const pendingClimbs: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
-  let finishCategory: StageMarkerCategory | null = null;
-  let finishAccentColor = '#b91c1c';
-
-  for (const boundaryMarker of collectStageBoundaryMarkers(summary)) {
-    const { marker, kmMark, elevation } = boundaryMarker;
-    if (marker.type === 'climb_start') {
-      pendingClimbs.push({
-        kmMark,
-        elevation,
-        name: marker.name,
-      });
-      continue;
-    }
-
-    if (isMountainClassificationMarker(marker)) {
-      let matchingIndex = -1;
-      for (let index = pendingClimbs.length - 1; index >= 0; index -= 1) {
-        if (marker.name && pendingClimbs[index]?.name === marker.name) {
-          matchingIndex = index;
-          break;
-        }
-      }
-      const climbStart = matchingIndex >= 0
-        ? pendingClimbs.splice(matchingIndex, 1)[0]
-        : pendingClimbs.pop();
-      const lengthKm = climbStart ? Math.max(0, kmMark - climbStart.kmMark) : 0;
-      const gainMeters = climbStart ? Math.max(0, elevation - climbStart.elevation) : 0;
-      const avgGradient = lengthKm > 0 ? gainMeters / (lengthKm * 10) : 0;
-      const accent = resolveMarkerAccent(marker.cat, marker.type);
-      const categoryLabel = formatProfileCategory(marker.cat);
-      if (marker.type === 'finish_hill' || marker.type === 'finish_mountain') {
-        finishCategory = marker.cat ?? null;
-        finishAccentColor = accent.accentColor;
-        continue;
-      }
-      rawEvents.push({
-        x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
-        anchorY: scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
-        primaryLabel: categoryLabel ?? 'Berg',
-        secondaryLabel: formatElevationLabel(elevation),
-        distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
-        accentColor: accent.accentColor,
-      });
-      continue;
-    }
-
-    if (marker.type === 'sprint_intermediate') {
-      const accent = resolveMarkerAccent(marker.cat, marker.type);
-      rawEvents.push({
-        x: scaleDistance(kmMark * 1000, stageDistanceMeters, width, paddingX),
-        anchorY: scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
-        primaryLabel: 'Sprint',
-        secondaryLabel: formatElevationLabel(elevation),
-        distanceLabel: `${kmMark.toFixed(1).replace('.', ',')} km`,
-        accentColor: accent.accentColor,
-      });
-    }
-  }
-
-  const finishPoint = summary.points[summary.points.length - 1];
-  rawEvents.push({
-    x: scaleDistance(finishPoint.kmMark * 1000, stageDistanceMeters, width, paddingX),
-    anchorY: scaleElevation(finishPoint.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
-    primaryLabel: finishCategory ? `${formatProfileCategory(finishCategory) ?? 'Ziel'} · Ziel` : 'Ziel',
-    secondaryLabel: formatElevationLabel(finishPoint.elevation),
-    distanceLabel: `${finishPoint.kmMark.toFixed(1).replace('.', ',')} km`,
-    accentColor: finishAccentColor,
-  });
-
-  return rawEvents.sort((left, right) => left.x - right.x);
-}
-
-function renderProfileEvent(event: ProfileEvent, topGuideY: number, baselineY: number): string {
-  const topTextY = topGuideY + 4;
-  const bottomGuideY = baselineY + 6;
-  const bottomTextY = baselineY + 38;
-  const combinedLabel = event.secondaryLabel ? `${event.primaryLabel} · ${event.secondaryLabel}` : event.primaryLabel;
-
-  return `
-    <g class="race-sim-marker-group">
-      <line x1="${event.x.toFixed(1)}" y1="${topGuideY.toFixed(1)}" x2="${event.x.toFixed(1)}" y2="${(event.anchorY - 10).toFixed(1)}" stroke="${event.accentColor}" stroke-width="1.4" opacity="0.75"></line>
-      <line x1="${event.x.toFixed(1)}" y1="${(event.anchorY + 8).toFixed(1)}" x2="${event.x.toFixed(1)}" y2="${(baselineY + 26).toFixed(1)}" stroke="${event.accentColor}" stroke-width="1.2" opacity="0.55"></line>
-      <circle cx="${event.x.toFixed(1)}" cy="${event.anchorY.toFixed(1)}" r="3.2" fill="${event.accentColor}" opacity="0.9"></circle>
-      <text x="${event.x.toFixed(1)}" y="${topTextY.toFixed(1)}" text-anchor="end" transform="rotate(-90 ${event.x.toFixed(1)} ${topTextY.toFixed(1)})" class="race-sim-marker-title" fill="${event.accentColor}">${esc(combinedLabel)}</text>
-      <text x="${event.x.toFixed(1)}" y="${bottomTextY.toFixed(1)}" text-anchor="start" transform="rotate(-90 ${event.x.toFixed(1)} ${bottomTextY.toFixed(1)})" class="race-sim-marker-detail">${esc(event.distanceLabel)}</text>
-    </g>`;
-}
-
-function renderCompactProfileEvent(event: ProfileEvent, topGuideY: number, baselineY: number): string {
-  return `
-    <g class="race-sim-marker-group">
-      <line x1="${event.x.toFixed(1)}" y1="${topGuideY.toFixed(1)}" x2="${event.x.toFixed(1)}" y2="${(baselineY - 2).toFixed(1)}" stroke="${event.accentColor}" stroke-width="1.5" opacity="0.72"></line>
-      <circle cx="${event.x.toFixed(1)}" cy="${event.anchorY.toFixed(1)}" r="2.6" fill="${event.accentColor}" opacity="0.95"></circle>
-    </g>`;
-}
 
 function buildDistanceTicks(summary: ParsedStageSummary, stageDistanceMeters: number): number[] {
   const tickMeters = new Set<number>();
@@ -261,20 +116,6 @@ function buildDistanceTicks(summary: ParsedStageSummary, stageDistanceMeters: nu
     .sort((left, right) => left - right);
 }
 
-function renderDistanceTicks(tickMeters: number[], summary: ParsedStageSummary, stageDistanceMeters: number, width: number, paddingX: number, baselineY: number): string {
-  const markerMeters = new Set(collectStageBoundaryMarkers(summary).map((entry) => Math.round(entry.kmMark * 1000)));
-  return tickMeters.map((distanceMeter) => {
-    const x = scaleDistance(distanceMeter, stageDistanceMeters, width, paddingX);
-    const hasMarker = markerMeters.has(distanceMeter);
-    const tickLength = hasMarker ? 18 : 12;
-    const labelY = baselineY + tickLength + 26;
-    return `
-      <g class="race-sim-distance-tick">
-        <line x1="${x.toFixed(1)}" y1="${baselineY.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(baselineY + tickLength).toFixed(1)}" class="race-sim-axis"></line>
-        <text x="${x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" class="race-sim-grid-label">${esc(formatKm(distanceMeter))}</text>
-      </g>`;
-  }).join('');
-}
 
 function renderCluster(cluster: RiderCluster, summary: ParsedStageSummary, stageDistanceMeters: number, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, axisMinElevation: number, axisMaxElevation: number, isSelected: boolean): string {
   const x = scaleDistance(cluster.distanceMeter, stageDistanceMeters, width, paddingX);
@@ -532,79 +373,331 @@ function buildClimbHighlightAreaPath(
   return `${linePath} L ${endX.toFixed(1)} ${baselineY.toFixed(1)} L ${startX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
 }
 
-function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean, options: StaticStageProfileOptions = {}): string {
-  const width = compact ? 312 : 1584;
-  const height = compact ? 173 : 634;
-  const paddingX = compact ? 12 : 28;
-  const paddingTop = compact ? 36 : 168;
-  const paddingBottom = compact ? 22 : 101;
-  const stageDistanceMeters = summary.distanceKm * 1000;
+// ===========================================================================
+// BROADCAST-LOOK (Höhenprofil 1b „Analyse-Karte")
+// Dunkle Karte, Kategorie-farbige Anstiege, Namens-Chips über dem Gipfel,
+// grüne „S"-Sprints, kollisionssichere Label-Entzerrung. Geteilt von Static-,
+// Mini- und Live-Race-Profil (renderRaceProfile).
+// ===========================================================================
+
+const BROADCAST_SPRINT_COLOR = '#4ade80';
+const BROADCAST_CAT: Record<'HC' | '1' | '2' | '3' | '4', { color: string; text: string; label: string }> = {
+  HC: { color: '#ef4444', text: '#2a0a0a', label: 'HC' },
+  '1': { color: '#f97316', text: '#2a1405', label: '1' },
+  '2': { color: '#fbbf24', text: '#2a2205', label: '2' },
+  '3': { color: '#a3e635', text: '#16240a', label: '3' },
+  '4': { color: '#4ade80', text: '#082013', label: '4' },
+};
+
+function broadcastCat(category: StageMarkerCategory | null): { color: string; text: string; label: string } {
+  if (category === 'HC' || category === '1' || category === '2' || category === '3' || category === '4') {
+    return BROADCAST_CAT[category];
+  }
+  return { color: '#94a3b8', text: '#0b1424', label: '?' };
+}
+
+function hexA(hex: string, alpha: number): string {
+  const n = hex.replace('#', '');
+  return `rgba(${parseInt(n.slice(0, 2), 16)},${parseInt(n.slice(2, 4), 16)},${parseInt(n.slice(4, 6), 16)},${alpha})`;
+}
+
+interface ProfileGeom {
+  x: (km: number) => number;
+  y: (elevation: number) => number;
+  baselineY: number;
+  width: number;
+  height: number;
+  paddingX: number;
+  paddingTop: number;
+  axisMinElevation: number;
+  axisMaxElevation: number;
+  distanceKm: number;
+}
+
+function buildProfileGeom(summary: ParsedStageSummary, width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number, stageDistanceMeters: number): ProfileGeom {
   const { axisMinElevation, axisMaxElevation } = resolveElevationAxis(summary);
-  const baselineY = height - paddingBottom;
-  const markerGuideTopY = compact ? 10 : 12;
-  const points = summary.points.map((point) => {
-    const x = scaleDistance(point.kmMark * 1000, stageDistanceMeters, width, paddingX);
-    const y = scaleElevation(point.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
-    return { x, y };
-  });
-  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
-  const climbHighlightPath = options.selectedClimbRange != null
-    ? buildClimbHighlightAreaPath(
-      summary,
-      stageDistanceMeters,
-      width,
-      paddingX,
-      height,
-      paddingTop,
-      paddingBottom,
-      axisMinElevation,
-      axisMaxElevation,
-      options.selectedClimbRange.startKm,
-      options.selectedClimbRange.endKm,
-    )
-    : null;
-  const markerEvents = buildProfileEvents(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation)
-    .map((event) => compact
-      ? renderCompactProfileEvent(event, markerGuideTopY, baselineY)
-      : renderProfileEvent(event, markerGuideTopY, baselineY))
-    .join('');
-  const tickValues = compact
-    ? []
-    : Array.from({ length: 5 }, (_value, index) => axisMinElevation + (((axisMaxElevation - axisMinElevation) / 4) * index));
-  const gridLines = tickValues.map((value) => {
-    const y = scaleElevation(value, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
-    return `
-      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
-      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
-      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label race-sim-elevation-label">${formatElevationLabel(value)}</text>`;
+  return {
+    x: (km) => scaleDistance(km * 1000, stageDistanceMeters, width, paddingX),
+    y: (elevation) => scaleElevation(elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom),
+    baselineY: height - paddingBottom,
+    width,
+    height,
+    paddingX,
+    paddingTop,
+    axisMinElevation,
+    axisMaxElevation,
+    distanceKm: stageDistanceMeters / 1000,
+  };
+}
+
+interface ClimbFeature {
+  startKm: number;
+  topKm: number;
+  startElevation: number;
+  topElevation: number;
+  category: StageMarkerCategory | null;
+  name: string;
+  lengthKm: number;
+  avgGradient: number;
+  finish: boolean;
+}
+interface SprintFeature { km: number; elevation: number; name: string; }
+interface StageFeatures { climbs: ClimbFeature[]; sprints: SprintFeature[]; finishHasSummit: boolean; }
+
+// Leitet Anstiege (climb_start↔climb_top/finish-summit), Zwischensprints und
+// Bergankunft aus den eingebetteten StageMarkern ab — dieselbe Paarungslogik
+// wie zuvor buildProfileEvents, aber mit vollem Start/Top-Bereich für die
+// farbige Anstiegs-Schattierung und die Namens-Chips.
+function extractStageFeatures(summary: ParsedStageSummary): StageFeatures {
+  const climbs: ClimbFeature[] = [];
+  const sprints: SprintFeature[] = [];
+  const pending: Array<{ kmMark: number; elevation: number; name: string | null }> = [];
+  let finishHasSummit = false;
+
+  for (const boundaryMarker of collectStageBoundaryMarkers(summary)) {
+    const { marker, kmMark, elevation } = boundaryMarker;
+    if (marker.type === 'climb_start') {
+      pending.push({ kmMark, elevation, name: marker.name });
+      continue;
+    }
+    if (isMountainClassificationMarker(marker)) {
+      let matchingIndex = -1;
+      for (let index = pending.length - 1; index >= 0; index -= 1) {
+        if (marker.name && pending[index]?.name === marker.name) { matchingIndex = index; break; }
+      }
+      const climbStart = matchingIndex >= 0 ? pending.splice(matchingIndex, 1)[0] : pending.pop();
+      const lengthKm = climbStart ? Math.max(0, kmMark - climbStart.kmMark) : 0;
+      const gainMeters = climbStart ? Math.max(0, elevation - climbStart.elevation) : 0;
+      const avgGradient = lengthKm > 0 ? gainMeters / (lengthKm * 10) : 0;
+      const finish = marker.type === 'finish_hill' || marker.type === 'finish_mountain';
+      if (finish) finishHasSummit = true;
+      climbs.push({
+        startKm: climbStart?.kmMark ?? kmMark,
+        topKm: kmMark,
+        startElevation: climbStart?.elevation ?? elevation,
+        topElevation: elevation,
+        category: marker.cat,
+        name: marker.name ?? climbStart?.name ?? 'Anstieg',
+        lengthKm,
+        avgGradient,
+        finish,
+      });
+      continue;
+    }
+    if (marker.type === 'sprint_intermediate') {
+      sprints.push({ km: kmMark, elevation, name: marker.name ?? 'Zwischensprint' });
+    }
+  }
+
+  return { climbs, sprints, finishHasSummit };
+}
+
+function broadcastGradientDefs(gradientId: string): string {
+  return `<linearGradient id="${gradientId}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="rgba(120,140,175,0.20)"></stop>
+      <stop offset="100%" stop-color="rgba(120,140,175,0.015)"></stop>
+    </linearGradient>`;
+}
+
+function broadcastGrid(summary: ParsedStageSummary, geom: ProfileGeom, compact: boolean): string {
+  if (compact) return '';
+  const values = Array.from({ length: 5 }, (_v, index) => geom.axisMinElevation + (((geom.axisMaxElevation - geom.axisMinElevation) / 4) * index));
+  return values.map((value) => {
+    const y = geom.y(value).toFixed(1);
+    return `<line x1="${geom.paddingX}" y1="${y}" x2="${(geom.width - geom.paddingX).toFixed(1)}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>
+      <text x="${(geom.paddingX + 4).toFixed(1)}" y="${(geom.y(value) - 6).toFixed(1)}" fill="#5f6f8a" font-size="16" font-family="'JetBrains Mono',monospace">${formatElevationLabel(value)}</text>`;
   }).join('');
-  const distanceTickMarkup = compact
-    ? ''
-    : renderDistanceTicks(buildDistanceTicks(summary, stageDistanceMeters), summary, stageDistanceMeters, width, paddingX, baselineY);
+}
+
+function broadcastLinePath(summary: ParsedStageSummary, geom: ProfileGeom): string {
+  return summary.points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${geom.x(point.kmMark).toFixed(1)} ${geom.y(point.elevation).toFixed(1)}`).join(' ');
+}
+
+// Kategorie-farbige Anstiegs-Schattierung + farbige Deckstroke über dem Kamm.
+function broadcastClimbSegments(summary: ParsedStageSummary, geom: ProfileGeom, features: StageFeatures, compact: boolean): string {
+  return features.climbs.map((climb) => {
+    const color = broadcastCat(climb.category).color;
+    const seg = [
+      { km: climb.startKm, elevation: interpolateElevation(summary, climb.startKm * 1000) },
+      ...summary.points.filter((point) => point.kmMark > climb.startKm && point.kmMark < climb.topKm).map((point) => ({ km: point.kmMark, elevation: point.elevation })),
+      { km: climb.topKm, elevation: interpolateElevation(summary, climb.topKm * 1000) },
+    ];
+    let area = `M ${geom.x(seg[0].km).toFixed(1)} ${geom.baselineY.toFixed(1)}`;
+    seg.forEach((point) => { area += ` L ${geom.x(point.km).toFixed(1)} ${geom.y(point.elevation).toFixed(1)}`; });
+    area += ` L ${geom.x(seg[seg.length - 1].km).toFixed(1)} ${geom.baselineY.toFixed(1)} Z`;
+    let deck = `M ${geom.x(seg[0].km).toFixed(1)} ${geom.y(seg[0].elevation).toFixed(1)}`;
+    seg.forEach((point, index) => { if (index) deck += ` L ${geom.x(point.km).toFixed(1)} ${geom.y(point.elevation).toFixed(1)}`; });
+    return `<path d="${area}" fill="${hexA(color, 0.22)}"></path>
+      <path d="${deck}" fill="none" stroke="${color}" stroke-width="${compact ? 2 : 3}" stroke-linejoin="round" stroke-linecap="round"></path>`;
+  }).join('');
+}
+
+function broadcastGuidesAndSprints(geom: ProfileGeom, features: StageFeatures, compact: boolean): string {
+  const guide = (km: number, elevation: number, color: string) =>
+    `<line x1="${geom.x(km).toFixed(1)}" x2="${geom.x(km).toFixed(1)}" y1="${geom.baselineY.toFixed(1)}" y2="${geom.y(elevation).toFixed(1)}" stroke="${hexA(color, 0.45)}" stroke-width="1.4" stroke-dasharray="3 3"></line>`;
+  const climbGuides = features.climbs.map((climb) => guide(climb.topKm, climb.topElevation, broadcastCat(climb.category).color)).join('');
+  const sprintGuides = features.sprints.map((sprint) => guide(sprint.km, sprint.elevation, BROADCAST_SPRINT_COLOR)).join('');
+  const sprintDots = features.sprints.map((sprint) =>
+    `<circle cx="${geom.x(sprint.km).toFixed(1)}" cy="${geom.y(sprint.elevation).toFixed(1)}" r="${compact ? 3 : 4.5}" fill="#061019" stroke="${BROADCAST_SPRINT_COLOR}" stroke-width="2"></circle>`).join('');
+  return climbGuides + sprintGuides + sprintDots;
+}
+
+// Namens-Chips über den Gipfeln mit kollisionssicherer Entzerrung im SVG-Raum.
+function broadcastMarkerChips(summary: ParsedStageSummary, geom: ProfileGeom, features: StageFeatures, compact: boolean): string {
+  interface ChipDesc {
+    cx: number; elevation: number; kind: 'climb' | 'sprint' | 'finish';
+    estW: number; chipH: number; tx: 'center' | 'left' | 'right';
+    title: string; inner: (originX: number, originY: number) => string;
+    L: number; R: number; markerY: number; top: number; bottom: number;
+  }
+  const S = compact
+    ? { cb: 13, p: 5, gap: 6, nameF: 0, metaF: 0, sprintR: 8, offY: 10, gapX: 16, gapY: 6, finF: 9 }
+    : { cb: 24, p: 8, gap: 9, nameF: 20, metaF: 15, sprintR: 13, offY: 16, gapX: 34, gapY: 12, finF: 15 };
+  const descs: ChipDesc[] = [];
+
+  const clampTx = (cx: number): 'center' | 'left' | 'right' => {
+    const frac = (cx - geom.paddingX) / Math.max(1, geom.width - geom.paddingX * 2);
+    if (frac > 0.9) return 'right';
+    if (frac < 0.08) return 'left';
+    return 'center';
+  };
+  const leftEdge = (cx: number, estW: number, tx: 'center' | 'left' | 'right') =>
+    tx === 'center' ? cx - estW / 2 : tx === 'right' ? cx - estW : cx;
+
+  for (const climb of features.climbs) {
+    const cat = broadcastCat(climb.category);
+    const cx = geom.x(climb.topKm);
+    const name = (climb.finish ? '🏁 ' : '') + climb.name;
+    const sub = `${Math.round(climb.topElevation)} m · ${climb.avgGradient.toFixed(1).replace('.', ',')}%`;
+    const title = `${climb.name} · ${climb.finish ? 'Bergankunft · ' : ''}Kat. ${cat.label} · ${Math.round(climb.topElevation)} m · ${climb.lengthKm.toFixed(1).replace('.', ',')} km · ${climb.avgGradient.toFixed(1).replace('.', ',')} %`;
+    let estW: number; let chipH: number;
+    if (compact) {
+      estW = S.cb + S.p * 2; chipH = S.cb + S.p * 2;
+    } else {
+      const textW = Math.max(name.length * S.nameF * 0.56, sub.length * S.metaF * 0.56);
+      estW = S.p + S.cb + S.gap + textW + S.p; chipH = S.p * 2 + S.nameF + 3 + S.metaF;
+    }
+    const tx = clampTx(cx);
+    const inner = (ox: number, oy: number): string => {
+      const catBox = `<rect x="${(ox + S.p).toFixed(1)}" y="${(oy + (chipH - S.cb) / 2).toFixed(1)}" width="${S.cb}" height="${S.cb}" rx="4" fill="${cat.color}"></rect>
+        <text x="${(ox + S.p + S.cb / 2).toFixed(1)}" y="${(oy + chipH / 2).toFixed(1)}" fill="${cat.text}" font-size="${(S.cb * 0.6).toFixed(1)}" font-weight="800" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono',monospace">${cat.label}</text>`;
+      const box = `<rect x="${ox.toFixed(1)}" y="${oy.toFixed(1)}" width="${estW.toFixed(1)}" height="${chipH.toFixed(1)}" rx="7" fill="#0c1729" stroke="${climb.finish ? hexA(cat.color, 0.7) : '#223350'}" stroke-width="1"></rect>`;
+      if (compact) return `${box}${catBox}`;
+      return `${box}${catBox}
+        <text x="${(ox + S.p + S.cb + S.gap).toFixed(1)}" y="${(oy + S.p + S.nameF * 0.82).toFixed(1)}" fill="#e8eef7" font-size="${S.nameF}" font-weight="800" font-family="'Archivo',sans-serif">${esc(name)}</text>
+        <text x="${(ox + S.p + S.cb + S.gap).toFixed(1)}" y="${(oy + chipH - S.p - 2).toFixed(1)}" fill="${hexA(cat.color, 0.95)}" font-size="${S.metaF}" font-weight="700" font-family="'JetBrains Mono',monospace">${esc(sub)}</text>`;
+    };
+    descs.push({ cx, elevation: climb.topElevation, kind: 'climb', estW, chipH, tx, title, inner, L: 0, R: 0, markerY: 0, top: 0, bottom: 0 });
+  }
+
+  for (const sprint of features.sprints) {
+    const cx = geom.x(sprint.km);
+    const size = S.sprintR * 2;
+    const title = `Zwischensprint${sprint.name && sprint.name !== 'Zwischensprint' ? ' · ' + sprint.name : ''} · km ${Math.round(sprint.km)} · ${Math.round(sprint.elevation)} m`;
+    const inner = (ox: number, oy: number): string =>
+      `<circle cx="${(ox + S.sprintR).toFixed(1)}" cy="${(oy + S.sprintR).toFixed(1)}" r="${(S.sprintR - 1).toFixed(1)}" fill="#061019" stroke="${BROADCAST_SPRINT_COLOR}" stroke-width="1.6"></circle>
+        <text x="${(ox + S.sprintR).toFixed(1)}" y="${(oy + S.sprintR).toFixed(1)}" fill="${BROADCAST_SPRINT_COLOR}" font-size="${(S.sprintR * 1.05).toFixed(1)}" font-weight="800" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono',monospace">S</text>`;
+    descs.push({ cx, elevation: sprint.elevation, kind: 'sprint', estW: size, chipH: size, tx: 'center', title, inner, L: 0, R: 0, markerY: 0, top: 0, bottom: 0 });
+  }
+
+  if (!features.finishHasSummit && summary.points.length > 0) {
+    const finishPoint = summary.points[summary.points.length - 1];
+    const cx = geom.x(finishPoint.kmMark);
+    const label = 'ZIEL';
+    const estW = compact ? 26 : label.length * S.finF * 0.72 + 12;
+    const chipH = compact ? 15 : 22;
+    const inner = (ox: number, oy: number): string =>
+      `<rect x="${ox.toFixed(1)}" y="${oy.toFixed(1)}" width="${estW.toFixed(1)}" height="${chipH.toFixed(1)}" rx="5" fill="#0c1729" stroke="#334a68" stroke-width="1"></rect>
+        <text x="${(ox + estW / 2).toFixed(1)}" y="${(oy + chipH / 2).toFixed(1)}" fill="#cbd5e1" font-size="${compact ? 8 : S.finF}" font-weight="800" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono',monospace">${label}</text>`;
+    descs.push({ cx, elevation: finishPoint.elevation, kind: 'finish', estW, chipH, tx: 'right', title: `Ziel · km ${Math.round(finishPoint.kmMark)} · ${Math.round(finishPoint.elevation)} m`, inner, L: 0, R: 0, markerY: 0, top: 0, bottom: 0 });
+  }
+
+  // Kollisionssichere Entzerrung: jedes Chip über seinen Marker, dann nach oben
+  // schieben, bis nichts überlappt (Verbindungsstrich runter zum Gipfel).
+  descs.sort((a, b) => a.cx - b.cx);
+  const placed: Array<{ L: number; R: number; top: number; bottom: number }> = [];
+  for (const desc of descs) {
+    desc.L = leftEdge(desc.cx, desc.estW, desc.tx);
+    desc.R = desc.L + desc.estW;
+    desc.markerY = geom.y(desc.elevation);
+    let bottom = desc.markerY - S.offY;
+    let top = bottom - desc.chipH;
+    let guard = 0; let hit = true;
+    while (hit && guard++ < 80) {
+      hit = false;
+      for (const prev of placed) {
+        if (desc.L < prev.R + S.gapX && desc.R > prev.L - S.gapX && top < prev.bottom + S.gapY && bottom > prev.top - S.gapY) {
+          bottom = prev.top - S.gapY; top = bottom - desc.chipH; hit = true;
+        }
+      }
+    }
+    if (top < 4) { top = 4; bottom = top + desc.chipH; }
+    desc.top = top; desc.bottom = bottom;
+    placed.push({ L: desc.L, R: desc.R, top, bottom });
+  }
+
+  return descs.map((desc) => {
+    const connectorTop = desc.bottom;
+    const connector = desc.markerY - connectorTop > 4
+      ? `<line x1="${desc.cx.toFixed(1)}" x2="${desc.cx.toFixed(1)}" y1="${connectorTop.toFixed(1)}" y2="${desc.markerY.toFixed(1)}" stroke="rgba(255,255,255,0.30)" stroke-width="1" stroke-dasharray="3 3"></line>`
+      : '';
+    return `<g class="hp-marker-chip">${connector}<title>${esc(desc.title)}</title>${desc.inner(desc.L, desc.top)}</g>`;
+  }).join('');
+}
+
+function broadcastDistanceTicks(summary: ParsedStageSummary, geom: ProfileGeom, stageDistanceMeters: number, compact: boolean): string {
+  if (compact) return '';
+  const markerMeters = new Set(collectStageBoundaryMarkers(summary).map((entry) => Math.round(entry.kmMark * 1000)));
+  const ticks = buildDistanceTicks(summary, stageDistanceMeters);
+  const finishMeter = ticks.length > 0 ? ticks[ticks.length - 1] : stageDistanceMeters;
+  // Regel-Labels, die zu nah an der Zielbeschriftung liegen, weglassen (sonst
+  // berühren sich z. B. „175 km" und die Zielangabe). Start links-, Ziel rechtsbündig.
+  const minGapMeters = stageDistanceMeters * 0.04;
+  return ticks.map((distanceMeter, index) => {
+    const x = geom.x(distanceMeter / 1000);
+    const tickLength = markerMeters.has(distanceMeter) ? 8 : 5;
+    const isFinish = index === ticks.length - 1;
+    const isStart = index === 0;
+    const anchor = isFinish ? 'end' : isStart ? 'start' : 'middle';
+    const showLabel = isFinish || (finishMeter - distanceMeter) >= minGapMeters;
+    const line = `<line x1="${x.toFixed(1)}" y1="${geom.baselineY.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(geom.baselineY + tickLength).toFixed(1)}" stroke="#334155" stroke-width="1"></line>`;
+    const text = showLabel
+      ? `<text x="${x.toFixed(1)}" y="${(geom.baselineY + tickLength + 18).toFixed(1)}" text-anchor="${anchor}" fill="#6a7a95" font-size="16" font-family="'JetBrains Mono',monospace">${esc(formatKm(distanceMeter))}</text>`
+      : '';
+    return line + text;
+  }).join('');
+}
+
+function buildStaticProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string, compact: boolean, options: StaticStageProfileOptions = {}): string {
+  const width = compact ? 600 : 1584;
+  const height = compact ? 156 : 634;
+  const paddingX = compact ? 12 : 28;
+  const paddingTop = compact ? 34 : 168;
+  const paddingBottom = compact ? 20 : 101;
+  const stageDistanceMeters = summary.distanceKm * 1000;
+  const geom = buildProfileGeom(summary, width, height, paddingX, paddingTop, paddingBottom, stageDistanceMeters);
+  const features = extractStageFeatures(summary);
+  const gradientId = compact ? 'hp-mini-area' : 'hp-large-area';
+  const linePath = broadcastLinePath(summary, geom);
+  const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${geom.baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${geom.baselineY.toFixed(1)} Z`;
+  const climbHighlightPath = options.selectedClimbRange != null
+    ? buildClimbHighlightAreaPath(summary, stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, geom.axisMinElevation, geom.axisMaxElevation, options.selectedClimbRange.startKm, options.selectedClimbRange.endKm)
+    : null;
 
   return `
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(label)}" class="${compact ? 'dashboard-stage-profile-svg' : 'dashboard-stage-profile-svg dashboard-stage-profile-svg-large'}" data-stage-profile="${stageProfile}">
-      <defs>
-        <linearGradient id="${compact ? 'dashboard-mini-paper' : 'dashboard-large-paper'}" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="#fffdf7"></stop>
-          <stop offset="100%" stop-color="#f8f1df"></stop>
-        </linearGradient>
-        <linearGradient id="${compact ? 'dashboard-mini-area' : 'dashboard-large-area'}" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="#fbbf24"></stop>
-          <stop offset="100%" stop-color="#f59e0b"></stop>
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="${width}" height="${height}" fill="url(#${compact ? 'dashboard-mini-paper' : 'dashboard-large-paper'})"></rect>
-      ${gridLines}
-      <line x1="${paddingX}" y1="${baselineY}" x2="${width - paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
-      ${compact ? '' : `<line x1="${paddingX}" y1="${paddingTop}" x2="${paddingX}" y2="${baselineY}" class="race-sim-axis"></line>`}
-      <path d="${areaPath}" fill="url(#${compact ? 'dashboard-mini-area' : 'dashboard-large-area'})"></path>
+      <defs>${broadcastGradientDefs(gradientId)}</defs>
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#0c1526"></rect>
+      ${broadcastGrid(summary, geom, compact)}
+      <line x1="${paddingX}" y1="${geom.baselineY}" x2="${width - paddingX}" y2="${geom.baselineY}" stroke="#243352" stroke-width="1.2"></line>
+      <path d="${areaPath}" fill="url(#${gradientId})"></path>
+      ${broadcastClimbSegments(summary, geom, features, compact)}
       ${climbHighlightPath ? `<path d="${climbHighlightPath}" class="dashboard-stage-profile-climb-highlight"></path>` : ''}
-      <path d="${linePath}" class="race-sim-profile-line"></path>
-      ${markerEvents}
-      ${distanceTickMarkup}
-      ${compact ? '' : `<text x="${paddingX.toFixed(1)}" y="${(paddingTop - 20).toFixed(1)}" class="race-sim-scale race-sim-scale-title" text-anchor="start">Höhe</text>`}
+      <path d="${linePath}" fill="none" stroke="rgba(226,232,240,0.85)" stroke-width="${compact ? 1.8 : 2.8}" stroke-linejoin="round" stroke-linecap="round"></path>
+      ${broadcastGuidesAndSprints(geom, features, compact)}
+      ${broadcastMarkerChips(summary, geom, features, compact)}
+      ${broadcastDistanceTicks(summary, geom, stageDistanceMeters, compact)}
+      ${compact ? '' : `<text x="${(paddingX + 4).toFixed(1)}" y="${(paddingTop - 18).toFixed(1)}" fill="#5f6f8a" font-size="16" font-weight="700" letter-spacing="1.5" font-family="'JetBrains Mono',monospace">HÖHE</text>`}
     </svg>`;
 }
 
@@ -617,13 +710,16 @@ export function renderStaticStageProfile(container: HTMLElement, summary: Parsed
   container.innerHTML = `<div class="dashboard-stage-profile-wrap">${buildStaticProfileMarkup(summary, stageProfile, label, false, options)}</div>`;
 }
 
-export function renderMiniStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {
+// Kompaktes Mini-Profil als HTML-String (für innerHTML-Einbettung, z. B. Dashboard-Spotlight).
+export function renderMiniStageProfileMarkup(summary: ParsedStageSummary, stageProfile: StageProfile, label: string): string {
   if (summary.points.length < 2) {
-    container.innerHTML = '<div class="dashboard-stage-profile-empty">–</div>';
-    return;
+    return '<div class="dashboard-stage-profile-empty">–</div>';
   }
+  return buildStaticProfileMarkup(summary, stageProfile, label, true);
+}
 
-  container.innerHTML = buildStaticProfileMarkup(summary, stageProfile, label, true);
+export function renderMiniStageProfile(container: HTMLElement, summary: ParsedStageSummary, stageProfile: StageProfile, label: string): void {
+  container.innerHTML = renderMiniStageProfileMarkup(summary, stageProfile, label);
 }
 
 export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSummary, snapshot: SimulationSnapshot, label: string, bootstrap: RealtimeSimulationBootstrap, timingMode: TimingRailMode = 'finish', selectedGroupLabel: string | null = null): void {
@@ -637,68 +733,45 @@ export function renderRaceProfile(container: HTMLElement, summary: ParsedStageSu
   const paddingX = 28;
   const paddingTop = 168;
   const paddingBottom = 101;
-  const { axisMinElevation, axisMaxElevation } = resolveElevationAxis(summary);
-  const baselineY = height - paddingBottom;
-  const markerGuideTopY = 12;
-  const tickValues = Array.from({ length: 5 }, (_value, index) => axisMinElevation + (((axisMaxElevation - axisMinElevation) / 4) * index));
+  const stageDistanceMeters = snapshot.stageDistanceMeters;
+  const geom = buildProfileGeom(summary, width, height, paddingX, paddingTop, paddingBottom, stageDistanceMeters);
+  const features = extractStageFeatures(summary);
+  const gradientId = 'hp-race-area';
+  const linePath = broadcastLinePath(summary, geom);
+  const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${geom.baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${geom.baselineY.toFixed(1)} Z`;
   const displayClusters = mergeDisplayedClusters(snapshot.clusters);
   const namedGroups = buildNamedRaceGroups(displayClusters);
-  const distanceTicks = buildDistanceTicks(summary, snapshot.stageDistanceMeters);
-  const points = summary.points.map((point) => {
-    const x = scaleDistance(point.kmMark * 1000, snapshot.stageDistanceMeters, width, paddingX);
-    const y = scaleElevation(point.elevation, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
-    return { x, y };
-  });
-  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L ${(width - paddingX).toFixed(1)} ${baselineY.toFixed(1)} L ${paddingX.toFixed(1)} ${baselineY.toFixed(1)} Z`;
-  const markerEvents = buildProfileEvents(summary, snapshot.stageDistanceMeters, width, paddingX, height, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation)
-    .map((event) => renderProfileEvent(event, markerGuideTopY, baselineY))
-    .join('');
-  const gridLines = tickValues.map((value) => {
-    const y = scaleElevation(value, axisMinElevation, axisMaxElevation, height, paddingTop, paddingBottom);
-    return `
-      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${width - paddingX}" y2="${y.toFixed(1)}" class="race-sim-grid-line"></line>
-      <line x1="${paddingX}" y1="${y.toFixed(1)}" x2="${(paddingX - 8).toFixed(1)}" y2="${y.toFixed(1)}" class="race-sim-axis"></line>
-      <text x="${(paddingX - 14).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="race-sim-grid-label race-sim-elevation-label">${formatElevationLabel(value)}</text>`;
-  }).join('');
-  const distanceTickMarkup = renderDistanceTicks(distanceTicks, summary, snapshot.stageDistanceMeters, width, paddingX, baselineY);
   const groupByCluster = new Map(displayClusters.map((cluster, index) => [cluster, namedGroups[index] ?? null]));
   const clusters = displayClusters
-    .map((cluster) => renderCluster(cluster, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation, groupByCluster.get(cluster)?.label === selectedGroupLabel))
+    .map((cluster) => renderCluster(cluster, summary, stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, geom.axisMinElevation, geom.axisMaxElevation, groupByCluster.get(cluster)?.label === selectedGroupLabel))
     .join('');
   const ittRiderLabels = bootstrap.stage.profile === 'ITT'
-    ? renderIttRiderLabels(displayClusters, summary, snapshot.stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, axisMinElevation, axisMaxElevation, bootstrap)
+    ? renderIttRiderLabels(displayClusters, summary, stageDistanceMeters, width, height, paddingX, paddingTop, paddingBottom, geom.axisMinElevation, geom.axisMaxElevation, bootstrap)
     : '';
   container.innerHTML = `
     <div class="race-sim-profile-layout${bootstrap.stage.profile === 'ITT' ? ' race-sim-profile-layout-itt' : ''}">
       <div class="race-sim-profile-canvas-wrap">
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(label)}">
           <defs>
-            <linearGradient id="race-sim-paper" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color="#fffdf7"></stop>
-              <stop offset="100%" stop-color="#f8f1df"></stop>
-            </linearGradient>
-            <linearGradient id="race-sim-area" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color="#fbbf24"></stop>
-              <stop offset="100%" stop-color="#f59e0b"></stop>
-            </linearGradient>
+            ${broadcastGradientDefs(gradientId)}
             <clipPath id="race-sim-profile-plot-clip">
               <rect x="${paddingX}" y="0" width="${width - (paddingX * 2)}" height="${height}"></rect>
             </clipPath>
           </defs>
-          <rect x="0" y="0" width="${width}" height="${height}" fill="url(#race-sim-paper)"></rect>
-          ${gridLines}
-          <line x1="${paddingX}" y1="${baselineY}" x2="${width - paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
-          <line x1="${paddingX}" y1="${paddingTop}" x2="${paddingX}" y2="${baselineY}" class="race-sim-axis"></line>
+          <rect x="0" y="0" width="${width}" height="${height}" fill="#0c1526"></rect>
+          ${broadcastGrid(summary, geom, false)}
+          <line x1="${paddingX}" y1="${geom.baselineY}" x2="${width - paddingX}" y2="${geom.baselineY}" stroke="#243352" stroke-width="1.2"></line>
           <g clip-path="url(#race-sim-profile-plot-clip)">
-            <path d="${areaPath}" fill="url(#race-sim-area)"></path>
-            <path d="${linePath}" class="race-sim-profile-line"></path>
-            ${markerEvents}
+            <path d="${areaPath}" fill="url(#${gradientId})"></path>
+            ${broadcastClimbSegments(summary, geom, features, false)}
+            <path d="${linePath}" fill="none" stroke="rgba(226,232,240,0.85)" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"></path>
+            ${broadcastGuidesAndSprints(geom, features, false)}
             ${clusters}
           </g>
+          ${broadcastMarkerChips(summary, geom, features, false)}
           ${ittRiderLabels}
-          ${distanceTickMarkup}
-          <text x="${paddingX.toFixed(1)}" y="${(paddingTop - 20).toFixed(1)}" class="race-sim-scale race-sim-scale-title" text-anchor="start">Höhe</text>
+          ${broadcastDistanceTicks(summary, geom, stageDistanceMeters, false)}
+          <text x="${(paddingX + 4).toFixed(1)}" y="${(paddingTop - 18).toFixed(1)}" fill="#5f6f8a" font-size="16" font-weight="700" letter-spacing="1.5" font-family="'JetBrains Mono',monospace">HÖHE</text>
         </svg>
       </div>
     </div>`;

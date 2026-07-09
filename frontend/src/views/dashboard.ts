@@ -42,6 +42,7 @@ import { renderStaticStageProfile } from '../race-sim/renderProfile';
 import {
   renderDashboardBroadcast,
   ensureSpotlightWinsLoaded,
+  spotlightStageId,
 } from './dashboardBroadcast';
 
 // Dynamically imported or declared interfaces to avoid circular import issues
@@ -156,6 +157,20 @@ export function renderDashboard(): void {
       $('view-dashboard').innerHTML = renderDashboardBroadcast();
     }
   });
+  // Echtes Höhenprofil der laufenden Etappe lazy nachladen (Spotlight-Mini-Widget).
+  void ensureSpotlightStageProfileLoaded();
+}
+
+// Laedt das Etappenprofil des Spotlight-Rennens (einmalig, gecacht in
+// state.stageSummariesByStageId) und rendert das Dashboard danach neu.
+async function ensureSpotlightStageProfileLoaded(): Promise<void> {
+  const stageId = spotlightStageId();
+  if (stageId == null) return;
+  if (state.stageSummariesByStageId[stageId] || state.stageSummaryErrorsByStageId[stageId]) return;
+  await ensureStageSummaryLoaded(stageId);
+  if (isActiveView('dashboard')) {
+    $('view-dashboard').innerHTML = renderDashboardBroadcast();
+  }
 }
 
 export async function loadRaces(): Promise<void> {
@@ -546,7 +561,8 @@ export async function openDashboardStageProfile(stageId: number, selectedClimb: 
   }
 
   state.selectedDashboardProfileStageId = stageId;
-  $('stage-profile-title').textContent = `${location.race.name} · ${getStageDisplayName(location.stage)}`;
+  const catBadge = location.race.category?.name ? raceCategoryNameBadge(location.race) : '';
+  $('stage-profile-title').innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">${catBadge}${renderStageProfileBadge(location.stage.profile)}<span>${esc(location.race.name)} · ${esc(getStageDisplayName(location.stage))}</span></span>`;
   const climbMeta = selectedClimb != null
     ? ` · Anstieg ${selectedClimb.climbIndex}: ${selectedClimb.name}${selectedClimb.category != null ? ` · Kat. ${selectedClimb.category}` : ''} · ${selectedClimb.startKm.toFixed(1).replace('.', ',')}-${selectedClimb.endKm.toFixed(1).replace('.', ',')} km · Climb Score ${selectedClimb.climbScore}`
     : '';

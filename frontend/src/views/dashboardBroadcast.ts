@@ -11,7 +11,8 @@
  */
 import { api } from '../api';
 import { state, resolveRaceCategoryBadgeStyle } from '../state';
-import type { Race, Rider, Team, RiderStatsPayload } from '../../../shared/types';
+import { renderMiniStageProfileMarkup } from '../race-sim/renderProfile';
+import type { Race, Rider, Team, RiderStatsPayload, StageProfile } from '../../../shared/types';
 
 const MONO = "font-family:'JetBrains Mono',monospace";
 const MONTHS = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
@@ -152,19 +153,36 @@ function radarRow(race: Race): string {
 }
 
 // ---- Live-Spotlight (aktuelles laufendes Rennen) ---------------------------
-function renderLiveSpotlight(): string {
+interface SpotlightPick { race: Race; pendingStage: { stageId: number; stageNumber: number; profile: StageProfile } | null; }
+
+// Auswahl des Fokus-Rennens fürs Spotlight (bevorzugt ein Rennen mit heute
+// offener Etappe). Geteilt von renderLiveSpotlight und spotlightStageId, damit
+// das async nachgeladene Höhenprofil zur gerenderten Etappe passt.
+function pickSpotlight(): SpotlightPick | null {
   const gs = state.gameState;
-  if (!gs) return '';
+  if (!gs) return null;
   const today = gs.currentDate;
   const liveRaces = state.races
     .filter((r) => r.startDate <= today && r.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  if (liveRaces.length === 0) return '';
-
+  if (liveRaces.length === 0) return null;
   const pending = state.gameStatus?.pendingStages ?? [];
-  // Bevorzugt ein Rennen mit heute offener Etappe
   const race = liveRaces.find((r) => pending.some((p) => p.raceId === r.id)) ?? liveRaces[0];
   const pendingStage = pending.find((p) => p.raceId === race.id) ?? null;
+  return { race, pendingStage };
+}
+
+// Stage-ID des aktuell im Spotlight gezeigten Rennens (fürs Lazy-Laden des Profils).
+export function spotlightStageId(): number | null {
+  const pick = pickSpotlight();
+  if (!pick) return null;
+  return pick.pendingStage?.stageId ?? pick.race.upcomingStage?.stageId ?? null;
+}
+
+function renderLiveSpotlight(): string {
+  const pick = pickSpotlight();
+  if (!pick) return '';
+  const { race, pendingStage } = pick;
 
   const catStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
   const country = race.country?.code3 ?? race.country?.name ?? '';
@@ -175,13 +193,19 @@ function renderLiveSpotlight(): string {
     : country;
   const profileLabel = pendingStage?.profile ?? race.upcomingStage?.profile ?? '';
 
-  // stilisiertes Höhenprofil (repräsentativ, kein km-genaues Profil auf dem Dashboard)
-  const elevationSvg = `
-    <svg viewBox="0 0 600 90" preserveAspectRatio="none" style="width:100%;height:70px;display:block;margin-top:6px;">
-      <defs><linearGradient id="dash-elev" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.4)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>
-      <polygon points="0,80 0,66 60,60 110,64 170,48 230,55 300,36 360,44 420,20 470,30 520,8 560,22 600,10 600,80" fill="url(#dash-elev)"/>
-      <polyline points="0,66 60,60 110,64 170,48 230,55 300,36 360,44 420,20 470,30 520,8 560,22 600,10" fill="none" stroke="#22d3ee" stroke-width="2"/>
-    </svg>`;
+  // Echtes Etappen-Höhenprofil (Mini-Widget, Broadcast-1b). Wird lazy geladen
+  // (ensureSpotlightStageProfileLoaded in dashboard.ts) und aus dem Cache gerendert.
+  const stageId = pendingStage?.stageId ?? race.upcomingStage?.stageId ?? null;
+  const stageProfileType = (pendingStage?.profile ?? race.upcomingStage?.profile) as StageProfile | undefined;
+  const cachedSummary = stageId != null ? state.stageSummariesByStageId[stageId] : undefined;
+  let elevationSvg: string;
+  if (cachedSummary && stageProfileType) {
+    elevationSvg = `<div style="margin-top:8px;">${renderMiniStageProfileMarkup(cachedSummary, stageProfileType, race.name)}</div>`;
+  } else if (stageId != null && state.stageSummaryErrorsByStageId?.[stageId]) {
+    elevationSvg = `<div style="${MONO};font-size:10px;color:#6a7a95;margin-top:12px;">Höhenprofil nicht verfügbar.</div>`;
+  } else {
+    elevationSvg = `<div style="height:118px;margin-top:8px;border:1px dashed #1c2b47;border-radius:9px;display:flex;align-items:center;justify-content:center;${MONO};font-size:10px;letter-spacing:.08em;color:#6a7a95;">HÖHENPROFIL WIRD GELADEN…</div>`;
+  }
 
   const buttons = pendingStage
     ? `

@@ -3499,10 +3499,10 @@ html, body {
   align-items: stretch;
   height: 428px;
   min-height: 428px;
-  border: 1px solid rgba(148, 163, 184, .14);
+  border: 1px solid #1e2c49;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: linear-gradient(180deg, #fffdf7 0%, #f8f1df 100%);
+  background: #0c1526;
 }
 
 .race-sim-profile-layout {
@@ -3550,8 +3550,8 @@ html, body {
 }
 
 .race-sim-cluster-dot {
-  fill: #0f172a;
-  stroke: rgba(255, 255, 255, .92);
+  fill: #e2e8f0;
+  stroke: #0b1424;
   stroke-width: 1.2;
 }
 
@@ -3799,7 +3799,7 @@ html, body {
 }
 
 .race-sim-marker-detail {
-  fill: rgba(31, 41, 55, .82);
+  fill: rgba(226, 232, 240, .9);
   font-size: 10px;
   font-weight: 600;
 }
@@ -4659,9 +4659,9 @@ html, body {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(148, 163, 184, .18);
+  border: 1px solid #1e2c49;
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: #0c1526;
   padding: .75rem;
   overflow: hidden;
 }
