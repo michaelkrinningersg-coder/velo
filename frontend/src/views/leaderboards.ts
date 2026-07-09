@@ -39,7 +39,26 @@ const BADGE_DEFS: BadgeDef[] = [
   { key: 'breakawayMaster', category: 'Action', label: 'Ausreißer-Meister (erfolgreiche Ausreißer)', icon: '🎯', metricKey: 'successful_breakaways', thresholds: [5, 10, 15, 20, 25] },
   // Wertungen
   { key: 'maillotJaune', category: 'Wertungen', label: 'Maillot Jaune (Gelbe Trikottage)', icon: '💛', metricKey: 'jersey_gc', thresholds: [50, 100, 150, 200, 300] },
-  { key: 'summitFinisher', category: 'Rennerfolg', label: 'Summit Finisher (Hochgebirgs-Siege)', icon: '⛰️', metricKey: 'wins_terrain_High_Mountain', thresholds: [5, 10, 20, 30, 40] },
+  // Rennerfolg — Aggregat/Gruppe (Quelle: rider_career_category_stats, deckungsgleich mit den Badges)
+  { key: 'podiumMachine', category: 'Rennerfolg', label: 'Podium Machine (Podestplätze)', icon: '🥇', metricKey: 'catagg_podiums', thresholds: [25, 50, 100, 150, 200] },
+  { key: 'topTenMachine', category: 'Rennerfolg', label: 'Top-10 Machine (Top-10-Platzierungen)', icon: '🔟', metricKey: 'catagg_top_tens', thresholds: [25, 50, 100, 150, 200] },
+  { key: 'eternalSecond', category: 'Rennerfolg', label: 'Eternal Second (zweite Plätze)', icon: '🥈', metricKey: 'catagg_second_places', thresholds: [5, 10, 20, 30, 40] },
+  { key: 'mountainGoat', category: 'Rennerfolg', label: 'Mountain Goat (Bergwertungssiege)', icon: '🐐', metricKey: 'catagg_climb_wins', thresholds: [20, 40, 60, 80, 100] },
+  { key: 'hcKing', category: 'Rennerfolg', label: 'HC King (HC-Bergwertungssiege)', icon: '👑', metricKey: 'catagg_hc_climbs', thresholds: [5, 10, 15, 20, 25] },
+  { key: 'monumentHunter', category: 'Rennerfolg', label: 'Monument Hunter (Monument-Siege)', icon: '🏛️', metricKey: 'catagg_monument_wins', thresholds: [1, 2, 5, 8, 10] },
+  { key: 'sprintHunter', category: 'Rennerfolg', label: 'Sprint Hunter (Sprintsiege)', icon: '🚵', metricKey: 'catagg_sprint_wins', thresholds: [10, 20, 30, 50, 75] },
+  { key: 'rouleur', category: 'Rennerfolg', label: 'Rouleur (Siege Flach/Rolling)', icon: '🚴', metricKey: 'catagg_win_rouleur', thresholds: [5, 10, 20, 30, 40] },
+  { key: 'puncheur', category: 'Rennerfolg', label: 'Puncheur (Siege Hügelig)', icon: '⚡', metricKey: 'catagg_win_puncheur', thresholds: [5, 10, 20, 30, 40] },
+  { key: 'summitFinisher', category: 'Rennerfolg', label: 'Summit Finisher (Bergsiege)', icon: '⛰️', metricKey: 'catagg_win_summit', thresholds: [5, 10, 20, 30, 40] },
+  { key: 'chronoMaster', category: 'Rennerfolg', label: 'Chrono Master (Zeitfahrsiege)', icon: '⏱️', metricKey: 'catagg_win_chrono', thresholds: [5, 10, 15, 20, 25] },
+  { key: 'cobbledClassicsKing', category: 'Rennerfolg', label: 'Cobbled Classics King (Kopfsteinsiege)', icon: '🧱', metricKey: 'catagg_win_cobble', thresholds: [3, 6, 10, 15, 20] },
+  // Wetter (Siege nach Wetterlage, Quelle: rider_career_category_stats)
+  { key: 'heatWarrior', category: 'Wetter', label: 'Heat Warrior (Siege bei Extremhitze)', icon: '☀️', metricKey: 'catagg_win_weather_2', thresholds: [3, 6, 10, 15, 20] },
+  { key: 'rainMaster', category: 'Wetter', label: 'Rain Master (Siege bei Regen)', icon: '🌧️', metricKey: 'catagg_win_rain', thresholds: [5, 10, 15, 20, 25] },
+  { key: 'stormRider', category: 'Wetter', label: 'Storm Rider (Siege bei Starkregen)', icon: '⛈️', metricKey: 'catagg_win_weather_4', thresholds: [2, 4, 6, 8, 10] },
+  { key: 'echelonMaster', category: 'Wetter', label: 'Echelon Master (Siege bei Starkwind)', icon: '🌬️', metricKey: 'catagg_win_weather_5', thresholds: [2, 4, 8, 12, 15] },
+  { key: 'fogRider', category: 'Wetter', label: 'Fog Rider (Siege bei Nebel)', icon: '🌫️', metricKey: 'catagg_win_weather_6', thresholds: [2, 4, 6, 8, 10] },
+  { key: 'iceBreaker', category: 'Wetter', label: 'Ice Breaker (Siege bei Schnee/Eis)', icon: '❄️', metricKey: 'catagg_win_weather_7', thresholds: [2, 4, 6, 8, 10] },
   // Wertungen
   { key: 'greenMachine', category: 'Wertungen', label: 'Green Machine (Grüne Trikottage)', icon: '💚', metricKey: 'jersey_points', thresholds: [25, 50, 75, 100, 150] },
   { key: 'kingOfTheMountains', category: 'Wertungen', label: 'King of the Mountains (Bergtrikottage)', icon: '⛰️', metricKey: 'jersey_mountain', thresholds: [25, 50, 75, 100, 150] },
@@ -400,7 +419,9 @@ export async function renderLeaderboard(): Promise<void> {
   let filteredData = res.data;
   if (isBadge) {
     const thr = badgeThreshold ?? 0;
-    filteredData = res.data.filter((row: any) => Number(row.value) >= thr);
+    // Schwelle immer gegen den numerischen rawValue prüfen (value ist formatiert,
+    // z.B. "12500.0 km" → NaN und würde alle Halter fälschlich ausblenden).
+    filteredData = res.data.filter((row: any) => Number(row.rawValue ?? row.value) >= thr);
     if (filteredData.length === 0) {
       emptyEl.textContent = 'Kein Fahrer erfüllt diese Badge-Bedingung.';
       emptyEl.classList.remove('hidden');
