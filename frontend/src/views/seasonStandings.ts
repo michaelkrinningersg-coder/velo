@@ -24,6 +24,10 @@ import {
 import type {
   SeasonStandingsPayload,
   SeasonStandingCountryRow,
+  SeasonNationalChampionGroup,
+  SeasonReigningTitle,
+  SeasonChampionHolder,
+  ChampionTitleType,
 } from '../../../shared/types';
 
 export function formatPointsGap(points: number): string {
@@ -177,7 +181,23 @@ export function renderSeasonStandingsView(): void {
       class="results-type-btn${scope === 'countries' ? ' active' : ''}"
       data-season-scope="countries"
     >Country</button>
+    <button
+      type="button"
+      class="results-type-btn${scope === 'nationalChampions' ? ' active' : ''}"
+      data-season-scope="nationalChampions"
+    >Nationale Meister</button>
+    <button
+      type="button"
+      class="results-type-btn${scope === 'internationalChampions' ? ' active' : ''}"
+      data-season-scope="internationalChampions"
+    >WM / EM / Olympia</button>
   `;
+
+  // Die beiden Meister-Uebersichten nutzen ein eigenes Layout (kein Broadcast-Grid).
+  if (scope === 'nationalChampions' || scope === 'internationalChampions') {
+    renderChampionsScope(scope);
+    return;
+  }
 
   const isCountryScope = scope === 'countries';
   const rows = isCountryScope
@@ -199,6 +219,7 @@ export function renderSeasonStandingsView(): void {
   cardTitle.textContent = isCountryScope ? 'Länder-Wertung' : scope === 'teams' ? 'Team-Wertung' : 'Fahrer-Wertung';
   cardCount.textContent = `${rows.length} ${isCountryScope ? 'Länder' : scope === 'teams' ? 'Teams' : 'Fahrer'}`;
 
+  gridHead.style.display = '';
   gridHead.style.gridTemplateColumns = COLS;
   gridHead.innerHTML = isCountryScope
     ? `<span>PL.</span><span>${primaryLabel}</span><span style="justify-self:center;">FLAGGE</span><span style="justify-self:end;">PUNKTE</span><span style="justify-self:end;">RÜCKSTAND</span>`
@@ -258,12 +279,137 @@ export function renderSeasonStandingsView(): void {
   tableCard.classList.remove('hidden');
 }
 
+// Emoji-Signatur je internationalem Titeltyp (Regenbogen/Euro-Stern/Gold).
+const CHAMPION_TITLE_BADGE: Record<ChampionTitleType, string> = {
+  WM: '<span title="Weltmeister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+  WM_U23: '<span title="Weltmeister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+  WM_JUN: '<span title="Weltmeister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+  EM: '<span title="Europameister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+  EM_U23: '<span title="Europameister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+  EM_JUN: '<span title="Europameister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+  OLY: '<span title="Olympiasieger" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(251,191,36,.7));">🥇</span>',
+  NAT: '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>',
+};
+
+const RAINBOW_ACCENT = 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)';
+
+// Reihenfolge + Beschriftung der internationalen Titelgruppen.
+const INTERNATIONAL_GROUPS: Array<{ type: ChampionTitleType; title: string; accent: string }> = [
+  { type: 'OLY', title: 'Olympische Spiele', accent: '#fbbf24' },
+  { type: 'WM', title: 'Weltmeisterschaft', accent: RAINBOW_ACCENT },
+  { type: 'EM', title: 'Europameisterschaft', accent: '#3b82f6' },
+  { type: 'WM_U23', title: 'Weltmeisterschaft U23', accent: RAINBOW_ACCENT },
+  { type: 'EM_U23', title: 'Europameisterschaft U23', accent: '#3b82f6' },
+  { type: 'WM_JUN', title: 'Weltmeisterschaft Junioren', accent: RAINBOW_ACCENT },
+  { type: 'EM_JUN', title: 'Europameisterschaft Junioren', accent: '#3b82f6' },
+];
+
+function renderChampionHolderCell(holder: SeasonChampionHolder | null): string {
+  if (!holder) {
+    return '<span style="color:#5f6f8a;font-size:13px;">—</span>';
+  }
+  const flag = holder.countryCode ? renderResultsFlagColumn(holder.countryCode) : '';
+  const nameHtml = renderRiderNameLink(holder.riderName, { riderId: holder.riderId, strong: true });
+  return `
+    <span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
+      <span style="flex:0 0 auto;">${flag}</span>
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:#e2e8f0;">${nameHtml}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#8494ad;flex:0 0 auto;">'${String(holder.season).slice(-2)}</span>
+    </span>`;
+}
+
+function renderDisciplineLine(badge: string, label: string, holder: SeasonChampionHolder | null): string {
+  return `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid #14203a;">
+      ${badge}
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5f6f8a;flex:0 0 74px;">${esc(label)}</span>
+      ${renderChampionHolderCell(holder)}
+    </div>`;
+}
+
+function renderNationalChampionsScope(groups: SeasonNationalChampionGroup[]): string {
+  if (groups.length === 0) {
+    return '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine nationalen Meister.</div>';
+  }
+  const cards = groups.map((g) => {
+    const flag = g.countryCode ? renderResultsFlagColumn(g.countryCode) : '';
+    return `
+      <section style="border-radius:12px;border:1px solid #1e2c49;background:#0c1526;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #1c2b47;">
+          <span style="flex:0 0 auto;">${flag}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:800;color:#f1f5f9;">${esc(g.countryName)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;flex:0 0 auto;">${g.points} Pkt.</span>
+        </div>
+        ${renderDisciplineLine(CHAMPION_TITLE_BADGE.NAT, 'Straße', g.road)}
+        ${renderDisciplineLine(CHAMPION_TITLE_BADGE.NAT, 'Zeitfahren', g.itt)}
+      </section>`;
+  }).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:4px;">${cards}</div>`;
+}
+
+function renderInternationalChampionsScope(titles: SeasonReigningTitle[]): string {
+  const byType = new Map<string, SeasonReigningTitle[]>();
+  for (const t of titles) {
+    const bucket = byType.get(t.type) ?? [];
+    bucket.push(t);
+    byType.set(t.type, bucket);
+  }
+  const sections = INTERNATIONAL_GROUPS
+    .filter((group) => (byType.get(group.type) ?? []).length > 0)
+    .map((group) => {
+      const list = byType.get(group.type) ?? [];
+      const road = list.find((t) => t.discipline === 'ROAD')?.holder ?? null;
+      const itt = list.find((t) => t.discipline === 'ITT')?.holder ?? null;
+      const badge = CHAMPION_TITLE_BADGE[group.type];
+      return `
+        <section style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);overflow:hidden;">
+          <div style="height:4px;background:${group.accent};"></div>
+          <div style="padding:12px 16px;">
+            <h3 style="margin:0 0 8px;font-size:15px;font-weight:800;color:#f1f5f9;">${esc(group.title)}</h3>
+            ${renderDisciplineLine(badge, 'Straße', road)}
+            ${renderDisciplineLine(badge, 'Zeitfahren', itt)}
+          </div>
+        </section>`;
+    }).join('');
+  if (!sections) {
+    return '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine internationalen Titel vergeben.</div>';
+  }
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;padding:4px;">${sections}</div>`;
+}
+
+function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampions'): void {
+  const empty = $('season-standings-empty');
+  const tableCard = $('season-standings-table-card');
+  const gridHead = $('season-standings-grid-head');
+  const tbody = $('season-standings-tbody');
+  const cardTitle = $('season-standings-card-title');
+  const cardCount = $('season-standings-card-count');
+
+  gridHead.style.display = 'none';
+
+  if (scope === 'nationalChampions') {
+    const groups = state.seasonStandings?.nationalChampions ?? [];
+    cardTitle.textContent = 'Nationale Meister';
+    cardCount.textContent = `${groups.length} ${groups.length === 1 ? 'Land' : 'Länder'}`;
+    tbody.innerHTML = renderNationalChampionsScope(groups);
+  } else {
+    const titles = state.seasonStandings?.reigningTitles ?? [];
+    cardTitle.textContent = 'WM / EM / Olympia';
+    cardCount.textContent = `${titles.length} ${titles.length === 1 ? 'Titel' : 'Titel'}`;
+    tbody.innerHTML = renderInternationalChampionsScope(titles);
+  }
+
+  empty.classList.add('hidden');
+  tableCard.classList.remove('hidden');
+}
+
 export function initSeasonStandingsListeners(): void {
   $('season-standings-scope-tabs').addEventListener('click', (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button[data-season-scope]');
     if (!button) return;
     const scope = button.dataset['seasonScope'];
-    if (scope !== 'riders' && scope !== 'teams' && scope !== 'countries') return;
+    if (scope !== 'riders' && scope !== 'teams' && scope !== 'countries'
+      && scope !== 'nationalChampions' && scope !== 'internationalChampions') return;
     state.selectedSeasonStandingScope = scope;
     renderSeasonStandingsView();
   });

@@ -1,7 +1,7 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -65,7 +65,7 @@ export class ResultRepository {
         try {
           const payload = JSON.parse(snapshotRow.payload_json) as SeasonStandingsPayload;
           payload.availableSeasons = this.getAvailableStandingsSeasons(currentSeason);
-          return payload;
+          return this.attachChampionOverviews(payload, season);
         } catch (e) {
           // Fallback falls parsen fehlschlägt
         }
@@ -73,13 +73,13 @@ export class ResultRepository {
     }
 
     if (!tableExists(this.db, 'season_point_events')) {
-      return {
+      return this.attachChampionOverviews({
         season,
         riderStandings: [],
         teamStandings: [],
         countryStandings: [],
         availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
-      };
+      }, season);
     }
 
     const riderRows = this.db.prepare(`
@@ -131,14 +131,14 @@ export class ResultRepository {
       ORDER BY points_total DESC, country.name ASC
     `).all(season) as CountrySeasonStandingDbRow[];
 
-    return {
+    return this.attachChampionOverviews({
       season,
       riderStandings: this.mapRiderSeasonStandings(riderRows),
       teamStandings: this.mapTeamSeasonStandings(teamRows),
       countryStandings: this.mapCountrySeasonStandings(countryRows, riderRows),
       availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
       reigningChampions: this.getReigningChampions(),
-    };
+    }, season);
   }
 
   // Regierende Welt-/Europameister: je (Typ, Disziplin) der Sieger der juengsten
@@ -160,6 +160,120 @@ export class ResultRepository {
             AND inner_ct.discipline = ct.discipline
         )
     `).all() as Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
+  }
+
+  // Aktuelle nationale Meister (Strasse/ITT) je Land — reigning = juengste
+  // Edition bis zur gewaehlten Saison. Sortiert nach der Country-Wertung der
+  // Saison (meiste Punkte oben); Laender mit Titel aber ohne Punkte hinten
+  // (alphabetisch). Speist den Season-Standings-Tab "Nationale Meister".
+  private getNationalChampionsByCountry(
+    season: number,
+    countryStandings: SeasonStandingCountryRow[],
+  ): SeasonNationalChampionGroup[] {
+    if (!tableExists(this.db, 'national_champion_titles')) return [];
+    const rows = this.db.prepare(`
+      SELECT nct.discipline AS discipline, nct.season AS season, nct.rider_id AS riderId,
+             r.first_name AS firstName, r.last_name AS lastName, rc.code_3 AS riderCountryCode,
+             cc.code_3 AS countryCode, cc.name AS countryName
+      FROM national_champion_titles nct
+      JOIN riders r ON r.id = nct.rider_id
+      LEFT JOIN sta_country rc ON rc.id = r.country_id
+      LEFT JOIN sta_country cc ON cc.id = nct.country_id
+      WHERE nct.season <= ?
+        AND nct.season = (
+          SELECT MAX(i.season) FROM national_champion_titles i
+          WHERE i.country_id IS nct.country_id AND i.discipline = nct.discipline AND i.season <= ?
+        )
+    `).all(season, season) as Array<{
+      discipline: 'ITT' | 'ROAD'; season: number; riderId: number;
+      firstName: string; lastName: string; riderCountryCode: Nationality | null;
+      countryCode: Nationality | null; countryName: string | null;
+    }>;
+
+    const groups = new Map<string, SeasonNationalChampionGroup>();
+    for (const row of rows) {
+      const key = row.countryCode ?? `?${row.countryName ?? ''}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          countryCode: row.countryCode,
+          countryName: row.countryName ?? row.countryCode ?? 'Unbekannt',
+          points: 0,
+          road: null,
+          itt: null,
+        };
+        groups.set(key, group);
+      }
+      const holder: SeasonChampionHolder = {
+        riderId: row.riderId,
+        riderName: `${row.firstName} ${row.lastName}`.trim(),
+        countryCode: row.riderCountryCode,
+        season: row.season,
+      };
+      if (row.discipline === 'ITT') group.itt = holder;
+      else group.road = holder;
+    }
+
+    // Country-Wertungspunkte + Rang je Land zuordnen.
+    const rankByCode = new Map<string, number>();
+    for (const cs of countryStandings) {
+      if (cs.countryCode) {
+        rankByCode.set(cs.countryCode, cs.rank);
+        const g = groups.get(cs.countryCode);
+        if (g) g.points = cs.points;
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      const ra = a.countryCode ? rankByCode.get(a.countryCode) : undefined;
+      const rb = b.countryCode ? rankByCode.get(b.countryCode) : undefined;
+      if (ra != null && rb != null) return ra - rb;      // beide gewertet: nach Rang
+      if (ra != null) return -1;                          // gewertete zuerst
+      if (rb != null) return 1;
+      return a.countryName.localeCompare(b.countryName, 'de'); // Rest alphabetisch
+    });
+  }
+
+  // Aktuell gueltige internationale Titel (WM/EM inkl. U23/Junioren + Olympia),
+  // reigning je (Typ, Disziplin) bis zur gewaehlten Saison. Speist den Season-
+  // Standings-Tab "WM / EM / Olympia".
+  private getReigningTitlesAsOf(season: number): SeasonReigningTitle[] {
+    if (!tableExists(this.db, 'championship_titles')) return [];
+    const rows = this.db.prepare(`
+      SELECT ct.championship_type AS type, ct.discipline AS discipline, ct.rider_id AS riderId,
+             ct.season AS season, r.first_name AS firstName, r.last_name AS lastName,
+             c.code_3 AS countryCode
+      FROM championship_titles ct
+      JOIN riders r ON r.id = ct.rider_id
+      LEFT JOIN sta_country c ON c.id = r.country_id
+      WHERE ct.season <= ?
+        AND ct.season = (
+          SELECT MAX(i.season) FROM championship_titles i
+          WHERE i.championship_type = ct.championship_type AND i.discipline = ct.discipline AND i.season <= ?
+        )
+    `).all(season, season) as Array<{
+      type: ChampionTitleType; discipline: 'ITT' | 'ROAD'; riderId: number; season: number;
+      firstName: string; lastName: string; countryCode: Nationality | null;
+    }>;
+
+    return rows.map((row) => ({
+      type: row.type,
+      discipline: row.discipline,
+      holder: {
+        riderId: row.riderId,
+        riderName: `${row.firstName} ${row.lastName}`.trim(),
+        countryCode: row.countryCode,
+        season: row.season,
+      },
+    }));
+  }
+
+  // Haengt die beiden Champion-Uebersichten an das Payload — fuer frische wie
+  // gecachte (Snapshot-)Standings, damit sie fuer alle Saisons verfuegbar sind.
+  private attachChampionOverviews(payload: SeasonStandingsPayload, season: number): SeasonStandingsPayload {
+    payload.nationalChampions = this.getNationalChampionsByCountry(season, payload.countryStandings ?? []);
+    payload.reigningTitles = this.getReigningTitlesAsOf(season);
+    return payload;
   }
 
 

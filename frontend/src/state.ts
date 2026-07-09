@@ -109,7 +109,7 @@ export const state: {
   draftOverlayCurrentIndex: number;
   draftSpeedMultiplier: number;
   draftPaused: boolean;
-  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
+  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries' | 'nationalChampions' | 'internationalChampions';
   teamTableSort: {
     key: TeamTableSortKey;
     direction: 'asc' | 'desc';

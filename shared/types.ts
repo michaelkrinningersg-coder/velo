@@ -1309,6 +1309,30 @@ export interface SeasonStandingCountryRow {
   topRiders: SeasonStandingCountryRiderRow[];
 }
 
+// Ein aktueller Titeltraeger (Fahrer) einer Disziplin.
+export interface SeasonChampionHolder {
+  riderId: number;
+  riderName: string;
+  countryCode: Nationality | null;
+  season: number;
+}
+
+// Nationale Meister eines Landes (Strasse/ITT), sortiert nach Country-Wertung.
+export interface SeasonNationalChampionGroup {
+  countryCode: Nationality | null;
+  countryName: string;
+  points: number;           // Punkte in der Country-Wertung (Sortierschluessel)
+  road: SeasonChampionHolder | null;
+  itt: SeasonChampionHolder | null;
+}
+
+// Aktuell gueltiger internationaler Titel (WM/EM/U23/Junioren/Olympia).
+export interface SeasonReigningTitle {
+  type: ChampionTitleType;
+  discipline: 'ITT' | 'ROAD';
+  holder: SeasonChampionHolder;
+}
+
 export interface SeasonStandingsPayload {
   season: number;
   riderStandings: SeasonStandingRow[];
@@ -1317,6 +1341,10 @@ export interface SeasonStandingsPayload {
   availableSeasons?: number[];
   /** Regierende Welt-/Europameister (je Disziplin die juengste Edition). */
   reigningChampions?: ReigningChampionHolder[];
+  /** Aktuelle nationale Meister je Land, geordnet nach Country-Wertung. */
+  nationalChampions?: SeasonNationalChampionGroup[];
+  /** Aktuell gueltige internationale Titel (WM/EM/U23/Junioren/Olympia). */
+  reigningTitles?: SeasonReigningTitle[];
 }
 
 // ------ Generische API-Response ------------------------------
