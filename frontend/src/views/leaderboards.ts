@@ -51,6 +51,8 @@ const BADGE_CATEGORIES = Array.from(new Set(BADGE_DEFS.map((b) => b.category)));
 let badgeMetricKey = '';
 let badgeThreshold: number | null = null;
 let badgeLabel = '';
+let badgePage = 1;
+const BADGE_PAGE_SIZE = 25;
 
 // List of all select IDs
 const SELECT_IDS = [
@@ -155,7 +157,7 @@ function initBadgeControls(): void {
     badgeSel.innerHTML = '<option value="">– Wählen –</option>'
       + defs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('');
     thrSel.innerHTML = '<option value="">– Wählen –</option>';
-    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = '';
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgePage = 1;
     renderLeaderboard();
   });
 
@@ -172,13 +174,26 @@ function initBadgeControls(): void {
       thrSel.innerHTML = '<option value="0">Alle Halter</option>';
       badgeThreshold = 0;
     }
+    badgePage = 1;
     renderLeaderboard();
   });
 
   thrSel.addEventListener('change', () => {
     badgeThreshold = thrSel.value === '' ? null : Number(thrSel.value);
+    badgePage = 1;
     renderLeaderboard();
   });
+
+  const pager = $('leaderboard-pagination');
+  if (pager) {
+    pager.addEventListener('click', (event) => {
+      const btn = (event.target as Element).closest<HTMLButtonElement>('button[data-badge-page]');
+      if (!btn || btn.disabled) return;
+      badgePage += btn.dataset['badgePage'] === 'next' ? 1 : -1;
+      if (badgePage < 1) badgePage = 1;
+      renderLeaderboard();
+    });
+  }
 }
 
 function setScope(scope: 'riders' | 'teams' | 'badge'): void {
@@ -356,7 +371,9 @@ export async function renderLeaderboard(): Promise<void> {
   emptyEl.classList.remove('hidden');
   tableEl.classList.add('hidden');
 
-  const res = await api.getLeaderboards(fetchScope, metricKey, period);
+  const res = isBadge
+    ? await api.getBadgeLeaderboard(metricKey)
+    : await api.getLeaderboards(fetchScope, metricKey, period);
 
   if (!isActiveView('leaderboards')) {
     return; // User navigated away
@@ -448,10 +465,34 @@ export async function renderLeaderboard(): Promise<void> {
     : '';
   const rowAlign = fetchScope === 'teams' ? 'start' : 'center';
 
+  // Badge-Modus: Paginierung (alle Halter, 25/Seite).
+  const pager = $('leaderboard-pagination');
+  let displayRows = filteredData;
+  let rankOffset = 0;
+  if (isBadge) {
+    const total = filteredData.length;
+    const totalPages = Math.max(1, Math.ceil(total / BADGE_PAGE_SIZE));
+    if (badgePage > totalPages) badgePage = totalPages;
+    rankOffset = (badgePage - 1) * BADGE_PAGE_SIZE;
+    displayRows = filteredData.slice(rankOffset, rankOffset + BADGE_PAGE_SIZE);
+    if (pager) {
+      pager.style.display = 'block';
+      const btnBase = "background:#0a1122;border:1px solid #1c2b47;color:#e2e8f0;width:30px;height:28px;border-radius:7px;cursor:pointer;";
+      pager.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;gap:14px;padding:12px;border-top:1px solid #14203a;font-family:'JetBrains Mono',monospace;font-size:12px;color:#9fb0c9;">
+        <button type="button" data-badge-page="prev" ${badgePage <= 1 ? 'disabled' : ''} style="${btnBase}${badgePage <= 1 ? 'opacity:.4;cursor:not-allowed;' : ''}">‹</button>
+        <span>Seite ${badgePage} / ${totalPages} · ${total.toLocaleString('de-DE')} Fahrer</span>
+        <button type="button" data-badge-page="next" ${badgePage >= totalPages ? 'disabled' : ''} style="${btnBase}${badgePage >= totalPages ? 'opacity:.4;cursor:not-allowed;' : ''}">›</button>
+      </div>`;
+    }
+  } else if (pager) {
+    pager.style.display = 'none';
+    pager.innerHTML = '';
+  }
+
   // Render rows
   let html = '';
-  let rank = 1;
-  for (const row of filteredData) {
+  let rank = rankOffset + 1;
+  for (const row of displayRows) {
     const displayRank = rank++;
     const rankHtml = `<span style="text-align:center;${MONO}font-size:15px;font-weight:800;color:${rankColor(displayRank)};">${displayRank}</span>`;
     const jerseyHtml = `<span style="display:flex;justify-content:center;">${renderMiniJersey(row.teamId, row.teamName)}</span>`;

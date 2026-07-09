@@ -54,20 +54,21 @@ export class LeaderboardRepository {
     scope: 'riders' | 'teams',
     metricKey: string,
     period: 'season' | 'alltime' | 'live',
-    currentSeason: number
+    currentSeason: number,
+    includeAll = false
   ): LeaderboardRow[] {
     if (period === 'live' && scope === 'teams') {
       return []; // Live metrics only supported for riders
     }
 
     if (scope === 'riders') {
-      return this.getRiderLeaderboard(metricKey, period, currentSeason);
+      return this.getRiderLeaderboard(metricKey, period, currentSeason, includeAll);
     } else {
       return this.getTeamLeaderboard(metricKey, period as 'season' | 'alltime', currentSeason);
     }
   }
 
-  private getRiderLeaderboard(metricKey: string, period: 'season' | 'alltime' | 'live', currentSeason: number): LeaderboardRow[] {
+  private getRiderLeaderboard(metricKey: string, period: 'season' | 'alltime' | 'live', currentSeason: number, includeAll = false): LeaderboardRow[] {
     let query = '';
     let params: any[] = [];
     let valueFormatter: (row: any) => string | number = (r) => r.val;
@@ -1059,6 +1060,15 @@ export class LeaderboardRepository {
 
     if (!query) {
       return [];
+    }
+
+    // Badge-Modus: ALLE Halter (keine Top-100-Grenze) inkl. Retired-Fahrer
+    // (WorldTour + ProTour + Other). Zentraler Transform nur hier.
+    if (includeAll) {
+      query = query
+        .replace(/\s+AND r\.is_retired = 0/g, '')
+        .replace(/WHERE r\.is_retired = 0/g, 'WHERE 1=1')
+        .replace(/LIMIT 100\b/g, 'LIMIT 100000');
     }
 
     try {

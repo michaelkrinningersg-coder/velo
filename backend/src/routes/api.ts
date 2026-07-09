@@ -819,7 +819,8 @@ export function createRouter(dbService: DatabaseService): Router {
       const db = dbService.getActiveConnection();
       const gameState = db.prepare('SELECT season FROM game_state').get() as { season: number } | undefined;
       const currentSeason = gameState?.season ?? 2026;
-      const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason);
+      const includeAll = req.query['all'] === '1' || req.query['all'] === 'true';
+      const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason, includeAll);
       ok(res, data);
     } catch (e) {
       fail(res, 400, (e as Error).message);
