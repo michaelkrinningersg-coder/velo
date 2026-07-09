@@ -90,6 +90,10 @@ const BADGE_CATEGORIES = Array.from(new Set([
   ...BADGE_DEFS.map((b) => b.category),
   ...BESPOKE_BADGE_DEFS.map((b) => b.category),
 ]));
+// Kurzbeschreibung je Badge-Key (fuer den Broadcast-Header hinter dem Namen).
+const BADGE_DESCRIPTIONS = new Map<string, string>(
+  getHofBadgeCatalog().map((b) => [b.key, b.description]),
+);
 
 // Tier-Metadaten fuer die Halter-Gruppierung (Reihenfolge = Anzeigereihenfolge).
 const BADGE_TIER_ORDER: Array<{ key: string; label: string; color: string }> = [
@@ -106,6 +110,16 @@ let badgeThreshold: number | null = null;
 let badgeLabel = '';
 let badgePage = 1;
 let badgeBespokeKey = ''; // aktiv gewaehltes Bespoke-Badge (leer = Metrik-Modus)
+let badgeSelectedKey = ''; // aktiv gewaehltes Badge (Metrik ODER Bespoke) fuer die Beschreibung
+
+// Broadcast-Header: Badge-Name + kurze Beschreibung dahinter.
+function badgeCardTitleHtml(): string {
+  const desc = BADGE_DESCRIPTIONS.get(badgeSelectedKey) ?? '';
+  const descHtml = desc
+    ? `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6a7a95;margin-left:10px;">${esc(desc)}</span>`
+    : '';
+  return `<span>${esc(badgeLabel)}</span>${descHtml}`;
+}
 const BADGE_PAGE_SIZE = 25;
 
 // List of all select IDs
@@ -244,7 +258,7 @@ function initBadgeControls(): void {
       + metricDefs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('')
       + bespokeDefs.map((b) => `<option value="${b.key}">${b.icon} ${esc(b.label)}</option>`).join('');
     thrSel.innerHTML = '<option value="">– Wählen –</option>';
-    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; badgePage = 1;
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; badgeSelectedKey = ''; badgePage = 1;
     renderLeaderboard();
   });
 
@@ -253,6 +267,7 @@ function initBadgeControls(): void {
     if (def) {
       // Metrik-gestuetztes Badge (bestehendes Verhalten).
       badgeBespokeKey = '';
+      badgeSelectedKey = def.key;
       badgeMetricKey = def.metricKey;
       badgeLabel = `${def.icon} ${def.label}`;
       if (def.thresholds && def.thresholds.length) {
@@ -271,6 +286,7 @@ function initBadgeControls(): void {
     if (bespoke) {
       // Bespoke-Badge: keine Schwelle, stattdessen Tier-Gruppierung aller Halter.
       badgeBespokeKey = bespoke.key;
+      badgeSelectedKey = bespoke.key;
       badgeMetricKey = '';
       badgeThreshold = null;
       badgeLabel = `${bespoke.icon} ${bespoke.label}`;
@@ -279,7 +295,7 @@ function initBadgeControls(): void {
       renderLeaderboard();
       return;
     }
-    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; renderLeaderboard();
+    badgeMetricKey = ''; badgeThreshold = null; badgeLabel = ''; badgeBespokeKey = ''; badgeSelectedKey = ''; renderLeaderboard();
   });
 
   thrSel.addEventListener('change', () => {
@@ -481,12 +497,23 @@ export async function renderLeaderboard(): Promise<void> {
   emptyEl.classList.remove('hidden');
   tableEl.classList.add('hidden');
 
+  // Auswahl zum Zeitpunkt der Anfrage merken, um verspätete Antworten nach
+  // einem Badge-Wechsel zu verwerfen (sonst überschreibt eine langsame
+  // Metrik-Antwort z.B. die inzwischen gewählte Bespoke-Halterliste).
+  const reqScope = activeScope;
+  const reqMetricKey = metricKey;
+  const reqBespokeKey = badgeBespokeKey;
+
   const res = isBadge
     ? await api.getBadgeLeaderboard(metricKey)
     : await api.getLeaderboards(fetchScope, metricKey, period);
 
   if (!isActiveView('leaderboards')) {
     return; // User navigated away
+  }
+  // Auswahl inzwischen geändert? -> Ergebnis verwerfen.
+  if (activeScope !== reqScope || (isBadge && (badgeMetricKey !== reqMetricKey || badgeBespokeKey !== reqBespokeKey))) {
+    return;
   }
 
   if (!res.success || !res.data || res.data.length === 0) {
@@ -551,7 +578,10 @@ export async function renderLeaderboard(): Promise<void> {
 
   const cardTitle = $('leaderboard-card-title');
   const cardCount = $('leaderboard-card-count');
-  if (cardTitle) cardTitle.textContent = isBadge ? badgeLabel : (activeScope === 'teams' ? 'Team-Rangliste' : 'Fahrer-Rangliste');
+  if (cardTitle) {
+    if (isBadge) cardTitle.innerHTML = badgeCardTitleHtml();
+    else cardTitle.textContent = activeScope === 'teams' ? 'Team-Rangliste' : 'Fahrer-Rangliste';
+  }
   if (cardCount) cardCount.textContent = `${filteredData.length} ${fetchScope === 'teams' ? 'Teams' : 'Fahrer'}`;
 
   const cols = (fetchScope === 'riders'
@@ -767,7 +797,7 @@ async function renderBespokeBadgeHolders(): Promise<void> {
   const MONO = "font-family:'JetBrains Mono',monospace;";
   const cardTitle = $('leaderboard-card-title');
   const cardCount = $('leaderboard-card-count');
-  if (cardTitle) cardTitle.textContent = badgeLabel;
+  if (cardTitle) cardTitle.innerHTML = badgeCardTitleHtml();
   if (cardCount) cardCount.textContent = `${holders.length.toLocaleString('de-DE')} Halter`;
 
   // Kopfzeile: Gesamt + Tier-Zaehler.

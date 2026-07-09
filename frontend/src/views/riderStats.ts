@@ -4340,7 +4340,7 @@ const HOF_CATEGORY_META: Array<{ label: string; icon: string }> = [
   { label: 'Kuriositäten', icon: '🎲' },
 ];
 
-export interface HofBadgeMeta { key: string; name: string; category: string; icon: string }
+export interface HofBadgeMeta { key: string; name: string; description: string; category: string; icon: string }
 
 let hofBadgeCatalogCache: HofBadgeMeta[] | null = null;
 
@@ -4356,7 +4356,7 @@ export function getHofBadgeCatalog(): HofBadgeMeta[] {
   hofBadgeCatalogCache = badges.map((b) => {
     const gi = HOF_GROUP_INDEX.get(b.key);
     const cat = gi != null ? HOF_CATEGORY_META[gi] : undefined;
-    return { key: b.key, name: b.name, category: cat?.label ?? 'Sonstige', icon: cat?.icon ?? '🎖️' };
+    return { key: b.key, name: b.name, description: b.description, category: cat?.label ?? 'Sonstige', icon: cat?.icon ?? '🎖️' };
   });
   return hofBadgeCatalogCache;
 }
