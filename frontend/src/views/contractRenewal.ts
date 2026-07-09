@@ -33,22 +33,25 @@ function render(): void {
     const on = selected.has(c.riderId);
     const disabled = !on && atLimit;
     const border = on ? '#22d3ee' : '#1c2b47';
-    const bg = on ? 'rgba(34,211,238,.08)' : '#0b1424';
+    const rowBg = on ? 'rgba(34,211,238,.08)' : '#0b1424';
     const mono = "font-family:'JetBrains Mono',monospace";
+    const flag = c.countryCode ? renderFlag(c.countryCode) : '';
+    // Broadcast-Stat-Kachel (Label oben, Wert im Chip darunter).
+    const tile = (label: string, value: string, color: string, borderCol: string, bg: string) => `
+      <span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="${mono};font-size:8px;letter-spacing:.14em;color:#64748b;">${label}</span>
+        <span style="${mono};font-size:13px;font-weight:800;color:${color};border:1px solid ${borderCol};background:${bg};border-radius:6px;padding:2px 9px;min-width:44px;text-align:center;line-height:1.1;">${value}</span>
+      </span>`;
     return `
-      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:26px 30px 1fr 56px 52px 52px;align-items:center;gap:10px;padding:9px 12px;border:1px solid ${border};border-radius:9px;background:${bg};cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
+      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:24px 1fr auto auto auto;align-items:center;gap:12px;padding:8px 12px;border:1px solid ${border};border-radius:9px;background:${rowBg};cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
         <span style="width:18px;height:18px;border-radius:5px;border:2px solid ${on ? '#22d3ee' : '#334155'};background:${on ? '#22d3ee' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#0b1424;font-weight:900;font-size:12px;">${on ? '✓' : ''}</span>
-        <span style="display:flex;justify-content:center;">${c.countryCode ? renderFlag(c.countryCode) : ''}</span>
-        <span style="font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.lastName)} <span style="color:#8494ad;font-weight:500;">${esc(c.firstName)}</span></span>
-        <span style="${mono};font-size:11px;color:#8494ad;">${c.age} J.</span>
-        <span style="text-align:right;line-height:1;">
-          <span style="${mono};font-size:8px;letter-spacing:.08em;color:#64748b;display:block;">POT</span>
-          <span style="${mono};font-weight:800;color:#94a3b8;">${Number(c.potential).toFixed(1)}</span>
+        <span style="display:flex;align-items:center;gap:9px;min-width:0;">
+          <span style="flex:none;display:inline-flex;">${flag}</span>
+          <span style="font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.lastName)} <span style="color:#8494ad;font-weight:500;">${esc(c.firstName)}</span></span>
         </span>
-        <span style="text-align:right;line-height:1;">
-          <span style="${mono};font-size:8px;letter-spacing:.08em;color:#64748b;display:block;">OVR</span>
-          <span style="${mono};font-weight:800;color:#fbbf24;">${Number(c.overallRating).toFixed(1)}</span>
-        </span>
+        <span style="${mono};font-size:13px;font-weight:800;color:#facc15;">${c.age}<span style="font-size:9px;font-weight:700;color:#a8862a;"> J</span></span>
+        ${tile('POT', Number(c.potential).toFixed(1), '#94a3b8', '#2b3a55', 'rgba(148,163,184,.06)')}
+        ${tile('OVR', Number(c.overallRating).toFixed(1), '#fbbf24', 'rgba(251,191,36,.45)', 'rgba(251,191,36,.07)')}
       </div>`;
   }).join('');
 
