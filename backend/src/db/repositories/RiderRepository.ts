@@ -422,6 +422,7 @@ export class RiderRepository {
     const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
     const careerWins = this.getCareerWins(rider.id);
     const hallOfFame = this.buildHallOfFameStats(careerWins, rider.id);
+    const allTime = new ResultRepository(this.db).getAllTimePointsAndRank(rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
@@ -797,6 +798,8 @@ export class RiderRepository {
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
       currentSeasonBreakawayAttempts,
       careerWins,
+      allTimePoints: allTime.points,
+      allTimePointsRank: allTime.rank,
       hallOfFame,
       reigningChampionTitles: this.getReigningChampionTitles(rider.id),
       pointsByTerrain,
@@ -1161,6 +1164,7 @@ export class RiderRepository {
     mentoredRiderNames: string[],
   ): RiderStatsPayload {
     const hallOfFame = this.buildHallOfFameStats(careerWins, rider.id);
+    const allTime = new ResultRepository(this.db).getAllTimePointsAndRank(rider.id);
     return {
       riderId: rider.id,
       riderName: `${rider.firstName} ${rider.lastName}`,
@@ -1195,6 +1199,8 @@ export class RiderRepository {
       shortTermFatigueWarning: rider.shortTermFatigueWarning ?? 'none',
       currentSeasonBreakawayAttempts,
       careerWins,
+      allTimePoints: allTime.points,
+      allTimePointsRank: allTime.rank,
       hallOfFame,
       reigningChampionTitles: this.getReigningChampionTitles(rider.id),
       pointsByTerrain: emptyRiderStatsPointsByTerrain(),

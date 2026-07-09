@@ -6843,3 +6843,43 @@ tr.calendar-highlight {
   .race-detail-layout { grid-template-columns: 1fr; }
   .race-detail-stage-col { max-height: 220px; flex-direction: row; overflow-x: auto; }
 }
+
+/* ===== Renndetails Tabs 2-4 (Palmarès / Analyse / Rekord) ===== */
+.rd-pal-table { display: flex; flex-direction: column; gap: 4px; }
+.rd-pal-row { display: grid; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; background: #0b1424; border: 1px solid #14203a; }
+.rd-pal-row.rd-pal-header { background: transparent; border: none; padding: 4px 12px; }
+.rd-pal-th { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .12em; color: #6a7a95; text-transform: uppercase; }
+.rd-pal-year { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; color: #e2e8f0; }
+.rd-pal-rider { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.rd-pal-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-pal-empty { color: #4a5a75; font-family: 'JetBrains Mono', monospace; }
+.rider-stats-final-type { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; border: 1px solid transparent; }
+
+.rd-analysis { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.rd-analysis-card { background: #0b1424; border: 1px solid #14203a; border-radius: 12px; padding: 16px; }
+.rd-analysis-title { font-size: 14px; font-weight: 800; color: #e8eef7; margin-bottom: 14px; }
+.rd-analysis-hint { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #6a7a95; }
+.rd-analysis-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6a7a95; margin: 16px 0 8px; }
+.rd-donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.rd-donut { width: 128px; height: 128px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+.rd-donut-hole { width: 84px; height: 84px; border-radius: 50%; background: #0b1424; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.rd-donut-top { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 800; color: #f1f5f9; }
+.rd-donut-bottom { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .14em; color: #6a7a95; margin-top: 3px; }
+.rd-legend { display: flex; flex-direction: column; gap: 6px; min-width: 160px; flex: 1; }
+.rd-legend-row { display: flex; align-items: center; gap: 8px; }
+.rd-legend-dot { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+.rd-legend-label { font-size: 12px; color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-legend-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; }
+.rd-list { display: flex; flex-direction: column; gap: 4px; }
+.rd-listrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #0c1526; border: 1px solid #14203a; }
+.rd-listrow-label { font-size: 12.5px; color: #e2e8f0; display: inline-flex; align-items: center; gap: 6px; }
+.rd-listrow-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: #8494ad; }
+
+.rd-record { display: flex; flex-direction: column; gap: 5px; }
+.rd-record-head { font-size: 14px; font-weight: 800; color: #e8eef7; margin-bottom: 10px; }
+.rd-record-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #6a7a95; }
+.rd-record-row { display: grid; grid-template-columns: 34px 1fr auto auto; align-items: center; gap: 14px; padding: 9px 12px; border-radius: 9px; background: #0b1424; border: 1px solid #14203a; }
+.rd-record-rank { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; color: #6a7a95; text-align: center; }
+.rd-record-seasons { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #22d3ee; }
+.rd-record-points { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #fbbf24; min-width: 90px; text-align: right; }
+@media (max-width: 820px) { .rd-analysis { grid-template-columns: 1fr; } }

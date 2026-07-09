@@ -1,7 +1,7 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RacePalmaresPayload, PalmaresRiderRef, PalmaresSeasonEntry, PalmaresParticipationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -42,6 +42,135 @@ export class ResultRepository {
     `).get(season, riderId) as { rank: number } | undefined;
 
     return row?.rank ?? null;
+  }
+
+  // Renn-Historie (Palmarès): Sieger/Podium + Wertungssieger je Saison sowie
+  // Rekordteilnahme (Fahrer mit >=3 Saisons mit erzielten UCI-Punkten).
+  // Quelle: season_point_events (survives Kompaktierung) — keine neuen Tabellen.
+  public getRacePalmares(raceId: number): RacePalmaresPayload {
+    const raceRow = this.db.prepare('SELECT is_stage_race FROM races WHERE id = ?').get(raceId) as { is_stage_race: number } | undefined;
+    const isStageRace = (raceRow?.is_stage_race ?? 0) === 1;
+
+    if (!tableExists(this.db, 'season_point_events')) {
+      return { raceId, isStageRace, seasons: [], participation: [] };
+    }
+
+    const podiumAward = isStageRace ? 'gc_final' : 'one_day_result';
+    const rows = this.db.prepare(`
+      SELECT
+        spe.season AS season,
+        spe.award_type AS award_type,
+        spe.rank AS rank,
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        spe.team_id AS team_id,
+        teams.name AS team_name,
+        spec1.display_name AS spec1,
+        spec2.display_name AS spec2
+      FROM season_point_events spe
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = spe.team_id
+      LEFT JOIN type_rider spec1 ON spec1.id = riders.specialization_1_id
+      LEFT JOIN type_rider spec2 ON spec2.id = riders.specialization_2_id
+      WHERE spe.race_id = ?
+        AND (
+          (spe.award_type = ? AND spe.rank <= 3)
+          OR (spe.award_type IN ('points_final', 'mountain_final', 'youth_final') AND spe.rank = 1)
+        )
+      ORDER BY spe.season DESC, spe.rank ASC
+    `).all(raceId, podiumAward) as Array<{
+      season: number; award_type: string; rank: number; rider_id: number;
+      first_name: string; last_name: string; country_code: string | null;
+      team_id: number | null; team_name: string | null; spec1: string | null; spec2: string | null;
+    }>;
+
+    const ref = (r: (typeof rows)[number]): PalmaresRiderRef => ({
+      riderId: r.rider_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      countryCode: r.country_code,
+      teamId: r.team_id,
+      teamName: r.team_name,
+      specialization1: r.spec1,
+      specialization2: r.spec2,
+    });
+
+    const bySeason = new Map<number, PalmaresSeasonEntry>();
+    const entryFor = (season: number): PalmaresSeasonEntry => {
+      let entry = bySeason.get(season);
+      if (!entry) {
+        entry = { season, winner: null, second: null, third: null, pointsChampion: null, mountainChampion: null, youthChampion: null };
+        bySeason.set(season, entry);
+      }
+      return entry;
+    };
+
+    for (const r of rows) {
+      const entry = entryFor(r.season);
+      if (r.award_type === podiumAward) {
+        if (r.rank === 1) entry.winner = ref(r);
+        else if (r.rank === 2) entry.second = ref(r);
+        else if (r.rank === 3) entry.third = ref(r);
+      } else if (r.award_type === 'points_final') {
+        entry.pointsChampion = ref(r);
+      } else if (r.award_type === 'mountain_final') {
+        entry.mountainChampion = ref(r);
+      } else if (r.award_type === 'youth_final') {
+        entry.youthChampion = ref(r);
+      }
+    }
+
+    const seasons = [...bySeason.values()].sort((a, b) => b.season - a.season);
+
+    const participationRows = this.db.prepare(`
+      SELECT
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        COUNT(DISTINCT spe.season) AS seasons,
+        SUM(spe.points_awarded) AS total_points
+      FROM season_point_events spe
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      WHERE spe.race_id = ? AND spe.points_awarded > 0
+      GROUP BY spe.rider_id, riders.first_name, riders.last_name, country.code_3
+      HAVING COUNT(DISTINCT spe.season) >= 3
+      ORDER BY seasons DESC, total_points DESC, riders.last_name ASC
+    `).all(raceId) as Array<{ rider_id: number; first_name: string; last_name: string; country_code: string | null; seasons: number; total_points: number }>;
+
+    const participation: PalmaresParticipationRow[] = participationRows.map((r) => ({
+      riderId: r.rider_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      countryCode: r.country_code,
+      seasons: r.seasons,
+      totalPoints: r.total_points,
+    }));
+
+    return { raceId, isStageRace, seasons, participation };
+  }
+
+  // Allzeit-UCI-Punkte (Summe ueber alle Saisons) + Rang danach — keine neuen Tabellen.
+  public getAllTimePointsAndRank(riderId: number): { points: number; rank: number | null } {
+    if (!tableExists(this.db, 'season_point_events')) {
+      return { points: 0, rank: null };
+    }
+    const row = this.db.prepare(`
+      WITH totals AS (
+        SELECT rider_id, SUM(points_awarded) AS pts
+        FROM season_point_events
+        GROUP BY rider_id
+      ), ranked AS (
+        SELECT rider_id, pts, RANK() OVER (ORDER BY pts DESC) AS rank FROM totals
+      )
+      SELECT pts, rank FROM ranked WHERE rider_id = ?
+    `).get(riderId) as { pts: number; rank: number } | undefined;
+    const points = row?.pts ?? 0;
+    return { points, rank: points > 0 ? row?.rank ?? null : null };
   }
 
   private getAvailableStandingsSeasons(currentSeason: number): number[] {

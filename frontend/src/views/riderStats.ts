@@ -660,11 +660,12 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
           ${fatigueRing}
         </div>
       </div>
-      <div style="display:grid; grid-template-columns:repeat(6,1fr); border-top:1px solid #1c2b47;">
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); border-top:1px solid #1c2b47;">
         ${statCell('SAISONPUNKTE', String(currentSeasonPoints))}
         ${statCell('SAISON-RANG', currentSeasonRank != null ? `#${currentSeasonRank}` : '–')}
         ${statCell('SIEGE', String(seasonWins), '#fbbf24')}
         ${statCell('KARRIERESIEGE', String(careerWins), '#fbbf24')}
+        ${statCell('ALL-TIME-RANG', payload?.allTimePointsRank != null ? `#${payload.allTimePointsRank}` : '–', '#22d3ee')}
         ${statCell('RENNTAGE', String(currentSeasonRaceDays))}
         ${statCell('AUSREISSER', String(currentSeasonBreakawayAttempts), '#f1f5f9', true)}
       </div>

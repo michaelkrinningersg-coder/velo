@@ -46,6 +46,7 @@ import {
   StageEditorOverviewResponse,
   StageResultsPayload,
   RaceRosterPayload,
+  RacePalmaresPayload,
 } from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
@@ -485,6 +486,15 @@ export function createRouter(dbService: DatabaseService): Router {
       const result = new ResultRepository(db).getRaceRoster(raceId);
       if (!result) return fail(res, 404, 'Keine Teilnehmerdaten verfügbar (Rennen noch nicht gestartet?).');
       ok<RaceRosterPayload>(res, result);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/races/:id/history', (req: Request, res: Response) => {
+    const raceId = Number(req.params['id']);
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      ok<RacePalmaresPayload>(res, new ResultRepository(db).getRacePalmares(raceId));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

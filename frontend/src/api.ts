@@ -31,6 +31,7 @@ import type {
   DraftHistoryRow,
   InjuryRow,
   RaceRosterPayload,
+  RacePalmaresPayload,
   TeamStatsPayload,
 } from '../../shared/types';
 
@@ -84,6 +85,7 @@ export const api = {
   getRaces:            () => call<Race[]>('GET', '/api/races'),
   getRaceProgramParticipants: (raceId: number) => call<RaceProgramParticipant[]>('GET', `/api/races/${raceId}/program-participants`),
   getRaceResultsRoster:       (raceId: number) => call<RaceRosterPayload>('GET', `/api/races/${raceId}/results-roster`),
+  getRacePalmares:            (raceId: number) => call<RacePalmaresPayload>('GET', `/api/races/${raceId}/history`),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   getStageSummary:     (stageId: number) => call<ParsedStageSummary>('GET', `/api/stages/${stageId}/summary`),

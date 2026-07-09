@@ -6,7 +6,8 @@
  * skaliert) mit Prev/Next + Etappen-Dropdown, darunter Details (Wertungen, Hoehenmeter, Laenge).
  * Tabs 2–4 (Siegerliste / Analyse / Rekordteilnahme) folgen in Phase 2 (hier deaktiviert).
  */
-import { state, $, esc, showModal, findRaceById, formatDate, formatKm, formatElevationGain } from '../state';
+import { state, $, esc, showModal, findRaceById, formatDate, formatKm, formatElevationGain, renderFlag, renderMiniJersey } from '../state';
+import { api } from '../api';
 import {
   raceCategoryNameBadge,
   getStageDisplayName,
@@ -16,7 +17,11 @@ import {
   ensureStageSummaryLoaded,
 } from './dashboard';
 import { renderStaticStageProfileMarkup, extractStageFeatures } from '../race-sim/renderProfile';
-import type { Race, Stage, ParsedStageSummary } from '../../../shared/types';
+import type { Race, Stage, ParsedStageSummary, RacePalmaresPayload, PalmaresRiderRef } from '../../../shared/types';
+
+// Palmarès-Cache je Rennen (lazy geladen beim ersten Tab-Wechsel).
+const palmaresCache = new Map<number, RacePalmaresPayload>();
+const palmaresInFlight = new Set<number>();
 
 const CAT_COLOR: Record<string, string> = { HC: '#ef4444', '1': '#f97316', '2': '#fbbf24', '3': '#a3e635', '4': '#4ade80' };
 const SPRINT_COLOR = '#4ade80';
@@ -98,15 +103,38 @@ function renderTabs(): string {
   };
   return `<div class="team-detail-page-tabs race-detail-tabs" role="tablist" aria-label="Renndetails Tabs">
     ${tab('detail', 'Renndetails', true)}
-    ${tab('palmares', 'Siegerliste', false)}
-    ${tab('analysis', 'Analyse', false)}
-    ${tab('record', 'Rekordteilnahme', false)}
+    ${tab('palmares', 'Siegerliste', true)}
+    ${tab('analysis', 'Analyse', true)}
+    ${tab('record', 'Rekordteilnahme', true)}
   </div>`;
 }
 
 function renderTabContent(race: Race): string {
   if (state.raceDetailTab === 'detail') return renderDetailTab(race);
-  return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Dieser Tab folgt in Phase 2.</div>';
+  // Datengetriebene Tabs: Palmarès lazy laden.
+  const palmares = palmaresCache.get(race.id);
+  if (!palmares) {
+    return '<div class="race-detail-profile-loading" style="height:180px;">DATEN WERDEN GELADEN…</div>';
+  }
+  if (state.raceDetailTab === 'palmares') return renderPalmaresTab(race, palmares);
+  if (state.raceDetailTab === 'analysis') return renderAnalysisTab(palmares);
+  if (state.raceDetailTab === 'record') return renderRecordTab(palmares);
+  return '';
+}
+
+// --- Palmarès lazy-load ------------------------------------------------------
+async function ensurePalmaresLoaded(raceId: number): Promise<void> {
+  if (palmaresCache.has(raceId) || palmaresInFlight.has(raceId)) return;
+  palmaresInFlight.add(raceId);
+  try {
+    const res = await api.getRacePalmares(raceId);
+    if (res.success && res.data) palmaresCache.set(raceId, res.data);
+  } finally {
+    palmaresInFlight.delete(raceId);
+  }
+  if (raceDetailOpenFor(raceId) && state.raceDetailTab !== 'detail') {
+    $('race-detail-body').innerHTML = renderRaceDetailBody();
+  }
 }
 
 // --- Tab 1: Renndetails ------------------------------------------------------
@@ -201,6 +229,112 @@ function renderStageDetails(summary: ParsedStageSummary): string {
   </div>`;
 }
 
+// ============================================================================
+// Tab 2: Siegerliste (Palmarès)
+// ============================================================================
+function palmaresRiderCell(ref: PalmaresRiderRef | null, medalColor?: string): string {
+  if (!ref) return '<span class="rd-pal-empty">–</span>';
+  return `<span class="rd-pal-rider">${renderFlag(ref.countryCode ?? '')}<span class="rd-pal-name"${medalColor ? ` style="color:${medalColor};"` : ''}>${esc(ref.lastName)}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
+}
+
+function renderPalmaresTab(race: Race, palmares: RacePalmaresPayload): string {
+  if (palmares.seasons.length === 0) {
+    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Noch keine Renn-Historie vorhanden.</div>';
+  }
+  const stageRace = palmares.isStageRace;
+  const cols = stageRace ? '72px 1.4fr 1fr 1fr 1.1fr 1.1fr 1.1fr' : '72px 1.6fr 1.2fr 1.2fr';
+  const headerCells = stageRace
+    ? ['<div class="rd-pal-th">JAHR</div>', '<div class="rd-pal-th">SIEGER</div>', '<div class="rd-pal-th">2. PLATZ</div>', '<div class="rd-pal-th">3. PLATZ</div>',
+       '<div class="rd-pal-th"><span class="rider-stats-final-type is-points">Punkte</span></div>',
+       '<div class="rd-pal-th"><span class="rider-stats-final-type is-mountain">Berg</span></div>',
+       '<div class="rd-pal-th"><span class="rider-stats-final-type is-youth">Nachwuchs</span></div>']
+    : ['<div class="rd-pal-th">JAHR</div>', '<div class="rd-pal-th">SIEGER</div>', '<div class="rd-pal-th">2. PLATZ</div>', '<div class="rd-pal-th">3. PLATZ</div>'];
+  const header = `<div class="rd-pal-row rd-pal-header" style="grid-template-columns:${cols};">${headerCells.join('')}</div>`;
+  const rows = palmares.seasons.map((s) => {
+    const base = `<div class="rd-pal-year">${s.season}</div>${palmaresRiderCell(s.winner, '#fbbf24')}${palmaresRiderCell(s.second, '#cbd5e1')}${palmaresRiderCell(s.third, '#cd7c3b')}`;
+    const extra = stageRace ? `${palmaresRiderCell(s.pointsChampion)}${palmaresRiderCell(s.mountainChampion)}${palmaresRiderCell(s.youthChampion)}` : '';
+    return `<div class="rd-pal-row" style="grid-template-columns:${cols};">${base}${extra}</div>`;
+  }).join('');
+  return `<div class="rd-pal-table">${header}${rows}</div>`;
+}
+
+// ============================================================================
+// Tab 3: Analyse (Spec 1 + Nationalität der Sieger)
+// ============================================================================
+const DONUT_PALETTE = ['#22d3ee', '#fbbf24', '#a855f7', '#4ade80', '#f97316', '#ef4444', '#60a5fa', '#f472b6', '#a3e635', '#2dd4bf', '#c084fc', '#fb7185'];
+
+function countBy<T>(items: T[], keyFn: (t: T) => string): Array<{ key: string; count: number }> {
+  const map = new Map<string, number>();
+  for (const it of items) { const k = keyFn(it); map.set(k, (map.get(k) ?? 0) + 1); }
+  return [...map.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'de'));
+}
+
+function renderDistributionDonut(items: Array<{ key: string; count: number }>, centerTop: string, centerBottom: string): string {
+  const total = items.reduce((s, i) => s + i.count, 0) || 1;
+  let acc = 0;
+  const stops: string[] = [];
+  const legend: string[] = [];
+  items.forEach((it, i) => {
+    const color = DONUT_PALETTE[i % DONUT_PALETTE.length];
+    const start = acc / total; acc += it.count; const end = acc / total;
+    stops.push(`${color} ${start}turn ${end}turn`);
+    legend.push(`<div class="rd-legend-row"><span class="rd-legend-dot" style="background:${color};"></span><span class="rd-legend-label">${esc(it.key)}</span><span class="rd-legend-count">${it.count}× · ${Math.round((it.count / total) * 100)}%</span></div>`);
+  });
+  const grad = `conic-gradient(${stops.join(', ')})`;
+  return `<div class="rd-donut-wrap">
+    <div class="rd-donut" style="background:${grad};"><div class="rd-donut-hole"><span class="rd-donut-top">${esc(centerTop)}</span><span class="rd-donut-bottom">${esc(centerBottom)}</span></div></div>
+    <div class="rd-legend">${legend.join('')}</div>
+  </div>`;
+}
+
+function renderAnalysisTab(palmares: RacePalmaresPayload): string {
+  const winners = palmares.seasons.map((s) => s.winner).filter((w): w is PalmaresRiderRef => w != null);
+  if (winners.length === 0) {
+    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Noch keine Sieger für eine Analyse vorhanden.</div>';
+  }
+  const specCounts = countBy(winners, (w) => w.specialization1 ?? 'Unbekannt');
+  const comboCounts = countBy(winners, (w) => `${w.specialization1 ?? '?'} + ${w.specialization2 ?? '?'}`);
+  const natCounts = countBy(winners, (w) => w.countryCode ?? '—');
+
+  const comboList = comboCounts.map((c) => `<div class="rd-listrow"><span class="rd-listrow-label">${esc(c.key)}</span><span class="rd-listrow-count">${c.count}×</span></div>`).join('');
+  const natFlags = (code: string) => code === '—' ? '' : renderFlag(code);
+  const natList = natCounts.map((c) => `<div class="rd-listrow"><span class="rd-listrow-label">${natFlags(c.key)} ${esc(c.key)}</span><span class="rd-listrow-count">${c.count}×</span></div>`).join('');
+
+  return `<div class="rd-analysis">
+    <div class="rd-analysis-card">
+      <div class="rd-analysis-title">Spec 1 der Sieger <span class="rd-analysis-hint">· aktuelle Spezialisierung</span></div>
+      ${renderDistributionDonut(specCounts, String(winners.length), 'SIEGE')}
+      <div class="rd-analysis-sub">Spec 1 + 2 Kombinationen</div>
+      <div class="rd-list">${comboList}</div>
+    </div>
+    <div class="rd-analysis-card">
+      <div class="rd-analysis-title">Nationalität der Sieger</div>
+      ${renderDistributionDonut(natCounts, String(winners.length), 'SIEGE')}
+      <div class="rd-analysis-sub">Nach Land</div>
+      <div class="rd-list">${natList}</div>
+    </div>
+  </div>`;
+}
+
+// ============================================================================
+// Tab 4: Rekordteilnahme
+// ============================================================================
+function renderRecordTab(palmares: RacePalmaresPayload): string {
+  if (palmares.participation.length === 0) {
+    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Kein Fahrer mit mindestens 3 Teilnahmen (mit erzielten UCI-Punkten).</div>';
+  }
+  const rows = palmares.participation.map((p, i) => `<div class="rd-record-row">
+    <span class="rd-record-rank">${i + 1}</span>
+    <span class="rd-pal-rider">${renderFlag(p.countryCode ?? '')}<span class="rd-pal-name">${esc(p.firstName)} ${esc(p.lastName)}</span></span>
+    <span class="rd-record-seasons">${p.seasons}× Teilnahme</span>
+    <span class="rd-record-points">${p.totalPoints.toLocaleString('de-DE')} Pkt</span>
+  </div>`).join('');
+  return `<div class="rd-record">
+    <div class="rd-record-head">Teilnahme mit erzielten UCI-Punkten <span class="rd-record-sub">· ab 3 Saisons</span></div>
+    ${rows}
+  </div>`;
+}
+
 // --- Listener (einmalig in app.ts registriert) ------------------------------
 export function initRaceDetailListeners(): void {
   const body = $('race-detail-body');
@@ -214,6 +348,7 @@ export function initRaceDetailListeners(): void {
     if (tabBtn && !tabBtn.disabled) {
       state.raceDetailTab = tabBtn.dataset['raceDetailTab'] as typeof state.raceDetailTab;
       body.innerHTML = renderRaceDetailBody();
+      if (state.raceDetailTab !== 'detail') void ensurePalmaresLoaded(raceId);
       return;
     }
 

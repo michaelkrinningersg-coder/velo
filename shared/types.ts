@@ -505,6 +505,47 @@ export interface Race {
   upcomingStage?: RaceStageSummary;
 }
 
+/** Verweis auf einen Fahrer in der Renn-Historie (Sieger/Wertungssieger). */
+export interface PalmaresRiderRef {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  /** Aktuelle Spezialisierung (kein historischer Snapshot verfuegbar). */
+  specialization1: string | null;
+  specialization2: string | null;
+}
+
+/** Sieger + Podium + Wertungssieger eines Rennens fuer eine Saison. */
+export interface PalmaresSeasonEntry {
+  season: number;
+  winner: PalmaresRiderRef | null;
+  second: PalmaresRiderRef | null;
+  third: PalmaresRiderRef | null;
+  pointsChampion: PalmaresRiderRef | null;
+  mountainChampion: PalmaresRiderRef | null;
+  youthChampion: PalmaresRiderRef | null;
+}
+
+/** Rekordteilnahme: Fahrer mit Anzahl Saisons, in denen er hier Punkte holte. */
+export interface PalmaresParticipationRow {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  seasons: number;
+  totalPoints: number;
+}
+
+export interface RacePalmaresPayload {
+  raceId: number;
+  isStageRace: boolean;
+  seasons: PalmaresSeasonEntry[];
+  participation: PalmaresParticipationRow[];
+}
+
 export interface Stage {
   id: number;
   raceId: number;
@@ -1236,6 +1277,9 @@ export interface RiderStatsPayload {
   shortTermFatigueWarning: RiderLoadWarningLevel;
   currentSeasonBreakawayAttempts: number;
   careerWins: number;
+  /** Allzeit-UCI-Punkte (Summe ueber alle Saisons) + Rang danach. */
+  allTimePoints: number;
+  allTimePointsRank: number | null;
   /** Basisdaten fuer die Hall-of-Fame-Badges (Allzeit-Siege). */
   hallOfFame: RiderHallOfFameStats;
   pointsByTerrain: RiderStatsPointsByTerrain;
