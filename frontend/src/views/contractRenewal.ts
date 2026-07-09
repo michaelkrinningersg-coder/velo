@@ -29,29 +29,44 @@ function render(): void {
   if (sub) sub.textContent = `Saison ${currentSeason} · Auswahl bis 01.08. · max. ${maxSelectable} von ${candidates.length}`;
 
   const atLimit = selected.size >= maxSelectable;
+  const mono = "font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums";
+  // Telemetrie-Balken: Skala 60-85. OVR = cyanfarbene Fuellung, POT = gruene Marke
+  // davor, die schraffierte Luecke dazwischen ist der Entwicklungsspielraum (+Δ).
+  const SCALE_MIN = 60;
+  const SCALE_MAX = 85;
+  const pct = (v: number) => Math.max(0, Math.min(100, ((v - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100));
   const rows = candidates.map((c) => {
     const on = selected.has(c.riderId);
     const disabled = !on && atLimit;
-    const border = on ? '#22d3ee' : '#1c2b47';
-    const rowBg = on ? 'rgba(34,211,238,.08)' : '#0b1424';
-    const mono = "font-family:'JetBrains Mono',monospace";
+    const border = on ? '#22d3ee' : '#1e2c49';
+    const rowBg = on ? 'rgba(34,211,238,.07)' : '#0b1120';
+    const selShadow = on ? 'box-shadow:inset 3px 0 0 #22d3ee;' : '';
     const flag = c.countryCode ? renderFlag(c.countryCode) : '';
-    // Broadcast-Stat-Kachel (Label oben, Wert im Chip darunter).
-    const tile = (label: string, value: string, color: string, borderCol: string, bg: string) => `
-      <span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="${mono};font-size:8px;letter-spacing:.14em;color:#64748b;">${label}</span>
-        <span style="${mono};font-size:13px;font-weight:800;color:${color};border:1px solid ${borderCol};background:${bg};border-radius:6px;padding:2px 9px;min-width:44px;text-align:center;line-height:1.1;">${value}</span>
-      </span>`;
+    const ovr = Number(c.overallRating);
+    const pot = Number(c.potential);
+    const delta = pot - ovr;
+    const ovrPct = pct(ovr);
+    const potPct = pct(pot);
+    const deltaLabel = delta >= 0.05 ? `+${delta.toFixed(1)}` : delta <= -0.05 ? delta.toFixed(1) : '±0.0';
     return `
-      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:24px 1fr auto auto auto;align-items:center;gap:12px;padding:8px 12px;border:1px solid ${border};border-radius:9px;background:${rowBg};cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
-        <span style="width:18px;height:18px;border-radius:5px;border:2px solid ${on ? '#22d3ee' : '#334155'};background:${on ? '#22d3ee' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#0b1424;font-weight:900;font-size:12px;">${on ? '✓' : ''}</span>
+      <div class="contract-renewal-row" data-rider-id="${c.riderId}" style="display:grid;grid-template-columns:24px minmax(120px,1fr) 40px minmax(160px,230px);align-items:center;gap:13px;padding:10px 13px;border:1px solid ${border};border-radius:10px;background:${rowBg};${selShadow}cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1};">
+        <span style="width:18px;height:18px;border-radius:5px;border:2px solid ${on ? '#22d3ee' : '#33415a'};background:${on ? '#22d3ee' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#0b1120;font-weight:900;font-size:12px;flex:none;">${on ? '✓' : ''}</span>
         <span style="display:flex;align-items:center;gap:9px;min-width:0;">
           <span style="flex:none;display:inline-flex;">${flag}</span>
-          <span style="font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.lastName)} <span style="color:#8494ad;font-weight:500;">${esc(c.firstName)}</span></span>
+          <span style="font-weight:700;color:#e6ecf6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.lastName)} <span style="color:#8b9ab4;font-weight:500;">${esc(c.firstName)}</span></span>
         </span>
-        <span style="${mono};font-size:13px;font-weight:800;color:#facc15;">${c.age}<span style="font-size:9px;font-weight:700;color:#a8862a;"> J</span></span>
-        ${tile('POT', Number(c.potential).toFixed(1), '#94a3b8', '#2b3a55', 'rgba(148,163,184,.06)')}
-        ${tile('OVR', Number(c.overallRating).toFixed(1), '#fbbf24', 'rgba(251,191,36,.45)', 'rgba(251,191,36,.07)')}
+        <span style="${mono};font-size:13px;font-weight:800;color:#fbbf24;">${c.age}<span style="font-size:9px;font-weight:700;color:#a8862a;"> J</span></span>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="display:flex;justify-content:space-between;${mono};font-size:11px;">
+            <span style="color:#fbbf24;font-weight:800;">OVR ${ovr.toFixed(1)}</span>
+            <span><span style="color:#a7b4cc;font-weight:700;">POT ${pot.toFixed(1)}</span> <span style="color:#4ade80;font-weight:800;">${deltaLabel}</span></span>
+          </div>
+          <div style="position:relative;height:7px;border-radius:99px;background:#101d33;border:1px solid #14203a;overflow:hidden;">
+            <span style="position:absolute;top:0;bottom:0;left:${ovrPct}%;right:0;background:repeating-linear-gradient(90deg,rgba(74,222,128,.16) 0 3px,transparent 3px 6px);"></span>
+            <span style="position:absolute;inset:0 auto 0 0;width:${ovrPct}%;border-radius:99px;background:linear-gradient(90deg,#0e7490,#22d3ee);"></span>
+            <span style="position:absolute;top:-3px;left:${potPct}%;width:2px;height:13px;background:#4ade80;box-shadow:0 0 6px #4ade80;"></span>
+          </div>
+        </div>
       </div>`;
   }).join('');
 
