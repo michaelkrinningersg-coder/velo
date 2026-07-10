@@ -34,23 +34,17 @@ const TOP77_RAMP = 3.0;      // Strafe je bereits vorhandenem >77-Fahrer
 const TOP74_SOFT_START = 7;  // ab so vielen >74-Fahrern beginnt die weiche Rampe
 const TOP74_RAMP = 1.5;      // Strafe je >74-Fahrer oberhalb TOP74_SOFT_START
 
+// Draft-Muster (zyklisch wiederholt). Rang 0 = bestes Team der Vorsaison.
+// Pro 6-Runden-Zyklus: Ränge 0-9 dreimal, 10-19 zweimal, 20-24 einmal —
+// dämpft die Pick-Dominanz der starken Teams (Verhältnis Top-5:Schwächste-5
+// = 3:1 statt zuvor 6:1). Die frühere Extra-Runde 0 entfällt.
 const draftSequenceChunks = [
-  [0, 4],   // Runde 0: Plätze 1-5
-  [0, 4],   // Runde 1: Plätze 1-5
-  [0, 4],   // Runde 2: Plätze 1-5
-  [5, 9],   // Runde 3: Plätze 6-10
-  [0, 4],   // Runde 4: Plätze 1-5
-  [5, 9],   // Runde 5: Plätze 6-10
-  [10, 14], // Runde 6: Plätze 11-15
-  [0, 4],   // Runde 7: Plätze 1-5
-  [5, 9],   // Runde 8: Plätze 6-10
-  [10, 14], // Runde 9: Plätze 11-15
-  [15, 19], // Runde 10: Plätze 16-20
-  [0, 4],   // Runde 11: Plätze 1-5
-  [5, 9],   // Runde 12: Plätze 6-10
-  [10, 14], // Runde 13: Plätze 11-15
-  [15, 19], // Runde 14: Plätze 16-20
-  [20, 24]  // Runde 15: Plätze 21-25
+  [0, 9],   // Runde 1: Plätze 1-10
+  [0, 9],   // Runde 2: Plätze 1-10
+  [10, 19], // Runde 3: Plätze 11-20
+  [0, 9],   // Runde 4: Plätze 1-10
+  [10, 19], // Runde 5: Plätze 11-20
+  [20, 24], // Runde 6: Plätze 21-25
 ];
 
 export class RiderDraftService {
