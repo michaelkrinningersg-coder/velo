@@ -1,5 +1,6 @@
 import { api } from '../api';
 import { $, esc, renderFlag, renderMiniJersey } from '../state';
+import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type { RivalryOverviewItem, RivalryDetailPayload, RivalryRiderRef } from '../../../shared/types';
 
 // Liga-Rivalitaeten: Uebersicht als Rangliste, Klick auf ein Duell oeffnet die
@@ -46,7 +47,8 @@ function roleBadge(roleId: number | null, roleName: string | null): string {
 }
 function catBadge(name: string | null): string {
   if (!name) return '';
-  return `<span style="${MONO};font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7dd3fc;border:1px solid rgba(56,189,248,.4);background:rgba(56,189,248,.08);border-radius:5px;padding:2px 7px;white-space:nowrap;">${esc(name)}</span>`;
+  const s = resolveRaceCategoryBadgeStyle(name);
+  return `<span style="${MONO};font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${s.color};border:1px solid ${s.border};background:${s.background};border-radius:5px;padding:2px 7px;white-space:nowrap;">${esc(name)}</span>`;
 }
 function teamChip(teamId: number | null, teamName: string | null): string {
   return `<span style="display:inline-flex;align-items:center;gap:5px;${MONO};font-size:9.5px;color:#8b9ab4;white-space:nowrap;">${renderMiniJersey(teamId, teamName)}<span style="overflow:hidden;text-overflow:ellipsis;">${esc(teamName ?? 'Ohne Team')}</span></span>`;

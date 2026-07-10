@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { setReigningChampionMarkers } from '../riderStatsUi';
+import { setReigningChampionMarkers, resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import {
   $,
   esc,
@@ -416,12 +416,14 @@ function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampio
 
 // Jahresuebersicht der Renn-Sieger nach Prestige-Stufe (Design: Sektionen,
 // Plaetze 1/2/3 in eigenen Spalten einzeilig nebeneinander).
+// Farben aus der kanonischen Kategorie-Palette (resolveRaceCategoryBadgeStyle),
+// damit sie mit Kalender/Ergebnissen/Rivalen etc. konsistent sind.
 const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
-  { ids: [1], label: 'Tour de France', color: '#facc15' },
-  { ids: [2], label: 'Grand Tours', color: '#fb923c' },
-  { ids: [3], label: 'Monumente', color: '#f472b6' },
-  { ids: [4], label: 'World Tour High', color: '#22d3ee' },
-  { ids: [7], label: 'One Day High', color: '#a78bfa' },
+  { ids: [1], label: 'Tour de France', color: resolveRaceCategoryBadgeStyle('Tour de France').color },
+  { ids: [2], label: 'Grand Tours', color: resolveRaceCategoryBadgeStyle('Grand Tour').color },
+  { ids: [3], label: 'Monumente', color: resolveRaceCategoryBadgeStyle('Monument').color },
+  { ids: [4], label: 'World Tour High', color: resolveRaceCategoryBadgeStyle('Stage Race High').color },
+  { ids: [7], label: 'One Day High', color: resolveRaceCategoryBadgeStyle('One Day High').color },
 ];
 
 function renderWinnerCell(ref: PalmaresRiderRef | null, medalColor: string): string {
