@@ -394,6 +394,15 @@ export class RivalryService {
     };
   }
 
+  // Alle aktiven Rivalen-Paare der jueingsten Saison (fuer die Live-Sim).
+  public getActivePairs(): Array<{ aId: number; bId: number }> {
+    const season = this.latestSeason();
+    if (season == null || !tableExists(this.db, 'rivalries')) return [];
+    return this.db.prepare(
+      'SELECT rider_a_id AS aId, rider_b_id AS bId FROM rivalries WHERE season = ?',
+    ).all(season) as Array<{ aId: number; bId: number }>;
+  }
+
   // ---- riderStats-Header: Top-Rivale eines Fahrers ----------------------
 
   public getTopRivalForRider(riderId: number): RiderTopRival | null {

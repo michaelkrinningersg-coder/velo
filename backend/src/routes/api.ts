@@ -638,6 +638,7 @@ export function createRouter(dbService: DatabaseService): Router {
         skillWeightRules: repo.getSkillWeightRules(),
         stageScoringRules: repo.getStageScoringRules(),
         lieutenants,
+        rivalries: new RivalryService(db).getActivePairs(),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
@@ -783,6 +784,7 @@ export function createRouter(dbService: DatabaseService): Router {
         skillWeightRules: repo.getSkillWeightRules(),
         stageScoringRules: repo.getStageScoringRules(),
         lieutenants,
+        rivalries: new RivalryService(db).getActivePairs(),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

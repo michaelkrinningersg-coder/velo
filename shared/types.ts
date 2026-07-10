@@ -876,6 +876,8 @@ export interface RealtimeSimulationBootstrap {
   skillWeightRules: SkillWeightRule[];
   stageScoringRules: StageScoringRule[];
   lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
+  /** Aktive Liga-Rivalitaeten (Fahrerpaare) fuer Renn-Boni & Konterattacken. */
+  rivalries?: Array<{ aId: number; bId: number }> | null;
 }
 
 export type SeasonPointAwardType =

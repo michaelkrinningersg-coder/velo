@@ -402,6 +402,16 @@ const STAMINA_STAGE_DISTANCE_MIN_KM = 100;
 const STAMINA_STAGE_DISTANCE_MAX_KM = 300;
 const STAMINA_SKILL_MIN = 50;
 const STAMINA_SKILL_MAX = 85;
+
+// Rivalen-Feature: Radius, in dem ein Rivale einen Angriff kontert, sowie
+// Wahrscheinlichkeit/Grenzen des Druck-Boosts bzw. -Malus bei Rennstart.
+const RIVAL_COUNTER_RADIUS_METERS = 250;
+const RIVAL_PRESSURE_MALUS_CHANCE = 0.2;
+const RIVAL_PRESSURE_SKILL_COUNT = 3;
+const ALL_RIDER_SKILL_KEYS: readonly RiderSkillKey[] = [
+  'flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble',
+  'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation', 'bikeHandling',
+];
 const STAMINA_DISTANCE_DIFF_ANCHORS = [
   { kmMark: 100, value: 0.5 },
   { kmMark: 150, value: 1 },
@@ -1202,6 +1212,9 @@ export class SimulationEngine {
 
   private readonly activeStageAttacksByRiderId = new Map<number, ActiveStageAttack>();
 
+  // Rivale je Fahrer (nur Paare, bei denen BEIDE dieses Rennen bestreiten).
+  private readonly rivalByRiderId = new Map<number, number>();
+
   private readonly breakawayPlan: PrecalculatedStageBreakaway | null;
 
   /** Set-Spiegel von breakawayPlan.riderIds fuer O(1)-Lookups im Substep-Hot-Path. */
@@ -1389,6 +1402,40 @@ export class SimulationEngine {
 
       return clonedRider;
     });
+
+    // Rivalen-Druck: Starten beide Fahrer eines Rivalen-Paares, bekommt jeder
+    // auf 3 zufaellige Skills +0.2..1.0 (80%) bzw. -0.2..1.0 (20%, Druck).
+    // Nur pro Rennen (geklont), DB unberuehrt. Ausserdem die Rivalen-Map fuer
+    // die Konterattacken fuellen (nur Paare, bei denen beide starten).
+    if (bootstrap.rivalries && bootstrap.rivalries.length > 0) {
+      const startingIds = new Set(bootstrap.riders.map((r) => r.id));
+      const pressuredIds = new Set<number>();
+      for (const pair of bootstrap.rivalries) {
+        if (startingIds.has(pair.aId) && startingIds.has(pair.bId)) {
+          this.rivalByRiderId.set(pair.aId, pair.bId);
+          this.rivalByRiderId.set(pair.bId, pair.aId);
+          pressuredIds.add(pair.aId);
+          pressuredIds.add(pair.bId);
+        }
+      }
+      if (pressuredIds.size > 0) {
+        bootstrap.riders = bootstrap.riders.map((rider) => {
+          if (!pressuredIds.has(rider.id)) return rider;
+          const cloned = { ...rider, skills: { ...rider.skills } };
+          const isMalus = Math.random() < RIVAL_PRESSURE_MALUS_CHANCE;
+          const pool = [...ALL_RIDER_SKILL_KEYS];
+          for (let k = 0; k < RIVAL_PRESSURE_SKILL_COUNT && pool.length > 0; k++) {
+            const idx = Math.floor(Math.random() * pool.length);
+            const skill = pool.splice(idx, 1)[0];
+            const mod = randomBetween(0.2, 1.0);
+            cloned.skills[skill] = isMalus
+              ? Math.max(0, cloned.skills[skill] - mod)
+              : Math.min(100, cloned.skills[skill] + mod);
+          }
+          return cloned;
+        });
+      }
+    }
 
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;
     this.isIndividualTimeTrial = bootstrap.stage.profile === 'ITT';
@@ -3557,6 +3604,35 @@ export class SimulationEngine {
         riderName: this.formatRiderWithPreStageGc(counterRiderId, counterRider.riderName),
         riderTeamId: counterRider.rider.activeTeamId ?? null,
       });
+    }
+
+    // Rivalen-Konter: Der Rivale des Angreifers kontert immer, wenn er im
+    // Radius (250 m) ist und nicht schon selbst angreift (und nicht bereits
+    // ueber die Favoriten-Route als Konterer gesetzt wurde).
+    const rivalId = this.rivalByRiderId.get(rider.rider.id);
+    if (rivalId != null && !this.activeStageAttacksByRiderId.has(rivalId)) {
+      const rivalRider = this.riders.find((entry) => entry.rider.id === rivalId);
+      if (rivalRider && !isRiderInactive(rivalRider) && !rivalRider.isAttacking) {
+        const gapMeters = Math.abs(rider.distanceCoveredMeters - rivalRider.distanceCoveredMeters);
+        if (gapMeters <= RIVAL_COUNTER_RADIUS_METERS) {
+          this.activeStageAttacksByRiderId.set(rivalId, {
+            riderId: rivalId,
+            remainingSeconds: COUNTER_ATTACK_DURATION_SECONDS,
+            startedAtElapsedSeconds,
+            triggerDistanceMeters: rivalRider.distanceCoveredMeters,
+            durationSeconds: COUNTER_ATTACK_DURATION_SECONDS,
+            attackNumber: 1,
+            isCounterAttack: true,
+            triggeredByRiderId: rider.rider.id,
+          });
+          rivalRider.isAttacking = true;
+          counterRiders.push({
+            riderId: rivalId,
+            riderName: this.formatRiderWithPreStageGc(rivalId, rivalRider.riderName),
+            riderTeamId: rivalRider.rider.activeTeamId ?? null,
+          });
+        }
+      }
     }
 
     // Push attack message for the main attacker
