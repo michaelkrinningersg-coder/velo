@@ -83,6 +83,7 @@ import {
   showRivalriesView,
   openRivalryCard,
 } from './views/rivalries';
+import { initGlobalSearch } from './views/globalSearch';
 import { RaceSimView } from './race-sim/RaceSimView';
 import {
   initRaceProgramsView,
@@ -265,6 +266,7 @@ function initAppListeners(): void {
   initContractRenewalView();
   initLeaderboardsView();
   initRivalriesView();
+  initGlobalSearch();
   initRaceProgramsView();
   initDraftListeners();
 }
