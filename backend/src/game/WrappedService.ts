@@ -6,6 +6,7 @@ import type {
   WrappedTeamStat,
   WrappedNewcomer,
   WrappedRetiree,
+  WrappedLegend,
   WrappedCareerResult,
   PalmaresRiderRef,
   RaceWinnerEntry,
@@ -45,6 +46,48 @@ export class WrappedService {
     `).get(riderId) as any;
     if (!row) return null;
     return { ...row, specialization1: null, specialization2: null };
+  }
+
+  // Kumulative All-Time-UCI-Wertung bis einschliesslich `throughSeason`.
+  private cumulativeRanking(throughSeason: number): { ordered: Array<{ riderId: number; pts: number; rank: number }>; rankById: Map<number, number> } {
+    const rows = this.db.prepare(`
+      SELECT rider_id AS riderId, SUM(points_awarded) AS pts
+      FROM season_point_events
+      WHERE season <= ?
+      GROUP BY rider_id
+      ORDER BY pts DESC, rider_id ASC
+    `).all(throughSeason) as Array<{ riderId: number; pts: number }>;
+    const ordered = rows.map((r, i) => ({ riderId: r.riderId, pts: r.pts, rank: i + 1 }));
+    return { ordered, rankById: new Map(ordered.map((r) => [r.riderId, r.rank])) };
+  }
+
+  // Rang je Fahrer in der Saison-UCI-Wertung (nur diese Saison).
+  private seasonRankMap(season: number): Map<number, number> {
+    const rows = this.db.prepare(`
+      SELECT rider_id AS riderId, SUM(points_awarded) AS pts
+      FROM season_point_events
+      WHERE season = ?
+      GROUP BY rider_id
+      ORDER BY pts DESC, rider_id ASC
+    `).all(season) as Array<{ riderId: number; pts: number }>;
+    return new Map(rows.map((r, i) => [r.riderId, i + 1]));
+  }
+
+  private bestResults(riderId: number, limit = 5, season?: number): WrappedCareerResult[] {
+    const seasonClause = season != null ? 'AND spe.season = ?' : '';
+    const params: any[] = season != null ? [riderId, season, limit] : [riderId, limit];
+    const rows = this.db.prepare(`
+      SELECT r.name AS raceName, spe.season AS season, spe.points_awarded AS points,
+             spe.rank AS rank, spe.award_type AS award
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.rider_id = ? AND spe.points_awarded > 0 ${seasonClause}
+      ORDER BY spe.points_awarded DESC, spe.season DESC
+      LIMIT ?
+    `).all(...params) as Array<{ raceName: string; season: number; points: number; rank: number; award: string }>;
+    return rows.map((row) => ({
+      raceName: row.raceName, season: row.season, points: row.points, rank: row.rank, type: awardLabel(row.award),
+    }));
   }
 
   private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
@@ -87,7 +130,7 @@ export class WrappedService {
     `).all(season, limit) as WrappedTeamStat[];
   }
 
-  private bestNewcomers(season: number, limit = 3): WrappedNewcomer[] {
+  private bestNewcomers(season: number, seasonRank: Map<number, number>, limit = 3): WrappedNewcomer[] {
     if (!tableExists(this.db, 'contracts')) return [];
     const rows = this.db.prepare(`
       WITH newcomers AS (
@@ -105,7 +148,12 @@ export class WrappedService {
     const out: WrappedNewcomer[] = [];
     for (const row of rows) {
       const rider = this.riderRef(row.riderId);
-      if (rider) out.push({ rider, uciPoints: row.uciPoints, wins: this.riderSeasonWins(season, row.riderId) });
+      if (rider) out.push({
+        rider, uciPoints: row.uciPoints,
+        wins: this.riderSeasonWins(season, row.riderId),
+        seasonUciRank: seasonRank.get(row.riderId) ?? null,
+        bestResults: this.bestResults(row.riderId, 5, season),
+      });
     }
     return out;
   }
@@ -118,23 +166,8 @@ export class WrappedService {
     return row?.w ?? 0;
   }
 
-  private bestCareerResults(riderId: number, limit = 5): WrappedCareerResult[] {
-    const rows = this.db.prepare(`
-      SELECT r.name AS raceName, spe.season AS season, spe.points_awarded AS points,
-             spe.rank AS rank, spe.award_type AS award
-      FROM season_point_events spe
-      JOIN races r ON r.id = spe.race_id
-      WHERE spe.rider_id = ? AND spe.points_awarded > 0
-      ORDER BY spe.points_awarded DESC, spe.season DESC
-      LIMIT ?
-    `).all(riderId, limit) as Array<{ raceName: string; season: number; points: number; rank: number; award: string }>;
-    return rows.map((row) => ({
-      raceName: row.raceName, season: row.season, points: row.points, rank: row.rank, type: awardLabel(row.award),
-    }));
-  }
-
-  private retirees(season: number, limit = 5): WrappedRetiree[] {
-    if (!columnExists(this.db, 'riders', 'retired_season')) return [];
+  private retirees(season: number, allTimeRank: Map<number, number>, limit = 5): { list: WrappedRetiree[]; ids: Set<number> } {
+    if (!columnExists(this.db, 'riders', 'retired_season')) return { list: [], ids: new Set() };
     const rows = this.db.prepare(`
       SELECT ri.id AS riderId,
              (SELECT COALESCE(SUM(points_awarded),0) FROM season_point_events WHERE rider_id = ri.id) AS uci
@@ -143,16 +176,47 @@ export class WrappedService {
       ORDER BY uci DESC
       LIMIT ?
     `).all(season, limit) as Array<{ riderId: number; uci: number }>;
-    const out: WrappedRetiree[] = [];
+    const list: WrappedRetiree[] = [];
+    const ids = new Set<number>();
     for (const row of rows) {
       const rider = this.riderRef(row.riderId);
       if (!rider) continue;
-      out.push({
+      ids.add(row.riderId);
+      list.push({
         rider, allTimeUciPoints: row.uci,
+        allTimeUciRank: allTimeRank.get(row.riderId) ?? null,
         careerWins: this.careerWins(row.riderId),
-        bestResults: this.bestCareerResults(row.riderId),
+        bestResults: this.bestResults(row.riderId),
       });
     }
+    return { list, ids };
+  }
+
+  // Fahrer, die in dieser Saison neu in eine All-Time-UCI-Stufe (Top 20/10/3/1)
+  // aufgestiegen sind — verglichen mit dem Stand bis zum Vorjahr.
+  private legends(season: number, retireeIds: Set<number>): WrappedLegend[] {
+    const TIERS = [1, 3, 10, 20];
+    const now = this.cumulativeRanking(season);
+    const prev = this.cumulativeRanking(season - 1);
+    const out: WrappedLegend[] = [];
+    for (const entry of now.ordered.slice(0, 20)) {
+      if (retireeIds.has(entry.riderId)) continue; // Retirees stehen bereits eigen
+      const rankPrev = prev.rankById.get(entry.riderId) ?? Number.POSITIVE_INFINITY;
+      let newTier: number | null = null;
+      for (const t of TIERS) {
+        if (entry.rank <= t && rankPrev > t) { newTier = t; break; }
+      }
+      if (newTier == null) continue;
+      const rider = this.riderRef(entry.riderId);
+      if (!rider) continue;
+      out.push({
+        rider, allTimeUciPoints: entry.pts, allTimeUciRank: entry.rank,
+        careerWins: this.careerWins(entry.riderId),
+        bestResults: this.bestResults(entry.riderId),
+        newTier,
+      });
+    }
+    out.sort((a, b) => a.newTier - b.newTier || (a.allTimeUciRank ?? 0) - (b.allTimeUciRank ?? 0));
     return out;
   }
 
@@ -187,12 +251,17 @@ export class WrappedService {
 
   public getWrapped(season: number): SeasonWrappedPayload {
     const resultRepo = new ResultRepository(this.db);
-    const raceWinners = tableExists(this.db, 'season_point_events') ? this.raceWinners(season) : [];
+    const hasEvents = tableExists(this.db, 'season_point_events');
+    const raceWinners = hasEvents ? this.raceWinners(season) : [];
     const teamStandings = resultRepo.getSeasonStandings(season).teamStandings;
     const topTeamsByPoints: WrappedTeamStat[] = teamStandings
       .filter((t) => t.teamId != null)
       .slice(0, 3)
       .map((t) => ({ teamId: t.teamId as number, teamName: t.teamName, value: t.points }));
+
+    const allTimeRank = hasEvents ? this.cumulativeRanking(season).rankById : new Map<number, number>();
+    const seasonRank = hasEvents ? this.seasonRankMap(season) : new Map<number, number>();
+    const { list: retirees, ids: retireeIds } = this.retirees(season, allTimeRank);
 
     return {
       season,
@@ -200,8 +269,9 @@ export class WrappedService {
       topRidersByWins: this.topRidersByWins(season),
       topTeamsByWins: this.topTeamsByWins(season),
       topTeamsByPoints,
-      bestNewcomers: this.bestNewcomers(season),
-      retirees: this.retirees(season),
+      bestNewcomers: this.bestNewcomers(season, seasonRank),
+      retirees,
+      legends: hasEvents ? this.legends(season, retireeIds) : [],
     };
   }
 }

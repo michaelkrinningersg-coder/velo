@@ -1440,6 +1440,10 @@ export interface WrappedNewcomer {
   rider: PalmaresRiderRef;
   uciPoints: number;
   wins: number;
+  /** Platz in der Saison-UCI-Wertung (Fahrer). */
+  seasonUciRank: number | null;
+  /** Top-5-Ergebnisse dieser Saison nach erzielten UCI-Punkten. */
+  bestResults: WrappedCareerResult[];
 }
 
 export interface WrappedCareerResult {
@@ -1453,8 +1457,20 @@ export interface WrappedCareerResult {
 export interface WrappedRetiree {
   rider: PalmaresRiderRef;
   allTimeUciPoints: number;
+  allTimeUciRank: number | null;
   careerWins: number;
   bestResults: WrappedCareerResult[];
+}
+
+// Fahrer, der in dieser Saison neu in eine All-Time-UCI-Stufe aufgestiegen ist.
+export interface WrappedLegend {
+  rider: PalmaresRiderRef;
+  allTimeUciPoints: number;
+  allTimeUciRank: number | null;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+  /** Neu erreichte Stufe der All-Time-Wertung (1 / 3 / 10 / 20). */
+  newTier: number;
 }
 
 export interface SeasonWrappedPayload {
@@ -1465,6 +1481,7 @@ export interface SeasonWrappedPayload {
   topTeamsByPoints: WrappedTeamStat[];
   bestNewcomers: WrappedNewcomer[];
   retirees: WrappedRetiree[];
+  legends: WrappedLegend[];
 }
 
 export interface RiderFatigueHistoryEntry {
