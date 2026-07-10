@@ -9,7 +9,6 @@ import type {
   WrappedLegend,
   WrappedCareerResult,
   PalmaresRiderRef,
-  RaceWinnerEntry,
 } from '../../../shared/types';
 
 // Nur echte Renn-Siege zaehlen (Etappe/Eintages/GC), keine Wertungstrikots.
@@ -220,40 +219,14 @@ export class WrappedService {
     return out;
   }
 
-  // Jahressieger der grossen Rennen (Kategorien 1-4 & 7), nur der Sieger.
-  private raceWinners(season: number): RaceWinnerEntry[] {
-    const rows = this.db.prepare(`
-      SELECT r.id AS raceId, r.name AS raceName, r.category_id AS categoryId,
-             spe.rider_id AS riderId, ri.first_name AS firstName, ri.last_name AS lastName,
-             c.code_3 AS countryCode, spe.team_id AS teamId, t.name AS teamName
-      FROM season_point_events spe
-      JOIN races r ON r.id = spe.race_id
-      JOIN riders ri ON ri.id = spe.rider_id
-      JOIN sta_country c ON c.id = ri.country_id
-      LEFT JOIN teams t ON t.id = spe.team_id
-      WHERE spe.season = ?
-        AND r.category_id IN (1,2,3,4,7)
-        AND spe.rank = 1
-        AND ((r.is_stage_race = 1 AND spe.award_type = 'gc_final')
-          OR (r.is_stage_race = 0 AND spe.award_type = 'one_day_result'))
-      ORDER BY r.category_id ASC, r.start_date ASC
-    `).all(season) as any[];
-    return rows.map((row) => ({
-      raceId: row.raceId, raceName: row.raceName, categoryId: row.categoryId,
-      winner: {
-        riderId: row.riderId, firstName: row.firstName, lastName: row.lastName,
-        countryCode: row.countryCode, teamId: row.teamId, teamName: row.teamName,
-        specialization1: null, specialization2: null,
-      },
-      second: null, third: null,
-    }));
-  }
-
   public getWrapped(season: number): SeasonWrappedPayload {
     const resultRepo = new ResultRepository(this.db);
     const hasEvents = tableExists(this.db, 'season_point_events');
-    const raceWinners = hasEvents ? this.raceWinners(season) : [];
-    const teamStandings = resultRepo.getSeasonStandings(season).teamStandings;
+    // Jahressieger (inkl. 2./3. Platz) aus DERSELBEN Quelle wie die
+    // Season-Standings-Jahresuebersicht, damit Format & Daten identisch sind.
+    const standings = resultRepo.getSeasonStandings(season);
+    const raceWinners = standings.raceWinners ?? [];
+    const teamStandings = standings.teamStandings;
     const topTeamsByPoints: WrappedTeamStat[] = teamStandings
       .filter((t) => t.teamId != null)
       .slice(0, 3)

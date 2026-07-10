@@ -17,23 +17,50 @@ function riderChip(r: PalmaresRiderRef | null, bold = true): string {
   return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;">${renderFlag(r.countryCode ?? '')}<span style="font-weight:${bold ? 700 : 500};color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.firstName)} ${esc(r.lastName)}</span>${renderMiniJersey(r.teamId, r.teamName)}</span>`;
 }
 
-function catBadge(categoryId: number): string {
-  const name = categoryId === 1 ? 'Tour de France' : categoryId === 2 ? 'Grand Tour' : categoryId === 3 ? 'Monument' : categoryId === 4 ? 'Stage Race High' : 'One Day High';
-  const s = resolveRaceCategoryBadgeStyle(name);
-  return `<span style="${MONO};font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${s.color};border:1px solid ${s.border};background:${s.background};border-radius:5px;padding:2px 7px;white-space:nowrap;">${esc(name.replace('Stage Race High', 'WT High'))}</span>`;
-}
-
 function sectionTitle(label: string): string {
   return `<div style="display:flex;align-items:center;gap:12px;margin:30px 0 14px;${MONO};font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#5f6f8a;"><span>${esc(label)}</span><span style="flex:1;height:1px;background:#14203a;"></span></div>`;
 }
 
-function winnersGrid(winners: RaceWinnerEntry[]): string {
-  if (winners.length === 0) return `<div style="color:#5f6f8a;font-size:12.5px;padding:8px 0;">Keine großen Rennen gewertet.</div>`;
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">${winners.map((w) => `
-    <div style="border:1px solid #1e2c49;border-radius:10px;background:#0b1120;padding:11px 13px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">${catBadge(w.categoryId)}<span style="font-weight:700;font-size:12.5px;color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(w.raceName)}</span></div>
-      ${riderChip(w.winner)}
-    </div>`).join('')}</div>`;
+// Jahressieger in EXAKT demselben Format wie die Season-Standings-
+// Jahresuebersicht (Prestige-Stufen mit Sieger/2./3. in Spalten).
+const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
+  { ids: [1], label: 'Tour de France', color: resolveRaceCategoryBadgeStyle('Tour de France').color },
+  { ids: [2], label: 'Grand Tours', color: resolveRaceCategoryBadgeStyle('Grand Tour').color },
+  { ids: [3], label: 'Monumente', color: resolveRaceCategoryBadgeStyle('Monument').color },
+  { ids: [4], label: 'World Tour High', color: resolveRaceCategoryBadgeStyle('Stage Race High').color },
+  { ids: [7], label: 'One Day High', color: resolveRaceCategoryBadgeStyle('One Day High').color },
+];
+
+function winnerCell(ref: PalmaresRiderRef | null, medalColor: string): string {
+  if (!ref) return '<span style="color:#4a5a75;font-size:13px;">–</span>';
+  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${renderFlag(ref.countryCode ?? '')}<span style="font-weight:${medalColor === '#facc15' ? 800 : 600};color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ref.lastName)}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
+}
+
+function winnersSections(winners: RaceWinnerEntry[]): string {
+  const COLS = 'grid-template-columns:minmax(150px,1.25fr) 1fr 1fr 1fr;gap:14px;';
+  const sections = WINNER_TIERS.map((tier) => {
+    const races = winners.filter((w) => tier.ids.includes(w.categoryId));
+    if (races.length === 0) return '';
+    const header = `<div style="display:grid;${COLS}padding:6px 14px;">
+      <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#6a7a95;text-transform:uppercase;">Rennen</span>
+      <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#facc15;text-transform:uppercase;">Sieger</span>
+      <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#cbd5e1;text-transform:uppercase;">2. Platz</span>
+      <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#cd7c3b;text-transform:uppercase;">3. Platz</span>
+    </div>`;
+    const rows = races.map((w) => `<div style="display:grid;${COLS}padding:10px 14px;border-top:1px solid #14203a;align-items:center;">
+      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.raceName)}</span>
+      ${winnerCell(w.winner, '#facc15')}
+      ${winnerCell(w.second, '#cbd5e1')}
+      ${winnerCell(w.third, '#cd7c3b')}
+    </div>`).join('');
+    return `<section style="border:1px solid #1e2c49;border-radius:12px;background:#0c1526;overflow:hidden;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid #1c2b47;background:linear-gradient(90deg,${tier.color}22,transparent 60%);">
+        <span style="width:8px;height:20px;border-radius:3px;background:${tier.color};"></span>
+        <span style="font-weight:800;font-size:14px;color:#f1f5f9;">${esc(tier.label)}</span>
+        <span style="${MONO};font-size:10px;color:#6a7a95;letter-spacing:.1em;">${races.length} RENNEN</span>
+      </div>${header}${rows}</section>`;
+  }).join('');
+  return sections || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Sieger in dieser Saison.</div>';
 }
 
 function podium(entries: Array<{ label: string; sub: string }>): string {
@@ -115,7 +142,7 @@ function buildHtml(w: SeasonWrappedPayload): string {
       <p style="color:#8b9ab4;font-size:13.5px;max-width:64ch;margin:0;">Die Höhepunkte der abgelaufenen Saison — bevor der Draft die Karten neu mischt.</p>
 
       ${sectionTitle('Jahressieger · Große Rennen')}
-      ${winnersGrid(w.raceWinners)}
+      ${winnersSections(w.raceWinners)}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
         <div>${sectionTitle('Meiste Siege · Fahrer')}${podium(w.topRidersByWins.map((e: WrappedWinsEntry) => ({ label: riderChip(e.rider), sub: `${e.wins}` })))}</div>
