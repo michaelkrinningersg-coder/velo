@@ -236,9 +236,15 @@ function renderStageDetails(summary: ParsedStageSummary): string {
 // ============================================================================
 // Tab 2: Siegerliste (Palmarès)
 // ============================================================================
+// Klickbarer Fahrername -> oeffnet den riderStats-View (globaler app-rider-link-Listener).
+const RIDER_LINK_STYLE = 'background:none;border:none;padding:0;margin:0;font:inherit;cursor:pointer;text-align:left;';
+function riderLinkButton(riderId: number, label: string, extraStyle = ''): string {
+  return `<button type="button" class="app-rider-link rd-pal-name" data-rider-id="${riderId}" style="${RIDER_LINK_STYLE}${extraStyle}">${label}</button>`;
+}
+
 function palmaresRiderCell(ref: PalmaresRiderRef | null, medalColor?: string): string {
   if (!ref) return '<span class="rd-pal-empty">–</span>';
-  return `<span class="rd-pal-rider">${renderFlag(ref.countryCode ?? '')}<span class="rd-pal-name"${medalColor ? ` style="color:${medalColor};"` : ''}>${esc(ref.lastName)}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
+  return `<span class="rd-pal-rider">${renderFlag(ref.countryCode ?? '')}${riderLinkButton(ref.riderId, esc(ref.lastName), medalColor ? `color:${medalColor};` : '')}${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
 }
 
 function renderPalmaresTab(race: Race, palmares: RacePalmaresPayload): string {
@@ -329,7 +335,7 @@ function renderRecordTab(palmares: RacePalmaresPayload): string {
   }
   const rows = palmares.participation.map((p, i) => `<div class="rd-record-row">
     <span class="rd-record-rank">${i + 1}</span>
-    <span class="rd-pal-rider">${renderFlag(p.countryCode ?? '')}<span class="rd-pal-name">${esc(p.firstName)} ${esc(p.lastName)}</span></span>
+    <span class="rd-pal-rider">${renderFlag(p.countryCode ?? '')}${riderLinkButton(p.riderId, `${esc(p.firstName)} ${esc(p.lastName)}`)}</span>
     <span class="rd-record-seasons">${p.seasons}× Teilnahme</span>
     <span class="rd-record-points">${p.totalPoints.toLocaleString('de-DE')} Pkt</span>
   </div>`).join('');

@@ -65,20 +65,24 @@ const DUEL_WHERE = `
 export class RivalryService {
   constructor(private readonly db: Database.Database) {}
 
-  // Jueingste Saison mit substanziellen Renndaten (>= 100 Wertungen). Fallback:
-  // hoechste vorhandene Saison.
-  private resolveTargetSeason(): number | null {
-    if (!tableExists(this.db, 'season_point_events')) return null;
+  // Kandidaten-Saisons fuer die Materialisierung, neueste zuerst. Nur "reife"
+  // Saisons (>= MIN_SEASON_RACES abgeschlossene Rennen) — so wird eine gerade
+  // erst begonnene Saison nicht gewaehlt (dort haetten die Paare zu wenige
+  // Duelle und wuerden alle vom "aktiv in Saison"-Gate verworfen). Fallback:
+  // die hoechste vorhandene Saison, falls keine reif ist.
+  private static readonly MIN_SEASON_RACES = 20;
+  private resolveCandidateSeasons(): number[] {
+    if (!tableExists(this.db, 'season_point_events')) return [];
     const rows = this.db.prepare(`
-      SELECT season, COUNT(*) AS c
+      SELECT season, COUNT(DISTINCT race_id) AS races
       FROM season_point_events
       WHERE award_type IN ('one_day_result','gc_final')
       GROUP BY season
       ORDER BY season DESC
-    `).all() as Array<{ season: number; c: number }>;
-    if (rows.length === 0) return null;
-    const substantial = rows.find((r) => r.c >= 100);
-    return (substantial ?? rows[0]).season;
+    `).all() as Array<{ season: number; races: number }>;
+    if (rows.length === 0) return [];
+    const mature = rows.filter((r) => r.races >= RivalryService.MIN_SEASON_RACES).map((r) => r.season);
+    return mature.length > 0 ? mature : [rows[0].season];
   }
 
   private getEligibleRiders(): EligibleRider[] {
@@ -97,8 +101,8 @@ export class RivalryService {
 
   public rebuildRivalries(): void {
     if (!tableExists(this.db, 'rivalries') || !tableExists(this.db, 'season_point_events')) return;
-    const targetSeason = this.resolveTargetSeason();
-    if (targetSeason == null) {
+    const candidateSeasons = this.resolveCandidateSeasons();
+    if (candidateSeasons.length === 0) {
       this.db.prepare('DELETE FROM rivalries').run();
       return;
     }
@@ -153,22 +157,27 @@ export class RivalryService {
       }
     }
 
-    // Jedes Paar bewerten.
-    const ranked: RankedRivalryPair[] = [];
-    for (const [key, duels] of pairDuels) {
-      const [loId, hiId] = key.split('-').map(Number);
-      const lo = byId.get(loId); const hi = byId.get(hiId);
-      if (!lo || !hi) continue;
-      const meta: RivalryPairMeta = {
-        birthYearA: lo.birthYear, birthYearB: hi.birthYear,
-        teamA: lo.teamId, teamB: hi.teamId,
-        roleA: lo.roleId, roleB: hi.roleId,
-      };
-      const score = scoreRivalryPair(duels, meta, targetSeason);
-      if (score.qualifies) ranked.push({ aId: loId, bId: hiId, score });
+    // Neueste reife Saison waehlen, die tatsaechlich Rivalitaeten liefert
+    // (aeltere als Fallback, falls die jueingste keine ergibt).
+    let targetSeason = candidateSeasons[0];
+    let selected = selectSeasonRivalries([]);
+    for (const season of candidateSeasons) {
+      const ranked: RankedRivalryPair[] = [];
+      for (const [key, duels] of pairDuels) {
+        const [loId, hiId] = key.split('-').map(Number);
+        const lo = byId.get(loId); const hi = byId.get(hiId);
+        if (!lo || !hi) continue;
+        const meta: RivalryPairMeta = {
+          birthYearA: lo.birthYear, birthYearB: hi.birthYear,
+          teamA: lo.teamId, teamB: hi.teamId,
+          roleA: lo.roleId, roleB: hi.roleId,
+        };
+        const score = scoreRivalryPair(duels, meta, season);
+        if (score.qualifies) ranked.push({ aId: loId, bId: hiId, score });
+      }
+      const picked = selectSeasonRivalries(ranked);
+      if (picked.length > 0) { targetSeason = season; selected = picked; break; }
     }
-
-    const selected = selectSeasonRivalries(ranked);
 
     const insert = this.db.prepare(`
       INSERT INTO rivalries
