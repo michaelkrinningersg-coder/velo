@@ -1424,6 +1424,49 @@ export interface RiderTopRival {
   rivalWins: number;
 }
 
+// ==== Saison-Wrapped =========================================
+export interface WrappedWinsEntry {
+  rider: PalmaresRiderRef;
+  wins: number;
+}
+
+export interface WrappedTeamStat {
+  teamId: number;
+  teamName: string | null;
+  value: number; // Siege oder Punkte
+}
+
+export interface WrappedNewcomer {
+  rider: PalmaresRiderRef;
+  uciPoints: number;
+  wins: number;
+}
+
+export interface WrappedCareerResult {
+  raceName: string;
+  season: number;
+  points: number;
+  rank: number;
+  type: string; // GC / Etappe / Eintages / Wertung
+}
+
+export interface WrappedRetiree {
+  rider: PalmaresRiderRef;
+  allTimeUciPoints: number;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+}
+
+export interface SeasonWrappedPayload {
+  season: number;
+  raceWinners: RaceWinnerEntry[];
+  topRidersByWins: WrappedWinsEntry[];
+  topTeamsByWins: WrappedTeamStat[];
+  topTeamsByPoints: WrappedTeamStat[];
+  bestNewcomers: WrappedNewcomer[];
+  retirees: WrappedRetiree[];
+}
+
 export interface RiderFatigueHistoryEntry {
   id: number;
   riderId: number;

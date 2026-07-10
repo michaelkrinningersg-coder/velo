@@ -1,0 +1,207 @@
+import type Database from 'better-sqlite3';
+import { ResultRepository } from '../db/repositories/ResultRepository';
+import type {
+  SeasonWrappedPayload,
+  WrappedWinsEntry,
+  WrappedTeamStat,
+  WrappedNewcomer,
+  WrappedRetiree,
+  WrappedCareerResult,
+  PalmaresRiderRef,
+  RaceWinnerEntry,
+} from '../../../shared/types';
+
+// Nur echte Renn-Siege zaehlen (Etappe/Eintages/GC), keine Wertungstrikots.
+const WIN_FILTER = `
+  spe.rank = 1 AND (
+    (r.is_stage_race = 1 AND spe.award_type IN ('stage_result','gc_final'))
+    OR (r.is_stage_race = 0 AND spe.award_type = 'one_day_result'))`;
+
+function tableExists(db: Database.Database, name: string): boolean {
+  return db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name) != null;
+}
+function columnExists(db: Database.Database, table: string, col: string): boolean {
+  return (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).some((c) => c.name === col);
+}
+
+function awardLabel(award: string): string {
+  if (award === 'gc_final') return 'GC';
+  if (award === 'stage_result') return 'Etappe';
+  if (award === 'one_day_result') return 'Eintages';
+  return 'Wertung';
+}
+
+export class WrappedService {
+  constructor(private readonly db: Database.Database) {}
+
+  private riderRef(riderId: number): PalmaresRiderRef | null {
+    const row = this.db.prepare(`
+      SELECT ri.id AS riderId, ri.first_name AS firstName, ri.last_name AS lastName,
+             c.code_3 AS countryCode, ri.active_team_id AS teamId, t.name AS teamName
+      FROM riders ri
+      JOIN sta_country c ON c.id = ri.country_id
+      LEFT JOIN teams t ON t.id = ri.active_team_id
+      WHERE ri.id = ?
+    `).get(riderId) as any;
+    if (!row) return null;
+    return { ...row, specialization1: null, specialization2: null };
+  }
+
+  private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
+    const rows = this.db.prepare(`
+      SELECT spe.rider_id AS riderId, COUNT(*) AS wins
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.season = ? AND ${WIN_FILTER}
+      GROUP BY spe.rider_id
+      ORDER BY wins DESC, spe.rider_id ASC
+      LIMIT ?
+    `).all(season, limit) as Array<{ riderId: number; wins: number }>;
+    const out: WrappedWinsEntry[] = [];
+    for (const row of rows) {
+      const rider = this.riderRef(row.riderId);
+      if (rider) out.push({ rider, wins: row.wins });
+    }
+    return out;
+  }
+
+  private riderSeasonWins(season: number, riderId: number): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS wins FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.season = ? AND spe.rider_id = ? AND ${WIN_FILTER}
+    `).get(season, riderId) as { wins: number };
+    return row?.wins ?? 0;
+  }
+
+  private topTeamsByWins(season: number, limit = 3): WrappedTeamStat[] {
+    return this.db.prepare(`
+      SELECT spe.team_id AS teamId, t.name AS teamName, COUNT(*) AS value
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      JOIN teams t ON t.id = spe.team_id
+      WHERE spe.season = ? AND ${WIN_FILTER}
+      GROUP BY spe.team_id
+      ORDER BY value DESC, t.name ASC
+      LIMIT ?
+    `).all(season, limit) as WrappedTeamStat[];
+  }
+
+  private bestNewcomers(season: number, limit = 3): WrappedNewcomer[] {
+    if (!tableExists(this.db, 'contracts')) return [];
+    const rows = this.db.prepare(`
+      WITH newcomers AS (
+        SELECT rider_id FROM contracts GROUP BY rider_id HAVING MIN(start_season) = ?
+      )
+      SELECT spe.rider_id AS riderId, SUM(spe.points_awarded) AS uciPoints
+      FROM season_point_events spe
+      JOIN newcomers n ON n.rider_id = spe.rider_id
+      WHERE spe.season = ?
+      GROUP BY spe.rider_id
+      HAVING uciPoints > 0
+      ORDER BY uciPoints DESC
+      LIMIT ?
+    `).all(season, season, limit) as Array<{ riderId: number; uciPoints: number }>;
+    const out: WrappedNewcomer[] = [];
+    for (const row of rows) {
+      const rider = this.riderRef(row.riderId);
+      if (rider) out.push({ rider, uciPoints: row.uciPoints, wins: this.riderSeasonWins(season, row.riderId) });
+    }
+    return out;
+  }
+
+  private careerWins(riderId: number): number {
+    if (!tableExists(this.db, 'rider_career_category_stats')) return 0;
+    const row = this.db.prepare(
+      'SELECT COALESCE(SUM(gc_wins + stage_wins + one_day_wins),0) AS w FROM rider_career_category_stats WHERE rider_id = ?',
+    ).get(riderId) as { w: number };
+    return row?.w ?? 0;
+  }
+
+  private bestCareerResults(riderId: number, limit = 5): WrappedCareerResult[] {
+    const rows = this.db.prepare(`
+      SELECT r.name AS raceName, spe.season AS season, spe.points_awarded AS points,
+             spe.rank AS rank, spe.award_type AS award
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.rider_id = ? AND spe.points_awarded > 0
+      ORDER BY spe.points_awarded DESC, spe.season DESC
+      LIMIT ?
+    `).all(riderId, limit) as Array<{ raceName: string; season: number; points: number; rank: number; award: string }>;
+    return rows.map((row) => ({
+      raceName: row.raceName, season: row.season, points: row.points, rank: row.rank, type: awardLabel(row.award),
+    }));
+  }
+
+  private retirees(season: number, limit = 5): WrappedRetiree[] {
+    if (!columnExists(this.db, 'riders', 'retired_season')) return [];
+    const rows = this.db.prepare(`
+      SELECT ri.id AS riderId,
+             (SELECT COALESCE(SUM(points_awarded),0) FROM season_point_events WHERE rider_id = ri.id) AS uci
+      FROM riders ri
+      WHERE ri.retired_season = ?
+      ORDER BY uci DESC
+      LIMIT ?
+    `).all(season, limit) as Array<{ riderId: number; uci: number }>;
+    const out: WrappedRetiree[] = [];
+    for (const row of rows) {
+      const rider = this.riderRef(row.riderId);
+      if (!rider) continue;
+      out.push({
+        rider, allTimeUciPoints: row.uci,
+        careerWins: this.careerWins(row.riderId),
+        bestResults: this.bestCareerResults(row.riderId),
+      });
+    }
+    return out;
+  }
+
+  // Jahressieger der grossen Rennen (Kategorien 1-4 & 7), nur der Sieger.
+  private raceWinners(season: number): RaceWinnerEntry[] {
+    const rows = this.db.prepare(`
+      SELECT r.id AS raceId, r.name AS raceName, r.category_id AS categoryId,
+             spe.rider_id AS riderId, ri.first_name AS firstName, ri.last_name AS lastName,
+             c.code_3 AS countryCode, spe.team_id AS teamId, t.name AS teamName
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      JOIN riders ri ON ri.id = spe.rider_id
+      JOIN sta_country c ON c.id = ri.country_id
+      LEFT JOIN teams t ON t.id = spe.team_id
+      WHERE spe.season = ?
+        AND r.category_id IN (1,2,3,4,7)
+        AND spe.rank = 1
+        AND ((r.is_stage_race = 1 AND spe.award_type = 'gc_final')
+          OR (r.is_stage_race = 0 AND spe.award_type = 'one_day_result'))
+      ORDER BY r.category_id ASC, r.start_date ASC
+    `).all(season) as any[];
+    return rows.map((row) => ({
+      raceId: row.raceId, raceName: row.raceName, categoryId: row.categoryId,
+      winner: {
+        riderId: row.riderId, firstName: row.firstName, lastName: row.lastName,
+        countryCode: row.countryCode, teamId: row.teamId, teamName: row.teamName,
+        specialization1: null, specialization2: null,
+      },
+      second: null, third: null,
+    }));
+  }
+
+  public getWrapped(season: number): SeasonWrappedPayload {
+    const resultRepo = new ResultRepository(this.db);
+    const raceWinners = tableExists(this.db, 'season_point_events') ? this.raceWinners(season) : [];
+    const teamStandings = resultRepo.getSeasonStandings(season).teamStandings;
+    const topTeamsByPoints: WrappedTeamStat[] = teamStandings
+      .filter((t) => t.teamId != null)
+      .slice(0, 3)
+      .map((t) => ({ teamId: t.teamId as number, teamName: t.teamName, value: t.points }));
+
+    return {
+      season,
+      raceWinners,
+      topRidersByWins: this.topRidersByWins(season),
+      topTeamsByWins: this.topTeamsByWins(season),
+      topTeamsByPoints,
+      bestNewcomers: this.bestNewcomers(season),
+      retirees: this.retirees(season),
+    };
+  }
+}

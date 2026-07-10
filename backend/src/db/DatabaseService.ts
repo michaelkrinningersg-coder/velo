@@ -3184,6 +3184,15 @@ export class DatabaseService {
     `);
   }
 
+  // Retiree-Kohorte je Saison (fuer die Saison-Wrapped): in welcher Saison ein
+  // Fahrer zuletzt fuhr, bevor er in Rente ging. Von ContractService gesetzt.
+  private ensureRetiredSeasonColumn(db: Database.Database): void {
+    if (!tableExists(db, 'riders')) return;
+    if (!columnExists(db, 'riders', 'retired_season')) {
+      db.prepare('ALTER TABLE riders ADD COLUMN retired_season INTEGER').run();
+    }
+  }
+
   private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
@@ -3218,6 +3227,7 @@ export class DatabaseService {
     this.ensureRiderCategoryStatsSchema(db);
     this.ensureRiderBadgesSchema(db);
     this.ensureRivalriesSchema(db);
+    this.ensureRetiredSeasonColumn(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);

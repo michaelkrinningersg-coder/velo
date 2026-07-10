@@ -11,6 +11,7 @@ import { GameStateService } from '../game/GameStateService';
 import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
 import { RivalryService } from '../game/RivalryService';
+import { WrappedService } from '../game/WrappedService';
 import { RouteImporter } from '../simulation/RouteImporter';
 import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
@@ -32,6 +33,7 @@ import {
   RiderStatsPayload,
   RivalryOverviewPayload,
   RivalryDetailPayload,
+  SeasonWrappedPayload,
   TeamStatsPayload,
   RiderTeamEditorExportPayload,
   RiderTeamEditorPayload,
@@ -443,6 +445,16 @@ export function createRouter(dbService: DatabaseService): Router {
       const payload = new RivalryService(db).getDetail(aId, bId, Number.isFinite(season as number) ? season : undefined);
       if (!payload) return fail(res, 404, 'Rivalitaet nicht gefunden.');
       ok<RivalryDetailPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/season-wrapped/:season', (req: Request, res: Response) => {
+    const season = Number(req.params['season']);
+    if (!Number.isFinite(season)) return fail(res, 400, 'Ungueltige Saison.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      ok<SeasonWrappedPayload>(res, new WrappedService(db).getWrapped(season));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

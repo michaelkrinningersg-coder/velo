@@ -728,6 +728,9 @@ export async function executeDayAdvance(): Promise<boolean> {
     const newSeason = state.gameState?.season;
     if (oldSeason && newSeason && newSeason > oldSeason) {
       stopAutoProgress(); // Auto-Progress des Tageswechsels stoppen
+      // Saison-Rückblick der abgelaufenen Saison — vor dem Draft.
+      const { showSeasonWrapped } = await import('./seasonWrapped');
+      await showSeasonWrapped(oldSeason);
       const { startDraftPresentation } = await import('./draft');
       const { activateView } = await import('../state');
       activateView('draft');
