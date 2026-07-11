@@ -63,14 +63,25 @@ function winnersSections(winners: RaceWinnerEntry[]): string {
   return sections || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Sieger in dieser Saison.</div>';
 }
 
-function podium(entries: Array<{ label: string; sub: string }>): string {
-  if (entries.length === 0) return `<div style="color:#5f6f8a;font-size:12.5px;">–</div>`;
-  return `<div style="display:flex;flex-direction:column;gap:8px;">${entries.map((e, i) => `
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;border:1px solid ${i === 0 ? MEDAL[0] + '55' : '#1e2c49'};border-radius:10px;background:${i === 0 ? 'rgba(251,191,36,.05)' : '#0b1120'};">
-      <span style="${MONO};font-size:18px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};width:22px;text-align:center;flex:none;">${i + 1}</span>
-      <span style="flex:1;min-width:0;">${e.label}</span>
-      <span style="${MONO};font-size:15px;font-weight:800;color:#fbbf24;flex:none;">${e.sub}</span>
-    </div>`).join('')}</div>`;
+// Rahmen-Sektion im Stil der Jahressieger-Uebersicht: farbiger Header-Balken +
+// Label (+ optionaler Meta-Text), Inhalt darunter.
+function wrappedSection(color: string, label: string, meta: string, inner: string): string {
+  return `<section style="border:1px solid #1e2c49;border-radius:12px;background:#0c1526;overflow:hidden;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid #1c2b47;background:linear-gradient(90deg,${color}22,transparent 60%);">
+      <span style="width:8px;height:20px;border-radius:3px;background:${color};"></span>
+      <span style="font-weight:800;font-size:14px;color:#f1f5f9;">${esc(label)}</span>
+      ${meta ? `<span style="${MONO};font-size:10px;color:#6a7a95;letter-spacing:.1em;">${esc(meta)}</span>` : ''}
+    </div>${inner}</section>`;
+}
+
+// Podium-Zeilen (Rang · Fahrer/Team · Wert) im Tabellen-Stil einer Sektion.
+function statRows(entries: Array<{ label: string; sub: string }>): string {
+  if (entries.length === 0) return `<div style="padding:14px;color:#6a7a95;font-size:13px;">–</div>`;
+  return entries.map((e, i) => `<div style="display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #14203a;">
+    <span style="${MONO};font-size:16px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};text-align:center;">${i + 1}</span>
+    <span style="min-width:0;">${e.label}</span>
+    <span style="${MONO};font-size:15px;font-weight:800;color:#fbbf24;">${e.sub}</span>
+  </div>`).join('');
 }
 
 function teamChip(t: WrappedTeamStat): string {
@@ -87,8 +98,9 @@ function resultsList(results: WrappedCareerResult[]): string {
     </div>`).join('')}</div>`;
 }
 
-function detailCard(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[], accent?: string): string {
-  return `<div style="border:1px solid ${accent ? accent + '55' : '#1e2c49'};border-radius:12px;background:${accent ? 'rgba(168,85,247,.04)' : '#0b1120'};padding:13px 15px;margin-bottom:10px;">
+// Fahrer-Zeile mit verschachtelter Ergebnisliste, als Tabellenzeile einer Sektion.
+function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[]): string {
+  return `<div style="padding:12px 14px;border-top:1px solid #14203a;">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       ${badge}
       <span style="flex:1;min-width:160px;font-size:15px;">${riderChip(rider)}</span>
@@ -104,11 +116,11 @@ function rankBadge(i: number): string {
 
 function newcomersSection(list: WrappedNewcomer[]): string {
   if (list.length === 0) return '';
-  return sectionTitle('Beste Newcomer · erste Saison') + list.map((n, i) => detailCard(
+  return wrappedSection('#4ade80', 'Beste Newcomer', 'erste Saison', list.map((n, i) => detailRow(
     rankBadge(i), n.rider,
     `Saison-UCI ${n.seasonUciRank != null ? '#' + n.seasonUciRank : '—'} · ${n.wins} Siege · ${n.uciPoints.toLocaleString('de-DE')} UCI`,
     n.bestResults,
-  )).join('');
+  )).join(''));
 }
 
 function tierLabel(t: number): string {
@@ -117,21 +129,21 @@ function tierLabel(t: number): string {
 
 function legendsSection(list: WrappedLegend[]): string {
   if (list.length === 0) return '';
-  return sectionTitle('Legenden · neu in der All-Time-UCI-Elite') + list.map((l) => detailCard(
+  return wrappedSection('#a855f7', 'Legenden', 'neu in der All-Time-UCI-Elite', list.map((l) => detailRow(
     `<span style="${MONO};font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#d8b4fe;border:1px solid rgba(168,85,247,.5);background:rgba(168,85,247,.14);border-radius:6px;padding:3px 8px;">${esc(tierLabel(l.newTier))}</span>`,
     l.rider,
     `#${l.allTimeUciRank} All-Time-UCI · ${l.careerWins} Karrieresiege · ${l.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
-    l.bestResults, '#a855f7',
-  )).join('');
+    l.bestResults,
+  )).join(''));
 }
 
 function retireesSection(list: WrappedRetiree[]): string {
   if (list.length === 0) return '';
-  return sectionTitle('In den Ruhestand · Top 5 nach All-Time-UCI') + list.map((r, i) => detailCard(
+  return wrappedSection('#94a3b8', 'In den Ruhestand', 'Top 5 nach All-Time-UCI', list.map((r, i) => detailRow(
     rankBadge(i), r.rider,
     `${r.allTimeUciRank != null ? '#' + r.allTimeUciRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
     r.bestResults,
-  )).join('');
+  )).join(''));
 }
 
 function buildHtml(w: SeasonWrappedPayload): string {
@@ -144,14 +156,11 @@ function buildHtml(w: SeasonWrappedPayload): string {
       ${sectionTitle('Jahressieger · Große Rennen')}
       ${winnersSections(w.raceWinners)}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
-        <div>${sectionTitle('Meiste Siege · Fahrer')}${podium(w.topRidersByWins.map((e: WrappedWinsEntry) => ({ label: riderChip(e.rider), sub: `${e.wins}` })))}</div>
-        <div>${sectionTitle('Meiste Siege · Teams')}${podium(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` })))}</div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
-        <div>${sectionTitle('Meiste Punkte · Fahrer')}${podium(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') })))}</div>
-        <div>${sectionTitle('Meiste Punkte · Teams')}${podium(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') })))}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
+        ${wrappedSection('#fbbf24', 'Meiste Siege · Fahrer', '', statRows(w.topRidersByWins.map((e: WrappedWinsEntry) => ({ label: riderChip(e.rider), sub: `${e.wins}` }))))}
+        ${wrappedSection('#fbbf24', 'Meiste Siege · Teams', '', statRows(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` }))))}
+        ${wrappedSection('#22d3ee', 'Meiste Punkte · Fahrer', '', statRows(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') }))))}
+        ${wrappedSection('#22d3ee', 'Meiste Punkte · Teams', '', statRows(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') }))))}
       </div>
 
       ${newcomersSection(w.bestNewcomers)}
