@@ -3,6 +3,7 @@ import { ResultRepository } from '../db/repositories/ResultRepository';
 import type {
   SeasonWrappedPayload,
   WrappedWinsEntry,
+  WrappedRiderPoints,
   WrappedTeamStat,
   WrappedNewcomer,
   WrappedRetiree,
@@ -72,21 +73,39 @@ export class WrappedService {
     return new Map(rows.map((r, i) => [r.riderId, i + 1]));
   }
 
+  // Beste Ergebnisse eines Fahrers, IDENTISCHE Ergebnisse gruppiert
+  // (gleiches Rennen + Typ + Platz + Punkte -> z. B. "3x Etappe"). Sortiert
+  // nach Punkten absteigend, bei Gleichstand nach Rennprestige absteigend.
   private bestResults(riderId: number, limit = 5, season?: number): WrappedCareerResult[] {
     const seasonClause = season != null ? 'AND spe.season = ?' : '';
-    const params: any[] = season != null ? [riderId, season, limit] : [riderId, limit];
+    const params: any[] = season != null ? [riderId, season] : [riderId];
     const rows = this.db.prepare(`
-      SELECT r.name AS raceName, spe.season AS season, spe.points_awarded AS points,
-             spe.rank AS rank, spe.award_type AS award
+      SELECT r.name AS raceName, r.prestige AS prestige, spe.season AS season,
+             spe.points_awarded AS points, spe.rank AS rank, spe.award_type AS award
       FROM season_point_events spe
       JOIN races r ON r.id = spe.race_id
       WHERE spe.rider_id = ? AND spe.points_awarded > 0 ${seasonClause}
-      ORDER BY spe.points_awarded DESC, spe.season DESC
-      LIMIT ?
-    `).all(...params) as Array<{ raceName: string; season: number; points: number; rank: number; award: string }>;
-    return rows.map((row) => ({
-      raceName: row.raceName, season: row.season, points: row.points, rank: row.rank, type: awardLabel(row.award),
-    }));
+    `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
+
+    const groups = new Map<string, WrappedCareerResult & { prestige: number }>();
+    for (const row of rows) {
+      const type = awardLabel(row.award);
+      const key = `${row.raceName}|${type}|${row.rank}|${row.points}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.season = Math.max(existing.season, row.season);
+      } else {
+        groups.set(key, {
+          raceName: row.raceName, season: row.season, points: row.points,
+          rank: row.rank, type, count: 1, prestige: row.prestige ?? 0,
+        });
+      }
+    }
+    return [...groups.values()]
+      .sort((a, b) => b.points - a.points || b.prestige - a.prestige || b.count - a.count)
+      .slice(0, limit)
+      .map(({ prestige: _p, ...rest }) => rest);
   }
 
   private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
@@ -103,6 +122,23 @@ export class WrappedService {
     for (const row of rows) {
       const rider = this.riderRef(row.riderId);
       if (rider) out.push({ rider, wins: row.wins });
+    }
+    return out;
+  }
+
+  private topRidersByPoints(season: number, limit = 3): WrappedRiderPoints[] {
+    const rows = this.db.prepare(`
+      SELECT rider_id AS riderId, SUM(points_awarded) AS points
+      FROM season_point_events
+      WHERE season = ?
+      GROUP BY rider_id
+      ORDER BY points DESC, rider_id ASC
+      LIMIT ?
+    `).all(season, limit) as Array<{ riderId: number; points: number }>;
+    const out: WrappedRiderPoints[] = [];
+    for (const row of rows) {
+      const rider = this.riderRef(row.riderId);
+      if (rider) out.push({ rider, points: row.points });
     }
     return out;
   }
@@ -240,6 +276,7 @@ export class WrappedService {
       season,
       raceWinners,
       topRidersByWins: this.topRidersByWins(season),
+      topRidersByPoints: this.topRidersByPoints(season),
       topTeamsByWins: this.topTeamsByWins(season),
       topTeamsByPoints,
       bestNewcomers: this.bestNewcomers(season, seasonRank),

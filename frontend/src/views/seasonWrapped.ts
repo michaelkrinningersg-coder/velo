@@ -82,8 +82,8 @@ function resultsList(results: WrappedCareerResult[]): string {
   return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;">${results.map((b) => `
     <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;">
       <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
-      <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(b.raceName)}</span>
-      <span style="color:#5f6f8a;">${esc(b.type)} · P${b.rank} · ${b.season}</span>
+      <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.raceName)}</span>
+      <span style="color:#5f6f8a;">${esc(b.type)} · P${b.rank}${b.count === 1 ? ' · ' + b.season : ''}</span>
     </div>`).join('')}</div>`;
 }
 
@@ -149,8 +149,10 @@ function buildHtml(w: SeasonWrappedPayload): string {
         <div>${sectionTitle('Meiste Siege · Teams')}${podium(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` })))}</div>
       </div>
 
-      ${sectionTitle('Meiste Punkte · Teams')}
-      <div style="max-width:520px;">${podium(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') })))}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+        <div>${sectionTitle('Meiste Punkte · Fahrer')}${podium(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') })))}</div>
+        <div>${sectionTitle('Meiste Punkte · Teams')}${podium(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') })))}</div>
+      </div>
 
       ${newcomersSection(w.bestNewcomers)}
       ${legendsSection(w.legends)}

@@ -1430,6 +1430,11 @@ export interface WrappedWinsEntry {
   wins: number;
 }
 
+export interface WrappedRiderPoints {
+  rider: PalmaresRiderRef;
+  points: number;
+}
+
 export interface WrappedTeamStat {
   teamId: number;
   teamName: string | null;
@@ -1452,6 +1457,8 @@ export interface WrappedCareerResult {
   points: number;
   rank: number;
   type: string; // GC / Etappe / Eintages / Wertung
+  /** Anzahl identischer Ergebnisse (gleiches Rennen/Typ/Platz/Punkte), gruppiert. */
+  count: number;
 }
 
 export interface WrappedRetiree {
@@ -1477,6 +1484,7 @@ export interface SeasonWrappedPayload {
   season: number;
   raceWinners: RaceWinnerEntry[];
   topRidersByWins: WrappedWinsEntry[];
+  topRidersByPoints: WrappedRiderPoints[];
   topTeamsByWins: WrappedTeamStat[];
   topTeamsByPoints: WrappedTeamStat[];
   bestNewcomers: WrappedNewcomer[];
