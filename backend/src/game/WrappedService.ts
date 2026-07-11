@@ -9,7 +9,10 @@ import type {
   WrappedRetiree,
   WrappedLegend,
   WrappedCareerResult,
+  WrappedSurprise,
+  WrappedRecords,
   PalmaresRiderRef,
+  RaceWinnerEntry,
 } from '../../../shared/types';
 
 // Nur echte Renn-Siege zaehlen (Etappe/Eintages/GC), keine Wertungstrikots.
@@ -228,11 +231,14 @@ export class WrappedService {
       const rider = this.riderRef(row.riderId);
       if (!rider) continue;
       ids.add(row.riderId);
+      const cn = this.careerNumbers(row.riderId);
       list.push({
         rider, allTimeUciPoints: row.uci,
         allTimeUciRank: allTimeRank.get(row.riderId) ?? null,
         careerWins: this.careerWins(row.riderId),
         bestResults: this.bestResults(row.riderId, 25),
+        careerFromSeason: cn.from, careerToSeason: cn.to,
+        grandTourWins: cn.gt, monumentWins: cn.monument,
       });
     }
     return { list, ids };
@@ -266,6 +272,87 @@ export class WrappedService {
     return out;
   }
 
+  // ---- Ueberraschung des Jahres ----------------------------------------
+  private surprise(season: number, raceWinners: RaceWinnerEntry[]): WrappedSurprise {
+    let lowestOvrWinner: WrappedSurprise['lowestOvrWinner'] = null;
+    let youngestMonumentWinner: WrappedSurprise['youngestMonumentWinner'] = null;
+    const info = this.db.prepare('SELECT overall_rating AS ovr, birth_year AS birthYear FROM riders WHERE id = ?');
+    for (const w of raceWinners) {
+      if (!w.winner) continue;
+      const row = info.get(w.winner.riderId) as { ovr: number; birthYear: number } | undefined;
+      if (!row) continue;
+      const ovr = Math.round(row.ovr);
+      if (!lowestOvrWinner || ovr < lowestOvrWinner.value) {
+        lowestOvrWinner = { rider: w.winner, raceName: w.raceName, categoryId: w.categoryId, value: ovr };
+      }
+      if (w.categoryId === 3) { // Monument
+        const age = season - row.birthYear;
+        if (!youngestMonumentWinner || age < youngestMonumentWinner.value) {
+          youngestMonumentWinner = { rider: w.winner, raceName: w.raceName, categoryId: w.categoryId, value: age };
+        }
+      }
+    }
+    return { lowestOvrWinner, youngestMonumentWinner };
+  }
+
+  // ---- Rekorde der Saison ----------------------------------------------
+  // Laengste Serie aufeinanderfolgender Renntags-Siege (Etappen/Eintages,
+  // chronologisch). Nur Kandidaten mit >= 2 Siegen werden geprueft.
+  private longestWinStreak(season: number): WrappedRecords['longestStreak'] {
+    const candidates = (this.db.prepare(`
+      SELECT spe.rider_id AS id
+      FROM season_point_events spe
+      WHERE spe.season = ? AND spe.rank = 1 AND spe.award_type IN ('stage_result','one_day_result')
+      GROUP BY spe.rider_id HAVING COUNT(*) >= 2
+    `).all(season) as Array<{ id: number }>).map((r) => r.id);
+    if (candidates.length === 0) return null;
+    const rows = this.db.prepare(`
+      SELECT spe.rider_id AS rid, spe.rank AS rank
+      FROM season_point_events spe
+      WHERE spe.season = ? AND spe.award_type IN ('stage_result','one_day_result')
+        AND spe.rider_id IN (${candidates.join(',')})
+      ORDER BY spe.rider_id, spe.awarded_on, spe.stage_id
+    `).all(season) as Array<{ rid: number; rank: number }>;
+    let bestRider = -1, bestStreak = 0, curRider = -1, cur = 0;
+    for (const row of rows) {
+      if (row.rid !== curRider) { curRider = row.rid; cur = 0; }
+      if (row.rank === 1) { cur += 1; if (cur > bestStreak) { bestStreak = cur; bestRider = row.rid; } }
+      else cur = 0;
+    }
+    if (bestRider < 0 || bestStreak < 2) return null;
+    const rider = this.riderRef(bestRider);
+    return rider ? { rider, streak: bestStreak } : null;
+  }
+
+  private records(season: number, topRidersByWins: WrappedWinsEntry[], topTeamsByPoints: WrappedTeamStat[]): WrappedRecords {
+    const mostWins = topRidersByWins[0] ?? null;
+    let teamDominance: WrappedRecords['teamDominance'] = null;
+    if (topTeamsByPoints.length >= 1) {
+      const lead = topTeamsByPoints.length >= 2 ? topTeamsByPoints[0].value - topTeamsByPoints[1].value : topTeamsByPoints[0].value;
+      teamDominance = { team: topTeamsByPoints[0], lead };
+    }
+    return { mostWins, teamDominance, longestStreak: this.longestWinStreak(season) };
+  }
+
+  // ---- Retiree "Karriere in Zahlen" ------------------------------------
+  private careerNumbers(riderId: number): { from: number | null; to: number | null; gt: number; monument: number } {
+    const span = this.db.prepare(
+      'SELECT MIN(season) AS f, MAX(season) AS t FROM season_point_events WHERE rider_id = ?',
+    ).get(riderId) as { f: number | null; t: number | null };
+    let gt = 0, monument = 0;
+    if (tableExists(this.db, 'rider_career_category_stats')) {
+      gt = (this.db.prepare(
+        `SELECT COALESCE(SUM(gc_wins),0) AS w FROM rider_career_category_stats
+         WHERE rider_id = ? AND category_name IN ('World Tour - Tour de France','World Tour - Grand Tour')`,
+      ).get(riderId) as { w: number }).w;
+      monument = (this.db.prepare(
+        `SELECT COALESCE(SUM(one_day_wins),0) AS w FROM rider_career_category_stats
+         WHERE rider_id = ? AND category_name = 'World Tour - Monument'`,
+      ).get(riderId) as { w: number }).w;
+    }
+    return { from: span?.f ?? null, to: span?.t ?? null, gt, monument };
+  }
+
   public getWrapped(season: number): SeasonWrappedPayload {
     const resultRepo = new ResultRepository(this.db);
     const hasEvents = tableExists(this.db, 'season_point_events');
@@ -282,17 +369,20 @@ export class WrappedService {
     const allTimeRank = hasEvents ? this.cumulativeRanking(season).rankById : new Map<number, number>();
     const seasonRank = hasEvents ? this.seasonRankMap(season) : new Map<number, number>();
     const { list: retirees, ids: retireeIds } = this.retirees(season, allTimeRank);
+    const topRidersByWins = this.topRidersByWins(season);
 
     return {
       season,
       raceWinners,
-      topRidersByWins: this.topRidersByWins(season),
+      topRidersByWins,
       topRidersByPoints: this.topRidersByPoints(season),
       topTeamsByWins: this.topTeamsByWins(season),
       topTeamsByPoints,
       bestNewcomers: this.bestNewcomers(season, seasonRank),
       retirees,
       legends: hasEvents ? this.legends(season, retireeIds) : [],
+      surprise: hasEvents ? this.surprise(season, raceWinners) : { lowestOvrWinner: null, youngestMonumentWinner: null },
+      records: hasEvents ? this.records(season, topRidersByWins, topTeamsByPoints) : { mostWins: null, teamDominance: null, longestStreak: null },
     };
   }
 }

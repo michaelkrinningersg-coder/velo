@@ -12,9 +12,11 @@ import type {
 const MONO = "font-family:'JetBrains Mono',monospace";
 const MEDAL = ['#fbbf24', '#cbd5e1', '#cd7c3b'];
 
+const LINK = 'background:none;border:none;padding:0;margin:0;font:inherit;cursor:pointer;text-align:left;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 function riderChip(r: PalmaresRiderRef | null, bold = true): string {
   if (!r) return '<span style="color:#5f6f8a;">–</span>';
-  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;">${renderFlag(r.countryCode ?? '')}<span style="font-weight:${bold ? 700 : 500};color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.firstName)} ${esc(r.lastName)}</span>${renderMiniJersey(r.teamId, r.teamName)}</span>`;
+  const name = `<button type="button" class="app-rider-link" data-rider-id="${r.riderId}" style="${LINK}font-weight:${bold ? 700 : 500};color:#e6ecf6;">${esc(r.firstName)} ${esc(r.lastName)}</button>`;
+  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;">${renderFlag(r.countryCode ?? '')}${name}${renderMiniJersey(r.teamId, r.teamName)}</span>`;
 }
 
 function sectionTitle(label: string): string {
@@ -33,7 +35,8 @@ const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
 
 function winnerCell(ref: PalmaresRiderRef | null, medalColor: string): string {
   if (!ref) return '<span style="color:#4a5a75;font-size:13px;">–</span>';
-  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${renderFlag(ref.countryCode ?? '')}<span style="font-weight:${medalColor === '#facc15' ? 800 : 600};color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ref.lastName)}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
+  const name = `<button type="button" class="app-rider-link" data-rider-id="${ref.riderId}" style="${LINK}font-weight:${medalColor === '#facc15' ? 800 : 600};color:#e8eef7;">${esc(ref.lastName)}</button>`;
+  return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${renderFlag(ref.countryCode ?? '')}${name}${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
 }
 
 function winnersSections(winners: RaceWinnerEntry[]): string {
@@ -109,15 +112,50 @@ function resultsList(results: WrappedCareerResult[]): string {
 }
 
 // Fahrer-Zeile mit verschachtelter Ergebnisliste, als Tabellenzeile einer Sektion.
-function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[]): string {
+function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[], subLine = ''): string {
   return `<div style="padding:12px 14px;border-top:1px solid #14203a;">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       ${badge}
       <span style="flex:1;min-width:160px;font-size:15px;">${riderChip(rider)}</span>
       <span style="${MONO};font-size:11px;color:#8b9ab4;">${statsLine}</span>
     </div>
+    ${subLine ? `<div style="${MONO};font-size:10px;color:#6a7a95;margin-top:5px;">${subLine}</div>` : ''}
     ${resultsList(results)}
   </div>`;
+}
+
+// Highlight-Zeile (Label · Fahrer/Team · Wert) fuer Ueberraschung/Rekorde.
+function highlightRow(label: string, entity: string, detail: string, value: string): string {
+  return `<div style="display:grid;grid-template-columns:minmax(140px,200px) 1fr auto;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #14203a;">
+    <span style="${MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8b9ab4;">${esc(label)}</span>
+    <span style="min-width:0;display:flex;align-items:center;gap:9px;flex-wrap:wrap;">${entity}${detail ? `<span style="${MONO};font-size:10px;color:#6a7a95;">${esc(detail)}</span>` : ''}</span>
+    <span style="${MONO};font-size:15px;font-weight:800;color:#fbbf24;">${esc(value)}</span>
+  </div>`;
+}
+
+function surpriseSection(s: SeasonWrappedPayload['surprise']): string {
+  const rows: string[] = [];
+  if (s.lowestOvrWinner) rows.push(highlightRow('Underdog-Sieg', riderChip(s.lowestOvrWinner.rider), s.lowestOvrWinner.raceName, `OVR ${s.lowestOvrWinner.value}`));
+  if (s.youngestMonumentWinner) rows.push(highlightRow('Jüngster Monument-Sieger', riderChip(s.youngestMonumentWinner.rider), s.youngestMonumentWinner.raceName, `${s.youngestMonumentWinner.value} J`));
+  if (rows.length === 0) return '';
+  return wrappedSection('#f97316', 'Überraschung des Jahres', '', rows.join(''));
+}
+
+function recordsSection(r: SeasonWrappedPayload['records']): string {
+  const rows: string[] = [];
+  if (r.mostWins) rows.push(highlightRow('Meiste Siege', riderChip(r.mostWins.rider), '', `${r.mostWins.wins} Siege`));
+  if (r.teamDominance) rows.push(highlightRow('Dominantestes Team', teamChip(r.teamDominance.team), 'Punktevorsprung', `+${r.teamDominance.lead.toLocaleString('de-DE')}`));
+  if (r.longestStreak) rows.push(highlightRow('Längste Siegesserie', riderChip(r.longestStreak.rider), 'Renntags-Siege in Folge', `${r.longestStreak.streak}×`));
+  if (rows.length === 0) return '';
+  return wrappedSection('#22d3ee', 'Rekorde der Saison', '', rows.join(''));
+}
+
+function careerLine(r: WrappedRetiree): string {
+  const parts: string[] = [];
+  if (r.careerFromSeason != null) parts.push(`Karriere ${r.careerFromSeason}–${r.careerToSeason}`);
+  parts.push(`${r.grandTourWins} GT-Siege`);
+  parts.push(`${r.monumentWins} Monument-Siege`);
+  return '▪ ' + parts.join(' · ');
 }
 
 function rankBadge(i: number): string {
@@ -153,38 +191,47 @@ function retireesSection(list: WrappedRetiree[]): string {
     rankBadge(i), r.rider,
     `${r.allTimeUciRank != null ? '#' + r.allTimeUciRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
     r.bestResults,
+    careerLine(r),
   )).join(''));
 }
 
-function buildHtml(w: SeasonWrappedPayload): string {
-  return `
-    <div style="max-width:1000px;margin:0 auto;padding:36px 22px 40px;">
-      <div style="${MONO};font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#22d3ee;">Velo · Saison-Rückblick</div>
-      <h1 style="font-size:34px;font-weight:800;letter-spacing:-.02em;margin:.35rem 0 .3rem;">Saison ${w.season}</h1>
-      <p style="color:#8b9ab4;font-size:13.5px;max-width:64ch;margin:0;">Die Höhepunkte der abgelaufenen Saison — bevor der Draft die Karten neu mischt.</p>
+function overviewGrid(...sections: string[]): string {
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">${sections.join('')}</div>`;
+}
 
-      ${sectionTitle('Jahressieger · Große Rennen')}
-      ${winnersSections(w.raceWinners)}
+function introBody(w: SeasonWrappedPayload): string {
+  return `<div style="text-align:center;padding:8vh 0 4vh;">
+    <div style="${MONO};font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:#22d3ee;">Velo · Saison-Rückblick</div>
+    <div style="font-size:clamp(48px,9vw,86px);font-weight:800;letter-spacing:-.03em;margin:.15em 0 .12em;background:linear-gradient(120deg,#22d3ee,#a855f7 60%,#fbbf24);-webkit-background-clip:text;background-clip:text;color:transparent;">Saison ${w.season}</div>
+    <p style="color:#8b9ab4;font-size:14px;max-width:54ch;margin:0 auto;line-height:1.55;">Die Höhepunkte der abgelaufenen Saison — bevor der Draft die Karten neu mischt. Blättere mit ‹ › oder den Pfeiltasten.</p>
+  </div>`;
+}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
-        ${wrappedSection('#fbbf24', 'Meiste Siege · Fahrer', '', statRows(w.topRidersByWins.map((e: WrappedWinsEntry) => ({ label: riderChip(e.rider), sub: `${e.wins}` }))))}
-        ${wrappedSection('#fbbf24', 'Meiste Siege · Teams', '', statRows(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` }))))}
-        ${wrappedSection('#22d3ee', 'Meiste Punkte · Fahrer', '', statRows(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') }))))}
-        ${wrappedSection('#22d3ee', 'Meiste Punkte · Teams', '', statRows(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') }))))}
-      </div>
-
-      ${newcomersSection(w.bestNewcomers)}
-      ${legendsSection(w.legends)}
-      ${retireesSection(w.retirees)}
-
-      <div style="display:flex;justify-content:center;margin-top:34px;">
-        <button id="season-wrapped-continue" style="${MONO};font-size:13px;font-weight:800;letter-spacing:.04em;color:#04222b;background:linear-gradient(135deg,#22d3ee,#0891b2);border:none;border-radius:10px;padding:13px 28px;cursor:pointer;">Weiter zum Draft →</button>
-      </div>
-    </div>`;
+interface WrappedSlide { body: string; }
+function buildSlides(w: SeasonWrappedPayload): WrappedSlide[] {
+  const slides: WrappedSlide[] = [{ body: introBody(w) }];
+  const push = (body: string) => { if (body) slides.push({ body }); };
+  push(winnersSections(w.raceWinners));
+  push(overviewGrid(
+    wrappedSection('#fbbf24', 'Meiste Siege · Fahrer', '', statRows(w.topRidersByWins.map((e) => ({ label: riderChip(e.rider), sub: `${e.wins}` })))),
+    wrappedSection('#fbbf24', 'Meiste Siege · Teams', '', statRows(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` })))),
+  ));
+  push(overviewGrid(
+    wrappedSection('#22d3ee', 'Meiste Punkte · Fahrer', '', statRows(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') })))),
+    wrappedSection('#22d3ee', 'Meiste Punkte · Teams', '', statRows(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') })))),
+  ));
+  push(surpriseSection(w.surprise));
+  push(recordsSection(w.records));
+  push(newcomersSection(w.bestNewcomers));
+  push(legendsSection(w.legends));
+  push(retireesSection(w.retirees));
+  return slides;
 }
 
 let overlay: HTMLDivElement | null = null;
 
+// Story-Modus: ein Abschnitt pro Slide, mit Prev/Next, Fortschrittspunkten,
+// Tastatur (Pfeile) und "Überspringen". Loest auf, wenn der Nutzer weitergeht.
 export async function showSeasonWrapped(season: number): Promise<void> {
   let payload: SeasonWrappedPayload | null = null;
   try {
@@ -192,18 +239,63 @@ export async function showSeasonWrapped(season: number): Promise<void> {
     if (res.success && res.data) payload = res.data;
   } catch { /* still zeigen wir nichts, wenn es fehlschlaegt */ }
   if (!payload) return;
-  // Nichts Nennenswertes -> ueberspringen.
   if (payload.raceWinners.length === 0 && payload.topRidersByWins.length === 0) return;
+  const slides = buildSlides(payload);
 
   return new Promise<void>((resolve) => {
+    let idx = 0;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const riderStatsEl = document.getElementById('modal-riderStats');
+
     overlay = document.createElement('div');
     overlay.id = 'season-wrapped-overlay';
-    overlay.style.cssText =
-      'position:fixed;inset:0;z-index:7000;overflow-y:auto;color:#e6ecf6;font-family:Archivo,system-ui,sans-serif;' +
-      'background:radial-gradient(1200px 640px at 82% -12%,rgba(34,211,238,.08),transparent 60%),#080e1a;';
-    overlay.innerHTML = buildHtml(payload!);
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:7000;display:flex;flex-direction:column;color:#e6ecf6;'
+      + 'font-family:Archivo,system-ui,sans-serif;background:radial-gradient(1200px 640px at 82% -12%,rgba(34,211,238,.08),transparent 60%),#080e1a;';
+    overlay.innerHTML = `
+      <div id="ws-content" style="flex:1;overflow-y:auto;"></div>
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px;border-top:1px solid #14203a;background:#0b1120;">
+        <button id="ws-skip" style="${MONO};font-size:11px;color:#8b9ab4;background:none;border:1px solid #1e2c49;border-radius:8px;padding:8px 14px;cursor:pointer;">Überspringen</button>
+        <div id="ws-dots" style="display:flex;gap:7px;align-items:center;"></div>
+        <div style="display:flex;gap:8px;">
+          <button id="ws-prev" style="${MONO};font-size:14px;font-weight:800;color:#8b9ab4;background:#0c1526;border:1px solid #1e2c49;border-radius:8px;padding:8px 15px;cursor:pointer;">‹</button>
+          <button id="ws-next" style="${MONO};font-size:13px;font-weight:800;color:#04222b;background:linear-gradient(135deg,#22d3ee,#0891b2);border:none;border-radius:8px;padding:9px 18px;cursor:pointer;"></button>
+        </div>
+      </div>`;
     document.body.appendChild(overlay);
-    const done = () => { overlay?.remove(); overlay = null; resolve(); };
-    overlay.querySelector<HTMLButtonElement>('#season-wrapped-continue')?.addEventListener('click', done);
+    // riderStats-Modal ueber das Overlay heben, damit klickbare Namen sichtbar sind.
+    if (riderStatsEl) riderStatsEl.style.zIndex = '8000';
+
+    const content = overlay.querySelector<HTMLElement>('#ws-content')!;
+    const dotsEl = overlay.querySelector<HTMLElement>('#ws-dots')!;
+    const prevBtn = overlay.querySelector<HTMLButtonElement>('#ws-prev')!;
+    const nextBtn = overlay.querySelector<HTMLButtonElement>('#ws-next')!;
+
+    const done = () => {
+      if (riderStatsEl) riderStatsEl.style.zIndex = '';
+      document.removeEventListener('keydown', onKey);
+      overlay?.remove(); overlay = null; resolve();
+    };
+    const render = () => {
+      const eyebrow = idx === 0 ? '' : `<div style="${MONO};font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#22d3ee;margin-bottom:14px;">Saison ${payload!.season} · ${idx}/${slides.length - 1}</div>`;
+      content.innerHTML = `<div style="max-width:1000px;margin:0 auto;padding:34px 22px 30px;">${eyebrow}${slides[idx].body}</div>`;
+      content.scrollTop = 0;
+      if (!reduce) { content.style.opacity = '0'; requestAnimationFrame(() => { content.style.transition = 'opacity .28s ease'; content.style.opacity = '1'; }); }
+      dotsEl.innerHTML = slides.map((_, i) => `<span data-dot="${i}" style="width:${i === idx ? 20 : 8}px;height:8px;border-radius:99px;background:${i === idx ? '#22d3ee' : '#26364f'};cursor:pointer;transition:width .2s;"></span>`).join('');
+      prevBtn.style.visibility = idx === 0 ? 'hidden' : 'visible';
+      nextBtn.textContent = idx === slides.length - 1 ? 'Weiter zum Draft →' : 'Weiter ›';
+    };
+    const go = (n: number) => { idx = Math.max(0, Math.min(slides.length - 1, n)); render(); };
+    const next = () => { if (idx === slides.length - 1) done(); else go(idx + 1); };
+    const onKey = (e: KeyboardEvent) => {
+      if (riderStatsEl && !riderStatsEl.classList.contains('hidden')) return; // riderStats offen -> Pfeile ignorieren
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); go(idx - 1); }
+    };
+    nextBtn.addEventListener('click', next);
+    prevBtn.addEventListener('click', () => go(idx - 1));
+    overlay.querySelector<HTMLButtonElement>('#ws-skip')!.addEventListener('click', done);
+    dotsEl.addEventListener('click', (e) => { const d = (e.target as HTMLElement).closest<HTMLElement>('[data-dot]'); if (d) go(Number(d.dataset['dot'])); });
+    document.addEventListener('keydown', onKey);
+    render();
   });
 }

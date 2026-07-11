@@ -1467,6 +1467,30 @@ export interface WrappedRetiree {
   allTimeUciRank: number | null;
   careerWins: number;
   bestResults: WrappedCareerResult[];
+  // "Karriere in Zahlen"
+  careerFromSeason: number | null;
+  careerToSeason: number | null;
+  grandTourWins: number;
+  monumentWins: number;
+}
+
+// Ueberraschung des Jahres (Underdog-Sieg / juengster Monument-Sieger).
+export interface WrappedSurpriseEntry {
+  rider: PalmaresRiderRef;
+  raceName: string;
+  categoryId: number;
+  value: number; // OVR (gerundet) bzw. Alter
+}
+export interface WrappedSurprise {
+  lowestOvrWinner: WrappedSurpriseEntry | null;
+  youngestMonumentWinner: WrappedSurpriseEntry | null;
+}
+
+// Rekorde der Saison.
+export interface WrappedRecords {
+  mostWins: WrappedWinsEntry | null;
+  teamDominance: { team: WrappedTeamStat; lead: number } | null;
+  longestStreak: { rider: PalmaresRiderRef; streak: number } | null;
 }
 
 // Fahrer, der in dieser Saison neu in eine All-Time-UCI-Stufe aufgestiegen ist.
@@ -1490,6 +1514,8 @@ export interface SeasonWrappedPayload {
   bestNewcomers: WrappedNewcomer[];
   retirees: WrappedRetiree[];
   legends: WrappedLegend[];
+  surprise: WrappedSurprise;
+  records: WrappedRecords;
 }
 
 export interface RiderFatigueHistoryEntry {
