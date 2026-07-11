@@ -76,7 +76,7 @@ export class WrappedService {
   // Beste Ergebnisse eines Fahrers, IDENTISCHE Ergebnisse gruppiert
   // (gleiches Rennen + Typ + Platz + Punkte -> z. B. "3x Etappe"). Sortiert
   // nach Punkten absteigend, bei Gleichstand nach Rennprestige absteigend.
-  private bestResults(riderId: number, limit = 5, season?: number): WrappedCareerResult[] {
+  private bestResults(riderId: number, limit = 10, season?: number): WrappedCareerResult[] {
     const seasonClause = season != null ? 'AND spe.season = ?' : '';
     const params: any[] = season != null ? [riderId, season] : [riderId];
     const rows = this.db.prepare(`
@@ -187,7 +187,7 @@ export class WrappedService {
         rider, uciPoints: row.uciPoints,
         wins: this.riderSeasonWins(season, row.riderId),
         seasonUciRank: seasonRank.get(row.riderId) ?? null,
-        bestResults: this.bestResults(row.riderId, 5, season),
+        bestResults: this.bestResults(row.riderId, 10, season),
       });
     }
     return out;
