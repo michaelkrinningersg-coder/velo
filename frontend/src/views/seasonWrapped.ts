@@ -104,7 +104,7 @@ function resultsList(results: WrappedCareerResult[]): string {
     <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;">
       <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
       <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.raceName)}</span>
-      <span style="color:#5f6f8a;">${esc(b.type)} · <span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span>${b.count === 1 ? ' · ' + b.season : ''}</span>
+      <span style="color:#5f6f8a;">${esc(b.type)} · <span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span></span>
     </div>`).join('')}</div>`;
 }
 
