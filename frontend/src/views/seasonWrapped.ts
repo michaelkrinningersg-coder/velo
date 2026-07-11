@@ -88,13 +88,23 @@ function teamChip(t: WrappedTeamStat): string {
   return `<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">${renderMiniJersey(t.teamId, t.teamName)}<span style="font-weight:700;color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.teamName ?? '—')}</span></span>`;
 }
 
+// Platzierungsfarbe: P1 gold, P2 silber, P3 bronze, Top10 cyan, Top25 lila, danach grau.
+function rankColor(rank: number): string {
+  if (rank === 1) return '#fbbf24';
+  if (rank === 2) return '#cbd5e1';
+  if (rank === 3) return '#cd7c3b';
+  if (rank <= 10) return '#22d3ee';
+  if (rank <= 25) return '#a855f7';
+  return '#5f6f8a';
+}
+
 function resultsList(results: WrappedCareerResult[]): string {
   if (!results.length) return '';
   return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;">${results.map((b) => `
     <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;">
       <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
       <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.raceName)}</span>
-      <span style="color:#5f6f8a;">${esc(b.type)} · P${b.rank}${b.count === 1 ? ' · ' + b.season : ''}</span>
+      <span style="color:#5f6f8a;">${esc(b.type)} · <span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span>${b.count === 1 ? ' · ' + b.season : ''}</span>
     </div>`).join('')}</div>`;
 }
 

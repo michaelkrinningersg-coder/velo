@@ -26,10 +26,19 @@ function columnExists(db: Database.Database, table: string, col: string): boolea
 }
 
 function awardLabel(award: string): string {
-  if (award === 'gc_final') return 'GC';
-  if (award === 'stage_result') return 'Etappe';
-  if (award === 'one_day_result') return 'Eintages';
-  return 'Wertung';
+  switch (award) {
+    case 'gc_final': return 'GC';
+    case 'stage_result': return 'Etappe';
+    case 'one_day_result': return 'Eintages';
+    case 'points_final': return 'Punkte';
+    case 'mountain_final': return 'Berg';
+    case 'youth_final': return 'Nachwuchs';
+    case 'gc_leader_day': return 'GC-Trikot';
+    case 'points_leader_day': return 'Punkte-Trikot';
+    case 'mountain_leader_day': return 'Berg-Trikot';
+    case 'youth_leader_day': return 'Nachwuchs-Trikot';
+    default: return 'Wertung';
+  }
 }
 
 export class WrappedService {
@@ -84,7 +93,9 @@ export class WrappedService {
              spe.points_awarded AS points, spe.rank AS rank, spe.award_type AS award
       FROM season_point_events spe
       JOIN races r ON r.id = spe.race_id
-      WHERE spe.rider_id = ? AND spe.points_awarded > 0 ${seasonClause}
+      WHERE spe.rider_id = ? AND spe.points_awarded > 0
+        AND spe.award_type NOT LIKE '%\\_leader\\_day' ESCAPE '\\'
+        ${seasonClause}
     `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
 
     const groups = new Map<string, WrappedCareerResult & { prestige: number }>();
@@ -221,7 +232,7 @@ export class WrappedService {
         rider, allTimeUciPoints: row.uci,
         allTimeUciRank: allTimeRank.get(row.riderId) ?? null,
         careerWins: this.careerWins(row.riderId),
-        bestResults: this.bestResults(row.riderId),
+        bestResults: this.bestResults(row.riderId, 25),
       });
     }
     return { list, ids };
@@ -247,7 +258,7 @@ export class WrappedService {
       out.push({
         rider, allTimeUciPoints: entry.pts, allTimeUciRank: entry.rank,
         careerWins: this.careerWins(entry.riderId),
-        bestResults: this.bestResults(entry.riderId),
+        bestResults: this.bestResults(entry.riderId, 25),
         newTier,
       });
     }
