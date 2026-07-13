@@ -34,6 +34,15 @@ const RACE_FORM_FREE_STEP = 0.15;
 const BUILD_R_FORM_EXPIRY_DAYS = 56;
 const FREE_R_FORM_EXPIRY_DAYS = 25;
 const PEAK_MIN_SPACING_DAYS = 28;
+// Ein Rennen kommt als Peak nur infrage, wenn der Fahrer im Teilnehmerfeld
+// seines Teams (Fahrer mit diesem Rennen im Programm) nach OVR unter den besten
+// N liegt — regulaer Top 10, bei der Tour de France Top 14.
+const PEAK_QUALIFY_TOP_N = 10;
+const PEAK_QUALIFY_TOP_N_TDF = 14;
+const TOUR_DE_FRANCE_CATEGORY_ID = 1;
+// Fallback, wenn kein Rennen mit ausreichendem Team-Rang gefunden wird: Peaks
+// zufaellig aus den prestigetraechtigsten N Rennen des Fahrers waehlen.
+const PEAK_PRESTIGE_POOL_SIZE = 15;
 const ILLNESS_CHANCE = 0.0025;
 const INJURY_CHANCE = 0.002;
 
@@ -2520,40 +2529,62 @@ function resolveSeasonPeakDates(peakDates: string[], season: number, db?: Databa
   return resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows, db, riderId);
 }
 
-function findHighlightTriplet(races: Array<{ id: number; prestige: number; startDay: number }>, minSpacingDays: number): number[] | null {
-  const n = races.length;
-  if (n < 3) return null;
+type PeakRaceCandidate = { id: number; prestige: number; startDay: number; qualifies: boolean };
 
-  // The highest prestige race is at index 0 because races is sorted by prestige desc.
-  // We must anchor the first highlight race at index 0.
-  const firstIndex = 0;
-  let bestPair: [number, number] | null = null;
-  let maxPrestigeSum = -1;
-
-  for (let j = 1; j < n; j++) {
-    if (Math.abs(races[firstIndex].startDay - races[j].startDay) < minSpacingDays) {
-      continue;
-    }
-    for (let k = j + 1; k < n; k++) {
-      if (Math.abs(races[firstIndex].startDay - races[k].startDay) < minSpacingDays) {
-        continue;
-      }
-      if (Math.abs(races[j].startDay - races[k].startDay) < minSpacingDays) {
-        continue;
-      }
-      // Found a valid triplet containing index 0!
-      const prestigeSum = races[firstIndex].prestige + races[j].prestige + races[k].prestige;
-      if (prestigeSum > maxPrestigeSum) {
-        maxPrestigeSum = prestigeSum;
-        bestPair = [j, k];
-      }
+// Greedy: nimmt die Rennen mit dem hoechsten Prestige zuerst und ueberspringt
+// jedes, das den Mindestabstand zu einem bereits gewaehlten Peak verletzt
+// ("das naechst bessere Rennen"). `pool` muss nach Prestige absteigend sortiert
+// sein. `into` erlaubt das Auffuellen einer bereits teilweise gewaehlten Liste.
+function pickPeaksByPrestige(
+  pool: PeakRaceCandidate[],
+  need: number,
+  minSpacingDays: number,
+  into: PeakRaceCandidate[] = [],
+): PeakRaceCandidate[] {
+  const chosen = [...into];
+  for (const race of pool) {
+    if (chosen.length >= need) break;
+    if (chosen.some((c) => c.id === race.id)) continue;
+    if (chosen.every((c) => Math.abs(c.startDay - race.startDay) >= minSpacingDays)) {
+      chosen.push(race);
     }
   }
+  return chosen;
+}
 
-  if (bestPair !== null) {
-    return [firstIndex, bestPair[0], bestPair[1]];
+// Zufaellig: fuellt die Peak-Liste aus dem Pool auf, solange der Mindestabstand
+// eingehalten wird. Wird fuer die Fallbacks (Top-15-Prestige bzw. alle Rennen)
+// genutzt.
+function pickPeaksRandomly(
+  pool: PeakRaceCandidate[],
+  need: number,
+  minSpacingDays: number,
+  into: PeakRaceCandidate[] = [],
+): PeakRaceCandidate[] {
+  const chosen = [...into];
+  while (chosen.length < need) {
+    const candidates = pool.filter(
+      (race) => !chosen.some((c) => c.id === race.id)
+        && chosen.every((c) => Math.abs(c.startDay - race.startDay) >= minSpacingDays),
+    );
+    if (candidates.length === 0) break;
+    chosen.push(candidates[Math.floor(Math.random() * candidates.length)]);
   }
-  return null;
+  return chosen;
+}
+
+// Verschiebt jeden Peak um ±14 Tage (wie bisher) und stellt anschliessend den
+// Mindestabstand zwischen den Peaks sicher.
+function finalizePeakDates(picked: PeakRaceCandidate[]): string[] {
+  const days = picked
+    .map((race) => race.startDay + (Math.floor(Math.random() * 29) - 14))
+    .sort((a, b) => a - b);
+  for (let i = 1; i < days.length; i += 1) {
+    if (days[i] - days[i - 1] < PEAK_MIN_SPACING_DAYS) {
+      days[i] = days[i - 1] + PEAK_MIN_SPACING_DAYS;
+    }
+  }
+  return days.map(dayNumberToIsoDate);
 }
 
 function matchesProgramRaces(db: Database.Database | undefined, riderId: number | undefined, season: number, peakDates: string[]): boolean {
@@ -2619,13 +2650,34 @@ function generateHighlightBasedPeakDates(
     return null;
   }
   try {
+    // Je Programmrennen: Prestige, Kategorie und der OVR-Rang des Fahrers im
+    // Teilnehmerfeld seines Teams (= Teamkollegen mit demselben Rennen im
+    // Programm). teammates_stronger = Anzahl staerkerer Teamkollegen; Rang =
+    // teammates_stronger + 1.
     const rows = db.prepare(`
-      SELECT r.id, r.name, r.start_date, r.end_date, r.is_stage_race, r.prestige
+      SELECT r.id, r.start_date, r.end_date, r.is_stage_race, r.prestige, r.category_id,
+        (
+          SELECT COUNT(*)
+          FROM rider_season_programs rsp2
+          JOIN race_program_races rpr2 ON rpr2.program_id = rsp2.program_id AND rpr2.race_id = r.id
+          JOIN riders ri2 ON ri2.id = rsp2.rider_id
+          JOIN sta_country c2 ON c2.id = ri2.country_id
+          WHERE rsp2.season = ?
+            AND me.active_team_id IS NOT NULL
+            AND ri2.active_team_id = me.active_team_id
+            AND ri2.is_retired = 0
+            AND ri2.overall_rating > me.overall_rating
+            AND (
+              rpr2.allowed_program_group_ids IS NULL
+              OR rpr2.allowed_program_group_ids = ''
+              OR ('|' || rpr2.allowed_program_group_ids || '|') LIKE ('%|' || c2.program_group_id || '|%')
+            )
+        ) AS teammates_stronger
       FROM rider_season_programs rsp
       JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
       JOIN races r ON r.id = rpr.race_id
-      JOIN riders ON riders.id = rsp.rider_id
-      JOIN sta_country ON sta_country.id = riders.country_id
+      JOIN riders me ON me.id = rsp.rider_id
+      JOIN sta_country ON sta_country.id = me.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
         AND substr(r.start_date, 1, 4) = ?
         AND (
@@ -2633,48 +2685,58 @@ function generateHighlightBasedPeakDates(
           OR rpr.allowed_program_group_ids = ''
           OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
         )
-    `).all(riderId, season, String(season)) as Array<{ id: number; name: string; start_date: string; end_date: string; is_stage_race: number; prestige: number }>;
+    `).all(season, riderId, season, String(season)) as Array<{
+      id: number; start_date: string; end_date: string; is_stage_race: number;
+      prestige: number; category_id: number; teammates_stronger: number;
+    }>;
 
-    if (rows.length >= 3) {
-      const races = rows
-        .map(row => {
-          let startDay = isoDateToDayNumber(row.start_date);
-          if (row.is_stage_race === 1 && row.end_date) {
-            const endDay = isoDateToDayNumber(row.end_date);
-            if (!isNaN(endDay)) {
-              startDay = Math.floor((startDay + endDay) / 2);
-            }
+    if (rows.length < 3) {
+      return null;
+    }
+
+    const races: PeakRaceCandidate[] = rows
+      .map((row) => {
+        let startDay = isoDateToDayNumber(row.start_date);
+        if (row.is_stage_race === 1 && row.end_date) {
+          const endDay = isoDateToDayNumber(row.end_date);
+          if (!isNaN(endDay)) {
+            startDay = Math.floor((startDay + endDay) / 2);
           }
-          return {
-            id: row.id,
-            name: row.name,
-            prestige: row.prestige,
-            startDay
-          };
-        })
-        .filter(r => !isNaN(r.startDay));
-
-      races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
-
-      let chosenIndices: number[] | null = null;
-      const thresholds = [70, 56, 42, 28]; // 10, 8, 6, 4 weeks
-      for (const spacing of thresholds) {
-        chosenIndices = findHighlightTriplet(races, spacing);
-        if (chosenIndices !== null) {
-          break;
         }
-      }
+        const topN = row.category_id === TOUR_DE_FRANCE_CATEGORY_ID
+          ? PEAK_QUALIFY_TOP_N_TDF
+          : PEAK_QUALIFY_TOP_N;
+        return {
+          id: row.id,
+          prestige: row.prestige,
+          startDay,
+          qualifies: (row.teammates_stronger + 1) <= topN,
+        };
+      })
+      .filter((r) => !isNaN(r.startDay));
 
-      if (chosenIndices !== null) {
-        const chosenRaces = chosenIndices.map(idx => races[idx]);
-        const peakDays = chosenRaces.map(r => {
-          const shift = Math.floor(Math.random() * 29) - 14; // [-14, 14]
-          return r.startDay + shift;
-        });
-        return peakDays
-          .sort((a, b) => a - b)
-          .map(dayNumberToIsoDate);
-      }
+    // Prestige absteigend (bei Gleichstand frueheres Rennen, dann ID) — so nimmt
+    // die Auswahl immer "das naechst bessere Rennen".
+    races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
+
+    // 1) Primaer: nur Rennen, bei denen der Fahrer im Team-Rang unter der Grenze
+    //    liegt, hoechstes Prestige zuerst, Mindestabstand eingehalten.
+    const qualified = races.filter((r) => r.qualifies);
+    let picked = pickPeaksByPrestige(qualified, 3, PEAK_MIN_SPACING_DAYS);
+
+    // 2) Reichen die qualifizierten Rennen nicht fuer drei Peaks, zufaellig aus
+    //    den Top-15-Prestige-Rennen auffuellen.
+    if (picked.length < 3) {
+      picked = pickPeaksRandomly(races.slice(0, PEAK_PRESTIGE_POOL_SIZE), 3, PEAK_MIN_SPACING_DAYS, picked);
+    }
+
+    // 3) Immer noch keine drei Peaks: auf alle Rennen des Fahrers erweitern.
+    if (picked.length < 3) {
+      picked = pickPeaksRandomly(races, 3, PEAK_MIN_SPACING_DAYS, picked);
+    }
+
+    if (picked.length === 3) {
+      return finalizePeakDates(picked);
     }
   } catch (err) {
     console.error(`Error generating highlight-based peaks for rider ${riderId}:`, err);
