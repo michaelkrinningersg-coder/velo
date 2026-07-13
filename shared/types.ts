@@ -1355,6 +1355,16 @@ export interface RiderStatsPayload {
     season: number;
     raceDays: number;
   }>;
+  /**
+   * Autoritative Saison-Gesamtpunkte je Saison (SUM aller award_types inkl.
+   * Trikot-Tagespunkte) — deckungsgleich mit den Saisonpunkten der Standings.
+   * Die zeilenweise summierten Ergebnispunkte (row.seasonPoints) enthalten die
+   * Trikot-Tagespunkte NICHT, weshalb die Vertrags-Uebersicht diese Werte nutzt.
+   */
+  careerPointsBySeason: Array<{
+    season: number;
+    points: number;
+  }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];
   formHistory?: RiderFormHistoryEntry[];
@@ -1499,6 +1509,10 @@ export interface WrappedCareerResult {
   type: string; // GC / Etappe / Eintages / Wertung
   /** Anzahl identischer Ergebnisse (gleiches Rennen/Typ/Platz/Punkte), gruppiert. */
   count: number;
+  /** Renn-Prestige (fuer die Gruppierung/Sortierung nach Rennen). */
+  prestige: number;
+  /** true = Wertung (GC/Punkte/Berg/Nachwuchs), false = Etappe/Eintagesergebnis. */
+  isClassification: boolean;
 }
 
 export interface WrappedRetiree {
@@ -1546,6 +1560,24 @@ export interface WrappedLegend {
   age: number | null;
 }
 
+// Fahrer, der in dieser Saison aus den Top 25 der All-Time-UCI-Wertung
+// herausgefallen ist (bis zur Vorsaison in den Top 25, jetzt dahinter).
+export interface WrappedFallenLegend {
+  rider: PalmaresRiderRef;
+  /** All-Time-Rang bis zur Vorsaison (<= 25). */
+  previousRank: number;
+  /** Aktueller All-Time-Rang (> 25) bzw. null, wenn nicht mehr gewertet. */
+  currentRank: number | null;
+  allTimeUciPoints: number;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+  // "Karriere in Zahlen" (wie bei den Retirees).
+  careerFromSeason: number | null;
+  careerToSeason: number | null;
+  grandTourWins: number;
+  monumentWins: number;
+}
+
 export interface SeasonWrappedPayload {
   season: number;
   raceWinners: RaceWinnerEntry[];
@@ -1556,6 +1588,8 @@ export interface SeasonWrappedPayload {
   bestNewcomers: WrappedNewcomer[];
   retirees: WrappedRetiree[];
   legends: WrappedLegend[];
+  /** Fahrer, die diese Saison aus den Top 25 All-Time herausgefallen sind. */
+  fallenLegends: WrappedFallenLegend[];
   surprise: WrappedSurprise;
   records: WrappedRecords;
 }

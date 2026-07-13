@@ -424,6 +424,7 @@ export class RiderRepository {
     const hallOfFame = this.buildHallOfFameStats(careerWins, rider.id);
     const allTime = new ResultRepository(this.db).getAllTimePointsAndRank(rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
+    const careerPointsBySeason = this.getCareerPointsBySeason(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
     const pointsByRaceFormat = emptyRiderStatsPointsByRaceFormat();
@@ -810,6 +811,7 @@ export class RiderRepository {
       pointsByTerrain,
       pointsByRaceFormat,
       careerRaceDaysBySeason,
+      careerPointsBySeason,
       seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
       peakDates: tableExists(this.db, 'rider_daily_state') 
         ? parsePeakDates((this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id) as { peak_dates_json: string } | undefined)?.peak_dates_json)
@@ -1216,6 +1218,7 @@ export class RiderRepository {
       pointsByTerrain: emptyRiderStatsPointsByTerrain(),
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
+      careerPointsBySeason: this.getCareerPointsBySeason(rider.id),
       seasons: [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory: [],
@@ -2530,6 +2533,24 @@ export class RiderRepository {
       season: Number(r.season),
       raceDays: Number(r.raceDays ?? 0)
     }));
+  }
+
+  // Autoritative Saison-Gesamtpunkte je Saison (SUM ueber ALLE award_types,
+  // inkl. Trikot-Tagespunkte). Deckungsgleich mit den Saisonpunkten der
+  // Standings; die zeilenweise summierten Ergebnispunkte lassen die
+  // Trikot-Tagespunkte weg und weichen daher ab.
+  private getCareerPointsBySeason(riderId: number): Array<{ season: number; points: number }> {
+    if (!tableExists(this.db, 'season_point_events')) {
+      return [];
+    }
+    const rows = this.db.prepare(`
+      SELECT season, SUM(points_awarded) AS points
+      FROM season_point_events
+      WHERE rider_id = ?
+      GROUP BY season
+      ORDER BY season DESC
+    `).all(riderId) as any[];
+    return rows.map((r) => ({ season: Number(r.season), points: Number(r.points ?? 0) }));
   }
 
 

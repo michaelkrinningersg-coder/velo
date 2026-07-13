@@ -4,6 +4,7 @@ import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type {
   SeasonWrappedPayload, PalmaresRiderRef, RaceWinnerEntry, WrappedCareerResult,
   WrappedWinsEntry, WrappedTeamStat, WrappedNewcomer, WrappedRetiree, WrappedLegend,
+  WrappedFallenLegend,
 } from '../../../shared/types';
 
 // Saison-Rückblick ("Wrapped") als Vollbild-Overlay, gezeigt beim Jahreswechsel
@@ -117,8 +118,36 @@ function resultsList(results: WrappedCareerResult[]): string {
     </div>`).join('')}</div>`;
 }
 
+// Ergebnisliste nach RENNEN gruppiert (Rennen nach Prestige absteigend, innerhalb
+// eines Rennens zuerst die Wertungen, dann die Etappen/Eintagesergebnisse — die
+// Reihenfolge liefert das Backend). Ein Rennen-Kopf je Gruppe, darunter die
+// Ergebniszeilen ohne wiederholten Rennnamen. Fuer Legenden/Retirees/
+// Herausgefallene (bis zu 100 Ergebnisse).
+function groupedResultsList(results: WrappedCareerResult[]): string {
+  if (!results.length) return '';
+  const groups: Array<{ raceName: string; rows: WrappedCareerResult[] }> = [];
+  for (const r of results) {
+    const last = groups[groups.length - 1];
+    if (last && last.raceName === r.raceName) last.rows.push(r);
+    else groups.push({ raceName: r.raceName, rows: [r] });
+  }
+  const resultRow = (b: WrappedCareerResult): string => `
+    <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;padding-left:10px;">
+      <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
+      <span style="flex:1;color:${b.isClassification ? '#e9d5ff' : '#cbd5e1'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.type)}</span>
+      <span style="color:#5f6f8a;">P<span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">${b.rank}</span></span>
+    </div>`;
+  return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">${groups.map((g) => `
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <div style="${MONO};font-size:10px;font-weight:800;letter-spacing:.04em;color:#cbd5e1;border-left:2px solid #22d3ee;padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(g.raceName)}</div>
+      ${g.rows.map(resultRow).join('')}
+    </div>`).join('')}</div>`;
+}
+
 // Fahrer-Zeile mit verschachtelter Ergebnisliste, als Tabellenzeile einer Sektion.
-function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[], subLine = ''): string {
+// grouped = true rendert die Ergebnisse nach Rennen gruppiert (Legenden/Retirees/
+// Herausgefallene mit bis zu 100 Ergebnissen); sonst flach (Newcomer, Top 10).
+function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, results: WrappedCareerResult[], subLine = '', grouped = false): string {
   return `<div style="padding:12px 14px;border-top:1px solid #14203a;">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       ${badge}
@@ -126,7 +155,7 @@ function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, re
       <span style="${MONO};font-size:11px;color:#8b9ab4;">${statsLine}</span>
     </div>
     ${subLine ? `<div style="${MONO};font-size:10px;color:#6a7a95;margin-top:5px;">${subLine}</div>` : ''}
-    ${resultsList(results)}
+    ${grouped ? groupedResultsList(results) : resultsList(results)}
   </div>`;
 }
 
@@ -188,6 +217,8 @@ function legendsSection(list: WrappedLegend[]): string {
     l.rider,
     `${l.age != null ? l.age + ' J · ' : ''}#${l.allTimeUciRank} All-Time-UCI · ${l.careerWins} Karrieresiege · ${l.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
     l.bestResults,
+    '',
+    true,
   )).join(''));
 }
 
@@ -198,7 +229,30 @@ function retireesSection(list: WrappedRetiree[]): string {
     `${r.allTimeUciRank != null ? '#' + r.allTimeUciRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
     r.bestResults,
     careerLine(r),
+    true,
   )).join(''));
+}
+
+// Herausgefallene Legenden: bis zur Vorsaison in den Top 25 All-Time, jetzt
+// dahinter. Eigene Seite mit denselben Details wie Retirees/Legenden.
+function fallenLegendsSection(list: WrappedFallenLegend[]): string {
+  if (list.length === 0) return '';
+  return wrappedSection('#f43f5e', 'Aus den Top 25 gefallen', 'nicht mehr in der All-Time-UCI-Elite', list.map((r) => detailRow(
+    `<span style="${MONO};font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fda4af;border:1px solid rgba(244,63,94,.5);background:rgba(244,63,94,.14);border-radius:6px;padding:3px 8px;">#${r.previousRank} → ${r.currentRank != null ? '#' + r.currentRank : 'raus'}</span>`,
+    r.rider,
+    `${r.currentRank != null ? '#' + r.currentRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
+    r.bestResults,
+    fallenCareerLine(r),
+    true,
+  )).join(''));
+}
+
+function fallenCareerLine(r: WrappedFallenLegend): string {
+  const parts: string[] = [];
+  if (r.careerFromSeason != null) parts.push(`Karriere ${r.careerFromSeason}–${r.careerToSeason}`);
+  parts.push(`${r.grandTourWins} GT-Siege`);
+  parts.push(`${r.monumentWins} Monument-Siege`);
+  return '▪ ' + parts.join(' · ');
 }
 
 function overviewGrid(...sections: string[]): string {
@@ -230,6 +284,7 @@ function buildSlides(w: SeasonWrappedPayload): WrappedSlide[] {
   push(recordsSection(w.records));
   push(newcomersSection(w.bestNewcomers));
   push(legendsSection(w.legends));
+  push(fallenLegendsSection(w.fallenLegends));
   push(retireesSection(w.retirees));
   return slides;
 }

@@ -2679,19 +2679,22 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
 
   const currentSeason = state.gameState?.season ?? 2026;
 
-  // Per-Saison-Aggregation aus dem Payload (keine Datenfeld-Aenderung noetig)
+  // Per-Saison-Aggregation aus dem Payload. Siege werden zeilenweise gezaehlt;
+  // die Saisonpunkte kommen aus der autoritativen Gesamtsumme (careerPointsBySeason,
+  // inkl. Trikot-Tagespunkte), damit sie mit den Saisonpunkten der Standings
+  // uebereinstimmen — die zeilenweise summierten Ergebnispunkte liessen die
+  // Trikot-Tagespunkte weg und wichen daher ab.
   const raceDaysBySeason = new Map<number, number>((payload?.careerRaceDaysBySeason ?? []).map((r) => [r.season, r.raceDays]));
+  const pointsBySeason = new Map<number, number>((payload?.careerPointsBySeason ?? []).map((r) => [r.season, r.points]));
   const seasonAgg = new Map<number, { wins: number; points: number }>();
   for (const s of payload?.seasons ?? []) {
     let wins = 0;
-    let points = 0;
     for (const block of s.raceBlocks ?? []) {
       for (const row of block.rows ?? []) {
-        points += row.seasonPoints ?? 0;
         if ((row.rowType === 'stage_result' && row.resultRank === 1) || (row.rowType === 'gc_final' && row.resultRank === 1)) wins++;
       }
     }
-    seasonAgg.set(s.season, { wins, points });
+    seasonAgg.set(s.season, { wins, points: pointsBySeason.get(s.season) ?? 0 });
   }
 
   const yearlySteps: Array<{

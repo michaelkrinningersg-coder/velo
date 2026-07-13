@@ -8,6 +8,7 @@ import type {
   WrappedNewcomer,
   WrappedRetiree,
   WrappedLegend,
+  WrappedFallenLegend,
   WrappedCareerResult,
   WrappedSurprise,
   WrappedRecords,
@@ -86,9 +87,14 @@ export class WrappedService {
   }
 
   // Beste Ergebnisse eines Fahrers, IDENTISCHE Ergebnisse gruppiert
-  // (gleiches Rennen + Typ + Platz + Punkte -> z. B. "3x Etappe"). Sortiert
-  // nach Punkten absteigend, bei Gleichstand nach Rennprestige absteigend.
-  private bestResults(riderId: number, limit = 10, season?: number): WrappedCareerResult[] {
+  // (gleiches Rennen + Typ + Platz + Punkte -> z. B. "3x Etappe").
+  //
+  // groupByRace = false (Standard, Newcomer): flach nach Punkten absteigend.
+  // groupByRace = true (Legenden/Retirees/Herausgefallene): nach RENNEN
+  // gruppiert — Rennen nach Prestige absteigend, innerhalb eines Rennens zuerst
+  // die Wertungen (GC/Punkte/Berg/Nachwuchs) nach Punkten absteigend, danach die
+  // Etappen- bzw. Eintagesergebnisse nach Punkten absteigend.
+  private bestResults(riderId: number, limit = 10, season?: number, groupByRace = false): WrappedCareerResult[] {
     const seasonClause = season != null ? 'AND spe.season = ?' : '';
     const params: any[] = season != null ? [riderId, season] : [riderId];
     const rows = this.db.prepare(`
@@ -101,7 +107,7 @@ export class WrappedService {
         ${seasonClause}
     `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
 
-    const groups = new Map<string, WrappedCareerResult & { prestige: number }>();
+    const groups = new Map<string, WrappedCareerResult>();
     for (const row of rows) {
       const type = awardLabel(row.award);
       const key = `${row.raceName}|${type}|${row.rank}|${row.points}`;
@@ -113,13 +119,22 @@ export class WrappedService {
         groups.set(key, {
           raceName: row.raceName, season: row.season, points: row.points,
           rank: row.rank, type, count: 1, prestige: row.prestige ?? 0,
+          isClassification: row.award.endsWith('_final'),
         });
       }
     }
-    return [...groups.values()]
-      .sort((a, b) => b.points - a.points || b.prestige - a.prestige || b.count - a.count)
-      .slice(0, limit)
-      .map(({ prestige: _p, ...rest }) => rest);
+    const list = [...groups.values()];
+    if (groupByRace) {
+      list.sort((a, b) =>
+        b.prestige - a.prestige
+        || a.raceName.localeCompare(b.raceName)
+        || (a.isClassification === b.isClassification ? 0 : a.isClassification ? -1 : 1)
+        || b.points - a.points
+        || b.count - a.count);
+    } else {
+      list.sort((a, b) => b.points - a.points || b.prestige - a.prestige || b.count - a.count);
+    }
+    return list.slice(0, limit);
   }
 
   private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
@@ -236,7 +251,7 @@ export class WrappedService {
         rider, allTimeUciPoints: row.uci,
         allTimeUciRank: allTimeRank.get(row.riderId) ?? null,
         careerWins: this.careerWins(row.riderId),
-        bestResults: this.bestResults(row.riderId, 25),
+        bestResults: this.bestResults(row.riderId, 100, undefined, true),
         careerFromSeason: cn.from, careerToSeason: cn.to,
         grandTourWins: cn.gt, monumentWins: cn.monument,
       });
@@ -244,14 +259,17 @@ export class WrappedService {
     return { list, ids };
   }
 
-  // Fahrer, die in dieser Saison neu in eine All-Time-UCI-Stufe (Top 20/10/3/1)
+  // Fahrer, die in dieser Saison neu in eine All-Time-UCI-Stufe (Top 25/10/3/1)
   // aufgestiegen sind — verglichen mit dem Stand bis zum Vorjahr.
-  private legends(season: number, retireeIds: Set<number>): WrappedLegend[] {
-    const TIERS = [1, 3, 10, 20];
-    const now = this.cumulativeRanking(season);
-    const prev = this.cumulativeRanking(season - 1);
+  private legends(
+    season: number,
+    retireeIds: Set<number>,
+    now: ReturnType<WrappedService['cumulativeRanking']>,
+    prev: ReturnType<WrappedService['cumulativeRanking']>,
+  ): WrappedLegend[] {
+    const TIERS = [1, 3, 10, 25];
     const out: WrappedLegend[] = [];
-    for (const entry of now.ordered.slice(0, 20)) {
+    for (const entry of now.ordered.slice(0, 25)) {
       if (retireeIds.has(entry.riderId)) continue; // Retirees stehen bereits eigen
       const rankPrev = prev.rankById.get(entry.riderId) ?? Number.POSITIVE_INFINITY;
       let newTier: number | null = null;
@@ -265,12 +283,46 @@ export class WrappedService {
       out.push({
         rider, allTimeUciPoints: entry.pts, allTimeUciRank: entry.rank,
         careerWins: this.careerWins(entry.riderId),
-        bestResults: this.bestResults(entry.riderId, 25),
+        bestResults: this.bestResults(entry.riderId, 100, undefined, true),
         newTier,
         age: birth?.birthYear ? season - birth.birthYear : null,
       });
     }
     out.sort((a, b) => a.newTier - b.newTier || (a.allTimeUciRank ?? 0) - (b.allTimeUciRank ?? 0));
+    return out;
+  }
+
+  // Fahrer, die in dieser Saison AUS den Top 25 der All-Time-UCI-Wertung
+  // herausgefallen sind (bis zur Vorsaison in den Top 25, jetzt dahinter).
+  // Eigene Detail-Ansicht wie bei Retirees/Legenden.
+  private fallenLegends(
+    season: number,
+    retireeIds: Set<number>,
+    now: ReturnType<WrappedService['cumulativeRanking']>,
+    prev: ReturnType<WrappedService['cumulativeRanking']>,
+  ): WrappedFallenLegend[] {
+    const CUTOFF = 25;
+    const nowPtsById = new Map(now.ordered.map((r) => [r.riderId, r.pts]));
+    const out: WrappedFallenLegend[] = [];
+    for (const entry of prev.ordered.slice(0, CUTOFF)) {
+      if (retireeIds.has(entry.riderId)) continue; // Retirees stehen bereits eigen
+      const nowRank = now.rankById.get(entry.riderId) ?? Number.POSITIVE_INFINITY;
+      if (nowRank <= CUTOFF) continue; // weiterhin in den Top 25 -> keine Legende im Abstieg
+      const rider = this.riderRef(entry.riderId);
+      if (!rider) continue;
+      const cn = this.careerNumbers(entry.riderId);
+      out.push({
+        rider,
+        previousRank: entry.rank,
+        currentRank: Number.isFinite(nowRank) ? nowRank : null,
+        allTimeUciPoints: nowPtsById.get(entry.riderId) ?? entry.pts,
+        careerWins: this.careerWins(entry.riderId),
+        bestResults: this.bestResults(entry.riderId, 100, undefined, true),
+        careerFromSeason: cn.from, careerToSeason: cn.to,
+        grandTourWins: cn.gt, monumentWins: cn.monument,
+      });
+    }
+    out.sort((a, b) => a.previousRank - b.previousRank);
     return out;
   }
 
@@ -368,7 +420,11 @@ export class WrappedService {
       .slice(0, 3)
       .map((t) => ({ teamId: t.teamId as number, teamName: t.teamName, value: t.points }));
 
-    const allTimeRank = hasEvents ? this.cumulativeRanking(season).rankById : new Map<number, number>();
+    // Kumulative All-Time-Ranglisten (bis Saison bzw. Vorsaison) einmal berechnen
+    // und an Legenden + Herausgefallene weiterreichen.
+    const cumNow = hasEvents ? this.cumulativeRanking(season) : { ordered: [], rankById: new Map<number, number>() };
+    const cumPrev = hasEvents ? this.cumulativeRanking(season - 1) : { ordered: [], rankById: new Map<number, number>() };
+    const allTimeRank = cumNow.rankById;
     const seasonRank = hasEvents ? this.seasonRankMap(season) : new Map<number, number>();
     const { list: retirees, ids: retireeIds } = this.retirees(season, allTimeRank);
     const topRidersByWins = this.topRidersByWins(season);
@@ -382,7 +438,8 @@ export class WrappedService {
       topTeamsByPoints,
       bestNewcomers: this.bestNewcomers(season, seasonRank),
       retirees,
-      legends: hasEvents ? this.legends(season, retireeIds) : [],
+      legends: hasEvents ? this.legends(season, retireeIds, cumNow, cumPrev) : [],
+      fallenLegends: hasEvents ? this.fallenLegends(season, retireeIds, cumNow, cumPrev) : [],
       surprise: hasEvents ? this.surprise(season, raceWinners) : { lowestOvrWinner: null, youngestMonumentWinner: null },
       records: hasEvents ? this.records(season, topRidersByWins, topTeamsByPoints) : { mostWins: null, teamDominance: null, longestStreak: null },
     };
