@@ -1174,6 +1174,26 @@ export interface RiderHallOfFameStats {
   euroJuniorChampionIttTitles: number;
   olympicChampionRoadTitles: number;
   olympicChampionIttTitles: number;
+  // Kontinentale Meistertitel (Karriere-Zaehler) fuer die goldenen Einzelbadges.
+  // AO = Asien-Ozeanien, AM = Amerika, AF = Afrika; je Elite/U23/Junioren.
+  contAoChampionRoadTitles: number;
+  contAoChampionIttTitles: number;
+  contAoU23ChampionRoadTitles: number;
+  contAoU23ChampionIttTitles: number;
+  contAoJuniorChampionRoadTitles: number;
+  contAoJuniorChampionIttTitles: number;
+  contAmChampionRoadTitles: number;
+  contAmChampionIttTitles: number;
+  contAmU23ChampionRoadTitles: number;
+  contAmU23ChampionIttTitles: number;
+  contAmJuniorChampionRoadTitles: number;
+  contAmJuniorChampionIttTitles: number;
+  contAfChampionRoadTitles: number;
+  contAfChampionIttTitles: number;
+  contAfU23ChampionRoadTitles: number;
+  contAfU23ChampionIttTitles: number;
+  contAfJuniorChampionRoadTitles: number;
+  contAfJuniorChampionIttTitles: number;
   gtStageWinsTdf: number;             // Etappensiege Tour de France (All-Time)
   gtStageWinsGiro: number;            // Etappensiege Giro (All-Time)
   gtStageWinsVuelta: number;          // Etappensiege Vuelta (All-Time)

@@ -28,6 +28,9 @@ function sectionTitle(label: string): string {
 const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
   { ids: [10, 11], label: '🌈 Weltmeisterschaft', color: '#ec4899' },
   { ids: [12, 13], label: '⭐ Europameisterschaft', color: '#3b82f6' },
+  { ids: [28, 29], label: '🌏 Asien-Ozeanien-Meisterschaft', color: '#06b6d4' },
+  { ids: [34, 35], label: '🌎 Amerika-Meisterschaft', color: '#ef4444' },
+  { ids: [40, 41], label: '🌍 Afrika-Meisterschaft', color: '#f59e0b' },
   { ids: [24, 25], label: '🥇 Olympische Spiele', color: '#fbbf24' },
   { ids: [1], label: 'Tour de France', color: resolveRaceCategoryBadgeStyle('Tour de France').color },
   { ids: [2], label: 'Grand Tours', color: resolveRaceCategoryBadgeStyle('Grand Tour').color },

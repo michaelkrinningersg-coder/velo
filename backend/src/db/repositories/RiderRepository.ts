@@ -1946,6 +1946,15 @@ export class RiderRepository {
     worldJuniorChampionRoadTitles: number; worldJuniorChampionIttTitles: number;
     euroJuniorChampionRoadTitles: number; euroJuniorChampionIttTitles: number;
     olympicChampionRoadTitles: number; olympicChampionIttTitles: number;
+    contAoChampionRoadTitles: number; contAoChampionIttTitles: number;
+    contAoU23ChampionRoadTitles: number; contAoU23ChampionIttTitles: number;
+    contAoJuniorChampionRoadTitles: number; contAoJuniorChampionIttTitles: number;
+    contAmChampionRoadTitles: number; contAmChampionIttTitles: number;
+    contAmU23ChampionRoadTitles: number; contAmU23ChampionIttTitles: number;
+    contAmJuniorChampionRoadTitles: number; contAmJuniorChampionIttTitles: number;
+    contAfChampionRoadTitles: number; contAfChampionIttTitles: number;
+    contAfU23ChampionRoadTitles: number; contAfU23ChampionIttTitles: number;
+    contAfJuniorChampionRoadTitles: number; contAfJuniorChampionIttTitles: number;
   } {
     const out = {
       defects: 0, doomedEscapes: 0, supermalusDays: 0, bestSeasonRaceDays: 0, veteranWins: 0, awayWins: 0,
@@ -1960,6 +1969,12 @@ export class RiderRepository {
       worldU23ChampionRoadTitles: 0, worldU23ChampionIttTitles: 0, euroU23ChampionRoadTitles: 0, euroU23ChampionIttTitles: 0,
       worldJuniorChampionRoadTitles: 0, worldJuniorChampionIttTitles: 0, euroJuniorChampionRoadTitles: 0, euroJuniorChampionIttTitles: 0,
       olympicChampionRoadTitles: 0, olympicChampionIttTitles: 0,
+      contAoChampionRoadTitles: 0, contAoChampionIttTitles: 0, contAoU23ChampionRoadTitles: 0, contAoU23ChampionIttTitles: 0,
+      contAoJuniorChampionRoadTitles: 0, contAoJuniorChampionIttTitles: 0,
+      contAmChampionRoadTitles: 0, contAmChampionIttTitles: 0, contAmU23ChampionRoadTitles: 0, contAmU23ChampionIttTitles: 0,
+      contAmJuniorChampionRoadTitles: 0, contAmJuniorChampionIttTitles: 0,
+      contAfChampionRoadTitles: 0, contAfChampionIttTitles: 0, contAfU23ChampionRoadTitles: 0, contAfU23ChampionIttTitles: 0,
+      contAfJuniorChampionRoadTitles: 0, contAfJuniorChampionIttTitles: 0,
     };
 
     if (tableExists(this.db, 'rider_career_stats')) {
@@ -1972,6 +1987,7 @@ export class RiderRepository {
       const hasChampion = columnExists(this.db, 'rider_career_stats', 'world_champion_road_titles');
       const hasNational = columnExists(this.db, 'rider_career_stats', 'national_champion_road_titles');
       const hasAgeClassTitles = columnExists(this.db, 'rider_career_stats', 'olympic_champion_road_titles');
+      const hasContinental = columnExists(this.db, 'rider_career_stats', 'cont_ao_champion_road_titles');
       const c = this.db.prepare(
         `SELECT defects, breakaway_attempts, successful_breakaways, supermalus_days
          ${hasWaveB ? ', full_moon_podiums, clean_streak_best, grand_tours_finished, multi_jersey_days' : ''}
@@ -1983,6 +1999,7 @@ export class RiderRepository {
          ${hasChampion ? ', world_champion_road_titles, world_champion_itt_titles, euro_champion_road_titles, euro_champion_itt_titles' : ''}
          ${hasNational ? ', national_champion_road_titles, national_champion_itt_titles' : ''}
          ${hasAgeClassTitles ? ', world_u23_champion_road_titles, world_u23_champion_itt_titles, euro_u23_champion_road_titles, euro_u23_champion_itt_titles, world_junior_champion_road_titles, world_junior_champion_itt_titles, euro_junior_champion_road_titles, euro_junior_champion_itt_titles, olympic_champion_road_titles, olympic_champion_itt_titles' : ''}
+         ${hasContinental ? ', cont_ao_champion_road_titles, cont_ao_champion_itt_titles, cont_ao_u23_champion_road_titles, cont_ao_u23_champion_itt_titles, cont_ao_junior_champion_road_titles, cont_ao_junior_champion_itt_titles, cont_am_champion_road_titles, cont_am_champion_itt_titles, cont_am_u23_champion_road_titles, cont_am_u23_champion_itt_titles, cont_am_junior_champion_road_titles, cont_am_junior_champion_itt_titles, cont_af_champion_road_titles, cont_af_champion_itt_titles, cont_af_u23_champion_road_titles, cont_af_u23_champion_itt_titles, cont_af_junior_champion_road_titles, cont_af_junior_champion_itt_titles' : ''}
          FROM rider_career_stats WHERE rider_id = ?`
       ).get(riderId) as any;
       if (c) {
@@ -2028,6 +2045,24 @@ export class RiderRepository {
         out.euroJuniorChampionIttTitles = c.euro_junior_champion_itt_titles ?? 0;
         out.olympicChampionRoadTitles = c.olympic_champion_road_titles ?? 0;
         out.olympicChampionIttTitles = c.olympic_champion_itt_titles ?? 0;
+        out.contAoChampionRoadTitles = c.cont_ao_champion_road_titles ?? 0;
+        out.contAoChampionIttTitles = c.cont_ao_champion_itt_titles ?? 0;
+        out.contAoU23ChampionRoadTitles = c.cont_ao_u23_champion_road_titles ?? 0;
+        out.contAoU23ChampionIttTitles = c.cont_ao_u23_champion_itt_titles ?? 0;
+        out.contAoJuniorChampionRoadTitles = c.cont_ao_junior_champion_road_titles ?? 0;
+        out.contAoJuniorChampionIttTitles = c.cont_ao_junior_champion_itt_titles ?? 0;
+        out.contAmChampionRoadTitles = c.cont_am_champion_road_titles ?? 0;
+        out.contAmChampionIttTitles = c.cont_am_champion_itt_titles ?? 0;
+        out.contAmU23ChampionRoadTitles = c.cont_am_u23_champion_road_titles ?? 0;
+        out.contAmU23ChampionIttTitles = c.cont_am_u23_champion_itt_titles ?? 0;
+        out.contAmJuniorChampionRoadTitles = c.cont_am_junior_champion_road_titles ?? 0;
+        out.contAmJuniorChampionIttTitles = c.cont_am_junior_champion_itt_titles ?? 0;
+        out.contAfChampionRoadTitles = c.cont_af_champion_road_titles ?? 0;
+        out.contAfChampionIttTitles = c.cont_af_champion_itt_titles ?? 0;
+        out.contAfU23ChampionRoadTitles = c.cont_af_u23_champion_road_titles ?? 0;
+        out.contAfU23ChampionIttTitles = c.cont_af_u23_champion_itt_titles ?? 0;
+        out.contAfJuniorChampionRoadTitles = c.cont_af_junior_champion_road_titles ?? 0;
+        out.contAfJuniorChampionIttTitles = c.cont_af_junior_champion_itt_titles ?? 0;
       }
     }
     if (tableExists(this.db, 'rider_season_stats')) {
