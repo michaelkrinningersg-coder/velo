@@ -197,6 +197,22 @@ export class GameStateService {
     const state = this.loadState();
     this.repairMissingRaceProgramRaces();
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
+
+    // Einmalige Peak-Neuausrichtung fuer Altbestaende: aeltere Saves haben durch
+    // den frueheren Peak-Churn (fehlende Programm-Verknuepfungen) fehlplatzierte
+    // Season-Form-Peaks. Nachdem Reparatur + Programme geladen sind, richten wir
+    // die laufende Saison EINMALIG an den Programmrennen aus (danach uebernehmen
+    // Saisonwechsel/Draft die Ausrichtung).
+    const alignFlag = this.db.prepare("SELECT value FROM career_meta WHERE key = 'peakAlignmentFix'").get() as { value: string } | undefined;
+    if (!alignFlag) {
+      try {
+        this.realignAllSeasonFormPeaks(state.season, state.currentDate);
+      } catch (e) {
+        console.error('Einmalige Peak-Neuausrichtung fehlgeschlagen:', e);
+      }
+      this.db.prepare("INSERT OR REPLACE INTO career_meta (key, value) VALUES ('peakAlignmentFix', '1')").run();
+    }
+
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
       this.syncDailyFormHistory(state.currentDate);
@@ -2769,14 +2785,6 @@ function resolveSeasonPeakDatesFromWindows(
   db?: Database.Database,
   riderId?: number,
 ): string[] {
-  const programRanges = programWindows == null
-    ? null
-    : [
-      resolveIsoWeekDayBounds(season, programWindows.peak1Min, programWindows.peak1Max),
-      resolveIsoWeekDayBounds(season, programWindows.peak2Min, programWindows.peak2Max),
-      resolveIsoWeekDayBounds(season, programWindows.peak3Min, programWindows.peak3Max),
-    ];
-
   const normalized = [...new Set(peakDates)]
     .filter((peakDate: any) => peakDate.startsWith(`${season}-`))
     .sort((left: any, right: any) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
@@ -2798,13 +2806,15 @@ function resolveSeasonPeakDatesFromWindows(
     return isoDateToDayNumber(peakDate) - isoDateToDayNumber(previousPeak) >= PEAK_MIN_SPACING_DAYS;
   });
 
-  const matchesRaces = db && riderId != null ? matchesProgramRaces(db, riderId, season, normalized) : (
-    programRanges == null
-      ? true
-      : normalized.every((peakDate: any, index: any) => isWithinDayRange(peakDate, programRanges[index]))
-  );
-
-  if (hasValidSpacing && matchesRaces) {
+  // WICHTIG: Sind bereits 3 gueltig verteilte Peaks der laufenden Saison
+  // gespeichert, werden sie BEHALTEN — auch wenn sie (noch) nicht exakt an
+  // Programmrennen liegen. Frueher wurde hier zusaetzlich matchesProgramRaces
+  // geprueft und bei Fehlschlag jeden Tag neu (zufaellig) gewuerfelt; fehlten
+  // die Programm-Verknuepfungen (alte Saves), driftete das Aufbaufenster
+  // taeglich und die Season-Form baute nie auf. Die Ausrichtung an
+  // Programmrennen passiert jetzt gezielt bei der Neuvergabe (Saisonwechsel,
+  // Draft-Abschluss, Programm-Reparatur), nicht mehr im Tageslauf.
+  if (hasValidSpacing) {
     return normalized;
   }
 
