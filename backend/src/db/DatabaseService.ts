@@ -5,6 +5,7 @@ import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
 import { bootstrap, readStageScoreSegments } from '../bootstrapper';
+import { resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
@@ -179,11 +180,74 @@ export class DatabaseService {
       db.prepare("ALTER TABLE races ADD COLUMN required_specs TEXT DEFAULT NULL;").run();
     }
 
+    // Migration: Add per-race bonus_system_id override to races (Cat.5 WT tier).
+    if (!columnExists(db, 'races', 'bonus_system_id')) {
+      console.log("Adding 'bonus_system_id' column to 'races' table...");
+      db.prepare("ALTER TABLE races ADD COLUMN bonus_system_id INTEGER REFERENCES race_categories_bonus(id) DEFAULT NULL;").run();
+    }
+
     // Force recreation of race_entries view with new schema
     db.prepare("DROP VIEW IF EXISTS race_entries;").run();
 
     const schema = fs.readFileSync(this.schemaPath, 'utf8');
     db.exec(schema);
+
+    // Reference-data refresh: bring UCI point systems + per-race Cat.5 overrides
+    // up to date in existing savegames (idempotent, reads the canonical CSVs).
+    this.syncRaceBonusReferenceData(db);
+  }
+
+  // Re-seeds race_categories_bonus (WT systems 1-9 + Cat.5 systems 26/27) from
+  // the canonical CSV and backfills the per-race bonus overrides, so both fresh
+  // worlds and existing savegames award the correct UCI points.
+  private syncRaceBonusReferenceData(db: Database.Database): void {
+    if (!tableExists(db, 'race_categories_bonus') || !tableExists(db, 'races')) {
+      return;
+    }
+    // Only refresh already-seeded reference data (real world_data / savegames).
+    // A fresh/empty DB (e.g. in-memory test fixtures that seed their own rows)
+    // must not be pre-populated here.
+    const seeded = db.prepare('SELECT COUNT(*) AS n FROM race_categories_bonus').get() as { n: number };
+    if (!seeded || seeded.n === 0) {
+      return;
+    }
+    try {
+      const csvDir = resolveDataCsvDir();
+      const parseCsv = (file: string): Record<string, string>[] => {
+        const raw = fs.readFileSync(path.join(csvDir, file), 'utf8').trim();
+        const lines = raw.split(/\r?\n/);
+        const header = lines[0].split(',');
+        return lines.slice(1).map((line) => {
+          const cells = line.split(',');
+          const row: Record<string, string> = {};
+          header.forEach((h, i) => { row[h] = (cells[i] ?? '').trim(); });
+          return row;
+        });
+      };
+
+      const bonusRows = parseCsv('race_categories_bonus.csv');
+      const cols = Object.keys(bonusRows[0]);
+      const upsert = db.prepare(
+        `INSERT OR REPLACE INTO race_categories_bonus (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+      );
+      const upsertMany = db.transaction((rows: Record<string, string>[]) => {
+        for (const r of rows) upsert.run(cols.map((c) => r[c]));
+      });
+      upsertMany(bonusRows);
+
+      // Backfill per-race overrides by race NAME (only where still unset) so
+      // that season-duplicated races (which keep the name but get new ids) are
+      // covered across all seasons as well.
+      const setOverride = db.prepare('UPDATE races SET bonus_system_id = ? WHERE name = ? AND bonus_system_id IS NULL');
+      const backfill = db.transaction((rows: Record<string, string>[]) => {
+        for (const r of rows) {
+          if (r['bonus_system_id']) setOverride.run(Number(r['bonus_system_id']), r['name']);
+        }
+      });
+      backfill(parseCsv('races.csv'));
+    } catch (err) {
+      console.error('syncRaceBonusReferenceData fehlgeschlagen:', err);
+    }
   }
 
   private ensureReferenceData(db: Database.Database): void {

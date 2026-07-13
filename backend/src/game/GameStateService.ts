@@ -501,10 +501,11 @@ export class GameStateService {
       SELECT * FROM races WHERE start_date LIKE ?
     `).all(`${oldYearStr}-%`) as any[];
 
+    const hasBonusOverride = columnExists(this.db, 'races', 'bonus_system_id');
     const insertRace = this.db.prepare(`
       INSERT INTO races (
-        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs${hasBonusOverride ? ', bonus_system_id' : ''}
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasBonusOverride ? ', ?' : ''})
     `);
 
     const raceMap = new Map<number, number>();
@@ -512,7 +513,7 @@ export class GameStateService {
     for (const r of oldRaces) {
       const newStartDate = r.start_date.replace(oldYearStr, newYearStr);
       const newEndDate = r.end_date.replace(oldYearStr, newYearStr);
-      const res = insertRace.run(
+      const args: any[] = [
         r.name,
         r.country_id,
         r.category_id,
@@ -522,8 +523,10 @@ export class GameStateService {
         newEndDate,
         r.prestige,
         r.preferred_nationality_group || null,
-        r.required_specs || null
-      );
+        r.required_specs || null,
+      ];
+      if (hasBonusOverride) args.push(r.bonus_system_id ?? null);
+      const res = insertRace.run(...args);
       raceMap.set(r.id, res.lastInsertRowid as number);
     }
 

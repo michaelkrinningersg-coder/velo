@@ -713,12 +713,13 @@ function seedRaces(db: Database.Database): void {
   const rows = readCsv('races.csv');
   const insert = db.prepare(`
     INSERT INTO races (
-      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs, bonus_system_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `races.csv Zeile ${index + 2}`;
+    const bonusOverride = row['bonus_system_id']?.trim();
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
@@ -731,6 +732,7 @@ function seedRaces(db: Database.Database): void {
       int(req(row, 'prestige', ctx), ctx),
       row['preferred_nationality_group']?.trim() || null,
       row['required_specs']?.trim() || null,
+      bonusOverride ? int(bonusOverride, ctx) : null,
     );
   }
 

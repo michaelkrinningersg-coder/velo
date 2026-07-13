@@ -99,7 +99,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ROAD',
     categoryName: 'Weltmeisterschaft - Strasse',
     bonusName: 'Weltmeisterschaft Strasse Punkte',
-    pointsOneDay: '900|715|600|490|410|340|265|225|190|150|130|105|90|75|60|50|45|45|45|45|45|30|30|30|30|30|30|30|30|30|30|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|10|10|10|10|10|5|5|5|5|5',
+    pointsOneDay:
+      '900|700|575|475|400|330|275|225|185|150|125|105|90|78|68|58|50|42|35|28|24|20|17|14|12|10|9|8|7|6|5|5|4|4|3|3|2|2|1|1',
   },
   {
     categoryId: 11,
@@ -110,7 +111,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ITT',
     categoryName: 'Weltmeisterschaft - Einzelzeitfahren',
     bonusName: 'Weltmeisterschaft ITT Punkte',
-    pointsOneDay: '455|325|260|195|165|130|110|90|80|65|55|40|30|25|20|15|10|10|5|5|3|3|3|3|3',
+    pointsOneDay:
+      '450|350|290|240|200|165|140|115|95|75|62|52|45|39|34|29|25|21|18|14',
   },
   {
     categoryId: 12,
@@ -121,7 +123,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ROAD',
     categoryName: 'Europameisterschaft - Strasse',
     bonusName: 'Europameisterschaft Strasse Punkte',
-    pointsOneDay: '250|200|150|125|100|90|80|70|60|50|40|35|30|25|20|15|10|5|5|5|5|5|5|5|5|5|5|5|5|5|3|3|3|3|3|1|1|1|1|1',
+    pointsOneDay:
+      '375|290|240|200|165|135|110|90|75|60|50|42|36|31|27|23|20|17|14|11',
   },
   {
     categoryId: 13,
@@ -132,7 +135,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ITT',
     categoryName: 'Europameisterschaft - Einzelzeitfahren',
     bonusName: 'Europameisterschaft ITT Punkte',
-    pointsOneDay: '70|55|40|30|25|20|15|10|5|3',
+    pointsOneDay:
+      '188|145|120|100|82|68|55|45|37|30|25|21|18|15|13|11|10|8|7|5',
   },
   // --- U23 -----------------------------------------------------------------
   {
@@ -144,7 +148,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ROAD',
     categoryName: 'Weltmeisterschaft U23 - Strasse',
     bonusName: 'Weltmeisterschaft U23 Strasse Punkte',
-    pointsOneDay: '200|150|125|100|85|70|60|50|40|35|30|25|20|15|10|5|5|5|5|5|5|5|5|5|5|5|5|5|5|5|3|3|3|3|3|3|3|3|3|3',
+    pointsOneDay:
+      '300|235|195|160|132|110|92|76|62|50|41|34|29|25|21|18|15|13|10|8',
   },
   {
     categoryId: 17,
@@ -155,7 +160,7 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ITT',
     categoryName: 'Weltmeisterschaft U23 - Einzelzeitfahren',
     bonusName: 'Weltmeisterschaft U23 ITT Punkte',
-    pointsOneDay: '125|85|70|60|50|40|35|30|25|20|15|10|5|5|5|3|3|3|3|3',
+    pointsOneDay: '150|117|97|80|66|55|46|38|31|25|21|17|15|13|11|9|8|7|6|5',
   },
   {
     categoryId: 20,
@@ -166,7 +171,7 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ROAD',
     categoryName: 'Europameisterschaft U23 - Strasse',
     bonusName: 'Europameisterschaft U23 Strasse Punkte',
-    pointsOneDay: '125|85|70|60|50|40|35|30|25|20|15|10|5|5|5|3|3|3|3|3',
+    pointsOneDay: '200|156|129|107|88|72|59|48|40|32|27|22|19|16|14|12|10|9|7|6',
   },
   {
     categoryId: 21,
@@ -177,7 +182,7 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ITT',
     categoryName: 'Europameisterschaft U23 - Einzelzeitfahren',
     bonusName: 'Europameisterschaft U23 ITT Punkte',
-    pointsOneDay: '50|30|20|15|10|5|3|3|1|1',
+    pointsOneDay: '100|78|64|53|44|36|29|24|20|16|13|11|9|8|7|6|5|4|3|2',
   },
   // --- Junioren ------------------------------------------------------------
   {
@@ -234,7 +239,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ROAD',
     categoryName: 'Olympische Spiele - Strasse',
     bonusName: 'Olympische Spiele Strasse Punkte',
-    pointsOneDay: '900|715|600|490|410|340|265|225|190|150|130|105|90|75|60|50|45|45|45|45|45|30|30|30|30|30|30|30|30|30|30|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|15|10|10|10|10|10|5|5|5|5|5',
+    pointsOneDay:
+      '900|700|575|475|400|330|275|225|185|150|125|105|90|78|68|58|50|42|35|28|24|20|17|14|12|10|9|8|7|6|5|5|4|4|3|3|2|2|1|1',
   },
   {
     categoryId: 25,
@@ -245,7 +251,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     discipline: 'ITT',
     categoryName: 'Olympische Spiele - Einzelzeitfahren',
     bonusName: 'Olympische Spiele ITT Punkte',
-    pointsOneDay: '455|325|260|195|165|130|110|90|80|65|55|40|30|25|20|15|10|10|5|5|3|3|3|3|3',
+    pointsOneDay:
+      '450|350|290|240|200|165|140|115|95|75|62|52|45|39|34|29|25|21|18|14',
   },
 ];
 
@@ -288,7 +295,7 @@ export const NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS: NationalChampionshipCategoryDe
     discipline: 'ROAD',
     categoryName: 'Nationale Meisterschaft - Strasse',
     bonusName: 'Nationale Meisterschaft Strasse Punkte',
-    pointsOneDay: '100|75|60|50|40|30|20|10|5|3|3|1|1|1|1',
+    pointsOneDay: '100|75|50|40|30|25|20|15|10|5',
   },
   {
     categoryId: 15,
@@ -296,7 +303,7 @@ export const NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS: NationalChampionshipCategoryDe
     discipline: 'ITT',
     categoryName: 'Nationale Meisterschaft - Einzelzeitfahren',
     bonusName: 'Nationale Meisterschaft ITT Punkte',
-    pointsOneDay: '50|30|20|15|10|5|3|3|1|1',
+    pointsOneDay: '50|40|30|25|20|15|10|5',
   },
 ];
 

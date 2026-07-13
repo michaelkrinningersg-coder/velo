@@ -337,7 +337,7 @@ export class TeamRepository {
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
-      JOIN race_categories_bonus cat_bonus ON cat_bonus.id = cat.bonus_system_id
+      JOIN race_categories_bonus cat_bonus ON cat_bonus.id = COALESCE(races.bonus_system_id, cat.bonus_system_id)
       WHERE results.team_id = ?
         AND results.rider_id IS NULL
         AND results.result_type_id = 1

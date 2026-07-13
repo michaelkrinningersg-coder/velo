@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS races (
   prestige                    INTEGER NOT NULL CHECK(prestige BETWEEN 0 AND 100),
   preferred_nationality_group TEXT,
   required_specs              TEXT,
+  bonus_system_id             INTEGER REFERENCES race_categories_bonus(id),
   CHECK(end_date >= start_date)
 );
 

@@ -1184,7 +1184,7 @@ export function buildRaceSelect(): string {
     FROM races
     JOIN sta_country country ON country.id = races.country_id
     JOIN race_categories ON race_categories.id = races.category_id
-    JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
+    JOIN race_categories_bonus ON race_categories_bonus.id = COALESCE(races.bonus_system_id, race_categories.bonus_system_id)
   `;
 }
 
