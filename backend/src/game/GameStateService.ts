@@ -1146,13 +1146,18 @@ export class GameStateService {
     for (const row of rows) {
       const seasonChanged = row.season !== currentSeason;
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
-      if (!isTier1 && !seasonChanged) {
+      const storedPeaks = parsePeakDates(row.peak_dates_json);
+      // Veraltete Peaks (kein Termin in der laufenden Saison — z.B. alte Saves,
+      // deren Peaks beim Saisonwechsel nie neu abgeleitet wurden) auch fuer
+      // Nicht-Tier-1-Fahrer heilen, sonst bleibt deren Season-Form dauerhaft 0.
+      const peaksStale = !seasonChanged && !storedPeaks.some((d) => d.startsWith(`${currentSeason}-`));
+      if (!isTier1 && !seasonChanged && !peaksStale) {
         continue;
       }
 
       const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
       const peakDates = resolveSeasonPeakDatesFromWindows(
-        seasonChanged ? [] : parsePeakDates(row.peak_dates_json),
+        seasonChanged || peaksStale ? [] : storedPeaks,
         currentSeason,
         windows,
         this.db,
@@ -2143,6 +2148,56 @@ export class GameStateService {
     })();
   }
 
+  /**
+   * Leitet die Season-Form-Peaks ALLER Fahrer mit Tageszustand neu aus ihren
+   * (frisch zugewiesenen) Rennprogrammen ab und setzt die Form passend zum
+   * aktuellen Datum. Wird nach der Rollen-/Programmvergabe beim Draft-Abschluss
+   * aufgerufen, damit die Peaks zur neuen Saison und zum Programm passen.
+   */
+  private realignAllSeasonFormPeaks(season: number, currentDate: string): void {
+    if (!this.isTable('rider_daily_state')) {
+      return;
+    }
+    // Frisch verknuepfte Programme: Peak-Fenster-Cache invalidieren.
+    this.programWindowsBySeason.clear();
+
+    const rows = this.db.prepare('SELECT rider_id FROM rider_daily_state').all() as Array<{ rider_id: number }>;
+    const update = this.db.prepare(`
+      UPDATE rider_daily_state
+      SET season = ?, form_bonus = ?, peak_s_form = ?, active_peak_date = ?, peak_dates_json = ?
+      WHERE rider_id = ?
+    `);
+
+    this.db.transaction(() => {
+      for (const row of rows) {
+        // [] erzwingt die Neuableitung aus dem aktuellen Programm (Highlight-Rennen).
+        const peakDates = resolveSeasonPeakDatesFromWindows([], season, null, this.db, row.rider_id);
+        const phase = resolvePeakPhase(currentDate, peakDates);
+        let formBonus = 0;
+        let peakSForm = 0;
+        let activePeakDate: string | null = null;
+        if (phase?.phase === 'build') {
+          formBonus = scheduledBuildForm(currentDate, phase.actualBuildStartDay, phase.peakDate);
+        } else if (phase?.phase === 'decline') {
+          peakSForm = scheduledPeakForm(phase.peakDate, phase.actualBuildStartDay);
+          formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
+          activePeakDate = phase.peakDate;
+        }
+        update.run(
+          season,
+          roundFormBonus(formBonus),
+          roundFormBonus(peakSForm),
+          activePeakDate,
+          JSON.stringify(peakDates),
+          row.rider_id,
+        );
+      }
+    })();
+
+    // Leutnants erben die frischen Peaks ihrer Kapitaene.
+    this.syncLieutenantPeakState(season);
+  }
+
   public completeDraftAndInitializeSeason(season: number, nextDate: string): void {
     this.db.transaction(() => {
       new ContractService(this.db).checkContractStatuses(season); // activate new draft contracts
@@ -2166,6 +2221,12 @@ export class GameStateService {
 
       // Initialize rider daily states for newly drafted riders
       this.ensureRiderDailyStateRows(season);
+
+      // Season-Form-Peaks JETZT — nach der Rollen- und Programmvergabe — fuer alle
+      // Fahrer aus ihrem frisch zugewiesenen Rennprogramm neu ableiten. Die am
+      // 01.01. (vor dem Draft, ohne Programme) gesetzten Peaks waren nur zufaellig;
+      // hier greift die korrekte Reihenfolge Rollen -> Programme -> Peaks.
+      this.realignAllSeasonFormPeaks(season, nextDate);
 
       // Set draft_status to completed
       this.db.prepare(`
