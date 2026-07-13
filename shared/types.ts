@@ -878,6 +878,13 @@ export interface RealtimeSimulationBootstrap {
   lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
   /** Aktive Liga-Rivalitaeten (Fahrerpaare) fuer Renn-Boni & Konterattacken. */
   rivalries?: Array<{ aId: number; bId: number }> | null;
+  /**
+   * Gesetzt, wenn die Etappe ohne Simulation abgeschlossen wurde (z.B. eine
+   * nationale Meisterschaft ohne startberechtigte Fahrer -> kein Meister).
+   * Die uebrigen Felder sind dann nicht befuellt.
+   */
+  skipped?: boolean;
+  skipMessage?: string;
 }
 
 export type SeasonPointAwardType =

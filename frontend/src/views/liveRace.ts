@@ -116,6 +116,15 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
     }
 
     const bootstrap = res.data;
+    // Meisterschaft ohne startberechtigte Fahrer wurde serverseitig ergebnislos
+    // abgeschlossen (kein Meister) — nicht simulieren, nur Status auffrischen,
+    // damit der Spielfortschritt (auch Auto-Weiter) nicht blockiert.
+    if (bootstrap.skipped) {
+      state.realtimeBootstrap = null;
+      await loadGameState();
+      await loadRaces();
+      return true;
+    }
     state.realtimeBootstrap = bootstrap;
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);

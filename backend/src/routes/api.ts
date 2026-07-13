@@ -13,7 +13,8 @@ import { RiderDraftService } from '../game/RiderDraftService';
 import { RivalryService } from '../game/RivalryService';
 import { WrappedService } from '../game/WrappedService';
 import { RouteImporter } from '../simulation/RouteImporter';
-import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { applyRaceRosterSelection, ensureRaceEntries, finalizeChampionshipWithoutStarters, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { isChampionshipCategory, isNationalChampionshipCategory } from '../simulation/championships';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
 import { StageParser } from '../simulation/StageParser';
 import {
@@ -629,6 +630,15 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const riders = ensureRaceEntries(db, repo, race, stage);
       if (riders.length === 0) {
+        // Meisterschaft ohne startberechtigte Fahrer: ohne Simulation als
+        // ergebnislos abschliessen (kein Meister), damit das Spiel weiterlaeuft.
+        if (isChampionshipCategory(race.categoryId) || isNationalChampionshipCategory(race.categoryId)) {
+          finalizeChampionshipWithoutStarters(db, race);
+          return ok<RealtimeSimulationBootstrap>(res, {
+            skipped: true,
+            skipMessage: `${race.name}: keine startberechtigten Fahrer — in diesem Jahr kein Meister.`,
+          } as unknown as RealtimeSimulationBootstrap);
+        }
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
 

@@ -1329,32 +1329,31 @@ export function buildNationalChampionshipRoster(db: Database.Database, repo: any
     : [];
   const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
 
-  // Alle Fahrer des Landes mit Team.
+  // Alle Fahrer des Landes (mit ODER ohne Team).
   const countryRiders = (repo.getRiders() as Rider[]).filter(
-    (rider) => rider.activeTeamId != null && rider.countryId === countryId,
+    (rider) => rider.countryId === countryId,
   );
 
-  const isHealthyAvailable = (rider: Rider): boolean => {
+  // Startberechtigt = gesund, verfuegbar und nicht zu ermuedet. Verletzte/kranke
+  // oder zu erschoepfte Fahrer starten NICHT — auch nicht als Notloesung.
+  const isEligible = (rider: Rider): boolean => {
     const state = stateByRider.get(rider.id);
-    return !state || (state.health_status === 'healthy' && !state.unavailable_until);
+    if (!state) return true;
+    if (state.health_status !== 'healthy') return false;
+    if (state.unavailable_until) return false;
+    if (state.combined_fatigue > NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD) return false;
+    return true;
   };
 
-  // 1) Ideal: gesund, verfuegbar, nicht zu ermuedet.
-  const fresh = countryRiders.filter((rider) => {
-    if (!isHealthyAvailable(rider)) return false;
-    const state = stateByRider.get(rider.id);
-    return !state || state.combined_fatigue <= NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD;
-  });
-  if (fresh.length > 0) return fresh;
+  // 1) Bevorzugt startberechtigte Fahrer mit Team.
+  const withTeam = countryRiders.filter((rider) => rider.activeTeamId != null && isEligible(rider));
+  if (withTeam.length > 0) return withTeam;
 
-  // 2) Fallback: Ermuedungsgrenze ignorieren, aber gesund + verfuegbar.
-  const available = countryRiders.filter(isHealthyAvailable);
-  if (available.length > 0) return available;
-
-  // 3) Letzter Ausweg, damit die Meisterschaft ueberhaupt gefahren werden kann
-  //    (sonst blockiert die fehlende Startliste den Spielfortschritt): jeder
-  //    Fahrer des Landes mit Team.
-  return countryRiders;
+  // 2) Fallback: alle startberechtigten Fahrer des Landes (auch teamlose).
+  const eligibleAny = countryRiders.filter(isEligible);
+  // 3) Sind keine startberechtigt, bleibt die Startliste leer -> in diesem Jahr
+  //    gibt es fuer dieses Land keinen nationalen Meister (Rennen ohne Ergebnis).
+  return eligibleAny;
 }
 
 function applyChampionshipEntries(
@@ -1373,7 +1372,11 @@ function applyChampionshipEntries(
 
   const selected = rosterBuilder(db, repo, race, stage);
   const champDef = getChampionshipCategoryDef(race.categoryId);
-  const allowTeamless = champDef ? championshipAllowsTeamless(champDef.ageClass) : false;
+  // Nationale Meisterschaften duerfen ebenfalls teamlose Fahrer des Landes
+  // starten lassen (Fallback, wenn keine startberechtigten Team-Fahrer da sind).
+  const allowTeamless = champDef
+    ? championshipAllowsTeamless(champDef.ageClass)
+    : isNationalChampionshipCategory(race.categoryId);
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const insertEntry = db.prepare(
@@ -1396,6 +1399,24 @@ function applyChampionshipEntries(
 
   repo.ensureStageEntries(stage);
   return repo.getStageRiders(stage.id);
+}
+
+/**
+ * Schliesst ein Championship-Rennen ohne startberechtigte Fahrer ab, ohne es zu
+ * simulieren: ein leerer race_results_compact-Eintrag nimmt das Rennen aus den
+ * offenen Etappen (Spielfortschritt bleibt moeglich), es gibt kein Ergebnis und
+ * keinen Meister. Fuer nationale Meisterschaften ohne verfuegbare Fahrer.
+ */
+export function finalizeChampionshipWithoutStarters(db: Database.Database, race: Race): void {
+  if (!tableExists(db, 'race_results_compact')) return;
+  const season = (db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined)?.season;
+  if (season == null) return;
+  db.transaction(() => {
+    db.prepare('DELETE FROM stage_entries WHERE race_id = ?').run(race.id);
+    db.prepare('DELETE FROM active_race_entries WHERE race_id = ?').run(race.id);
+    db.prepare('INSERT OR REPLACE INTO race_results_compact (race_id, season, payload) VALUES (?, ?, ?)')
+      .run(race.id, season, '{}');
+  })();
 }
 
 export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
