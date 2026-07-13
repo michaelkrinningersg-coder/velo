@@ -26,6 +26,9 @@ function sectionTitle(label: string): string {
 // Jahressieger in EXAKT demselben Format wie die Season-Standings-
 // Jahresuebersicht (Prestige-Stufen mit Sieger/2./3. in Spalten).
 const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
+  { ids: [10, 11], label: '🌈 Weltmeisterschaft', color: '#ec4899' },
+  { ids: [12, 13], label: '⭐ Europameisterschaft', color: '#3b82f6' },
+  { ids: [24, 25], label: '🥇 Olympische Spiele', color: '#fbbf24' },
   { ids: [1], label: 'Tour de France', color: resolveRaceCategoryBadgeStyle('Tour de France').color },
   { ids: [2], label: 'Grand Tours', color: resolveRaceCategoryBadgeStyle('Grand Tour').color },
   { ids: [3], label: 'Monumente', color: resolveRaceCategoryBadgeStyle('Monument').color },
@@ -180,7 +183,7 @@ function legendsSection(list: WrappedLegend[]): string {
   return wrappedSection('#a855f7', 'Legenden', 'neu in der All-Time-UCI-Elite', list.map((l) => detailRow(
     `<span style="${MONO};font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#d8b4fe;border:1px solid rgba(168,85,247,.5);background:rgba(168,85,247,.14);border-radius:6px;padding:3px 8px;">${esc(tierLabel(l.newTier))}</span>`,
     l.rider,
-    `#${l.allTimeUciRank} All-Time-UCI · ${l.careerWins} Karrieresiege · ${l.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
+    `${l.age != null ? l.age + ' J · ' : ''}#${l.allTimeUciRank} All-Time-UCI · ${l.careerWins} Karrieresiege · ${l.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
     l.bestResults,
   )).join(''));
 }

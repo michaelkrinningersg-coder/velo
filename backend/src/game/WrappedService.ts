@@ -261,11 +261,13 @@ export class WrappedService {
       if (newTier == null) continue;
       const rider = this.riderRef(entry.riderId);
       if (!rider) continue;
+      const birth = this.db.prepare('SELECT birth_year AS birthYear FROM riders WHERE id = ?').get(entry.riderId) as { birthYear: number } | undefined;
       out.push({
         rider, allTimeUciPoints: entry.pts, allTimeUciRank: entry.rank,
         careerWins: this.careerWins(entry.riderId),
         bestResults: this.bestResults(entry.riderId, 25),
         newTier,
+        age: birth?.birthYear ? season - birth.birthYear : null,
       });
     }
     out.sort((a, b) => a.newTier - b.newTier || (a.allTimeUciRank ?? 0) - (b.allTimeUciRank ?? 0));

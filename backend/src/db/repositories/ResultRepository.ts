@@ -436,7 +436,7 @@ export class ResultRepository {
       JOIN sta_country country ON country.id = riders.country_id
       LEFT JOIN teams ON teams.id = spe.team_id
       WHERE spe.season = ?
-        AND races.category_id IN (1, 2, 3, 4, 7)
+        AND races.category_id IN (1, 2, 3, 4, 7, 10, 11, 12, 13, 24, 25)
         AND spe.rank <= 3
         AND (
           (races.is_stage_race = 1 AND spe.award_type = 'gc_final')

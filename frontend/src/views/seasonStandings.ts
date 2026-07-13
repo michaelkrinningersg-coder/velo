@@ -419,6 +419,9 @@ function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampio
 // Farben aus der kanonischen Kategorie-Palette (resolveRaceCategoryBadgeStyle),
 // damit sie mit Kalender/Ergebnissen/Rivalen etc. konsistent sind.
 const WINNER_TIERS: Array<{ ids: number[]; label: string; color: string }> = [
+  { ids: [10, 11], label: '🌈 Weltmeisterschaft', color: '#ec4899' },
+  { ids: [12, 13], label: '⭐ Europameisterschaft', color: '#3b82f6' },
+  { ids: [24, 25], label: '🥇 Olympische Spiele', color: '#fbbf24' },
   { ids: [1], label: 'Tour de France', color: resolveRaceCategoryBadgeStyle('Tour de France').color },
   { ids: [2], label: 'Grand Tours', color: resolveRaceCategoryBadgeStyle('Grand Tour').color },
   { ids: [3], label: 'Monumente', color: resolveRaceCategoryBadgeStyle('Monument').color },

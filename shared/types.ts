@@ -1502,6 +1502,8 @@ export interface WrappedLegend {
   bestResults: WrappedCareerResult[];
   /** Neu erreichte Stufe der All-Time-Wertung (1 / 3 / 10 / 20). */
   newTier: number;
+  /** Alter des Fahrers in der Wrapped-Saison. */
+  age: number | null;
 }
 
 export interface SeasonWrappedPayload {
