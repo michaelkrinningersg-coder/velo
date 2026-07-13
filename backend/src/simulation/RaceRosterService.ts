@@ -1329,20 +1329,32 @@ export function buildNationalChampionshipRoster(db: Database.Database, repo: any
     : [];
   const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
 
-  const selected: Rider[] = [];
-  for (const rider of repo.getRiders() as Rider[]) {
-    if (rider.activeTeamId == null || rider.countryId !== countryId) {
-      continue;
-    }
+  // Alle Fahrer des Landes mit Team.
+  const countryRiders = (repo.getRiders() as Rider[]).filter(
+    (rider) => rider.activeTeamId != null && rider.countryId === countryId,
+  );
+
+  const isHealthyAvailable = (rider: Rider): boolean => {
     const state = stateByRider.get(rider.id);
-    if (state) {
-      if (state.health_status !== 'healthy') continue;
-      if (state.unavailable_until) continue;
-      if (state.combined_fatigue > NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD) continue;
-    }
-    selected.push(rider);
-  }
-  return selected;
+    return !state || (state.health_status === 'healthy' && !state.unavailable_until);
+  };
+
+  // 1) Ideal: gesund, verfuegbar, nicht zu ermuedet.
+  const fresh = countryRiders.filter((rider) => {
+    if (!isHealthyAvailable(rider)) return false;
+    const state = stateByRider.get(rider.id);
+    return !state || state.combined_fatigue <= NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD;
+  });
+  if (fresh.length > 0) return fresh;
+
+  // 2) Fallback: Ermuedungsgrenze ignorieren, aber gesund + verfuegbar.
+  const available = countryRiders.filter(isHealthyAvailable);
+  if (available.length > 0) return available;
+
+  // 3) Letzter Ausweg, damit die Meisterschaft ueberhaupt gefahren werden kann
+  //    (sonst blockiert die fehlende Startliste den Spielfortschritt): jeder
+  //    Fahrer des Landes mit Team.
+  return countryRiders;
 }
 
 function applyChampionshipEntries(
