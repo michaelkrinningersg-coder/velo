@@ -1227,12 +1227,32 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       </section>`;
   }
 
-  const fullHistory = payload.formHistory ?? [];
-  const history = fullHistory.filter((_, idx) => idx % 2 === 0);
   const currentDateStr = state.gameState?.currentDate ?? new Date().toISOString();
-  const currentYear = history.length > 0 
-    ? new Date(history[history.length - 1].date).getUTCFullYear()
-    : new Date(currentDateStr).getUTCFullYear();
+  // Chart-Jahr immer aus dem Spiel-Datum ableiten (nicht aus dem letzten
+  // Historie-Eintrag — der koennte bei alten Saves aus einer Vorsaison stammen).
+  const currentYear = state.gameState?.season ?? new Date(currentDateStr).getUTCFullYear();
+  // Nur Eintraege der laufenden Spielsaison zeigen.
+  const fullHistory = (payload.formHistory ?? []).filter(
+    (e) => new Date(e.date).getUTCFullYear() === currentYear,
+  );
+  const history = fullHistory.filter((_, idx) => idx % 2 === 0);
+  // Live-Tageswert als reine DARSTELLUNG anhaengen (kein taegliches Logging):
+  // der Chart soll am aktuellen Tag den gleichen Wert wie Header/Menue zeigen.
+  const todayIso = currentDateStr.slice(0, 10);
+  if (todayIso.startsWith(String(currentYear)) && (history.length === 0 || history[history.length - 1].date < todayIso)) {
+    const last = fullHistory[fullHistory.length - 1];
+    const sForm = payload.formBonus ?? 0;
+    const rForm = payload.raceFormBonus ?? 0;
+    history.push({
+      date: todayIso,
+      sForm,
+      rForm,
+      totalForm: sForm + rForm,
+      shortFatigue: last?.shortFatigue ?? 0,
+      longFatigue: last?.longFatigue ?? 0,
+      combinedFatigue: last?.combinedFatigue ?? 0,
+    });
+  }
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   

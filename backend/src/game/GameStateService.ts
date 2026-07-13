@@ -1488,6 +1488,17 @@ export class GameStateService {
         raceFormBonus = 0;
       }
 
+      // Jahresstart: ALLE Fahrer beginnen bei 0 Season-Form. Die am 01.01. (vor
+      // dem Draft, ohne Programme) nur zufaellig gesetzten Peaks duerfen noch
+      // keinen Formaufbau ausloesen — die echten Peaks und der Aufbau werden
+      // erst beim Draft-Abschluss gesetzt (realignAllSeasonFormPeaks).
+      if (seasonChanged) {
+        formBonus = 0;
+        peakSForm = 0;
+        peakRForm = 0;
+        activePeakDate = null;
+      }
+
       developmentContexts.push({
         riderId: row.rider_id,
         healthStatus,
