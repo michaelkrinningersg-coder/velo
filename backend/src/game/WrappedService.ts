@@ -45,6 +45,21 @@ function awardLabel(award: string): string {
   }
 }
 
+// Reihenfolge der Ergebnistypen INNERHALB eines Rennens: zuerst die Wertungen
+// (nach Typ gruppiert: GC, Punkte, Berg, Nachwuchs), danach Etappen- bzw.
+// Eintagesergebnisse. Innerhalb eines Typs wird spaeter nach Punkten sortiert.
+function awardOrder(award: string): number {
+  switch (award) {
+    case 'gc_final': return 0;
+    case 'points_final': return 1;
+    case 'mountain_final': return 2;
+    case 'youth_final': return 3;
+    case 'stage_result': return 4;
+    case 'one_day_result': return 5;
+    default: return 6;
+  }
+}
+
 export class WrappedService {
   constructor(private readonly db: Database.Database) {}
 
@@ -107,7 +122,7 @@ export class WrappedService {
         ${seasonClause}
     `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
 
-    const groups = new Map<string, WrappedCareerResult>();
+    const groups = new Map<string, WrappedCareerResult & { order: number }>();
     for (const row of rows) {
       const type = awardLabel(row.award);
       const key = `${row.raceName}|${type}|${row.rank}|${row.points}`;
@@ -120,21 +135,25 @@ export class WrappedService {
           raceName: row.raceName, season: row.season, points: row.points,
           rank: row.rank, type, count: 1, prestige: row.prestige ?? 0,
           isClassification: row.award.endsWith('_final'),
+          order: awardOrder(row.award),
         });
       }
     }
     const list = [...groups.values()];
     if (groupByRace) {
+      // Nach Rennen (Prestige absteigend) gruppiert; innerhalb eines Rennens nach
+      // Typ gruppiert (Wertungen GC/Punkte/Berg/Nachwuchs zuerst, dann Etappen/
+      // Eintages), innerhalb eines Typs nach Punkten absteigend.
       list.sort((a, b) =>
         b.prestige - a.prestige
         || a.raceName.localeCompare(b.raceName)
-        || (a.isClassification === b.isClassification ? 0 : a.isClassification ? -1 : 1)
+        || a.order - b.order
         || b.points - a.points
         || b.count - a.count);
     } else {
       list.sort((a, b) => b.points - a.points || b.prestige - a.prestige || b.count - a.count);
     }
-    return list.slice(0, limit);
+    return list.slice(0, limit).map(({ order: _o, ...rest }) => rest);
   }
 
   private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
