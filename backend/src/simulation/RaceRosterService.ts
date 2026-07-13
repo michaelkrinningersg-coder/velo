@@ -11,7 +11,7 @@ import {
   championshipAgeBounds,
   championshipAllowsTeamless,
   CHAMPIONSHIP_FATIGUE_THRESHOLD,
-  championshipRestrictsToEurope,
+  championshipContinents,
   getChampionshipCategoryDef,
   isChampionshipCategory,
   isNationalChampionshipCategory,
@@ -1222,24 +1222,31 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   }
   const season = repo.getCurrentSeason();
   const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.courseType];
-  const europeOnly = championshipRestrictsToEurope(def.courseType);
+  // Kontinent-Filter (EM => Europa; kontinentale Meisterschaften => eigene
+  // Kontinentliste; WM/Olympia => offen). Flache Kadergrenze nur bei den
+  // kontinentalen Meisterschaften (def.maxRidersPerCountry gesetzt).
+  const continents = championshipContinents(def);
+  const flatCap = def.maxRidersPerCountry ?? null;
   const { minAge, maxAge } = championshipAgeBounds(def.ageClass);
   const allowTeamless = championshipAllowsTeamless(def.ageClass);
 
   // 1. Nationenwertung -> Rang je Land (bei Gleichstand gleicher Rang).
+  const continentFilter = continents
+    ? ` AND country.continent IN (${continents.map(() => '?').join(', ')})`
+    : '';
   const rankRows = db.prepare(`
     WITH nation_points AS (
       SELECT country.id AS country_id, SUM(spe.points_awarded) AS pts
       FROM season_point_events spe
       JOIN riders r ON r.id = spe.rider_id
       JOIN sta_country country ON country.id = r.country_id
-      WHERE spe.season = ?${europeOnly ? " AND country.continent = 'Europe'" : ''}
+      WHERE spe.season = ?${continentFilter}
       GROUP BY country.id
       HAVING SUM(spe.points_awarded) > 0
     )
     SELECT country_id, RANK() OVER (ORDER BY pts DESC) AS rank
     FROM nation_points
-  `).all(season) as Array<{ country_id: number; rank: number }>;
+  `).all(season, ...(continents ?? [])) as Array<{ country_id: number; rank: number }>;
   const rankByCountry = new Map<number, number>(rankRows.map((row) => [row.country_id, row.rank]));
   if (rankByCountry.size === 0) {
     return [];
@@ -1295,7 +1302,11 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   // 4. Je Land nach Disziplin sortieren und auf die Kadergroesse kuerzen.
   const selected: Rider[] = [];
   for (const [countryId, riders] of eligibleByCountry) {
-    const size = kaderSizeForRank(rankByCountry.get(countryId)!, def.discipline);
+    // Kontinentale Meisterschaften: flache Grenze (gleich fuer alle Laender);
+    // WM/EM: Abstufung nach Nationenrang.
+    const size = flatCap != null
+      ? flatCap
+      : kaderSizeForRank(rankByCountry.get(countryId)!, def.discipline);
     if (size <= 0) {
       continue;
     }

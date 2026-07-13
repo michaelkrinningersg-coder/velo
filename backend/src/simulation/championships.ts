@@ -22,12 +22,23 @@ export type ChampionshipType =
   | 'WM_JUN'
   | 'EM_U23'
   | 'EM_JUN'
-  | 'OLY';
+  | 'OLY'
+  // Kontinentale Meisterschaften (Elite/U23/Junioren) je Kontinentgruppe:
+  //   AO = Asien-Ozeanien, AM = Amerika (Nord+Sued), AF = Afrika.
+  | 'CM_AO'
+  | 'CM_AO_U23'
+  | 'CM_AO_JUN'
+  | 'CM_AM'
+  | 'CM_AM_U23'
+  | 'CM_AM_JUN'
+  | 'CM_AF'
+  | 'CM_AF_U23'
+  | 'CM_AF_JUN';
 export type ChampionshipDiscipline = 'ITT' | 'ROAD';
 
 // Grund-Wettbewerb, der Streckenpool, Europa-Filter und Ermuedungsschwelle
-// bestimmt (unabhaengig von der Altersklasse).
-export type ChampionshipCourseType = 'WM' | 'EM' | 'OLY';
+// bestimmt (unabhaengig von der Altersklasse). CM = kontinentale Meisterschaft.
+export type ChampionshipCourseType = 'WM' | 'EM' | 'OLY' | 'CM';
 
 // Altersklasse fuer die Nominierung. OPEN = keine Altersgrenze (Olympia).
 export type ChampionshipAgeClass = 'ELITE' | 'U23' | 'JUNIOR' | 'OPEN';
@@ -87,6 +98,146 @@ export interface ChampionshipCategoryDef {
   bonusName: string;
   /** UCI-Punkte je Zielplatzierung (Pipe-getrennt, absteigend ab Platz 1). */
   pointsOneDay: string;
+  /**
+   * Nur kontinentale Meisterschaften: beruecksichtigte Kontinente
+   * (sta_country.continent). null/undefined => keine Kontinent-Beschraenkung
+   * (bzw. Europa-Filter laeuft ueber courseType 'EM').
+   */
+  continents?: string[];
+  /**
+   * Nur kontinentale Meisterschaften: flache Kadergrenze je Land (keine
+   * Abstufung nach Nationenrang). undefined => Abstufung via kaderSizeForRank.
+   */
+  maxRidersPerCountry?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Kontinentale Meisterschaften (Asien-Ozeanien, Amerika, Afrika)
+// ---------------------------------------------------------------------------
+//
+// Analog zur EM, aber je Kontinentgruppe ein eigener Titelkampf am EM-Tag
+// (ITT 10.08., Strasse 12.08.). Nominierung/Ausschluesse wie bei der EM, jedoch
+// FLACHE Kadergrenze (max. 14 je Land, keine Abstufung nach Nationenrang) und
+// Nationenfilter ueber mehrere Kontinente. Strassenprofil rotiert wie bei der EM
+// (courseType 'CM' erbt die EM-Rotation). Elite/U23/Junioren je ITT + Strasse.
+export const CONTINENTAL_MAX_RIDERS_PER_COUNTRY = 14;
+
+interface ContinentalSpec {
+  /** Kurzcode fuer Titeltyp + Karriere-Spalten (AO/AM/AF). */
+  code: 'AO' | 'AM' | 'AF';
+  /** Anzeigename der Meisterschaft. */
+  name: string;
+  /** Beruecksichtigte Kontinente (sta_country.continent). */
+  continents: string[];
+  /** Erste Kategorie-ID des 6er-Blocks (Elite/U23/Junioren x Strasse/ITT). */
+  baseCategoryId: number;
+}
+
+const CONTINENTAL_SPECS: ContinentalSpec[] = [
+  { code: 'AO', name: 'Asien-Ozeanien', continents: ['Asia', 'Oceania'], baseCategoryId: 28 },
+  { code: 'AM', name: 'Amerika', continents: ['North America', 'South America'], baseCategoryId: 34 },
+  { code: 'AF', name: 'Afrika', continents: ['Africa'], baseCategoryId: 40 },
+];
+
+// Bausteine je Altersklasse+Disziplin (Punkte/Prestige aus den EM-Skalen). Der
+// Offset legt die Kategorie-ID innerhalb des 6er-Blocks fest.
+interface ContinentalVariant {
+  offset: number;
+  ageClass: ChampionshipAgeClass;
+  discipline: ChampionshipDiscipline;
+  typeSuffix: '' | '_U23' | '_JUN';
+  ageLabel: '' | ' U23' | ' Junioren';
+  prestige: number;
+  pointsOneDay: string;
+  ittDetailsFile?: string;
+}
+
+const CONTINENTAL_VARIANTS: ContinentalVariant[] = [
+  {
+    offset: 0, ageClass: 'ELITE', discipline: 'ROAD', typeSuffix: '', ageLabel: '',
+    prestige: 90,
+    pointsOneDay: '250|200|150|125|100|90|80|70|60|50|40|35|30|25|20|15|10|5|5|5|5|5|5|5|5|5|5|5|5|5|3|3|3|3|3|1|1|1|1|1',
+  },
+  {
+    offset: 1, ageClass: 'ELITE', discipline: 'ITT', typeSuffix: '', ageLabel: '',
+    prestige: 85, ittDetailsFile: 'dummy_itt_k.csv',
+    pointsOneDay: '70|55|40|30|25|20|15|10|5|3',
+  },
+  {
+    offset: 2, ageClass: 'U23', discipline: 'ROAD', typeSuffix: '_U23', ageLabel: ' U23',
+    prestige: 65,
+    pointsOneDay: '125|85|70|60|50|40|35|30|25|20|15|10|5|5|5|3|3|3|3|3',
+  },
+  {
+    offset: 3, ageClass: 'U23', discipline: 'ITT', typeSuffix: '_U23', ageLabel: ' U23',
+    prestige: 60, ittDetailsFile: 'dummy_itt_k.csv',
+    pointsOneDay: '50|30|20|15|10|5|3|3|1|1',
+  },
+  {
+    offset: 4, ageClass: 'JUNIOR', discipline: 'ROAD', typeSuffix: '_JUN', ageLabel: ' Junioren',
+    prestige: 50,
+    pointsOneDay: '100|78|64|53|44|36|29|24|20|16|13|11|9|8|7|6|5|4|3|2',
+  },
+  {
+    offset: 5, ageClass: 'JUNIOR', discipline: 'ITT', typeSuffix: '_JUN', ageLabel: ' Junioren',
+    prestige: 45, ittDetailsFile: 'dummy_itt_k.csv',
+    pointsOneDay: '50|39|32|26|22|18|15|12|10|8|7|6|5|4|3|3|2|2|1|1',
+  },
+];
+
+function continentalType(spec: ContinentalSpec, variant: ContinentalVariant): ChampionshipType {
+  return (`CM_${spec.code}${variant.typeSuffix}`) as ChampionshipType;
+}
+
+function buildContinentalCategoryDefs(): ChampionshipCategoryDef[] {
+  const defs: ChampionshipCategoryDef[] = [];
+  for (const spec of CONTINENTAL_SPECS) {
+    for (const variant of CONTINENTAL_VARIANTS) {
+      const categoryId = spec.baseCategoryId + variant.offset;
+      const disciplineLabel = variant.discipline === 'ITT' ? 'Einzelzeitfahren' : 'Strasse';
+      const label = `${spec.name}-Meisterschaft${variant.ageLabel}`;
+      defs.push({
+        categoryId,
+        bonusSystemId: categoryId,
+        type: continentalType(spec, variant),
+        courseType: 'CM',
+        ageClass: variant.ageClass,
+        discipline: variant.discipline,
+        categoryName: `${label} - ${disciplineLabel}`,
+        bonusName: `${label} ${disciplineLabel} Punkte`,
+        pointsOneDay: variant.pointsOneDay,
+        continents: spec.continents,
+        maxRidersPerCountry: CONTINENTAL_MAX_RIDERS_PER_COUNTRY,
+      });
+    }
+  }
+  return defs;
+}
+
+function buildContinentalRaceDefs(): ChampionshipRaceDef[] {
+  const defs: ChampionshipRaceDef[] = [];
+  for (const spec of CONTINENTAL_SPECS) {
+    for (const variant of CONTINENTAL_VARIANTS) {
+      const categoryId = spec.baseCategoryId + variant.offset;
+      const disciplineLabel = variant.discipline === 'ITT' ? 'Einzelzeitfahren' : 'Strassenrennen';
+      const raceName = `${spec.name}-Meisterschaft${variant.ageLabel} ${disciplineLabel}`;
+      defs.push({
+        categoryId,
+        type: continentalType(spec, variant),
+        courseType: 'CM',
+        ageClass: variant.ageClass,
+        discipline: variant.discipline,
+        raceName,
+        monthDay: variant.discipline === 'ITT' ? '08-10' : '08-12',
+        startElevation: 50,
+        prestige: variant.prestige,
+        ...(variant.ittDetailsFile ? { ittDetailsFile: variant.ittDetailsFile } : {}),
+        continents: spec.continents,
+        maxRidersPerCountry: CONTINENTAL_MAX_RIDERS_PER_COUNTRY,
+      });
+    }
+  }
+  return defs;
 }
 
 export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
@@ -247,6 +398,8 @@ export const CHAMPIONSHIP_CATEGORY_DEFS: ChampionshipCategoryDef[] = [
     bonusName: 'Olympische Spiele ITT Punkte',
     pointsOneDay: '455|325|260|195|165|130|110|90|80|65|55|40|30|25|20|15|10|10|5|5|3|3|3|3|3',
   },
+  // --- Kontinentale Meisterschaften (IDs 28-45) ----------------------------
+  ...buildContinentalCategoryDefs(),
 ];
 
 // Kategorie-IDs + Erkennung liegen in shared/types, damit Frontend und Backend
@@ -340,6 +493,10 @@ export interface ChampionshipRaceDef {
   prestige: number;
   /** Nur ITT: fester Streckensatz (>= 30 km). */
   ittDetailsFile?: string;
+  /** Nur kontinentale Meisterschaften: beruecksichtigte Kontinente. */
+  continents?: string[];
+  /** Nur kontinentale Meisterschaften: flache Kadergrenze je Land. */
+  maxRidersPerCountry?: number;
 }
 
 // EM im August (10./12.), WM im September (21./23.). Die U23-/Junioren-Rennen
@@ -486,6 +643,8 @@ export const CHAMPIONSHIP_RACE_DEFS: ChampionshipRaceDef[] = [
     startElevation: 50,
     prestige: 60,
   },
+  // --- Kontinentale Meisterschaften (EM-Tag: ITT 10.08., Strasse 12.08.) ----
+  ...buildContinentalRaceDefs(),
 ];
 
 // Cro Race muss dem WM-Fenster (21./23.09.) weichen. Es startet urspruenglich am
@@ -527,6 +686,13 @@ export const CHAMPIONSHIP_ROAD_DETAILS: Record<
     Hilly: 'msr.csv',
     Hilly_Difficult: 'giro02.csv',
     Medium_Mountain: 'liegebastogneliege.csv',
+  },
+  // Kontinentale Meisterschaften nutzen denselben Streckenpool wie die EM.
+  CM: {
+    Rolling: 'faun_drome.csv',
+    Hilly: 'tirreno_03.csv',
+    Hilly_Difficult: 'clasica_almeria.csv',
+    Medium_Mountain: 'faun_ardeche.csv',
   },
 };
 
@@ -617,11 +783,27 @@ export function championshipRestrictsToEurope(courseType: ChampionshipCourseType
   return courseType === 'EM';
 }
 
+// Kontinent-Filter je Kategorie (sta_country.continent). EM => Europa; die
+// kontinentalen Meisterschaften tragen ihre Kontinentliste selbst; WM/Olympia
+// sind offen (=> null). Zentrale Quelle fuer den Roster-Nationenfilter.
+export function championshipContinents(
+  def: ChampionshipCategoryDef | ChampionshipRaceDef,
+): string[] | null {
+  if (def.continents && def.continents.length > 0) {
+    return def.continents;
+  }
+  if (def.courseType === 'EM') {
+    return [EUROPE_CONTINENT];
+  }
+  return null;
+}
+
 // Kombinierte-Ermuedungs-Schwelle als Ausschlusskriterium (>= Schwelle => raus).
 export const CHAMPIONSHIP_FATIGUE_THRESHOLD: Record<ChampionshipCourseType, number> = {
   WM: 8,
   EM: 10,
   OLY: 8,
+  CM: 10,
 };
 
 // Karriere-Zaehler-Spalte (rider_career_stats) je Titeltyp + Disziplin. Speist
@@ -646,6 +828,25 @@ export function championshipTitleColumn(
       return itt ? 'euro_junior_champion_itt_titles' : 'euro_junior_champion_road_titles';
     case 'OLY':
       return itt ? 'olympic_champion_itt_titles' : 'olympic_champion_road_titles';
+    // Kontinentale Meisterschaften (AO/AM/AF x Elite/U23/Junioren).
+    case 'CM_AO':
+      return itt ? 'cont_ao_champion_itt_titles' : 'cont_ao_champion_road_titles';
+    case 'CM_AO_U23':
+      return itt ? 'cont_ao_u23_champion_itt_titles' : 'cont_ao_u23_champion_road_titles';
+    case 'CM_AO_JUN':
+      return itt ? 'cont_ao_junior_champion_itt_titles' : 'cont_ao_junior_champion_road_titles';
+    case 'CM_AM':
+      return itt ? 'cont_am_champion_itt_titles' : 'cont_am_champion_road_titles';
+    case 'CM_AM_U23':
+      return itt ? 'cont_am_u23_champion_itt_titles' : 'cont_am_u23_champion_road_titles';
+    case 'CM_AM_JUN':
+      return itt ? 'cont_am_junior_champion_itt_titles' : 'cont_am_junior_champion_road_titles';
+    case 'CM_AF':
+      return itt ? 'cont_af_champion_itt_titles' : 'cont_af_champion_road_titles';
+    case 'CM_AF_U23':
+      return itt ? 'cont_af_u23_champion_itt_titles' : 'cont_af_u23_champion_road_titles';
+    case 'CM_AF_JUN':
+      return itt ? 'cont_af_junior_champion_itt_titles' : 'cont_af_junior_champion_road_titles';
     default:
       return null;
   }

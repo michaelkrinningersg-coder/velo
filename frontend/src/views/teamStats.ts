@@ -1192,6 +1192,15 @@ export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
     EM_JUN: '<span title="Europameister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
     OLY: '<span title="Olympiasieger" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(251,191,36,.7));">🥇</span>',
     NAT: '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>',
+    CM_AO: '<span title="Asien-Ozeanien-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AO_U23: '<span title="Asien-Ozeanien-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AO_JUN: '<span title="Asien-Ozeanien-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AM: '<span title="Amerika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AM_U23: '<span title="Amerika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AM_JUN: '<span title="Amerika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AF: '<span title="Afrika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+    CM_AF_U23: '<span title="Afrika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+    CM_AF_JUN: '<span title="Afrika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
   };
 
   const renderChampionRow = (title: TeamChampionTitle): string => {

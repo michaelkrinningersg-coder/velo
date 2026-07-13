@@ -1231,10 +1231,13 @@ export interface RiderHallOfFameStats {
 }
 
 // Kategorie-IDs aller Meisterschaften (Strasse/ITT). Elite-WM/EM (10-13),
-// U23/Junioren (16-23) und Olympia (24/25). Wird auf Backend UND Frontend fuer
-// die Meisterschafts-Erkennung (Roster, Titelvergabe) genutzt.
+// U23/Junioren (16-23), Olympia (24/25) und die kontinentalen Meisterschaften
+// (Asien-Ozeanien/Amerika/Afrika je Elite/U23/Junioren x Strasse/ITT, 28-45).
+// Wird auf Backend UND Frontend fuer die Meisterschafts-Erkennung (Roster,
+// Titelvergabe) genutzt.
 export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [
   10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+  28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
 ];
 
 export function isChampionshipCategory(categoryId?: number | null): boolean {
@@ -1250,7 +1253,17 @@ export type ChampionTitleType =
   | 'WM_JUN'
   | 'EM_U23'
   | 'EM_JUN'
-  | 'OLY';
+  | 'OLY'
+  // Kontinentale Meisterschaften (AO = Asien-Ozeanien, AM = Amerika, AF = Afrika).
+  | 'CM_AO'
+  | 'CM_AO_U23'
+  | 'CM_AO_JUN'
+  | 'CM_AM'
+  | 'CM_AM_U23'
+  | 'CM_AM_JUN'
+  | 'CM_AF'
+  | 'CM_AF_U23'
+  | 'CM_AF_JUN';
 
 export interface ReigningChampionTitle {
   type: ChampionTitleType;

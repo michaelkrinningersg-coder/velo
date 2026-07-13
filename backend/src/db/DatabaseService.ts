@@ -2458,6 +2458,26 @@ export class DatabaseService {
       ['euro_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
       ['olympic_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
       ['olympic_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      // Kontinentale Meistertitel (Karriere-Zaehler) fuer die goldenen HoF-Badges.
+      // AO = Asien-Ozeanien, AM = Amerika, AF = Afrika; je Elite/U23/Junioren.
+      ['cont_ao_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {

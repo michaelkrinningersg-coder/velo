@@ -300,19 +300,41 @@ const CHAMPION_TITLE_BADGE: Record<ChampionTitleType, string> = {
   EM_JUN: '<span title="Europameister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
   OLY: '<span title="Olympiasieger" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(251,191,36,.7));">🥇</span>',
   NAT: '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>',
+  // Kontinentale Meisterschaften: regionale Erdkugel je Kontinentgruppe.
+  CM_AO: '<span title="Asien-Ozeanien-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+  CM_AO_U23: '<span title="Asien-Ozeanien-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+  CM_AO_JUN: '<span title="Asien-Ozeanien-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+  CM_AM: '<span title="Amerika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+  CM_AM_U23: '<span title="Amerika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+  CM_AM_JUN: '<span title="Amerika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+  CM_AF: '<span title="Afrika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+  CM_AF_U23: '<span title="Afrika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+  CM_AF_JUN: '<span title="Afrika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
 };
 
 const RAINBOW_ACCENT = 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)';
 
 // Reihenfolge + Beschriftung der internationalen Titelgruppen.
+const CM_AO_ACCENT = '#06b6d4';
+const CM_AM_ACCENT = '#ef4444';
+const CM_AF_ACCENT = '#f59e0b';
 const INTERNATIONAL_GROUPS: Array<{ type: ChampionTitleType; title: string; accent: string }> = [
   { type: 'OLY', title: 'Olympische Spiele', accent: '#fbbf24' },
   { type: 'WM', title: 'Weltmeisterschaft', accent: RAINBOW_ACCENT },
   { type: 'EM', title: 'Europameisterschaft', accent: '#3b82f6' },
+  { type: 'CM_AO', title: 'Asien-Ozeanien-Meisterschaft', accent: CM_AO_ACCENT },
+  { type: 'CM_AM', title: 'Amerika-Meisterschaft', accent: CM_AM_ACCENT },
+  { type: 'CM_AF', title: 'Afrika-Meisterschaft', accent: CM_AF_ACCENT },
   { type: 'WM_U23', title: 'Weltmeisterschaft U23', accent: RAINBOW_ACCENT },
   { type: 'EM_U23', title: 'Europameisterschaft U23', accent: '#3b82f6' },
+  { type: 'CM_AO_U23', title: 'Asien-Ozeanien-Meisterschaft U23', accent: CM_AO_ACCENT },
+  { type: 'CM_AM_U23', title: 'Amerika-Meisterschaft U23', accent: CM_AM_ACCENT },
+  { type: 'CM_AF_U23', title: 'Afrika-Meisterschaft U23', accent: CM_AF_ACCENT },
   { type: 'WM_JUN', title: 'Weltmeisterschaft Junioren', accent: RAINBOW_ACCENT },
   { type: 'EM_JUN', title: 'Europameisterschaft Junioren', accent: '#3b82f6' },
+  { type: 'CM_AO_JUN', title: 'Asien-Ozeanien-Meisterschaft Junioren', accent: CM_AO_ACCENT },
+  { type: 'CM_AM_JUN', title: 'Amerika-Meisterschaft Junioren', accent: CM_AM_ACCENT },
+  { type: 'CM_AF_JUN', title: 'Afrika-Meisterschaft Junioren', accent: CM_AF_ACCENT },
 ];
 
 function renderChampionHolderCell(holder: SeasonChampionHolder | null): string {

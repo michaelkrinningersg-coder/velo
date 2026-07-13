@@ -3,11 +3,13 @@ import type Database from 'better-sqlite3';
 import {
   championshipAgeBounds,
   championshipAllowsTeamless,
+  championshipContinents,
   championshipRestrictsToEurope,
   championshipTitleColumn,
   getChampionshipCategoryDef,
   isChampionshipCategory,
   isOlympicSeason,
+  CONTINENTAL_MAX_RIDERS_PER_COUNTRY,
   NATIONAL_SELECTION_TEAM_ID,
 } from './championships';
 import { isChampionshipCategory as sharedIsChampionshipCategory } from '../../../shared/types';
@@ -49,15 +51,39 @@ describe('championship age-class helpers', () => {
     expect(championshipTitleColumn('EM_JUN', 'ITT')).toBe('euro_junior_champion_itt_titles');
     expect(championshipTitleColumn('OLY', 'ROAD')).toBe('olympic_champion_road_titles');
     expect(championshipTitleColumn('OLY', 'ITT')).toBe('olympic_champion_itt_titles');
+    // Kontinentale Meisterschaften.
+    expect(championshipTitleColumn('CM_AO', 'ROAD')).toBe('cont_ao_champion_road_titles');
+    expect(championshipTitleColumn('CM_AM', 'ITT')).toBe('cont_am_champion_itt_titles');
+    expect(championshipTitleColumn('CM_AF_U23', 'ROAD')).toBe('cont_af_u23_champion_road_titles');
+    expect(championshipTitleColumn('CM_AO_JUN', 'ITT')).toBe('cont_ao_junior_champion_itt_titles');
   });
 
-  it('erkennt alle Meisterschaftskategorien inkl. Olympia', () => {
+  it('liefert den Kontinent-Filter je Kategorie', () => {
+    // EM => Europa; WM/Olympia offen; kontinentale Meisterschaften eigene Liste.
+    expect(championshipContinents(getChampionshipCategoryDef(12)!)).toEqual(['Europe']);
+    expect(championshipContinents(getChampionshipCategoryDef(10)!)).toBeNull();
+    expect(championshipContinents(getChampionshipCategoryDef(28)!)).toEqual(['Asia', 'Oceania']);
+    expect(championshipContinents(getChampionshipCategoryDef(34)!)).toEqual(['North America', 'South America']);
+    expect(championshipContinents(getChampionshipCategoryDef(40)!)).toEqual(['Africa']);
+    // Flache Kadergrenze nur bei kontinentalen Meisterschaften.
+    expect(getChampionshipCategoryDef(28)!.maxRidersPerCountry).toBe(CONTINENTAL_MAX_RIDERS_PER_COUNTRY);
+    expect(getChampionshipCategoryDef(10)!.maxRidersPerCountry).toBeUndefined();
+  });
+
+  it('erkennt alle Meisterschaftskategorien inkl. Olympia und Kontinental', () => {
     for (const id of [10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]) {
       expect(isChampionshipCategory(id)).toBe(true);
       expect(sharedIsChampionshipCategory(id)).toBe(true);
       expect(getChampionshipCategoryDef(id)).toBeTruthy();
     }
+    // Kontinentale Kategorien 28-45.
+    for (let id = 28; id <= 45; id++) {
+      expect(isChampionshipCategory(id)).toBe(true);
+      expect(sharedIsChampionshipCategory(id)).toBe(true);
+      expect(getChampionshipCategoryDef(id)).toBeTruthy();
+    }
     expect(isChampionshipCategory(14)).toBe(false); // National
+    expect(isChampionshipCategory(26)).toBe(false); // WT-Bonus-Override
     expect(isChampionshipCategory(99)).toBe(false);
   });
 
@@ -70,7 +96,8 @@ describe('championship age-class helpers', () => {
   });
 
   it('hat fuer jede Kategorie-Def eine nicht-leere Punktetabelle', () => {
-    for (const id of [16, 17, 18, 19, 20, 21, 22, 23, 24, 25]) {
+    for (const id of [16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45]) {
       const def = getChampionshipCategoryDef(id)!;
       const points = def.pointsOneDay.split('|').map(Number);
       expect(points.length).toBeGreaterThan(0);
