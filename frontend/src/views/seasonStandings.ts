@@ -25,12 +25,12 @@ import type {
   SeasonStandingsPayload,
   SeasonStandingCountryRow,
   SeasonNationalChampionGroup,
-  SeasonReigningTitle,
   SeasonChampionHolder,
   ChampionTitleType,
   RaceWinnerEntry,
   PalmaresRiderRef,
 } from '../../../shared/types';
+import { isChampionshipCategory } from '../../../shared/types';
 
 export function formatPointsGap(points: number): string {
   if (points === 0) return '–';
@@ -312,31 +312,6 @@ const CHAMPION_TITLE_BADGE: Record<ChampionTitleType, string> = {
   CM_AF_JUN: '<span title="Afrika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
 };
 
-const RAINBOW_ACCENT = 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)';
-
-// Reihenfolge + Beschriftung der internationalen Titelgruppen.
-const CM_AO_ACCENT = '#06b6d4';
-const CM_AM_ACCENT = '#ef4444';
-const CM_AF_ACCENT = '#f59e0b';
-const INTERNATIONAL_GROUPS: Array<{ type: ChampionTitleType; title: string; accent: string }> = [
-  { type: 'OLY', title: 'Olympische Spiele', accent: '#fbbf24' },
-  { type: 'WM', title: 'Weltmeisterschaft', accent: RAINBOW_ACCENT },
-  { type: 'EM', title: 'Europameisterschaft', accent: '#3b82f6' },
-  { type: 'CM_AO', title: 'Asien-Ozeanien-Meisterschaft', accent: CM_AO_ACCENT },
-  { type: 'CM_AM', title: 'Amerika-Meisterschaft', accent: CM_AM_ACCENT },
-  { type: 'CM_AF', title: 'Afrika-Meisterschaft', accent: CM_AF_ACCENT },
-  { type: 'WM_U23', title: 'Weltmeisterschaft U23', accent: RAINBOW_ACCENT },
-  { type: 'EM_U23', title: 'Europameisterschaft U23', accent: '#3b82f6' },
-  { type: 'CM_AO_U23', title: 'Asien-Ozeanien-Meisterschaft U23', accent: CM_AO_ACCENT },
-  { type: 'CM_AM_U23', title: 'Amerika-Meisterschaft U23', accent: CM_AM_ACCENT },
-  { type: 'CM_AF_U23', title: 'Afrika-Meisterschaft U23', accent: CM_AF_ACCENT },
-  { type: 'WM_JUN', title: 'Weltmeisterschaft Junioren', accent: RAINBOW_ACCENT },
-  { type: 'EM_JUN', title: 'Europameisterschaft Junioren', accent: '#3b82f6' },
-  { type: 'CM_AO_JUN', title: 'Asien-Ozeanien-Meisterschaft Junioren', accent: CM_AO_ACCENT },
-  { type: 'CM_AM_JUN', title: 'Amerika-Meisterschaft Junioren', accent: CM_AM_ACCENT },
-  { type: 'CM_AF_JUN', title: 'Afrika-Meisterschaft Junioren', accent: CM_AF_ACCENT },
-];
-
 function renderChampionHolderCell(holder: SeasonChampionHolder | null): string {
   if (!holder) {
     return '<span style="color:#5f6f8a;font-size:13px;">—</span>';
@@ -380,34 +355,12 @@ function renderNationalChampionsScope(groups: SeasonNationalChampionGroup[]): st
   return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:4px;">${cards}</div>`;
 }
 
-function renderInternationalChampionsScope(titles: SeasonReigningTitle[]): string {
-  const byType = new Map<string, SeasonReigningTitle[]>();
-  for (const t of titles) {
-    const bucket = byType.get(t.type) ?? [];
-    bucket.push(t);
-    byType.set(t.type, bucket);
-  }
-  const sections = INTERNATIONAL_GROUPS
-    .filter((group) => (byType.get(group.type) ?? []).length > 0)
-    .map((group) => {
-      const list = byType.get(group.type) ?? [];
-      const road = list.find((t) => t.discipline === 'ROAD')?.holder ?? null;
-      const itt = list.find((t) => t.discipline === 'ITT')?.holder ?? null;
-      const badge = CHAMPION_TITLE_BADGE[group.type];
-      return `
-        <section style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);overflow:hidden;">
-          <div style="height:4px;background:${group.accent};"></div>
-          <div style="padding:12px 16px;">
-            <h3 style="margin:0 0 8px;font-size:15px;font-weight:800;color:#f1f5f9;">${esc(group.title)}</h3>
-            ${renderDisciplineLine(badge, 'Straße', road)}
-            ${renderDisciplineLine(badge, 'Zeitfahren', itt)}
-          </div>
-        </section>`;
-    }).join('');
-  if (!sections) {
-    return '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine internationalen Titel vergeben.</div>';
-  }
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;padding:4px;">${sections}</div>`;
+// WM/EM/Olympia/Kontinental im selben Layout wie die Jahressieger-Uebersicht:
+// je Meisterschaft eine Sektion mit Sieger/2./3. Platz in eigenen Spalten
+// (Straßen- und Zeitfahr-Titel als separate Zeilen).
+function renderInternationalChampionsScope(winners: RaceWinnerEntry[]): string {
+  return renderWinnerTierSections(INTERNATIONAL_CHAMPION_TIERS, winners)
+    || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine internationalen Titel in dieser Saison vergeben.</div>';
 }
 
 function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampions'): void {
@@ -426,10 +379,12 @@ function renderChampionsScope(scope: 'nationalChampions' | 'internationalChampio
     cardCount.textContent = `${groups.length} ${groups.length === 1 ? 'Land' : 'Länder'}`;
     tbody.innerHTML = renderNationalChampionsScope(groups);
   } else {
-    const titles = state.seasonStandings?.reigningTitles ?? [];
+    const winners = state.seasonStandings?.raceWinners ?? [];
+    const champRaces = winners.filter((w) => isChampionshipCategory(w.categoryId)
+      && INTERNATIONAL_CHAMPION_TIERS.some((t) => t.ids.includes(w.categoryId)));
     cardTitle.textContent = 'WM / EM / Olympia';
-    cardCount.textContent = `${titles.length} ${titles.length === 1 ? 'Titel' : 'Titel'}`;
-    tbody.innerHTML = renderInternationalChampionsScope(titles);
+    cardCount.textContent = `${champRaces.length} ${champRaces.length === 1 ? 'Rennen' : 'Rennen'}`;
+    tbody.innerHTML = renderInternationalChampionsScope(winners);
   }
 
   empty.classList.add('hidden');
@@ -461,21 +416,17 @@ function renderWinnerCell(ref: PalmaresRiderRef | null, medalColor: string): str
   return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${flag}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
 }
 
-function renderRaceWinnersScope(): void {
-  const empty = $('season-standings-empty');
-  const tableCard = $('season-standings-table-card');
-  const gridHead = $('season-standings-grid-head');
-  const tbody = $('season-standings-tbody');
-  const cardTitle = $('season-standings-card-title');
-  const cardCount = $('season-standings-card-count');
-
-  gridHead.style.display = 'none';
-  const winners = state.seasonStandings?.raceWinners ?? [];
-  cardTitle.textContent = 'Jahressieger';
-  cardCount.textContent = `${winners.length} ${winners.length === 1 ? 'Rennen' : 'Rennen'}`;
-
+// Rendert die Jahressieger-Sektionen (je Prestige-Stufe eine Sektion; pro Rennen
+// eine Zeile mit den Spalten Rennen | Sieger | 2. Platz | 3. Platz — d. h. alle
+// Sieger untereinander, alle Zweiten untereinander usw.). Von der Jahressieger-
+// Uebersicht UND dem WM/EM/Olympia-Tab genutzt (dort auf die Meisterschaften
+// gefiltert).
+function renderWinnerTierSections(
+  tiers: Array<{ ids: number[]; label: string; color: string }>,
+  winners: RaceWinnerEntry[],
+): string {
   const COLS = 'grid-template-columns:minmax(150px,1.25fr) 1fr 1fr 1fr;gap:14px;';
-  const sections = WINNER_TIERS.map((tier) => {
+  return tiers.map((tier) => {
     const races = winners.filter((w) => tier.ids.includes(w.categoryId));
     if (races.length === 0) return '';
     const header = `<div style="display:grid;${COLS}padding:6px 14px;">
@@ -497,8 +448,29 @@ function renderRaceWinnersScope(): void {
         <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6a7a95;letter-spacing:.1em;">${races.length} RENNEN</span>
       </div>${header}${rows}</section>`;
   }).join('');
+}
 
-  tbody.innerHTML = sections || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Sieger in dieser Saison.</div>';
+// WM/EM/Olympia/Kontinental-Untermenge der Jahressieger-Stufen (fuer den
+// internationalen Meister-Tab).
+const INTERNATIONAL_CHAMPION_TIERS = WINNER_TIERS.filter((tier) =>
+  tier.ids.every((id) => isChampionshipCategory(id)),
+);
+
+function renderRaceWinnersScope(): void {
+  const empty = $('season-standings-empty');
+  const tableCard = $('season-standings-table-card');
+  const gridHead = $('season-standings-grid-head');
+  const tbody = $('season-standings-tbody');
+  const cardTitle = $('season-standings-card-title');
+  const cardCount = $('season-standings-card-count');
+
+  gridHead.style.display = 'none';
+  const winners = state.seasonStandings?.raceWinners ?? [];
+  cardTitle.textContent = 'Jahressieger';
+  cardCount.textContent = `${winners.length} ${winners.length === 1 ? 'Rennen' : 'Rennen'}`;
+
+  tbody.innerHTML = renderWinnerTierSections(WINNER_TIERS, winners)
+    || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Sieger in dieser Saison.</div>';
   empty.classList.add('hidden');
   tableCard.classList.remove('hidden');
 }
