@@ -700,11 +700,11 @@ function sampleMicroForm(): number {
   return roundToTwoDecimals(chooseOne([-1, 1]) * randomBetween(3, 4));
 }
 
-// Tagesform je Fahrer (einmal pro Etappe, additive Skillpunkte): +/- 2,5.
+// Tagesform je Fahrer (einmal pro Etappe, additive Skillpunkte): +/- 3.
 // Der aktuelle GC-Fuehrende ist nach oben gedeckelt (Druck/Markierung): die
-// Tagesform liegt fuer ihn zufaellig in [-2,5; +1,5].
+// Tagesform liegt fuer ihn zufaellig in [-3; +1,5].
 function sampleDailyForm(isGcLeader = false): number {
-  return roundToTwoDecimals(randomBetween(-2.5, isGcLeader ? 1.5 : 2.5));
+  return roundToTwoDecimals(randomBetween(-3, isGcLeader ? 1.5 : 3));
 }
 
 function createWindZones(stageDistanceMeters: number): WindZone[] {
