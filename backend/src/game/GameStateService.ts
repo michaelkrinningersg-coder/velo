@@ -5,6 +5,7 @@ import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
 import { isRenewalSelectionPending } from '../simulation/contractRenewalSelection';
 import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
 import { ensureOlympicGames } from '../simulation/olympicGamesSchedule';
+import { OLYMPIC_CATEGORY_IDS, isOlympicSeason } from '../simulation/championships';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -525,8 +526,16 @@ export class GameStateService {
     `);
 
     const raceMap = new Map<number, number>();
+    // Olympische Spiele finden nur alle 4 Jahre statt (durch 4 teilbare Saisons).
+    // Sie werden NICHT ins Folgejahr geklont, sondern in Olympia-Jahren eigens von
+    // ensureOlympicGames erzeugt. So verschwinden sie im Jahr nach Olympia wieder
+    // aus dem Kalender (2032 -> nicht 2033; erst 2036 wieder).
+    const cloneNewSeasonIsOlympic = isOlympicSeason(newYear);
 
     for (const r of oldRaces) {
+      if (OLYMPIC_CATEGORY_IDS.includes(r.category_id) && !cloneNewSeasonIsOlympic) {
+        continue; // Olympia nicht in ein Nicht-Olympia-Jahr uebernehmen
+      }
       const newStartDate = r.start_date.replace(oldYearStr, newYearStr);
       const newEndDate = r.end_date.replace(oldYearStr, newYearStr);
       const args: any[] = [

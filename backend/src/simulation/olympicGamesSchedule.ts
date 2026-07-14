@@ -12,8 +12,48 @@ import { isOlympicSeason, olympicStageProfile, OLYMPIC_RACE_DEFS } from './champ
 // damit die Rennen auch dann entstehen, wenn der 22.06. mitten im Spiel
 // ueberschritten wird (ohne Neuladen). Kategorie-/Bonus-Zeilen legt bereits
 // ensureChampionshipCalendar an (Olympia-Kategorien sind Teil der Defs).
+// Entfernt Olympia-Rennen (Kategorien 24/25) aus NICHT-Olympia-Saisons. Solche
+// entstehen z. B., wenn der Saison-Klon (duplicateCalendarForSeason) eine
+// Olympia-Saison in das Folgejahr kopiert (2032 -> 2033). Nur ungefahrene Rennen
+// werden geloescht (Rennen mit Punktevergabe bleiben unangetastet). Idempotent.
+export function removeMisscheduledOlympicGames(db: Database.Database): void {
+  if (!tableExists(db, 'races') || !tableExists(db, 'stages')) return;
+  const races = db.prepare(`
+    SELECT id, CAST(substr(start_date, 1, 4) AS INTEGER) AS season
+    FROM races WHERE category_id IN (24, 25)
+  `).all() as Array<{ id: number; season: number }>;
+  const stale = races.filter((r) => Number.isInteger(r.season) && !isOlympicSeason(r.season));
+  if (stale.length === 0) return;
+
+  const speExists = tableExists(db, 'season_point_events');
+  const hasResults = speExists ? db.prepare('SELECT 1 FROM season_point_events WHERE race_id = ? LIMIT 1') : null;
+  const delClimbs = tableExists(db, 'stage_climb_scores')
+    ? db.prepare('DELETE FROM stage_climb_scores WHERE stage_id IN (SELECT id FROM stages WHERE race_id = ?)')
+    : null;
+  const delStageEntries = tableExists(db, 'stage_entries') ? db.prepare('DELETE FROM stage_entries WHERE race_id = ?') : null;
+  const delActiveEntries = tableExists(db, 'active_race_entries') ? db.prepare('DELETE FROM active_race_entries WHERE race_id = ?') : null;
+  const delProgramRaces = tableExists(db, 'race_program_races') ? db.prepare('DELETE FROM race_program_races WHERE race_id = ?') : null;
+  const delStages = db.prepare('DELETE FROM stages WHERE race_id = ?');
+  const delRace = db.prepare('DELETE FROM races WHERE id = ?');
+
+  db.transaction(() => {
+    for (const r of stale) {
+      if (hasResults && hasResults.get(r.id)) continue; // bereits gefahren -> behalten
+      delClimbs?.run(r.id);
+      delStageEntries?.run(r.id);
+      delActiveEntries?.run(r.id);
+      delProgramRaces?.run(r.id);
+      delStages.run(r.id);
+      delRace.run(r.id);
+    }
+  })();
+}
+
 export function ensureOlympicGames(db: Database.Database): void {
   if (!tableExists(db, 'races') || !tableExists(db, 'stages')) return;
+  // Falsch eingeplante Olympia-Rennen (z. B. aus einem Saison-Klon) entfernen,
+  // bevor die faelligen Olympia-Rennen erzeugt werden.
+  removeMisscheduledOlympicGames(db);
   if (!tableExists(db, 'game_state')) return;
 
   // WICHTIG: "current_date" quoten — unquoted ist es das SQLite-Schluesselwort
