@@ -700,8 +700,11 @@ function sampleMicroForm(): number {
   return roundToTwoDecimals(chooseOne([-1, 1]) * randomBetween(3, 4));
 }
 
-function sampleDailyForm(): number {
-  return roundToTwoDecimals(randomBetween(-3, 3));
+// Tagesform je Fahrer (einmal pro Etappe, additive Skillpunkte): +/- 2,5.
+// Der aktuelle GC-Fuehrende ist nach oben gedeckelt (Druck/Markierung): die
+// Tagesform liegt fuer ihn zufaellig in [-2,5; +1,5].
+function sampleDailyForm(isGcLeader = false): number {
+  return roundToTwoDecimals(randomBetween(-2.5, isGcLeader ? 1.5 : 2.5));
 }
 
 function createWindZones(stageDistanceMeters: number): WindZone[] {
@@ -1507,6 +1510,8 @@ export class SimulationEngine {
         });
       }
     }
+    // GC-Fuehrenden vor dem Sampling kennen, damit seine Tagesform gedeckelt wird.
+    const gcLeaderRiderId = bootstrap.gcStandings.find((standing) => standing.rank === 1)?.riderId ?? null;
     const baseRiderStates: RiderState[] = bootstrap.riders.map((rider) => {
       const riderState: RiderState = {
         rider,
@@ -1519,7 +1524,7 @@ export class SimulationEngine {
         segmentEndKm: 0,
         segmentStartElevation: 0,
         segmentEndElevation: 0,
-        dailyForm: sampleDailyForm(),
+        dailyForm: sampleDailyForm(rider.id === gcLeaderRiderId),
         microForm: sampleMicroForm(),
         nextFormUpdateMeter: randomBetween(5000, 40000),
         finishTimeSeconds: null,
@@ -1599,7 +1604,6 @@ export class SimulationEngine {
       .slice(0, 15)
       .map((favorite) => bootstrap.riders.find((rider) => rider.id === favorite.riderId) ?? null)
       .filter((rider): rider is Rider => rider != null);
-    const gcLeaderRiderId = bootstrap.gcStandings.find((standing) => standing.rank === 1)?.riderId ?? null;
     const precalculatedStageAttacks = precalculateStageAttacks(
       top15FavoriteRiders,
       bootstrap.stage,

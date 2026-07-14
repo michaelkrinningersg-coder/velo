@@ -3,8 +3,8 @@ import { tableExists } from '../db/mappers';
 
 export const CONTRACT_RENEWAL_MONTH_DAY = '08-01';
 const CONTRACT_RENEWAL_SHARE = 0.35;              // KI-Teams: feste 35%
-const PLAYER_RENEWAL_MIN_SHARE = 0.35;            // Spieler: 35-65% der Auswahl
-const PLAYER_RENEWAL_MAX_SHARE = 0.65;
+const PLAYER_RENEWAL_MIN_SHARE = 0.50;            // Spieler: 50-80% der Auswahl
+const PLAYER_RENEWAL_MAX_SHARE = 0.80;
 const CONTRACT_RENEWAL_MIN_YEARS = 1;
 const CONTRACT_RENEWAL_MAX_YEARS = 3;
 

@@ -2,13 +2,14 @@ import Database from 'better-sqlite3';
 import { tableExists } from '../db/mappers';
 
 // Auswahlfenster fuer Spieler-Vertragsverlaengerungen: ab dem 10.01. jeder
-// Saison waehlt der Spieler seine Verlaengerungsziele (max. 75% der Fahrer mit
-// auslaufendem Vertrag, ohne Retirement-Faelle). Am 01.08. verlaengern davon
-// zufaellig 35-65% (siehe contractRenewalSchedule.ts). KI-Teams bleiben beim
-// automatischen 35%-Lauf.
+// Saison waehlt der Spieler seine Verlaengerungsziele. Es koennen ALLE Fahrer mit
+// auslaufendem Vertrag (ohne Retirement-Faelle) ausgewaehlt werden (kein Limit).
+// Am 01.08. verlaengern davon zufaellig 50-80% (siehe contractRenewalSchedule.ts).
+// KI-Teams bleiben beim automatischen 35%-Lauf.
 export const RENEWAL_SELECTION_MONTH_DAY = '01-10';
 export const RENEWAL_DRAW_MONTH_DAY = '08-01';
-export const RENEWAL_MAX_SELECT_SHARE = 0.75;
+// Kein Auswahl-Limit mehr: der Spieler darf alle waehlbaren Fahrer auswaehlen.
+export const RENEWAL_MAX_SELECT_SHARE = 1.0;
 const RETIREMENT_AGE_FALLBACK = 36;
 
 export interface RenewalCandidate {
@@ -136,7 +137,7 @@ export function saveRenewalSelection(db: Database.Database, riderIds: number[]):
     if (!eligibleIds.has(id)) throw new Error(`Fahrer ${id} ist nicht wählbar (kein auslaufender Vertrag oder Retirement).`);
   }
   const maxSel = maxSelectableCount(eligible.length);
-  if (unique.length > maxSel) throw new Error(`Es dürfen maximal ${maxSel} Fahrer (75%) ausgewählt werden.`);
+  if (unique.length > maxSel) throw new Error(`Es können höchstens alle ${maxSel} wählbaren Fahrer ausgewählt werden.`);
 
   const insertSel = db.prepare('INSERT OR IGNORE INTO contract_renewal_selection (season, rider_id) VALUES (?, ?)');
   const clearSel = db.prepare('DELETE FROM contract_renewal_selection WHERE season = ?');

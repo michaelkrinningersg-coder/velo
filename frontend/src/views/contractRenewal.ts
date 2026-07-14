@@ -26,7 +26,7 @@ export async function openContractRenewalModal(): Promise<void> {
 
 function render(): void {
   const sub = $('contract-renewal-subtitle');
-  if (sub) sub.textContent = `Saison ${currentSeason} · Auswahl bis 01.08. · max. ${maxSelectable} von ${candidates.length}`;
+  if (sub) sub.textContent = `Saison ${currentSeason} · Auswahl bis 01.08. · alle ${candidates.length} wählbar`;
 
   const atLimit = selected.size >= maxSelectable;
   const mono = "font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums";
@@ -77,7 +77,7 @@ function render(): void {
   } else {
     body.innerHTML = `
       <div style="padding:2px 2px 12px;color:#94a3b8;font-size:12.5px;line-height:1.5;">
-        Wähle bis zu <strong style="color:#e2e8f0;">${maxSelectable}</strong> (75%) deiner ${candidates.length} Fahrer mit auslaufendem Vertrag als Verlängerungsziele. Am 01.08. verlängern davon zufällig 35–65% ihren Vertrag. Fahrer, die ihr Karriereende erreichen würden, sind nicht wählbar.
+        Wähle beliebig viele — bis zu <strong style="color:#e2e8f0;">alle ${candidates.length}</strong> deiner Fahrer mit auslaufendem Vertrag als Verlängerungsziele. Am 01.08. verlängern davon zufällig 50–80% ihren Vertrag. Fahrer, die ihr Karriereende erreichen würden, sind nicht wählbar.
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow-y:auto;padding-right:4px;">${rows}</div>`;
   }

@@ -95,7 +95,7 @@ describe('Spieler-Vertragsverlängerung — Auswahl (10.01.) + Ziehung (01.08.)'
     expect(isRenewalSelectionPending(db)).toBe(true);
     const payload = getRenewalSelectionPayload(db);
     expect(payload.candidates.length).toBe(8);
-    expect(payload.maxSelectable).toBe(6); // floor(8 * 0.75)
+    expect(payload.maxSelectable).toBe(8); // kein Limit -> alle wählbar
   });
 
   it('schließt Retirement-Fälle aus der Auswahl aus', () => {
@@ -107,16 +107,16 @@ describe('Spieler-Vertragsverlängerung — Auswahl (10.01.) + Ziehung (01.08.)'
     expect(payload.candidates.find((c) => c.riderId === rid)).toBeUndefined();
   });
 
-  it('lehnt mehr als 75% oder nicht-wählbare Fahrer ab', () => {
+  it('erlaubt die Auswahl ALLER wählbaren Fahrer, lehnt nur nicht-wählbare ab', () => {
     seedGameState(db, { date: '2026-01-10', season: SEASON });
-    const ids = seedPlayerExpiring(4); // maxSelectable = 3
-    expect(() => saveRenewalSelection(db, ids)).toThrow(); // 4 > 3
+    const ids = seedPlayerExpiring(4); // kein Limit -> alle 4 wählbar
+    expect(() => saveRenewalSelection(db, ids)).not.toThrow(); // alle 4 erlaubt
     expect(() => saveRenewalSelection(db, [999999])).toThrow(); // nicht wählbar
   });
 
-  it('bestätigte Auswahl schließt das Fenster; am 01.08. verlängern 35-65% der Ausgewählten', () => {
+  it('bestätigte Auswahl schließt das Fenster; am 01.08. verlängern 50-80% der Ausgewählten', () => {
     seedGameState(db, { date: '2026-01-10', season: SEASON });
-    const ids = seedPlayerExpiring(20); // maxSelectable = 15
+    const ids = seedPlayerExpiring(20); // alle wählbar
     const selected = ids.slice(0, 12);
     saveRenewalSelection(db, selected);
     expect(isRenewalSelectionPending(db)).toBe(false); // Fenster geschlossen
@@ -127,9 +127,9 @@ describe('Spieler-Vertragsverlängerung — Auswahl (10.01.) + Ziehung (01.08.)'
 
     const renewedSelected = selected.filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON).length;
     const renewedOthers = ids.slice(12).filter((id) => (getContract(db, id)?.endSeason ?? SEASON) > SEASON).length;
-    // 35-65% von 12 = 4..8; nicht ausgewählte Spieler-Fahrer werden NICHT verlängert.
-    expect(renewedSelected).toBeGreaterThanOrEqual(Math.round(12 * 0.35));
-    expect(renewedSelected).toBeLessThanOrEqual(Math.round(12 * 0.65));
+    // 50-80% von 12 = 6..10 (gerundet); nicht ausgewählte Fahrer werden NICHT verlängert.
+    expect(renewedSelected).toBeGreaterThanOrEqual(Math.floor(12 * 0.50));
+    expect(renewedSelected).toBeLessThanOrEqual(Math.ceil(12 * 0.80));
     expect(renewedOthers).toBe(0);
   });
 

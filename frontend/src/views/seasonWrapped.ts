@@ -131,11 +131,12 @@ function groupedResultsList(results: WrappedCareerResult[]): string {
     if (last && last.raceName === r.raceName) last.rows.push(r);
     else groups.push({ raceName: r.raceName, rows: [r] });
   }
+  // Spalten: Punkte | Position (P{Platz}, nach Platzierung eingefaerbt) | Anzahl + Typ.
   const resultRow = (b: WrappedCareerResult): string => `
     <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;padding-left:10px;">
       <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
+      <span style="width:38px;color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span>
       <span style="flex:1;color:${b.isClassification ? '#e9d5ff' : '#cbd5e1'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.type)}</span>
-      <span style="color:#5f6f8a;">P<span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">${b.rank}</span></span>
     </div>`;
   return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">${groups.map((g) => `
     <div style="display:flex;flex-direction:column;gap:3px;">

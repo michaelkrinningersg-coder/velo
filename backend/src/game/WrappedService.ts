@@ -112,13 +112,31 @@ export class WrappedService {
   private bestResults(riderId: number, limit = 10, season?: number, groupByRace = false): WrappedCareerResult[] {
     const seasonClause = season != null ? 'AND spe.season = ?' : '';
     const params: any[] = season != null ? [riderId, season] : [riderId];
+    // Fuer die nach Rennen gruppierten Palmares (Legenden/Retirees/Herausgefallene)
+    // gilt ein Positions-/Kategorie-Filter: nur wirklich zaehlbare Ergebnisse.
+    //   GC (gc_final)                              : Platz <= 10
+    //   Etappenwertung (stage_result)              : Platz <= 10
+    //   Punkte/Berg/Nachwuchs (*_final)            : alle mit Punkten
+    //   Eintagesrennen (one_day_result), regulaer  : Platz <= 25
+    //     inkl. WM/EM/Olympia/kontinentale Meisterschaften (Eintagesrennen)
+    //   Nationale Meisterschaften (Kat. 14/15)     : Platz <= 10
+    // Flach (Newcomer): wie bisher alle mit Punkten ausser Trikot-Tagespunkten.
+    const filterClause = groupByRace
+      ? `AND (
+             (spe.award_type = 'gc_final' AND spe.rank <= 10)
+          OR (spe.award_type = 'stage_result' AND spe.rank <= 10)
+          OR (spe.award_type IN ('points_final', 'mountain_final', 'youth_final'))
+          OR (spe.award_type = 'one_day_result' AND r.category_id IN (14, 15) AND spe.rank <= 10)
+          OR (spe.award_type = 'one_day_result' AND (r.category_id IS NULL OR r.category_id NOT IN (14, 15)) AND spe.rank <= 25)
+        )`
+      : `AND spe.award_type NOT LIKE '%\\_leader\\_day' ESCAPE '\\'`;
     const rows = this.db.prepare(`
       SELECT r.name AS raceName, r.prestige AS prestige, spe.season AS season,
              spe.points_awarded AS points, spe.rank AS rank, spe.award_type AS award
       FROM season_point_events spe
       JOIN races r ON r.id = spe.race_id
       WHERE spe.rider_id = ? AND spe.points_awarded > 0
-        AND spe.award_type NOT LIKE '%\\_leader\\_day' ESCAPE '\\'
+        ${filterClause}
         ${seasonClause}
     `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
 
@@ -270,7 +288,7 @@ export class WrappedService {
         rider, allTimeUciPoints: row.uci,
         allTimeUciRank: allTimeRank.get(row.riderId) ?? null,
         careerWins: this.careerWins(row.riderId),
-        bestResults: this.bestResults(row.riderId, 100, undefined, true),
+        bestResults: this.bestResults(row.riderId, 200, undefined, true),
         careerFromSeason: cn.from, careerToSeason: cn.to,
         grandTourWins: cn.gt, monumentWins: cn.monument,
       });
@@ -302,7 +320,7 @@ export class WrappedService {
       out.push({
         rider, allTimeUciPoints: entry.pts, allTimeUciRank: entry.rank,
         careerWins: this.careerWins(entry.riderId),
-        bestResults: this.bestResults(entry.riderId, 100, undefined, true),
+        bestResults: this.bestResults(entry.riderId, 200, undefined, true),
         newTier,
         age: birth?.birthYear ? season - birth.birthYear : null,
       });
@@ -336,7 +354,7 @@ export class WrappedService {
         currentRank: Number.isFinite(nowRank) ? nowRank : null,
         allTimeUciPoints: nowPtsById.get(entry.riderId) ?? entry.pts,
         careerWins: this.careerWins(entry.riderId),
-        bestResults: this.bestResults(entry.riderId, 100, undefined, true),
+        bestResults: this.bestResults(entry.riderId, 200, undefined, true),
         careerFromSeason: cn.from, careerToSeason: cn.to,
         grandTourWins: cn.gt, monumentWins: cn.monument,
       });
