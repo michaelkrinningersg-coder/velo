@@ -42,4 +42,5 @@ Code, Bezeichner und Dateinamen auf Englisch (wie im bestehenden Code).
 
 * `README.md` – Velo (Radsport-Manager), Stack und Datenpipeline
 * `docs/KONZEPT_MEHRLIGA_RENNMANAGER.md` – Konzept für den Mehrliga-Rennmanager (APEX)
+* `docs/DATENMODELL_APEX_M0.md` – Schema der CSV-Stammdaten und der `world_data.db` für APEX (M0–M2)
 * `walkthroughs/` – Detailbeschreibungen einzelner Gameplay-Systeme
