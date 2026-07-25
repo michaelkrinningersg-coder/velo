@@ -78,8 +78,8 @@ graph TD
     L6["Tier 6 · Challenger Series<br/>18 Teams · 12 Rennen"]
     L7["Tier 7 · National Elite<br/>18 Teams · 10 Rennen"]
     L8["Tier 8 · National Series<br/>20 Teams · 10 Rennen"]
-    L9["Tier 9 · Regional Cup<br/>20 Teams · 8 Rennen · 1 Auto"]
-    L10["Tier 10 · Rookie Cup<br/>22 Teams · 8 Rennen · 1 Auto"]
+    L9["Tier 9 · Regional Cup<br/>20 Teams · 8 Rennen · 2 Autos"]
+    L10["Tier 10 · Rookie Cup<br/>22 Teams · 8 Rennen · 2 Autos"]
     L2 -->|Aufstieg| L1
     L3 -->|Aufstieg| L2
     L4 --> L3
@@ -756,9 +756,9 @@ backend/src/
 
 ## 20. Offene Fragen
 
-1. **Konferenzen ja/nein?** Ausbaustufe B erhöht Realismus und Regionalfarbe, aber auch den Balancing-Aufwand deutlich. Vorschlag: Schema vorbereiten, Entscheidung nach M2 anhand der Simulationsergebnisse.
-2. **Ein oder zwei Autos in Tier 9–10?** Ein Auto ist wirtschaftlich stimmiger für Amateurligen, bricht aber die Teamkollegen-Dynamik (Mentoring, Stallorder) genau dort, wo Nachwuchs entsteht.
-3. **Motorenhersteller als eigene Entität** mit eigener Entwicklung – oder als reiner Vertragsparameter? Erstes ist deutlich reizvoller (Werksteam-Politik), kostet aber ein eigenes Subsystem.
+1. **Konferenzen ja/nein?** ✓ **ENTSCHIEDEN: Nein.** Schlanker halten, kein separates Konferenz-Subsystem.
+2. **Ein oder zwei Autos in Tier 9–10?** ✓ **ENTSCHIEDEN: Zwei Autos.** Volle Teamdynamik von unten auf, Mentoring und Stallorder sind in der Nachwuchsschmiede zentral.
+3. **Motorenhersteller als eigene Entität** mit eigener Entwicklung – oder als reiner Vertragsparameter? ✓ **ENTSCHIEDEN: Unabhängige Entität mit Tuning für Teams.** Werksteam-Verträge und Kundenverträge sind spielerisch relevant, mit je eigenem Entwicklungstracking. Teams können aber innerhalb ihres Budgets Motorenspecs für ihre Autos anpassen.
 4. **Reglementwechsel in unteren Ligen?** Vorschlag: nur Tier 1–4 haben echte Formelwechsel; darunter sind die Reglements stabil und abgeleitet.
 5. **Wie sichtbar ist die Konkurrenz-Entwicklung?** Vorschlag: Schätzwerte mit Unschärfe, die vom Scouting-Level abhängt – nie exakte Zahlen.
 6. **Fahrer-Ablösesummen** in unteren Ligen: realistisch (fast keine) oder spielerisch (relevantes Geschäftsmodell)? Zweiteres macht Tier 7–10 wirtschaftlich überhaupt erst spielbar.
