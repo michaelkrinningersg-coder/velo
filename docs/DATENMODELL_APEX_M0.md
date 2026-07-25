@@ -1115,3 +1115,72 @@ Für Absteiger und Verbleibende bleibt der alte Deckel maßgeblich. Auch den Abs
 * Der Homologations-Ratchet aus M3 (+8 % je Aufstieg, unbegrenzt kumulierend) ist weiterhin ungeklärt.
 * `grace_period_seasons` in `licence_requirements.csv` ist weiterhin ungenutzt.
 * Personal (8 Rollen) ist ausdrücklich auf einen späteren Schritt verschoben.
+
+---
+
+## 19. M5 Teil 2: Personal
+
+Konzept 8.1 nennt acht Rollen. Drei Entscheidungen prägen die Umsetzung.
+
+### 19.1 Rollen von Hand, Personen generiert
+
+167 Teams × 9 Stellen sind rund **1.500 Personen** – zum Vergleich: die gesamte Handarbeit in M0 waren 617 Zeilen. Handgepflegt ist deshalb nur `staff_roles.csv` mit **acht Zeilen**: sie legt fest, *was* eine Rolle bewirkt, nicht *wer* sie ausfüllt. Der Bestand entsteht deterministisch aus dem Seed, Namen aus `driver_names.csv`.
+
+Das ist dasselbe Muster wie bei `car_part_types.csv`: Typdefinition von Hand, Bestand zur Laufzeit.
+
+#### Die Normierung
+
+Jede Wirkungsspalte summiert sich **über alle acht Rollen auf genau 1.0**. Der Validator prüft das hart, wie bei den Gewichtsprofilen der Strecken. Nur dadurch ist der Personalwert einer Wirkung ein sauberer gewichteter Mittelwert auf derselben 0–100-Skala wie die Einzelwerte – eine Summe von 1,1 sähe in keiner einzelnen Zahl falsch aus, verschöbe aber jede Entwicklung im Spiel.
+
+| Spalte | Wirkung |
+| :--- | :--- |
+| `w_chassis` … `w_brakes` | Entwicklung der neun Bauteilgruppen |
+| `w_reliability` | Wachstum der Standfestigkeit |
+| `w_strategy` | Güte der Boxenstopp- und Reifenentscheidungen (Tick-Sim) |
+| `w_pit` | Boxenstoppzeit und Fehlerrate |
+| `w_feedback` | Verwertung des Fahrer-Feedbacks |
+| `w_morale` | Fahrermoral (noch ohne Wirkung, siehe 19.5) |
+| `w_newgen` | Qualität des eigenen Nachwuchses (noch ohne Wirkung) |
+
+Zusätzlich summiert sich `salary_share × count_per_team` über alle Rollen auf 1.0 – das Personalbudget wird über die tatsächlich besetzten Stellen verteilt, der Renningenieur zählt doppelt.
+
+Ein Team ohne besetzte Stelle fällt nicht auf null, sondern aus der Gewichtung: Der Wert wird auf den abgedeckten Anteil hochgerechnet.
+
+### 19.2 Sieben Rollen wirken, der Nachwuchsleiter noch nicht
+
+Seine Wirkung ist Sichtbarkeit und Schätzgenauigkeit – das braucht erst einen Spieler, der etwas nicht weiß. Er wird trotzdem besetzt und bezahlt, damit später kein Bestand nachgezogen werden muss. Dieselbe Vorgehensweise wie bei den Regenmischungen in `tyre_compounds.csv`.
+
+### 19.3 Abwerbung nur über zwei Ligen hinweg
+
+Ein Tier-6-Team verliert seinen Chefkonstrukteur an Tier 4 und höher, **nie an den direkten Ligarivalen**. Konzept 8.1 will die Dramatik, dass ein erfolgreiches kleines Team seine Leute nach oben verliert; der Abstand von zwei Stufen nimmt ihr die Spitze gegen genau den Konkurrenten, gegen den der Aufstieg entschieden wird.
+
+Loyalität (steigt um 8 je Saison im Amt) und Restlaufzeit senken die Erfolgsquote, verhindern den Wechsel aber nie ganz – das ist die Ausstiegsklausel aus Konzept 8.1. Gemessen: 245 Abwerbungen in 20 Saisons.
+
+### 19.4 Was das Personal ersetzt hat
+
+Bis hierher war `staff` in `developParts` eine reine Ligafunktion (`68 − 4,5 × (Tier−1)`) und damit **für jedes Team einer Liga identisch** – es gab innerhalb einer Liga schlicht keinen personellen Unterschied. Dieselbe Formel stand für Stratege und Boxencrew in der Tick-Sim.
+
+Beim Verkabeln fiel eine Abweichung vom Konzept auf: Der Crewwert wirkte nur auf die *Streuung* der Stoppzeit. Zwischen der besten und der schlechtesten Crew in Tier 1 lagen damit neun Hundertstel – weniger als das Rauschen einer Saison. Konzept 8.1 verlangt ausdrücklich „Mittelwert **und** Fehlerrate"; die Standzeit folgt jetzt `2,9 − 1,2 × (Crew/100)`. Gemessen liegen zwischen der besten und schlechtesten Tier-1-Crew nun 0,26 s.
+
+### 19.5 Gemessen über 20 Saisons
+
+| | Saison 1 | Saison 20 |
+| :--- | :--- | :--- |
+| Personalwert Tier 1 | 87,2 | 86,7 |
+| Personalwert Tier 4 | 69,1 | 64,8 |
+| Personalwert Tier 10 | 33,0 | 32,1 |
+| Streuung innerhalb Tier 1 | – | SD 4,9 (78,4 – 94,4) |
+| Streuung innerhalb Tier 10 | – | SD 1,2 (28,8 – 35,1) |
+| Verschiedene Tier-1-Meister | – | 7 (vorher 4) |
+
+Die Pyramide hält, und Teams derselben Liga unterscheiden sich jetzt personell. Der Zusammenhang zwischen Personalwert und Tabellenplatz liegt im Mittel der Saisons 10–20 bei **r = −0,52 (Tier 1)**, −0,46 (Tier 7) und −0,33 (Tier 10) – in Tier 4 dagegen bei −0,02.
+
+Ein Fehler, der dabei auffiel und behoben ist: Teams griffen nach jedem freien Kandidaten, auch weit unter ihrem Ligaband, statt einen besseren Neuzugang zu holen. Der Personalwert der Mittelfeldligen sackte dadurch um bis zu 14 Punkte ab.
+
+### 19.6 Was offen bleibt
+
+* **Die Mobilität hat sich nicht bewegt.** Auch mit Personal steigt netto kein Team zwei Ligen (Spannweite ≥ 2: 23 von 167 Teams, unbewegt 46). Die Erwartung, dass personelle Unterschiede innerhalb einer Liga den Aufsteiger tragen, hat sich **nicht** bestätigt. Der Befund aus 18.10 steht unverändert.
+* **In Tier 4 wirkt das Personal nicht messbar** (r = −0,02 gegen −0,52 in Tier 1). Ungeklärt.
+* **Gehälter werden weiterhin nicht verbucht** – weder die der Fahrer noch die des Personals. `applyFinances` rechnet Ausgaben pauschal als `expense_ratio × cost_cap`. Gehört nach M6.
+* `w_morale` und `w_newgen` sind ohne Wirkung: Die Fahrermoral wird geführt, aber nirgends gelesen, und der Nachwuchsleiter wartet auf das Scouting.
+* Infrastruktur (Konzept 8.2, Level 0–5) ist nicht angefasst.
