@@ -1044,11 +1044,36 @@ Startwerte folgen der Alterskurve: 0.75 des Potenzials mit 17, 0.81 mit 19.
 
 Ein Cockpit wird frei, wenn der Vertrag ausläuft oder der Fahrer zurücktritt – **Abwerbung aus laufenden Verträgen gibt es nicht** (getroffene Entscheidung). Die Vergabe läuft von Tier 1 abwärts, damit die oberen Ligen zuerst zugreifen. Kandidat ist jeder ohne Stammcockpit, sofern er die **Superlizenzpunkte** seiner Liga erfüllt (Tier 1: 30, Tier 4: 15, ab Tier 5: keine). Punkte gibt es nach Saisonplatzierung, in Tier 1 bis 40 für den Meister, in Tier 10 noch 2.
 
-Diese Schranke ist der Aufstiegsweg eines Fahrers: Ein Newgen startet in Tier 5–10, sammelt Punkte und wird erst danach für die oberen Ligen verpflichtbar.
+Diese Schranke ist der Aufstiegsweg eines Fahrers: Ein Newgen startet in Tier 5–10, sammelt Punkte und wird erst danach für die obere Hälfte verpflichtbar.
 
-Neue Verträge laufen 1–4 Jahre. Das Gehalt folgt `10^(7 − 0.28 × (tier − 1)) × (Kernwert / 70)^3`.
+### 18.6 Das Gehalt als zweite Schranke
 
-### 18.6 Rücktritte
+Die Superlizenz allein reicht nicht. Ohne Geldschranke gibt jedes Team sein Cockpit dem besten Verfügbaren – auch das ärmste – und die Ligen rücken über zwanzig Saisons bis auf wenige Punkte zusammen: gemessen stieg das mittlere Potenzial in Tier 10 von den handgepflegten 43 auf 63, während 105 Fahrer mit Potenzial 48 nie ein Cockpit fanden.
+
+Der Preis eines Fahrers hängt deshalb **allein an seiner Güte, nie an der Liga**. Ein 90er kostet in Tier 10 dasselbe wie in Tier 1, nur kann ihn dort niemand bezahlen. Genau daraus entsteht die Staffelung, die in `drivers.csv` von Hand gesetzt ist.
+
+Beide Ankerpunkte kommen aus den Daten:
+
+* **Preis:** das Sitzbudget von Tier 1 und Tier 10 – 12 % der Ausschüttung bei mittlerer Platzierung, geteilt durch zwei Cockpits. Aktuell 5,22 Mio. gegen 9.360 EUR.
+* **Güte:** der Kernwertschnitt der handgepflegten Stammfahrer dieser beiden Ligen. Aktuell 88,9 gegen 35,6.
+
+Der Exponent ist damit nicht gewählt, sondern die Lösung von `Budget₁ / Budget₁₀ = (Güte₁ / Güte₁₀)^Exponent` – aktuell 6,92. Wer `league_payouts` oder `drivers.csv` nachjustiert, justiert den Markt mit.
+
+Das Budget eines einzelnen Teams folgt der Ausschüttung, die es in seiner **neuen** Liga zu erwarten hat, bezogen auf seine Platzierung der Vorsaison: Der Meister einer Liga hat mehr für Fahrer übrig als ihr Letzter, und ein Aufsteiger rechnet bereits mit dem Geld der neuen Liga.
+
+#### Der Ruf – warum die beiden Schranken sich nicht zuschnüren dürfen
+
+Mit reinem Gütepreis saß ein schneller Neunzehnjähriger in der Falle: für Tier 1–4 fehlten ihm die Punkte, für Tier 5–10 war er zu teuer. Er fuhr nie, verdiente nie Punkte, und die Spitze blutete aus – der Kernwert der Tier-1-Fahrer fiel in zwanzig Saisons von 89 auf 74, während im freien Pool dauerhaft ein 82er saß, den niemand verpflichten konnte.
+
+Der Preis wird deshalb mit dem **Ruf** gedämpft, gemessen an den Superlizenzpunkten: Ein völlig unbeschriebener Fahrer kostet 10 % seines späteren Werts, ab 45 Punkten ruft er ihn voll auf. Ein Rookie unterschreibt billig dort, wo er darf, fährt sich Punkte heraus und wird beim nächsten Vertrag teuer. Ein alternder Fahrer wird über den fallenden Kernwert von selbst wieder billiger und findet weiter unten ein Cockpit.
+
+Ein **Pay-Driver** senkt über `pay_driver_budget` direkt, was er das Team kostet – dafür steht die Spalte.
+
+Findet sich niemand im Rahmen, wird der günstigste Fahrer über Budget verpflichtet; ein Team muss zwei Autos an den Start bringen. Über 20 Saisons trat dieser Fall zuletzt **kein einziges Mal** ein.
+
+Neue Verträge laufen 1–4 Jahre.
+
+### 18.7 Rücktritte
 
 | Alter | Mit Cockpit | Ohne Cockpit |
 | :--- | :--- | :--- |
@@ -1058,7 +1083,7 @@ Neue Verträge laufen 1–4 Jahre. Das Gehalt folgt `10^(7 − 0.28 × (tier −
 | 39–41 | 40 % | 100 % |
 | ≥ 42 | 100 % | 100 % |
 
-### 18.7 Reihenfolge im Saisonzyklus
+### 18.8 Reihenfolge im Saisonzyklus
 
 Sie ist zwingend, nicht beliebig:
 
@@ -1072,9 +1097,21 @@ Sie ist zwingend, nicht beliebig:
 8. `retireDrivers`
 9. `resolveMovements` – Auf- und Abstieg
 
-### 18.8 Was offen bleibt
+### 18.9 Der Aufsteiger-Bonus
 
-* **Die Fahrerpyramide flacht unten ab.** Nach zwanzig Saisons liegt das mittlere Potenzial in Tier 10 bei 63 statt bei den handgepflegten 43, während 105 Fahrer mit mittlerem Potenzial 48 nie ein Cockpit finden. Ursache: Der Markt vergibt jedes Cockpit an den besten Verfügbaren, auch in Tier 10 – Geld spielt bei der Vergabe bisher keine Rolle.
-* **Teams steigen weiterhin höchstens eine Liga.** In 20 Saisons erreicht kein Team einen Netto-Aufstieg von zwei Stufen.
+Zwei Änderungen an der Bauteilentwicklung, beide auf den Aufsteiger gemünzt:
+
+1. Ein Aufsteiger entwickelt gegen den Deckel der Liga, in der sein Auto **fahren** wird, nicht gegen den, unter dem es gebaut wurde. Am alten Deckel gemessen blieb ihm kein Spielraum – sein Sättigungsterm war nahe null, ausgerechnet in der Saison, in der er aufholen muss.
+2. Ein Faktor von **1,6** auf die Entwicklung, genau eine Saison lang, nämlich die erste in der neuen Liga. Er läuft danach von selbst aus und ist kein zweiter Deckel.
+
+Für Absteiger und Verbleibende bleibt der alte Deckel maßgeblich. Auch den Absteiger am neuen, niedrigeren Deckel zu messen, wurde ausprobiert und verworfen: Er entwickelte dann gar nicht mehr weiter, war mit seinem gekappten Auto unten trotzdem überlegen, und die Quote der direkten Wiederaufstiege stieg von 60 auf 71 Prozent.
+
+**Wirkung, über 20 Saisons gemessen:** Das Auto eines Aufsteigers liegt in seiner ersten Saison in der neuen Liga jetzt bei **101 % des Ligaschnitts** – das Auto ist nicht mehr der Engpass. Er landet damit im Mittelfeld (0,56 auf einer Skala, auf der 0 der Meister und 1 der Letzte ist) und bleibt dort auch in den Folgesaisons.
+
+### 18.10 Was offen bleibt
+
+* **Teams steigen weiterhin höchstens eine Liga.** Der Aufsteiger-Bonus hat den Engpass verschoben, aber nicht aufgelöst: Über 20 Saisons erreicht kein Team einen Netto-Aufstieg von zwei Stufen, und die Zahl der Teams, die zwei Saisons hintereinander aufsteigen, blieb bei 5. Die Ursache ist jetzt sichtbar und liegt tiefer als ein Regler: Der Sättigungsterm zieht alle Autos einer Liga so dicht an den Deckel, dass die Tabelle über die Jahre nahe am Zufall entscheidet. Genau das ist die Anti-Dominanz-Regelung, die dafür sorgt, dass der Tier-1-Titel überhaupt den Besitzer wechselt (4–6 verschiedene Meister in 20 Saisons statt einem). Sie steht im direkten Widerspruch zum Ziel aus Konzept 18, einem Aufstieg alle 3–4 Saisons – **das ist eine Designentscheidung, keine weitere Justierung.**
+* **Tier 5 liegt leicht über Tier 4.** Tier 5 ist die oberste Liga ohne Superlizenzhürde, also landet dort das beste noch unlizenzierte Talent. Gemessen: Potenzial 78,6 in Tier 5 gegen 75,3 in Tier 4.
+* Der Homologations-Ratchet aus M3 (+8 % je Aufstieg, unbegrenzt kumulierend) ist weiterhin ungeklärt.
 * `grace_period_seasons` in `licence_requirements.csv` ist weiterhin ungenutzt.
 * Personal (8 Rollen) ist ausdrücklich auf einen späteren Schritt verschoben.
