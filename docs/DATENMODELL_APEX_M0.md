@@ -995,3 +995,86 @@ Der Bootstrapper legt eine View an, die den Vorrang auflöst: Streckenzeile gewi
 **Validierung:** Bauteilgewichte je Zeile Summe 1.0 · Fahrergewichte je Zeile Summe 1.0 · jeder Archetyp mit allen drei Sektoren · `sector_share` je Archetyp und je überschreibender Strecke Summe 1.0 · eine Strecke überschreibt **alle drei** Sektoren oder keinen · `track_id` existiert.
 
 Diese Summenregeln sind der Grund, warum die Prüfung hart ist: Eine Gewichtssumme von 1,1 sieht in keiner einzelnen Zahl falsch aus, verschiebt aber alle Rundenzeiten dieser Strecke systematisch.
+
+---
+
+## 18. M5: Fahrerkarrieren
+
+Bis M4 waren Fahrer unveränderlich: `drivers.csv` sagte, wer für wen fährt, und daran änderte sich über zwanzig Saisons nichts. Damit konnte ein aufgestiegenes Team seine neue Liga nie gewinnen – sein Auto wuchs, seine Fahrer nicht. M5 löst die Identität eines Fahrers von seinem Zustand.
+
+### 18.1 `driver_state` – der Verlauf
+
+Dieselbe Trennung wie bei den Teams: `drivers` hält, was sich nie ändert (Name, Land, Jahrgang, Potenzial), `driver_state` hält je Saison eine Zeile mit allem, was sich ändert – die 17 Attribute, Rolle, Team, Cockpitnummer, Vertragslaufzeit, Gehalt, Moral und Superlizenzpunkte. Primärschlüssel `(driver_id, season)`.
+
+`drivers.start_team_id`, `start_role`, `start_seat` und `contract_until_season` sind damit endgültig **Startwerte** – ab Saison 2 wären sie falsch, und keine Abfrage der Engine liest sie noch. `seedDriverState` überträgt sie einmalig in die Saison-1-Zeile.
+
+`contract_until` ist die **letzte gedeckte Saison**: Wer bis 7 unterschrieben hat, fährt Saison 7 noch und ist erst zu Saison 8 frei.
+
+### 18.2 `driver_history` – die Chronik
+
+Eine schmale Tabelle `(driver_id, season, event)` mit `tier`, `team_id` und einem Freitextfeld. Sie hält fest, was aus den Zustandszeilen nicht mehr rekonstruierbar wäre: Verpflichtungen und Rücktritte. Für die spätere Fahrerakte im Frontend ist sie die Quelle.
+
+### 18.3 Entwicklung als Annäherungsrate
+
+Die Alterskurve arbeitet nicht mit festen Punktzuwächsen, sondern mit **Annäherungsraten** an das Potenzial:
+
+| Alter | Tempo (`pace`, `qualifying`, `braking`, `cornering`, `car_control`) | Erfahrung (`pressure`, `feedback`, `racecraft_traffic`, `defending`) |
+| :--- | :--- | :--- |
+| ≤ 21 | 0.20 | 0.24 |
+| 22–26 | 0.15 | 0.20 |
+| 27–31 | 0.10 | 0.14 |
+| 32–35 | −2.0 Punkte | 0.06 |
+| ≥ 36 | −3.5 Punkte | −0.5 Punkte |
+
+Eine Rate von 0.20 heißt: ein Fünftel des Abstands zum Potenzial pro Saison. Ein fester Punktzuwachs wäre hier falsch – er läuft nicht aus, sodass ein Fahrer mit Potenzial 45 genauso schnell wächst wie einer mit 95 und irgendwann sein eigenes Potenzial überschreitet. Abbauwerte sind dagegen echte Punktabzüge: Wer nachlässt, verliert unabhängig davon, wie nah er seinem Potenzial einmal kam.
+
+Die Raten sind an der Alterskurve der handgepflegten Startfahrer kalibriert. Deren `pace`/`potential`-Quote liegt mit 16–19 Jahren bei 0.79, mit 24–27 bei 0.93 und ab 28 bei 0.97; mit diesen Raten trifft ein Newgen dieselbe Kurve.
+
+Zwei Faktoren skalieren die Rate: die **Ligastufe** (`1.16 − 0.04 × (tier − 1)` – wer oben fährt, lernt schneller) und das **Cockpit** (ohne Stammcockpit nur 35 %).
+
+### 18.4 Newgens ziehen aus dem Startfeld
+
+Der Nachwuchs füllt den Bestand jede Saison auf 450 auf. Sein Potenzial wird **nicht** aus einer Formel gezogen, sondern aus der Potenzialverteilung der handgepflegten Startfahrer – die Marke `drivers.is_newgen` trennt beide Bestände dauerhaft. Damit bleibt die Pyramide aus `drivers.csv` mit ihrer breiten Mitte und ihrer dünnen Spitze über beliebig viele Saisons erhalten.
+
+Der erste Versuch mit einer freien Formel (`38 + rng^1.7 × 58`) ließ die Welt verarmen: Nach zwanzig Saisons war die mittlere `pace` in Tier 1 von 89 auf 55 gefallen, weil die zurücktretende Spitze durch schwächere Jahrgänge ersetzt wurde. Namen und Nationen kommen aus `driver_names.csv` (30 Nationen, gewichtet).
+
+Startwerte folgen der Alterskurve: 0.75 des Potenzials mit 17, 0.81 mit 19.
+
+### 18.5 Der Markt füllt nur freie Cockpits
+
+Ein Cockpit wird frei, wenn der Vertrag ausläuft oder der Fahrer zurücktritt – **Abwerbung aus laufenden Verträgen gibt es nicht** (getroffene Entscheidung). Die Vergabe läuft von Tier 1 abwärts, damit die oberen Ligen zuerst zugreifen. Kandidat ist jeder ohne Stammcockpit, sofern er die **Superlizenzpunkte** seiner Liga erfüllt (Tier 1: 30, Tier 4: 15, ab Tier 5: keine). Punkte gibt es nach Saisonplatzierung, in Tier 1 bis 40 für den Meister, in Tier 10 noch 2.
+
+Diese Schranke ist der Aufstiegsweg eines Fahrers: Ein Newgen startet in Tier 5–10, sammelt Punkte und wird erst danach für die oberen Ligen verpflichtbar.
+
+Neue Verträge laufen 1–4 Jahre. Das Gehalt folgt `10^(7 − 0.28 × (tier − 1)) × (Kernwert / 70)^3`.
+
+### 18.6 Rücktritte
+
+| Alter | Mit Cockpit | Ohne Cockpit |
+| :--- | :--- | :--- |
+| < 32 | 0 % | 3 % |
+| 32–35 | 4 % | 22 % |
+| 36–38 | 16 % | 52 % |
+| 39–41 | 40 % | 100 % |
+| ≥ 42 | 100 % | 100 % |
+
+### 18.7 Reihenfolge im Saisonzyklus
+
+Sie ist zwingend, nicht beliebig:
+
+1. `prepareSeason` – Ligazugehörigkeit der neuen Saison
+2. `developParts` – Autoentwicklung
+3. `ageAndDevelop` – Altern und Entwicklung in die neue Saison
+4. `generateNewgens` – Bestand auf 450 auffüllen
+5. `runMarket` – freie Cockpits besetzen *(kann nur vergeben, wer schon existiert)*
+6. `runSeason` → `buildStandings` → `applyFinances`
+7. `awardSuperlicence` – *vor* den Rücktritten: Wer aufhört, hat sich die Punkte trotzdem verdient
+8. `retireDrivers`
+9. `resolveMovements` – Auf- und Abstieg
+
+### 18.8 Was offen bleibt
+
+* **Die Fahrerpyramide flacht unten ab.** Nach zwanzig Saisons liegt das mittlere Potenzial in Tier 10 bei 63 statt bei den handgepflegten 43, während 105 Fahrer mit mittlerem Potenzial 48 nie ein Cockpit finden. Ursache: Der Markt vergibt jedes Cockpit an den besten Verfügbaren, auch in Tier 10 – Geld spielt bei der Vergabe bisher keine Rolle.
+* **Teams steigen weiterhin höchstens eine Liga.** In 20 Saisons erreicht kein Team einen Netto-Aufstieg von zwei Stufen.
+* `grace_period_seasons` in `licence_requirements.csv` ist weiterhin ungenutzt.
+* Personal (8 Rollen) ist ausdrücklich auf einen späteren Schritt verschoben.
