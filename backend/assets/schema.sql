@@ -336,6 +336,11 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   -- Achsenabschnitt der Regime-Ziehung: P(geschlossene Ankunft) =
   -- sigmoid(bunch_intercept + BUNCH_SLOPE * stage_score / km). Gemessen.
   bunch_intercept             REAL NOT NULL,
+  -- Mittlerer Anteil der ersten Zeitgruppe bei geschlossener Ankunft. Gemessen.
+  bunched_share_mean          REAL NOT NULL,
+  -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
+  -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
+  split_share_intercept       REAL NOT NULL,
   -- Sekunden Rueckstand je Score-Punkt und Kilometer.
   gap_factor                  REAL NOT NULL,
   -- Exponent auf den Score-Abstand: > 1 staut das Feld vorne und zieht es hinten auseinander.

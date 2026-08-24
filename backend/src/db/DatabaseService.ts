@@ -3293,6 +3293,11 @@ export class DatabaseService {
         profile                     TEXT PRIMARY KEY,
         base_speed_kmh              REAL NOT NULL,
         bunch_intercept             REAL NOT NULL,
+        -- Mittlerer Anteil der ersten Zeitgruppe bei geschlossener Ankunft. Gemessen.
+        bunched_share_mean          REAL NOT NULL,
+        -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
+        -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
+        split_share_intercept       REAL NOT NULL,
         gap_factor                  REAL NOT NULL,
         gap_exponent                REAL NOT NULL,
         noise_sigma                 REAL NOT NULL,

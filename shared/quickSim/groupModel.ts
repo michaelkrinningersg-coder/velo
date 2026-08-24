@@ -12,9 +12,10 @@
  */
 
 import {
-  BUNCHED_SHARE_BETA,
+  BUNCHED_SHARE_RELATIVE_SD,
   BUNCH_SLOPE,
-  SPLIT_SHARE_BETA,
+  SPLIT_SHARE_RELATIVE_SD,
+  SPLIT_SHARE_SLOPE,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
 import { randomBetween, type RandomSource } from '../rng';
@@ -105,15 +106,53 @@ export function drawBeta(random: RandomSource, alpha: number, beta: number): num
   return sum === 0 ? 0.5 : a / sum;
 }
 
+/** Kleinster und groesster zulaessiger Anteil, damit die Beta-Ziehung definiert bleibt. */
+const MIN_SHARE = 0.005;
+const MAX_SHARE = 0.98;
+
 /**
- * Anteil der Finisher in der ersten Zeitgruppe, je nach Regime.
+ * Erwarteter Anteil der ersten Zeitgruppe je Regime.
  *
- * Gemessen: geschlossen Mittel 0,772 bei sd 0,124 (795 Laeufe), zerfallen
- * Mittel 0,092 bei sd 0,124 (1.855 Laeufe). Als Beta-Verteilungen ueber die
- * Momentenmethode.
+ * Beide haengen vom Profil ab — ein gepoolter Mittelwert war der groesste
+ * Fehler der ersten Fassung: er sagte fuer alle Bergprofile 0,092 voraus,
+ * beobachtet waren 0,022 bis 0,034, und fuer Flat 0,772 statt 0,858. Im
+ * zerfallenen Regime kommt die Schwierigkeit je Kilometer hinzu.
  */
-export function drawFirstGroupShare(random: RandomSource, regime: FinishRegime): number {
-  const { alpha, beta } = regime === 'bunched' ? BUNCHED_SHARE_BETA : SPLIT_SHARE_BETA;
+export function resolveFirstGroupShareMean(
+  parameters: QuickSimProfileParameters,
+  regime: FinishRegime,
+  difficultyPerKm: number,
+): number {
+  if (regime === 'bunched') {
+    return Math.min(MAX_SHARE, Math.max(MIN_SHARE, parameters.bunchedShareMean));
+  }
+  const logDifficulty = Math.log(Math.max(0.01, difficultyPerKm));
+  const mean = parameters.splitShareIntercept + (SPLIT_SHARE_SLOPE * logDifficulty);
+  return Math.min(0.5, Math.max(MIN_SHARE, mean));
+}
+
+/**
+ * Beta-Parameter aus Mittelwert und relativer Streuung (Momentenmethode).
+ * Die Varianz wird gedeckelt, damit alpha und beta positiv bleiben.
+ */
+export function resolveBetaParameters(mean: number, relativeSd: number): { alpha: number; beta: number } {
+  const clampedMean = Math.min(MAX_SHARE, Math.max(MIN_SHARE, mean));
+  const maxVariance = clampedMean * (1 - clampedMean) * 0.98;
+  const variance = Math.min(maxVariance, (clampedMean * relativeSd) ** 2);
+  const concentration = ((clampedMean * (1 - clampedMean)) / variance) - 1;
+  return { alpha: clampedMean * concentration, beta: (1 - clampedMean) * concentration };
+}
+
+/** Anteil der Finisher in der ersten Zeitgruppe. */
+export function drawFirstGroupShare(
+  random: RandomSource,
+  parameters: QuickSimProfileParameters,
+  regime: FinishRegime,
+  difficultyPerKm: number,
+): number {
+  const mean = resolveFirstGroupShareMean(parameters, regime, difficultyPerKm);
+  const relativeSd = regime === 'bunched' ? BUNCHED_SHARE_RELATIVE_SD : SPLIT_SHARE_RELATIVE_SD;
+  const { alpha, beta } = resolveBetaParameters(mean, relativeSd);
   return drawBeta(random, alpha, beta);
 }
 

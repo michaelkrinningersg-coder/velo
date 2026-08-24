@@ -17,20 +17,14 @@ import path from 'node:path';
 import {
   resolveBunchProbability,
   resolveDifficultyPerKm,
+  resolveFirstGroupShareMean,
 } from '../../shared/quickSim/groupModel';
-import {
-  BUNCHED_SHARE_BETA,
-  DEFAULT_QUICK_SIM_PROFILES,
-  SPLIT_SHARE_BETA,
-} from '../../shared/quickSimProfiles';
+import { DEFAULT_QUICK_SIM_PROFILES } from '../../shared/quickSimProfiles';
 import type { StageProfile } from '../../shared/types';
 import type { StageRunMetrics } from './metrics';
 
 /** Zeitfahren haben keine Gruppendynamik. */
 const EXCLUDED_PROFILES = new Set(['ITT', 'TTT']);
-
-const betaMean = (beta: { alpha: number; beta: number }): number =>
-  beta.alpha / (beta.alpha + beta.beta);
 
 interface StageReferenceFile {
   stage: {
@@ -61,9 +55,6 @@ function main(): void {
     process.exit(1);
   }
 
-  const meanBunched = betaMean(BUNCHED_SHARE_BETA);
-  const meanSplit = betaMean(SPLIT_SHARE_BETA);
-
   const byProfile = new Map<string, Array<{ observed: number; predicted: number }>>();
   for (const name of fs.readdirSync(inputDir)) {
     if (!name.startsWith('stage-') || !name.endsWith('.json')) {
@@ -86,11 +77,11 @@ function main(): void {
     }
 
     const observed = runs.reduce((sum, run) => sum + (run.firstGroupSize / run.finisherCount), 0) / runs.length;
-    const bunchProbability = resolveBunchProbability(
-      parameters,
-      resolveDifficultyPerKm(stageScore, distanceKm),
-    );
-    const predicted = (bunchProbability * meanBunched) + ((1 - bunchProbability) * meanSplit);
+    const difficultyPerKm = resolveDifficultyPerKm(stageScore, distanceKm);
+    const bunchProbability = resolveBunchProbability(parameters, difficultyPerKm);
+    const predicted =
+      (bunchProbability * resolveFirstGroupShareMean(parameters, 'bunched', difficultyPerKm))
+      + ((1 - bunchProbability) * resolveFirstGroupShareMean(parameters, 'split', difficultyPerKm));
 
     const bucket = byProfile.get(profile) ?? [];
     bucket.push({ observed, predicted });

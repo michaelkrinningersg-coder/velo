@@ -20,6 +20,8 @@ function row(profile: string, overrides: Partial<QuickSimProfileRow> = {}): Quic
     profile,
     base_speed_kmh: 40,
     bunch_intercept: 1,
+    bunched_share_mean: 0.7,
+    split_share_intercept: 0.05,
     gap_factor: 0.2,
     gap_exponent: 1.4,
     noise_sigma: 0.2,
@@ -36,6 +38,8 @@ function createTable(db: Database.Database): void {
       profile                     TEXT PRIMARY KEY,
       base_speed_kmh              REAL NOT NULL,
       bunch_intercept             REAL NOT NULL,
+      bunched_share_mean          REAL NOT NULL,
+      split_share_intercept       REAL NOT NULL,
       gap_factor                  REAL NOT NULL,
       gap_exponent                REAL NOT NULL,
       noise_sigma                 REAL NOT NULL,
@@ -48,9 +52,10 @@ function createTable(db: Database.Database): void {
 
 function insert(db: Database.Database, entry: QuickSimProfileRow): void {
   db.prepare(`
-    INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    entry.profile, entry.base_speed_kmh, entry.bunch_intercept, entry.gap_factor,
+    entry.profile, entry.base_speed_kmh, entry.bunch_intercept,
+    entry.bunched_share_mean, entry.split_share_intercept, entry.gap_factor,
     entry.gap_exponent, entry.noise_sigma, entry.incident_loss_multiplier,
     entry.severe_dnf_chance, entry.breakaway_shrink_exponent,
   );
@@ -85,12 +90,14 @@ describe('Vorgabewerte', () => {
 describe('mapQuickSimProfileRow', () => {
   it('uebertraegt jede Spalte auf das passende Feld', () => {
     const mapped = mapQuickSimProfileRow(row('Flat', {
-      base_speed_kmh: 43.5, bunch_intercept: 3.1, gap_factor: 0.061, gap_exponent: 1.31,
+      base_speed_kmh: 43.5, bunch_intercept: 3.1, bunched_share_mean: 0.857,
+      split_share_intercept: -0.086, gap_factor: 0.061, gap_exponent: 1.31,
       noise_sigma: 0.151, incident_loss_multiplier: 1.21, severe_dnf_chance: 0.251,
       breakaway_shrink_exponent: 1.51,
     }));
     expect(mapped).toEqual({
-      baseSpeedKmh: 43.5, bunchIntercept: 3.1, gapFactor: 0.061, gapExponent: 1.31,
+      baseSpeedKmh: 43.5, bunchIntercept: 3.1, bunchedShareMean: 0.857,
+      splitShareIntercept: -0.086, gapFactor: 0.061, gapExponent: 1.31,
       noiseSigma: 0.151, incidentLossMultiplier: 1.21, severeDnfChance: 0.251,
       breakawayShrinkExponent: 1.51,
     });
