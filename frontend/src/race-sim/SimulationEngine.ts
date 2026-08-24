@@ -54,6 +54,9 @@ export interface RiderCluster {
   distanceMeter: number;
 }
 
+/** Geteilte leere Cluster-Liste fuer Frames ohne Live-Darstellung (Instant-Sim). */
+const EMPTY_CLUSTERS: RiderCluster[] = [];
+
 export interface RealtimeRiderSnapshot {
   riderId: number;
   riderName: string;
@@ -1202,6 +1205,8 @@ export class SimulationEngine {
 
   private readonly draftOrderScratch: RiderState[] = [];
 
+  /** Wiederverwendete Ergebnis-Map fuer buildTeamGroupBonusByRiderId. */
+  private teamGroupBonusMapScratch: TeamGroupBonusByRiderId | null = null;
   /** Persistenter, fast-sortierter Fahrer-Pool fuer buildTeamGroupBonusByRiderId. */
   private teamGroupBonusScratch: RiderState[] | null = null;
 
@@ -1853,8 +1858,45 @@ export class SimulationEngine {
   }
 
   public getFrameSnapshot(): SimulationFrameSnapshot {
+    // Instant-Sim: der Aufrufer liest je Frame nur Fortschritt und isFinished.
+    // Die vollstaendige Rangsortierung (orderRoadRiders inkl. Tie-Break) und die
+    // Cluster-Berechnung dienen ausschliesslich der Live-Darstellung. Die einzige
+    // Nebenwirkung von getOrderedRiders() — applySprintLeadoutBonuses() — ist
+    // durch hasAppliedSprintLeadoutBonuses idempotent und laeuft am Ende ueber
+    // getSnapshot(); das Ergebnis ist daher identisch.
+    if (this.isInstantSimulation) {
+      return this.buildLightFrameSnapshot();
+    }
     const ordered = this.getOrderedRiders();
     return this.buildFrameSnapshot(ordered);
+  }
+
+  /**
+   * Fortschritts-Snapshot ohne Sortierung, ohne Cluster, ohne Zwischenarrays.
+   * Liefert dieselben Werte fuer elapsedSeconds, stageDistanceMeters,
+   * leaderDistanceMeters, finishedRiders und isFinished wie buildFrameSnapshot.
+   */
+  private buildLightFrameSnapshot(): SimulationFrameSnapshot {
+    let leaderDistanceMeters = 0;
+    let finishedRiders = 0;
+    for (const rider of this.riders) {
+      if (rider.finishStatus !== 'dnf' && rider.distanceCoveredMeters > leaderDistanceMeters) {
+        leaderDistanceMeters = rider.distanceCoveredMeters;
+      }
+      if (isClassifiedFinisher(rider)) {
+        finishedRiders += 1;
+      }
+    }
+
+    return {
+      elapsedSeconds: this.elapsedSeconds,
+      stageDistanceMeters: this.stageDistanceMeters,
+      leaderDistanceMeters,
+      finishedRiders,
+      isFinished: this.isFinished(),
+      clusters: EMPTY_CLUSTERS,
+      windZones: this.windZones,
+    };
   }
 
   public getSnapshot(): SimulationSnapshot {
@@ -2065,11 +2107,22 @@ export class SimulationEngine {
     if (this.superTeamId != null && this.superTeamBreakawayRiderId != null && !this.superTeamBreakawayRiderCaught) {
       const breakawayRiderState = this.riders.find(r => r.rider.id === this.superTeamBreakawayRiderId);
       if (breakawayRiderState && !isRiderInactive(breakawayRiderState)) {
-        const leaders = this.riders.filter(r => this.superTeamProtectedLeaderIds.has(r.rider.id) && !isRiderInactive(r));
-        const leaderCaughtHim = leaders.some(l => 
-          l.distanceCoveredMeters >= 0.40 * this.stageDistanceMeters &&
-          l.distanceCoveredMeters >= breakawayRiderState.distanceCoveredMeters
-        );
+        // filter().some() ohne Zwischenarray: identische Praedikate, gleiche
+        // Reihenfolge, Abbruch beim ersten Treffer wie zuvor.
+        const minimumDistanceMeters = 0.40 * this.stageDistanceMeters;
+        let leaderCaughtHim = false;
+        for (const leader of this.riders) {
+          if (!this.superTeamProtectedLeaderIds.has(leader.rider.id) || isRiderInactive(leader)) {
+            continue;
+          }
+          if (
+            leader.distanceCoveredMeters >= minimumDistanceMeters
+            && leader.distanceCoveredMeters >= breakawayRiderState.distanceCoveredMeters
+          ) {
+            leaderCaughtHim = true;
+            break;
+          }
+        }
         if (leaderCaughtHim) {
           this.superTeamBreakawayRiderCaught = true;
           breakawayRiderState.breakawayMalus = 0;
@@ -2491,19 +2544,26 @@ export class SimulationEngine {
     this.updateBreakawayGapStatus();
 
     if (this.breakawayPlan && this.breakawayPhaseActive && !this.breakawayCaughtLogged) {
-      const breakawayRiderIds = new Set(this.breakawayPlan.riderIds);
-      const activeBreakawayRiders = this.riders.filter(r => breakawayRiderIds.has(r.rider.id) && !isRiderInactive(r));
-      const activeNonBreakawayRiders = this.riders.filter(r => !breakawayRiderIds.has(r.rider.id) && !isRiderInactive(r));
+      // Ein Durchlauf statt zweier .filter()-Allokationen je Substep. Die reduce()
+      // waehlten jeweils den ersten Fahrer mit strikt groesster Distanz — bei
+      // Gleichstand blieb der zuerst gesehene stehen; dieselbe Regel gilt hier.
+      const breakawayRiderIds = this.breakawayPlanRiderIdSet;
+      let lastSurvivor: RiderState | null = null;
+      let leadingChaser: RiderState | null = null;
+      for (const rider of this.riders) {
+        if (isRiderInactive(rider)) {
+          continue;
+        }
+        if (breakawayRiderIds.has(rider.rider.id)) {
+          if (!lastSurvivor || rider.distanceCoveredMeters > lastSurvivor.distanceCoveredMeters) {
+            lastSurvivor = rider;
+          }
+        } else if (!leadingChaser || rider.distanceCoveredMeters > leadingChaser.distanceCoveredMeters) {
+          leadingChaser = rider;
+        }
+      }
 
-      if (activeBreakawayRiders.length > 0 && activeNonBreakawayRiders.length > 0) {
-        const lastSurvivor = activeBreakawayRiders.reduce((best, r) =>
-          r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
-          , activeBreakawayRiders[0]);
-
-        const leadingChaser = activeNonBreakawayRiders.reduce((best, r) =>
-          r.distanceCoveredMeters > best.distanceCoveredMeters ? r : best
-          , activeNonBreakawayRiders[0]);
-
+      if (lastSurvivor && leadingChaser) {
         if (leadingChaser.distanceCoveredMeters >= lastSurvivor.distanceCoveredMeters) {
           if (lastSurvivor.distanceCoveredMeters >= 0.40 * this.stageDistanceMeters) {
             this.pushMessage({
@@ -3054,63 +3114,49 @@ export class SimulationEngine {
       return;
     }
 
-    const breakawayRiderIds = new Set(breakawayPlan.riderIds);
-    const activeBreakawayRiders = this.riders.filter((rider) => (
-      !isRiderInactive(rider)
-      && breakawayRiderIds.has(rider.rider.id)
-      && rider.activeTerrain !== 'Finish'
-    ));
-    const activeNonBreakawayRiders = this.riders.filter((rider) => (
-      !isRiderInactive(rider)
-      && !breakawayRiderIds.has(rider.rider.id)
-      && rider.activeTerrain !== 'Finish'
-    ));
-    if (activeBreakawayRiders.length === 0 || activeNonBreakawayRiders.length === 0) {
-      this.breakawayGapStatus = null;
-      return;
-    }
-
+    // Ein Durchlauf statt zweier .filter()-Allokationen je Substep. Praedikate,
+    // Reihenfolge und Tie-Break (Distanz, dann Tempo, dann kleinere Fahrer-ID)
+    // sind unveraendert, daher ist das Ergebnis identisch.
+    const breakawayRiderIds = this.breakawayPlanRiderIdSet;
     let bestBreakawayRider: RiderState | null = null;
-    for (const r of activeBreakawayRiders) {
-      if (!bestBreakawayRider) {
-        bestBreakawayRider = r;
+    let bestNonBreakawayRider: RiderState | null = null;
+
+    for (const rider of this.riders) {
+      if (isRiderInactive(rider) || rider.activeTerrain === 'Finish') {
         continue;
       }
-      const distDiff = r.distanceCoveredMeters - bestBreakawayRider.distanceCoveredMeters;
-      if (distDiff > 0) {
-        bestBreakawayRider = r;
-      } else if (distDiff === 0) {
-        const speedDiff = r.currentSpeedMps - bestBreakawayRider.currentSpeedMps;
-        if (speedDiff > 0) {
-          bestBreakawayRider = r;
-        } else if (speedDiff === 0) {
-          if (r.rider.id < bestBreakawayRider.rider.id) {
-            bestBreakawayRider = r;
+      const isBreakawayRider = breakawayRiderIds.has(rider.rider.id);
+      const best = isBreakawayRider ? bestBreakawayRider : bestNonBreakawayRider;
+      let isBetter: boolean;
+      if (!best) {
+        isBetter = true;
+      } else {
+        const distDiff = rider.distanceCoveredMeters - best.distanceCoveredMeters;
+        if (distDiff > 0) {
+          isBetter = true;
+        } else if (distDiff < 0) {
+          isBetter = false;
+        } else {
+          const speedDiff = rider.currentSpeedMps - best.currentSpeedMps;
+          if (speedDiff > 0) {
+            isBetter = true;
+          } else if (speedDiff < 0) {
+            isBetter = false;
+          } else {
+            isBetter = rider.rider.id < best.rider.id;
           }
         }
+      }
+      if (!isBetter) {
+        continue;
+      }
+      if (isBreakawayRider) {
+        bestBreakawayRider = rider;
+      } else {
+        bestNonBreakawayRider = rider;
       }
     }
 
-    let bestNonBreakawayRider: RiderState | null = null;
-    for (const r of activeNonBreakawayRiders) {
-      if (!bestNonBreakawayRider) {
-        bestNonBreakawayRider = r;
-        continue;
-      }
-      const distDiff = r.distanceCoveredMeters - bestNonBreakawayRider.distanceCoveredMeters;
-      if (distDiff > 0) {
-        bestNonBreakawayRider = r;
-      } else if (distDiff === 0) {
-        const speedDiff = r.currentSpeedMps - bestNonBreakawayRider.currentSpeedMps;
-        if (speedDiff > 0) {
-          bestNonBreakawayRider = r;
-        } else if (speedDiff === 0) {
-          if (r.rider.id < bestNonBreakawayRider.rider.id) {
-            bestNonBreakawayRider = r;
-          }
-        }
-      }
-    }
     if (!bestBreakawayRider || !bestNonBreakawayRider || bestBreakawayRider.distanceCoveredMeters <= bestNonBreakawayRider.distanceCoveredMeters) {
       this.breakawayGapStatus = null;
       return;
@@ -3167,7 +3213,7 @@ export class SimulationEngine {
       return;
     }
 
-    const breakawayRiderIds = new Set(breakawayPlan.riderIds);
+    const breakawayRiderIds = this.breakawayPlanRiderIdSet;
     const activeBreakawayRiders = this.riders.filter((rider) => (
       !isRiderInactive(rider)
       && breakawayRiderIds.has(rider.rider.id)
@@ -3270,17 +3316,23 @@ export class SimulationEngine {
     rider.segmentStartElevation = segment.start_elevation;
     rider.segmentEndElevation = segment.end_elevation;
     rider.activeTerrain = segment.terrain;
-    const attackSkillBonus = this.resolveAttackSkillBonus(rider);
-    if (attackSkillBonus > 0) {
-      rider.skillBreakdown = `${rider.skillBreakdown} · Attack +${attackSkillBonus}`;
+    // skillBreakdown ist reine Anzeige (renderSidebar / Endsnapshot). In der
+    // Instant-Sim liefert resolveSkillBreakdown bereits '' — die Konkatenation
+    // waere dann eine Stringallokation je Fahrer und Substep ohne Abnehmer.
+    if (!this.isInstantSimulation) {
+      const attackSkillBonus = this.resolveAttackSkillBonus(rider);
+      if (attackSkillBonus > 0) {
+        rider.skillBreakdown = `${rider.skillBreakdown} · Attack +${attackSkillBonus}`;
+      }
     }
     rider.currentSpeedMps = rider.tempSpeedMps * rider.draftModifier;
     if (rider.photoFinishScore === 0) {
       rider.photoFinishScore = this.calculatePhotoFinishScore(rider);
     }
     rider.isAttacking = this.activeStageAttacksByRiderId.has(rider.rider.id);
-    rider.isBreakaway = this.breakawayPlan?.riderIds.includes(rider.rider.id) ?? false;
+    rider.isBreakaway = this.breakawayPlanRiderIdSet.has(rider.rider.id);
   }
+
 
   private updateBreakawayMalusRecovery(): boolean {
     const breakawayPlan = this.breakawayPlan;
@@ -3288,7 +3340,7 @@ export class SimulationEngine {
       return false;
     }
 
-    const breakawayRiderIds = new Set(breakawayPlan.riderIds);
+    const breakawayRiderIds = this.breakawayPlanRiderIdSet;
     const leadingNonBreakawayDistanceMeters = this.riders.reduce((bestDistance, rider) => {
       if (isRiderInactive(rider) || breakawayRiderIds.has(rider.rider.id)) {
         return bestDistance;
@@ -3351,7 +3403,7 @@ export class SimulationEngine {
       return;
     }
 
-    const breakawayRiderIds = new Set(breakawayPlan.riderIds);
+    const breakawayRiderIds = this.breakawayPlanRiderIdSet;
     for (const rider of this.riders) {
       if (isRiderInactive(rider) || !breakawayRiderIds.has(rider.rider.id)) {
         continue;
@@ -3692,7 +3744,13 @@ export class SimulationEngine {
   }
 
   private buildTeamGroupBonusByRiderId(): TeamGroupBonusByRiderId {
-    const bonusByRiderId: TeamGroupBonusByRiderId = new Map();
+    // Die Map wird je Substep neu befuellt, aber nicht neu allokiert: der
+    // Aufrufer haelt sie nur bis zum naechsten Aufbau (lastTeamGroupBonusByRiderId
+    // wird in advanceSubstep sofort ueberschrieben), und die Schluesselmenge ist
+    // ueber die Etappe stabil. Das spart eine Allokation plus Rehash je Substep.
+    const bonusByRiderId: TeamGroupBonusByRiderId = this.teamGroupBonusMapScratch
+      ?? (this.teamGroupBonusMapScratch = new Map());
+    bonusByRiderId.clear();
     // Persistenter Scratch: Fahrer verlassen den Pool nur einseitig (DNF/Ziel),
     // die Reihenfolge des Vor-Substeps ist fast sortiert -> adaptiver Sort ist
     // deutlich billiger. Der Comparator ist eine Totalordnung (ID-Tiebreak),
