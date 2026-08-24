@@ -9,7 +9,8 @@
     "start": "concurrently \"npm --prefix backend run dev\" \"wait-on http://localhost:3101/health && npm --prefix frontend run dev -- --host 0.0.0.0\"",
     "dev": "npm run start",
     "browser": "npm run start",
-    "test": "npm --prefix backend run test"
+    "test": "npm --prefix backend run test",
+    "calibrate:reference": "node tools/quicksim-calibration/run.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

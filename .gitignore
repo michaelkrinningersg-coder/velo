@@ -36,6 +36,8 @@ brain/
 scratch/
 debug/*.db
 debug/*.log
+# Referenzdatensaetze der Quick-Sim-Kalibrierung (gross, reproduzierbar erzeugbar)
+debug/quicksim-reference/
 
 # Editor / assistant tooling
 .continue/

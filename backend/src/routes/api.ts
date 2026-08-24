@@ -67,7 +67,7 @@ function fail(res: Response, status: number, message: string): void {
   res.status(status).json(body);
 }
 
-function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: number, riders: Rider[]): number[] {
+export function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: number, riders: Rider[]): number[] {
   const participatingTeams = new Map<number, Team>();
   for (const team of repo.getTeams()) {
     if (riders.some((rider) => rider.activeTeamId === team.id)) {
@@ -1374,7 +1374,7 @@ export function createRouter(dbService: DatabaseService): Router {
   return router;
 }
 
-function ensureWeatherRolled(db: any, stageId: number): void {
+export function ensureWeatherRolled(db: any, stageId: number): void {
   const row = db.prepare('SELECT rolled_weather_id, allowed_weather FROM stages WHERE id = ?').get(stageId) as { rolled_weather_id: number | null, allowed_weather: string } | undefined;
   if (!row) {
     return;
