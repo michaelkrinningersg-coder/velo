@@ -1123,6 +1123,9 @@ export class DatabaseService {
     const weatherStageColumns = [
       ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
       ['rolled_weather_id', 'INTEGER REFERENCES wetter(id)'],
+      // Seed der Rennsimulation, einmal je Etappe gezogen. Altspielstaende
+      // bekommen die Spalte leer; sie wird beim ersten Rennen gefuellt.
+      ['sim_seed', 'INTEGER'],
     ] as const;
 
     for (const [columnName, columnDefinition] of weatherStageColumns) {
@@ -3277,7 +3280,13 @@ export class DatabaseService {
     }
   }
 
-  private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
+  /**
+   * Bringt eine geoeffnete Savegame-Datenbank auf den aktuellen Schemastand.
+   * Oeffentlich, damit Werkzeuge (etwa der Kalibrier-Harness unter tools/),
+   * die einen Spielstand direkt oeffnen, dieselbe Migration fahren wie das
+   * Spiel — statt sie zu duplizieren und damit auseinanderlaufen zu lassen.
+   */
+  public ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
     // `PRAGMA foreign_keys = ON`. When applying to a not-yet-populated DB

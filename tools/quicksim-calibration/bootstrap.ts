@@ -11,11 +11,12 @@
 
 import Database from 'better-sqlite3';
 import type { RealtimeSimulationBootstrap } from '../../shared/types';
+import { DatabaseService } from '../../backend/src/db/DatabaseService';
 import { GameRepository } from '../../backend/src/db/GameRepository';
 import { ensureRaceEntries } from '../../backend/src/simulation/RaceRosterService';
 import { StageParser } from '../../backend/src/simulation/StageParser';
 import { RivalryService } from '../../backend/src/game/RivalryService';
-import { ensureWeatherRolled, resolveRealtimeTeamStartOrder } from '../../backend/src/routes/api';
+import { ensureSimSeedRolled, ensureWeatherRolled, resolveRealtimeTeamStartOrder } from '../../backend/src/routes/api';
 
 export interface StageCandidate {
   stageId: number;
@@ -31,6 +32,16 @@ export interface StageCandidate {
    * Tabelle `stages`, sondern ergibt sich aus dem Etappenprofil-CSV.
    */
   distanceKm: number | null;
+}
+
+/**
+ * Bringt einen direkt geoeffneten Spielstand auf den aktuellen Schemastand —
+ * mit derselben Migration, die auch `DatabaseService.loadSave` fuer das Spiel
+ * fuehrt. Ohne diesen Schritt fehlen einem Altspielstand Spalten, die der
+ * Bootstrap erwartet (etwa `stages.sim_seed`).
+ */
+export function migrateSavegame(db: Database.Database): void {
+  new DatabaseService().ensureAllSchemas(db);
 }
 
 /**
@@ -86,6 +97,7 @@ export function buildStageBootstrap(
   db: Database.Database,
   stageId: number,
 ): RealtimeSimulationBootstrap | null {
+  const simSeed = ensureSimSeedRolled(db, stageId);
   const repo = new GameRepository(db);
   const stage = repo.getStageById(stageId);
   if (!stage) {
@@ -109,6 +121,7 @@ export function buildStageBootstrap(
   ).all(seasonRow?.season ?? 2026) as any[];
 
   return {
+    simSeed: simSeed ?? undefined,
     race,
     stage,
     riders,

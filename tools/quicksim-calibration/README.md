@@ -45,6 +45,7 @@ schreibt in die Datenbank.
 | `metrics.test.ts` | Tests dazu; laufen mit `npm test` in der Backend-Suite mit |
 | `bootstrap.ts` | Baut den Etappen-Bootstrap **mit denselben Funktionen** wie die API-Route |
 | `referenceRun.ts` | Der eigentliche Lauf: Etappenauswahl, Simulation, Verdichtung, Ausgabe |
+| `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
 `bootstrap.ts` ruft bewusst dieselben Funktionen in derselben Reihenfolge auf wie
@@ -58,6 +59,25 @@ Typprüfung:
 
 ```bash
 backend/node_modules/.bin/tsc -p tools/quicksim-calibration/tsconfig.json
+```
+
+## Etappen-Seed
+
+Seit der Einführung von `stages.sim_seed` ist jedes Rennen wiederholbar. Der Seed
+wird einmal je Etappe gezogen (`ensureSimSeedRolled`, analog zum Wetter) und über
+`bootstrap.simSeed` an die Engine gereicht. Fehlt er, zieht die Engine einen — dann
+verhält sie sich wie zuvor, nur eben nicht wiederholbar.
+
+Jedes Teilsystem bekommt über `deriveSeed(seed, label)` einen eigenen Zufallsstrom
+(`engine`, `incidents`, `attacks`, `breakaway`, `special-form`). Sonst würde ein
+zusätzlicher Zufallsaufruf in der Engine jede spätere Ziehung verschieben — und der
+Ausreißerplan derselben Etappe sähe nach einer harmlosen Änderung anders aus.
+
+Testvorlage neu erzeugen:
+
+```bash
+npm run calibrate:reference -- --stages=549 \
+  --dump-bootstrap=backend/src/__tests__/fixtures/stage-549-bootstrap.json
 ```
 
 ## Die Kennzahlen

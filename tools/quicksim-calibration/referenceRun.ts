@@ -20,7 +20,7 @@ import { SimulationEngine } from '../../frontend/src/race-sim/SimulationEngine';
 import { calculateStageFavoriteRiderRanking } from '../../frontend/src/race-sim/stageFavorites';
 import { resolveStageTimeLimitSeconds } from '../../shared/stageResultRules';
 import type { StageProfile } from '../../shared/types';
-import { buildStageBootstrap, listStageCandidates, rollStageWeatherOnce, type StageCandidate } from './bootstrap';
+import { buildStageBootstrap, listStageCandidates, migrateSavegame, rollStageWeatherOnce, type StageCandidate } from './bootstrap';
 import {
   computeStageRunMetrics,
   summarize,
@@ -42,6 +42,12 @@ interface Options {
   perProfile: number;
   stageIds: number[] | null;
   outDir: string;
+  /**
+   * Wenn gesetzt: nur den Bootstrap der ersten gewaehlten Etappe als JSON
+   * schreiben und beenden. Damit wird die Testvorlage fuer den
+   * Determinismus-Test erzeugt — der laeuft dann ohne Datenbank.
+   */
+  dumpBootstrap: string | null;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -57,6 +63,7 @@ function parseOptions(argv: string[]): Options {
     perProfile: Number(get('per-profile') ?? 3),
     stageIds: stageIdsRaw ? stageIdsRaw.split(',').map((value) => Number(value.trim())) : null,
     outDir: get('out') ?? path.join('debug', 'quicksim-reference'),
+    dumpBootstrap: get('dump-bootstrap'),
   };
 }
 
@@ -281,10 +288,35 @@ function main(): void {
   db.pragma('cache_size = -262144');
   db.pragma('temp_store = MEMORY');
 
+  // Denselben Schemastand herstellen, den das Spiel beim Laden herstellt.
+  migrateSavegame(db);
+
   const candidates = listStageCandidates(db);
   const stages = options.stageIds
     ? candidates.filter((candidate) => options.stageIds!.includes(candidate.stageId))
     : selectStages(candidates, options.perProfile);
+
+  if (options.dumpBootstrap) {
+    const target = stages[0];
+    if (!target) {
+      console.error('Keine Etappe gewaehlt — --stages=<id> angeben.');
+      process.exit(1);
+    }
+    rollStageWeatherOnce(db, target.stageId);
+    const dumped = buildStageBootstrap(db, target.stageId);
+    if (!dumped) {
+      console.error(`Etappe ${target.stageId}: kein Bootstrap erzeugbar.`);
+      process.exit(1);
+    }
+    fs.mkdirSync(path.dirname(options.dumpBootstrap), { recursive: true });
+    fs.writeFileSync(options.dumpBootstrap, JSON.stringify(dumped), 'utf8');
+    db.close();
+    fs.rmSync(path.dirname(workingCopy), { recursive: true, force: true });
+    console.error(
+      `Bootstrap Etappe ${target.stageId} (${target.profile}, ${dumped.riders.length} Fahrer) → ${options.dumpBootstrap}`,
+    );
+    return;
+  }
 
   fs.mkdirSync(options.outDir, { recursive: true });
   console.error(`${stages.length} Etappen x ${options.runs} Laeufe — Spielstand ${path.basename(options.savegame)}`);

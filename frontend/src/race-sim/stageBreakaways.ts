@@ -1,4 +1,5 @@
 import type { ParsedStageSummary, Race, RealtimeClassificationStanding, RealtimeGcStanding, Rider, Stage, Team } from '../../../shared/types';
+import { createRandomSeed, createSeededRandom, randomBetween, randomInteger, shuffleInPlace, type RandomSource } from '../../../shared/rng';
 import { calculateStageFavoriteRiderRanking, type FavoriteItem } from './stageFavorites';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 
@@ -12,39 +13,21 @@ export interface PrecalculatedStageBreakaway {
   superTeamId?: number;
 }
 
-function randomInteger(min: number, max: number): number {
-  const normalizedMin = Math.ceil(Math.min(min, max));
-  const normalizedMax = Math.floor(Math.max(min, max));
-  return Math.floor(Math.random() * ((normalizedMax - normalizedMin) + 1)) + normalizedMin;
-}
-
-function randomBetween(min: number, max: number): number {
-  return min + (Math.random() * (max - min));
-}
-
-function shuffleInPlace<T>(values: T[]): T[] {
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomInteger(0, index);
-    [values[index], values[swapIndex]] = [values[swapIndex]!, values[index]!];
-  }
-  return values;
-}
-
-function sampleWithoutReplacement<T>(values: T[], count: number): T[] {
+function sampleWithoutReplacement<T>(random: RandomSource, values: T[], count: number): T[] {
   if (count <= 0 || values.length === 0) {
     return [];
   }
 
-  return shuffleInPlace([...values]).slice(0, Math.min(count, values.length));
+  return shuffleInPlace(random, [...values]).slice(0, Math.min(count, values.length));
 }
 
-function sampleWeightedWithoutReplacement<T>(values: T[], count: number, resolveWeight: (value: T) => number): T[] {
+function sampleWeightedWithoutReplacement<T>(random: RandomSource, values: T[], count: number, resolveWeight: (value: T) => number): T[] {
   const pool = [...values];
   const selected: T[] = [];
 
   while (selected.length < count && pool.length > 0) {
     const totalWeight = pool.reduce((sum, value) => sum + Math.max(0.0001, resolveWeight(value)), 0);
-    let roll = Math.random() * totalWeight;
+    let roll = random() * totalWeight;
     let selectedIndex = 0;
     for (let index = 0; index < pool.length; index += 1) {
       roll -= Math.max(0.0001, resolveWeight(pool[index] as T));
@@ -253,6 +236,7 @@ export function precalculateStageBreakaway(
   gcStandings: RealtimeGcStanding[],
   mountainStandings: RealtimeClassificationStanding[],
   teams?: Team[],
+  random: RandomSource = createSeededRandom(createRandomSeed()),
 ): PrecalculatedStageBreakaway | null {
   if ((stage.profile === 'ITT' || stage.profile === 'TTT') || riders.length === 0 || stageSummary.distanceKm <= 0) {
     return null;
@@ -260,7 +244,7 @@ export function precalculateStageBreakaway(
 
   const riderCount = riders.length;
   const { min: minBreakawaySize, max: maxBreakawaySize } = resolveBreakawaySizeBounds(race, stage, riderCount);
-  const desiredBreakawaySize = randomInteger(minBreakawaySize, maxBreakawaySize);
+  const desiredBreakawaySize = randomInteger(random, minBreakawaySize, maxBreakawaySize);
   const isEarlyStageRace = race.isStageRace && stage.stageNumber <= 10;
   const isOneDayRace = !race.isStageRace;
   const gcLeaderTeamId = resolveGcLeaderTeamId(riders, gcStandings);
@@ -321,8 +305,8 @@ export function precalculateStageBreakaway(
       }
     }
 
-    if (candidateTeams.length > 0 && Math.random() < 0.5) {
-      const randomIndex = randomInteger(0, candidateTeams.length - 1);
+    if (candidateTeams.length > 0 && random() < 0.5) {
+      const randomIndex = randomInteger(random, 0, candidateTeams.length - 1);
       superTeamId = candidateTeams[randomIndex];
     }
   }
@@ -432,6 +416,7 @@ export function precalculateStageBreakaway(
   const totalEligibleWeight = eligibleRiders.reduce((sum, rider) => sum + (weightByRiderId.get(rider.id)?.finalWeight ?? 0), 0);
 
   const selectedRiders = sampleWeightedWithoutReplacement(
+    random,
     eligibleRiders,
     Math.max(0, Math.min(desiredBreakawaySize - (forcedRider ? 1 : 0), eligibleRiders.length)),
     (rider) => weightByRiderId.get(rider.id)?.finalWeight ?? 1,
@@ -467,18 +452,18 @@ export function precalculateStageBreakaway(
   console.groupEnd();
 
   const stageDistanceMeters = stageSummary.distanceKm * 1000;
-  const triggerDistanceMeters = randomInteger(0, Math.min(10000, Math.max(0, Math.floor(stageDistanceMeters * 0.1))));
+  const triggerDistanceMeters = randomInteger(random, 0, Math.min(10000, Math.max(0, Math.floor(stageDistanceMeters * 0.1))));
   const phaseEndRange = resolveBreakawayPhaseEndRange(race, stage);
-  const phaseEndDistanceMeters = Math.round(stageDistanceMeters * randomBetween(phaseEndRange.min, phaseEndRange.max));
-  const groupPhaseLeadOutMeters = Math.round(stageDistanceMeters * randomBetween(0.1, 0.25));
+  const phaseEndDistanceMeters = Math.round(stageDistanceMeters * randomBetween(random, phaseEndRange.min, phaseEndRange.max));
+  const groupPhaseLeadOutMeters = Math.round(stageDistanceMeters * randomBetween(random, 0.1, 0.25));
   const groupPhaseEndDistanceMeters = Math.max(
     triggerDistanceMeters + 1000,
     Math.min(phaseEndDistanceMeters - 1000, phaseEndDistanceMeters - groupPhaseLeadOutMeters),
   );
   const breakawayBonus = stage.rolledBreakawayBonus ?? 0;
   const skillBonus = (stage.profile === 'Flat' || stage.profile === 'Rolling')
-    ? randomInteger(2, 4)
-    : randomInteger(3 + breakawayBonus, 8 + breakawayBonus);
+    ? randomInteger(random, 2, 4)
+    : randomInteger(random, 3 + breakawayBonus, 8 + breakawayBonus);
 
 
   return {
@@ -488,8 +473,8 @@ export function precalculateStageBreakaway(
     phaseEndDistanceMeters,
     skillBonus,
     malusValue: (stage.profile === 'Flat' || stage.profile === 'Rolling')
-      ? randomInteger(6, 10)
-      : randomInteger(5, 8),
+      ? randomInteger(random, 6, 10)
+      : randomInteger(random, 5, 8),
     superTeamId,
   };
 }

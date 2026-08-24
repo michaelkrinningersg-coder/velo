@@ -8,6 +8,7 @@ import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
 import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
+import { createRandomSeed } from '../../../shared/rng';
 import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
 import { RivalryService } from '../game/RivalryService';
@@ -617,6 +618,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const db = dbService.getActiveConnection();
       ensureWeatherRolled(db, stageId);
+      const simSeed = ensureSimSeedRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -646,6 +648,7 @@ export function createRouter(dbService: DatabaseService): Router {
       const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
 
       ok<RealtimeSimulationBootstrap>(res, {
+        simSeed: simSeed ?? undefined,
         race,
         stage,
         riders,
@@ -743,6 +746,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const db = dbService.getActiveConnection();
       ensureWeatherRolled(db, stageId);
+      const simSeed = ensureSimSeedRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -792,6 +796,7 @@ export function createRouter(dbService: DatabaseService): Router {
       const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
 
       ok<RealtimeSimulationBootstrap>(res, {
+        simSeed: simSeed ?? undefined,
         race,
         stage,
         riders,
@@ -1372,6 +1377,27 @@ export function createRouter(dbService: DatabaseService): Router {
   });
 
   return router;
+}
+
+/**
+ * Zieht einmal je Etappe den Seed der Rennsimulation und legt ihn ab. Ab dann
+ * liefert dieselbe Etappe mit demselben Starterfeld immer dasselbe Ergebnis —
+ * Grundlage fuer Wiederholungen, reproduzierbare Fehlerberichte und
+ * Golden-Master-Tests. Analog zu ensureWeatherRolled.
+ */
+export function ensureSimSeedRolled(db: any, stageId: number): number | null {
+  const row = db.prepare('SELECT sim_seed FROM stages WHERE id = ?').get(stageId) as
+    { sim_seed: number | null } | undefined;
+  if (!row) {
+    return null;
+  }
+  if (row.sim_seed != null) {
+    return row.sim_seed;
+  }
+
+  const seed = createRandomSeed();
+  db.prepare('UPDATE stages SET sim_seed = ? WHERE id = ?').run(seed, stageId);
+  return seed;
 }
 
 export function ensureWeatherRolled(db: any, stageId: number): void {

@@ -862,6 +862,13 @@ export interface RaceRosterEditorPayload {
 }
 
 export interface RealtimeSimulationBootstrap {
+  /**
+   * Seed der Etappe. Wird einmal je Etappe gezogen und in der Datenbank
+   * gespeichert (`stages.sim_seed`); dieselbe Etappe mit demselben Starterfeld
+   * liefert damit immer dasselbe Ergebnis. Optional, damit Altspielstaende und
+   * Aufrufer ohne Seed weiterhin funktionieren — dann zieht die Engine einen.
+   */
+  simSeed?: number;
   race: Race;
   stage: Stage;
   riders: Rider[];

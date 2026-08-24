@@ -16,6 +16,7 @@ import type {
   RaceSimMessage,
 } from '../../../shared/types';
 import { isChampionshipCategory } from '../../../shared/types';
+import { createRandomSeed, createSeededRandom, deriveSeed, randomBetween, randomInteger, shuffled, type RandomSource } from '../../../shared/rng';
 import { buildSkillWeightConfigMap, buildSkillWeightRuleMap, resolveFinalSpreadConfig, resolveSkillWeightComponents, resolveSkillWeightSimulationMode, resolveTttTerrainSpeedMultiplier, resolveWeightedSkillFromSkills, FinalSpreadConfig } from './skillWeights';
 import { precalculateRaceIncidents, buildDynamicCrashIncident } from './incidents';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
@@ -32,11 +33,7 @@ import {
   type PrecalculatedStageAttack,
 } from './stageAttacks';
 
-function randomInteger(min: number, max: number): number {
-  const normalizedMin = Math.ceil(Math.min(min, max));
-  const normalizedMax = Math.floor(Math.max(min, max));
-  return Math.floor(Math.random() * ((normalizedMax - normalizedMin) + 1)) + normalizedMin;
-}
+
 
 export type TerrainSkillName = 'Flat' | 'Hill' | 'Medium_Mountain' | 'Mountain' | 'Cobble' | 'Sprint' | 'Downhill';
 
@@ -512,9 +509,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function randomBetween(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
+
 
 export const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
   1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
@@ -533,8 +528,8 @@ export function getWeatherRelation(profileId: number, weatherId: number): 'pref'
   return 'neutral';
 }
 
-function chooseOne<T>(values: T[]): T {
-  return values[Math.floor(Math.random() * values.length)] as T;
+function chooseOne<T>(random: RandomSource, values: T[]): T {
+  return values[Math.floor(random() * values.length)] as T;
 }
 
 function roundToTwoDecimals(value: number): number {
@@ -681,43 +676,43 @@ function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]
   return parts.join(' • ');;
 }
 
-function sampleInitialWindSpeedKph(): number {
-  const roll = Math.random();
+function sampleInitialWindSpeedKph(random: RandomSource): number {
+  const roll = random();
   if (roll < 0.9) {
-    return randomBetween(5, 20);
+    return randomBetween(random, 5, 20);
   }
   if (roll < 0.98) {
-    return randomBetween(20, 40);
+    return randomBetween(random, 20, 40);
   }
-  return randomBetween(40, 70);
+  return randomBetween(random, 40, 70);
 }
 
-function sampleMicroForm(): number {
-  const roll = Math.random();
+function sampleMicroForm(random: RandomSource): number {
+  const roll = random();
   if (roll < 0.9) {
-    return roundToTwoDecimals(randomBetween(-1, 1));
+    return roundToTwoDecimals(randomBetween(random, -1, 1));
   }
   if (roll < 0.995) {
-    return roundToTwoDecimals(chooseOne([-1, 1]) * randomBetween(1, 2));
+    return roundToTwoDecimals(chooseOne(random, [-1, 1]) * randomBetween(random, 1, 2));
   }
-  return roundToTwoDecimals(chooseOne([-1, 1]) * randomBetween(3, 4));
+  return roundToTwoDecimals(chooseOne(random, [-1, 1]) * randomBetween(random, 3, 4));
 }
 
 // Tagesform je Fahrer (einmal pro Etappe, additive Skillpunkte): +/- 3.
 // Der aktuelle GC-Fuehrende ist nach oben gedeckelt (Druck/Markierung): die
 // Tagesform liegt fuer ihn zufaellig in [-3; +1,5].
-function sampleDailyForm(isGcLeader = false): number {
-  return roundToTwoDecimals(randomBetween(-3, isGcLeader ? 1.5 : 3));
+function sampleDailyForm(random: RandomSource, isGcLeader = false): number {
+  return roundToTwoDecimals(randomBetween(random, -3, isGcLeader ? 1.5 : 3));
 }
 
-function createWindZones(stageDistanceMeters: number): WindZone[] {
+function createWindZones(random: RandomSource, stageDistanceMeters: number): WindZone[] {
   const zones: WindZone[] = [];
   let currentMeter = 0;
-  let windSpeedKph = sampleInitialWindSpeedKph();
-  let vector = randomBetween(-1, 1);
+  let windSpeedKph = sampleInitialWindSpeedKph(random);
+  let vector = randomBetween(random, -1, 1);
 
   while (currentMeter < stageDistanceMeters) {
-    const zoneLength = Math.min(stageDistanceMeters - currentMeter, randomBetween(3000, 40000));
+    const zoneLength = Math.min(stageDistanceMeters - currentMeter, randomBetween(random, 3000, 40000));
     zones.push({
       startMeter: currentMeter,
       endMeter: currentMeter + zoneLength,
@@ -731,12 +726,12 @@ function createWindZones(stageDistanceMeters: number): WindZone[] {
     }
 
     windSpeedKph = clamp(
-      windSpeedKph + (Math.random() < 0.5 ? -1 : 1) * randomBetween(2, 10),
+      windSpeedKph + (random() < 0.5 ? -1 : 1) * randomBetween(random, 2, 10),
       5,
       70,
     );
     vector = clamp(
-      vector + (Math.random() < 0.5 ? -1 : 1) * randomBetween(0, 0.5),
+      vector + (random() < 0.5 ? -1 : 1) * randomBetween(random, 0, 0.5),
       -1,
       1,
     );
@@ -1264,12 +1259,26 @@ export class SimulationEngine {
 
   private hasAppliedSprintLeadoutBonuses = false;
 
+  /**
+   * Der Etappen-Seed. Stammt aus `bootstrap.simSeed` (in der Datenbank je
+   * Etappe gespeichert); fehlt er, wird einer gezogen — dann verhaelt sich die
+   * Simulation wie zuvor mit `Math.random()`, nur eben nicht wiederholbar.
+   */
+  public readonly seed: number;
+  /** Zufallsstrom der Engine selbst. Teilsysteme bekommen eigene Stroeme. */
+  private readonly random: RandomSource;
+
   constructor(
     private readonly bootstrap: RealtimeSimulationBootstrap,
-    options?: { maxSubstepSeconds?: number; isInstantSimulation?: boolean },
+    options?: { maxSubstepSeconds?: number; isInstantSimulation?: boolean; seed?: number },
   ) {
     this.maxSubstepSeconds = options?.maxSubstepSeconds ?? 1;
     this.isInstantSimulation = options?.isInstantSimulation ?? false;
+    this.seed = options?.seed ?? bootstrap.simSeed ?? createRandomSeed();
+    // Getrennte Stroeme je Teilsystem: ein zusaetzlicher Zufallsaufruf in der
+    // Engine verschiebt sonst jede spaetere Ziehung und aendert damit auch
+    // Ausreisserplan und Vorfaelle derselben Etappe.
+    this.random = createSeededRandom(deriveSeed(this.seed, 'engine'));
 
     // Apply Home Advantage / Pressure modifications
     const raceCountryCode = bootstrap.race.country?.code3;
@@ -1282,7 +1291,7 @@ export class SimulationEngine {
             skills: { ...originalRider.skills },
           };
 
-          const roll = Math.random();
+          const roll = this.random();
           const profile = bootstrap.stage.profile;
           const isTimeTrial = profile === 'ITT' || profile === 'TTT';
 
@@ -1315,14 +1324,14 @@ export class SimulationEngine {
               // We need to pick n - 1 additional skills from the allowed pool.
               const limit = Math.min(n - 1, keys.length);
               for (let i = 0; i < limit; i++) {
-                const idx = Math.floor(Math.random() * keys.length);
+                const idx = Math.floor(this.random() * keys.length);
                 result.push(keys.splice(idx, 1)[0]);
               }
             } else {
               // We pick n skills from the allowed pool.
               const limit = Math.min(n, keys.length);
               for (let i = 0; i < limit; i++) {
-                const idx = Math.floor(Math.random() * keys.length);
+                const idx = Math.floor(this.random() * keys.length);
                 result.push(keys.splice(idx, 1)[0]);
               }
             }
@@ -1331,7 +1340,9 @@ export class SimulationEngine {
 
           const selectedSkills = pickRandomSkills(5);
           // Shuffle to randomize which of the selected skills gets the +3 (which is index 0)
-          const shuffledSkills = [...selectedSkills].sort(() => Math.random() - 0.5);
+          // Fisher-Yates statt sort(() => rng() - 0.5): letzteres ist keine
+          // Gleichverteilung und bevorzugte bisher bestimmte Skills.
+          const shuffledSkills = shuffled(this.random, selectedSkills);
           clonedRider.homeEffectSkills = shuffledSkills;
 
           if (roll < 0.05) {
@@ -1381,7 +1392,7 @@ export class SimulationEngine {
 
       if (relation === 'pref') {
         for (const skill of skillsToModify) {
-          const mod = randomBetween(0.2, 1.0);
+          const mod = randomBetween(this.random, 0.2, 1.0);
           clonedRider.skills[skill] = Math.min(100, clonedRider.skills[skill] + mod);
         }
       } else if (relation === 'malus') {
@@ -1396,14 +1407,14 @@ export class SimulationEngine {
               const ltProfileId = ltRider?.weatherProfileId || 1;
               const ltRelation = getWeatherRelation(ltProfileId, weatherId);
               if (ltRelation === 'pref') {
-                reduction = randomBetween(0.40, 0.75);
+                reduction = randomBetween(this.random, 0.40, 0.75);
               }
             }
           }
         }
 
         for (const skill of skillsToModify) {
-          const mod = randomBetween(0.2, 1.0) * (1 - reduction);
+          const mod = randomBetween(this.random, 0.2, 1.0) * (1 - reduction);
           clonedRider.skills[skill] = Math.max(0, clonedRider.skills[skill] - mod);
         }
       }
@@ -1430,12 +1441,12 @@ export class SimulationEngine {
         bootstrap.riders = bootstrap.riders.map((rider) => {
           if (!pressuredIds.has(rider.id)) return rider;
           const cloned = { ...rider, skills: { ...rider.skills } };
-          const isMalus = Math.random() < RIVAL_PRESSURE_MALUS_CHANCE;
+          const isMalus = this.random() < RIVAL_PRESSURE_MALUS_CHANCE;
           const pool = [...ALL_RIDER_SKILL_KEYS];
           for (let k = 0; k < RIVAL_PRESSURE_SKILL_COUNT && pool.length > 0; k++) {
-            const idx = Math.floor(Math.random() * pool.length);
+            const idx = Math.floor(this.random() * pool.length);
             const skill = pool.splice(idx, 1)[0];
-            const mod = randomBetween(0.2, 1.0);
+            const mod = randomBetween(this.random, 0.2, 1.0);
             cloned.skills[skill] = isMalus
               ? Math.max(0, cloned.skills[skill] - mod)
               : Math.min(100, cloned.skills[skill] + mod);
@@ -1472,7 +1483,7 @@ export class SimulationEngine {
         : 1 - (gradientPercent * 0.06);
     }
     this.finishWeightProfile = this.resolveFinishWeightProfile();
-    this.windZones = createWindZones(this.stageDistanceMeters);
+    this.windZones = createWindZones(this.random, this.stageDistanceMeters);
     for (const windZone of this.windZones) {
       windZone.windModifierCached = 1 + (windZone.vector * (windZone.windSpeedKph / 100) * 0.52);
     }
@@ -1489,14 +1500,19 @@ export class SimulationEngine {
     const configuredStartPercent = bootstrap.stage.finalSpreadStartPercent;
     this.lateStageStartRatio = configuredStartPercent != null
       ? clamp(configuredStartPercent / 100, 0, 1)
-      : randomBetween(LATE_STAGE_START_MIN, LATE_STAGE_START_MAX);
+      : randomBetween(this.random, LATE_STAGE_START_MIN, LATE_STAGE_START_MAX);
     const configuredFinalPushStartPercent = bootstrap.stage.finalPushStartPercent;
     this.finalPushStartRatio = configuredFinalPushStartPercent != null
       ? clamp(configuredFinalPushStartPercent / 100, this.lateStageStartRatio, 1)
       : clamp(0.9, this.lateStageStartRatio, 1);
     this.finalSpreadDifficultyMultiplier = bootstrap.stage.finalSpreadDifficultyMultiplier ?? 1;
     this.spreadCurve = this.buildSpreadCurve(this.lateStageStartRatio);
-    const precalculatedIncidents = precalculateRaceIncidents(bootstrap.riders, bootstrap.stage, bootstrap.stageSummary.distanceKm);
+    const precalculatedIncidents = precalculateRaceIncidents(
+      bootstrap.riders,
+      bootstrap.stage,
+      bootstrap.stageSummary.distanceKm,
+      createSeededRandom(deriveSeed(this.seed, 'incidents')),
+    );
     this.incidentsByRiderId = new Map(precalculatedIncidents.map((incident) => [incident.riderId, incident]));
     if (precalculatedIncidents.length > 0) {
       console.log('[RaceIncidents] Vor der Etappe ausgewuerfelt:', precalculatedIncidents.map((incident) => ({
@@ -1529,9 +1545,9 @@ export class SimulationEngine {
         segmentEndKm: 0,
         segmentStartElevation: 0,
         segmentEndElevation: 0,
-        dailyForm: sampleDailyForm(rider.id === gcLeaderRiderId),
-        microForm: sampleMicroForm(),
-        nextFormUpdateMeter: randomBetween(5000, 40000),
+        dailyForm: sampleDailyForm(this.random, rider.id === gcLeaderRiderId),
+        microForm: sampleMicroForm(this.random),
+        nextFormUpdateMeter: randomBetween(this.random, 5000, 40000),
         finishTimeSeconds: null,
         segmentIndex: 0,
         windZoneIndex: 0,
@@ -1617,6 +1633,7 @@ export class SimulationEngine {
         const attackWeight = Math.max(1, Math.pow(10, (candidate.skills.attack - 65) / 10));
         return attackWeight * (candidate.id === gcLeaderRiderId ? 0.25 : 1);
       },
+      createSeededRandom(deriveSeed(this.seed, 'attacks')),
     );
     this.precalculatedStageAttacksByRiderId = new Map();
     for (const attack of precalculatedStageAttacks) {
@@ -1634,6 +1651,7 @@ export class SimulationEngine {
       bootstrap.gcStandings,
       bootstrap.mountainStandings,
       bootstrap.teams,
+      createSeededRandom(deriveSeed(this.seed, 'breakaway')),
     );
     this.breakawayPlanRiderIdSet = new Set(this.breakawayPlan?.riderIds ?? []);
     const breakawayGapPenaltyConfig = this.buildBreakawayGapPenaltyConfig();
@@ -1648,6 +1666,7 @@ export class SimulationEngine {
       distanceKm: bootstrap.stageSummary.distanceKm,
       elevationGainMeters: bootstrap.stageSummary.elevationGainMeters,
       dailyFormByRiderId: preStartDailyFormByRiderId,
+      random: createSeededRandom(deriveSeed(this.seed, 'special-form')),
     });
     const riderWithSpecialStateById = new Map(ridersWithSpecialStates.map((rider) => [rider.id, rider]));
 
@@ -1686,10 +1705,10 @@ export class SimulationEngine {
 
     if (this.breakawayPlan && this.breakawayPlan.superTeamId != null) {
       this.superTeamId = this.breakawayPlan.superTeamId;
-      this.superTeamBonusAmount = randomInteger(2, 6);
-      this.superTeamMalusAmount = randomInteger(4, 8);
-      this.superTeamStartPercent = randomBetween(0.40, 0.60);
-      this.superTeamEndPercent = randomBetween(0.86, 0.96);
+      this.superTeamBonusAmount = randomInteger(this.random, 2, 6);
+      this.superTeamMalusAmount = randomInteger(this.random, 4, 8);
+      this.superTeamStartPercent = randomBetween(this.random, 0.40, 0.60);
+      this.superTeamEndPercent = randomBetween(this.random, 0.86, 0.96);
 
       const normRole = (name: string | null | undefined) => (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const teamRiders = bootstrap.riders.filter(r => r.activeTeamId === this.superTeamId);
@@ -2433,7 +2452,7 @@ export class SimulationEngine {
             }
           } else if (isMalusActive) {
             if (rider.superTeamMalusAmount == null) {
-              rider.superTeamMalusAmount = randomInteger(4, 8);
+              rider.superTeamMalusAmount = randomInteger(this.random, 4, 8);
             }
             targetMod = -rider.superTeamMalusAmount;
             if (!rider.superTeamExhaustedLogged) {
@@ -2528,8 +2547,8 @@ export class SimulationEngine {
       }
 
       while (!isRiderInactive(rider) && rider.distanceCoveredMeters >= rider.nextFormUpdateMeter) {
-        rider.microForm = sampleMicroForm();
-        rider.nextFormUpdateMeter += randomBetween(5000, 40000);
+        rider.microForm = sampleMicroForm(this.random);
+        rider.nextFormUpdateMeter += randomBetween(this.random, 5000, 40000);
       }
 
       this.advanceIndexForDistance(rider);
@@ -3368,7 +3387,7 @@ export class SimulationEngine {
         }
 
         rider.breakawayRecoveryStartDistanceMeters = rider.distanceCoveredMeters;
-        if (rider.rider.hasSuperform === true || Math.random() < BREAKAWAY_FULL_RECOVERY_CHANCE) {
+        if (rider.rider.hasSuperform === true || this.random() < BREAKAWAY_FULL_RECOVERY_CHANCE) {
           rider.breakawayMalus = 0;
           hasChanges = true;
           continue;
@@ -3636,7 +3655,7 @@ export class SimulationEngine {
         const gapBehindAttackerMeters = rider.distanceCoveredMeters - candidate.distanceCoveredMeters;
         return gapBehindAttackerMeters >= 0 && gapBehindAttackerMeters <= 150;
       });
-    const counterRiderIds = resolveCounterAttackStarterIds(nearbyCounterFavorites, rider.rider.id, activeAttackerIds);
+    const counterRiderIds = resolveCounterAttackStarterIds(nearbyCounterFavorites, rider.rider.id, activeAttackerIds, this.random);
     const counterRiders: Array<{ riderId: number; riderName: string; riderTeamId: number | null }> = [];
     for (const counterRiderId of counterRiderIds) {
       const counterRider = this.riders.find((candidate) => candidate.rider.id === counterRiderId);
@@ -3938,8 +3957,8 @@ export class SimulationEngine {
   private buildSpreadCurve(lateStageStartRatio: number): number[] {
     const totalBucketCount = Math.ceil(1 / SPREAD_BUCKET_RATIO);
     const reachBucket = Math.max(1, Math.ceil(lateStageStartRatio / SPREAD_BUCKET_RATIO));
-    const startSpreadFactor = randomBetween(START_SPREAD_MIN, START_SPREAD_MAX);
-    const weights = Array.from({ length: reachBucket }, () => randomBetween(0.2, 1.2));
+    const startSpreadFactor = randomBetween(this.random, START_SPREAD_MIN, START_SPREAD_MAX);
+    const weights = Array.from({ length: reachBucket }, () => randomBetween(this.random, 0.2, 1.2));
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     const factors = Array.from({ length: totalBucketCount + 1 }, () => 1);
 
@@ -4491,13 +4510,13 @@ export class SimulationEngine {
     // Check teammate bonuses
     let teamSprintRand = this.teamSprintRandomValues.get(teamId);
     if (teamSprintRand === undefined) {
-      teamSprintRand = randomBetween(0.25, 0.6);
+      teamSprintRand = randomBetween(this.random, 0.25, 0.6);
       this.teamSprintRandomValues.set(teamId, teamSprintRand);
     }
 
     let teamSpecialRand = this.teamSprintSpecialRandomValues.get(teamId);
     if (teamSpecialRand === undefined) {
-      teamSpecialRand = randomBetween(0.1, 0.3);
+      teamSpecialRand = randomBetween(this.random, 0.1, 0.3);
       this.teamSprintSpecialRandomValues.set(teamId, teamSpecialRand);
     }
 
@@ -4696,7 +4715,8 @@ export class SimulationEngine {
             victimState.rider,
             this.bootstrap.riders,
             incident.triggerDistanceKm,
-            this.bootstrap.stageSummary.distanceKm
+            this.bootstrap.stageSummary.distanceKm,
+            this.random,
           );
 
           this.applyIncident(victimState, victimIncident, eventTimeSeconds, true);

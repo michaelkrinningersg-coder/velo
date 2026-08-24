@@ -357,6 +357,9 @@ CREATE TABLE IF NOT EXISTS stages (
   stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
   allowed_weather TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7',
   rolled_weather_id INTEGER REFERENCES wetter(id),
+  -- Seed der Rennsimulation. Wird einmal je Etappe gezogen; dieselbe Etappe mit
+  -- demselben Starterfeld liefert damit immer dasselbe Ergebnis.
+  sim_seed INTEGER,
   super_team_id INTEGER REFERENCES teams(id),
   UNIQUE(race_id, stage_number)
 );
