@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { SimulationEngine } from '../../frontend/src/race-sim/SimulationEngine';
+import { buildRealtimeCommitEntries } from '../../frontend/src/race-sim/commitEntries';
 import { calculateStageFavoriteRiderRanking } from '../../frontend/src/race-sim/stageFavorites';
 import { resolveStageTimeLimitSeconds } from '../../shared/stageResultRules';
 import type { StageProfile } from '../../shared/types';
@@ -187,12 +188,13 @@ function runStage(
     runtimesMs.push(Number(process.hrtime.bigint() - startedAt) / 1e6);
 
     const snapshot = withSilencedConsole(() => engine.getSnapshot());
-    // Achtung: `finishStatus` ist bei Finishern haeufig null, nicht 'finished' —
-    // die Engine setzt ihn nur fuer Aufgaben. Massgeblich ist dieselbe Regel wie
-    // in isClassifiedFinisher: kein DNF und eine Zielzeit vorhanden.
-    const finishers = snapshot.riders
-      .filter((rider) => rider.finishStatus !== 'dnf' && rider.finishTimeSeconds != null)
-      .map((rider) => ({ riderId: rider.riderId, finishTimeSeconds: rider.finishTimeSeconds as number }));
+    // Dieselbe Uebersetzung wie im Spiel: bei Zeitfahren zaehlt die individuelle
+    // Fahrzeit (riderClockSeconds), nicht die absolute Uhrzeit — sonst liegen
+    // alle spaet gestarteten Fahrer scheinbar ausserhalb des Zeitlimits.
+    const commitEntries = buildRealtimeCommitEntries(snapshot, bootstrap);
+    const finishers = commitEntries
+      .filter((entry) => entry.finishStatus !== 'dnf' && entry.finishTimeSeconds != null)
+      .map((entry) => ({ riderId: entry.riderId, finishTimeSeconds: entry.finishTimeSeconds as number }));
 
     // OTL wird im Commit-Dienst aus dem Zeitlimit abgeleitet, nicht von der
     // Engine gemeldet. Hier dieselbe Regel anwenden, damit die Referenz das
@@ -208,7 +210,7 @@ function runStage(
 
     const metrics = computeStageRunMetrics({
       finishers: withinLimit,
-      dnfCount: snapshot.riders.filter((rider) => rider.finishStatus === 'dnf').length,
+      dnfCount: commitEntries.filter((entry) => entry.finishStatus === 'dnf').length,
       otlCount,
       breakawayRiderIds: [],
       breakawayCatchKm: null,
