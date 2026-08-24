@@ -19,6 +19,7 @@ import {
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
 import { randomBetween, type RandomSource } from '../rng';
+import { TIME_TIE_THRESHOLD_SECONDS } from '../stageResultRules';
 
 export type FinishRegime = 'bunched' | 'split';
 
@@ -180,15 +181,26 @@ export interface BuildFinishGroupsInput {
   random: RandomSource;
 }
 
+/** Kleinster Abstand zwischen erster Zeitgruppe und dem Feld dahinter. */
+const MIN_SPLIT_SECONDS = TIME_TIE_THRESHOLD_SECONDS + 1;
+
 /**
- * Teilt das Feld hinter der ersten Zeitgruppe in weitere Gruppen und vergibt
- * die Abstaende.
+ * Vergibt die Rueckstaende hinter der ersten Zeitgruppe und bildet daraus die
+ * Zeitgruppen.
  *
- * Die erste Gruppe ist durch `firstGroupSize` gesetzt (sie kommt aus der
- * Regime-Ziehung, nicht aus den Scores). Dahinter beginnt eine neue Gruppe,
- * wenn der Score-Abstand zum Vordermann groesser ist als der mittlere Abstand
- * im verbleibenden Feld — so entstehen am Berg viele kleine Gruppen und im
- * Flachen wenige grosse, ohne einen zweiten freien Parameter.
+ * Die erste Gruppe ist durch `firstGroupSize` gesetzt — sie kommt aus der
+ * Regime-Ziehung, nicht aus den Scores. Dahinter bekommt *jeder* Fahrer seinen
+ * eigenen Rueckstand aus dem Score-Abstand zum Vordermann; die Zeitgruppen
+ * entstehen daraus nach derselben 1-Sekunden-Regel, die auch das Spiel
+ * anwendet.
+ *
+ * Der erste Entwurf hatte hier eine zweite Strukturregel — eine neue Gruppe
+ * beginnt, wenn der Score-Abstand groesser ist als der mittlere im Restfeld.
+ * Der Vergleich mit der Instant-Simulation hat sie widerlegt: sie fasste viel
+ * zu grosszuegig zusammen (Hochgebirge 55 Zeitgruppen gegen gemessene 107).
+ * Ohne sie ergibt sich die Gruppenzahl aus den Zeiten statt aus einer zweiten
+ * Annahme — am Berg faehrt fast jeder allein, im Flachen bleibt das Feld
+ * zusammen, ohne dass das irgendwo hineingeschrieben waere.
  */
 export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] {
   const { scoresDescending, firstGroupSize, distanceKm, parameters, random } = input;
@@ -206,34 +218,29 @@ export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] 
     return groups;
   }
 
-  // Mittlerer Score-Abstand im Feld hinter der ersten Gruppe.
-  const tailStart = headSize;
-  const tailSpan = (scoresDescending[tailStart - 1] as number) - (scoresDescending[riderCount - 1] as number);
-  const averageStep = tailSpan / Math.max(1, riderCount - tailStart);
-
-  let current: FinishGroup = { memberIndices: [tailStart], gapSeconds: 0 };
-  for (let index = tailStart + 1; index < riderCount; index += 1) {
-    const step = (scoresDescending[index - 1] as number) - (scoresDescending[index] as number);
-    if (step > averageStep && current.memberIndices.length > 0) {
-      groups.push(current);
-      current = { memberIndices: [index], gapSeconds: 0 };
-      continue;
-    }
-    current.memberIndices.push(index);
-  }
-  groups.push(current);
-
-  // Abstaende aus den Score-Differenzen der Gruppenkoepfe.
-  for (let groupIndex = 1; groupIndex < groups.length; groupIndex += 1) {
-    const previousHead = groups[groupIndex - 1]!.memberIndices[0] as number;
-    const head = groups[groupIndex]!.memberIndices[0] as number;
-    const scoreGap = Math.max(0, (scoresDescending[previousHead] as number) - (scoresDescending[head] as number));
+  let current: FinishGroup | null = null;
+  let cumulative = 0;
+  for (let index = headSize; index < riderCount; index += 1) {
+    const scoreGap = Math.max(
+      0,
+      (scoresDescending[index - 1] as number) - (scoresDescending[index] as number),
+    );
     const noise = 1 + (drawStandardNormal(random) * parameters.noiseSigma);
     const delta = parameters.gapFactor
       * Math.pow(scoreGap, parameters.gapExponent)
       * distanceKm
       * Math.max(0.1, noise);
-    groups[groupIndex]!.gapSeconds = groups[groupIndex - 1]!.gapSeconds + Math.max(1, delta);
+    // Der erste Fahrer hinter der Spitzengruppe muss sichtbar dahinter liegen,
+    // sonst waere die gezogene Gruppengroesse durch die 1-Sekunden-Regel wieder
+    // aufgehoben.
+    cumulative += index === headSize ? Math.max(MIN_SPLIT_SECONDS, delta) : Math.max(0, delta);
+
+    if (current && cumulative - current.gapSeconds <= TIME_TIE_THRESHOLD_SECONDS) {
+      current.memberIndices.push(index);
+      continue;
+    }
+    current = { memberIndices: [index], gapSeconds: cumulative };
+    groups.push(current);
   }
 
   return groups;

@@ -13,7 +13,9 @@
     "calibrate:reference": "node tools/quicksim-calibration/run.js",
     "calibrate:aggregate": "node tools/quicksim-calibration/runAggregate.js",
     "calibrate:groups": "node tools/quicksim-calibration/runGroups.js",
-    "calibrate:validate": "node tools/quicksim-calibration/runValidate.js"
+    "calibrate:validate": "node tools/quicksim-calibration/runValidate.js",
+    "calibrate:compare": "node tools/quicksim-calibration/runCompare.js",
+    "calibrate:fit-gaps": "node tools/quicksim-calibration/runFitGaps.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

@@ -34,6 +34,7 @@ import {
 import {
   computeStageRunMetrics,
   summarize,
+  TRACKED_FIELD_POSITIONS,
   TRACKED_GAP_RANKS,
   type Distribution,
   type StageRunMetrics,
@@ -242,6 +243,10 @@ function runStage(
   };
   for (const rank of TRACKED_GAP_RANKS) {
     aggregate[`gapSecondsRank${rank}`] = pick((m) => m.gapSecondsByRank[rank] ?? null);
+  }
+  for (const position of TRACKED_FIELD_POSITIONS) {
+    aggregate[`gapSecondsPosition${Math.round(position * 100)}`] =
+      pick((m) => m.gapSecondsByFieldPosition[position] ?? null);
   }
 
   const sortedRuntimes = [...runtimesMs].sort((left, right) => left - right);

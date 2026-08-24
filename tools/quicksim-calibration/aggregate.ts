@@ -16,7 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { summarize, TRACKED_GAP_RANKS, type Distribution, type StageRunMetrics } from './metrics';
+import { summarize, TRACKED_FIELD_POSITIONS, TRACKED_GAP_RANKS, type Distribution, type StageRunMetrics } from './metrics';
 
 interface StageReferenceFile {
   stage: {
@@ -43,6 +43,7 @@ interface ProfileTarget {
   firstGroupShare: Distribution | null;
   timeGroupCount: Distribution | null;
   gapPerKmByRank: Record<number, Distribution | null>;
+  gapPerKmByFieldPosition: Record<number, Distribution | null>;
   lastGapPerKm: Distribution | null;
   dnfCount: Distribution | null;
   otlCount: Distribution | null;
@@ -66,6 +67,7 @@ function buildProfileTarget(profile: string, references: StageReferenceFile[]): 
   const firstGroupShares: Array<number | null> = [];
   const timeGroupCounts: Array<number | null> = [];
   const gapsPerKm: Record<number, Array<number | null>> = {};
+  const positionGapsPerKm: Record<number, Array<number | null>> = {};
   const lastGapsPerKm: Array<number | null> = [];
   const dnfCounts: Array<number | null> = [];
   const otlCounts: Array<number | null> = [];
@@ -75,6 +77,9 @@ function buildProfileTarget(profile: string, references: StageReferenceFile[]): 
 
   for (const rank of TRACKED_GAP_RANKS) {
     gapsPerKm[rank] = [];
+  }
+  for (const position of TRACKED_FIELD_POSITIONS) {
+    positionGapsPerKm[position] = [];
   }
 
   let runCount = 0;
@@ -102,12 +107,21 @@ function buildProfileTarget(profile: string, references: StageReferenceFile[]): 
         const gap = run.gapSecondsByRank[rank];
         gapsPerKm[rank]!.push(gap == null ? null : gap / distanceKm);
       }
+      for (const position of TRACKED_FIELD_POSITIONS) {
+        // Aeltere Referenzdaten kennen die Feldpositionen noch nicht.
+        const gap = run.gapSecondsByFieldPosition?.[position];
+        positionGapsPerKm[position]!.push(gap == null ? null : gap / distanceKm);
+      }
     }
   }
 
   const gapPerKmByRank: Record<number, Distribution | null> = {};
   for (const rank of TRACKED_GAP_RANKS) {
     gapPerKmByRank[rank] = summarize(gapsPerKm[rank]!);
+  }
+  const gapPerKmByFieldPosition: Record<number, Distribution | null> = {};
+  for (const position of TRACKED_FIELD_POSITIONS) {
+    gapPerKmByFieldPosition[position] = summarize(positionGapsPerKm[position]!);
   }
 
   const sortedRuntimes = [...runtimes].sort((left, right) => left - right);
@@ -121,6 +135,7 @@ function buildProfileTarget(profile: string, references: StageReferenceFile[]): 
     firstGroupShare: summarize(firstGroupShares),
     timeGroupCount: summarize(timeGroupCounts),
     gapPerKmByRank,
+    gapPerKmByFieldPosition,
     lastGapPerKm: summarize(lastGapsPerKm),
     dnfCount: summarize(dnfCounts),
     otlCount: summarize(otlCounts),
@@ -168,6 +183,7 @@ function main(): void {
     'profile', 'stages', 'runs', 'distance_km', 'speed_kmh', 'speed_sd',
     'first_group', 'first_group_share', 'time_groups',
     ...TRACKED_GAP_RANKS.map((rank) => `gap_rank${rank}_s_per_km`),
+    ...TRACKED_FIELD_POSITIONS.map((position) => `gap_pos${Math.round(position * 100)}_s_per_km`),
     'last_gap_s_per_km', 'dnf', 'otl', 'spearman', 'runtime_ms',
   ].join(';');
   const lines = targets.map((target) => [
@@ -179,6 +195,7 @@ function main(): void {
     formatNumber(target.firstGroupShare, 3),
     formatNumber(target.timeGroupCount, 1),
     ...TRACKED_GAP_RANKS.map((rank) => formatNumber(target.gapPerKmByRank[rank] ?? null, 4)),
+    ...TRACKED_FIELD_POSITIONS.map((position) => formatNumber(target.gapPerKmByFieldPosition[position] ?? null, 4)),
     formatNumber(target.lastGapPerKm, 4),
     formatNumber(target.dnfCount, 2),
     formatNumber(target.otlCount, 2),

@@ -58,6 +58,9 @@ schreibt in die Datenbank.
 | `aggregate.ts` | Verdichtet die Etappenmessung zu Kalibrierzielen je Profil |
 | `analyzeGroupRegime.ts` | Passt die Regime-Kurve an und weist Residuen je Profil aus |
 | `validateGroupModel.ts` | Stellt die Modellvorhersage gegen die gemessenen Etappen |
+| `quickSimAdapter.ts` | Speist den reinen Quick-Kern aus einem echten Etappen-Bootstrap |
+| `compareQuickSim.ts` | Fährt dieselben Etappen mit dem Quick-Kern und stellt sie gegenüber |
+| `fitGapModel.ts` | Passt `gap_factor`, `gap_exponent` und den Vorfall-Multiplikator an |
 | `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
@@ -108,6 +111,8 @@ Alle in `metrics.ts`, je Lauf erhoben und über die Läufe verdichtet
 
 - Siegerzeit
 - Rückstand auf Rang 2, 5, 10, 20, 50, 100 und den letzten Finisher
+- Rückstand an den Feldpositionen 50 %, 75 %, 90 %, 95 %, 99 % — erst diese Kurve
+  macht das abgehängte Ende sichtbar
 - Größe der ersten Zeitgruppe, Anzahl Zeitgruppen, größte Gruppe
 - DNF- und OTL-Anzahl
 - **Spearman-Rangkorrelation** zwischen Favoritenwertung vor dem Rennen und Zielrang
@@ -130,6 +135,8 @@ done
 npm run calibrate:aggregate    # Zielwerte je Profil
 npm run calibrate:groups       # Regime-Analyse der Gruppenbildung
 npm run calibrate:validate     # Modell gegen die Referenz pruefen
+npm run calibrate:compare      # Quick-Kern gegen Instant, Kennzahl fuer Kennzahl
+npm run calibrate:fit-gaps     # Abstandsmodell an die Referenz anpassen
 ```
 
 | Profil | Etappen | km/h | 1. Zeitgruppe | Anteil | Zeitgruppen | s/km (Letzter) | Spearman |
@@ -224,32 +231,113 @@ der ersten Zeitgruppe gegen den beobachteten. Stand des aktuellen Datensatzes:
 
 | Profil | Etappen | beobachtet | Modell | Delta |
 | :-- | --: | --: | --: | --: |
-| Flat | 8 | 0,635 | 0,580 | −0,055 |
-| Rolling | 5 | 0,567 | 0,576 | +0,009 |
-| Hilly | 7 | 0,451 | 0,416 | −0,035 |
-| Cobble_Hill | 8 | 0,292 | 0,221 | −0,071 |
-| Hilly_Difficult | 6 | 0,244 | 0,289 | +0,045 |
-| Medium_Mountain | 6 | 0,078 | 0,093 | +0,014 |
-| Mountain | 4 | 0,034 | 0,092 | +0,058 |
-| Cobble | 2 | 0,027 | 0,095 | +0,067 |
-| High_Mountain | 7 | 0,022 | 0,092 | +0,070 |
+| Flat | 8 | 0,635 | 0,633 | −0,001 |
+| Rolling | 5 | 0,567 | 0,564 | −0,003 |
+| Hilly | 7 | 0,451 | 0,451 | −0,000 |
+| Cobble_Hill | 8 | 0,292 | 0,290 | −0,002 |
+| Hilly_Difficult | 6 | 0,244 | 0,246 | +0,001 |
+| Medium_Mountain | 6 | 0,078 | 0,078 | +0,000 |
+| Mountain | 4 | 0,034 | 0,038 | +0,004 |
+| Cobble | 2 | 0,027 | 0,030 | +0,002 |
+| High_Mountain | 7 | 0,022 | 0,024 | +0,001 |
 
-**Mittlerer absoluter Fehler: 0,047.** Das Werkzeug bricht ab, wenn er über 0,08
+**Mittlerer absoluter Fehler: 0,002.** Das Werkzeug bricht ab, wenn er über 0,08
 steigt — damit fällt eine Parameteränderung auf, die das Modell von der Referenz
 wegzieht.
 
-Auffällig ist das Muster bei den Bergprofilen: das Modell sagt dort durchweg 0,092
-voraus — den Mittelwert der Verteilung für zerfallene Felder — beobachtet sind aber
-0,022 bis 0,034. Der Grund ist die Poolung: `Beta(0,408; 4,025)` mischt
-Cobble_Hill (0,21) und Rolling (0,23) mit High_Mountain (0,02). **Der Anteil im
-zerfallenen Regime hängt selbst noch vom Profil oder von der Schwierigkeit ab.** Das
-ist die nächste Verfeinerung und der Grund, warum genau diese Prüfung existiert.
+Vorher lag er bei 0,047, und das Muster war eindeutig: das Modell sagte für **jedes**
+Bergprofil 0,092 voraus — den gepoolten Mittelwert für zerfallene Felder — beobachtet
+waren 0,022 bis 0,034. `Beta(0,408; 4,025)` mischte Cobble_Hill (0,21) und Rolling
+(0,23) mit High_Mountain (0,02). Beide Regime hängen selbst noch vom Profil ab:
+
+- **geschlossen**: Mittelwert je Profil (`bunched_share_mean`), relative Streuung
+  0,123 gemeinsam. Gemessen: Flat 0,858, Hilly 0,786, Hilly_Difficult 0,734,
+  Rolling 0,704, Cobble_Hill 0,624.
+- **zerfallen**: `Anteil = split_share_intercept + (−0,0673) · ln(D)`, relative
+  Streuung 0,694. Diese Form erklärt 54 % der Streuung zwischen den Etappen
+  (R² 0,540, BIC −9679), ein gepoolter Mittelwert 0 %.
 
 ### Was das Modell noch nicht trifft
 
-Die logistische Kurve unterschätzt das obere Ende: bei D ≈ 0,1 sagt sie rund 80 %
-voraus, beobachtet sind 94–98 %. Für die Sattigungszone braucht es entweder eine
+Die logistische Kurve unterschätzt das obere Ende: bei D ≈ 0,1 sagt sie rund 75–80 %
+voraus, beobachtet sind 94–98 %. Für die Sättigungszone braucht es entweder eine
 asymmetrische Verknüpfungsfunktion oder eine Untergrenze auf dem gezogenen Anteil.
+
+## Quick gegen Instant
+
+`npm run calibrate:compare` fährt dieselben Etappen mit dem Quick-Kern und misst sie
+mit **derselben** `computeStageRunMetrics`. Das ist die Prüfung, die
+`calibrate:validate` nicht leisten kann: ein Modell kann die Momente einer einzelnen
+Größe treffen und trotzdem Etappenergebnisse liefern, die kein Radrennen sind.
+
+Stand nach dem Kern (12 Etappen, 20 Läufe je Etappe):
+
+| Kennzahl | Flat Instant | Flat Quick | High_Mountain Instant | High_Mountain Quick |
+| :-- | --: | --: | --: | --: |
+| km/h | 44,28 | 44,57 | 38,98 | 39,01 |
+| 1. Gruppe (Anteil) | 0,830 | 0,844 | 0,010 | 0,015 |
+| Zeitgruppen | 11,0 | 12,0 | 107,0 | 92,0 |
+| s/km (Letzter) | 7,690 | 0,581 | 17,499 | 9,112 |
+| Laufzeit je Etappe | 715 ms | 0,53 ms | 997 ms | 1,07 ms |
+
+Geschwindigkeit, Anteil der ersten Gruppe und Zahl der Zeitgruppen stimmen; der Kern
+läuft rund **1.000-mal schneller** als die Instant-Simulation.
+
+Die Zeitgruppen stimmen erst, seit die zweite Strukturregel raus ist. Der Entwurf
+ließ hinter der ersten Gruppe eine neue beginnen, wenn der Score-Abstand größer war
+als der mittlere im Restfeld — das fasste viel zu großzügig zusammen (Hochgebirge 55
+statt 107). Jetzt bekommt jeder Fahrer hinter der Spitzengruppe seinen eigenen
+Rückstand, und die Zeitgruppen entstehen daraus nach der 1-Sekunden-Regel des Spiels.
+Eine Annahme weniger, und das Ergebnis ist näher an der Referenz.
+
+### Das abgehängte Ende
+
+Der Rückstand des Letzten bleibt weit daneben, und der Grund ist ein Modellfehler,
+kein Fitfehler. Auf einer Flachetappe liegt Rang 100 bei 0,063 Sekunden je Kilometer
+zurück, der letzte Fahrer bei 7,691 — **Faktor 120**. So einen Sprung erzeugt kein
+Score-Abstand, denn die Scores springen dort nicht.
+
+Eine Sonde über die volle Rückstandskurve zeigt, was passiert (Median über 6 Läufe):
+
+| Rang | Etappe 260 (Flat, 109 km, 183 Finisher) | Etappe 336 (Flat, 235 km, 178 Finisher) |
+| --: | --: | --: |
+| 100 | 10,9 s | 62,7 s |
+| 140 | 18,2 s | 242,8 s |
+| 160 | 21,9 s | 487,1 s |
+| 170 | 28,4 s | 742,5 s |
+| 175 | **196,4 s** | 876,5 s |
+| letzter | 891,8 s | 1007,4 s |
+
+Das Ende des Feldes wird abgehängt — und *wo* das anfängt, hängt an der Etappe: bei
+109 km um Rang 172 von 183, bei 235 km schon um Rang 130 von 178. Es sind auch keine
+Stürze: der Effekt tritt in **jedem** Lauf auf (Minimum über die Läufe ebenso hoch),
+und die DNF-Zahl ist im Median null. Ein Versuch, ihn über
+`incident_loss_multiplier` zu erklären, lief bis an die Obergrenze 200, ohne den
+beobachteten Wert zu erreichen.
+
+Der Kern braucht dafür eine eigene Komponente. Damit sie fittbar wird, erhebt
+`metrics.ts` den Rückstand jetzt zusätzlich an **relativen Feldpositionen**
+(`TRACKED_FIELD_POSITIONS`: 50 %, 75 %, 90 %, 95 %, 99 %) — feste Ränge sagen über
+das Ende eines Feldes nichts, dessen Größe sich von Etappe zu Etappe ändert. Der
+vorhandene Referenzdatensatz kennt sie noch nicht; ein neuer Lauf ist die
+Voraussetzung für diesen Fit.
+
+## Das Abstandsmodell fitten
+
+`npm run calibrate:fit-gaps` passt `gap_factor` und `gap_exponent` an. Zwei Stufen,
+weil zwei verschiedene Phänomene gemessen werden:
+
+**A — die Rückstandskurve im Feld** (Ränge 2 bis 100). Der Rückstand ist in
+`gap_factor` *linear*; deshalb genügt je Exponent ein einziger Lauf mit f = 1, und
+das optimale f folgt in geschlossener Form als geometrisches Mittel der
+Verhältnisse. Gesucht wird nur über γ.
+
+**B — der Rückstand des Letzten** über `incident_loss_multiplier`, per Bisektion.
+
+Solange das abgehängte Ende fehlt, sind die Ergebnisse beider Stufen nicht
+übernehmbar: Stufe B läuft ins Leere, und Stufe A würde einen Modellfehler in die
+Parameter hineinfitten. Die Werte in `quick_sim_profiles.csv` bleiben deshalb
+vorerst die geschätzten Startwerte.
 
 ## Bekannte Grenzen der Messung
 

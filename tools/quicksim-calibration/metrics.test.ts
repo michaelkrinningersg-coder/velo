@@ -90,6 +90,33 @@ describe('computeStageRunMetrics', () => {
     expect(metrics!.firstGroupSize).toBe(2);
     expect(metrics!.timeGroupCount).toBe(4);
     expect(metrics!.largestGroupSize).toBe(2);
+    // Feldpositionen: 5 Finisher, Position 0,5 ist der dritte, 0,99 der fuenfte.
+    expect(metrics!.gapSecondsByFieldPosition[0.5]).toBe(30);
+    expect(metrics!.gapSecondsByFieldPosition[0.9]).toBe(300);
+    expect(metrics!.gapSecondsByFieldPosition[0.99]).toBe(300);
+  });
+
+  it('misst die Feldpositionen ueber die ganze Breite des Feldes', () => {
+    // 100 Finisher, jeder eine Sekunde hinter dem Vordermann: der Rueckstand
+    // an Position p ist damit genau ceil(p · 100) − 1 Sekunden.
+    const metrics = computeStageRunMetrics({
+      finishers: Array.from({ length: 100 }, (_, index) => ({
+        riderId: index + 1,
+        finishTimeSeconds: 1000 + index,
+      })),
+      dnfCount: 0,
+      otlCount: 0,
+      breakawayRiderIds: [],
+      breakawayCatchKm: null,
+      favouriteRiderIdsInOrder,
+    });
+
+    expect(metrics!.gapSecondsByFieldPosition[0.5]).toBe(49);
+    expect(metrics!.gapSecondsByFieldPosition[0.75]).toBe(74);
+    expect(metrics!.gapSecondsByFieldPosition[0.9]).toBe(89);
+    expect(metrics!.gapSecondsByFieldPosition[0.95]).toBe(94);
+    expect(metrics!.gapSecondsByFieldPosition[0.99]).toBe(98);
+    expect(metrics!.lastFinisherGapSeconds).toBe(99);
   });
 
   it('meldet null fuer Raenge, die es nicht gibt', () => {
@@ -108,6 +135,9 @@ describe('computeStageRunMetrics', () => {
     expect(metrics!.gapSecondsByRank[2]).toBe(50);
     expect(metrics!.gapSecondsByRank[10]).toBeNull();
     expect(metrics!.gapSecondsByRank[100]).toBeNull();
+    // Feldpositionen gibt es dagegen immer — sie sind relativ.
+    expect(metrics!.gapSecondsByFieldPosition[0.5]).toBe(0);
+    expect(metrics!.gapSecondsByFieldPosition[0.99]).toBe(50);
   });
 
   it('unterscheidet ueberlebte, gestellte und fehlende Ausreissergruppe', () => {

@@ -16,6 +16,22 @@ import { TIME_TIE_THRESHOLD_SECONDS } from '../../shared/stageResultRules';
 /** Raenge, deren Rueckstand auf den Sieger erfasst wird. */
 export const TRACKED_GAP_RANKS = [2, 5, 10, 20, 50, 100] as const;
 
+/**
+ * Relative Positionen im Feld, deren Rueckstand ebenfalls erfasst wird.
+ *
+ * Feste Raenge reichen fuer den Kopf, nicht fuer das Ende. Der Vergleich der
+ * Quick Sim mit der Instant-Sim ist genau daran haengen geblieben: auf einer
+ * Flachetappe liegt Rang 100 bei 11 Sekunden zurueck, der letzte Fahrer bei
+ * 892 — und *wo* dazwischen der Sprung passiert, sagt keine der bisherigen
+ * Kennzahlen. Gemessen an einer Sonde beginnt er bei 109 km um Rang 172 von
+ * 183, bei 235 km schon um Rang 130 von 178: das Ende des Feldes wird
+ * abgehaengt, und wie frueh, haengt an der Etappe.
+ *
+ * Relative Positionen sind dafuer das richtige Mass, weil sie weder von der
+ * Feldgroesse noch von der Zahl der Aufgaben abhaengen.
+ */
+export const TRACKED_FIELD_POSITIONS = [0.5, 0.75, 0.9, 0.95, 0.99] as const;
+
 export interface FinisherObservation {
   riderId: number;
   /** Zielzeit in Sekunden. */
@@ -44,6 +60,11 @@ export interface StageRunMetrics {
   otlCount: number;
   /** Rueckstand auf den Sieger je verfolgtem Rang; null, wenn es den Rang nicht gibt. */
   gapSecondsByRank: Record<number, number | null>;
+  /**
+   * Rueckstand auf den Sieger an relativen Positionen im Feld. Erst diese
+   * Kurve macht das abgehaengte Ende sichtbar.
+   */
+  gapSecondsByFieldPosition: Record<number, number | null>;
   lastFinisherGapSeconds: number | null;
   /** Anzahl Fahrer in der ersten Zeitgruppe (1-Sekunden-Regel). */
   firstGroupSize: number;
@@ -158,12 +179,22 @@ export function computeStageRunMetrics(observation: StageRunObservation): StageR
     gapSecondsByRank[rank] = entry ? entry.finishTimeSeconds - winnerTimeSeconds : null;
   }
 
+  const gapSecondsByFieldPosition: Record<number, number | null> = {};
+  for (const position of TRACKED_FIELD_POSITIONS) {
+    // Aufrunden, damit Position 1,0 der letzte Fahrer waere und 0,5 bei
+    // ungerader Feldgroesse nicht nach vorne rutscht.
+    const index = Math.min(finishers.length - 1, Math.max(0, Math.ceil(position * finishers.length) - 1));
+    const entry = finishers[index];
+    gapSecondsByFieldPosition[position] = entry ? entry.finishTimeSeconds - winnerTimeSeconds : null;
+  }
+
   return {
     winnerTimeSeconds,
     finisherCount: finishers.length,
     dnfCount: observation.dnfCount,
     otlCount: observation.otlCount,
     gapSecondsByRank,
+    gapSecondsByFieldPosition,
     lastFinisherGapSeconds: finishers[finishers.length - 1]!.finishTimeSeconds - winnerTimeSeconds,
     firstGroupSize: groupSizes[0] ?? 0,
     timeGroupCount: groupSizes.length,
