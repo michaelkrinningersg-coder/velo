@@ -20,7 +20,15 @@ import { SimulationEngine } from '../../frontend/src/race-sim/SimulationEngine';
 import { calculateStageFavoriteRiderRanking } from '../../frontend/src/race-sim/stageFavorites';
 import { resolveStageTimeLimitSeconds } from '../../shared/stageResultRules';
 import type { StageProfile } from '../../shared/types';
-import { buildStageBootstrap, listStageCandidates, migrateSavegame, rollStageWeatherOnce, type StageCandidate } from './bootstrap';
+import {
+  buildStageBootstrap,
+  createBootstrapContext,
+  listStageCandidates,
+  migrateSavegame,
+  rollStageWeatherOnce,
+  type StageBootstrapContext,
+  type StageCandidate,
+} from './bootstrap';
 import {
   computeStageRunMetrics,
   summarize,
@@ -48,6 +56,11 @@ interface Options {
    * Determinismus-Test erzeugt — der laeuft dann ohne Datenbank.
    */
   dumpBootstrap: string | null;
+  /** Nur diese Etappenprofile messen. Leer = alle. */
+  profiles: string[] | null;
+  /** Aufteilung auf mehrere Prozesse: `i/n` misst jede n-te Etappe ab i. */
+  shardIndex: number;
+  shardCount: number;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -57,6 +70,7 @@ function parseOptions(argv: string[]): Options {
   };
 
   const stageIdsRaw = get('stages');
+  const shard = get('shard');
   return {
     savegame: get('savegame') ?? path.join('savegames', 'a_1783240576758.db'),
     runs: Number(get('runs') ?? 30),
@@ -64,6 +78,11 @@ function parseOptions(argv: string[]): Options {
     stageIds: stageIdsRaw ? stageIdsRaw.split(',').map((value) => Number(value.trim())) : null,
     outDir: get('out') ?? path.join('debug', 'quicksim-reference'),
     dumpBootstrap: get('dump-bootstrap'),
+    profiles: (get('profiles') ?? '').trim()
+      ? (get('profiles') as string).split(',').map((value) => value.trim()).filter(Boolean)
+      : null,
+    shardIndex: shard ? Number(shard.split('/')[0]) : 0,
+    shardCount: shard ? Number(shard.split('/')[1]) : 1,
   };
 }
 
@@ -124,9 +143,10 @@ function runStage(
   db: Database.Database,
   stage: StageCandidate,
   runs: number,
+  context: StageBootstrapContext,
 ): StageReference | null {
   const weatherId = rollStageWeatherOnce(db, stage.stageId);
-  const bootstrap = withSilencedConsole(() => buildStageBootstrap(db, stage.stageId));
+  const bootstrap = withSilencedConsole(() => buildStageBootstrap(db, stage.stageId, context));
   if (!bootstrap || !bootstrap.riders || bootstrap.riders.length === 0) {
     return null;
   }
@@ -292,9 +312,17 @@ function main(): void {
   migrateSavegame(db);
 
   const candidates = listStageCandidates(db);
-  const stages = options.stageIds
-    ? candidates.filter((candidate) => options.stageIds!.includes(candidate.stageId))
-    : selectStages(candidates, options.perProfile);
+  const filtered = options.profiles
+    ? candidates.filter((candidate) => options.profiles!.includes(candidate.profile))
+    : candidates;
+  const chosen = options.stageIds
+    ? filtered.filter((candidate) => options.stageIds!.includes(candidate.stageId))
+    : selectStages(filtered, options.perProfile);
+  // Aufteilung erst nach der Auswahl: jeder Prozess misst dieselbe Stichprobe,
+  // nur einen anderen Ausschnitt davon.
+  const stages = options.shardCount > 1
+    ? chosen.filter((_, index) => index % options.shardCount === options.shardIndex)
+    : chosen;
 
   if (options.dumpBootstrap) {
     const target = stages[0];
@@ -303,7 +331,7 @@ function main(): void {
       process.exit(1);
     }
     rollStageWeatherOnce(db, target.stageId);
-    const dumped = buildStageBootstrap(db, target.stageId);
+    const dumped = withSilencedConsole(() => buildStageBootstrap(db, target.stageId));
     if (!dumped) {
       console.error(`Etappe ${target.stageId}: kein Bootstrap erzeugbar.`);
       process.exit(1);
@@ -321,6 +349,9 @@ function main(): void {
   fs.mkdirSync(options.outDir, { recursive: true });
   console.error(`${stages.length} Etappen x ${options.runs} Laeufe — Spielstand ${path.basename(options.savegame)}`);
 
+  // Etappenunabhaengigen Teil einmal laden statt einmal je Etappe.
+  const bootstrapContext = withSilencedConsole(() => createBootstrapContext(db));
+
   const references: StageReference[] = [];
   for (const [index, stage] of stages.entries()) {
     process.stderr.write(
@@ -328,7 +359,7 @@ function main(): void {
     );
     let reference: StageReference | null = null;
     try {
-      reference = runStage(db, stage, options.runs);
+      reference = runStage(db, stage, options.runs, bootstrapContext);
     } catch (error) {
       console.error(`Fehler: ${(error as Error).message}`);
       continue;
@@ -353,7 +384,8 @@ function main(): void {
     );
   }
 
-  const summaryPath = path.join(options.outDir, 'summary.csv');
+  const summarySuffix = options.shardCount > 1 ? `-shard${options.shardIndex}` : '';
+  const summaryPath = path.join(options.outDir, `summary${summarySuffix}.csv`);
   writeSummaryCsv(references, summaryPath);
   db.close();
   fs.rmSync(path.dirname(workingCopy), { recursive: true, force: true });

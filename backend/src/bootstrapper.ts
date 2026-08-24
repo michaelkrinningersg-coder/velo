@@ -903,6 +903,39 @@ function seedStages(db: Database.Database): void {
   console.log(`  ${rows.length} Etappen eingefuegt.`);
 }
 
+/**
+ * Befuellt die Parametertabelle der Quick Simulation aus der CSV.
+ *
+ * Exportiert und idempotent (INSERT OR IGNORE), damit die Migration
+ * bestehender Spielstaende dieselbe Funktion benutzen kann. Die
+ * Wetter-Migration in DatabaseService haelt ihre Werte ein zweites Mal im Code
+ * — genau die Doppelpflege, die hier vermieden wird.
+ */
+export function seedQuickSimProfiles(db: Database.Database): void {
+  const rows = readCsv('quick_sim_profiles.csv');
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO quick_sim_profiles (
+      profile, base_speed_kmh, group_threshold, gap_factor, gap_exponent,
+      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `quick_sim_profiles.csv Zeile ${index + 2}`;
+    insert.run(
+      req(row, 'profile', ctx),
+      real(req(row, 'base_speed_kmh', ctx), `${ctx} / base_speed_kmh`),
+      real(req(row, 'group_threshold', ctx), `${ctx} / group_threshold`),
+      real(req(row, 'gap_factor', ctx), `${ctx} / gap_factor`),
+      real(req(row, 'gap_exponent', ctx), `${ctx} / gap_exponent`),
+      real(req(row, 'noise_sigma', ctx), `${ctx} / noise_sigma`),
+      real(req(row, 'incident_loss_multiplier', ctx), `${ctx} / incident_loss_multiplier`),
+      real(req(row, 'severe_dnf_chance', ctx), `${ctx} / severe_dnf_chance`),
+      real(req(row, 'breakaway_shrink_exponent', ctx), `${ctx} / breakaway_shrink_exponent`),
+    );
+  }
+}
+
 function seedWetter(db: Database.Database): void {
   const rows = readCsv('wetter.csv');
   const insert = db.prepare(`
@@ -1339,6 +1372,7 @@ export function bootstrap(force = false): void {
     seedRaceProgramRaces(db);
     seedRaceProgramProbabilityRules(db);
     seedWetter(db);
+    seedQuickSimProfiles(db);
     seedStages(db);
     seedRiders(db);
     seedTeamPreferences(db);

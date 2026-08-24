@@ -1,22 +1,24 @@
 /**
- * Baut den Bootstrap einer Etappe genau so, wie ihn die Route
- * `GET /api/simulation/realtime/:stageId` baut (backend/src/routes/api.ts).
+ * Zugang zum Spielstand fuer den Kalibrier-Harness.
  *
- * Wichtig fuer die Kalibrierung: es wird bewusst *kein* eigener Aufbau
- * geschrieben, sondern es werden dieselben Funktionen in derselben Reihenfolge
- * aufgerufen. Waeren es zwei Wege, wuerde die Referenzmessung mit der Zeit von
- * dem abweichen, was das Spiel tatsaechlich simuliert — und niemand wuerde es
- * merken.
+ * Der Bootstrap selbst kommt aus `StageBootstrapService` — demselben Dienst,
+ * den auch die Route `GET /api/simulation/realtime/:stageId` benutzt. Waeren es
+ * zwei Wege, wuerde die Referenzmessung mit der Zeit von dem abweichen, was das
+ * Spiel tatsaechlich simuliert, und niemand wuerde es merken.
  */
 
 import Database from 'better-sqlite3';
 import type { RealtimeSimulationBootstrap } from '../../shared/types';
 import { DatabaseService } from '../../backend/src/db/DatabaseService';
 import { GameRepository } from '../../backend/src/db/GameRepository';
-import { ensureRaceEntries } from '../../backend/src/simulation/RaceRosterService';
-import { StageParser } from '../../backend/src/simulation/StageParser';
-import { RivalryService } from '../../backend/src/game/RivalryService';
-import { ensureSimSeedRolled, ensureWeatherRolled, resolveRealtimeTeamStartOrder } from '../../backend/src/routes/api';
+import {
+  buildStageBootstrap as buildStageBootstrapFromService,
+  createStageBootstrapContext,
+  type StageBootstrapContext,
+} from '../../backend/src/simulation/StageBootstrapService';
+import { ensureSimSeedRolled, ensureWeatherRolled } from '../../backend/src/routes/api';
+
+export type { StageBootstrapContext };
 
 export interface StageCandidate {
   stageId: number;
@@ -90,52 +92,24 @@ export function rollStageWeatherOnce(db: Database.Database, stageId: number): nu
 }
 
 /**
- * Erzeugt den Bootstrap. Achtung: `ensureRaceEntries` schreibt Startlisten in
- * die Datenbank — der Aufrufer muss auf einer Kopie des Spielstands arbeiten.
+ * Erzeugt den Bootstrap ueber denselben Dienst, den auch die API-Route
+ * benutzt. Achtung: `ensureRaceEntries` schreibt die Startliste in die
+ * Datenbank — der Aufrufer muss auf einer Kopie des Spielstands arbeiten.
  */
 export function buildStageBootstrap(
   db: Database.Database,
   stageId: number,
+  context?: StageBootstrapContext,
 ): RealtimeSimulationBootstrap | null {
   const simSeed = ensureSimSeedRolled(db, stageId);
-  const repo = new GameRepository(db);
-  const stage = repo.getStageById(stageId);
-  if (!stage) {
-    return null;
-  }
+  return buildStageBootstrapFromService(db, new GameRepository(db), stageId, { simSeed, context });
+}
 
-  const race = repo.getRaceById(stage.raceId);
-  if (!race) {
-    return null;
-  }
-
-  const riders = ensureRaceEntries(db, repo, race, stage);
-  if (riders.length === 0) {
-    return null;
-  }
-
-  const seasonRow = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as
-    { season: number } | undefined;
-  const lieutenants = db.prepare(
-    'SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?',
-  ).all(seasonRow?.season ?? 2026) as any[];
-
-  return {
-    simSeed: simSeed ?? undefined,
-    race,
-    stage,
-    riders,
-    teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
-    stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
-    gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
-    pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
-    mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
-    youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
-    classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
-    teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
-    skillWeightRules: repo.getSkillWeightRules(),
-    stageScoringRules: repo.getStageScoringRules(),
-    lieutenants,
-    rivalries: new RivalryService(db).getActivePairs(),
-  } as RealtimeSimulationBootstrap;
+/**
+ * Laedt den etappenunabhaengigen Teil einmal, damit er ueber viele Etappen
+ * wiederverwendet werden kann. Bei einem Referenzlauf ueber 80 Etappen spart
+ * das 80-mal Teams, Skill-Gewichte, Wertungsregeln und Rivalitaeten.
+ */
+export function createBootstrapContext(db: Database.Database): StageBootstrapContext {
+  return createStageBootstrapContext(db, new GameRepository(db));
 }

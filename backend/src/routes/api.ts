@@ -18,6 +18,7 @@ import { applyRaceRosterSelection, ensureRaceEntries, finalizeChampionshipWithou
 import { isChampionshipCategory, isNationalChampionshipCategory } from '../simulation/championships';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
 import { StageParser } from '../simulation/StageParser';
+import { buildStageBootstrap, resolveRealtimeTeamStartOrder } from '../simulation/StageBootstrapService';
 import {
   ApiResponse,
   ParsedStageSummary,
@@ -68,73 +69,6 @@ function fail(res: Response, status: number, message: string): void {
   res.status(status).json(body);
 }
 
-export function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: number, riders: Rider[]): number[] {
-  const participatingTeams = new Map<number, Team>();
-  for (const team of repo.getTeams()) {
-    if (riders.some((rider) => rider.activeTeamId === team.id)) {
-      participatingTeams.set(team.id, team);
-    }
-  }
-
-  const participatingTeamIds = new Set(participatingTeams.keys());
-  if (participatingTeamIds.size === 0) {
-    return [];
-  }
-
-  if (race.isStageRace && stageNumber > 1) {
-    const previousGcStandings = repo.getPreviousGcStandings(race.id, stageNumber);
-    const riderById = new Map(riders.map((rider) => [rider.id, rider]));
-    const teamTotals = new Map<number, number[]>();
-
-    for (const standing of previousGcStandings) {
-      const rider = riderById.get(standing.riderId);
-      const teamId = rider?.activeTeamId;
-      if (teamId == null || !participatingTeamIds.has(teamId)) {
-        continue;
-      }
-
-      const bucket = teamTotals.get(teamId) ?? [];
-      bucket.push(standing.timeSeconds);
-      teamTotals.set(teamId, bucket);
-    }
-
-    return [...participatingTeams.values()]
-      .sort((left, right) => {
-        const leftTimes = teamTotals.get(left.id);
-        const rightTimes = teamTotals.get(right.id);
-        const leftTotal = leftTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, leftTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
-        const rightTotal = rightTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, rightTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
-
-        if (leftTotal != null && rightTotal != null) {
-          return rightTotal - leftTotal || left.name.localeCompare(right.name, 'de');
-        }
-        if (leftTotal != null) return 1;
-        if (rightTotal != null) return -1;
-        return left.name.localeCompare(right.name, 'de');
-      })
-      .map((team) => team.id);
-  }
-
-  const seasonTeamPoints = new Map(
-    repo.getSeasonStandings().teamStandings
-      .filter((row: any) => row.teamId != null && participatingTeamIds.has(row.teamId))
-      .map((row: any) => [row.teamId as number, row.points] as const),
-  );
-
-  return [...participatingTeams.values()]
-    .sort((left, right) => {
-      const leftPoints = seasonTeamPoints.get(left.id) ?? 0;
-      const rightPoints = seasonTeamPoints.get(right.id) ?? 0;
-
-      if (leftPoints === 0 && rightPoints === 0) {
-        return left.name.localeCompare(right.name, 'de');
-      }
-      if (leftPoints === 0) return -1;
-      if (rightPoints === 0) return 1;
-      return (leftPoints as number) - (rightPoints as number) || left.name.localeCompare(right.name, 'de');
-    })
-    .map((team: any) => team.id);
-}
 
 function getSinglePickDetails(db: any, season: number, pickNumber: number): any {
   // 1. Get the draft history row
@@ -630,8 +564,8 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
       }
 
-      const riders = ensureRaceEntries(db, repo, race, stage);
-      if (riders.length === 0) {
+      const bootstrap = buildStageBootstrap(db, repo, stageId, { simSeed });
+      if (!bootstrap) {
         // Meisterschaft ohne startberechtigte Fahrer: ohne Simulation als
         // ergebnislos abschliessen (kein Meister), damit das Spiel weiterlaeuft.
         if (isChampionshipCategory(race.categoryId) || isNationalChampionshipCategory(race.categoryId)) {
@@ -644,27 +578,7 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
 
-      const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number };
-      const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
-
-      ok<RealtimeSimulationBootstrap>(res, {
-        simSeed: simSeed ?? undefined,
-        race,
-        stage,
-        riders,
-        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
-        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
-        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
-        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
-        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
-        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
-        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
-        skillWeightRules: repo.getSkillWeightRules(),
-        stageScoringRules: repo.getStageScoringRules(),
-        lieutenants,
-        rivalries: new RivalryService(db).getActivePairs(),
-      });
+      ok<RealtimeSimulationBootstrap>(res, bootstrap);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

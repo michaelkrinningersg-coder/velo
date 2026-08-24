@@ -325,6 +325,30 @@ CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
   ON rider_season_programs(season, program_id);
 
 -- ---- Wetter --------------------------------------------------
+-- ---- Quick-Simulation: Parameter je Etappenprofil ----------
+-- Kalibrierbare Kennwerte des schnellen Simulationsmodus. Bewusst als Daten
+-- statt als Konstanten im Code: die Werte werden gegen die Instant-Simulation
+-- gefittet und muessen ohne Rebuild anpassbar bleiben.
+CREATE TABLE IF NOT EXISTS quick_sim_profiles (
+  profile                     TEXT PRIMARY KEY,
+  -- Referenzgeschwindigkeit fuer die Siegerzeit.
+  base_speed_kmh              REAL NOT NULL,
+  -- Score-Abstand, ab dem eine neue Zeitgruppe beginnt. 0 = keine Gruppen (Zeitfahren).
+  group_threshold             REAL NOT NULL,
+  -- Sekunden Rueckstand je Score-Punkt und Kilometer.
+  gap_factor                  REAL NOT NULL,
+  -- Exponent auf den Score-Abstand: > 1 staut das Feld vorne und zieht es hinten auseinander.
+  gap_exponent                REAL NOT NULL,
+  -- Streuung des Rueckstands. Regelt, wie vorhersagbar das Ergebnis ist.
+  noise_sigma                 REAL NOT NULL,
+  -- Faktor auf den Zeitverlust eines Vorfalls (Anschluss verlieren kostet mehr als die Wartezeit).
+  incident_loss_multiplier    REAL NOT NULL,
+  -- Wahrscheinlichkeit, dass ein schwerer Sturz zur Aufgabe fuehrt.
+  severe_dnf_chance           REAL NOT NULL,
+  -- Exponent der Ausduennung der Ausreissergruppe bis zum Einholpunkt.
+  breakaway_shrink_exponent   REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS wetter (
   id INTEGER PRIMARY KEY,
   wetter_name TEXT NOT NULL UNIQUE,

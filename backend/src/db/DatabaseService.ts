@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
-import { bootstrap, readStageScoreSegments } from '../bootstrapper';
+import { bootstrap, readStageScoreSegments, seedQuickSimProfiles } from '../bootstrapper';
 import { resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
@@ -1119,6 +1119,8 @@ export class DatabaseService {
         insert.run(...row);
       }
     })();
+
+    this.ensureQuickSimProfilesSchema(db);
 
     const weatherStageColumns = [
       ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
@@ -3277,6 +3279,35 @@ export class DatabaseService {
     if (!tableExists(db, 'riders')) return;
     if (!columnExists(db, 'riders', 'retired_season')) {
       db.prepare('ALTER TABLE riders ADD COLUMN retired_season INTEGER').run();
+    }
+  }
+
+  /**
+   * Legt die Parametertabelle der Quick Simulation an und befuellt sie aus der
+   * CSV. Nutzt bewusst dieselbe Seed-Funktion wie der Bootstrapper, damit die
+   * Werte nur an einer Stelle gepflegt werden.
+   */
+  private ensureQuickSimProfilesSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS quick_sim_profiles (
+        profile                     TEXT PRIMARY KEY,
+        base_speed_kmh              REAL NOT NULL,
+        group_threshold             REAL NOT NULL,
+        gap_factor                  REAL NOT NULL,
+        gap_exponent                REAL NOT NULL,
+        noise_sigma                 REAL NOT NULL,
+        incident_loss_multiplier    REAL NOT NULL,
+        severe_dnf_chance           REAL NOT NULL,
+        breakaway_shrink_exponent   REAL NOT NULL
+      )
+    `).run();
+
+    try {
+      seedQuickSimProfiles(db);
+    } catch (error) {
+      // Im gepackten Betrieb kann die CSV fehlen. Die Tabelle bleibt dann leer;
+      // die Quick Simulation faellt auf ihre eingebauten Vorgaben zurueck.
+      console.warn('quick_sim_profiles konnten nicht geladen werden:', (error as Error).message);
     }
   }
 

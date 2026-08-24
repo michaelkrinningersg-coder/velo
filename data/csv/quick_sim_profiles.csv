@@ -1,0 +1,12 @@
+profile,base_speed_kmh,group_threshold,gap_factor,gap_exponent,noise_sigma,incident_loss_multiplier,severe_dnf_chance,breakaway_shrink_exponent
+Flat,43.0,3.00,0.060,1.30,0.15,1.2,0.25,1.5
+Rolling,42.0,2.20,0.100,1.30,0.18,1.4,0.25,1.5
+Hilly,40.0,1.60,0.180,1.40,0.20,1.7,0.28,1.5
+Hilly_Difficult,38.0,1.20,0.260,1.40,0.22,2.0,0.30,1.5
+Cobble,39.0,1.00,0.300,1.50,0.30,2.4,0.35,1.4
+Cobble_Hill,39.0,1.00,0.300,1.50,0.30,2.4,0.35,1.4
+Medium_Mountain,36.0,0.90,0.340,1.50,0.22,2.2,0.30,1.6
+Mountain,34.0,0.60,0.450,1.60,0.24,2.6,0.30,1.7
+High_Mountain,32.0,0.40,0.580,1.70,0.26,3.0,0.32,1.8
+ITT,48.0,0.00,0.700,1.00,0.10,1.0,0.20,1.0
+TTT,52.0,0.00,0.700,1.00,0.08,1.0,0.20,1.0
