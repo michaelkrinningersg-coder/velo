@@ -14,11 +14,11 @@ import { RiderDraftService } from '../game/RiderDraftService';
 import { RivalryService } from '../game/RivalryService';
 import { WrappedService } from '../game/WrappedService';
 import { RouteImporter } from '../simulation/RouteImporter';
-import { applyRaceRosterSelection, ensureRaceEntries, finalizeChampionshipWithoutStarters, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { applyRaceRosterSelection, finalizeChampionshipWithoutStarters, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
 import { isChampionshipCategory, isNationalChampionshipCategory } from '../simulation/championships';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
 import { StageParser } from '../simulation/StageParser';
-import { buildStageBootstrap, resolveRealtimeTeamStartOrder } from '../simulation/StageBootstrapService';
+import { assembleStageBootstrap, buildStageBootstrap, resolveRealtimeTeamStartOrder } from '../simulation/StageBootstrapService';
 import {
   ApiResponse,
   ParsedStageSummary,
@@ -706,27 +706,7 @@ export function createRouter(dbService: DatabaseService): Router {
         }
       }
 
-      const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number };
-      const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
-
-      ok<RealtimeSimulationBootstrap>(res, {
-        simSeed: simSeed ?? undefined,
-        race,
-        stage,
-        riders,
-        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
-        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
-        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
-        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
-        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
-        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
-        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
-        skillWeightRules: repo.getSkillWeightRules(),
-        stageScoringRules: repo.getStageScoringRules(),
-        lieutenants,
-        rivalries: new RivalryService(db).getActivePairs(),
-      });
+      ok<RealtimeSimulationBootstrap>(res, assembleStageBootstrap(db, repo, race, stage, riders, { simSeed }));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

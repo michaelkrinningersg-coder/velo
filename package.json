@@ -10,7 +10,8 @@
     "dev": "npm run start",
     "browser": "npm run start",
     "test": "npm --prefix backend run test",
-    "calibrate:reference": "node tools/quicksim-calibration/run.js"
+    "calibrate:reference": "node tools/quicksim-calibration/run.js",
+    "calibrate:aggregate": "node tools/quicksim-calibration/runAggregate.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

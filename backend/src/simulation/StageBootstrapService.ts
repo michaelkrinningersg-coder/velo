@@ -173,6 +173,24 @@ export function buildStageBootstrap(
     return null;
   }
 
+  return assembleStageBootstrap(db, repo, race, stage, riders, options);
+}
+
+/**
+ * Setzt den Bootstrap aus einem bereits bestimmten Starterfeld zusammen.
+ *
+ * Getrennt von `buildStageBootstrap`, weil die Roster-Route ihre Fahrer selbst
+ * ermittelt (Spielerauswahl plus Mentorenboni) und trotzdem denselben Aufbau
+ * liefern muss. Ohne diese Trennung stuende die Zusammenstellung zweimal da.
+ */
+export function assembleStageBootstrap(
+  db: Database.Database,
+  repo: any,
+  race: Race,
+  stage: any,
+  riders: Rider[],
+  options: BuildStageBootstrapOptions = {},
+): RealtimeSimulationBootstrap {
   const context = options.context ?? createStageBootstrapContext(db, repo);
   const participatingTeams = context.teams.filter(
     (team) => riders.some((rider: any) => rider.activeTeamId === team.id),
