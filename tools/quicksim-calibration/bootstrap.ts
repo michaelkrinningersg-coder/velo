@@ -17,6 +17,7 @@ import {
   type StageBootstrapContext,
 } from '../../backend/src/simulation/StageBootstrapService';
 import { ensureSimSeedRolled, ensureWeatherRolled } from '../../backend/src/routes/api';
+import { deriveSeed } from '../../shared/rng';
 
 export type { StageBootstrapContext };
 
@@ -79,16 +80,31 @@ export function listStageCandidates(db: Database.Database): StageCandidate[] {
 }
 
 /**
- * Wuerfelt das Wetter der Etappe einmal aus, falls noch nicht geschehen, und
- * liefert die gesetzte Wetter-ID zurueck. Fuer die Referenzmessung bleibt das
- * Wetter ueber alle Laeufe einer Etappe konstant, damit sich die Laeufe nur
- * durch den Simulationszufall unterscheiden.
+ * Legt den Etappen-Seed fuer die Referenzmessung deterministisch fest und
+ * leitet das Wetter daraus ab.
+ *
+ * Im Spiel wird der Seed je Etappe zufaellig gezogen. Fuer eine Messung ist das
+ * unbrauchbar: der Harness arbeitet auf einer frischen Kopie des Spielstands,
+ * also wuerde jeder Aufruf ein anderes Wetter ziehen — und die Zielwerte
+ * schwankten zwischen zwei Referenzlaeufen staerker, als die Laufzahl vermuten
+ * laesst. Beobachtet: Hilly lag in zwei Laeufen bei 42,4 und 44,4 km/h.
+ *
+ * Der Seed wird deshalb aus der Etappen-ID abgeleitet. Die einzelnen Laeufe
+ * bekommen davon getrennte Seeds (siehe `resolveRunSeed`), damit sich der
+ * Rennverlauf weiterhin unterscheidet — nur der Etappenaufbau steht fest.
  */
-export function rollStageWeatherOnce(db: Database.Database, stageId: number): number | null {
+export function pinStageSeed(db: Database.Database, stageId: number): { seed: number; weatherId: number | null } {
+  const seed = deriveSeed(stageId, 'calibration-reference');
+  db.prepare('UPDATE stages SET sim_seed = ?, rolled_weather_id = NULL WHERE id = ?').run(seed, stageId);
   ensureWeatherRolled(db, stageId);
   const row = db.prepare('SELECT rolled_weather_id AS weatherId FROM stages WHERE id = ?')
     .get(stageId) as { weatherId: number | null } | undefined;
-  return row?.weatherId ?? null;
+  return { seed, weatherId: row?.weatherId ?? null };
+}
+
+/** Seed eines einzelnen Laufs. Gleicher Etappenaufbau, anderer Rennverlauf. */
+export function resolveRunSeed(stageSeed: number, runIndex: number): number {
+  return deriveSeed(stageSeed, `run-${runIndex}`);
 }
 
 /**

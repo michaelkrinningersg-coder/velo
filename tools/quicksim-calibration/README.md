@@ -74,9 +74,18 @@ backend/node_modules/.bin/tsc -p tools/quicksim-calibration/tsconfig.json
 ## Etappen-Seed
 
 Seit der Einführung von `stages.sim_seed` ist jedes Rennen wiederholbar. Der Seed
-wird einmal je Etappe gezogen (`ensureSimSeedRolled`, analog zum Wetter) und über
-`bootstrap.simSeed` an die Engine gereicht. Fehlt er, zieht die Engine einen — dann
-verhält sie sich wie zuvor, nur eben nicht wiederholbar.
+wird einmal je Etappe gezogen (`ensureSimSeedRolled`) und über `bootstrap.simSeed`
+an die Engine gereicht. Fehlt er, zieht die Engine einen — dann verhält sie sich wie
+zuvor, nur eben nicht wiederholbar.
+
+**Auch das Wetter wird aus dem Seed abgeleitet** (`deriveSeed(seed, 'weather')`).
+Vorher war die Simulation reproduzierbar, das Wetter aber nicht: derselbe Seed ergab
+in einer frisch aufgesetzten Datenbank ein anderes Rennen.
+
+Für Messungen nagelt der Harness den Etappen-Seed deterministisch fest
+(`pinStageSeed`, abgeleitet aus der Etappen-ID) und gibt jedem Lauf einen eigenen
+davon abgeleiteten Seed (`resolveRunSeed`). Der Etappenaufbau steht damit über alle
+Referenzläufe fest, der Rennverlauf variiert weiterhin.
 
 Jedes Teilsystem bekommt über `deriveSeed(seed, label)` einen eigenen Zufallsstrom
 (`engine`, `incidents`, `attacks`, `breakaway`, `special-form`). Sonst würde ein
@@ -213,12 +222,12 @@ asymmetrische Verknüpfungsfunktion oder eine Untergrenze auf dem gezogenen Ante
 
 ## Bekannte Grenzen der Messung
 
-- **Das Wetter wird je Referenzlauf neu gewürfelt.** Innerhalb eines Laufs ist es
-  je Etappe fest, zwischen zwei Läufen aber nicht. Deshalb schwanken die
-  Profilmittel zwischen Läufen stärker als die Laufzahl vermuten lässt — Hilly lag
-  in zwei Läufen bei 42,4 und 44,4 km/h. Für stabile Zielwerte müsste das Wetter
-  entweder festgeschrieben oder je Lauf statt je Etappe gewürfelt werden, damit
-  über die Wetterlagen gemittelt wird.
+- **Die Startliste ist noch nicht geseedet.** `RaceRosterService` füllt die letzten
+  Kaderplätze bewusst mit echtem Zufall (`useTrueRandom`), damit ein Team nicht
+  immer dieselben Wasserträger schickt. Auf einer frischen Kopie des Spielstands
+  wird der Kader dadurch neu gelost. Nach der Wetterkorrektur ist das die einzige
+  verbliebene Quelle von Unterschieden zwischen zwei Referenzläufen — gemessen
+  liegen die Siegerzeiten jetzt innerhalb von 0,3 %.
 - **Cobble ruht auf zwei Etappen.** Der Achsenabschnitt −4,03 ist plausibel, aber
   dünn belegt.
 - **19 der 82 ausgewählten Etappen lieferten keine Startliste.** Die Stichprobe ist

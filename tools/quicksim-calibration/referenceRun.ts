@@ -26,7 +26,8 @@ import {
   createBootstrapContext,
   listStageCandidates,
   migrateSavegame,
-  rollStageWeatherOnce,
+  pinStageSeed,
+  resolveRunSeed,
   type StageBootstrapContext,
   type StageCandidate,
 } from './bootstrap';
@@ -146,7 +147,7 @@ function runStage(
   runs: number,
   context: StageBootstrapContext,
 ): StageReference | null {
-  const weatherId = rollStageWeatherOnce(db, stage.stageId);
+  const { seed: stageSeed, weatherId } = pinStageSeed(db, stage.stageId);
   const bootstrap = withSilencedConsole(() => buildStageBootstrap(db, stage.stageId, context));
   if (!bootstrap || !bootstrap.riders || bootstrap.riders.length === 0) {
     return null;
@@ -174,6 +175,8 @@ function runStage(
     const engine = withSilencedConsole(() => new SimulationEngine(bootstrap, {
       maxSubstepSeconds: INSTANT_SUBSTEP_SECONDS,
       isInstantSimulation: true,
+      // Etappenaufbau fest, Rennverlauf je Lauf verschieden.
+      seed: resolveRunSeed(stageSeed, run),
     }));
 
     const startedAt = process.hrtime.bigint();
@@ -332,7 +335,7 @@ function main(): void {
       console.error('Keine Etappe gewaehlt — --stages=<id> angeben.');
       process.exit(1);
     }
-    rollStageWeatherOnce(db, target.stageId);
+    pinStageSeed(db, target.stageId);
     const dumped = withSilencedConsole(() => buildStageBootstrap(db, target.stageId));
     if (!dumped) {
       console.error(`Etappe ${target.stageId}: kein Bootstrap erzeugbar.`);

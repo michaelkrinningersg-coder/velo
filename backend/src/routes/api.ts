@@ -8,7 +8,7 @@ import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
 import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
-import { createRandomSeed } from '../../../shared/rng';
+import { createRandomSeed, createSeededRandom, deriveSeed } from '../../../shared/rng';
 import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
 import { RivalryService } from '../game/RivalryService';
@@ -1294,6 +1294,15 @@ export function ensureSimSeedRolled(db: any, stageId: number): number | null {
   return seed;
 }
 
+/**
+ * Wuerfelt das Wetter der Etappe einmal aus.
+ *
+ * Seit der Einfuehrung des Etappen-Seeds wird es aus diesem abgeleitet statt
+ * frei gezogen. Damit bestimmt der Seed die Etappe vollstaendig — vorher war
+ * die Simulation reproduzierbar, das Wetter aber nicht, sodass derselbe Seed in
+ * einer frisch aufgesetzten Datenbank ein anderes Rennen ergab. Das ist auch
+ * die Voraussetzung dafuer, dass Referenzlaeufe untereinander vergleichbar sind.
+ */
 export function ensureWeatherRolled(db: any, stageId: number): void {
   const row = db.prepare('SELECT rolled_weather_id, allowed_weather FROM stages WHERE id = ?').get(stageId) as { rolled_weather_id: number | null, allowed_weather: string } | undefined;
   if (!row) {
@@ -1308,8 +1317,9 @@ export function ensureWeatherRolled(db: any, stageId: number): void {
     allowed.push(1);
   }
 
-  const randomIndex = Math.floor(Math.random() * allowed.length);
-  const rolledId = allowed[randomIndex];
+  const seed = ensureSimSeedRolled(db, stageId) ?? createRandomSeed();
+  const random = createSeededRandom(deriveSeed(seed, 'weather'));
+  const rolledId = allowed[Math.floor(random() * allowed.length)];
 
   db.prepare('UPDATE stages SET rolled_weather_id = ? WHERE id = ?').run(rolledId, stageId);
 }
