@@ -56,6 +56,8 @@ schreibt in die Datenbank.
 | `bootstrap.ts` | Baut den Etappen-Bootstrap **mit denselben Funktionen** wie die API-Route |
 | `referenceRun.ts` | Der eigentliche Lauf: Etappenauswahl, Simulation, Verdichtung, Ausgabe |
 | `aggregate.ts` | Verdichtet die Etappenmessung zu Kalibrierzielen je Profil |
+| `analyzeGroupRegime.ts` | Passt die Regime-Kurve an und weist Residuen je Profil aus |
+| `validateGroupModel.ts` | Stellt die Modellvorhersage gegen die gemessenen Etappen |
 | `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
@@ -127,6 +129,7 @@ for i in 0 1 2; do
 done
 npm run calibrate:aggregate    # Zielwerte je Profil
 npm run calibrate:groups       # Regime-Analyse der Gruppenbildung
+npm run calibrate:validate     # Modell gegen die Referenz pruefen
 ```
 
 | Profil | Etappen | km/h | 1. Zeitgruppe | Anteil | Zeitgruppen | s/km (Letzter) | Spearman |
@@ -213,6 +216,34 @@ keine ist geraten.
 Als Kontrollgröße für das Abstandsmodell: die Zahl der Zeitgruppen liegt bei
 geschlossener Ankunft im Median bei 15 (p10 8, p90 24), bei zerfallenem Feld bei 45
 (p10 14, p90 123).
+
+### Wie gut das Modell die Referenz trifft
+
+`npm run calibrate:validate` stellt für jede gemessene Etappe den erwarteten Anteil
+der ersten Zeitgruppe gegen den beobachteten. Stand des aktuellen Datensatzes:
+
+| Profil | Etappen | beobachtet | Modell | Delta |
+| :-- | --: | --: | --: | --: |
+| Flat | 8 | 0,635 | 0,580 | −0,055 |
+| Rolling | 5 | 0,567 | 0,576 | +0,009 |
+| Hilly | 7 | 0,451 | 0,416 | −0,035 |
+| Cobble_Hill | 8 | 0,292 | 0,221 | −0,071 |
+| Hilly_Difficult | 6 | 0,244 | 0,289 | +0,045 |
+| Medium_Mountain | 6 | 0,078 | 0,093 | +0,014 |
+| Mountain | 4 | 0,034 | 0,092 | +0,058 |
+| Cobble | 2 | 0,027 | 0,095 | +0,067 |
+| High_Mountain | 7 | 0,022 | 0,092 | +0,070 |
+
+**Mittlerer absoluter Fehler: 0,047.** Das Werkzeug bricht ab, wenn er über 0,08
+steigt — damit fällt eine Parameteränderung auf, die das Modell von der Referenz
+wegzieht.
+
+Auffällig ist das Muster bei den Bergprofilen: das Modell sagt dort durchweg 0,092
+voraus — den Mittelwert der Verteilung für zerfallene Felder — beobachtet sind aber
+0,022 bis 0,034. Der Grund ist die Poolung: `Beta(0,408; 4,025)` mischt
+Cobble_Hill (0,21) und Rolling (0,23) mit High_Mountain (0,02). **Der Anteil im
+zerfallenen Regime hängt selbst noch vom Profil oder von der Schwierigkeit ab.** Das
+ist die nächste Verfeinerung und der Grund, warum genau diese Prüfung existiert.
 
 ### Was das Modell noch nicht trifft
 
