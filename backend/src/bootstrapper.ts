@@ -915,7 +915,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
   const rows = readCsv('quick_sim_profiles.csv');
   const insert = db.prepare(`
     INSERT OR IGNORE INTO quick_sim_profiles (
-      profile, base_speed_kmh, group_threshold, gap_factor, gap_exponent,
+      profile, base_speed_kmh, bunch_intercept, gap_factor, gap_exponent,
       noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
@@ -925,7 +925,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
     insert.run(
       req(row, 'profile', ctx),
       real(req(row, 'base_speed_kmh', ctx), `${ctx} / base_speed_kmh`),
-      real(req(row, 'group_threshold', ctx), `${ctx} / group_threshold`),
+      real(req(row, 'bunch_intercept', ctx), `${ctx} / bunch_intercept`),
       real(req(row, 'gap_factor', ctx), `${ctx} / gap_factor`),
       real(req(row, 'gap_exponent', ctx), `${ctx} / gap_exponent`),
       real(req(row, 'noise_sigma', ctx), `${ctx} / noise_sigma`),

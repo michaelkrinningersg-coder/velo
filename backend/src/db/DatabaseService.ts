@@ -3292,7 +3292,7 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS quick_sim_profiles (
         profile                     TEXT PRIMARY KEY,
         base_speed_kmh              REAL NOT NULL,
-        group_threshold             REAL NOT NULL,
+        bunch_intercept             REAL NOT NULL,
         gap_factor                  REAL NOT NULL,
         gap_exponent                REAL NOT NULL,
         noise_sigma                 REAL NOT NULL,

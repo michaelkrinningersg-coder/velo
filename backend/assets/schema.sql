@@ -333,8 +333,9 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   profile                     TEXT PRIMARY KEY,
   -- Referenzgeschwindigkeit fuer die Siegerzeit.
   base_speed_kmh              REAL NOT NULL,
-  -- Score-Abstand, ab dem eine neue Zeitgruppe beginnt. 0 = keine Gruppen (Zeitfahren).
-  group_threshold             REAL NOT NULL,
+  -- Achsenabschnitt der Regime-Ziehung: P(geschlossene Ankunft) =
+  -- sigmoid(bunch_intercept + BUNCH_SLOPE * stage_score / km). Gemessen.
+  bunch_intercept             REAL NOT NULL,
   -- Sekunden Rueckstand je Score-Punkt und Kilometer.
   gap_factor                  REAL NOT NULL,
   -- Exponent auf den Score-Abstand: > 1 staut das Feld vorne und zieht es hinten auseinander.

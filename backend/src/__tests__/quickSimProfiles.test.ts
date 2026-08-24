@@ -19,7 +19,7 @@ function row(profile: string, overrides: Partial<QuickSimProfileRow> = {}): Quic
   return {
     profile,
     base_speed_kmh: 40,
-    group_threshold: 1,
+    bunch_intercept: 1,
     gap_factor: 0.2,
     gap_exponent: 1.4,
     noise_sigma: 0.2,
@@ -35,7 +35,7 @@ function createTable(db: Database.Database): void {
     CREATE TABLE quick_sim_profiles (
       profile                     TEXT PRIMARY KEY,
       base_speed_kmh              REAL NOT NULL,
-      group_threshold             REAL NOT NULL,
+      bunch_intercept             REAL NOT NULL,
       gap_factor                  REAL NOT NULL,
       gap_exponent                REAL NOT NULL,
       noise_sigma                 REAL NOT NULL,
@@ -50,7 +50,7 @@ function insert(db: Database.Database, entry: QuickSimProfileRow): void {
   db.prepare(`
     INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    entry.profile, entry.base_speed_kmh, entry.group_threshold, entry.gap_factor,
+    entry.profile, entry.base_speed_kmh, entry.bunch_intercept, entry.gap_factor,
     entry.gap_exponent, entry.noise_sigma, entry.incident_loss_multiplier,
     entry.severe_dnf_chance, entry.breakaway_shrink_exponent,
   );
@@ -69,27 +69,28 @@ describe('Vorgabewerte', () => {
     const high = DEFAULT_QUICK_SIM_PROFILES.High_Mountain;
     // Auf der Flachetappe faehrt das Feld schneller …
     expect(flat.baseSpeedKmh).toBeGreaterThan(high.baseSpeedKmh);
-    // … bleibt eher zusammen (hohe Gruppenschwelle) …
-    expect(flat.groupThreshold).toBeGreaterThan(high.groupThreshold);
+    // … und kommt viel eher geschlossen an.
+    expect(flat.bunchIntercept).toBeGreaterThan(high.bunchIntercept);
     // … und reisst weniger auseinander.
     expect(flat.gapFactor).toBeLessThan(high.gapFactor);
   });
 
-  it('gibt Zeitfahren keine Gruppenbildung', () => {
-    expect(DEFAULT_QUICK_SIM_PROFILES.ITT.groupThreshold).toBe(0);
-    expect(DEFAULT_QUICK_SIM_PROFILES.TTT.groupThreshold).toBe(0);
+  it('gibt Zeitfahren keine Regime-Ziehung', () => {
+    // Zeitfahren kennen keine Gruppendynamik; der Wert bleibt neutral.
+    expect(DEFAULT_QUICK_SIM_PROFILES.ITT.bunchIntercept).toBe(0);
+    expect(DEFAULT_QUICK_SIM_PROFILES.TTT.bunchIntercept).toBe(0);
   });
 });
 
 describe('mapQuickSimProfileRow', () => {
   it('uebertraegt jede Spalte auf das passende Feld', () => {
     const mapped = mapQuickSimProfileRow(row('Flat', {
-      base_speed_kmh: 43.5, group_threshold: 3.1, gap_factor: 0.061, gap_exponent: 1.31,
+      base_speed_kmh: 43.5, bunch_intercept: 3.1, gap_factor: 0.061, gap_exponent: 1.31,
       noise_sigma: 0.151, incident_loss_multiplier: 1.21, severe_dnf_chance: 0.251,
       breakaway_shrink_exponent: 1.51,
     }));
     expect(mapped).toEqual({
-      baseSpeedKmh: 43.5, groupThreshold: 3.1, gapFactor: 0.061, gapExponent: 1.31,
+      baseSpeedKmh: 43.5, bunchIntercept: 3.1, gapFactor: 0.061, gapExponent: 1.31,
       noiseSigma: 0.151, incidentLossMultiplier: 1.21, severeDnfChance: 0.251,
       breakawayShrinkExponent: 1.51,
     });

@@ -8,7 +8,7 @@
  *
  *   Siegerzeit      → Durchschnittsgeschwindigkeit in km/h   (→ base_speed_kmh)
  *   Rueckstaende    → Sekunden je Kilometer                  (→ gap_factor)
- *   erste Gruppe    → absolut und als Anteil der Finisher    (→ group_threshold)
+ *   erste Gruppe    → absolut und als Anteil der Finisher    (→ Regime-Ziehung)
  *   Spearman        → unveraendert                           (→ noise_sigma)
  *
  * Aufruf: npm run calibrate:aggregate -- --in=debug/quicksim-reference
