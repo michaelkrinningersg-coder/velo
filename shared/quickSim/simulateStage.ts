@@ -35,6 +35,7 @@ import {
 import {
   buildFinishGroups,
   drawFinishRegime,
+  drawStandardNormal,
   drawFirstGroupShare,
   resolveDifficultyPerKm,
   resolveFirstGroupSize,
@@ -163,6 +164,71 @@ function buildScoreMap(input: QuickSimStageInput, breakawaySurvived: boolean): M
   return scores;
 }
 
+/**
+ * Streut die Reihenfolge um den Leistungsscore.
+ *
+ * Die Scores allein ergeben ein Rennen, das dem Favoritentipp zu genau folgt:
+ * gemessen an der Rangkorrelation kam die Quick Simulation auf Flachetappen
+ * auf 0,81, die volle Simulation auf 0,47. Zeiten, Gruppen und Abstaende
+ * koennen stimmen und es gewinnen trotzdem immer dieselben.
+ *
+ * Die Streuung ist ein Vielfaches der Score-Streuung im Feld — damit wirkt sie
+ * in einem engen Feld genauso stark wie in einem breiten, statt in dem einen
+ * alles umzuwerfen und im anderen nichts.
+ *
+ * Sie trifft beides: die Reihenfolge *und* den Tie-Break im Ziel. Nur auf die
+ * Reihenfolge gelegt, blieb sie auf Flachetappen wirkungslos — dort kommen
+ * neun von zehn Fahrern zeitgleich an, und wer gewinnt, entscheidet der
+ * Zielsprint, nicht die Gruppenzuordnung.
+ */
+function drawRankNoise(
+  random: RandomSource,
+  scores: ReadonlyMap<number, number>,
+  rankNoise: number,
+): Map<number, number> {
+  const noise = new Map<number, number>();
+  if (rankNoise <= 0 || scores.size < 2) {
+    return noise;
+  }
+  const values = [...scores.values()];
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const spread = Math.sqrt(
+    values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1),
+  );
+  if (spread <= 0) {
+    return noise;
+  }
+  // Nach Fahrer-ID, damit die Ziehung nicht an der Reihenfolge der Map haengt.
+  for (const riderId of [...scores.keys()].sort((left, right) => left - right)) {
+    noise.set(riderId, drawStandardNormal(random) * spread * rankNoise);
+  }
+  return noise;
+}
+
+/**
+ * Fahrer mit dem Score, mit dem sie ins Rennen gehen.
+ *
+ * Der Ausreisser-Malus muss auch den `photoFinishScore` treffen, nicht nur die
+ * Reihenfolge. Sonst gewinnt ein gestellter Ausreisser den Sprint innerhalb
+ * seiner Zeitgruppe — er sitzt zwar hinten im Feld, hat aber unveraendert den
+ * hoechsten Tie-Break-Wert, und genau das war er nach 150 Kilometern vorne
+ * eben nicht mehr.
+ */
+function applyScoreShiftToEntries(
+  riders: readonly QuickSimRiderInput[],
+  input: QuickSimStageInput,
+  breakawaySurvived: boolean,
+  rankNoise: ReadonlyMap<number, number>,
+): QuickSimRiderInput[] {
+  const plan = input.breakaway;
+  const shift = plan ? (breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0)) : 0;
+  const affected = new Set(plan?.riderIds ?? []);
+  return riders.map((rider) => {
+    const delta = (affected.has(rider.riderId) ? shift : 0) + (rankNoise.get(rider.riderId) ?? 0);
+    return delta === 0 ? rider : { ...rider, photoFinishScore: rider.photoFinishScore + delta };
+  });
+}
+
 /** Restvorsprung der ueberlebenden Ausreissergruppe im Ziel. */
 export function resolveSurvivingBreakawayLeadSeconds(
   plan: QuickSimBreakawayPlan,
@@ -228,7 +294,11 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
 
   // 4 · Gruppen und Abstaende.
   const scores = buildScoreMap(input, breakawaySurvived);
-  const sorted = [...finishers].sort(
+  const rankNoise = drawRankNoise(random, scores, parameters.rankNoise);
+  for (const [riderId, delta] of rankNoise) {
+    scores.set(riderId, (scores.get(riderId) as number) + delta);
+  }
+  const sorted = applyScoreShiftToEntries(finishers, input, breakawaySurvived, rankNoise).sort(
     (left, right) => (scores.get(right.riderId) as number) - (scores.get(left.riderId) as number)
       || left.riderId - right.riderId,
   );

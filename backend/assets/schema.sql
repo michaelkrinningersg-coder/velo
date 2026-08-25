@@ -359,7 +359,9 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   -- Nur Zeitfahren: Reststreuung um diese Gerade (Tagesform), ebenso relativ.
   time_trial_noise            REAL NOT NULL,
   -- Anteil der Kandidaten eines Massensturzes, den es tatsaechlich trifft.
-  mass_crash_involvement      REAL NOT NULL
+  mass_crash_involvement      REAL NOT NULL,
+  -- Streuung der Reihenfolge, als Vielfaches der Score-Streuung im Feld.
+  rank_noise                  REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wetter (

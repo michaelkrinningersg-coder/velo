@@ -918,8 +918,8 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
       tail_gap_per_km, tail_group_size,
       noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
-      time_trial_slope, time_trial_noise, mass_crash_involvement
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      time_trial_slope, time_trial_noise, mass_crash_involvement, rank_noise
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -939,6 +939,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       real(req(row, 'time_trial_slope', ctx), `${ctx} / time_trial_slope`),
       real(req(row, 'time_trial_noise', ctx), `${ctx} / time_trial_noise`),
       real(req(row, 'mass_crash_involvement', ctx), `${ctx} / mass_crash_involvement`),
+      real(req(row, 'rank_noise', ctx), `${ctx} / rank_noise`),
     );
   }
 }

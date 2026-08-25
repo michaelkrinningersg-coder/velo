@@ -116,7 +116,15 @@ export async function openOfflineStage(
   }
 
   setInstantStageInFlightId(stageId);
-  showInstantProgress(0);
+  // Die Fortschrittsanzeige der Instant-Simulation baut das Favoriten- und
+  // Gesamtwertungsfenster auf. Fuer die Quick Simulation waere das verschenkte
+  // Arbeit: die Etappe ist ausgewertet, bevor das Fenster steht. Bleibt der
+  // schlichte Ladehinweis fuer die beiden Netzwerkaufrufe.
+  if (mode === 'instant') {
+    showInstantProgress(0);
+  } else {
+    showLoading('Etappe wird ausgewertet …');
+  }
   try {
     const res = await api.getRealtimeSimulation(stageId);
     if (!res.success || !res.data) {
@@ -138,9 +146,7 @@ export async function openOfflineStage(
 
     if (mode === 'quick') {
       const { runQuickSimulation } = await import('../race-sim/runQuickSimulation');
-      updateInstantProgress(0.5);
       const outcome = runQuickSimulation(bootstrap);
-      updateInstantProgress(1);
       await completeRealtimeStage(
         stageId, outcome.entries, outcome.markerClassifications, outcome.incidents,
         outcome.events, skipViewActivation, outcome.leadoutContributions, outcome.superTeamId,

@@ -61,8 +61,9 @@ schreibt in die Datenbank.
 | `quickSimAdapter.ts` | Ruft denselben Läufer auf wie das Spiel (`runQuickSimulation`) |
 | `quickSimRunner.test.ts` | Prüft die Anbindung: Ergebniszeilen, Wertungen, Ereignisse |
 | `compareQuickSim.ts` | Fährt dieselben Etappen mit dem Quick-Kern und stellt sie gegenüber |
-| `fitTailModel.ts` | Fittet `tail_group_size` gegen die Zahl der Zeitgruppen |
-| `fitTimeTrialModel.ts` | Fittet `time_trial_slope` und `time_trial_noise` fuer ITT und TTT |
+| `fitAll.ts` | Leitet **alle** gemessenen Parameter her und schreibt CSV und Vorgabewerte |
+| `fit/regression.ts` | Die Anpassungen dahinter — rein, ohne Datei und ohne Simulation |
+| `fit/regression.test.ts` | Prueft sie gegen bekannte Wahrheiten |
 | `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
@@ -147,8 +148,7 @@ npm run calibrate:aggregate    # Zielwerte je Profil
 npm run calibrate:groups       # Regime-Analyse der Gruppenbildung
 npm run calibrate:validate     # Modell gegen die Referenz pruefen
 npm run calibrate:compare      # Quick-Kern gegen Instant, Kennzahl fuer Kennzahl
-npm run calibrate:fit-tail     # Klumpung des Feldendes anpassen
-npm run calibrate:fit-tt       # Zeitfahrmodell anpassen
+npm run calibrate:fit -- --write   # alle Parameter neu herleiten und schreiben
 ```
 
 | Profil | Etappen | km/h | 1. Zeitgruppe | Anteil | Zeitgruppen | s/km (Letzter) | Spearman |

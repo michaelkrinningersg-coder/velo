@@ -126,12 +126,17 @@ describe('Zufallsverteilungen', () => {
 
 describe('resolveFirstGroupShareMean', () => {
   it('nimmt bei geschlossener Ankunft den gemessenen Profilwert', () => {
-    // Flat kommt geschlossen mit 0,858 an, Cobble_Hill nur mit 0,624 —
-    // ein gepoolter Wert war der groesste Fehler der ersten Fassung.
-    expect(resolveFirstGroupShareMean(DEFAULT_QUICK_SIM_PROFILES.Flat, 'bunched', 0.1))
-      .toBeCloseTo(0.8575, 4);
-    expect(resolveFirstGroupShareMean(DEFAULT_QUICK_SIM_PROFILES.Cobble_Hill, 'bunched', 0.5))
-      .toBeCloseTo(0.6237, 4);
+    // Gegen den Parameter geprueft, nicht gegen eine abgeschriebene Zahl: der
+    // Wert kommt aus der Kalibrierung und aendert sich mit jedem Referenzlauf.
+    // Was gleich bleiben muss, ist der Mechanismus — und dass Flat geschlossener
+    // ankommt als Cobble_Hill; ein gepoolter Wert war der groesste Fehler der
+    // ersten Fassung.
+    for (const profile of ['Flat', 'Cobble_Hill', 'Rolling'] as const) {
+      expect(resolveFirstGroupShareMean(DEFAULT_QUICK_SIM_PROFILES[profile], 'bunched', 0.1))
+        .toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].bunchedShareMean, 6);
+    }
+    expect(DEFAULT_QUICK_SIM_PROFILES.Flat.bunchedShareMean)
+      .toBeGreaterThan(DEFAULT_QUICK_SIM_PROFILES.Cobble_Hill.bunchedShareMean);
   });
 
   it('faellt im zerfallenen Regime mit der Schwierigkeit', () => {
@@ -186,7 +191,7 @@ describe('drawFirstGroupShare', () => {
     const random = createSeededRandom(31);
     const parameters = DEFAULT_QUICK_SIM_PROFILES.Flat;
     const values = Array.from({ length: 30_000 }, () => drawFirstGroupShare(random, parameters, 'bunched', 0.1));
-    expect(moments(values).mean).toBeCloseTo(0.8575, 2);
+    expect(moments(values).mean).toBeCloseTo(parameters.bunchedShareMean, 2);
   });
 
   it('trifft den erwarteten Mittelwert im zerfallenen Regime', () => {
@@ -202,7 +207,10 @@ describe('drawFirstGroupShare', () => {
     const parameters = DEFAULT_QUICK_SIM_PROFILES.Hilly;
     const bunched = Array.from({ length: 2_000 }, () => drawFirstGroupShare(random, parameters, 'bunched', 0.4));
     const split = Array.from({ length: 2_000 }, () => drawFirstGroupShare(random, parameters, 'split', 0.4));
-    expect(moments(bunched).mean).toBeGreaterThan(moments(split).mean + 0.5);
+    // Geschlossen heisst mindestens doppelt so grosse Spitzengruppe wie
+    // zerfallen — als Verhaeltnis formuliert, damit die Aussage einen
+    // Neufit ueberlebt.
+    expect(moments(bunched).mean).toBeGreaterThan(moments(split).mean * 2);
   });
 });
 
@@ -374,11 +382,14 @@ describe('resolveTailGapShare', () => {
     }
   });
 
-  it('trifft die gemessene Kurve', () => {
-    // Aus 11.601 Messpunkten, normiert auf den Rueckstand des Letzten.
-    expect(resolveTailGapShare(0.5)).toBeCloseTo(0.10, 1);
-    expect(resolveTailGapShare(0.9)).toBeCloseTo(0.42, 1);
-    expect(resolveTailGapShare(0.95)).toBeCloseTo(0.60, 1);
+  it('bricht erst zum Ende hin weg', () => {
+    // Die Form ist gemessen und aendert sich mit jedem Referenzlauf; was
+    // bleiben muss, ist ihr Charakter: vorne flach, hinten steil. Der
+    // Zuwachs im letzten Zehntel ist groesser als in der ganzen ersten
+    // Haelfte.
+    const first = resolveTailGapShare(0.5) - resolveTailGapShare(0);
+    const last = resolveTailGapShare(1) - resolveTailGapShare(0.9);
+    expect(last).toBeGreaterThan(first);
   });
 
   it('laesst die Haelfte des Feldes weniger als ein Fuenftel verlieren', () => {

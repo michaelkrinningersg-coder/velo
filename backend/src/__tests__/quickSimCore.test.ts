@@ -455,7 +455,9 @@ describe('simulateQuickStage', () => {
       malusValue: 50,
     };
     const result = simulateQuickStage({
-      profile: 'Flat', distanceKm: 190, stageScore: 20, parameters: FLAT,
+      // Ohne Rangstreuung, damit der Malus allein wirkt — die Streuung hat
+      // ihren eigenen Test.
+      profile: 'Flat', distanceKm: 190, stageScore: 20, parameters: { ...FLAT, rankNoise: 0 },
       riders: field(100), breakaway: plan, random: createSeededRandom(77),
     });
     expect(result.breakawaySurvived).toBe(false);

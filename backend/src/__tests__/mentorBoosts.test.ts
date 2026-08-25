@@ -9,6 +9,7 @@ import {
   MENTOR_SKILL_BONUS,
   MENTOR_SKILL_COUNT,
 } from '../simulation/mentorBoosts';
+import { resolveSkillsWithMentorBoosts } from '../../../frontend/src/race-sim/riderCondition';
 
 function rider(overrides: Partial<Rider> & { id: number }): Rider {
   const skills = Object.fromEntries([
@@ -90,5 +91,32 @@ describe('applyMentorBoosts', () => {
     const input = [mentee, mentor];
     applyMentorBoosts(input, createSeededRandom(13));
     expect(input[0]?.mentorBoosts).toBeUndefined();
+  });
+});
+
+describe('resolveSkillsWithMentorBoosts', () => {
+  const boosts = { flat: 2, sprint: 1 } as const;
+
+  it('hebt die Faehigkeiten eines Kapitaens', () => {
+    const captain = rider({ id: 1, role: { id: 1, name: 'Kapitaen' }, mentorBoosts: boosts } as never);
+    const skills = resolveSkillsWithMentorBoosts(captain);
+    expect(skills.flat).toBe(captain.skills.flat + 2);
+    expect(skills.sprint).toBe(captain.skills.sprint + 1);
+    expect(skills.mountain).toBe(captain.skills.mountain);
+  });
+
+  it('gilt auch fuer Co-Kapitaene', () => {
+    const co = rider({ id: 2, role: { id: 2, name: 'Co-Kapitaen' }, mentorBoosts: boosts } as never);
+    expect(resolveSkillsWithMentorBoosts(co).flat).toBe(co.skills.flat + 2);
+  });
+
+  it('laesst jede andere Rolle unveraendert — so macht es die volle Simulation', () => {
+    const helper = rider({ id: 3, role: { id: 5, name: 'Edelhelfer' }, mentorBoosts: boosts } as never);
+    expect(resolveSkillsWithMentorBoosts(helper)).toBe(helper.skills);
+  });
+
+  it('kommt ohne Bonus und ohne Rolle zurecht', () => {
+    const plain = rider({ id: 4 });
+    expect(resolveSkillsWithMentorBoosts(plain)).toBe(plain.skills);
   });
 });

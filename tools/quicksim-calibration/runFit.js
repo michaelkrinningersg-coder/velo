@@ -1,5 +1,5 @@
 /**
- * Plattformunabhaengiger Starter fuer fitTailModel.ts.
+ * Plattformunabhaengiger Starter fuer fitAll.ts.
  *
  * Das Werkzeug liegt ausserhalb von backend/ und frontend/, hat also keine
  * eigenen Abhaengigkeiten. Es benutzt die des Backends (ts-node,
@@ -25,4 +25,4 @@ process.env.TS_NODE_PROJECT = path.join(toolDir, 'tsconfig.json');
 process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY ?? 'true';
 
 require(path.join(backendModules, 'ts-node', 'register'));
-require(path.join(toolDir, 'fitTailModel.ts'));
+require(path.join(toolDir, 'fitAll.ts'));
