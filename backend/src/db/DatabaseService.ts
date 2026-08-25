@@ -4,10 +4,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
-import { bootstrap, readStageScoreSegments } from '../bootstrapper';
+import { bootstrap, readStageScoreSegments, seedQuickSimProfiles } from '../bootstrapper';
+import { resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
+import { BadgeMaterializationService } from '../game/BadgeMaterializationService';
+import { RivalryService } from '../game/RivalryService';
 import { summarizeStageProfile } from '../simulation/StageParser';
 import {
   CHAMPIONSHIP_CATEGORY_DEFS,
@@ -16,14 +19,12 @@ import {
   CRO_RACE_ORIGINAL_START_DAY,
   CRO_RACE_TARGET_START_DAY,
   championshipStageProfile,
-  NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS,
-  NATIONAL_CHAMPIONSHIP_GENERATION_MONTH_DAY,
-  NATIONAL_CHAMPIONSHIP_ITT_MONTH_DAY,
-  NATIONAL_CHAMPIONSHIP_ROAD_MONTH_DAY,
-  NATIONAL_CHAMPIONSHIP_TOP_STANDINGS,
-  NATIONAL_CHAMPIONSHIP_MIN_TEAM_RIDERS,
-  nationalChampionshipStageProfile,
+  NATIONAL_SELECTION_TEAM_ID,
+  NATIONAL_SELECTION_TEAM_NAME,
 } from '../simulation/championships';
+import { ensureContractRenewals as ensureContractRenewalsSchedule } from '../simulation/contractRenewalSchedule';
+import { ensureNationalChampionships as ensureNationalChampionshipsSchedule } from '../simulation/nationalChampionshipsSchedule';
+import { ensureOlympicGames as ensureOlympicGamesSchedule } from '../simulation/olympicGamesSchedule';
 import {
   calculateClimbScoresForStage,
   calculateStageScore,
@@ -179,11 +180,74 @@ export class DatabaseService {
       db.prepare("ALTER TABLE races ADD COLUMN required_specs TEXT DEFAULT NULL;").run();
     }
 
+    // Migration: Add per-race bonus_system_id override to races (Cat.5 WT tier).
+    if (!columnExists(db, 'races', 'bonus_system_id')) {
+      console.log("Adding 'bonus_system_id' column to 'races' table...");
+      db.prepare("ALTER TABLE races ADD COLUMN bonus_system_id INTEGER REFERENCES race_categories_bonus(id) DEFAULT NULL;").run();
+    }
+
     // Force recreation of race_entries view with new schema
     db.prepare("DROP VIEW IF EXISTS race_entries;").run();
 
     const schema = fs.readFileSync(this.schemaPath, 'utf8');
     db.exec(schema);
+
+    // Reference-data refresh: bring UCI point systems + per-race Cat.5 overrides
+    // up to date in existing savegames (idempotent, reads the canonical CSVs).
+    this.syncRaceBonusReferenceData(db);
+  }
+
+  // Re-seeds race_categories_bonus (WT systems 1-9 + Cat.5 systems 26/27) from
+  // the canonical CSV and backfills the per-race bonus overrides, so both fresh
+  // worlds and existing savegames award the correct UCI points.
+  private syncRaceBonusReferenceData(db: Database.Database): void {
+    if (!tableExists(db, 'race_categories_bonus') || !tableExists(db, 'races')) {
+      return;
+    }
+    // Only refresh already-seeded reference data (real world_data / savegames).
+    // A fresh/empty DB (e.g. in-memory test fixtures that seed their own rows)
+    // must not be pre-populated here.
+    const seeded = db.prepare('SELECT COUNT(*) AS n FROM race_categories_bonus').get() as { n: number };
+    if (!seeded || seeded.n === 0) {
+      return;
+    }
+    try {
+      const csvDir = resolveDataCsvDir();
+      const parseCsv = (file: string): Record<string, string>[] => {
+        const raw = fs.readFileSync(path.join(csvDir, file), 'utf8').trim();
+        const lines = raw.split(/\r?\n/);
+        const header = lines[0].split(',');
+        return lines.slice(1).map((line) => {
+          const cells = line.split(',');
+          const row: Record<string, string> = {};
+          header.forEach((h, i) => { row[h] = (cells[i] ?? '').trim(); });
+          return row;
+        });
+      };
+
+      const bonusRows = parseCsv('race_categories_bonus.csv');
+      const cols = Object.keys(bonusRows[0]);
+      const upsert = db.prepare(
+        `INSERT OR REPLACE INTO race_categories_bonus (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+      );
+      const upsertMany = db.transaction((rows: Record<string, string>[]) => {
+        for (const r of rows) upsert.run(cols.map((c) => r[c]));
+      });
+      upsertMany(bonusRows);
+
+      // Backfill per-race overrides by race NAME (only where still unset) so
+      // that season-duplicated races (which keep the name but get new ids) are
+      // covered across all seasons as well.
+      const setOverride = db.prepare('UPDATE races SET bonus_system_id = ? WHERE name = ? AND bonus_system_id IS NULL');
+      const backfill = db.transaction((rows: Record<string, string>[]) => {
+        for (const r of rows) {
+          if (r['bonus_system_id']) setOverride.run(Number(r['bonus_system_id']), r['name']);
+        }
+      });
+      backfill(parseCsv('races.csv'));
+    } catch (err) {
+      console.error('syncRaceBonusReferenceData fehlgeschlagen:', err);
+    }
   }
 
   private ensureReferenceData(db: Database.Database): void {
@@ -679,6 +743,60 @@ export class DatabaseService {
     }
   }
 
+  private ensureContractRenewalSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_runs (
+        season INTEGER PRIMARY KEY
+      )
+    `).run();
+    // Vom Spieler am 10.01. ausgewaehlte Verlaengerungsziele je Saison.
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_selection (
+        season INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL,
+        PRIMARY KEY (season, rider_id)
+      )
+    `).run();
+    // Markiert, dass der Spieler die Auswahl fuer die Saison bestaetigt hat
+    // (auch wenn 0 Fahrer gewaehlt wurden) — schliesst das Auswahlfenster.
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contract_renewal_selection_runs (
+        season INTEGER PRIMARY KEY
+      )
+    `).run();
+  }
+
+  // Reserviertes Pseudo-Team fuer teamlose Starter der U23-/Junioren-Rennen
+  // (active_race_entries.team_id ist NOT NULL). Attribute werden von einem
+  // bestehenden Team kopiert, damit alle Fremdschluessel gueltig sind. Wird aus
+  // Team-Listen ausgeblendet (getTeams) und faellt aus den Team-Standings, da
+  // Meisterschaftspunkte dort ausgeschlossen sind.
+  private ensureNationalSelectionTeam(db: Database.Database): void {
+    if (!tableExists(db, 'teams')) return;
+    const exists = db.prepare('SELECT 1 FROM teams WHERE id = ?').get(NATIONAL_SELECTION_TEAM_ID);
+    if (exists) return;
+    const template = db
+      .prepare('SELECT division_id, country_id, ai_focus_1, ai_focus_2, ai_focus_3 FROM teams ORDER BY id LIMIT 1')
+      .get() as
+      | { division_id: number; country_id: number; ai_focus_1: number; ai_focus_2: number; ai_focus_3: number }
+      | undefined;
+    if (!template) return; // Noch keine Teams (frische Master-DB) — nichts zu tun.
+    db.prepare(`
+      INSERT INTO teams (
+        id, name, abbreviation, division_id, is_player_team, country_id,
+        color_primary, color_secondary, ai_focus_1, ai_focus_2, ai_focus_3
+      ) VALUES (?, ?, 'NAT', ?, 0, ?, '#334155', '#e2e8f0', ?, ?, ?)
+    `).run(
+      NATIONAL_SELECTION_TEAM_ID,
+      NATIONAL_SELECTION_TEAM_NAME,
+      template.division_id,
+      template.country_id,
+      template.ai_focus_1,
+      template.ai_focus_2,
+      template.ai_focus_3,
+    );
+  }
+
   private ensureChampionshipTitlesSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS championship_titles (
@@ -954,125 +1072,7 @@ export class DatabaseService {
   // Qualifiziert: Top 40 der Nationenwertung ODER >= 15 Fahrer mit aktivem Team.
   // Idempotent (Erkennung ueber die Kategorien 14/15 je Saisonjahr).
   private ensureNationalChampionships(db: Database.Database): void {
-    if (!tableExists(db, 'races') || !tableExists(db, 'stages')) return;
-    if (!tableExists(db, 'race_categories') || !tableExists(db, 'race_categories_bonus')) return;
-    if (!tableExists(db, 'season_point_events') || !tableExists(db, 'game_state')) return;
-
-    // 1. Kategorien + Bonus-Systeme.
-    const insertBonus = db.prepare(`
-      INSERT OR IGNORE INTO race_categories_bonus (
-        id, name, bonus_seconds_final, bonus_seconds_intermediate, points_stage,
-        points_mountainstage, points_sprint_finish, points_one_day, points_gc_final,
-        points_jersey_leader_day, points_jersey_sprint_day, points_jersey_mountain_day,
-        points_jersey_youth_day, points_sprint_intermediate, points_mountain_hc,
-        points_mountain_cat1, points_mountain_cat2, points_mountain_cat3, points_mountain_cat4,
-        points_jersey_sprint_final, points_jersey_mountain_final, points_jersey_youth_final
-      ) VALUES (
-        @id, @name, '0', '0', '0', '0', '0', @pointsOneDay, '0',
-        0, 0, 0, 0, '0', '0', '0', '0', '0', '0', '0', '0', '0'
-      )
-    `);
-    const insertCategory = db.prepare(`
-      INSERT OR IGNORE INTO race_categories (
-        id, name, tier, number_of_teams, number_of_riders, bonus_system_id, home_selection_probability
-      ) VALUES (@id, @name, 1, 30, 8, @bonusSystemId, 0.0)
-    `);
-    for (const def of NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS) {
-      insertBonus.run({ id: def.bonusSystemId, name: def.bonusName, pointsOneDay: def.pointsOneDay });
-      insertCategory.run({ id: def.categoryId, name: def.categoryName, bonusSystemId: def.bonusSystemId });
-    }
-
-    const gameState = db.prepare('SELECT current_date AS d, season FROM game_state LIMIT 1').get() as
-      | { d: string; season: number }
-      | undefined;
-    if (!gameState) return;
-
-    const seasonRows = db
-      .prepare(`SELECT DISTINCT CAST(substr(date, 1, 4) AS INTEGER) AS season FROM stages WHERE date IS NOT NULL`)
-      .all() as Array<{ season: number }>;
-    const seasons = seasonRows.map((row) => row.season).filter((season) => Number.isInteger(season));
-
-    const hasNationalStage = db.prepare(`
-      SELECT 1 FROM stages JOIN races ON races.id = stages.race_id
-      WHERE races.category_id IN (14, 15) AND CAST(substr(stages.date, 1, 4) AS INTEGER) = ? LIMIT 1
-    `);
-    const insertRace = db.prepare(`
-      INSERT INTO races (
-        name, country_id, category_id, is_stage_race, number_of_stages,
-        start_date, end_date, prestige, preferred_nationality_group, required_specs
-      ) VALUES (@name, @countryId, @categoryId, 0, 1, @date, @date, @prestige, NULL, NULL)
-    `);
-    const insertStage = db.prepare(`
-      INSERT INTO stages (
-        race_id, stage_number, date, profile, start_elevation, details_csv_file,
-        final_spread_start_percent, final_push_start_percent, final_spread_difficulty_multiplier,
-        crash_incident_multiplier, mechanical_incident_multiplier, stage_score, allowed_weather
-      ) VALUES (@raceId, 1, @date, @profile, 50, @detailsFile, 70, 90, 1, 1, 1, @stageScore, '1|3')
-    `);
-    const insertClimb = tableExists(db, 'stage_climb_scores')
-      ? db.prepare(`INSERT INTO stage_climb_scores (stage_id, climb_index, name, category, start_km, end_km, climb_score) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      : null;
-    const countryNameById = new Map(
-      (db.prepare('SELECT id, name FROM sta_country').all() as Array<{ id: number; name: string }>).map((r) => [r.id, r.name]),
-    );
-
-    for (const season of seasons) {
-      if (season > gameState.season) continue; // Zukunft ueberspringen
-      // Aktuelle Saison erst ab dem 01.06. erzeugen; vergangene Saisons sofort.
-      if (season === gameState.season && gameState.d < `${season}-${NATIONAL_CHAMPIONSHIP_GENERATION_MONTH_DAY}`) {
-        continue;
-      }
-      if (hasNationalStage.get(season)) continue;
-
-      // Qualifizierte Laender: Top 40 der Nationenwertung ODER >= 15 Fahrer mit Team.
-      const topCountries = db.prepare(`
-        SELECT country.id AS id
-        FROM season_point_events spe
-        JOIN riders r ON r.id = spe.rider_id
-        JOIN sta_country country ON country.id = r.country_id
-        WHERE spe.season = ?
-        GROUP BY country.id
-        ORDER BY SUM(spe.points_awarded) DESC
-        LIMIT ${NATIONAL_CHAMPIONSHIP_TOP_STANDINGS}
-      `).all(season) as Array<{ id: number }>;
-      const bigCountries = db.prepare(`
-        SELECT country_id AS id FROM riders
-        WHERE active_team_id IS NOT NULL AND is_retired = 0
-        GROUP BY country_id HAVING COUNT(*) >= ${NATIONAL_CHAMPIONSHIP_MIN_TEAM_RIDERS}
-      `).all() as Array<{ id: number }>;
-      const qualifying = new Set<number>([...topCountries, ...bigCountries].map((c) => c.id));
-      if (qualifying.size === 0) continue;
-
-      db.transaction(() => {
-        for (const countryId of qualifying) {
-          const countryName = countryNameById.get(countryId) ?? `Land ${countryId}`;
-          for (const def of NATIONAL_CHAMPIONSHIP_CATEGORY_DEFS) {
-            const monthDay = def.discipline === 'ITT'
-              ? NATIONAL_CHAMPIONSHIP_ITT_MONTH_DAY
-              : NATIONAL_CHAMPIONSHIP_ROAD_MONTH_DAY;
-            const date = `${season}-${monthDay}`;
-            const { profile, detailsFile } = nationalChampionshipStageProfile(def.discipline, season, countryId);
-            const segments = readStageScoreSegments(detailsFile, `national championship ${countryName} ${season}`);
-            const stageScore = calculateStageScore(segments, 50);
-            const raceResult = insertRace.run({
-              name: `Nationale Meisterschaft ${def.discipline === 'ITT' ? 'ITT' : 'Strasse'} – ${countryName}`,
-              countryId,
-              categoryId: def.categoryId,
-              date,
-              prestige: def.discipline === 'ITT' ? 45 : 55,
-            });
-            const raceId = raceResult.lastInsertRowid as number;
-            const stageResult = insertStage.run({ raceId, date, profile, detailsFile, stageScore });
-            const stageId = stageResult.lastInsertRowid as number;
-            if (insertClimb) {
-              for (const climb of calculateClimbScoresForStage(segments, 50)) {
-                insertClimb.run(stageId, climb.climbIndex, climb.name, climb.category, climb.startKm, climb.endKm, climb.score);
-              }
-            }
-          }
-        }
-      })();
-    }
+    ensureNationalChampionshipsSchedule(db);
   }
 
   private ensureWeatherSchema(db: Database.Database): void {
@@ -1120,9 +1120,14 @@ export class DatabaseService {
       }
     })();
 
+    this.ensureQuickSimProfilesSchema(db);
+
     const weatherStageColumns = [
       ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
       ['rolled_weather_id', 'INTEGER REFERENCES wetter(id)'],
+      // Seed der Rennsimulation, einmal je Etappe gezogen. Altspielstaende
+      // bekommen die Spalte leer; sie wird beim ersten Rennen gefuellt.
+      ['sim_seed', 'INTEGER'],
     ] as const;
 
     for (const [columnName, columnDefinition] of weatherStageColumns) {
@@ -2446,6 +2451,38 @@ export class DatabaseService {
       // Nationale Meistertitel (Karriere-Zaehler) fuer HoF-Badges.
       ['national_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
       ['national_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      // U23-/Junioren-WM+EM sowie Olympia (Karriere-Zaehler) fuer die goldenen
+      // Hall-of-Fame-Badges (ein Titel je Edition).
+      ['world_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['world_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['euro_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['olympic_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['olympic_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      // Kontinentale Meistertitel (Karriere-Zaehler) fuer die goldenen HoF-Badges.
+      // AO = Asien-Ozeanien, AM = Amerika, AF = Afrika; je Elite/U23/Junioren.
+      ['cont_ao_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_ao_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_am_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_u23_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_u23_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_junior_champion_road_titles', 'INTEGER NOT NULL DEFAULT 0'],
+      ['cont_af_junior_champion_itt_titles', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const;
 
     for (const [colName, colDef] of careerColumns) {
@@ -3186,7 +3223,136 @@ export class DatabaseService {
     }
   }
 
-  private ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
+  /**
+   * Materialisierungs-Tabelle fuer Hall-of-Fame-Badges. Wird bei jedem
+   * Savegame-Load komplett neu aufgebaut (siehe BadgeMaterializationService).
+   * `tier` ist gold/silver/bronze/cyan/purple oder 'earned' fuer Single-/
+   * Binaer-Badges ohne Schwellen-Tier.
+   */
+  private ensureRiderBadgesSchema(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS rider_badges (
+        rider_id INTEGER NOT NULL,
+        badge_key TEXT NOT NULL,
+        tier TEXT,
+        PRIMARY KEY (rider_id, badge_key)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rider_badges_key
+        ON rider_badges(badge_key);
+    `);
+  }
+
+  /**
+   * Materialisierte Liga-Rivalitaeten je Saison (max. 10). Wird beim
+   * Saisonwechsel neu berechnet (RivalryService), analog zu rider_badges.
+   */
+  private ensureRivalriesSchema(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS rivalries (
+        season          INTEGER NOT NULL,
+        rank            INTEGER NOT NULL,
+        rider_a_id      INTEGER NOT NULL,
+        rider_b_id      INTEGER NOT NULL,
+        idx             INTEGER NOT NULL,
+        intensity       REAL    NOT NULL,
+        encounters      INTEGER NOT NULL,
+        win_a           INTEGER NOT NULL,
+        win_b           INTEGER NOT NULL,
+        season_win_a    INTEGER NOT NULL,
+        season_win_b    INTEGER NOT NULL,
+        top_category_id INTEGER,
+        discipline      TEXT,
+        PRIMARY KEY (season, rider_a_id, rider_b_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rivalries_season_rank
+        ON rivalries(season, rank);
+      CREATE INDEX IF NOT EXISTS idx_rivalries_rider_a ON rivalries(rider_a_id);
+      CREATE INDEX IF NOT EXISTS idx_rivalries_rider_b ON rivalries(rider_b_id);
+    `);
+  }
+
+  // Retiree-Kohorte je Saison (fuer die Saison-Wrapped): in welcher Saison ein
+  // Fahrer zuletzt fuhr, bevor er in Rente ging. Von ContractService gesetzt.
+  private ensureRetiredSeasonColumn(db: Database.Database): void {
+    if (!tableExists(db, 'riders')) return;
+    if (!columnExists(db, 'riders', 'retired_season')) {
+      db.prepare('ALTER TABLE riders ADD COLUMN retired_season INTEGER').run();
+    }
+  }
+
+  /**
+   * Legt die Parametertabelle der Quick Simulation an und befuellt sie aus der
+   * CSV. Nutzt bewusst dieselbe Seed-Funktion wie der Bootstrapper, damit die
+   * Werte nur an einer Stelle gepflegt werden.
+   */
+  private ensureQuickSimProfilesSchema(db: Database.Database): void {
+    // Die Tabelle traegt ausschliesslich Parameter aus der CSV — keine
+    // Spielerdaten. Aendert sich der Spaltensatz, wird sie deshalb neu angelegt
+    // statt Spalte fuer Spalte migriert. Ohne das bleibt ein bestehender
+    // Spielstand still auf dem alten Satz stehen: `CREATE TABLE IF NOT EXISTS`
+    // tut nichts, das Befuellen scheitert an der fehlenden Spalte, und die
+    // Quick Simulation faellt unbemerkt auf ihre eingebauten Vorgaben zurueck.
+    const expectedColumns = [
+      'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_mean',
+      'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
+      'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
+      'time_trial_slope', 'time_trial_noise',
+    ];
+    if (tableExists(db, 'quick_sim_profiles')) {
+      const actual = (db.prepare('PRAGMA table_info(quick_sim_profiles)').all() as Array<{ name: string }>)
+        .map((column) => column.name);
+      const matches = actual.length === expectedColumns.length
+        && expectedColumns.every((column) => actual.includes(column));
+      if (!matches) {
+        db.prepare('DROP TABLE quick_sim_profiles').run();
+      }
+    }
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS quick_sim_profiles (
+        profile                     TEXT PRIMARY KEY,
+        base_speed_kmh              REAL NOT NULL,
+        bunch_intercept             REAL NOT NULL,
+        -- Mittlerer Anteil der ersten Zeitgruppe bei geschlossener Ankunft. Gemessen.
+        bunched_share_mean          REAL NOT NULL,
+        -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
+        -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
+        split_share_intercept       REAL NOT NULL,
+        -- Rueckstand des letzten Fahrers in Sekunden je Kilometer; skaliert die
+        -- ganze Rueckstandskurve hinter der ersten Gruppe. Gemessen.
+        tail_gap_per_km             REAL NOT NULL,
+        -- Mittlere Zahl Fahrer je Zeitgruppe im Feld dahinter. Gemessen.
+        tail_group_size             REAL NOT NULL,
+        noise_sigma                 REAL NOT NULL,
+        incident_loss_multiplier    REAL NOT NULL,
+        severe_dnf_chance           REAL NOT NULL,
+        breakaway_shrink_exponent   REAL NOT NULL,
+        -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit
+        -- und die Reststreuung um diese Gerade (Tagesform).
+        time_trial_slope            REAL NOT NULL,
+        time_trial_noise            REAL NOT NULL
+      )
+    `).run();
+
+    try {
+      seedQuickSimProfiles(db);
+    } catch (error) {
+      // Im gepackten Betrieb kann die CSV fehlen. Die Tabelle bleibt dann leer;
+      // die Quick Simulation faellt auf ihre eingebauten Vorgaben zurueck.
+      console.warn('quick_sim_profiles konnten nicht geladen werden:', (error as Error).message);
+    }
+  }
+
+
+  /**
+   * Bringt eine geoeffnete Savegame-Datenbank auf den aktuellen Schemastand.
+   * Oeffentlich, damit Werkzeuge (etwa der Kalibrier-Harness unter tools/),
+   * die einen Spielstand direkt oeffnen, dieselbe Migration fahren wie das
+   * Spiel — statt sie zu duplizieren und damit auseinanderlaufen zu lassen.
+   */
+  public ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
     // `PRAGMA foreign_keys = ON`. When applying to a not-yet-populated DB
@@ -3206,6 +3372,9 @@ export class DatabaseService {
     this.ensureChampionshipCalendar(db);
     this.ensureNationalChampionshipTitlesSchema(db);
     this.ensureNationalChampionships(db);
+    ensureOlympicGamesSchedule(db);
+    this.ensureContractRenewalSchema(db);
+    ensureContractRenewalsSchedule(db);
     this.ensureRulesData(db);
     this.ensureSkillWeightsData(db);
     this.ensureStageSpreadData(db);
@@ -3215,6 +3384,9 @@ export class DatabaseService {
     this.ensureRiderCareerStatsSchema(db);
     this.ensureRiderSeasonStatsSchema(db);
     this.ensureRiderCategoryStatsSchema(db);
+    this.ensureRiderBadgesSchema(db);
+    this.ensureRivalriesSchema(db);
+    this.ensureRetiredSeasonColumn(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);
@@ -3227,6 +3399,7 @@ export class DatabaseService {
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureReferenceData(db);
+    this.ensureNationalSelectionTeam(db);
     this.ensureDayChangeIndexes(db);
     this.ensurePerformanceIndexes(db);
   }
@@ -3313,6 +3486,24 @@ export class DatabaseService {
     const gameState = new GameStateService(this.activeConnection).ensureState();
     new RiderProgramService(this.activeConnection).ensureSeasonPrograms(gameState.season, gameState.currentDate);
     new ContractService(this.activeConnection).checkContractStatuses(gameState.season);
+    // Hall-of-Fame-Badges werden regulaer beim Saisonwechsel materialisiert
+    // (GameStateService). Hier nur Erstbefuellung, falls die Tabelle noch leer
+    // ist (frische bzw. Alt-Savegames) — der volle Rebuild ist teuer (~21 s bei
+    // ~2900 Fahrern) und soll nicht jeden Load blockieren.
+    const badgeCount = this.activeConnection
+      .prepare('SELECT 1 FROM rider_badges LIMIT 1')
+      .get();
+    if (!badgeCount) {
+      new BadgeMaterializationService(this.activeConnection).rebuildAllRiderBadges();
+    }
+    // Liga-Rivalitaeten: Erstbefuellung, falls noch keine Saison materialisiert
+    // ist (regulaer beim Saisonwechsel in GameStateService).
+    const rivalryCount = this.activeConnection
+      .prepare('SELECT 1 FROM rivalries LIMIT 1')
+      .get();
+    if (!rivalryCount) {
+      new RivalryService(this.activeConnection).rebuildRivalries();
+    }
     return this.activeConnection;
   }
 

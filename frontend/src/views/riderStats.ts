@@ -18,7 +18,16 @@ import {
   resolveTeamJerseyAssetPath,
 } from '../state';
 import { formatRaceDateRange, renderStageProfileBadge, raceCategoryBadge, raceCategoryNameBadge, openDashboardStageProfile } from './dashboard';
-import type { Rider, RiderStatsPayload, RiderFormHistoryEntry } from '../../../shared/types';
+import {
+  computeRiderBadgeTiers,
+  resolveThresholdTier,
+  resolveRankTier,
+  resolveFirstPlacePilotTier,
+  resolveWinTrackerTier,
+  resolveContinentTier,
+  type HofTierKey,
+} from '../../../shared/hallOfFameBadges';
+import type { Rider, RiderStatsPayload, RiderFormHistoryEntry, ReigningChampionTitle } from '../../../shared/types';
 import type { RiderStatsTab } from '../state';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -518,21 +527,43 @@ function renderBroadcastRing(segments: Array<[string, number]>, label: string, i
     </div>`;
 }
 
-// Marker fuer regierende Welt-/Europameister. Eigene Signaturfarben:
-// Regenbogen-Rand (WM) bzw. Blau mit gelbem Euro-Stern (EM).
-export function renderReigningChampionChip(title: { type: 'WM' | 'EM' | 'NAT'; discipline: 'ITT' | 'ROAD' }): string {
+// Marker fuer regierende Meister. Eigene Signaturfarben je Wettbewerb:
+// Regenbogen-Rand (WM/U23/Junioren), Blau + Euro-Stern (EM), Gold (Olympia),
+// Orange (National). U23/Junioren teilen die Signatur mit der Elite, im Label
+// per Zusatz unterschieden. Olympiasieger bleiben bis zu den naechsten Spielen.
+export function renderReigningChampionChip(title: ReigningChampionTitle): string {
   const suffix = title.discipline === 'ITT' ? ' ITT' : '';
   const base = "display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;";
-  if (title.type === 'WM') {
-    const label = `Weltmeister${suffix}`;
-    return `<span title="Regierender ${esc(label)}" style="${base}color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);">🌈 ${esc(label)}</span>`;
-  }
-  if (title.type === 'EM') {
-    const label = `Europameister${suffix}`;
-    return `<span title="Regierender ${esc(label)}" style="${base}color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);">⭐ ${esc(label)}</span>`;
-  }
-  const label = `Nationaler Meister${suffix}`;
-  return `<span title="Regierender ${esc(label)}" style="${base}color:#fed7aa;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);">🏅 ${esc(label)}</span>`;
+  const RAINBOW = 'color:#fff;border:1.5px solid transparent;background:linear-gradient(#0c1526,#0c1526) padding-box, linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7,#ec4899,#f59e0b,#22c55e) border-box;box-shadow:0 0 10px rgba(236,72,153,.35);';
+  const EM_STYLE = 'color:#fde68a;border:1.5px solid #3b82f6;background:#0b1b3a;box-shadow:0 0 10px rgba(250,204,21,.28);';
+  const OLY_STYLE = 'color:#fde68a;border:1.5px solid #fbbf24;background:linear-gradient(90deg,#1c1405,#2a1d05);box-shadow:0 0 12px rgba(251,191,36,.42);';
+  const NAT_STYLE = 'color:#fed7aa;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);';
+  // Kontinentale Meister: regionale Erdkugel + eigene Signaturfarbe je Kontinent.
+  const CM_AO_STYLE = 'color:#cffafe;border:1.5px solid #06b6d4;background:#052b33;box-shadow:0 0 10px rgba(6,182,212,.32);';
+  const CM_AM_STYLE = 'color:#fecaca;border:1.5px solid #ef4444;background:#2a0d0d;box-shadow:0 0 10px rgba(239,68,68,.30);';
+  const CM_AF_STYLE = 'color:#fde68a;border:1.5px solid #f59e0b;background:#241605;box-shadow:0 0 10px rgba(245,158,11,.30);';
+  const CHIPS: Record<string, { emoji: string; label: string; style: string }> = {
+    WM: { emoji: '🌈', label: 'Weltmeister', style: RAINBOW },
+    WM_U23: { emoji: '🌈', label: 'Weltmeister U23', style: RAINBOW },
+    WM_JUN: { emoji: '🌈', label: 'Weltmeister Junioren', style: RAINBOW },
+    EM: { emoji: '⭐', label: 'Europameister', style: EM_STYLE },
+    EM_U23: { emoji: '⭐', label: 'Europameister U23', style: EM_STYLE },
+    EM_JUN: { emoji: '⭐', label: 'Europameister Junioren', style: EM_STYLE },
+    OLY: { emoji: '🥇', label: 'Olympiasieger', style: OLY_STYLE },
+    NAT: { emoji: '🏅', label: 'Nationaler Meister', style: NAT_STYLE },
+    CM_AO: { emoji: '🌏', label: 'Asien-Ozeanien-Meister', style: CM_AO_STYLE },
+    CM_AO_U23: { emoji: '🌏', label: 'Asien-Ozeanien-Meister U23', style: CM_AO_STYLE },
+    CM_AO_JUN: { emoji: '🌏', label: 'Asien-Ozeanien-Meister Junioren', style: CM_AO_STYLE },
+    CM_AM: { emoji: '🌎', label: 'Amerika-Meister', style: CM_AM_STYLE },
+    CM_AM_U23: { emoji: '🌎', label: 'Amerika-Meister U23', style: CM_AM_STYLE },
+    CM_AM_JUN: { emoji: '🌎', label: 'Amerika-Meister Junioren', style: CM_AM_STYLE },
+    CM_AF: { emoji: '🌍', label: 'Afrika-Meister', style: CM_AF_STYLE },
+    CM_AF_U23: { emoji: '🌍', label: 'Afrika-Meister U23', style: CM_AF_STYLE },
+    CM_AF_JUN: { emoji: '🌍', label: 'Afrika-Meister Junioren', style: CM_AF_STYLE },
+  };
+  const chip = CHIPS[title.type] ?? CHIPS.NAT;
+  const label = `${chip.label}${suffix}`;
+  return `<span title="Regierender ${esc(label)}" style="${base}${chip.style}">${chip.emoji} ${esc(label)}</span>`;
 }
 
 export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStatsPayload | null, teamName: string | null, countryCode: string | null, countryFlag: string): string {
@@ -597,6 +628,12 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
     `<span style="font-size:11px; font-weight:700; color:${color}; background:${bg}; border:1px solid ${border}; padding:4px 11px; border-radius:99px; display:inline-flex; align-items:center; gap:6px;"${title ? ` title="${esc(title)}"` : ''}>${content}</span>`;
 
   const pills: string[] = [];
+  if (payload?.isRetired) {
+    pills.push(pill(
+      `<span style="display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:4px; background:#ef4444; color:#2a0a0a; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:9px;">R</span>RETIRED`,
+      '#fca5a5', 'rgba(239,68,68,.16)', 'rgba(239,68,68,.45)', 'Karriere beendet',
+    ));
+  }
   if (isCaptain) {
     pills.push(pill(
       `<span style="display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:4px; background:#eab308; color:#1a1300; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:9px;">K</span>Kapitän`,
@@ -642,6 +679,9 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
           ${(payload?.reigningChampionTitles ?? []).length
             ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:7px;">${(payload!.reigningChampionTitles ?? []).map(renderReigningChampionChip).join('')}</div>`
             : ''}
+          ${payload?.topRival
+            ? `<div data-rivalry-pair="${payload.topRival.riderAId}-${payload.topRival.riderBId}" role="button" tabindex="0" title="Zum Head-to-Head" style="display:inline-flex; align-items:center; gap:9px; margin-bottom:8px; cursor:pointer; border:1px solid rgba(251,191,36,.4); border-radius:11px; padding:6px 12px; background:rgba(251,191,36,.06);"><span style="font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:.16em; color:#b58f2e;">RIVALE</span><span style="display:inline-flex; align-items:center; gap:6px; font-weight:800; font-size:13px; color:#e2e8f0;">${renderFlag(payload.topRival.rivalCountryCode ?? '')} ${esc(payload.topRival.rivalLastName)}</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8b9ab4;">H2H ${payload.topRival.selfWins}–${payload.topRival.rivalWins}</span><span style="font-family:'JetBrains Mono',monospace; color:#fbbf24; font-size:13px;">→</span></div>`
+            : ''}
           <div style="font-size:15px; font-weight:700; color:#e2e8f0;">${esc(resolvedRoleName)}</div>
           <div style="display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;">${pills.join('')}</div>
         </div>
@@ -651,11 +691,12 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
           ${fatigueRing}
         </div>
       </div>
-      <div style="display:grid; grid-template-columns:repeat(6,1fr); border-top:1px solid #1c2b47;">
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); border-top:1px solid #1c2b47;">
         ${statCell('SAISONPUNKTE', String(currentSeasonPoints))}
         ${statCell('SAISON-RANG', currentSeasonRank != null ? `#${currentSeasonRank}` : '–')}
         ${statCell('SIEGE', String(seasonWins), '#fbbf24')}
         ${statCell('KARRIERESIEGE', String(careerWins), '#fbbf24')}
+        ${statCell('ALL-TIME-RANG', payload?.allTimePointsRank != null ? `#${payload.allTimePointsRank}` : '–', '#22d3ee')}
         ${statCell('RENNTAGE', String(currentSeasonRaceDays))}
         ${statCell('AUSREISSER', String(currentSeasonBreakawayAttempts), '#f1f5f9', true)}
       </div>
@@ -757,7 +798,9 @@ export function renderRiderSkillBadge(score: number): string {
 }
 
 export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderStatsPayload | null): string {
-  const riderSkills = rider?.skills ?? {
+  // Fallback auf die Payload-Skills (eingefroren beim Retirement) — retired
+  // Fahrer stehen nicht in der aktiven Liste, daher waere `rider` null.
+  const riderSkills = rider?.skills ?? payload?.skills ?? {
     mountain: 60, hill: 60, sprint: 60, timeTrial: 60, cobble: 60, attack: 60,
     mediumMountain: 60, flat: 60, prologue: 60, acceleration: 60
   };
@@ -911,9 +954,11 @@ export function renderRiderStatsSkillsTab(rider: Rider | null, payload: RiderSta
 
   // SPEC-Karten (1-3)
   const specDefs: Array<{ label: string; border: string; value: string }> = [
-    { label: 'SPEC 1', border: '#22d3ee', value: rider?.specialization1 ? getRiderSpecializationLabel(rider.specialization1) : '–' },
-    { label: 'SPEC 2', border: '#818cf8', value: rider?.specialization2 ? getRiderSpecializationLabel(rider.specialization2) : '–' },
-    { label: 'SPEC 3', border: '#5f6f8a', value: rider?.specialization3 ? getRiderSpecializationLabel(rider.specialization3) : '–' },
+    // Fallback auf die Payload-Spezialisierungen (eingefroren beim Retirement),
+    // da retired Fahrer nicht in der aktiven Liste stehen (rider == null).
+    { label: 'SPEC 1', border: '#22d3ee', value: (rider?.specialization1 ?? payload?.specialization1) ? getRiderSpecializationLabel((rider?.specialization1 ?? payload?.specialization1)!) : '–' },
+    { label: 'SPEC 2', border: '#818cf8', value: (rider?.specialization2 ?? payload?.specialization2) ? getRiderSpecializationLabel((rider?.specialization2 ?? payload?.specialization2)!) : '–' },
+    { label: 'SPEC 3', border: '#5f6f8a', value: (rider?.specialization3 ?? payload?.specialization3) ? getRiderSpecializationLabel((rider?.specialization3 ?? payload?.specialization3)!) : '–' },
   ];
   const specCardsHtml = specDefs.map((spec) => `
     <div style="flex:1; min-width:0; background:#0b1424; border:1px solid #1c2b47; border-top:2px solid ${spec.border}; border-radius:9px; padding:8px 11px;">
@@ -1195,12 +1240,32 @@ export function renderRiderStatsFormTab(payload: RiderStatsPayload | null): stri
       </section>`;
   }
 
-  const fullHistory = payload.formHistory ?? [];
-  const history = fullHistory.filter((_, idx) => idx % 2 === 0);
   const currentDateStr = state.gameState?.currentDate ?? new Date().toISOString();
-  const currentYear = history.length > 0 
-    ? new Date(history[history.length - 1].date).getUTCFullYear()
-    : new Date(currentDateStr).getUTCFullYear();
+  // Chart-Jahr immer aus dem Spiel-Datum ableiten (nicht aus dem letzten
+  // Historie-Eintrag — der koennte bei alten Saves aus einer Vorsaison stammen).
+  const currentYear = state.gameState?.season ?? new Date(currentDateStr).getUTCFullYear();
+  // Nur Eintraege der laufenden Spielsaison zeigen.
+  const fullHistory = (payload.formHistory ?? []).filter(
+    (e) => new Date(e.date).getUTCFullYear() === currentYear,
+  );
+  const history = fullHistory.filter((_, idx) => idx % 2 === 0);
+  // Live-Tageswert als reine DARSTELLUNG anhaengen (kein taegliches Logging):
+  // der Chart soll am aktuellen Tag den gleichen Wert wie Header/Menue zeigen.
+  const todayIso = currentDateStr.slice(0, 10);
+  if (todayIso.startsWith(String(currentYear)) && (history.length === 0 || history[history.length - 1].date < todayIso)) {
+    const last = fullHistory[fullHistory.length - 1];
+    const sForm = payload.formBonus ?? 0;
+    const rForm = payload.raceFormBonus ?? 0;
+    history.push({
+      date: todayIso,
+      sForm,
+      rForm,
+      totalForm: sForm + rForm,
+      shortFatigue: last?.shortFatigue ?? 0,
+      longFatigue: last?.longFatigue ?? 0,
+      combinedFatigue: last?.combinedFatigue ?? 0,
+    });
+  }
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).getTime();
   const msPerDay = 86400000;
   
@@ -2246,6 +2311,13 @@ export function initRiderStatsListeners(): void {
     const target = event.target as HTMLInputElement;
     if (target.id === 'rider-stats-filter-category') {
       state.riderStatsTopResultsFilterCategory = target.value === 'all' ? null : target.value;
+      // Rennen-Filter zuruecksetzen: das gewaehlte Rennen liegt evtl. nicht in der neuen Klasse.
+      state.riderStatsTopResultsFilterRaceName = null;
+      state.riderStatsTopResultsPage = 1;
+      const rider = findRiderById(state.riderStatsSelectedRiderId);
+      $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
+    } else if (target.id === 'rider-stats-filter-race') {
+      state.riderStatsTopResultsFilterRaceName = target.value === 'all' ? null : target.value;
       state.riderStatsTopResultsPage = 1;
       const rider = findRiderById(state.riderStatsSelectedRiderId);
       $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
@@ -2373,6 +2445,10 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
   if (state.riderStatsTopResultsFilterRank != null && !isNaN(state.riderStatsTopResultsFilterRank)) {
     filteredRows = filteredRows.filter(r => r.resultRank != null && r.resultRank <= state.riderStatsTopResultsFilterRank!);
   }
+  if (state.riderStatsTopResultsFilterRaceName != null) {
+    // Nach Rennname filtern -> alle Saisons dieses Rennens (Renn-IDs wechseln je Saison).
+    filteredRows = filteredRows.filter(r => r.raceName === state.riderStatsTopResultsFilterRaceName);
+  }
   if (state.riderStatsTopResultsFilterProfile) {
     filteredRows = filteredRows.filter(r => r.profile === state.riderStatsTopResultsFilterProfile);
   }
@@ -2437,6 +2513,25 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     }
   }).join('');
 
+  // Rennen-Optionen, vorgefiltert durch die aktuell gewaehlte Rennklasse.
+  const rawCatFilter = state.riderStatsTopResultsFilterCategory;
+  const effectiveCatName = rawCatFilter
+    ? (rawCatFilter.endsWith('-etappen') ? rawCatFilter.slice(0, -'-etappen'.length)
+      : rawCatFilter.endsWith('-gc') ? rawCatFilter.slice(0, -'-gc'.length)
+        : rawCatFilter)
+    : null;
+  // Nur EINDEUTIGE Rennen (nach Name) — dasselbe Rennen erscheint sonst je Saison
+  // mehrfach (Renn-IDs werden je Saison neu vergeben). Auswahl filtert nach Name
+  // und zeigt damit alle Saisons.
+  const raceOptions = Array.from(new Set(
+    allRows
+      .filter(r => !effectiveCatName || r.raceCategoryName === effectiveCatName)
+      .map(r => r.raceName as string),
+  )).sort((a, b) => a.localeCompare(b, 'de'));
+  const raceOptionsHtml = raceOptions
+    .map(name => `<option value="${esc(name)}" ${state.riderStatsTopResultsFilterRaceName === name ? 'selected' : ''}>${esc(name)}</option>`)
+    .join('');
+
   const MONOF = "font-family:'JetBrains Mono',monospace";
   const selStyle = `${MONOF}; font-size:11px; font-weight:700; color:#e2e8f0; background:#0a1122; border:1px solid #1c2b47; border-radius:8px; padding:6px 9px; cursor:pointer;`;
   const labStyle = `${MONOF}; font-size:10px; letter-spacing:.1em; color:#6a7a95;`;
@@ -2457,6 +2552,13 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
           <select id="rider-stats-filter-category" style="${selStyle}">
             <option value="all">Alle</option>
             ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="${labStyle}">RENNEN</span>
+          <select id="rider-stats-filter-race" style="${selStyle}">
+            <option value="all">Alle</option>
+            ${raceOptionsHtml}
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:7px;">
@@ -2577,19 +2679,22 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
 
   const currentSeason = state.gameState?.season ?? 2026;
 
-  // Per-Saison-Aggregation aus dem Payload (keine Datenfeld-Aenderung noetig)
+  // Per-Saison-Aggregation aus dem Payload. Siege werden zeilenweise gezaehlt;
+  // die Saisonpunkte kommen aus der autoritativen Gesamtsumme (careerPointsBySeason,
+  // inkl. Trikot-Tagespunkte), damit sie mit den Saisonpunkten der Standings
+  // uebereinstimmen — die zeilenweise summierten Ergebnispunkte liessen die
+  // Trikot-Tagespunkte weg und wichen daher ab.
   const raceDaysBySeason = new Map<number, number>((payload?.careerRaceDaysBySeason ?? []).map((r) => [r.season, r.raceDays]));
+  const pointsBySeason = new Map<number, number>((payload?.careerPointsBySeason ?? []).map((r) => [r.season, r.points]));
   const seasonAgg = new Map<number, { wins: number; points: number }>();
   for (const s of payload?.seasons ?? []) {
     let wins = 0;
-    let points = 0;
     for (const block of s.raceBlocks ?? []) {
       for (const row of block.rows ?? []) {
-        points += row.seasonPoints ?? 0;
         if ((row.rowType === 'stage_result' && row.resultRank === 1) || (row.rowType === 'gc_final' && row.resultRank === 1)) wins++;
       }
     }
-    seasonAgg.set(s.season, { wins, points });
+    seasonAgg.set(s.season, { wins, points: pointsBySeason.get(s.season) ?? 0 });
   }
 
   const yearlySteps: Array<{
@@ -2638,7 +2743,8 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
   const GRID = 'display:grid;grid-template-columns:70px minmax(120px,1fr) 96px 104px 74px 56px 82px 52px;gap:10px;align-items:center;';
   const MONOF = "font-family:'JetBrains Mono',monospace";
 
-  const rowsHtml = yearlySteps.map((step) => {
+  const retiredPill = '<span style="font-size:11px;font-weight:800;color:#fca5a5;background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.45);padding:3px 9px;border-radius:99px;">Retired</span>';
+  const rowsHtml = yearlySteps.map((step, index) => {
     const agg = seasonAgg.get(step.season);
     const raceDays = raceDaysBySeason.get(step.season) ?? (step.season === currentSeason ? (payload?.currentSeasonRaceDays ?? 0) : 0);
     const wins = step.status === 'future' ? '–' : String(agg?.wins ?? 0);
@@ -2652,7 +2758,7 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
         <span style="${MONOF};font-size:13px;font-weight:700;color:#e2e8f0;">${step.season}</span>
         ${teamCell}
         <span style="font-size:12px;color:#9fb0c9;">${esc(step.roleName || '-')}</span>
-        <span>${statusPill(step.status)}</span>
+        <span>${payload?.isRetired && index === 0 ? retiredPill : statusPill(step.status)}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${step.status === 'future' ? '–' : raceDays}</span>
         <span style="${MONOF};font-size:12px;color:#fbbf24;justify-self:end;">${wins}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${points}</span>
@@ -2687,8 +2793,6 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
 // Badge-System: jedes Badge hat 5 Stufen (gold/silber/bronze/cyan/lila).
 // Die Definitionen sind bewusst als Liste aufgebaut, damit weitere Badge-Sets
 // einfach ergaenzt werden koennen.
-
-type HofTierKey = 'gold' | 'silver' | 'bronze' | 'cyan' | 'purple';
 
 const HOF_TIERS: Record<HofTierKey, { label: string; color: string; soft: string; glow: string; text: string }> = {
   gold:   { label: 'GOLD',   color: '#fbbf24', soft: 'rgba(251,191,36,.13)',  glow: 'rgba(251,191,36,.30)',  text: '#fde68a' },
@@ -2766,65 +2870,28 @@ const HOF_STYLE_GREEN: HofTierStyle = { label: 'GESCHAFFT', color: '#4ade80', so
 const HOF_STYLE_RAINBOW: HofTierStyle = { label: 'WELTMEISTER', color: '#22d3ee', soft: 'rgba(139,92,246,.18)', glow: 'rgba(236,72,153,.40)', text: '#f0abfc' };
 // Europameister: blauer Rand mit gelben Euro-Sternen-Akzenten.
 const HOF_STYLE_EURO: HofTierStyle = { label: 'EUROPAMEISTER', color: '#3b82f6', soft: 'rgba(59,130,246,.16)', glow: 'rgba(250,204,21,.34)', text: '#fde68a' };
+// Kontinentale Meister: eigene Signaturfarbe je Kontinent (Erdkugel-Emoji).
+const HOF_STYLE_CM_AO: HofTierStyle = { label: 'ASIEN-OZEANIEN-MEISTER', color: '#06b6d4', soft: 'rgba(6,182,212,.16)', glow: 'rgba(6,182,212,.34)', text: '#cffafe' };
+const HOF_STYLE_CM_AM: HofTierStyle = { label: 'AMERIKA-MEISTER', color: '#ef4444', soft: 'rgba(239,68,68,.16)', glow: 'rgba(239,68,68,.34)', text: '#fecaca' };
+const HOF_STYLE_CM_AF: HofTierStyle = { label: 'AFRIKA-MEISTER', color: '#f59e0b', soft: 'rgba(245,158,11,.16)', glow: 'rgba(245,158,11,.34)', text: '#fde68a' };
 function classColorStyle(categoryName: string, label: string): HofTierStyle {
   const border = resolveRaceCategoryBadgeStyle(categoryName).border;
   const bg = resolveRaceCategoryBadgeStyle(categoryName).background;
   return { label, color: border, soft: bg, glow: border, text: resolveRaceCategoryBadgeStyle(categoryName).color };
 }
 
-function resolveFirstPlacePilotTier(rank: number | null): HofTierKey | null {
-  if (rank == null) return null;
-  if (rank === 1) return 'gold';
-  if (rank === 2) return 'silver';
-  if (rank === 3) return 'bronze';
-  if (rank <= 10) return 'cyan';
-  if (rank <= 25) return 'purple';
-  return null;
-}
-
-function resolveWinTrackerTier(wins: number): HofTierKey | null {
-  if (wins > 100) return 'gold';
-  if (wins >= 75) return 'silver';
-  if (wins >= 50) return 'bronze';
-  if (wins >= 25) return 'cyan';
-  if (wins >= 10) return 'purple';
-  return null;
-}
-
-// Schwellen-Tier: hoechste erreichte Stufe [lila, cyan, bronze, silber, gold].
-function resolveThresholdTier(value: number, thresholds: [number, number, number, number, number]): HofTierKey | null {
-  if (value >= thresholds[4]) return 'gold';
-  if (value >= thresholds[3]) return 'silver';
-  if (value >= thresholds[2]) return 'bronze';
-  if (value >= thresholds[1]) return 'cyan';
-  if (value >= thresholds[0]) return 'purple';
-  return null;
-}
-
-// Rang-Tier: P1 gold, P2 silber, P3 bronze, P4-10 cyan, P11-25 lila.
-function resolveRankTier(rank: number | null): HofTierKey | null {
-  if (rank == null) return null;
-  if (rank === 1) return 'gold';
-  if (rank === 2) return 'silver';
-  if (rank === 3) return 'bronze';
-  if (rank <= 10) return 'cyan';
-  if (rank <= 25) return 'purple';
-  return null;
-}
-
 function formatKm(km: number): string {
   return `${Math.round(km).toLocaleString('de-DE')} km`;
 }
 
-// Geo-Tier: 2 Kontinente Bronze, 3 Silber, 4 Gold.
-function resolveContinentTier(count: number): HofTierKey | null {
-  if (count >= 4) return 'gold';
-  if (count >= 3) return 'silver';
-  if (count >= 2) return 'bronze';
-  return null;
-}
-
 function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
+  // Tier/earned je Badge kommen aus der geteilten Single-Source-Logik
+  // (`shared/hallOfFameBadges.ts`). Hier bleibt ausschliesslich die
+  // Praesentation (Namen, Icons, Detail-/Hovertexte, Anforderungen).
+  const badgeTierMap = new Map<string, { tier: HofTierKey | null; earned: boolean }>();
+  for (const b of computeRiderBadgeTiers(payload)) badgeTierMap.set(b.key, { tier: b.tier, earned: b.earned });
+  const T = (key: string): HofTierKey | null => badgeTierMap.get(key)?.tier ?? null;
+  const E = (key: string): boolean => badgeTierMap.get(key)?.earned ?? false;
   const hof: any = payload.hallOfFame ?? {
     allTimeWins: payload.careerWins ?? 0, allTimeWinsRank: null, rankedRiders: 0,
     allTimeRaceDays: 0, breakawayKms: 0, breakawayAttempts: 0, breakawayKmRank: null, rankedBreakawayRiders: 0,
@@ -2905,6 +2972,34 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const euroChampionIttTitles = hof.euroChampionIttTitles ?? 0;
   const nationalChampionRoadTitles = hof.nationalChampionRoadTitles ?? 0;
   const nationalChampionIttTitles = hof.nationalChampionIttTitles ?? 0;
+  const worldU23ChampionRoadTitles = hof.worldU23ChampionRoadTitles ?? 0;
+  const worldU23ChampionIttTitles = hof.worldU23ChampionIttTitles ?? 0;
+  const euroU23ChampionRoadTitles = hof.euroU23ChampionRoadTitles ?? 0;
+  const euroU23ChampionIttTitles = hof.euroU23ChampionIttTitles ?? 0;
+  const worldJuniorChampionRoadTitles = hof.worldJuniorChampionRoadTitles ?? 0;
+  const worldJuniorChampionIttTitles = hof.worldJuniorChampionIttTitles ?? 0;
+  const euroJuniorChampionRoadTitles = hof.euroJuniorChampionRoadTitles ?? 0;
+  const euroJuniorChampionIttTitles = hof.euroJuniorChampionIttTitles ?? 0;
+  const olympicChampionRoadTitles = hof.olympicChampionRoadTitles ?? 0;
+  const olympicChampionIttTitles = hof.olympicChampionIttTitles ?? 0;
+  const contAoChampionRoadTitles = hof.contAoChampionRoadTitles ?? 0;
+  const contAoChampionIttTitles = hof.contAoChampionIttTitles ?? 0;
+  const contAoU23ChampionRoadTitles = hof.contAoU23ChampionRoadTitles ?? 0;
+  const contAoU23ChampionIttTitles = hof.contAoU23ChampionIttTitles ?? 0;
+  const contAoJuniorChampionRoadTitles = hof.contAoJuniorChampionRoadTitles ?? 0;
+  const contAoJuniorChampionIttTitles = hof.contAoJuniorChampionIttTitles ?? 0;
+  const contAmChampionRoadTitles = hof.contAmChampionRoadTitles ?? 0;
+  const contAmChampionIttTitles = hof.contAmChampionIttTitles ?? 0;
+  const contAmU23ChampionRoadTitles = hof.contAmU23ChampionRoadTitles ?? 0;
+  const contAmU23ChampionIttTitles = hof.contAmU23ChampionIttTitles ?? 0;
+  const contAmJuniorChampionRoadTitles = hof.contAmJuniorChampionRoadTitles ?? 0;
+  const contAmJuniorChampionIttTitles = hof.contAmJuniorChampionIttTitles ?? 0;
+  const contAfChampionRoadTitles = hof.contAfChampionRoadTitles ?? 0;
+  const contAfChampionIttTitles = hof.contAfChampionIttTitles ?? 0;
+  const contAfU23ChampionRoadTitles = hof.contAfU23ChampionRoadTitles ?? 0;
+  const contAfU23ChampionIttTitles = hof.contAfU23ChampionIttTitles ?? 0;
+  const contAfJuniorChampionRoadTitles = hof.contAfJuniorChampionRoadTitles ?? 0;
+  const contAfJuniorChampionIttTitles = hof.contAfJuniorChampionIttTitles ?? 0;
   const gtStageWinsTdf = hof.gtStageWinsTdf ?? 0;
   const gtStageWinsGiro = hof.gtStageWinsGiro ?? 0;
   const gtStageWinsVuelta = hof.gtStageWinsVuelta ?? 0;
@@ -3043,8 +3138,8 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   ];
   const terrainCovered = terrainGroups.filter((v) => v > 0).length;
 
-  const singleBadge = (key: string, name: string, icon: string, description: string, earned: boolean, style: HofTierStyle, hover: string, requirement: string, detail = ''): HofBadge =>
-    ({ key, name, icon, description, tier: null, customStyle: earned ? style : null, detail: earned ? detail : '', hover, requirement });
+  const singleBadge = (key: string, name: string, icon: string, description: string, _earned: boolean, style: HofTierStyle, hover: string, requirement: string, detail = ''): HofBadge =>
+    ({ key, name, icon, description, tier: null, customStyle: E(key) ? style : null, detail: E(key) ? detail : '', hover, requirement });
 
   // Ranglisten-Badge: Tier ausschliesslich ueber den All-Time-Rang. `listLabel`
   // benennt die Rangliste (z.B. "der ewigen Siegerliste"). Rang null/undefined
@@ -3052,7 +3147,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
   const rankBadge = (key: string, name: string, icon: string, description: string, rank: number | null, listLabel: string): HofBadge =>
     ({
       key, name, icon, description,
-      tier: resolveRankTier(rank),
+      tier: T(key),
       detail: rank != null ? `Platz ${rank}` : '',
       hover: rank != null
         ? `Platz ${rank} ${listLabel} (Gold P1 · Silber P2 · Bronze P3 · Cyan P4–10 · Lila P11–25)`
@@ -3066,7 +3161,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'First Place Pilot',
       icon: HOF_ICON_TROPHY,
       description: 'Ewige Siegerliste · Rang',
-      tier: resolveFirstPlacePilotTier(rank),
+      tier: T('firstPlacePilot'),
       detail: rank != null ? `Platz ${rank} · ${wins} Sieg${wins === 1 ? '' : 'e'}` : '',
       hover: rank != null
         ? `Meiste Siege (All-Time): Platz ${rank} von ${hof.rankedRiders} · ${wins} Sieg${wins === 1 ? '' : 'e'}`
@@ -3078,7 +3173,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'The Win Tracker',
       icon: HOF_ICON_FLAG,
       description: 'Karrieresiege · Meilensteine',
-      tier: resolveWinTrackerTier(wins),
+      tier: T('winTracker'),
       detail: `${wins} Karrieresieg${wins === 1 ? '' : 'e'}`,
       hover: `${wins} Karrieresieg${wins === 1 ? '' : 'e'} (Gold >100 · Silber 75 · Bronze 50 · Cyan 25 · Lila 10)`,
       requirement: 'Ab 10 Karrieresiegen',
@@ -3088,7 +3183,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Race Day Squirrel',
       icon: HOF_ICON_CALENDAR,
       description: 'Renntage · Meilensteine',
-      tier: resolveThresholdTier(raceDays, [350, 450, 550, 650, 750]),
+      tier: T('raceDaySquirrel'),
       detail: `${raceDays.toLocaleString('de-DE')} Renntage`,
       hover: `${raceDays.toLocaleString('de-DE')} Karriere-Renntage (Gold 750 · Silber 650 · Bronze 550 · Cyan 450 · Lila 350)`,
       requirement: 'Ab 350 Renntagen',
@@ -3098,7 +3193,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'The Escape Artist',
       icon: HOF_ICON_ROUTE,
       description: 'Ausreißer-km · Meilensteine',
-      tier: resolveThresholdTier(brkKms, [10000, 12500, 15000, 17500, 20000]),
+      tier: T('escapeArtist'),
       detail: formatKm(brkKms),
       hover: `${formatKm(brkKms)} in Ausreißergruppen (Gold 20.000 · Silber 17.500 · Bronze 15.000 · Cyan 12.500 · Lila 10.000)`,
       requirement: 'Ab 10.000 Ausreißer-km',
@@ -3108,7 +3203,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Baroudeur Supreme',
       icon: HOF_ICON_MOUNTAIN,
       description: 'Ausreißversuche · Meilensteine',
-      tier: resolveThresholdTier(brkAttempts, [75, 100, 150, 200, 250]),
+      tier: T('baroudeurSupreme'),
       detail: `${brkAttempts.toLocaleString('de-DE')} Versuche`,
       hover: `${brkAttempts.toLocaleString('de-DE')} Ausreißversuche (Gold 250 · Silber 200 · Bronze 150 · Cyan 100 · Lila 75)`,
       requirement: 'Ab 75 Ausreißversuchen',
@@ -3118,7 +3213,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Breakaway King',
       icon: HOF_ICON_ROUTE,
       description: 'Ausreißer-km-Rang',
-      tier: resolveRankTier(brkRank),
+      tier: T('breakawayKing'),
       detail: brkRank != null ? `Platz ${brkRank} · ${formatKm(brkKms)}` : '',
       hover: brkRank != null
         ? `Ausreißer-km (All-Time): Platz ${brkRank} von ${hof.rankedBreakawayRiders} · ${formatKm(brkKms)} · ${brkAttempts.toLocaleString('de-DE')} Ausreißversuche`
@@ -3130,7 +3225,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Bunch Sprint Boss',
       icon: HOF_ICON_BIKE,
       description: 'Massensprint-Siege',
-      tier: resolveThresholdTier(bunchSprintWins, [10, 20, 35, 50, 65]),
+      tier: T('bunchSprintBoss'),
       detail: `${bunchSprintWins.toLocaleString('de-DE')} Siege`,
       hover: `${bunchSprintWins.toLocaleString('de-DE')} Massensprint-Siege — Zielgruppe > 25 Fahrer (Gold 65 · Silber 50 · Bronze 35 · Cyan 20 · Lila 10)`,
       requirement: 'Ab 10 Massensprint-Siegen',
@@ -3140,7 +3235,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Maillot Jaune',
       icon: HOF_ICON_JERSEY,
       description: 'Tage im Gelben Trikot',
-      tier: resolveThresholdTier(yellowDays, [50, 100, 150, 200, 300]),
+      tier: T('maillotJaune'),
       detail: `${yellowDays.toLocaleString('de-DE')} Tage`,
       hover: `${yellowDays.toLocaleString('de-DE')} Tage in Führung der Gesamtwertung (Gold 300 · Silber 200 · Bronze 150 · Cyan 100 · Lila 50)`,
       requirement: 'Ab 50 Tagen im Gelben Trikot',
@@ -3150,7 +3245,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Podium Machine',
       icon: HOF_ICON_PODIUM,
       description: 'Podestplätze gesamt',
-      tier: resolveThresholdTier(podiums, [25, 50, 100, 150, 200]),
+      tier: T('podiumMachine'),
       detail: `${podiums.toLocaleString('de-DE')} Podeste`,
       hover: `${podiums.toLocaleString('de-DE')} Podestplätze (GC + Etappen + Eintagesrennen) (Gold 200 · Silber 150 · Bronze 100 · Cyan 50 · Lila 25)`,
       requirement: 'Ab 25 Podestplätzen',
@@ -3160,7 +3255,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Mountain Goat',
       icon: HOF_ICON_MOUNTAIN,
       description: 'Bergwertungen zuerst',
-      tier: resolveThresholdTier(climbWins, [20, 40, 60, 80, 100]),
+      tier: T('mountainGoat'),
       detail: `${climbWins.toLocaleString('de-DE')} Anstiege`,
       hover: `${climbWins.toLocaleString('de-DE')} Bergwertungen als Erster überquert (Gold 100 · Silber 80 · Bronze 60 · Cyan 40 · Lila 20)`,
       requirement: 'Ab 20 Bergwertungen',
@@ -3170,7 +3265,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'HC King',
       icon: HOF_ICON_CROWN,
       description: 'HC-Berge zuerst',
-      tier: resolveThresholdTier(hcClimbs, [5, 10, 15, 20, 25]),
+      tier: T('hcKing'),
       detail: `${hcClimbs.toLocaleString('de-DE')} HC-Anstiege`,
       hover: `${hcClimbs.toLocaleString('de-DE')} HC-Berge als Erster überquert (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 HC-Bergen',
@@ -3180,7 +3275,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Monument Hunter',
       icon: HOF_ICON_COLUMN,
       description: 'Monument-Siege',
-      tier: resolveThresholdTier(monumentWins, [1, 2, 5, 8, 10]),
+      tier: T('monumentHunter'),
       detail: `${monumentWins.toLocaleString('de-DE')} Monumente`,
       hover: `${monumentWins.toLocaleString('de-DE')} Monument-Siege (Gold 10 · Silber 8 · Bronze 5 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Monument-Sieg',
@@ -3190,7 +3285,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Attacker',
       icon: HOF_ICON_BOLT,
       description: 'Attacken-Rang',
-      tier: resolveRankTier(hof.attacksRank ?? null),
+      tier: T('attacker'),
       detail: hof.attacksRank != null ? `Platz ${hof.attacksRank} · ${attacks.toLocaleString('de-DE')}` : '',
       hover: hof.attacksRank != null
         ? `Attacken (All-Time): Platz ${hof.attacksRank} von ${hof.rankedAttackers} · ${attacks.toLocaleString('de-DE')} Attacken`
@@ -3202,7 +3297,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Restless Legs',
       icon: HOF_ICON_BOLT,
       description: 'Attacken gesamt',
-      tier: resolveThresholdTier(attacks, [15, 30, 45, 60, 75]),
+      tier: T('restlessLegs'),
       detail: `${attacks.toLocaleString('de-DE')} Attacken`,
       hover: `${attacks.toLocaleString('de-DE')} Attacken (Gold 75 · Silber 60 · Bronze 45 · Cyan 30 · Lila 15)`,
       requirement: 'Ab 15 Attacken',
@@ -3212,7 +3307,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Not Without Me',
       icon: HOF_ICON_SHIELD,
       description: 'Konterattacken gesamt',
-      tier: resolveThresholdTier(counterAttacks, [10, 20, 30, 40, 50]),
+      tier: T('notWithoutMe'),
       detail: `${counterAttacks.toLocaleString('de-DE')} Konter`,
       hover: `${counterAttacks.toLocaleString('de-DE')} Konterattacken (Gold 50 · Silber 40 · Bronze 30 · Cyan 20 · Lila 10)`,
       requirement: 'Ab 10 Konterattacken',
@@ -3222,7 +3317,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Breakaway Master',
       icon: HOF_ICON_ROUTE,
       description: 'Erfolgreiche Ausreißer',
-      tier: resolveThresholdTier(successfulBreakaways, [5, 10, 15, 20, 25]),
+      tier: T('breakawayMaster'),
       detail: `${successfulBreakaways.toLocaleString('de-DE')} erfolgreich`,
       hover: `${successfulBreakaways.toLocaleString('de-DE')} erfolgreiche Ausreißversuche (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 erfolgreichen Ausreißern',
@@ -3232,7 +3327,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Pechvogel',
       icon: HOF_ICON_WRENCH,
       description: 'Defekte gesamt',
-      tier: resolveThresholdTier(defects, [5, 10, 15, 20, 25]),
+      tier: T('pechvogel'),
       detail: `${defects.toLocaleString('de-DE')} Defekte`,
       hover: `${defects.toLocaleString('de-DE')} Defekte (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Defekten',
@@ -3242,7 +3337,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Sturzpilot',
       icon: HOF_ICON_CRASH,
       description: 'Stürze gesamt',
-      tier: resolveThresholdTier(crashes, [5, 10, 15, 20, 25]),
+      tier: T('sturzpilot'),
       detail: `${crashes.toLocaleString('de-DE')} Stürze`,
       hover: `${crashes.toLocaleString('de-DE')} Stürze (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Stürzen',
@@ -3252,7 +3347,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Around the World',
       icon: HOF_ICON_GLOBE,
       description: 'Erdumrundungen',
-      tier: resolveThresholdTier(earthLoops, [1, 2, 3, 4, 5]),
+      tier: T('aroundTheWorld'),
       detail: `${earthLoops}× die Erde · ${formatKm(distanceKm)}`,
       hover: `${formatKm(distanceKm)} gefahren — ${earthLoops} volle Erdumrundung${earthLoops === 1 ? '' : 'en'} (je 40.000 km; Farbe ab 1/2/3/4/5)`,
       requirement: 'Ab 40.000 gefahrenen km (1 Erdumrundung)',
@@ -3288,24 +3383,157 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'EM-Einzelzeitfahren gewinnen', euroChampionIttTitles > 1 ? `${euroChampionIttTitles}×` : 'Europameister'),
     {
       key: 'nationalChampionRoad', name: 'Nationaler Meister', icon: HOF_ICON_JERSEY, description: 'Nationale-Meisterschaft-Titel (Straße)',
-      tier: resolveThresholdTier(nationalChampionRoadTitles, [1, 3, 5, 8, 12]),
+      tier: T('nationalChampionRoad'),
       detail: nationalChampionRoadTitles > 0 ? `${nationalChampionRoadTitles.toLocaleString('de-DE')} Titel` : '',
       hover: `${nationalChampionRoadTitles.toLocaleString('de-DE')} nationale Straßen-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 nationalem Straßen-Meistertitel',
     },
     {
       key: 'nationalChampionItt', name: 'Nationaler Meister ITT', icon: HOF_ICON_STOPWATCH, description: 'Nationale-Meisterschaft-Titel (ITT)',
-      tier: resolveThresholdTier(nationalChampionIttTitles, [1, 3, 5, 8, 12]),
+      tier: T('nationalChampionItt'),
       detail: nationalChampionIttTitles > 0 ? `${nationalChampionIttTitles.toLocaleString('de-DE')} Titel` : '',
       hover: `${nationalChampionIttTitles.toLocaleString('de-DE')} nationale Zeitfahr-Meistertitel (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 nationalem Zeitfahr-Meistertitel',
     },
+    // U23-/Junioren-WM+EM und Olympia: je ein goldenes Badge ("einmal gewonnen"),
+    // ohne Schwellen-Tier.
+    singleBadge('worldU23ChampionRoad', 'Weltmeister U23', HOF_ICON_CROWN, 'WM-U23-Straßenrennen gewonnen',
+      worldU23ChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      worldU23ChampionRoadTitles >= 1 ? `${worldU23ChampionRoadTitles.toLocaleString('de-DE')}× Weltmeister U23 im Straßenrennen` : 'Noch kein WM-U23-Straßentitel.',
+      'WM-U23-Straßenrennen gewinnen', worldU23ChampionRoadTitles > 1 ? `${worldU23ChampionRoadTitles}×` : 'Weltmeister U23'),
+    singleBadge('worldU23ChampionItt', 'Weltmeister U23 ITT', HOF_ICON_STOPWATCH, 'WM-U23-Einzelzeitfahren gewonnen',
+      worldU23ChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      worldU23ChampionIttTitles >= 1 ? `${worldU23ChampionIttTitles.toLocaleString('de-DE')}× Weltmeister U23 im Einzelzeitfahren` : 'Noch kein WM-U23-ITT-Titel.',
+      'WM-U23-Einzelzeitfahren gewinnen', worldU23ChampionIttTitles > 1 ? `${worldU23ChampionIttTitles}×` : 'Weltmeister U23'),
+    singleBadge('euroU23ChampionRoad', 'Europameister U23', HOF_ICON_CROWN, 'EM-U23-Straßenrennen gewonnen',
+      euroU23ChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      euroU23ChampionRoadTitles >= 1 ? `${euroU23ChampionRoadTitles.toLocaleString('de-DE')}× Europameister U23 im Straßenrennen` : 'Noch kein EM-U23-Straßentitel.',
+      'EM-U23-Straßenrennen gewinnen', euroU23ChampionRoadTitles > 1 ? `${euroU23ChampionRoadTitles}×` : 'Europameister U23'),
+    singleBadge('euroU23ChampionItt', 'Europameister U23 ITT', HOF_ICON_STOPWATCH, 'EM-U23-Einzelzeitfahren gewonnen',
+      euroU23ChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      euroU23ChampionIttTitles >= 1 ? `${euroU23ChampionIttTitles.toLocaleString('de-DE')}× Europameister U23 im Einzelzeitfahren` : 'Noch kein EM-U23-ITT-Titel.',
+      'EM-U23-Einzelzeitfahren gewinnen', euroU23ChampionIttTitles > 1 ? `${euroU23ChampionIttTitles}×` : 'Europameister U23'),
+    singleBadge('worldJuniorChampionRoad', 'Weltmeister Junioren', HOF_ICON_CROWN, 'WM-Junioren-Straßenrennen gewonnen',
+      worldJuniorChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      worldJuniorChampionRoadTitles >= 1 ? `${worldJuniorChampionRoadTitles.toLocaleString('de-DE')}× Weltmeister der Junioren im Straßenrennen` : 'Noch kein WM-Junioren-Straßentitel.',
+      'WM-Junioren-Straßenrennen gewinnen', worldJuniorChampionRoadTitles > 1 ? `${worldJuniorChampionRoadTitles}×` : 'Weltmeister Junioren'),
+    singleBadge('worldJuniorChampionItt', 'Weltmeister Junioren ITT', HOF_ICON_STOPWATCH, 'WM-Junioren-Einzelzeitfahren gewonnen',
+      worldJuniorChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      worldJuniorChampionIttTitles >= 1 ? `${worldJuniorChampionIttTitles.toLocaleString('de-DE')}× Weltmeister der Junioren im Einzelzeitfahren` : 'Noch kein WM-Junioren-ITT-Titel.',
+      'WM-Junioren-Einzelzeitfahren gewinnen', worldJuniorChampionIttTitles > 1 ? `${worldJuniorChampionIttTitles}×` : 'Weltmeister Junioren'),
+    singleBadge('euroJuniorChampionRoad', 'Europameister Junioren', HOF_ICON_CROWN, 'EM-Junioren-Straßenrennen gewonnen',
+      euroJuniorChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      euroJuniorChampionRoadTitles >= 1 ? `${euroJuniorChampionRoadTitles.toLocaleString('de-DE')}× Europameister der Junioren im Straßenrennen` : 'Noch kein EM-Junioren-Straßentitel.',
+      'EM-Junioren-Straßenrennen gewinnen', euroJuniorChampionRoadTitles > 1 ? `${euroJuniorChampionRoadTitles}×` : 'Europameister Junioren'),
+    singleBadge('euroJuniorChampionItt', 'Europameister Junioren ITT', HOF_ICON_STOPWATCH, 'EM-Junioren-Einzelzeitfahren gewonnen',
+      euroJuniorChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      euroJuniorChampionIttTitles >= 1 ? `${euroJuniorChampionIttTitles.toLocaleString('de-DE')}× Europameister der Junioren im Einzelzeitfahren` : 'Noch kein EM-Junioren-ITT-Titel.',
+      'EM-Junioren-Einzelzeitfahren gewinnen', euroJuniorChampionIttTitles > 1 ? `${euroJuniorChampionIttTitles}×` : 'Europameister Junioren'),
+    singleBadge('olympicChampionRoad', 'Olympiasieger', HOF_ICON_TROPHY, 'Olympisches Straßenrennen gewonnen',
+      olympicChampionRoadTitles >= 1, HOF_STYLE_GOLD,
+      olympicChampionRoadTitles >= 1 ? `${olympicChampionRoadTitles.toLocaleString('de-DE')}× Olympiasieger im Straßenrennen` : 'Noch kein olympischer Straßentitel.',
+      'Olympisches Straßenrennen gewinnen', olympicChampionRoadTitles > 1 ? `${olympicChampionRoadTitles}×` : 'Olympiasieger'),
+    singleBadge('olympicChampionItt', 'Olympiasieger ITT', HOF_ICON_STOPWATCH, 'Olympisches Einzelzeitfahren gewonnen',
+      olympicChampionIttTitles >= 1, HOF_STYLE_GOLD,
+      olympicChampionIttTitles >= 1 ? `${olympicChampionIttTitles.toLocaleString('de-DE')}× Olympiasieger im Einzelzeitfahren` : 'Noch kein olympischer ITT-Titel.',
+      'Olympisches Einzelzeitfahren gewinnen', olympicChampionIttTitles > 1 ? `${olympicChampionIttTitles}×` : 'Olympiasieger'),
+    // Kontinentale Meister (Asien-Ozeanien / Amerika / Afrika) je Elite/U23/Junioren.
+    singleBadge('contAoChampionRoad', 'Asien-Ozeanien-Meister', HOF_ICON_CROWN, 'Asien-Ozeanien-Straßenrennen gewonnen',
+      contAoChampionRoadTitles >= 1, HOF_STYLE_CM_AO,
+      contAoChampionRoadTitles >= 1 ? `${contAoChampionRoadTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister im Straßenrennen` : 'Noch kein Asien-Ozeanien-Straßentitel.',
+      'Asien-Ozeanien-Straßenrennen gewinnen', contAoChampionRoadTitles > 1 ? `${contAoChampionRoadTitles}×` : 'Asien-Ozeanien-Meister'),
+    singleBadge('contAoChampionItt', 'Asien-Ozeanien-Meister ITT', HOF_ICON_STOPWATCH, 'Asien-Ozeanien-Einzelzeitfahren gewonnen',
+      contAoChampionIttTitles >= 1, HOF_STYLE_CM_AO,
+      contAoChampionIttTitles >= 1 ? `${contAoChampionIttTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister im Einzelzeitfahren` : 'Noch kein Asien-Ozeanien-ITT-Titel.',
+      'Asien-Ozeanien-Einzelzeitfahren gewinnen', contAoChampionIttTitles > 1 ? `${contAoChampionIttTitles}×` : 'Asien-Ozeanien-Meister'),
+    singleBadge('contAoU23ChampionRoad', 'Asien-Ozeanien-Meister U23', HOF_ICON_CROWN, 'Asien-Ozeanien-U23-Straßenrennen gewonnen',
+      contAoU23ChampionRoadTitles >= 1, HOF_STYLE_CM_AO,
+      contAoU23ChampionRoadTitles >= 1 ? `${contAoU23ChampionRoadTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister U23 im Straßenrennen` : 'Noch kein Asien-Ozeanien-U23-Straßentitel.',
+      'Asien-Ozeanien-U23-Straßenrennen gewinnen', contAoU23ChampionRoadTitles > 1 ? `${contAoU23ChampionRoadTitles}×` : 'Asien-Ozeanien-Meister U23'),
+    singleBadge('contAoU23ChampionItt', 'Asien-Ozeanien-Meister U23 ITT', HOF_ICON_STOPWATCH, 'Asien-Ozeanien-U23-Einzelzeitfahren gewonnen',
+      contAoU23ChampionIttTitles >= 1, HOF_STYLE_CM_AO,
+      contAoU23ChampionIttTitles >= 1 ? `${contAoU23ChampionIttTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister U23 im Einzelzeitfahren` : 'Noch kein Asien-Ozeanien-U23-ITT-Titel.',
+      'Asien-Ozeanien-U23-Einzelzeitfahren gewinnen', contAoU23ChampionIttTitles > 1 ? `${contAoU23ChampionIttTitles}×` : 'Asien-Ozeanien-Meister U23'),
+    singleBadge('contAoJuniorChampionRoad', 'Asien-Ozeanien-Meister Junioren', HOF_ICON_CROWN, 'Asien-Ozeanien-Junioren-Straßenrennen gewonnen',
+      contAoJuniorChampionRoadTitles >= 1, HOF_STYLE_CM_AO,
+      contAoJuniorChampionRoadTitles >= 1 ? `${contAoJuniorChampionRoadTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister der Junioren im Straßenrennen` : 'Noch kein Asien-Ozeanien-Junioren-Straßentitel.',
+      'Asien-Ozeanien-Junioren-Straßenrennen gewinnen', contAoJuniorChampionRoadTitles > 1 ? `${contAoJuniorChampionRoadTitles}×` : 'Asien-Ozeanien-Meister Junioren'),
+    singleBadge('contAoJuniorChampionItt', 'Asien-Ozeanien-Meister Junioren ITT', HOF_ICON_STOPWATCH, 'Asien-Ozeanien-Junioren-Einzelzeitfahren gewonnen',
+      contAoJuniorChampionIttTitles >= 1, HOF_STYLE_CM_AO,
+      contAoJuniorChampionIttTitles >= 1 ? `${contAoJuniorChampionIttTitles.toLocaleString('de-DE')}× Asien-Ozeanien-Meister der Junioren im Einzelzeitfahren` : 'Noch kein Asien-Ozeanien-Junioren-ITT-Titel.',
+      'Asien-Ozeanien-Junioren-Einzelzeitfahren gewinnen', contAoJuniorChampionIttTitles > 1 ? `${contAoJuniorChampionIttTitles}×` : 'Asien-Ozeanien-Meister Junioren'),
+    singleBadge('contAmChampionRoad', 'Amerika-Meister', HOF_ICON_CROWN, 'Amerika-Straßenrennen gewonnen',
+      contAmChampionRoadTitles >= 1, HOF_STYLE_CM_AM,
+      contAmChampionRoadTitles >= 1 ? `${contAmChampionRoadTitles.toLocaleString('de-DE')}× Amerika-Meister im Straßenrennen` : 'Noch kein Amerika-Straßentitel.',
+      'Amerika-Straßenrennen gewinnen', contAmChampionRoadTitles > 1 ? `${contAmChampionRoadTitles}×` : 'Amerika-Meister'),
+    singleBadge('contAmChampionItt', 'Amerika-Meister ITT', HOF_ICON_STOPWATCH, 'Amerika-Einzelzeitfahren gewonnen',
+      contAmChampionIttTitles >= 1, HOF_STYLE_CM_AM,
+      contAmChampionIttTitles >= 1 ? `${contAmChampionIttTitles.toLocaleString('de-DE')}× Amerika-Meister im Einzelzeitfahren` : 'Noch kein Amerika-ITT-Titel.',
+      'Amerika-Einzelzeitfahren gewinnen', contAmChampionIttTitles > 1 ? `${contAmChampionIttTitles}×` : 'Amerika-Meister'),
+    singleBadge('contAmU23ChampionRoad', 'Amerika-Meister U23', HOF_ICON_CROWN, 'Amerika-U23-Straßenrennen gewonnen',
+      contAmU23ChampionRoadTitles >= 1, HOF_STYLE_CM_AM,
+      contAmU23ChampionRoadTitles >= 1 ? `${contAmU23ChampionRoadTitles.toLocaleString('de-DE')}× Amerika-Meister U23 im Straßenrennen` : 'Noch kein Amerika-U23-Straßentitel.',
+      'Amerika-U23-Straßenrennen gewinnen', contAmU23ChampionRoadTitles > 1 ? `${contAmU23ChampionRoadTitles}×` : 'Amerika-Meister U23'),
+    singleBadge('contAmU23ChampionItt', 'Amerika-Meister U23 ITT', HOF_ICON_STOPWATCH, 'Amerika-U23-Einzelzeitfahren gewonnen',
+      contAmU23ChampionIttTitles >= 1, HOF_STYLE_CM_AM,
+      contAmU23ChampionIttTitles >= 1 ? `${contAmU23ChampionIttTitles.toLocaleString('de-DE')}× Amerika-Meister U23 im Einzelzeitfahren` : 'Noch kein Amerika-U23-ITT-Titel.',
+      'Amerika-U23-Einzelzeitfahren gewinnen', contAmU23ChampionIttTitles > 1 ? `${contAmU23ChampionIttTitles}×` : 'Amerika-Meister U23'),
+    singleBadge('contAmJuniorChampionRoad', 'Amerika-Meister Junioren', HOF_ICON_CROWN, 'Amerika-Junioren-Straßenrennen gewonnen',
+      contAmJuniorChampionRoadTitles >= 1, HOF_STYLE_CM_AM,
+      contAmJuniorChampionRoadTitles >= 1 ? `${contAmJuniorChampionRoadTitles.toLocaleString('de-DE')}× Amerika-Meister der Junioren im Straßenrennen` : 'Noch kein Amerika-Junioren-Straßentitel.',
+      'Amerika-Junioren-Straßenrennen gewinnen', contAmJuniorChampionRoadTitles > 1 ? `${contAmJuniorChampionRoadTitles}×` : 'Amerika-Meister Junioren'),
+    singleBadge('contAmJuniorChampionItt', 'Amerika-Meister Junioren ITT', HOF_ICON_STOPWATCH, 'Amerika-Junioren-Einzelzeitfahren gewonnen',
+      contAmJuniorChampionIttTitles >= 1, HOF_STYLE_CM_AM,
+      contAmJuniorChampionIttTitles >= 1 ? `${contAmJuniorChampionIttTitles.toLocaleString('de-DE')}× Amerika-Meister der Junioren im Einzelzeitfahren` : 'Noch kein Amerika-Junioren-ITT-Titel.',
+      'Amerika-Junioren-Einzelzeitfahren gewinnen', contAmJuniorChampionIttTitles > 1 ? `${contAmJuniorChampionIttTitles}×` : 'Amerika-Meister Junioren'),
+    singleBadge('contAfChampionRoad', 'Afrika-Meister', HOF_ICON_CROWN, 'Afrika-Straßenrennen gewonnen',
+      contAfChampionRoadTitles >= 1, HOF_STYLE_CM_AF,
+      contAfChampionRoadTitles >= 1 ? `${contAfChampionRoadTitles.toLocaleString('de-DE')}× Afrika-Meister im Straßenrennen` : 'Noch kein Afrika-Straßentitel.',
+      'Afrika-Straßenrennen gewinnen', contAfChampionRoadTitles > 1 ? `${contAfChampionRoadTitles}×` : 'Afrika-Meister'),
+    singleBadge('contAfChampionItt', 'Afrika-Meister ITT', HOF_ICON_STOPWATCH, 'Afrika-Einzelzeitfahren gewonnen',
+      contAfChampionIttTitles >= 1, HOF_STYLE_CM_AF,
+      contAfChampionIttTitles >= 1 ? `${contAfChampionIttTitles.toLocaleString('de-DE')}× Afrika-Meister im Einzelzeitfahren` : 'Noch kein Afrika-ITT-Titel.',
+      'Afrika-Einzelzeitfahren gewinnen', contAfChampionIttTitles > 1 ? `${contAfChampionIttTitles}×` : 'Afrika-Meister'),
+    singleBadge('contAfU23ChampionRoad', 'Afrika-Meister U23', HOF_ICON_CROWN, 'Afrika-U23-Straßenrennen gewonnen',
+      contAfU23ChampionRoadTitles >= 1, HOF_STYLE_CM_AF,
+      contAfU23ChampionRoadTitles >= 1 ? `${contAfU23ChampionRoadTitles.toLocaleString('de-DE')}× Afrika-Meister U23 im Straßenrennen` : 'Noch kein Afrika-U23-Straßentitel.',
+      'Afrika-U23-Straßenrennen gewinnen', contAfU23ChampionRoadTitles > 1 ? `${contAfU23ChampionRoadTitles}×` : 'Afrika-Meister U23'),
+    singleBadge('contAfU23ChampionItt', 'Afrika-Meister U23 ITT', HOF_ICON_STOPWATCH, 'Afrika-U23-Einzelzeitfahren gewonnen',
+      contAfU23ChampionIttTitles >= 1, HOF_STYLE_CM_AF,
+      contAfU23ChampionIttTitles >= 1 ? `${contAfU23ChampionIttTitles.toLocaleString('de-DE')}× Afrika-Meister U23 im Einzelzeitfahren` : 'Noch kein Afrika-U23-ITT-Titel.',
+      'Afrika-U23-Einzelzeitfahren gewinnen', contAfU23ChampionIttTitles > 1 ? `${contAfU23ChampionIttTitles}×` : 'Afrika-Meister U23'),
+    singleBadge('contAfJuniorChampionRoad', 'Afrika-Meister Junioren', HOF_ICON_CROWN, 'Afrika-Junioren-Straßenrennen gewonnen',
+      contAfJuniorChampionRoadTitles >= 1, HOF_STYLE_CM_AF,
+      contAfJuniorChampionRoadTitles >= 1 ? `${contAfJuniorChampionRoadTitles.toLocaleString('de-DE')}× Afrika-Meister der Junioren im Straßenrennen` : 'Noch kein Afrika-Junioren-Straßentitel.',
+      'Afrika-Junioren-Straßenrennen gewinnen', contAfJuniorChampionRoadTitles > 1 ? `${contAfJuniorChampionRoadTitles}×` : 'Afrika-Meister Junioren'),
+    singleBadge('contAfJuniorChampionItt', 'Afrika-Meister Junioren ITT', HOF_ICON_STOPWATCH, 'Afrika-Junioren-Einzelzeitfahren gewonnen',
+      contAfJuniorChampionIttTitles >= 1, HOF_STYLE_CM_AF,
+      contAfJuniorChampionIttTitles >= 1 ? `${contAfJuniorChampionIttTitles.toLocaleString('de-DE')}× Afrika-Meister der Junioren im Einzelzeitfahren` : 'Noch kein Afrika-Junioren-ITT-Titel.',
+      'Afrika-Junioren-Einzelzeitfahren gewinnen', contAfJuniorChampionIttTitles > 1 ? `${contAfJuniorChampionIttTitles}×` : 'Afrika-Meister Junioren'),
+    // Meta-Badge: WM-Titel in Junioren + U23 + Elite gesammelt (Regenbogen-Signatur).
+    singleBadge('careerRainbow', 'Karriere-Regenbogen', HOF_ICON_CROWN, 'WM-Titel in Junioren, U23 und Elite',
+      (worldJuniorChampionRoadTitles + worldJuniorChampionIttTitles) >= 1
+        && (worldU23ChampionRoadTitles + worldU23ChampionIttTitles) >= 1
+        && (worldChampionRoadTitles + worldChampionIttTitles) >= 1,
+      HOF_STYLE_RAINBOW,
+      'Weltmeistertitel in allen drei Altersklassen — Junioren, U23 und Elite',
+      'Je einen WM-Titel als Junior, U23 und Elite gewinnen', 'Regenbogen-Karriere'),
     singleBadge('grandTourStageSlam', 'Grand Tour Slam', HOF_ICON_CROWN, 'Etappensieg in allen 3 Grand Tours',
       gtWithStageWin === 3, classColorStyle('World Tour - Grand Tour', 'GT SLAM'),
       gtWithStageWin === 3
         ? `Etappensiege in allen drei Grand Tours (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta})`
         : `Erst in ${gtWithStageWin} von 3 Grand Tours eine Etappe gewonnen.`,
       'In allen drei Grand Tours eine Etappe gewinnen', gtStageWinsTotal > 0 ? `${gtStageWinsTotal} GT-Etappen` : ''),
+    {
+      key: 'gtStageHunter',
+      name: 'Grand Tour Etappenjäger',
+      icon: HOF_ICON_FLAG,
+      description: 'Grand-Tour-Etappensiege',
+      tier: T('gtStageHunter'),
+      detail: `${gtStageWinsTotal.toLocaleString('de-DE')} GT-Etappensiege`,
+      hover: `${gtStageWinsTotal.toLocaleString('de-DE')} Etappensiege in den Grand Tours (Tour ${gtStageWinsTdf} · Giro ${gtStageWinsGiro} · Vuelta ${gtStageWinsVuelta}) (Gold 40 · Silber 25 · Bronze 15 · Cyan 8 · Lila 3)`,
+      requirement: 'Ab 3 Grand-Tour-Etappensiegen',
+    },
     singleBadge('missingOutOne', 'Missing Out One', HOF_ICON_PODIUM, 'Etappensieg in 2 von 3 Grand Tours',
       gtWithStageWin === 2, HOF_STYLE_GREEN,
       gtWithStageWin === 2
@@ -3337,7 +3565,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Green Machine',
       icon: HOF_ICON_JERSEY,
       description: 'Tage im Grünen Trikot',
-      tier: resolveThresholdTier(greenDays, [25, 50, 75, 100, 150]),
+      tier: T('greenMachine'),
       detail: `${greenDays.toLocaleString('de-DE')} Tage`,
       hover: `${greenDays.toLocaleString('de-DE')} Tage in Führung der Punktewertung (Gold 150 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
       requirement: 'Ab 25 Tagen im Grünen Trikot',
@@ -3347,7 +3575,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'King of the Mountains',
       icon: HOF_ICON_MOUNTAIN,
       description: 'Tage im Bergtrikot',
-      tier: resolveThresholdTier(komDays, [25, 50, 75, 100, 150]),
+      tier: T('kingOfTheMountains'),
       detail: `${komDays.toLocaleString('de-DE')} Tage`,
       hover: `${komDays.toLocaleString('de-DE')} Tage in Führung der Bergwertung (Gold 150 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
       requirement: 'Ab 25 Tagen im Bergtrikot',
@@ -3357,7 +3585,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Young Gun',
       icon: HOF_ICON_STAR,
       description: 'Tage im Weißen Trikot',
-      tier: resolveThresholdTier(youthDays, [25, 50, 75, 100, 125]),
+      tier: T('youngGun'),
       detail: `${youthDays.toLocaleString('de-DE')} Tage`,
       hover: `${youthDays.toLocaleString('de-DE')} Tage in Führung der Nachwuchswertung (Gold 125 · Silber 100 · Bronze 75 · Cyan 50 · Lila 25)`,
       requirement: 'Ab 25 Tagen im Weißen Trikot',
@@ -3367,7 +3595,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Chrono Master',
       icon: HOF_ICON_STOPWATCH,
       description: 'Zeitfahr-Siege (ITT + TTT)',
-      tier: resolveThresholdTier(timeTrialWins, [5, 10, 15, 20, 25]),
+      tier: T('chronoMaster'),
       detail: `${timeTrialWins.toLocaleString('de-DE')} Zeitfahr-Siege`,
       hover: `${timeTrialWins.toLocaleString('de-DE')} Zeitfahr-Siege (Einzel + Mannschaft) (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Zeitfahr-Siegen',
@@ -3377,7 +3605,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Cobbled Classics King',
       icon: HOF_ICON_PAVE,
       description: 'Kopfstein-Siege',
-      tier: resolveThresholdTier(cobbleWins, [3, 6, 10, 15, 20]),
+      tier: T('cobbledClassicsKing'),
       detail: `${cobbleWins.toLocaleString('de-DE')} Siege`,
       hover: `${cobbleWins.toLocaleString('de-DE')} Siege auf Kopfsteinpflaster (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 Kopfstein-Siegen',
@@ -3387,7 +3615,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Rain Master',
       icon: HOF_ICON_RAIN,
       description: 'Siege bei Regen',
-      tier: resolveThresholdTier(rainWins, [5, 10, 15, 20, 25]),
+      tier: T('rainMaster'),
       detail: `${rainWins.toLocaleString('de-DE')} Siege`,
       hover: `${rainWins.toLocaleString('de-DE')} Siege bei Regen (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Siegen bei Regen',
@@ -3397,7 +3625,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'In the Zone',
       icon: HOF_ICON_SPARK,
       description: 'Tage in Superform',
-      tier: resolveThresholdTier(superformDays, [5, 10, 20, 25, 30]),
+      tier: T('inTheZone'),
       detail: `${superformDays.toLocaleString('de-DE')} Tage`,
       hover: `${superformDays.toLocaleString('de-DE')} Tage in Superform (Gold 30 · Silber 25 · Bronze 20 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Tagen in Superform',
@@ -3407,7 +3635,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'Home Hero',
       icon: HOF_ICON_HOME,
       description: 'Heimvorteil-Tage',
-      tier: resolveThresholdTier(homeDays, [20, 40, 60, 80, 100]),
+      tier: T('homeHero'),
       detail: `${homeDays.toLocaleString('de-DE')} Tage`,
       hover: `${homeDays.toLocaleString('de-DE')} Tage mit Heimvorteil (Gold 100 · Silber 80 · Bronze 60 · Cyan 40 · Lila 20)`,
       requirement: 'Ab 20 Heimvorteil-Tagen',
@@ -3417,7 +3645,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       name: 'The Complete Rider',
       icon: HOF_ICON_CROWN,
       description: 'Allrounder-Erfolge',
-      tier: completeRiderTier,
+      tier: T('completeRider'),
       detail: completeRiderTier === 'gold' ? 'Grand Tour + Monument + Sprint'
         : completeRiderTier === 'silver' ? 'Rundfahrt + Monument + Sprint'
         : completeRiderTier === 'bronze' ? 'Rundfahrt + Eintagesrennen + Sprint' : '',
@@ -3426,147 +3654,147 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     },
     {
       key: 'pointsChampion', name: 'Points Champion', icon: HOF_ICON_JERSEY, description: 'Grüne-Trikot-Titel',
-      tier: resolveThresholdTier(pointsTitles, [2, 3, 5, 7, 11]),
+      tier: T('pointsChampion'),
       detail: `${pointsTitles.toLocaleString('de-DE')} Titel`,
       hover: `${pointsTitles.toLocaleString('de-DE')} Punktewertungs-Titel (Gold 11 · Silber 7 · Bronze 5 · Cyan 3 · Lila 2)`,
       requirement: 'Ab 2 Punktewertungs-Titeln',
     },
     {
       key: 'polkaDotKing', name: 'Polka-Dot King', icon: HOF_ICON_MOUNTAIN, description: 'Bergtrikot-Titel',
-      tier: resolveThresholdTier(komTitles, [2, 3, 5, 7, 11]),
+      tier: T('polkaDotKing'),
       detail: `${komTitles.toLocaleString('de-DE')} Titel`,
       hover: `${komTitles.toLocaleString('de-DE')} Bergwertungs-Titel (Gold 11 · Silber 7 · Bronze 5 · Cyan 3 · Lila 2)`,
       requirement: 'Ab 2 Bergwertungs-Titeln',
     },
     {
       key: 'bestYoungRider', name: 'Best Young Rider', icon: HOF_ICON_STAR, description: 'Weiße-Trikot-Titel',
-      tier: resolveThresholdTier(youthTitles, [1, 2, 3, 5, 8]),
+      tier: T('bestYoungRider'),
       detail: `${youthTitles.toLocaleString('de-DE')} Titel`,
       hover: `${youthTitles.toLocaleString('de-DE')} Nachwuchswertungs-Titel (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Nachwuchswertungs-Titel',
     },
     {
       key: 'rouleur', name: 'Rouleur', icon: HOF_ICON_BIKE, description: 'Siege Flach/Rolling',
-      tier: resolveThresholdTier(flatWins, [5, 10, 20, 30, 40]),
+      tier: T('rouleur'),
       detail: `${flatWins.toLocaleString('de-DE')} Siege`,
       hover: `${flatWins.toLocaleString('de-DE')} Siege auf flachem/rolligem Terrain (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Flach-/Rolling-Siegen',
     },
     {
       key: 'puncheur', name: 'Puncheur', icon: HOF_ICON_BOLT, description: 'Siege Hügelig',
-      tier: resolveThresholdTier(punchWins, [5, 10, 20, 30, 40]),
+      tier: T('puncheur'),
       detail: `${punchWins.toLocaleString('de-DE')} Siege`,
       hover: `${punchWins.toLocaleString('de-DE')} Siege auf hügeligem Terrain (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Hügel-Siegen',
     },
     {
       key: 'summitFinisher', name: 'Summit Finisher', icon: HOF_ICON_MOUNTAIN, description: 'Siege Hochgebirge',
-      tier: resolveThresholdTier(summitWins, [5, 10, 20, 30, 40]),
+      tier: T('summitFinisher'),
       detail: `${summitWins.toLocaleString('de-DE')} Siege`,
       hover: `${summitWins.toLocaleString('de-DE')} Siege im Hochgebirge (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Hochgebirgs-Siegen',
     },
     {
       key: 'sprintHunter', name: 'Sprint Hunter', icon: HOF_ICON_BIKE, description: 'Sprintsiege',
-      tier: resolveThresholdTier(sprintWinsTotal, [10, 20, 30, 50, 75]),
+      tier: T('sprintHunter'),
       detail: `${sprintWinsTotal.toLocaleString('de-DE')} Sprintsiege`,
       hover: `${sprintWinsTotal.toLocaleString('de-DE')} Sprintsiege (Gold 75 · Silber 50 · Bronze 30 · Cyan 20 · Lila 10)`,
       requirement: 'Ab 10 Sprintsiegen',
     },
     {
       key: 'heatWarrior', name: 'Heat Warrior', icon: HOF_ICON_SUN, description: 'Siege bei Extremhitze',
-      tier: resolveThresholdTier(heatWins, [3, 6, 10, 15, 20]),
+      tier: T('heatWarrior'),
       detail: `${heatWins.toLocaleString('de-DE')} Siege`,
       hover: `${heatWins.toLocaleString('de-DE')} Siege bei Extremhitze (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 Siegen bei Extremhitze',
     },
     {
       key: 'echelonMaster', name: 'Echelon Master', icon: HOF_ICON_WIND, description: 'Siege bei Starkwind',
-      tier: resolveThresholdTier(windWins, [2, 4, 8, 12, 15]),
+      tier: T('echelonMaster'),
       detail: `${windWins.toLocaleString('de-DE')} Siege`,
       hover: `${windWins.toLocaleString('de-DE')} Siege bei Starkwind (Gold 15 · Silber 12 · Bronze 8 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen bei Starkwind',
     },
     {
       key: 'iceBreaker', name: 'Ice Breaker', icon: HOF_ICON_SNOW, description: 'Siege bei Schnee/Eis',
-      tier: resolveThresholdTier(snowWins, [2, 4, 6, 8, 10]),
+      tier: T('iceBreaker'),
       detail: `${snowWins.toLocaleString('de-DE')} Siege`,
       hover: `${snowWins.toLocaleString('de-DE')} Siege bei Schnee/Eis (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen bei Schnee/Eis',
     },
     {
       key: 'topTenMachine', name: 'Top-10 Machine', icon: HOF_ICON_PODIUM, description: 'Top-10-Platzierungen',
-      tier: resolveThresholdTier(topTens, [25, 50, 100, 150, 200]),
+      tier: T('topTenMachine'),
       detail: `${topTens.toLocaleString('de-DE')} Top-10`,
       hover: `${topTens.toLocaleString('de-DE')} Top-10-Platzierungen (Gold 200 · Silber 150 · Bronze 100 · Cyan 50 · Lila 25)`,
       requirement: 'Ab 25 Top-10-Platzierungen',
     },
     {
       key: 'eternalSecond', name: 'Eternal Second', icon: HOF_ICON_PODIUM, description: 'Zweite Plätze',
-      tier: resolveThresholdTier(secondPlaces, [5, 10, 20, 30, 40]),
+      tier: T('eternalSecond'),
       detail: `${secondPlaces.toLocaleString('de-DE')} × Platz 2`,
       hover: `${secondPlaces.toLocaleString('de-DE')} zweite Plätze — immer Brautjungfer (Gold 40 · Silber 30 · Bronze 20 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 zweiten Plätzen',
     },
     {
       key: 'comebackKing', name: 'Comeback King', icon: HOF_ICON_HEART, description: 'Überstandene Verletzungen',
-      tier: resolveThresholdTier(injuries, [3, 6, 10, 15, 20]),
+      tier: T('comebackKing'),
       detail: `${injuries.toLocaleString('de-DE')} Comebacks`,
       hover: `${injuries.toLocaleString('de-DE')} überstandene Verletzungen (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 überstandenen Verletzungen',
     },
     {
       key: 'underTheWeather', name: 'Under the Weather', icon: HOF_ICON_CROSS, description: 'Krankheiten',
-      tier: resolveThresholdTier(illnesses, [3, 6, 10, 15, 20]),
+      tier: T('underTheWeather'),
       detail: `${illnesses.toLocaleString('de-DE')} Krankheiten`,
       hover: `${illnesses.toLocaleString('de-DE')} überstandene Krankheiten (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 Krankheiten',
     },
     {
       key: 'hardLuck', name: 'Hard Luck', icon: HOF_ICON_CRASH, description: 'Aufgaben + Zeitüberschr.',
-      tier: resolveThresholdTier(hardLuck, [5, 10, 15, 20, 25]),
+      tier: T('hardLuck'),
       detail: `${hardLuck.toLocaleString('de-DE')} × Pech`,
       hover: `${hardLuck.toLocaleString('de-DE')} Aufgaben + Zeitüberschreitungen (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5 Aufgaben/Zeitüberschreitungen',
     },
     {
       key: 'oneClubMan', name: 'One Club Man', icon: HOF_ICON_SHIELD, description: 'Saisons bei einem Team',
-      tier: resolveThresholdTier(mostSeasonsOneTeam, [3, 5, 7, 8, 10]),
+      tier: T('oneClubMan'),
       detail: `${mostSeasonsOneTeam.toLocaleString('de-DE')} Saisons`,
       hover: `${mostSeasonsOneTeam.toLocaleString('de-DE')} Saisons beim selben Team (Gold 10 · Silber 8 · Bronze 7 · Cyan 5 · Lila 3)`,
       requirement: 'Ab 3 Saisons beim selben Team',
     },
     {
       key: 'journeyman', name: 'Journeyman', icon: HOF_ICON_GLOBE, description: 'Verschiedene Teams',
-      tier: resolveThresholdTier(teamCount, [3, 4, 5, 6, 7]),
+      tier: T('journeyman'),
       detail: `${teamCount.toLocaleString('de-DE')} Teams`,
       hover: `${teamCount.toLocaleString('de-DE')} verschiedene Teams in der Karriere (Gold 7 · Silber 6 · Bronze 5 · Cyan 4 · Lila 3)`,
       requirement: 'Ab 3 verschiedenen Teams',
     },
     {
       key: 'evergreen', name: 'Evergreen', icon: HOF_ICON_CLOCK, description: 'Karrieredauer',
-      tier: resolveThresholdTier(careerSeasons, [5, 7, 10, 12, 15]),
+      tier: T('evergreen'),
       detail: `${careerSeasons.toLocaleString('de-DE')} Saisons`,
       hover: `${careerSeasons.toLocaleString('de-DE')} Saisons Karrieredauer (Gold 15 · Silber 12 · Bronze 10 · Cyan 7 · Lila 5)`,
       requirement: 'Ab 5 Karriere-Saisons',
     },
     {
       key: 'werewolf', name: 'Werewolf', icon: HOF_ICON_MOON, description: 'Siege bei Vollmond',
-      tier: resolveThresholdTier(fullMoonWins, [1, 2, 3, 5, 8]),
+      tier: T('werewolf'),
       detail: `${fullMoonWins.toLocaleString('de-DE')} Vollmond-Siege`,
       hover: `${fullMoonWins.toLocaleString('de-DE')} Siege an Vollmondtagen (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Sieg bei Vollmond',
     },
     {
       key: 'worldCitizen', name: 'World Citizen', icon: HOF_ICON_GLOBE, description: 'Kontinente in einer Saison',
-      tier: resolveContinentTier(worldCitizenBestYear),
+      tier: T('worldCitizen'),
       detail: worldCitizenBestYear >= 2 ? `${worldCitizenBestYear} Kontinente in einer Saison` : '',
       hover: `Beste Saison: Siege auf ${worldCitizenBestYear} Kontinent${worldCitizenBestYear === 1 ? '' : 'en'} (Gold 4 · Silber 3 · Bronze 2)`,
       requirement: 'In einer Saison auf 2 Kontinenten siegen',
     },
     {
       key: 'globetrotter', name: 'Globetrotter', icon: HOF_ICON_GLOBE, description: 'Kontinente in der Karriere',
-      tier: resolveContinentTier(continentsWon.length),
+      tier: T('globetrotter'),
       detail: continentsWon.length >= 2 ? `${continentsWon.length} Kontinente (All-Time)` : '',
       hover: `Siege auf ${continentsWon.length} Kontinent${continentsWon.length === 1 ? '' : 'en'} in der Karriere (Gold 4 · Silber 3 · Bronze 2)`,
       requirement: 'Auf 2 Kontinenten siegen (Karriere)',
@@ -3601,21 +3829,21 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Siege in Belgien, Niederlande und Luxemburg', 'Komplett'),
     {
       key: 'travelKing', name: 'Travel King', icon: HOF_ICON_SUITCASE, description: 'Siege in verschiedenen Ländern',
-      tier: resolveThresholdTier(countriesWonCount, [3, 5, 8, 12, 20]),
+      tier: T('travelKing'),
       detail: countriesWonCount > 0 ? `${countriesWonCount.toLocaleString('de-DE')} Länder` : '',
       hover: `Siege in ${countriesWonCount.toLocaleString('de-DE')} verschiedenen Ländern (Gold 20 · Silber 12 · Bronze 8 · Cyan 5 · Lila 3)`,
       requirement: 'Siege in mind. 3 Ländern',
     },
     {
       key: 'homeSoilHero', name: 'Home Soil Hero', icon: HOF_ICON_HOME, description: 'Siege im Heimatland',
-      tier: resolveThresholdTier(homeSoilWins, [1, 5, 10, 20, 30]),
+      tier: T('homeSoilHero'),
       detail: homeSoilWins > 0 ? `${homeSoilWins.toLocaleString('de-DE')} Heimsiege` : '',
       hover: `${homeSoilWins.toLocaleString('de-DE')} Siege im Heimatland (Gold 30 · Silber 20 · Bronze 10 · Cyan 5 · Lila 1)`,
       requirement: 'Mind. 1 Sieg im Heimatland',
     },
     {
       key: 'nationExpress', name: 'Nation Express', icon: HOF_ICON_PASSPORT, description: 'Rennteilnahme in vielen Ländern',
-      tier: resolveThresholdTier(nationExpressCountries, [10, 15, 20, 25, 30]),
+      tier: T('nationExpress'),
       detail: nationExpressCountries > 0 ? `${nationExpressCountries.toLocaleString('de-DE')} Länder` : '',
       hover: `Rennteilnahme in ${nationExpressCountries.toLocaleString('de-DE')} verschiedenen Ländern (Gold 30 · Silber 25 · Bronze 20 · Cyan 15 · Lila 10)`,
       requirement: 'Teilnahme in mind. 10 Ländern',
@@ -3626,14 +3854,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Gesamtsieg bei der Heim-Grand-Tour (FR → Tour, IT → Giro, ES → Vuelta)', 'Geschafft'),
     {
       key: 'ghost', name: 'Ghost', icon: HOF_ICON_GHOST, description: 'GC-Top-10 aus dem Nichts',
-      tier: resolveThresholdTier(ghostTop10, [1, 2, 3, 5, 8]),
+      tier: T('ghost'),
       detail: `${ghostTop10.toLocaleString('de-DE')}×`,
       hover: `${ghostTop10.toLocaleString('de-DE')}× GC-Top-10 einer Rundfahrt, ohne je in der GC-Top-30 aufzutauchen (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'GC-Top-10 ohne je GC-Top-30',
     },
     {
       key: 'theCat', name: 'The Cat', icon: HOF_ICON_CAT, description: 'Neun Leben',
-      tier: resolveThresholdTier(catPodiums, [1, 3, 5, 7, 9]),
+      tier: T('theCat'),
       detail: `${catPodiums.toLocaleString('de-DE')} Podeste`,
       hover: `${catPodiums.toLocaleString('de-DE')}× Podium trotz Sturz in derselben Etappe (Gold 9 · Silber 7 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Podium trotz Sturz im selben Rennen',
@@ -3655,7 +3883,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     rankBadge('recYellowDays', 'Yellow Sovereign', HOF_ICON_JERSEY, 'Gelbtrikot-Tage-Rang', yellowDaysRank, 'der ewigen Gelbtrikot-Tage-Liste'),
     {
       key: 'leadoutTrain', name: 'Sprint Train', icon: HOF_ICON_TRAIN, description: 'Bester Team-Leadout',
-      tier: resolveRankTier(leadoutTrainRank),
+      tier: T('leadoutTrain'),
       detail: leadoutTrainRank != null ? `Platz ${leadoutTrainRank}` : '',
       hover: leadoutTrainRank != null
         ? `Beteiligt am ${leadoutTrainRank}. besten Team-Leadout aller Zeiten (Gold 1 · Silber 2 · Bronze 3 · Cyan 4–10)`
@@ -3666,63 +3894,63 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Kuriositaeten-Badges (Welle A) ---
     {
       key: 'gremlin', name: "Gremlin's Favourite", icon: HOF_ICON_WRENCH, description: 'Mechanische Defekte',
-      tier: resolveThresholdTier(defectsCount, [3, 6, 10, 15, 20]),
+      tier: T('gremlin'),
       detail: `${defectsCount.toLocaleString('de-DE')} Defekte`,
       hover: `${defectsCount.toLocaleString('de-DE')} mechanische Defekte in der Karriere (Gold 20 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 Defekten',
     },
     {
       key: 'doomedEscapee', name: 'Doomed Escapee', icon: HOF_ICON_ROUTE, description: 'Eingeholte Ausreißversuche',
-      tier: resolveThresholdTier(doomedEscapes, [40, 80, 120, 180, 250]),
+      tier: T('doomedEscapee'),
       detail: `${doomedEscapes.toLocaleString('de-DE')}× gestellt`,
       hover: `${doomedEscapes.toLocaleString('de-DE')} eingeholte Ausreißversuche (Versuche minus erfolgreiche) (Gold 250 · Silber 180 · Bronze 120 · Cyan 80 · Lila 40)`,
       requirement: 'Ab 40 eingeholten Ausreißversuchen',
     },
     {
       key: 'theSlump', name: 'The Slump', icon: HOF_ICON_RAIN, description: 'Formtief-Tage',
-      tier: resolveThresholdTier(supermalusDays, [15, 30, 60, 100, 150]),
+      tier: T('theSlump'),
       detail: `${supermalusDays.toLocaleString('de-DE')} Tage`,
       hover: `${supermalusDays.toLocaleString('de-DE')} Tage in ausgeprägtem Formtief (Supermalus) (Gold 150 · Silber 100 · Bronze 60 · Cyan 30 · Lila 15)`,
       requirement: 'Ab 15 Formtief-Tagen',
     },
     {
       key: 'everPresent', name: 'The Ever-Present', icon: HOF_ICON_CALENDAR, description: 'Renntage in einer Saison',
-      tier: resolveThresholdTier(bestSeasonRaceDays, [50, 65, 80, 95, 110]),
+      tier: T('everPresent'),
       detail: bestSeasonRaceDays > 0 ? `${bestSeasonRaceDays.toLocaleString('de-DE')} Renntage` : '',
       hover: `${bestSeasonRaceDays.toLocaleString('de-DE')} Renntage in der stärksten Saison (Gold 110 · Silber 95 · Bronze 80 · Cyan 65 · Lila 50)`,
       requirement: 'Ab 50 Renntagen in einer Saison',
     },
     {
       key: 'vintageWine', name: 'Vintage Wine', icon: HOF_ICON_WINE, description: 'Siege mit 35+',
-      tier: resolveThresholdTier(veteranWins, [1, 2, 3, 5, 8]),
+      tier: T('vintageWine'),
       detail: veteranWins > 0 ? `${veteranWins.toLocaleString('de-DE')} Alt-Siege` : '',
       hover: `${veteranWins.toLocaleString('de-DE')} Siege mit 35 Jahren oder älter (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Sieg mit 35+',
     },
     {
       key: 'roadWarrior', name: 'Road Warrior', icon: HOF_ICON_GLOBE, description: 'Siege im Ausland',
-      tier: resolveThresholdTier(awayWins, [5, 15, 30, 50, 80]),
+      tier: T('roadWarrior'),
       detail: awayWins > 0 ? `${awayWins.toLocaleString('de-DE')} Auslandssiege` : '',
       hover: `${awayWins.toLocaleString('de-DE')} Siege außerhalb des Heimatlands (Gold 80 · Silber 50 · Bronze 30 · Cyan 15 · Lila 5)`,
       requirement: 'Ab 5 Siegen im Ausland',
     },
     {
       key: 'kamikaze', name: 'Kamikaze', icon: HOF_ICON_BOLT, description: 'Attacken je Sieg',
-      tier: resolveThresholdTier((hof.allTimeAttacks ?? 0) >= 20 ? kamikazeRatio : 0, [15, 30, 50, 80, 120]),
+      tier: T('kamikaze'),
       detail: (hof.allTimeAttacks ?? 0) >= 20 ? `${kamikazeRatio.toFixed(1)} Att./Sieg` : '',
       hover: `${(hof.allTimeAttacks ?? 0).toLocaleString('de-DE')} Attacken bei ${(hof.allTimeWins ?? 0).toLocaleString('de-DE')} Siegen — ${kamikazeRatio.toFixed(1)} Attacken je Sieg (ab 20 Attacken; Gold 120 · Silber 80 · Bronze 50 · Cyan 30 · Lila 15)`,
       requirement: 'Viele Attacken, wenig Ertrag (ab 20 Attacken)',
     },
     {
       key: 'smashGrab', name: 'Smash & Grab', icon: HOF_ICON_BIKE, description: 'Siege aus dem Ausreißer',
-      tier: resolveThresholdTier(breakawayWins, [1, 3, 5, 10, 20]),
+      tier: T('smashGrab'),
       detail: breakawayWins > 0 ? `${breakawayWins.toLocaleString('de-DE')} Coups` : '',
       hover: `${breakawayWins.toLocaleString('de-DE')} Siege aus einem Ausreißer heraus (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Sieg aus dem Ausreißer',
     },
     {
       key: 'groundhogDay', name: 'Groundhog Day', icon: HOF_ICON_LOOP, description: 'Dasselbe Rennen in Serie',
-      tier: resolveThresholdTier(groundhogStreak, [3, 4, 5, 6, 7]),
+      tier: T('groundhogDay'),
       detail: groundhogStreak >= 2 ? `${groundhogStreak}× in Folge` : '',
       hover: `Dasselbe Rennen ${groundhogStreak}× in aufeinanderfolgenden Saisons gewonnen (Gold 7 · Silber 6 · Bronze 5 · Cyan 4 · Lila 3)`,
       requirement: 'Dasselbe Rennen 3 Saisons in Folge gewinnen',
@@ -3731,28 +3959,28 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Kuriositaeten-Badges (Welle B, Commit-getrackt) ---
     {
       key: 'nightShift', name: 'Night Shift', icon: HOF_ICON_MOON, description: 'Podeste bei Vollmond',
-      tier: resolveThresholdTier(fullMoonPodiums, [1, 3, 5, 8, 12]),
+      tier: T('nightShift'),
       detail: fullMoonPodiums > 0 ? `${fullMoonPodiums.toLocaleString('de-DE')} Podeste` : '',
       hover: `${fullMoonPodiums.toLocaleString('de-DE')} Podestplätze an Vollmondtagen (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Podium bei Vollmond',
     },
     {
       key: 'ironHorse', name: 'Iron Horse', icon: HOF_ICON_STOPWATCH, description: 'Serie sauberer Renntage',
-      tier: resolveThresholdTier(cleanStreakBest, [20, 40, 60, 90, 120]),
+      tier: T('ironHorse'),
       detail: cleanStreakBest > 0 ? `${cleanStreakBest.toLocaleString('de-DE')} Renntage` : '',
       hover: `Längste Serie von ${cleanStreakBest.toLocaleString('de-DE')} Renntagen ohne DNF/DNS/OTL (Gold 120 · Silber 90 · Bronze 60 · Cyan 40 · Lila 20)`,
       requirement: 'Ab 20 Renntagen ohne Ausfall in Folge',
     },
     {
       key: 'marathonFinisher', name: 'Marathon Finisher', icon: HOF_ICON_FLAG, description: 'Beendete Grand Tours',
-      tier: resolveThresholdTier(grandToursFinished, [1, 3, 6, 10, 15]),
+      tier: T('marathonFinisher'),
       detail: grandToursFinished > 0 ? `${grandToursFinished.toLocaleString('de-DE')} Grand Tours` : '',
       hover: `${grandToursFinished.toLocaleString('de-DE')} komplett beendete Grand Tours (Tour/Giro/Vuelta) (Gold 15 · Silber 10 · Bronze 6 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 komplett beendeten Grand Tour',
     },
     {
       key: 'wardrobeMalfunction', name: 'Wardrobe Malfunction', icon: HOF_ICON_JERSEY, description: 'Tage mit Mehrfach-Trikot',
-      tier: resolveThresholdTier(multiJerseyDays, [1, 5, 15, 30, 50]),
+      tier: T('wardrobeMalfunction'),
       detail: multiJerseyDays > 0 ? `${multiJerseyDays.toLocaleString('de-DE')} Tage` : '',
       hover: `${multiJerseyDays.toLocaleString('de-DE')} Tage mit mehreren Führungstrikots gleichzeitig (Gold 50 · Silber 30 · Bronze 15 · Cyan 5 · Lila 1)`,
       requirement: 'Ab 1 Tag mit mehreren Führungstrikots',
@@ -3761,7 +3989,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 1 ---
     {
       key: 'pointAccumulator', name: 'Point Accumulator', icon: HOF_ICON_COLUMN, description: 'UCI-Punkte in einer Saison',
-      tier: resolveThresholdTier(bestSeasonUciPoints, [2000, 3000, 4000, 5000, 6000]),
+      tier: T('pointAccumulator'),
       detail: bestSeasonUciPoints > 0 ? `${bestSeasonUciPoints.toLocaleString('de-DE')} Pkt.` : '',
       hover: `${bestSeasonUciPoints.toLocaleString('de-DE')} UCI-Punkte in der besten Saison (Gold 6000 · Silber 5000 · Bronze 4000 · Cyan 3000 · Lila 2000)`,
       requirement: 'Ab 2000 UCI-Punkten in einer Saison',
@@ -3772,56 +4000,56 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Ein Sieg in jeder Rennklasse', 'Komplett'),
     {
       key: 'phantomGc', name: 'Phantom GC', icon: HOF_ICON_GHOST, description: 'GC-Sieg ohne Führung zuvor',
-      tier: resolveThresholdTier(phantomGcWins, [1, 2, 3, 4, 5]),
+      tier: T('phantomGc'),
       detail: phantomGcWins > 0 ? `${phantomGcWins}× Phantom` : '',
       hover: `${phantomGcWins}× GC gewonnen, ohne vor der Schlussetappe je Gesamtführender zu sein (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 GC-Sieg ohne vorherige Führung',
     },
     {
       key: 'firstBlood', name: 'First Blood', icon: HOF_ICON_BOLT, description: 'Eröffnungsetappen-Siege',
-      tier: resolveThresholdTier(firstBloodWins, [1, 3, 5, 7, 10]),
+      tier: T('firstBlood'),
       detail: firstBloodWins > 0 ? `${firstBloodWins}× Auftakt` : '',
       hover: `${firstBloodWins} Siege auf der Eröffnungsetappe (TdF / Grand Tour / Stage Race High) (Gold 10 · Silber 7 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Eröffnungsetappen-Sieg',
     },
     {
       key: 'hatTrickHero', name: 'Hat-Trick Hero', icon: HOF_ICON_STAR, description: '3+ Etappensiege je Rundfahrt',
-      tier: resolveThresholdTier(hatTrickRaces, [1, 2, 3, 4, 5]),
+      tier: T('hatTrickHero'),
       detail: hatTrickRaces > 0 ? `${hatTrickRaces}× Hattrick` : '',
       hover: `${hatTrickRaces} Rundfahrten mit mindestens 3 Etappensiegen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Rundfahrt mit 3+ Etappensiegen',
     },
     {
       key: 'whereHills', name: 'Where are the Hills?', icon: HOF_ICON_ROUTE, description: 'Siege auf flachen Etappen',
-      tier: resolveThresholdTier(whereHillsWins, [2, 4, 6, 8, 10]),
+      tier: T('whereHills'),
       detail: whereHillsWins > 0 ? `${whereHillsWins} Siege` : '',
       hover: `${whereHillsWins} Etappensiege mit Stage Score unter 20 (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen auf sehr flachen Etappen',
     },
     {
       key: 'springKing', name: 'Spring King', icon: HOF_ICON_SUN, description: 'Frühjahrs-Klassiker-Siege',
-      tier: resolveThresholdTier(springWins, [2, 4, 6, 8, 10]),
+      tier: T('springKing'),
       detail: springWins > 0 ? `${springWins} Siege` : '',
       hover: `${springWins} Siege in One Day High / Monument zwischen 01.03. und 02.05. (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Frühjahrs-Klassiker-Siegen',
     },
     {
       key: 'gcStayer', name: 'GC Stayer', icon: HOF_ICON_SHIELD, description: 'Grand-Tour-GC-Top-10',
-      tier: resolveThresholdTier(gcStayerTopTen, [2, 4, 6, 8, 10]),
+      tier: T('gcStayer'),
       detail: gcStayerTopTen > 0 ? `${gcStayerTopTen}× Top 10` : '',
       hover: `${gcStayerTopTen} Grand-Tour-Gesamtwertungen in den Top 10 (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Grand-Tour-Top-10 im GC',
     },
     {
       key: 'fogRider', name: 'Fog Rider', icon: HOF_ICON_FOG, description: 'Siege bei Nebel',
-      tier: resolveThresholdTier(fogWins, [2, 4, 6, 8, 10]),
+      tier: T('fogRider'),
       detail: fogWins > 0 ? `${fogWins} Siege` : '',
       hover: `${fogWins} Siege bei dichtem Nebel (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen bei Nebel',
     },
     {
       key: 'stormRider', name: 'Storm Rider', icon: HOF_ICON_RAIN, description: 'Siege bei Starkregen',
-      tier: resolveThresholdTier(stormWins, [2, 4, 6, 8, 10]),
+      tier: T('stormRider'),
       detail: stormWins > 0 ? `${stormWins} Siege` : '',
       hover: `${stormWins} Siege bei Starkregen (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen bei Starkregen',
@@ -3838,7 +4066,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 2 (Distanz / Höhenmeter) ---
     {
       key: 'longHaul', name: 'Long Haul Specialist', icon: HOF_ICON_ROUTE, description: 'Siege auf langen Etappen',
-      tier: resolveThresholdTier(longHaulWins, [2, 4, 6, 8, 10]),
+      tier: T('longHaul'),
       detail: longHaulWins > 0 ? `${longHaulWins} Siege` : '',
       hover: `${longHaulWins} Siege auf Etappen über 200 km (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen auf Etappen > 200 km',
@@ -3849,7 +4077,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Ein Sieg auf über 240 km', 'Geschafft'),
     {
       key: 'verticalLimit', name: 'Vertical Limit', icon: HOF_ICON_MOUNTAIN, description: 'Siege mit 4000+ hm',
-      tier: resolveThresholdTier(verticalLimitWins, [2, 4, 6, 8, 10]),
+      tier: T('verticalLimit'),
       detail: verticalLimitWins > 0 ? `${verticalLimitWins} Siege` : '',
       hover: `${verticalLimitWins} Etappensiege mit über 4000 Höhenmetern (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen mit über 4000 hm',
@@ -3858,56 +4086,56 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 3 (Positionen; zählen ab jetzt) ---
     {
       key: 'lanterneRouge', name: 'Lanterne Rouge', icon: HOF_ICON_LANTERN, description: 'Letzter Finisher',
-      tier: resolveThresholdTier(lanterneRougeStage, [1, 3, 5, 10, 20]),
+      tier: T('lanterneRouge'),
       detail: lanterneRougeStage > 0 ? `${lanterneRougeStage}×` : '',
       hover: `${lanterneRougeStage}× letzter klassierter Finisher einer Etappe/eines Eintagesrennens (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1× letzter Finisher',
     },
     {
       key: 'redLanternLegend', name: 'Red Lantern Legend', icon: HOF_ICON_LANTERN, description: 'Letzter im Grand-Tour-GC',
-      tier: resolveThresholdTier(lanterneRougeGt, [1, 2, 3, 5, 8]),
+      tier: T('redLanternLegend'),
       detail: lanterneRougeGt > 0 ? `${lanterneRougeGt}×` : '',
       hover: `${lanterneRougeGt}× Letzter der Gesamtwertung einer Grand Tour (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Lanterne Rouge einer Grand Tour',
     },
     {
       key: 'broomWagonRegular', name: 'Broom Wagon Regular', icon: HOF_ICON_BROOM, description: 'Letzter im Stage-Race-GC',
-      tier: resolveThresholdTier(lanterneRougeSr, [1, 3, 5, 8, 12]),
+      tier: T('broomWagonRegular'),
       detail: lanterneRougeSr > 0 ? `${lanterneRougeSr}×` : '',
       hover: `${lanterneRougeSr}× Letzter der Gesamtwertung eines (Nicht-Grand-Tour-)Etappenrennens (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1× Letzter im Stage-Race-GC',
     },
     {
       key: 'timeCutSpecialist', name: 'Time Cut Specialist', icon: HOF_ICON_STOPWATCH, description: 'Knapp im Zeitlimit',
-      tier: resolveThresholdTier(timeCutFinishes, [1, 3, 5, 10, 20]),
+      tier: T('timeCutSpecialist'),
       detail: timeCutFinishes > 0 ? `${timeCutFinishes}×` : '',
       hover: `${timeCutFinishes}× Ziel unter 60 s vor dem Zeitlimit erreicht (Gold 20 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1× knapp im Zeitlimit',
     },
     {
       key: 'teamEffort', name: 'Team Effort', icon: HOF_ICON_SHIELD, description: 'Top-3 mit starkem Team',
-      tier: resolveThresholdTier(teamEffortPodiums, [1, 3, 6, 10, 15]),
+      tier: T('teamEffort'),
       detail: teamEffortPodiums > 0 ? `${teamEffortPodiums}×` : '',
       hover: `${teamEffortPodiums}× Top-3, während mindestens 2 Teamkollegen ebenfalls Top 10 waren (Gold 15 · Silber 10 · Bronze 6 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1× Top-3 mit 2+ Teamkollegen in den Top 10',
     },
     {
       key: 'oneManTeam', name: 'One Man Team', icon: HOF_ICON_BIKE, description: 'Einziger im Team in Top 50',
-      tier: resolveThresholdTier(oneManTeam, [5, 10, 15, 20, 25]),
+      tier: T('oneManTeam'),
       detail: oneManTeam > 0 ? `${oneManTeam}×` : '',
       hover: `${oneManTeam}× einziger Fahrer seines Teams in den Top 50 (Gold 25 · Silber 20 · Bronze 15 · Cyan 10 · Lila 5)`,
       requirement: 'Ab 5× einziger Team-Fahrer in den Top 50',
     },
     {
       key: 'gcBySeconds', name: 'GC by Seconds', icon: HOF_ICON_CLOCK, description: 'GT knapp gewonnen',
-      tier: resolveThresholdTier(gcBySeconds, [1, 2, 3, 4, 5]),
+      tier: T('gcBySeconds'),
       detail: gcBySeconds > 0 ? `${gcBySeconds}×` : '',
       hover: `${gcBySeconds}× Grand Tour mit weniger als 20 Sekunden Vorsprung gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× GT-Sieg mit < 20 s Vorsprung',
     },
     {
       key: 'notBitterEnd', name: 'Not to the Bitter End', icon: HOF_ICON_CROSS, description: 'Aufgabe auf GT-Schlussetappe',
-      tier: resolveThresholdTier(bitterEndDnf, [1, 2, 3, 4, 5]),
+      tier: T('notBitterEnd'),
       detail: bitterEndDnf > 0 ? `${bitterEndDnf}×` : '',
       hover: `${bitterEndDnf}× auf der Schlussetappe einer Grand Tour nicht ins Ziel gekommen (DNS/DNF/OTL) (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Aufgabe auf der GT-Schlussetappe',
@@ -3916,7 +4144,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badge Welle 4 (Back-to-Back) ---
     {
       key: 'hotStreak', name: 'Hot Streak', icon: HOF_ICON_SPARK, description: 'Siege in Folge',
-      tier: resolveThresholdTier(winStreakBest, [2, 4, 6, 8, 10]),
+      tier: T('hotStreak'),
       detail: winStreakBest > 0 ? `${winStreakBest} in Folge` : '',
       hover: `Längste Siegesserie von ${winStreakBest} Siegen an aufeinanderfolgenden Renntagen (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Siegen an aufeinanderfolgenden Renntagen',
@@ -3925,63 +4153,63 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 5 (Helfer & Team) ---
     {
       key: 'waterCarrier', name: 'Water Carrier', icon: HOF_ICON_WATER, description: 'Renntage als Wasserträger',
-      tier: resolveThresholdTier(waterCarrierDays, [100, 200, 300, 400, 500]),
+      tier: T('waterCarrier'),
       detail: waterCarrierDays > 0 ? `${waterCarrierDays.toLocaleString('de-DE')} Renntage` : '',
       hover: `${waterCarrierDays.toLocaleString('de-DE')} Renntage in der Rolle Wasserträger (Gold 500 · Silber 400 · Bronze 300 · Cyan 200 · Lila 100)`,
       requirement: 'Ab 100 Renntagen als Wasserträger',
     },
     {
       key: 'superDomestique', name: 'Super Domestique', icon: HOF_ICON_WRENCH, description: 'Leadout-Beteiligungen',
-      tier: resolveThresholdTier(superDomestiqueLeadouts, [10, 25, 50, 100, 200]),
+      tier: T('superDomestique'),
       detail: superDomestiqueLeadouts > 0 ? `${superDomestiqueLeadouts} Anfahrten` : '',
       hover: `${superDomestiqueLeadouts} Leadout-Beteiligungen als Anfahrer (Gold 200 · Silber 100 · Bronze 50 · Cyan 25 · Lila 10)`,
       requirement: 'Ab 10 Leadout-Beteiligungen',
     },
     {
       key: 'loyalLieutenant', name: 'Loyal Lieutenant', icon: HOF_ICON_SHIELD, description: 'Saisons als Leutnant',
-      tier: resolveThresholdTier(lieutenantSeasons, [2, 4, 6, 8, 10]),
+      tier: T('loyalLieutenant'),
       detail: lieutenantSeasons > 0 ? `${lieutenantSeasons} Saisons` : '',
       hover: `${lieutenantSeasons} Saisons als Leutnant (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Saisons als Leutnant',
     },
     {
       key: 'packesel', name: 'Packesel', icon: HOF_ICON_ROUTE, description: 'Ausreißer-Kilometer',
-      tier: resolveThresholdTier(brkKms, [2500, 5000, 7500, 10000, 15000]),
+      tier: T('packesel'),
       detail: brkKms > 0 ? formatKm(brkKms) : '',
       hover: `${formatKm(brkKms)} in Ausreißversuchen zurückgelegt (Gold 15.000 · Silber 10.000 · Bronze 7.500 · Cyan 5.000 · Lila 2.500 km)`,
       requirement: 'Ab 2.500 Ausreißer-Kilometern',
     },
     {
       key: 'kingmaker', name: 'Kingmaker', icon: HOF_ICON_CROWN, description: 'Leutnant eines GT-Siegers',
-      tier: resolveThresholdTier(kingmakerCount, [1, 2, 3, 4, 5]),
+      tier: T('kingmaker'),
       detail: kingmakerCount > 0 ? `${kingmakerCount}×` : '',
       hover: `${kingmakerCount}× Leutnant eines Grand-Tour-Siegers in derselben Saison (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Leutnant eines Grand-Tour-Siegers',
     },
     {
       key: 'theFranchise', name: 'The Franchise', icon: HOF_ICON_STAR, description: 'Über 50 % der Teamsiege',
-      tier: resolveThresholdTier(franchiseSeasons, [1, 2, 3, 4, 5]),
+      tier: T('theFranchise'),
       detail: franchiseSeasons > 0 ? `${franchiseSeasons} Saisons` : '',
       hover: `${franchiseSeasons} Saisons mit über 50 % der Teamsiege (Team mind. 5 Siege) (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Saison mit > 50 % der Teamsiege',
     },
     {
       key: 'bandOfBrothers', name: 'Band of Brothers', icon: HOF_ICON_HEART, description: 'Saisons mit Teamkollegen',
-      tier: resolveThresholdTier(bandOfBrothersBest, [5, 6, 7, 8, 10]),
+      tier: T('bandOfBrothers'),
       detail: bandOfBrothersBest > 0 ? `${bandOfBrothersBest} Saisons` : '',
       hover: `${bandOfBrothersBest} gemeinsame Saisons mit demselben Teamkollegen (Gold 10 · Silber 8 · Bronze 7 · Cyan 6 · Lila 5)`,
       requirement: 'Ab 5 Saisons mit demselben Teamkollegen',
     },
     {
       key: 'cleanSweep', name: 'Clean Sweep', icon: HOF_ICON_JERSEY, description: 'GC + Berg + Punkte + Etappe',
-      tier: resolveThresholdTier(cleanSweepCount, [1, 2, 3, 4, 5]),
+      tier: T('cleanSweep'),
       detail: cleanSweepCount > 0 ? `${cleanSweepCount}×` : '',
       hover: `${cleanSweepCount}× in einem Etappenrennen GC, Berg, Punkte und eine Etappe gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× GC + Berg + Punkte + Etappe',
     },
     {
       key: 'cleanSweepPlus', name: 'Clean Sweep Plus', icon: HOF_ICON_CROWN, description: '+ Nachwuchs',
-      tier: resolveThresholdTier(cleanSweepPlusCount, [1, 2, 3, 4, 5]),
+      tier: T('cleanSweepPlus'),
       detail: cleanSweepPlusCount > 0 ? `${cleanSweepPlusCount}×` : '',
       hover: `${cleanSweepPlusCount}× GC, Berg, Punkte, Nachwuchs und eine Etappe im selben Rennen gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× GC + Berg + Punkte + Nachwuchs + Etappe',
@@ -3994,7 +4222,7 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 6 (Saison-Muster) ---
     {
       key: 'mrReliable', name: 'Mr Reliable', icon: HOF_ICON_SHIELD, description: 'Saisons ohne Ausfall',
-      tier: resolveThresholdTier(mrReliableSeasons, [1, 2, 3, 5, 8]),
+      tier: T('mrReliable'),
       detail: mrReliableSeasons > 0 ? `${mrReliableSeasons} Saisons` : '',
       hover: `${mrReliableSeasons} Saisons ohne DNF/DNS/OTL (mind. 30 Renntage) (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 makellosen Saison',
@@ -4005,14 +4233,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Sieg in der ersten Vertragssaison', 'Geschafft'),
     {
       key: 'outOfDark', name: 'Out of the Dark', icon: HOF_ICON_SUN, description: 'Sieg im Saisonauftakt',
-      tier: resolveThresholdTier(outOfDarkWins, [1, 2, 3, 4, 5]),
+      tier: T('outOfDark'),
       detail: outOfDarkWins > 0 ? `${outOfDarkWins}×` : '',
       hover: `${outOfDarkWins}× das erste Rennen der Saison gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Sieg im ersten Rennen der Saison',
     },
     {
       key: 'hotStreakOpener', name: 'Hot Streak Opener', icon: HOF_ICON_SPARK, description: 'Starke Saisoneröffnung',
-      tier: resolveThresholdTier(hotStreakOpenerSeasons, [1, 2, 3, 4, 5]),
+      tier: T('hotStreakOpener'),
       detail: hotStreakOpenerSeasons > 0 ? `${hotStreakOpenerSeasons} Saisons` : '',
       hover: `${hotStreakOpenerSeasons} Saisons mit 3+ Siegen in den ersten 5 Rennen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Saison mit 3+ Siegen in den ersten 5 Rennen',
@@ -4021,14 +4249,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 7 (Commit-getrackt) ---
     {
       key: 'peakPerformer', name: 'Peak Performer', icon: HOF_ICON_STAR, description: 'Sieg in Topform',
-      tier: resolveThresholdTier(peakPerformerWins, [1, 3, 5, 8, 12]),
+      tier: T('peakPerformer'),
       detail: peakPerformerWins > 0 ? `${peakPerformerWins} Siege` : '',
       hover: `${peakPerformerWins} Siege mit kombinierter R+S-Form über 7,5 (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Sieg in absoluter Topform',
     },
     {
       key: 'theYoyo', name: 'The Yoyo', icon: HOF_ICON_BOLT, description: '10+ Attacken je Rundfahrt',
-      tier: resolveThresholdTier(yoyoRaces, [1, 3, 5, 10, 12]),
+      tier: T('theYoyo'),
       detail: yoyoRaces > 0 ? `${yoyoRaces}×` : '',
       hover: `${yoyoRaces} Etappenrennen mit mindestens 10 Attacken (Gold 12 · Silber 10 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Rundfahrt mit 10+ Attacken',
@@ -4037,28 +4265,28 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 8 (rein abgeleitet) ---
     {
       key: 'prologuePrince', name: 'Prologue Prince', icon: HOF_ICON_STOPWATCH, description: 'Prolog-Siege',
-      tier: resolveThresholdTier(prologueWins, [1, 2, 3, 5, 8]),
+      tier: T('prologuePrince'),
       detail: prologueWins > 0 ? `${prologueWins} Prologe` : '',
       hover: `${prologueWins} Siege auf ITT-Auftaktetappen unter 10 km (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Prolog-Sieg (ITT < 10 km, Etappe 1)',
     },
     {
       key: 'autumnKing', name: 'Autumn King', icon: HOF_ICON_OLIVE, description: 'Herbst-Klassiker-Siege',
-      tier: resolveThresholdTier(autumnWins, [2, 4, 6, 8, 10]),
+      tier: T('autumnKing'),
       detail: autumnWins > 0 ? `${autumnWins} Siege` : '',
       hover: `${autumnWins} Siege in One Day High / Monument zwischen 01.09. und 31.10. (Gold 10 · Silber 8 · Bronze 6 · Cyan 4 · Lila 2)`,
       requirement: 'Ab 2 Herbst-Klassiker-Siegen',
     },
     {
       key: 'grandFinale', name: 'Grand Finale', icon: HOF_ICON_SPARK, description: 'Sieg im Saisonfinale',
-      tier: resolveThresholdTier(grandFinaleWins, [1, 2, 3, 4, 5]),
+      tier: T('grandFinale'),
       detail: grandFinaleWins > 0 ? `${grandFinaleWins}×` : '',
       hover: `${grandFinaleWins}× das letzte Rennen der Saison gewonnen (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Sieg im letzten Rennen der Saison',
     },
     {
       key: 'theProdigy', name: 'The Prodigy', icon: HOF_ICON_STAR, description: 'Großsieg mit unter 23',
-      tier: resolveThresholdTier(prodigyWins, [1, 2, 3, 4, 5]),
+      tier: T('theProdigy'),
       detail: prodigyWins > 0 ? `${prodigyWins}×` : '',
       hover: `${prodigyWins}× Monument- oder Grand-Tour-Sieg mit unter 23 Jahren (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Großsieg mit unter 23',
@@ -4069,14 +4297,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Sieg in der letzten Karrieresaison', 'Abschiedssieg'),
     {
       key: 'gtRunnerUp', name: 'GT Runner-Up', icon: HOF_ICON_PODIUM, description: 'Zweiter im GT-GC',
-      tier: resolveThresholdTier(gtRunnerUp, [1, 2, 3, 4, 5]),
+      tier: T('gtRunnerUp'),
       detail: gtRunnerUp > 0 ? `${gtRunnerUp}×` : '',
       hover: `${gtRunnerUp}× Zweiter im Gesamtklassement einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Zweiter im GT-Gesamtklassement',
     },
     {
       key: 'theUndertaker', name: 'The Undertaker', icon: HOF_ICON_FLAG, description: 'GT-Schlussetappen-Sieg',
-      tier: resolveThresholdTier(undertakerWins, [1, 2, 3, 4, 5]),
+      tier: T('theUndertaker'),
       detail: undertakerWins > 0 ? `${undertakerWins}×` : '',
       hover: `${undertakerWins}× Sieg auf der Schlussetappe einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× GT-Schlussetappen-Sieg',
@@ -4089,35 +4317,35 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 9 (Commit-getrackt) ---
     {
       key: 'escapeToVictory', name: 'Escape to Victory', icon: HOF_ICON_ROUTE, description: 'Solo-Siege',
-      tier: resolveThresholdTier(escapeToVictory, [1, 3, 5, 8, 12]),
+      tier: T('escapeToVictory'),
       detail: escapeToVictory > 0 ? `${escapeToVictory}×` : '',
       hover: `${escapeToVictory}× Solo-Sieg mit über 1 Minute Vorsprung (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Solo-Sieg mit > 1 min Vorsprung',
     },
     {
       key: 'podiumLockout', name: 'Podium Lockout', icon: HOF_ICON_PODIUM, description: 'Team-Dreifachsieg',
-      tier: resolveThresholdTier(podiumLockout, [1, 2, 3, 5, 8]),
+      tier: T('podiumLockout'),
       detail: podiumLockout > 0 ? `${podiumLockout}×` : '',
       hover: `${podiumLockout}× Teil eines Team-Dreifachsiegs (Plätze 1-2-3 einer Etappe) (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× Team-Dreifachsieg (1-2-3)',
     },
     {
       key: 'jerseyGuardian', name: 'Jersey Guardian', icon: HOF_ICON_JERSEY, description: 'Trikot-Serie',
-      tier: resolveThresholdTier(jerseyStreakBest, [3, 6, 10, 15, 21]),
+      tier: T('jerseyGuardian'),
       detail: jerseyStreakBest > 0 ? `${jerseyStreakBest} Tage` : '',
       hover: `Längste Serie von ${jerseyStreakBest} aufeinanderfolgenden Etappen in einem Führungstrikot (Gold 21 · Silber 15 · Bronze 10 · Cyan 6 · Lila 3)`,
       requirement: 'Ab 3 Etappen in Folge im Führungstrikot',
     },
     {
       key: 'photoFinishKing', name: 'Photo Finish King', icon: HOF_ICON_STOPWATCH, description: 'Siege per Zielfoto',
-      tier: resolveThresholdTier(photoFinishWins, [1, 3, 5, 8, 12]),
+      tier: T('photoFinishKing'),
       detail: photoFinishWins > 0 ? `${photoFinishWins}×` : '',
       hover: `${photoFinishWins}× Sieg per Zielfoto (Fotofinish-Abstand unter 0,05) (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Sieg per Zielfoto',
     },
     {
       key: 'soClose', name: 'So Close', icon: HOF_ICON_PODIUM, description: 'Zweiter per Zielfoto',
-      tier: resolveThresholdTier(soClose, [1, 3, 5, 8, 12]),
+      tier: T('soClose'),
       detail: soClose > 0 ? `${soClose}×` : '',
       hover: `${soClose}× Zweiter per Zielfoto — hauchdünn geschlagen (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1× Zweiter per Zielfoto',
@@ -4126,14 +4354,14 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
     // --- Badges Welle 10 (rein abgeleitet) ---
     {
       key: 'pointsPerfectionist', name: 'Points Perfectionist', icon: HOF_ICON_JERSEY, description: 'GT-Punkte ohne Etappensieg',
-      tier: resolveThresholdTier(pointsPerfectionist, [1, 2, 3, 4, 5]),
+      tier: T('pointsPerfectionist'),
       detail: pointsPerfectionist > 0 ? `${pointsPerfectionist}×` : '',
       hover: `${pointsPerfectionist}× Punktewertung einer Grand Tour gewonnen — ganz ohne Etappensieg (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1× GT-Punktewertung ohne Etappensieg',
     },
     {
       key: 'thirdWeekWonder', name: 'Third Week Wonder', icon: HOF_ICON_MOUNTAIN, description: 'Siege in der GT-Schlusswoche',
-      tier: resolveThresholdTier(thirdWeekWonder, [1, 2, 3, 4, 5]),
+      tier: T('thirdWeekWonder'),
       detail: thirdWeekWonder > 0 ? `${thirdWeekWonder}×` : '',
       hover: `${thirdWeekWonder}× mindestens 2 Etappensiege in der letzten Woche einer Grand Tour (Gold 5 · Silber 4 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 GT mit 2+ Siegen in der Schlusswoche',
@@ -4144,21 +4372,21 @@ function buildHallOfFameBadges(payload: RiderStatsPayload): HofBadge[] {
       'Alle 5 Monumente in einer Saison', 'Legendär'),
     {
       key: 'babyFace', name: 'Baby-Faced Assassin', icon: HOF_ICON_STAR, description: 'Siege mit unter 20',
-      tier: resolveThresholdTier(babyFaceWins, [1, 3, 5, 8, 12]),
+      tier: T('babyFace'),
       detail: babyFaceWins > 0 ? `${babyFaceWins} Siege` : '',
       hover: `${babyFaceWins} Siege mit unter 20 Jahren (Gold 12 · Silber 8 · Bronze 5 · Cyan 3 · Lila 1)`,
       requirement: 'Ab 1 Sieg mit unter 20',
     },
     {
       key: 'workhorse', name: 'The Workhorse', icon: HOF_ICON_WRENCH, description: 'Renntage als Helfer',
-      tier: resolveThresholdTier(workhorseDays, [100, 200, 300, 400, 500]),
+      tier: T('workhorse'),
       detail: workhorseDays > 0 ? `${workhorseDays.toLocaleString('de-DE')} Renntage` : '',
       hover: `${workhorseDays.toLocaleString('de-DE')} Renntage als Edelhelfer / Starker Helfer (Gold 500 · Silber 400 · Bronze 300 · Cyan 200 · Lila 100)`,
       requirement: 'Ab 100 Renntagen als Helfer',
     },
     {
       key: 'longBreakaway', name: 'Long Breakaway King', icon: HOF_ICON_ROUTE, description: 'Siege aus langen Ausreißern',
-      tier: resolveThresholdTier(longBreakawayWins, [1, 2, 3, 5, 8]),
+      tier: T('longBreakaway'),
       detail: longBreakawayWins > 0 ? `${longBreakawayWins}×` : '',
       hover: `${longBreakawayWins} Siege aus einem Ausreißer über 150 km (Gold 8 · Silber 5 · Bronze 3 · Cyan 2 · Lila 1)`,
       requirement: 'Ab 1 Sieg aus einem 150-km-Ausreißer',
@@ -4183,7 +4411,7 @@ function renderHofBadgeCard(badge: HofBadge): string {
 
   const tier = tierStyle;
   return `
-    <div title="${esc(badge.hover)}" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;">
+    <div data-hof-badge-key="${esc(badge.key)}" role="button" tabindex="0" title="${esc(badge.hover)} · Klick: alle Fahrer mit diesem Badge" style="position:relative;border-radius:16px;border:2px solid ${tier.color};background:linear-gradient(165deg,#101d33,#0b1424);box-shadow:0 0 24px ${tier.glow}, inset 0 0 40px ${tier.soft};padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;cursor:pointer;">
       <span style="position:absolute;inset:0;background:radial-gradient(circle at 50% 0%, ${tier.soft}, transparent 62%);pointer-events:none;"></span>
       <span style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%, ${tier.soft}, #0e1930 75%);border:2px solid ${tier.color};color:${tier.color};box-shadow:0 0 18px ${tier.glow};">
         ${badge.icon}
@@ -4201,7 +4429,13 @@ function renderHofBadgeCard(badge: HofBadge): string {
 const HOF_GROUPS: string[][] = [
   // 1. Große Siege & Titel
   ['worldChampionRoad', 'worldChampionItt', 'euroChampionRoad', 'euroChampionItt',
-   'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'missingOutOne',
+   'careerRainbow', 'olympicChampionRoad', 'olympicChampionItt',
+   'worldU23ChampionRoad', 'worldU23ChampionItt', 'euroU23ChampionRoad', 'euroU23ChampionItt',
+   'worldJuniorChampionRoad', 'worldJuniorChampionItt', 'euroJuniorChampionRoad', 'euroJuniorChampionItt',
+   'contAoChampionRoad', 'contAoChampionItt', 'contAmChampionRoad', 'contAmChampionItt', 'contAfChampionRoad', 'contAfChampionItt',
+   'contAoU23ChampionRoad', 'contAoU23ChampionItt', 'contAmU23ChampionRoad', 'contAmU23ChampionItt', 'contAfU23ChampionRoad', 'contAfU23ChampionItt',
+   'contAoJuniorChampionRoad', 'contAoJuniorChampionItt', 'contAmJuniorChampionRoad', 'contAmJuniorChampionItt', 'contAfJuniorChampionRoad', 'contAfJuniorChampionItt',
+   'nationalChampionRoad', 'nationalChampionItt', 'grandTourStageSlam', 'gtStageHunter', 'missingOutOne',
    'firstPlacePilot', 'winTracker', 'completeRider', 'grandTourWinner', 'tdfWinner', 'monumentWinner',
    'allGrandTourWinner', 'allMonumentWinner', 'monumentHunter', 'cobbleKing', 'ardennenKing',
    'careerSlam', 'phantomGc', 'firstBlood', 'hatTrickHero', 'springKing', 'gcStayer', 'gcBySeconds',
@@ -4243,6 +4477,44 @@ const HOF_GROUP_INDEX: Map<string, number> = (() => {
   HOF_GROUPS.forEach((keys, i) => keys.forEach((k) => { if (!m.has(k)) m.set(k, i); }));
   return m;
 })();
+
+// Kategorie-Metadaten pro HOF_GROUPS-Index (Label + Emoji) fuer das Badge-Tab
+// in Statistiken & Rekorde.
+const HOF_CATEGORY_META: Array<{ label: string; icon: string }> = [
+  { label: 'Große Siege & Titel', icon: '🏆' },
+  { label: 'Ranglisten-Rekorde', icon: '📊' },
+  { label: 'Wertungen & Trikots', icon: '👕' },
+  { label: 'Terrain & Spezialisierung', icon: '⛰️' },
+  { label: 'Ausreißer & Angriff', icon: '💨' },
+  { label: 'Helfer & Team', icon: '🛡️' },
+  { label: 'Geografie', icon: '🌍' },
+  { label: 'Konstanz & Volumen', icon: '📈' },
+  { label: 'Wetter', icon: '🌦️' },
+  { label: 'Karriere & Loyalität', icon: '⏳' },
+  { label: 'Pech & Widrigkeiten', icon: '🩹' },
+  { label: 'Kuriositäten', icon: '🎲' },
+];
+
+export interface HofBadgeMeta { key: string; name: string; description: string; category: string; icon: string }
+
+let hofBadgeCatalogCache: HofBadgeMeta[] | null = null;
+
+/**
+ * Katalog ALLER Hall-of-Fame-Badges (Key, Name, Kategorie, Emoji-Icon). Die
+ * Namen stammen 1:1 aus `buildHallOfFameBadges`; die Kategorie/Icon aus der
+ * HOF_GROUPS-Zuordnung. Wird vom Badge-Tab (leaderboards) genutzt, um die
+ * bespoke Badges filterbar zu machen.
+ */
+export function getHofBadgeCatalog(): HofBadgeMeta[] {
+  if (hofBadgeCatalogCache) return hofBadgeCatalogCache;
+  const badges = buildHallOfFameBadges({} as RiderStatsPayload);
+  hofBadgeCatalogCache = badges.map((b) => {
+    const gi = HOF_GROUP_INDEX.get(b.key);
+    const cat = gi != null ? HOF_CATEGORY_META[gi] : undefined;
+    return { key: b.key, name: b.name, description: b.description, category: cat?.label ?? 'Sonstige', icon: cat?.icon ?? '🎖️' };
+  });
+  return hofBadgeCatalogCache;
+}
 const HOF_TIER_STRENGTH: Record<string, number> = { gold: 6, silver: 5, bronze: 4, cyan: 3, purple: 2 };
 function hofBadgeStrength(b: HofBadge): number {
   if (b.tier) return HOF_TIER_STRENGTH[b.tier] ?? 0;
@@ -4408,6 +4680,8 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
         ${panel('Gesundheit', [
           { label: 'Krankheiten', value: String(stats.illnesses ?? 0), sub: `${stats.illnessDays ?? 0} Tage`, color: '#ed64a6' },
           { label: 'Verletzungen', value: String(stats.injuries ?? 0), sub: `${stats.injuryDays ?? 0} Tage`, color: '#f6ad55' },
+          { label: 'Superform', value: String(stats.superformDays ?? 0), sub: 'Tage', color: '#4ade80' },
+          { label: 'Supermalus', value: String(stats.supermalusDays ?? 0), sub: 'Tage', color: '#fb7185' },
         ])}
         ${panel('Heim', [
           { label: 'Heimvorteil', value: String(stats.homeAdvantageDays ?? 0), sub: 'Tage', color: '#38bdf8' },
@@ -4433,6 +4707,7 @@ export function renderRiderStatsCareerTab(payload: RiderStatsPayload): string {
           { label: 'Platz 2', value: String(placeTotals.p2), color: '#cbd5e1' },
           { label: 'Platz 3', value: String(placeTotals.p3), color: '#d08b5b' },
           { label: 'Top 10', value: String(placeTotals.top10), color: '#22d3ee' },
+          { label: 'Back-to-Back', value: String((payload.hallOfFame as any)?.winStreakBest ?? 0), sub: 'Siege in Folge', color: '#f59e0b' },
         ])}
       </div>
 

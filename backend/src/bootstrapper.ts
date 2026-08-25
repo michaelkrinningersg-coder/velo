@@ -713,12 +713,13 @@ function seedRaces(db: Database.Database): void {
   const rows = readCsv('races.csv');
   const insert = db.prepare(`
     INSERT INTO races (
-      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs, bonus_system_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `races.csv Zeile ${index + 2}`;
+    const bonusOverride = row['bonus_system_id']?.trim();
     insert.run(
       int(req(row, 'id', ctx), ctx),
       req(row, 'name', ctx),
@@ -731,6 +732,7 @@ function seedRaces(db: Database.Database): void {
       int(req(row, 'prestige', ctx), ctx),
       row['preferred_nationality_group']?.trim() || null,
       row['required_specs']?.trim() || null,
+      bonusOverride ? int(bonusOverride, ctx) : null,
     );
   }
 
@@ -899,6 +901,45 @@ function seedStages(db: Database.Database): void {
   }
 
   console.log(`  ${rows.length} Etappen eingefuegt.`);
+}
+
+/**
+ * Befuellt die Parametertabelle der Quick Simulation aus der CSV.
+ *
+ * Exportiert und idempotent (INSERT OR IGNORE), damit die Migration
+ * bestehender Spielstaende dieselbe Funktion benutzen kann. Die
+ * Wetter-Migration in DatabaseService haelt ihre Werte ein zweites Mal im Code
+ * — genau die Doppelpflege, die hier vermieden wird.
+ */
+export function seedQuickSimProfiles(db: Database.Database): void {
+  const rows = readCsv('quick_sim_profiles.csv');
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO quick_sim_profiles (
+      profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
+      tail_gap_per_km, tail_group_size,
+      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
+      time_trial_slope, time_trial_noise
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `quick_sim_profiles.csv Zeile ${index + 2}`;
+    insert.run(
+      req(row, 'profile', ctx),
+      real(req(row, 'base_speed_kmh', ctx), `${ctx} / base_speed_kmh`),
+      real(req(row, 'bunch_intercept', ctx), `${ctx} / bunch_intercept`),
+      real(req(row, 'bunched_share_mean', ctx), `${ctx} / bunched_share_mean`),
+      real(req(row, 'split_share_intercept', ctx), `${ctx} / split_share_intercept`),
+      real(req(row, 'tail_gap_per_km', ctx), `${ctx} / tail_gap_per_km`),
+      real(req(row, 'tail_group_size', ctx), `${ctx} / tail_group_size`),
+      real(req(row, 'noise_sigma', ctx), `${ctx} / noise_sigma`),
+      real(req(row, 'incident_loss_multiplier', ctx), `${ctx} / incident_loss_multiplier`),
+      real(req(row, 'severe_dnf_chance', ctx), `${ctx} / severe_dnf_chance`),
+      real(req(row, 'breakaway_shrink_exponent', ctx), `${ctx} / breakaway_shrink_exponent`),
+      real(req(row, 'time_trial_slope', ctx), `${ctx} / time_trial_slope`),
+      real(req(row, 'time_trial_noise', ctx), `${ctx} / time_trial_noise`),
+    );
+  }
 }
 
 function seedWetter(db: Database.Database): void {
@@ -1337,6 +1378,7 @@ export function bootstrap(force = false): void {
     seedRaceProgramRaces(db);
     seedRaceProgramProbabilityRules(db);
     seedWetter(db);
+    seedQuickSimProfiles(db);
     seedStages(db);
     seedRiders(db);
     seedTeamPreferences(db);

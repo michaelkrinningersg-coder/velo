@@ -1,3 +1,7 @@
+// Reiner Typ-Import; er wird beim Uebersetzen entfernt, der Ringschluss mit
+// quickSimProfiles.ts existiert also nur auf Typebene.
+import type { QuickSimProfileParameters } from './quickSimProfiles';
+
 // ============================================================
 //  SHARED TYPES â€“ verwendet von Backend und Frontend
 // ============================================================
@@ -230,6 +234,7 @@ export interface Rider {
   activeTeamId: number | null;
   activeContractId: number | null;
   contractEndSeason?: number | null;
+  isRetired?: boolean;
   seasonPoints?: number;
   seasonRaceDays?: number;
   seasonRaceDaysTotal?: number;
@@ -505,6 +510,57 @@ export interface Race {
   upcomingStage?: RaceStageSummary;
 }
 
+/** Verweis auf einen Fahrer in der Renn-Historie (Sieger/Wertungssieger). */
+export interface PalmaresRiderRef {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  /** Aktuelle Spezialisierung (kein historischer Snapshot verfuegbar). */
+  specialization1: string | null;
+  specialization2: string | null;
+}
+
+/** Sieger + Podium + Wertungssieger eines Rennens fuer eine Saison. */
+export interface PalmaresSeasonEntry {
+  season: number;
+  winner: PalmaresRiderRef | null;
+  second: PalmaresRiderRef | null;
+  third: PalmaresRiderRef | null;
+  pointsChampion: PalmaresRiderRef | null;
+  mountainChampion: PalmaresRiderRef | null;
+  youthChampion: PalmaresRiderRef | null;
+}
+
+/** Rekordteilnahme: Fahrer mit Anzahl Saisons, in denen er hier Punkte holte. */
+export interface PalmaresParticipationRow {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  seasons: number;
+  totalPoints: number;
+}
+
+export interface RacePalmaresPayload {
+  raceId: number;
+  isStageRace: boolean;
+  seasons: PalmaresSeasonEntry[];
+  participation: PalmaresParticipationRow[];
+}
+
+/** Sieger + Podium eines Rennens (fuer die Season-Standings-Jahresuebersicht). */
+export interface RaceWinnerEntry {
+  raceId: number;
+  raceName: string;
+  categoryId: number;
+  winner: PalmaresRiderRef | null;
+  second: PalmaresRiderRef | null;
+  third: PalmaresRiderRef | null;
+}
+
 export interface Stage {
   id: number;
   raceId: number;
@@ -590,6 +646,8 @@ export interface GameState {
   draftStatus?: 'not_started' | 'active' | 'completed';
   draftCurrentPickNumber?: number;
   draftSeason?: number | null;
+  /** Spieler muss am 10.01. seine Vertragsverlängerungs-Ziele wählen (blockiert). */
+  renewalSelectionPending?: boolean;
 }
 
 export interface PendingStage {
@@ -623,6 +681,8 @@ export interface GameStatus {
   draftStatus?: 'not_started' | 'active' | 'completed';
   draftCurrentPickNumber?: number;
   draftSeason?: number | null;
+  /** Spieler muss am 10.01. seine Vertragsverlängerungs-Ziele wählen (blockiert). */
+  renewalSelectionPending?: boolean;
   /** Sieger der zuletzt simulierten Etappe / des letzten Rennens (fuer "Im Fokus"). */
   lastStageWinner?: LastStageWinner | null;
 }
@@ -806,6 +866,13 @@ export interface RaceRosterEditorPayload {
 }
 
 export interface RealtimeSimulationBootstrap {
+  /**
+   * Seed der Etappe. Wird einmal je Etappe gezogen und in der Datenbank
+   * gespeichert (`stages.sim_seed`); dieselbe Etappe mit demselben Starterfeld
+   * liefert damit immer dasselbe Ergebnis. Optional, damit Altspielstaende und
+   * Aufrufer ohne Seed weiterhin funktionieren — dann zieht die Engine einen.
+   */
+  simSeed?: number;
   race: Race;
   stage: Stage;
   riders: Rider[];
@@ -819,7 +886,21 @@ export interface RealtimeSimulationBootstrap {
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
   stageScoringRules: StageScoringRule[];
+  /**
+   * Parameter der Quick Simulation je Etappenprofil, aus `quick_sim_profiles`.
+   * Optional — fehlt sie, benutzt der Modus seine eingebauten Vorgaben.
+   */
+  quickSimProfiles?: Record<StageProfile, QuickSimProfileParameters>;
   lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
+  /** Aktive Liga-Rivalitaeten (Fahrerpaare) fuer Renn-Boni & Konterattacken. */
+  rivalries?: Array<{ aId: number; bId: number }> | null;
+  /**
+   * Gesetzt, wenn die Etappe ohne Simulation abgeschlossen wurde (z.B. eine
+   * nationale Meisterschaft ohne startberechtigte Fahrer -> kein Meister).
+   * Die uebrigen Felder sind dann nicht befuellt.
+   */
+  skipped?: boolean;
+  skipMessage?: string;
 }
 
 export type SeasonPointAwardType =
@@ -929,6 +1010,7 @@ export interface RiderCareerStats {
   superteamCount: number;
   totalKm?: number;
   superformDays?: number;
+  supermalusDays?: number;
   categories: Record<string, {
     gcWins: number;
     gcSecond: number;
@@ -1096,6 +1178,38 @@ export interface RiderHallOfFameStats {
   euroChampionIttTitles: number;    // Europameister ITT
   nationalChampionRoadTitles: number; // Nationaler Meister (Strasse)
   nationalChampionIttTitles: number;  // Nationaler Meister ITT
+  // U23-/Junioren-WM+EM sowie Olympia (Karriere-Zaehler) fuer die goldenen
+  // Einzelbadges (ein Titel je Edition).
+  worldU23ChampionRoadTitles: number;
+  worldU23ChampionIttTitles: number;
+  euroU23ChampionRoadTitles: number;
+  euroU23ChampionIttTitles: number;
+  worldJuniorChampionRoadTitles: number;
+  worldJuniorChampionIttTitles: number;
+  euroJuniorChampionRoadTitles: number;
+  euroJuniorChampionIttTitles: number;
+  olympicChampionRoadTitles: number;
+  olympicChampionIttTitles: number;
+  // Kontinentale Meistertitel (Karriere-Zaehler) fuer die goldenen Einzelbadges.
+  // AO = Asien-Ozeanien, AM = Amerika, AF = Afrika; je Elite/U23/Junioren.
+  contAoChampionRoadTitles: number;
+  contAoChampionIttTitles: number;
+  contAoU23ChampionRoadTitles: number;
+  contAoU23ChampionIttTitles: number;
+  contAoJuniorChampionRoadTitles: number;
+  contAoJuniorChampionIttTitles: number;
+  contAmChampionRoadTitles: number;
+  contAmChampionIttTitles: number;
+  contAmU23ChampionRoadTitles: number;
+  contAmU23ChampionIttTitles: number;
+  contAmJuniorChampionRoadTitles: number;
+  contAmJuniorChampionIttTitles: number;
+  contAfChampionRoadTitles: number;
+  contAfChampionIttTitles: number;
+  contAfU23ChampionRoadTitles: number;
+  contAfU23ChampionIttTitles: number;
+  contAfJuniorChampionRoadTitles: number;
+  contAfJuniorChampionIttTitles: number;
   gtStageWinsTdf: number;             // Etappensiege Tour de France (All-Time)
   gtStageWinsGiro: number;            // Etappensiege Giro (All-Time)
   gtStageWinsVuelta: number;          // Etappensiege Vuelta (All-Time)
@@ -1152,16 +1266,43 @@ export interface RiderHallOfFameStats {
   multiJerseyDays: number;      // Tage mit mehreren Fuehrungstrikots (Wardrobe Malfunction)
 }
 
-// Kategorie-IDs der Welt-/Europameisterschaften (Strasse/ITT × WM/EM). Wird auf
-// Backend UND Frontend fuer die Meisterschafts-Erkennung genutzt.
-export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [10, 11, 12, 13];
+// Kategorie-IDs aller Meisterschaften (Strasse/ITT). Elite-WM/EM (10-13),
+// U23/Junioren (16-23), Olympia (24/25) und die kontinentalen Meisterschaften
+// (Asien-Ozeanien/Amerika/Afrika je Elite/U23/Junioren x Strasse/ITT, 28-45).
+// Wird auf Backend UND Frontend fuer die Meisterschafts-Erkennung (Roster,
+// Titelvergabe) genutzt.
+export const CHAMPIONSHIP_CATEGORY_IDS: readonly number[] = [
+  10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+  28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+];
 
 export function isChampionshipCategory(categoryId?: number | null): boolean {
   return categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(categoryId);
 }
 
+// Titeltyp fuer Header-Chip (riderStats) und Team-Meisterliste (teamStats).
+export type ChampionTitleType =
+  | 'WM'
+  | 'EM'
+  | 'NAT'
+  | 'WM_U23'
+  | 'WM_JUN'
+  | 'EM_U23'
+  | 'EM_JUN'
+  | 'OLY'
+  // Kontinentale Meisterschaften (AO = Asien-Ozeanien, AM = Amerika, AF = Afrika).
+  | 'CM_AO'
+  | 'CM_AO_U23'
+  | 'CM_AO_JUN'
+  | 'CM_AM'
+  | 'CM_AM_U23'
+  | 'CM_AM_JUN'
+  | 'CM_AF'
+  | 'CM_AF_U23'
+  | 'CM_AF_JUN';
+
 export interface ReigningChampionTitle {
-  type: 'WM' | 'EM' | 'NAT';
+  type: ChampionTitleType;
   discipline: 'ITT' | 'ROAD';
   season: number;
 }
@@ -1177,6 +1318,7 @@ export interface RiderStatsPayload {
   riderId: number;
   riderName: string;
   age?: number;
+  isRetired: boolean;
   teamId: number | null;
   teamName: string | null;
   weatherProfileId?: number;
@@ -1185,11 +1327,20 @@ export interface RiderStatsPayload {
   mentorName?: string | null;
   mentoredRiderNames?: string[];
   overallRating: number;
+  // Skills + Spezialisierungen des Fahrers (eingefroren beim Retirement). Als
+  // Fallback fuer die Anzeige zurueckgetretener Fahrer, die nicht mehr in der
+  // aktiven Fahrerliste stehen (dort waere das Rider-Objekt null -> 60/"-").
+  skills?: RiderSkills;
+  specialization1?: RiderSpecialization | null;
+  specialization2?: RiderSpecialization | null;
+  specialization3?: RiderSpecialization | null;
   seasonFormPhase: RiderSeasonFormPhase;
   formBonus: number;
   raceFormBonus: number;
   /** Aktuell gehaltene WM/EM-Titel (regierender Meister bis zur naechsten Edition). */
   reigningChampionTitles?: ReigningChampionTitle[];
+  /** Aktueller Top-Rivale (falls dieser Fahrer in einer Liga-Rivalitaet steckt). */
+  topRival?: RiderTopRival | null;
   program: RaceProgram | null;
   programRaces: Race[];
   isUnavailable: boolean;
@@ -1209,6 +1360,9 @@ export interface RiderStatsPayload {
   shortTermFatigueWarning: RiderLoadWarningLevel;
   currentSeasonBreakawayAttempts: number;
   careerWins: number;
+  /** Allzeit-UCI-Punkte (Summe ueber alle Saisons) + Rang danach. */
+  allTimePoints: number;
+  allTimePointsRank: number | null;
   /** Basisdaten fuer die Hall-of-Fame-Badges (Allzeit-Siege). */
   hallOfFame: RiderHallOfFameStats;
   pointsByTerrain: RiderStatsPointsByTerrain;
@@ -1216,6 +1370,16 @@ export interface RiderStatsPayload {
   careerRaceDaysBySeason: Array<{
     season: number;
     raceDays: number;
+  }>;
+  /**
+   * Autoritative Saison-Gesamtpunkte je Saison (SUM aller award_types inkl.
+   * Trikot-Tagespunkte) — deckungsgleich mit den Saisonpunkten der Standings.
+   * Die zeilenweise summierten Ergebnispunkte (row.seasonPoints) enthalten die
+   * Trikot-Tagespunkte NICHT, weshalb die Vertrags-Uebersicht diese Werte nutzt.
+   */
+  careerPointsBySeason: Array<{
+    season: number;
+    points: number;
   }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];
@@ -1236,6 +1400,214 @@ export interface RiderStatsPayload {
     season: number;
     roleName: string;
   }>;
+}
+
+// ==== Rivalen =================================================
+export type RivalryDuelKind = 'GC' | 'Etappe' | 'Eintages';
+
+export interface RivalryRiderRef {
+  riderId: number;
+  firstName: string;
+  lastName: string;
+  countryCode: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  roleId: number | null;
+  roleName: string | null;
+  overallRating: number;
+}
+
+export interface RivalryOverviewItem {
+  rank: number;
+  index: number;
+  discipline: string;
+  topCategoryId: number | null;
+  topCategoryName: string | null;
+  encounters: number;
+  seasonWinA: number;
+  seasonWinB: number;
+  riderA: RivalryRiderRef;
+  riderB: RivalryRiderRef;
+}
+
+export interface RivalryOverviewPayload {
+  season: number;
+  seasons: number[];
+  rivalries: RivalryOverviewItem[];
+}
+
+export interface RivalryDetailRider extends RivalryRiderRef {
+  age: number;
+  careerWins: number;
+  allTimeUciPoints: number;
+  seasonProgram: string | null;
+}
+
+export interface RivalryDuelRow {
+  date: string;
+  season: number;
+  raceName: string;
+  categoryId: number;
+  categoryName: string | null;
+  type: RivalryDuelKind;
+  rankA: number;
+  rankB: number;
+  teamAId: number | null;
+  teamAName: string | null;
+  teamBId: number | null;
+  teamBName: string | null;
+  winner: 'A' | 'B' | null;
+}
+
+export interface RivalryDetailPayload {
+  season: number;
+  rank: number;
+  index: number;
+  discipline: string;
+  topCategoryId: number | null;
+  topCategoryName: string | null;
+  seasonWinA: number;
+  seasonWinB: number;
+  seasonEncounters: number;
+  gesamtWinA: number;
+  gesamtWinB: number;
+  encounters: number;
+  riderA: RivalryDetailRider;
+  riderB: RivalryDetailRider;
+  duels: RivalryDuelRow[];
+}
+
+export interface RiderTopRival {
+  season: number;
+  riderAId: number;
+  riderBId: number;
+  rivalRiderId: number;
+  rivalFirstName: string;
+  rivalLastName: string;
+  rivalCountryCode: string | null;
+  index: number;
+  selfWins: number;
+  rivalWins: number;
+}
+
+// ==== Saison-Wrapped =========================================
+export interface WrappedWinsEntry {
+  rider: PalmaresRiderRef;
+  wins: number;
+}
+
+export interface WrappedRiderPoints {
+  rider: PalmaresRiderRef;
+  points: number;
+}
+
+export interface WrappedTeamStat {
+  teamId: number;
+  teamName: string | null;
+  value: number; // Siege oder Punkte
+}
+
+export interface WrappedNewcomer {
+  rider: PalmaresRiderRef;
+  uciPoints: number;
+  wins: number;
+  /** Platz in der Saison-UCI-Wertung (Fahrer). */
+  seasonUciRank: number | null;
+  /** Top-5-Ergebnisse dieser Saison nach erzielten UCI-Punkten. */
+  bestResults: WrappedCareerResult[];
+}
+
+export interface WrappedCareerResult {
+  raceName: string;
+  season: number;
+  points: number;
+  rank: number;
+  type: string; // GC / Etappe / Eintages / Wertung
+  /** Anzahl identischer Ergebnisse (gleiches Rennen/Typ/Platz/Punkte), gruppiert. */
+  count: number;
+  /** Renn-Prestige (fuer die Gruppierung/Sortierung nach Rennen). */
+  prestige: number;
+  /** true = Wertung (GC/Punkte/Berg/Nachwuchs), false = Etappe/Eintagesergebnis. */
+  isClassification: boolean;
+}
+
+export interface WrappedRetiree {
+  rider: PalmaresRiderRef;
+  allTimeUciPoints: number;
+  allTimeUciRank: number | null;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+  // "Karriere in Zahlen"
+  careerFromSeason: number | null;
+  careerToSeason: number | null;
+  grandTourWins: number;
+  monumentWins: number;
+}
+
+// Ueberraschung des Jahres (Underdog-Sieg / juengster Monument-Sieger).
+export interface WrappedSurpriseEntry {
+  rider: PalmaresRiderRef;
+  raceName: string;
+  categoryId: number;
+  value: number; // OVR (gerundet) bzw. Alter
+}
+export interface WrappedSurprise {
+  lowestOvrWinner: WrappedSurpriseEntry | null;
+  youngestMonumentWinner: WrappedSurpriseEntry | null;
+}
+
+// Rekorde der Saison.
+export interface WrappedRecords {
+  mostWins: WrappedWinsEntry | null;
+  teamDominance: { team: WrappedTeamStat; lead: number } | null;
+  longestStreak: { rider: PalmaresRiderRef; streak: number } | null;
+}
+
+// Fahrer, der in dieser Saison neu in eine All-Time-UCI-Stufe aufgestiegen ist.
+export interface WrappedLegend {
+  rider: PalmaresRiderRef;
+  allTimeUciPoints: number;
+  allTimeUciRank: number | null;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+  /** Neu erreichte Stufe der All-Time-Wertung (1 / 3 / 10 / 20). */
+  newTier: number;
+  /** Alter des Fahrers in der Wrapped-Saison. */
+  age: number | null;
+}
+
+// Fahrer, der in dieser Saison aus den Top 25 der All-Time-UCI-Wertung
+// herausgefallen ist (bis zur Vorsaison in den Top 25, jetzt dahinter).
+export interface WrappedFallenLegend {
+  rider: PalmaresRiderRef;
+  /** All-Time-Rang bis zur Vorsaison (<= 25). */
+  previousRank: number;
+  /** Aktueller All-Time-Rang (> 25) bzw. null, wenn nicht mehr gewertet. */
+  currentRank: number | null;
+  allTimeUciPoints: number;
+  careerWins: number;
+  bestResults: WrappedCareerResult[];
+  // "Karriere in Zahlen" (wie bei den Retirees).
+  careerFromSeason: number | null;
+  careerToSeason: number | null;
+  grandTourWins: number;
+  monumentWins: number;
+}
+
+export interface SeasonWrappedPayload {
+  season: number;
+  raceWinners: RaceWinnerEntry[];
+  topRidersByWins: WrappedWinsEntry[];
+  topRidersByPoints: WrappedRiderPoints[];
+  topTeamsByWins: WrappedTeamStat[];
+  topTeamsByPoints: WrappedTeamStat[];
+  bestNewcomers: WrappedNewcomer[];
+  retirees: WrappedRetiree[];
+  legends: WrappedLegend[];
+  /** Fahrer, die diese Saison aus den Top 25 All-Time herausgefallen sind. */
+  fallenLegends: WrappedFallenLegend[];
+  surprise: WrappedSurprise;
+  records: WrappedRecords;
 }
 
 export interface RiderFatigueHistoryEntry {
@@ -1282,6 +1654,30 @@ export interface SeasonStandingCountryRow {
   topRiders: SeasonStandingCountryRiderRow[];
 }
 
+// Ein aktueller Titeltraeger (Fahrer) einer Disziplin.
+export interface SeasonChampionHolder {
+  riderId: number;
+  riderName: string;
+  countryCode: Nationality | null;
+  season: number;
+}
+
+// Nationale Meister eines Landes (Strasse/ITT), sortiert nach Country-Wertung.
+export interface SeasonNationalChampionGroup {
+  countryCode: Nationality | null;
+  countryName: string;
+  points: number;           // Punkte in der Country-Wertung (Sortierschluessel)
+  road: SeasonChampionHolder | null;
+  itt: SeasonChampionHolder | null;
+}
+
+// Aktuell gueltiger internationaler Titel (WM/EM/U23/Junioren/Olympia).
+export interface SeasonReigningTitle {
+  type: ChampionTitleType;
+  discipline: 'ITT' | 'ROAD';
+  holder: SeasonChampionHolder;
+}
+
 export interface SeasonStandingsPayload {
   season: number;
   riderStandings: SeasonStandingRow[];
@@ -1290,6 +1686,12 @@ export interface SeasonStandingsPayload {
   availableSeasons?: number[];
   /** Regierende Welt-/Europameister (je Disziplin die juengste Edition). */
   reigningChampions?: ReigningChampionHolder[];
+  /** Aktuelle nationale Meister je Land, geordnet nach Country-Wertung. */
+  nationalChampions?: SeasonNationalChampionGroup[];
+  /** Aktuell gueltige internationale Titel (WM/EM/U23/Junioren/Olympia). */
+  reigningTitles?: SeasonReigningTitle[];
+  /** Jahresuebersicht der Renn-Sieger nach Prestige-Stufe (TdF/GT/Monument/High). */
+  raceWinners?: RaceWinnerEntry[];
 }
 
 // ------ Generische API-Response ------------------------------
@@ -1666,6 +2068,21 @@ export interface TeamSuccessStats {
   }>;
 }
 
+/**
+ * Ein von einem (aktuellen) Teamfahrer gewonnener Meistertitel — Welt- (WM),
+ * Europa- (EM) oder nationaler Meister (NAT), je Disziplin (ITT/ROAD) und
+ * Saison. Speist den Teamstats-Tab "Meister".
+ */
+export interface TeamChampionTitle {
+  riderId: number;
+  riderName: string;
+  riderCountryCode: string | null;
+  type: ChampionTitleType;
+  discipline: 'ITT' | 'ROAD';
+  season: number;
+  countryName?: string | null;
+}
+
 export interface TeamStatsPayload {
   teamId: number;
   teamName: string;
@@ -1674,6 +2091,8 @@ export interface TeamStatsPayload {
   countryCode: string | null;
   riders: TeamStatsRider[];
   topResults: TeamStatsTopResult[];
+  /** Meistertitel (WM/EM/National) der aktuellen Teamfahrer, neueste zuerst. */
+  champions: TeamChampionTitle[];
   successStats: {
     [seasonOrAll: string]: TeamSuccessStats;
   };

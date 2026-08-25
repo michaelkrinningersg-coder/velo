@@ -1,6 +1,11 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
+import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
+import { isRenewalSelectionPending } from '../simulation/contractRenewalSelection';
+import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
+import { ensureOlympicGames } from '../simulation/olympicGamesSchedule';
+import { OLYMPIC_CATEGORY_IDS, isOlympicSeason } from '../simulation/championships';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -15,6 +20,8 @@ import { RiderProgramService } from './RiderProgramService';
 import { RiderRoleService } from './RiderRoleService';
 import { RiderDraftService } from './RiderDraftService';
 import { RiderNewgenService } from './RiderNewgenService';
+import { BadgeMaterializationService } from './BadgeMaterializationService';
+import { RivalryService } from './RivalryService';
 
 const DEFAULT_START_DATE = '2026-01-01';
 const DEFAULT_START_SEASON = 2026;
@@ -28,6 +35,15 @@ const RACE_FORM_FREE_STEP = 0.15;
 const BUILD_R_FORM_EXPIRY_DAYS = 56;
 const FREE_R_FORM_EXPIRY_DAYS = 25;
 const PEAK_MIN_SPACING_DAYS = 28;
+// Ein Rennen kommt als Peak nur infrage, wenn der Fahrer im Teilnehmerfeld
+// seines Teams (Fahrer mit diesem Rennen im Programm) nach OVR unter den besten
+// N liegt — regulaer Top 10, bei der Tour de France Top 14.
+const PEAK_QUALIFY_TOP_N = 10;
+const PEAK_QUALIFY_TOP_N_TDF = 14;
+const TOUR_DE_FRANCE_CATEGORY_ID = 1;
+// Fallback, wenn kein Rennen mit ausreichendem Team-Rang gefunden wird: Peaks
+// zufaellig aus den prestigetraechtigsten N Rennen des Fahrers waehlen.
+const PEAK_PRESTIGE_POOL_SIZE = 15;
 const ILLNESS_CHANCE = 0.0025;
 const INJURY_CHANCE = 0.002;
 
@@ -182,6 +198,22 @@ export class GameStateService {
     const state = this.loadState();
     this.repairMissingRaceProgramRaces();
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
+
+    // Einmalige Peak-Neuausrichtung fuer Altbestaende: aeltere Saves haben durch
+    // den frueheren Peak-Churn (fehlende Programm-Verknuepfungen) fehlplatzierte
+    // Season-Form-Peaks. Nachdem Reparatur + Programme geladen sind, richten wir
+    // die laufende Saison EINMALIG an den Programmrennen aus (danach uebernehmen
+    // Saisonwechsel/Draft die Ausrichtung).
+    const alignFlag = this.db.prepare("SELECT value FROM career_meta WHERE key = 'peakAlignmentFix'").get() as { value: string } | undefined;
+    if (!alignFlag) {
+      try {
+        this.realignAllSeasonFormPeaks(state.season, state.currentDate);
+      } catch (e) {
+        console.error('Einmalige Peak-Neuausrichtung fehlgeschlagen:', e);
+      }
+      this.db.prepare("INSERT OR REPLACE INTO career_meta (key, value) VALUES ('peakAlignmentFix', '1')").run();
+    }
+
     if (this.syncedStateDate !== state.currentDate) {
       this.syncCurrentSeasonFormState(state.currentDate, state.season);
       this.syncDailyFormHistory(state.currentDate);
@@ -225,6 +257,7 @@ export class GameStateService {
       draftStatus: state.draftStatus,
       draftCurrentPickNumber: state.draftCurrentPickNumber,
       draftSeason: state.draftSeason,
+      renewalSelectionPending: isRenewalSelectionPending(this.db),
       lastStageWinner: this.loadLastStageWinner(),
     };
   }
@@ -258,6 +291,12 @@ export class GameStateService {
       const pendingStages = this.getPendingStages(currentRow.current_date);
       if (pendingStages.length > 0) {
         throw new Error('Der Tag kann nicht beendet werden, solange offene Rennen oder Etappen simuliert werden muessen.');
+      }
+
+      // Blockierendes Auswahlfenster (10.01.): der Spieler muss zuerst seine
+      // Vertragsverlängerungs-Ziele wählen und bestätigen.
+      if (isRenewalSelectionPending(this.db)) {
+        throw new Error('Bitte zuerst die Ziele für Vertragsverlängerungen auswählen und bestätigen.');
       }
 
       const nextDate = addDaysIso(currentRow.current_date, 1);
@@ -396,6 +435,14 @@ export class GameStateService {
               draft_season = ?
           WHERE id = 1
         `).run(nextSeason);
+
+        // Hall-of-Fame-Badges einmal jaehrlich beim Saisonwechsel neu
+        // materialisieren (die Karrierestatistiken der abgeschlossenen Saison
+        // sind hier final). Bewusst nur hier statt bei jedem Load — der volle
+        // Rebuild ist teuer (~26 Queries je Fahrer).
+        new BadgeMaterializationService(this.db).rebuildAllRiderBadges();
+        // Liga-Rivalitaeten der abgeschlossenen Saison neu materialisieren.
+        new RivalryService(this.db).rebuildRivalries();
       }
       this.ensureRiderDailyStateTable();
       this.ensureRiderDailyStateRows(currentRow.season);
@@ -420,6 +467,30 @@ export class GameStateService {
       } catch (e) {
         console.error('Failed to run post-season VACUUM:', e);
       }
+    }
+
+    // Nationale Meisterschaften erzeugen, sobald der 01.06. erreicht ist —
+    // auch mitten im Spiel (nicht nur beim Laden). Idempotent.
+    try {
+      ensureNationalChampionships(this.db);
+    } catch (e) {
+      console.error('Nationale Meisterschaften konnten nicht erzeugt werden:', e);
+    }
+
+    // Olympische Spiele erzeugen, sobald der 22.06. eines Olympia-Jahres
+    // erreicht ist — auch mitten im Spiel. Idempotent.
+    try {
+      ensureOlympicGames(this.db);
+    } catch (e) {
+      console.error('Olympische Spiele konnten nicht erzeugt werden:', e);
+    }
+
+    // Automatische Vertragsverlaengerung erzeugen, sobald der 01.08. erreicht
+    // ist — auch mitten im Spiel (nicht nur beim Laden). Idempotent.
+    try {
+      ensureContractRenewals(this.db);
+    } catch (e) {
+      console.error('Vertragsverlaengerungen konnten nicht verarbeitet werden:', e);
     }
 
     // advanceDay stellt den kompletten Tageszustand her (Leutnant-Peaks, Load-
@@ -447,18 +518,27 @@ export class GameStateService {
       SELECT * FROM races WHERE start_date LIKE ?
     `).all(`${oldYearStr}-%`) as any[];
 
+    const hasBonusOverride = columnExists(this.db, 'races', 'bonus_system_id');
     const insertRace = this.db.prepare(`
       INSERT INTO races (
-        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige, preferred_nationality_group, required_specs${hasBonusOverride ? ', bonus_system_id' : ''}
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasBonusOverride ? ', ?' : ''})
     `);
 
     const raceMap = new Map<number, number>();
+    // Olympische Spiele finden nur alle 4 Jahre statt (durch 4 teilbare Saisons).
+    // Sie werden NICHT ins Folgejahr geklont, sondern in Olympia-Jahren eigens von
+    // ensureOlympicGames erzeugt. So verschwinden sie im Jahr nach Olympia wieder
+    // aus dem Kalender (2032 -> nicht 2033; erst 2036 wieder).
+    const cloneNewSeasonIsOlympic = isOlympicSeason(newYear);
 
     for (const r of oldRaces) {
+      if (OLYMPIC_CATEGORY_IDS.includes(r.category_id) && !cloneNewSeasonIsOlympic) {
+        continue; // Olympia nicht in ein Nicht-Olympia-Jahr uebernehmen
+      }
       const newStartDate = r.start_date.replace(oldYearStr, newYearStr);
       const newEndDate = r.end_date.replace(oldYearStr, newYearStr);
-      const res = insertRace.run(
+      const args: any[] = [
         r.name,
         r.country_id,
         r.category_id,
@@ -468,8 +548,10 @@ export class GameStateService {
         newEndDate,
         r.prestige,
         r.preferred_nationality_group || null,
-        r.required_specs || null
-      );
+        r.required_specs || null,
+      ];
+      if (hasBonusOverride) args.push(r.bonus_system_id ?? null);
+      const res = insertRace.run(...args);
       raceMap.set(r.id, res.lastInsertRowid as number);
     }
 
@@ -1101,13 +1183,18 @@ export class GameStateService {
     for (const row of rows) {
       const seasonChanged = row.season !== currentSeason;
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
-      if (!isTier1 && !seasonChanged) {
+      const storedPeaks = parsePeakDates(row.peak_dates_json);
+      // Veraltete Peaks (kein Termin in der laufenden Saison — z.B. alte Saves,
+      // deren Peaks beim Saisonwechsel nie neu abgeleitet wurden) auch fuer
+      // Nicht-Tier-1-Fahrer heilen, sonst bleibt deren Season-Form dauerhaft 0.
+      const peaksStale = !seasonChanged && !storedPeaks.some((d) => d.startsWith(`${currentSeason}-`));
+      if (!isTier1 && !seasonChanged && !peaksStale) {
         continue;
       }
 
       const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
       const peakDates = resolveSeasonPeakDatesFromWindows(
-        seasonChanged ? [] : parsePeakDates(row.peak_dates_json),
+        seasonChanged || peaksStale ? [] : storedPeaks,
         currentSeason,
         windows,
         this.db,
@@ -1121,24 +1208,18 @@ export class GameStateService {
       if (phase?.phase === 'build') {
         activePeakDate = null;
         peakSForm = 0;
-        // S-Form only accumulates via daily advances (syncRiderDailyStates).
-        // Prevent retroactive form from the previous year: if the build window
-        // started before Jan 1 of this season, the max legitimate form is
-        // (days since Jan 1) * RISE_STEP. If the DB value exceeds this (e.g.
-        // from an older run), reset it to 0 so it builds up correctly.
-        const peakDayForBuild = isoDateToDayNumber(phase.peakDate);
-        const buildWindowStart = peakDayForBuild - SEASON_FORM_RISE_DAYS;
-        const seasonStartDay = isoDateToDayNumber(`${currentSeason}-01-01`);
-        if (buildWindowStart < seasonStartDay || seasonChanged) {
-          const currentDayNum = isoDateToDayNumber(currentDate);
-          const daysSinceSeasonStart = Math.max(0, currentDayNum - seasonStartDay);
-          const maxLegitForm = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, daysSinceSeasonStart * SEASON_FORM_RISE_STEP_RAW));
-          if (formBonus > maxLegitForm) {
-            formBonus = SEASON_FORM_MIN_RAW;
-          }
-        }
+        // Season-Form am Fahrplan ausrichten: Wert der aktuellen Position im
+        // (kanonischen) Aufbaufenster setzen, statt den gespeicherten Wert nur
+        // nach oben zu deckeln. So zeigt ein frisch geladener Spielstand die
+        // Season-Form passend zu den angezeigten Peaks (und nicht 0/veraltet).
+        formBonus = scheduledBuildForm(currentDate, phase.actualBuildStartDay, phase.peakDate);
       } else if (phase?.phase === 'decline') {
-        peakSForm = row.active_peak_date === phase.peakDate ? row.peak_s_form : row.form_bonus;
+        // Von einem echten (aufgezeichneten) Peakwert abbauen, sonst vom
+        // planmaessigen Peakwert — damit der Abbau zu den Peaks passt, auch wenn
+        // der Peaktag in dieser Sitzung nie durchlaufen wurde.
+        peakSForm = row.active_peak_date === phase.peakDate && row.peak_s_form > 0
+          ? row.peak_s_form
+          : scheduledPeakForm(phase.peakDate, phase.actualBuildStartDay);
         formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
         activePeakDate = phase.peakDate;
       } else {
@@ -1411,13 +1492,14 @@ export class GameStateService {
         activePeakDate = null;
         peakSForm = 0;
         peakRForm = 0;
-        // Only accumulate form after Jan 1 of the current season.
-        // If the build window starts in the previous year, riders begin at 0 on Jan 1.
-        const peakDayForBuild2 = isoDateToDayNumber(phase.peakDate);
-        const buildWindowStartDay = peakDayForBuild2 - SEASON_FORM_RISE_DAYS;
+        // Aufbaufenster-Start = kanonischer actualBuildStartDay (fruehestens
+        // Saisonstart bzw. Ende der Abbauphase des vorherigen Peaks), damit der
+        // Formaufbau exakt auf denselben Fenstern laeuft wie die angezeigten
+        // Peaks. Vorher wurde stur peak-56 (nur auf Saisonstart gedeckelt)
+        // verwendet — dadurch lief der Aufbau auf anderen Daten.
         const seasonStart2Day = isoDateToDayNumber(`${nextSeason}-01-01`);
         const nextDayNum = isoDateToDayNumber(nextDate);
-        const effectiveBuildStart = Math.max(buildWindowStartDay, seasonStart2Day);
+        const effectiveBuildStart = phase.actualBuildStartDay ?? Math.max(isoDateToDayNumber(phase.peakDate) - SEASON_FORM_RISE_DAYS, seasonStart2Day);
         if (nextDayNum >= effectiveBuildStart && healthStatus === 'healthy') {
           formBonus = roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, formBonus + SEASON_FORM_RISE_STEP_RAW));
         } else if (nextDayNum < effectiveBuildStart) {
@@ -1429,6 +1511,17 @@ export class GameStateService {
         peakRForm = 0;
         formBonus = 0;
         raceFormBonus = 0;
+      }
+
+      // Jahresstart: ALLE Fahrer beginnen bei 0 Season-Form. Die am 01.01. (vor
+      // dem Draft, ohne Programme) nur zufaellig gesetzten Peaks duerfen noch
+      // keinen Formaufbau ausloesen — die echten Peaks und der Aufbau werden
+      // erst beim Draft-Abschluss gesetzt (realignAllSeasonFormPeaks).
+      if (seasonChanged) {
+        formBonus = 0;
+        peakSForm = 0;
+        peakRForm = 0;
+        activePeakDate = null;
       }
 
       developmentContexts.push({
@@ -1867,6 +1960,7 @@ export class GameStateService {
       draftStatus:    (row.draft_status as any) ?? 'completed',
       draftCurrentPickNumber: row.draft_current_pick_number ?? 1,
       draftSeason:    row.draft_season ?? null,
+      renewalSelectionPending: isRenewalSelectionPending(this.db),
     };
   }
 
@@ -2102,6 +2196,56 @@ export class GameStateService {
     })();
   }
 
+  /**
+   * Leitet die Season-Form-Peaks ALLER Fahrer mit Tageszustand neu aus ihren
+   * (frisch zugewiesenen) Rennprogrammen ab und setzt die Form passend zum
+   * aktuellen Datum. Wird nach der Rollen-/Programmvergabe beim Draft-Abschluss
+   * aufgerufen, damit die Peaks zur neuen Saison und zum Programm passen.
+   */
+  private realignAllSeasonFormPeaks(season: number, currentDate: string): void {
+    if (!this.isTable('rider_daily_state')) {
+      return;
+    }
+    // Frisch verknuepfte Programme: Peak-Fenster-Cache invalidieren.
+    this.programWindowsBySeason.clear();
+
+    const rows = this.db.prepare('SELECT rider_id FROM rider_daily_state').all() as Array<{ rider_id: number }>;
+    const update = this.db.prepare(`
+      UPDATE rider_daily_state
+      SET season = ?, form_bonus = ?, peak_s_form = ?, active_peak_date = ?, peak_dates_json = ?
+      WHERE rider_id = ?
+    `);
+
+    this.db.transaction(() => {
+      for (const row of rows) {
+        // [] erzwingt die Neuableitung aus dem aktuellen Programm (Highlight-Rennen).
+        const peakDates = resolveSeasonPeakDatesFromWindows([], season, null, this.db, row.rider_id);
+        const phase = resolvePeakPhase(currentDate, peakDates);
+        let formBonus = 0;
+        let peakSForm = 0;
+        let activePeakDate: string | null = null;
+        if (phase?.phase === 'build') {
+          formBonus = scheduledBuildForm(currentDate, phase.actualBuildStartDay, phase.peakDate);
+        } else if (phase?.phase === 'decline') {
+          peakSForm = scheduledPeakForm(phase.peakDate, phase.actualBuildStartDay);
+          formBonus = resolveDeclineValue(peakSForm, phase.elapsedDays);
+          activePeakDate = phase.peakDate;
+        }
+        update.run(
+          season,
+          roundFormBonus(formBonus),
+          roundFormBonus(peakSForm),
+          activePeakDate,
+          JSON.stringify(peakDates),
+          row.rider_id,
+        );
+      }
+    })();
+
+    // Leutnants erben die frischen Peaks ihrer Kapitaene.
+    this.syncLieutenantPeakState(season);
+  }
+
   public completeDraftAndInitializeSeason(season: number, nextDate: string): void {
     this.db.transaction(() => {
       new ContractService(this.db).checkContractStatuses(season); // activate new draft contracts
@@ -2125,6 +2269,12 @@ export class GameStateService {
 
       // Initialize rider daily states for newly drafted riders
       this.ensureRiderDailyStateRows(season);
+
+      // Season-Form-Peaks JETZT — nach der Rollen- und Programmvergabe — fuer alle
+      // Fahrer aus ihrem frisch zugewiesenen Rennprogramm neu ableiten. Die am
+      // 01.01. (vor dem Draft, ohne Programme) gesetzten Peaks waren nur zufaellig;
+      // hier greift die korrekte Reihenfolge Rollen -> Programme -> Peaks.
+      this.realignAllSeasonFormPeaks(season, nextDate);
 
       // Set draft_status to completed
       this.db.prepare(`
@@ -2172,19 +2322,55 @@ function isoDateToDayNumber(isoDate: string): number {
   return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
 }
 
-function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number } | null {
+// Kanonische Formphasen-Aufloesung — identisch zu resolvePeakPhase in
+// db/mappers.ts, das die im Chart gezeichnete Formkurve speist. WICHTIG: Peaks
+// werden sortiert betrachtet und das Aufbaufenster startet fruehestens am
+// Saisonanfang bzw. am Ende der Abbauphase des vorherigen Peaks (prevDeclineEnd).
+// Frueher lief die Spiel-Logik auf einer vereinfachten Variante (Aufbau stur
+// peak-56, unsortiert) — dadurch liefen Formaufbau/-abbau auf anderen Fenstern
+// als die angezeigten Peaks.
+function resolvePeakPhase(currentDate: string, peakDates: string[]): { phase: 'build' | 'decline'; peakDate: string; elapsedDays: number; actualBuildStartDay?: number } | null {
   const currentDay = isoDateToDayNumber(currentDate);
-  for (const peakDate of peakDates) {
+  const sortedPeaks = [...peakDates].sort((a, b) => isoDateToDayNumber(a) - isoDateToDayNumber(b));
+
+  for (let i = 0; i < sortedPeaks.length; i++) {
+    const peakDate = sortedPeaks[i];
     const peakDay = isoDateToDayNumber(peakDate);
+    const prevPeakDay = i > 0 ? isoDateToDayNumber(sortedPeaks[i - 1]) : Number.NEGATIVE_INFINITY;
+
     if (currentDay >= peakDay && currentDay < peakDay + SEASON_FORM_FALL_DAYS) {
       return { phase: 'decline', peakDate, elapsedDays: currentDay - peakDay };
     }
-    if (currentDay >= peakDay - SEASON_FORM_RISE_DAYS && currentDay < peakDay) {
-      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay };
+
+    const seasonYear = peakDate.slice(0, 4);
+    const seasonStartDay = isoDateToDayNumber(`${seasonYear}-01-01`);
+    const idealBuildStart = Math.max(seasonStartDay, peakDay - SEASON_FORM_RISE_DAYS);
+    const prevDeclineEnd = prevPeakDay + SEASON_FORM_FALL_DAYS;
+    const actualBuildStartDay = Math.max(idealBuildStart, prevDeclineEnd);
+
+    if (currentDay >= actualBuildStartDay && currentDay < peakDay) {
+      return { phase: 'build', peakDate, elapsedDays: peakDay - currentDay, actualBuildStartDay };
     }
   }
 
   return null;
+}
+
+// Plan-Formwert am Peak = Anzahl Aufbautage (Fensterstart..Peak) * Aufbauschritt,
+// gedeckelt auf das Maximum. Fruehe Peaks (Fenster durch Saisonstart gekuerzt)
+// erreichen dadurch bewusst nicht die volle Form.
+function scheduledPeakForm(peakDate: string, actualBuildStartDay: number | undefined): number {
+  const peakDay = isoDateToDayNumber(peakDate);
+  const startDay = actualBuildStartDay ?? (peakDay - SEASON_FORM_RISE_DAYS);
+  return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(SEASON_FORM_MIN_RAW, (peakDay - startDay) * SEASON_FORM_RISE_STEP_RAW)));
+}
+
+// Plan-Formwert an einem Tag innerhalb der Aufbauphase.
+function scheduledBuildForm(currentDate: string, actualBuildStartDay: number | undefined, peakDate: string): number {
+  const peakDay = isoDateToDayNumber(peakDate);
+  const startDay = actualBuildStartDay ?? (peakDay - SEASON_FORM_RISE_DAYS);
+  const daysBuilt = isoDateToDayNumber(currentDate) - startDay + 1;
+  return roundFormBonus(Math.min(SEASON_FORM_MAX_RAW, Math.max(SEASON_FORM_MIN_RAW, daysBuilt * SEASON_FORM_RISE_STEP_RAW)));
 }
 
 function resolveDeclineValue(peakValue: number, elapsedDays: number): number {
@@ -2382,40 +2568,62 @@ function resolveSeasonPeakDates(peakDates: string[], season: number, db?: Databa
   return resolveSeasonPeakDatesFromWindows(peakDates, season, programWindows, db, riderId);
 }
 
-function findHighlightTriplet(races: Array<{ id: number; prestige: number; startDay: number }>, minSpacingDays: number): number[] | null {
-  const n = races.length;
-  if (n < 3) return null;
+type PeakRaceCandidate = { id: number; prestige: number; startDay: number; qualifies: boolean };
 
-  // The highest prestige race is at index 0 because races is sorted by prestige desc.
-  // We must anchor the first highlight race at index 0.
-  const firstIndex = 0;
-  let bestPair: [number, number] | null = null;
-  let maxPrestigeSum = -1;
-
-  for (let j = 1; j < n; j++) {
-    if (Math.abs(races[firstIndex].startDay - races[j].startDay) < minSpacingDays) {
-      continue;
-    }
-    for (let k = j + 1; k < n; k++) {
-      if (Math.abs(races[firstIndex].startDay - races[k].startDay) < minSpacingDays) {
-        continue;
-      }
-      if (Math.abs(races[j].startDay - races[k].startDay) < minSpacingDays) {
-        continue;
-      }
-      // Found a valid triplet containing index 0!
-      const prestigeSum = races[firstIndex].prestige + races[j].prestige + races[k].prestige;
-      if (prestigeSum > maxPrestigeSum) {
-        maxPrestigeSum = prestigeSum;
-        bestPair = [j, k];
-      }
+// Greedy: nimmt die Rennen mit dem hoechsten Prestige zuerst und ueberspringt
+// jedes, das den Mindestabstand zu einem bereits gewaehlten Peak verletzt
+// ("das naechst bessere Rennen"). `pool` muss nach Prestige absteigend sortiert
+// sein. `into` erlaubt das Auffuellen einer bereits teilweise gewaehlten Liste.
+function pickPeaksByPrestige(
+  pool: PeakRaceCandidate[],
+  need: number,
+  minSpacingDays: number,
+  into: PeakRaceCandidate[] = [],
+): PeakRaceCandidate[] {
+  const chosen = [...into];
+  for (const race of pool) {
+    if (chosen.length >= need) break;
+    if (chosen.some((c) => c.id === race.id)) continue;
+    if (chosen.every((c) => Math.abs(c.startDay - race.startDay) >= minSpacingDays)) {
+      chosen.push(race);
     }
   }
+  return chosen;
+}
 
-  if (bestPair !== null) {
-    return [firstIndex, bestPair[0], bestPair[1]];
+// Zufaellig: fuellt die Peak-Liste aus dem Pool auf, solange der Mindestabstand
+// eingehalten wird. Wird fuer die Fallbacks (Top-15-Prestige bzw. alle Rennen)
+// genutzt.
+function pickPeaksRandomly(
+  pool: PeakRaceCandidate[],
+  need: number,
+  minSpacingDays: number,
+  into: PeakRaceCandidate[] = [],
+): PeakRaceCandidate[] {
+  const chosen = [...into];
+  while (chosen.length < need) {
+    const candidates = pool.filter(
+      (race) => !chosen.some((c) => c.id === race.id)
+        && chosen.every((c) => Math.abs(c.startDay - race.startDay) >= minSpacingDays),
+    );
+    if (candidates.length === 0) break;
+    chosen.push(candidates[Math.floor(Math.random() * candidates.length)]);
   }
-  return null;
+  return chosen;
+}
+
+// Verschiebt jeden Peak um ±14 Tage (wie bisher) und stellt anschliessend den
+// Mindestabstand zwischen den Peaks sicher.
+function finalizePeakDates(picked: PeakRaceCandidate[]): string[] {
+  const days = picked
+    .map((race) => race.startDay + (Math.floor(Math.random() * 29) - 14))
+    .sort((a, b) => a - b);
+  for (let i = 1; i < days.length; i += 1) {
+    if (days[i] - days[i - 1] < PEAK_MIN_SPACING_DAYS) {
+      days[i] = days[i - 1] + PEAK_MIN_SPACING_DAYS;
+    }
+  }
+  return days.map(dayNumberToIsoDate);
 }
 
 function matchesProgramRaces(db: Database.Database | undefined, riderId: number | undefined, season: number, peakDates: string[]): boolean {
@@ -2481,13 +2689,34 @@ function generateHighlightBasedPeakDates(
     return null;
   }
   try {
+    // Je Programmrennen: Prestige, Kategorie und der OVR-Rang des Fahrers im
+    // Teilnehmerfeld seines Teams (= Teamkollegen mit demselben Rennen im
+    // Programm). teammates_stronger = Anzahl staerkerer Teamkollegen; Rang =
+    // teammates_stronger + 1.
     const rows = db.prepare(`
-      SELECT r.id, r.name, r.start_date, r.end_date, r.is_stage_race, r.prestige
+      SELECT r.id, r.start_date, r.end_date, r.is_stage_race, r.prestige, r.category_id,
+        (
+          SELECT COUNT(*)
+          FROM rider_season_programs rsp2
+          JOIN race_program_races rpr2 ON rpr2.program_id = rsp2.program_id AND rpr2.race_id = r.id
+          JOIN riders ri2 ON ri2.id = rsp2.rider_id
+          JOIN sta_country c2 ON c2.id = ri2.country_id
+          WHERE rsp2.season = ?
+            AND me.active_team_id IS NOT NULL
+            AND ri2.active_team_id = me.active_team_id
+            AND ri2.is_retired = 0
+            AND ri2.overall_rating > me.overall_rating
+            AND (
+              rpr2.allowed_program_group_ids IS NULL
+              OR rpr2.allowed_program_group_ids = ''
+              OR ('|' || rpr2.allowed_program_group_ids || '|') LIKE ('%|' || c2.program_group_id || '|%')
+            )
+        ) AS teammates_stronger
       FROM rider_season_programs rsp
       JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
       JOIN races r ON r.id = rpr.race_id
-      JOIN riders ON riders.id = rsp.rider_id
-      JOIN sta_country ON sta_country.id = riders.country_id
+      JOIN riders me ON me.id = rsp.rider_id
+      JOIN sta_country ON sta_country.id = me.country_id
       WHERE rsp.rider_id = ? AND rsp.season = ?
         AND substr(r.start_date, 1, 4) = ?
         AND (
@@ -2495,48 +2724,58 @@ function generateHighlightBasedPeakDates(
           OR rpr.allowed_program_group_ids = ''
           OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
         )
-    `).all(riderId, season, String(season)) as Array<{ id: number; name: string; start_date: string; end_date: string; is_stage_race: number; prestige: number }>;
+    `).all(season, riderId, season, String(season)) as Array<{
+      id: number; start_date: string; end_date: string; is_stage_race: number;
+      prestige: number; category_id: number; teammates_stronger: number;
+    }>;
 
-    if (rows.length >= 3) {
-      const races = rows
-        .map(row => {
-          let startDay = isoDateToDayNumber(row.start_date);
-          if (row.is_stage_race === 1 && row.end_date) {
-            const endDay = isoDateToDayNumber(row.end_date);
-            if (!isNaN(endDay)) {
-              startDay = Math.floor((startDay + endDay) / 2);
-            }
+    if (rows.length < 3) {
+      return null;
+    }
+
+    const races: PeakRaceCandidate[] = rows
+      .map((row) => {
+        let startDay = isoDateToDayNumber(row.start_date);
+        if (row.is_stage_race === 1 && row.end_date) {
+          const endDay = isoDateToDayNumber(row.end_date);
+          if (!isNaN(endDay)) {
+            startDay = Math.floor((startDay + endDay) / 2);
           }
-          return {
-            id: row.id,
-            name: row.name,
-            prestige: row.prestige,
-            startDay
-          };
-        })
-        .filter(r => !isNaN(r.startDay));
-
-      races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
-
-      let chosenIndices: number[] | null = null;
-      const thresholds = [70, 56, 42, 28]; // 10, 8, 6, 4 weeks
-      for (const spacing of thresholds) {
-        chosenIndices = findHighlightTriplet(races, spacing);
-        if (chosenIndices !== null) {
-          break;
         }
-      }
+        const topN = row.category_id === TOUR_DE_FRANCE_CATEGORY_ID
+          ? PEAK_QUALIFY_TOP_N_TDF
+          : PEAK_QUALIFY_TOP_N;
+        return {
+          id: row.id,
+          prestige: row.prestige,
+          startDay,
+          qualifies: (row.teammates_stronger + 1) <= topN,
+        };
+      })
+      .filter((r) => !isNaN(r.startDay));
 
-      if (chosenIndices !== null) {
-        const chosenRaces = chosenIndices.map(idx => races[idx]);
-        const peakDays = chosenRaces.map(r => {
-          const shift = Math.floor(Math.random() * 29) - 14; // [-14, 14]
-          return r.startDay + shift;
-        });
-        return peakDays
-          .sort((a, b) => a - b)
-          .map(dayNumberToIsoDate);
-      }
+    // Prestige absteigend (bei Gleichstand frueheres Rennen, dann ID) — so nimmt
+    // die Auswahl immer "das naechst bessere Rennen".
+    races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
+
+    // 1) Primaer: nur Rennen, bei denen der Fahrer im Team-Rang unter der Grenze
+    //    liegt, hoechstes Prestige zuerst, Mindestabstand eingehalten.
+    const qualified = races.filter((r) => r.qualifies);
+    let picked = pickPeaksByPrestige(qualified, 3, PEAK_MIN_SPACING_DAYS);
+
+    // 2) Reichen die qualifizierten Rennen nicht fuer drei Peaks, zufaellig aus
+    //    den Top-15-Prestige-Rennen auffuellen.
+    if (picked.length < 3) {
+      picked = pickPeaksRandomly(races.slice(0, PEAK_PRESTIGE_POOL_SIZE), 3, PEAK_MIN_SPACING_DAYS, picked);
+    }
+
+    // 3) Immer noch keine drei Peaks: auf alle Rennen des Fahrers erweitern.
+    if (picked.length < 3) {
+      picked = pickPeaksRandomly(races, 3, PEAK_MIN_SPACING_DAYS, picked);
+    }
+
+    if (picked.length === 3) {
+      return finalizePeakDates(picked);
     }
   } catch (err) {
     console.error(`Error generating highlight-based peaks for rider ${riderId}:`, err);
@@ -2555,14 +2794,6 @@ function resolveSeasonPeakDatesFromWindows(
   db?: Database.Database,
   riderId?: number,
 ): string[] {
-  const programRanges = programWindows == null
-    ? null
-    : [
-      resolveIsoWeekDayBounds(season, programWindows.peak1Min, programWindows.peak1Max),
-      resolveIsoWeekDayBounds(season, programWindows.peak2Min, programWindows.peak2Max),
-      resolveIsoWeekDayBounds(season, programWindows.peak3Min, programWindows.peak3Max),
-    ];
-
   const normalized = [...new Set(peakDates)]
     .filter((peakDate: any) => peakDate.startsWith(`${season}-`))
     .sort((left: any, right: any) => isoDateToDayNumber(left) - isoDateToDayNumber(right));
@@ -2584,13 +2815,15 @@ function resolveSeasonPeakDatesFromWindows(
     return isoDateToDayNumber(peakDate) - isoDateToDayNumber(previousPeak) >= PEAK_MIN_SPACING_DAYS;
   });
 
-  const matchesRaces = db && riderId != null ? matchesProgramRaces(db, riderId, season, normalized) : (
-    programRanges == null
-      ? true
-      : normalized.every((peakDate: any, index: any) => isWithinDayRange(peakDate, programRanges[index]))
-  );
-
-  if (hasValidSpacing && matchesRaces) {
+  // WICHTIG: Sind bereits 3 gueltig verteilte Peaks der laufenden Saison
+  // gespeichert, werden sie BEHALTEN — auch wenn sie (noch) nicht exakt an
+  // Programmrennen liegen. Frueher wurde hier zusaetzlich matchesProgramRaces
+  // geprueft und bei Fehlschlag jeden Tag neu (zufaellig) gewuerfelt; fehlten
+  // die Programm-Verknuepfungen (alte Saves), driftete das Aufbaufenster
+  // taeglich und die Season-Form baute nie auf. Die Ausrichtung an
+  // Programmrennen passiert jetzt gezielt bei der Neuvergabe (Saisonwechsel,
+  // Draft-Abschluss, Programm-Reparatur), nicht mehr im Tageslauf.
+  if (hasValidSpacing) {
     return normalized;
   }
 

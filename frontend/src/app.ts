@@ -67,14 +67,23 @@ import {
   openTeamStats,
   initTeamStatsListeners,
 } from './views/teamStats';
+import { initRaceDetailListeners } from './views/raceDetail';
+import { initContractRenewalView } from './views/contractRenewal';
 import {
   initLeaderboardsView,
   showLeaderboardsView,
+  openBadgeInLeaderboards,
 } from './views/leaderboards';
 import {
   initCalendarView,
   showCalendarView,
 } from './views/calendar';
+import {
+  initRivalriesView,
+  showRivalriesView,
+  openRivalryCard,
+} from './views/rivalries';
+import { initGlobalSearch } from './views/globalSearch';
 import { RaceSimView } from './race-sim/RaceSimView';
 import {
   initRaceProgramsView,
@@ -149,6 +158,7 @@ function initAppListeners(): void {
       if (view === 'injuries') void loadInjuries();
       if (view === 'season-standings') void loadSeasonStandings(true);
       if (view === 'leaderboards') void showLeaderboardsView();
+      if (view === 'rivalries') showRivalriesView();
       if (view === 'calendar') showCalendarView();
       if (view === 'race-programs') void loadRaceProgramsData();
       if (view === 'stage-editor-stages' || view === 'stage-editor-climbs') void loadStageEditorOverview();
@@ -171,6 +181,38 @@ function initAppListeners(): void {
     openRiderStats(riderId);
   });
 
+  // Klick auf ein Badge in der riderStats-Ansicht -> Badge-Tab in
+  // Statistiken & Rekorde mit allen Fahrern, die dieses Badge halten.
+  document.body.addEventListener('click', (event) => {
+    const badgeCard = (event.target as Element).closest<HTMLElement>('[data-hof-badge-key]');
+    if (!badgeCard) {
+      return;
+    }
+    const badgeKey = badgeCard.dataset['hofBadgeKey'];
+    if (!badgeKey) {
+      return;
+    }
+    hideModal('riderStats');
+    activateView('leaderboards');
+    openBadgeInLeaderboards(badgeKey);
+  });
+
+  // Klick auf den Rivalen-Chip im riderStats-Header -> Rivalen-View mit der
+  // Rivalitaetskarte des Paares.
+  document.body.addEventListener('click', (event) => {
+    const chip = (event.target as Element).closest<HTMLElement>('[data-rivalry-pair]');
+    if (!chip) {
+      return;
+    }
+    const key = chip.dataset['rivalryPair'];
+    if (!key) {
+      return;
+    }
+    hideModal('riderStats');
+    activateView('rivalries');
+    openRivalryCard(key);
+  });
+
   // Global shared body team link click listener
   document.body.addEventListener('click', (event) => {
     const teamButton = (event.target as Element).closest<HTMLButtonElement>('button.app-team-link[data-team-id]');
@@ -189,6 +231,7 @@ function initAppListeners(): void {
   // Global modals closes events registration
   $('btn-cancel-new').addEventListener('click', () => hideModal('newCareer'));
   $('btn-close-race-stages').addEventListener('click', () => hideModal('raceStages'));
+  $('btn-close-race-detail').addEventListener('click', () => hideModal('raceDetail'));
   $('btn-close-stage-profile').addEventListener('click', () => hideModal('stageProfile'));
   $('btn-close-rider-program').addEventListener('click', () => hideModal('riderProgram'));
   $('btn-close-rider-stats').addEventListener('click', () => hideModal('riderStats'));
@@ -218,8 +261,12 @@ function initAppListeners(): void {
   initStageEditorListeners();
   initRiderStatsListeners();
   initTeamStatsListeners();
+  initRaceDetailListeners();
   initSeasonStandingsListeners();
+  initContractRenewalView();
   initLeaderboardsView();
+  initRivalriesView();
+  initGlobalSearch();
   initRaceProgramsView();
   initDraftListeners();
 }

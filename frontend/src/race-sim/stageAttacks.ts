@@ -1,4 +1,5 @@
 import type { ParsedStageSegment, ParsedStageSummary, Rider, Stage } from '../../../shared/types';
+import { createRandomSeed, createSeededRandom, randomInteger, shuffleInPlace, type RandomSource } from '../../../shared/rng';
 import type { FavoriteItem } from './stageFavorites';
 
 export interface PrecalculatedStageAttack {
@@ -51,28 +52,14 @@ export const COUNTER_ATTACK_DURATION_SECONDS = 180;
 export const ATTACK_SKILL_BONUS = 10;
 const SECOND_ATTACK_MIN_DISTANCE_METERS = 8000;
 
-function randomInteger(min: number, max: number, randomValue = Math.random()): number {
-  const normalizedMin = Math.ceil(Math.min(min, max));
-  const normalizedMax = Math.floor(Math.max(min, max));
-  return Math.floor(randomValue * ((normalizedMax - normalizedMin) + 1)) + normalizedMin;
-}
-
-function shuffleInPlace<T>(values: T[]): T[] {
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomInteger(0, index);
-    [values[index], values[swapIndex]] = [values[swapIndex]!, values[index]!];
-  }
-  return values;
-}
-
-function sampleWithoutReplacement<T>(values: T[], count: number): T[] {
+function sampleWithoutReplacement<T>(random: RandomSource, values: T[], count: number): T[] {
   if (count <= 0 || values.length === 0) {
     return [];
   }
-  return shuffleInPlace([...values]).slice(0, Math.min(count, values.length));
+  return shuffleInPlace(random, [...values]).slice(0, Math.min(count, values.length));
 }
 
-function sampleWeightedWithoutReplacement<T>(values: T[], count: number, resolveWeight: (value: T) => number): T[] {
+function sampleWeightedWithoutReplacement<T>(random: RandomSource, values: T[], count: number, resolveWeight: (value: T) => number): T[] {
   if (count <= 0 || values.length === 0) {
     return [];
   }
@@ -82,11 +69,11 @@ function sampleWeightedWithoutReplacement<T>(values: T[], count: number, resolve
   while (pool.length > 0 && selected.length < count) {
     const totalWeight = pool.reduce((sum, value) => sum + Math.max(0, resolveWeight(value)), 0);
     if (totalWeight <= 0) {
-      selected.push(...sampleWithoutReplacement(pool, count - selected.length));
+      selected.push(...sampleWithoutReplacement(random, pool, count - selected.length));
       break;
     }
 
-    let threshold = Math.random() * totalWeight;
+    let threshold = random() * totalWeight;
     let selectedIndex = pool.length - 1;
     for (let index = 0; index < pool.length; index += 1) {
       threshold -= Math.max(0, resolveWeight(pool[index]!));
@@ -138,7 +125,7 @@ function buildAttackWindows(stage: Stage, stageSummary: ParsedStageSummary): Att
   });
 }
 
-function sampleTriggerFromWindows(windows: AttackWindow[], excludeDistanceMeters?: number): {
+function sampleTriggerFromWindows(random: RandomSource, windows: AttackWindow[], excludeDistanceMeters?: number): {
   triggerDistanceMeters: number;
   sourceSegmentStartMeters: number;
   sourceSegmentEndMeters: number;
@@ -160,7 +147,7 @@ function sampleTriggerFromWindows(windows: AttackWindow[], excludeDistanceMeters
     return null;
   }
 
-  const selectedWindow = eligibleWindows[randomInteger(0, eligibleWindows.length - 1)];
+  const selectedWindow = eligibleWindows[randomInteger(random, 0, eligibleWindows.length - 1)];
   if (!selectedWindow) {
     return null;
   }
@@ -173,7 +160,7 @@ function sampleTriggerFromWindows(windows: AttackWindow[], excludeDistanceMeters
 
   let attempts = 0;
   while (attempts < 12) {
-    const triggerDistanceMeters = randomInteger(minTrigger, maxTrigger);
+    const triggerDistanceMeters = randomInteger(random, minTrigger, maxTrigger);
     if (excludeDistanceMeters == null || Math.abs(triggerDistanceMeters - excludeDistanceMeters) >= SECOND_ATTACK_MIN_DISTANCE_METERS) {
       return {
         triggerDistanceMeters,
@@ -203,6 +190,7 @@ export function precalculateStageAttacks(
   stage: Stage,
   stageSummary: ParsedStageSummary,
   resolveAttackWeight: (rider: Rider) => number = () => 1,
+  random: RandomSource = createSeededRandom(createRandomSeed()),
 ): PrecalculatedStageAttack[] {
   const validTop15 = top15Riders.slice(0, 15);
   const attackWindows = buildAttackWindows(stage, stageSummary);
@@ -210,12 +198,12 @@ export function precalculateStageAttacks(
     return [];
   }
 
-  const desiredPrimaryAttackers = randomInteger(MIN_PRIMARY_ATTACKERS, Math.min(MAX_PRIMARY_ATTACKERS, validTop15.length));
-  const selectedAttackers = sampleWeightedWithoutReplacement(validTop15, desiredPrimaryAttackers, resolveAttackWeight);
+  const desiredPrimaryAttackers = randomInteger(random, MIN_PRIMARY_ATTACKERS, Math.min(MAX_PRIMARY_ATTACKERS, validTop15.length));
+  const selectedAttackers = sampleWeightedWithoutReplacement(random, validTop15, desiredPrimaryAttackers, resolveAttackWeight);
   const attacks: PrecalculatedStageAttack[] = [];
 
   for (const rider of selectedAttackers) {
-    const primaryTrigger = sampleTriggerFromWindows(attackWindows);
+    const primaryTrigger = sampleTriggerFromWindows(random, attackWindows);
     if (!primaryTrigger) {
       continue;
     }
@@ -224,7 +212,7 @@ export function precalculateStageAttacks(
       riderId: rider.id,
       attackNumber: 1,
       triggerDistanceMeters: primaryTrigger.triggerDistanceMeters,
-      durationSeconds: randomInteger(ATTACK_DURATION_MIN_SECONDS, ATTACK_DURATION_MAX_SECONDS),
+      durationSeconds: randomInteger(random, ATTACK_DURATION_MIN_SECONDS, ATTACK_DURATION_MAX_SECONDS),
       sourceSegmentStartMeters: primaryTrigger.sourceSegmentStartMeters,
       sourceSegmentEndMeters: primaryTrigger.sourceSegmentEndMeters,
       isCounterAttack: false,
@@ -237,14 +225,14 @@ export function precalculateStageAttacks(
 
   const attackersWithPrimary = attacks.map((attack) => attack.riderId);
   const secondAttackCount = Math.floor(attackersWithPrimary.length * 0.5);
-  const secondAttackRiderIds = new Set(sampleWithoutReplacement(attackersWithPrimary, secondAttackCount));
+  const secondAttackRiderIds = new Set(sampleWithoutReplacement(random, attackersWithPrimary, secondAttackCount));
 
   for (const primaryAttack of [...attacks]) {
     if (!secondAttackRiderIds.has(primaryAttack.riderId)) {
       continue;
     }
 
-    const secondTrigger = sampleTriggerFromWindows(attackWindows, primaryAttack.triggerDistanceMeters);
+    const secondTrigger = sampleTriggerFromWindows(random, attackWindows, primaryAttack.triggerDistanceMeters);
     if (!secondTrigger) {
       continue;
     }
@@ -253,7 +241,7 @@ export function precalculateStageAttacks(
       riderId: primaryAttack.riderId,
       attackNumber: 2,
       triggerDistanceMeters: secondTrigger.triggerDistanceMeters,
-      durationSeconds: randomInteger(ATTACK_DURATION_MIN_SECONDS, ATTACK_DURATION_MAX_SECONDS),
+      durationSeconds: randomInteger(random, ATTACK_DURATION_MIN_SECONDS, ATTACK_DURATION_MAX_SECONDS),
       sourceSegmentStartMeters: secondTrigger.sourceSegmentStartMeters,
       sourceSegmentEndMeters: secondTrigger.sourceSegmentEndMeters,
       isCounterAttack: false,
@@ -267,7 +255,12 @@ export function precalculateStageAttacks(
   ));
 }
 
-export function resolveCounterAttackStarterIds(top20Favorites: FavoriteItem[], attackerRiderId: number, activeAttackerIds: ReadonlySet<number>): number[] {
+export function resolveCounterAttackStarterIds(
+  top20Favorites: FavoriteItem[],
+  attackerRiderId: number,
+  activeAttackerIds: ReadonlySet<number>,
+  random: RandomSource = createSeededRandom(createRandomSeed()),
+): number[] {
   if (top20Favorites.length === 0) {
     return [];
   }
@@ -300,14 +293,14 @@ export function resolveCounterAttackStarterIds(top20Favorites: FavoriteItem[], a
   }
 
   const teamRepresentatives = [...eligibleFavoritesByTeamId.values()]
-    .map((teamFavorites) => sampleWithoutReplacement(teamFavorites, 1)[0] ?? null)
+    .map((teamFavorites) => sampleWithoutReplacement(random, teamFavorites, 1)[0] ?? null)
     .filter((favorite): favorite is FavoriteItem => favorite != null && favorite.riderId != null);
   if (teamRepresentatives.length === 0) {
     return [];
   }
 
-  const desiredCounterCount = Math.min(randomInteger(0, 3), teamRepresentatives.length);
-  return sampleWithoutReplacement(teamRepresentatives, desiredCounterCount)
+  const desiredCounterCount = Math.min(randomInteger(random, 0, 3), teamRepresentatives.length);
+  return sampleWithoutReplacement(random, teamRepresentatives, desiredCounterCount)
     .map((favorite) => favorite.riderId as number);
 }
 

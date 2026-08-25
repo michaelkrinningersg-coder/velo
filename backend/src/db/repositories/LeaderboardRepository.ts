@@ -54,20 +54,21 @@ export class LeaderboardRepository {
     scope: 'riders' | 'teams',
     metricKey: string,
     period: 'season' | 'alltime' | 'live',
-    currentSeason: number
+    currentSeason: number,
+    includeAll = false
   ): LeaderboardRow[] {
     if (period === 'live' && scope === 'teams') {
       return []; // Live metrics only supported for riders
     }
 
     if (scope === 'riders') {
-      return this.getRiderLeaderboard(metricKey, period, currentSeason);
+      return this.getRiderLeaderboard(metricKey, period, currentSeason, includeAll);
     } else {
       return this.getTeamLeaderboard(metricKey, period as 'season' | 'alltime', currentSeason);
     }
   }
 
-  private getRiderLeaderboard(metricKey: string, period: 'season' | 'alltime' | 'live', currentSeason: number): LeaderboardRow[] {
+  private getRiderLeaderboard(metricKey: string, period: 'season' | 'alltime' | 'live', currentSeason: number, includeAll = false): LeaderboardRow[] {
     let query = '';
     let params: any[] = [];
     let valueFormatter: (row: any) => string | number = (r) => r.val;
@@ -181,7 +182,7 @@ export class LeaderboardRepository {
       `;
       valueFormatter = (r) => `${r.val} J. (${r.race_category.replace('World Tour - ', '')})`;
 
-    } else if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey === 'wins') {
+    } else if (metricKey.startsWith('wins_terrain_') || metricKey.startsWith('wins_weather_') || metricKey.startsWith('wins_class_') || metricKey === 'wins') {
       // 3. Stage Wins
       let extraFilter = '';
       let terrainOrWeather: any = null;
@@ -191,6 +192,12 @@ export class LeaderboardRepository {
       } else if (metricKey.startsWith('wins_weather_')) {
         terrainOrWeather = parseInt(metricKey.replace('wins_weather_', ''), 10);
         extraFilter = `AND s.rolled_weather_id = ?`;
+      } else if (metricKey.startsWith('wins_class_')) {
+        // Siege in einer Rennklasse (Kategorie-ID), z.B. Monument (3),
+        // One Day High (7) / Middle (8) / Low (9). Subquery statt JOIN, damit
+        // die bestehende Params-Push-Logik (terrainOrWeather) unveraendert bleibt.
+        terrainOrWeather = parseInt(metricKey.replace('wins_class_', ''), 10);
+        extraFilter = `AND s.race_id IN (SELECT id FROM races WHERE category_id = ?)`;
       }
 
       if (period === 'season') {
@@ -919,6 +926,63 @@ export class LeaderboardRepository {
       }
       valueFormatter = (r) => typeof r.val === 'number' ? r.val.toFixed(2) : r.val;
 
+    } else if (metricKey.startsWith('catagg_')) {
+      // 8b. Aggregierte Kategorie-Statistiken für Hall-of-Fame-Badges.
+      // Summiert rider_career_category_stats exakt so, wie es der Badge-Builder
+      // im Frontend tut (sum((c) => ...)), damit Halterliste & Sortierung dem
+      // Badge 1:1 entsprechen. Alle Fahrer (inkl. Retired), keine Top-100-Grenze
+      // (via includeAll-Transform). Nur eine feste Whitelist an Ausdrücken.
+      if (!tableExists(this.db, 'rider_career_category_stats')) {
+        return [];
+      }
+      const suffix = metricKey.replace('catagg_', '');
+      const EXPR: Record<string, string> = {
+        podiums: 'rcs.gc_wins + rcs.gc_second + rcs.gc_third + rcs.stage_wins + rcs.stage_second + rcs.stage_third + rcs.one_day_wins + rcs.one_day_second + rcs.one_day_third',
+        climb_wins: 'rcs.climb_wins_hc + rcs.climb_wins_1 + rcs.climb_wins_2 + rcs.climb_wins_3 + rcs.climb_wins_4',
+        hc_climbs: 'rcs.climb_wins_hc',
+        top_tens: 'rcs.gc_top_ten + rcs.stage_top_ten + rcs.one_day_top_ten',
+        second_places: 'rcs.gc_second + rcs.stage_second + rcs.one_day_second',
+        sprint_wins: 'rcs.sprint_wins',
+        win_rouleur: 'rcs.win_flat + rcs.win_rolling',
+        win_puncheur: 'rcs.win_hilly + rcs.win_hilly_difficult',
+        win_summit: 'rcs.win_mountain + rcs.win_high_mountain',
+        win_chrono: 'rcs.win_itt + rcs.win_ttt',
+        win_cobble: 'rcs.win_cobble + rcs.win_cobble_hill',
+        win_rain: 'rcs.win_weather_3 + rcs.win_weather_4',
+        win_weather_2: 'rcs.win_weather_2',
+        win_weather_4: 'rcs.win_weather_4',
+        win_weather_5: 'rcs.win_weather_5',
+        win_weather_6: 'rcs.win_weather_6',
+        win_weather_7: 'rcs.win_weather_7',
+        monument_wins: "CASE WHEN rcs.category_name = 'World Tour - Monument' THEN rcs.one_day_wins ELSE 0 END",
+      };
+      const expr = EXPR[suffix];
+      if (!expr) {
+        return [];
+      }
+      query = `
+        SELECT
+          r.id AS id,
+          r.first_name,
+          r.last_name,
+          c.code_3 AS nationality,
+          t.abbreviation AS team_abbr,
+          t.name AS team_name,
+          t.id AS team_id,
+          t.division_id AS team_division_id,
+          r.is_retired AS is_retired,
+          SUM(${expr}) AS val
+        FROM rider_career_category_stats rcs
+        JOIN riders r ON r.id = rcs.rider_id
+        JOIN sta_country c ON c.id = r.country_id
+        LEFT JOIN teams t ON t.id = r.active_team_id
+        GROUP BY r.id
+        HAVING val > 0
+        ORDER BY val DESC, r.last_name ASC
+        LIMIT 100
+      `;
+      valueFormatter = (r) => `${r.val}`;
+
     } else {
       // 9. Season stats / Career stats (crashes, defects, breakaway kms etc.)
       const isCareerField = [
@@ -1059,6 +1123,15 @@ export class LeaderboardRepository {
 
     if (!query) {
       return [];
+    }
+
+    // Badge-Modus: ALLE Halter (keine Top-100-Grenze) inkl. Retired-Fahrer
+    // (WorldTour + ProTour + Other). Zentraler Transform nur hier.
+    if (includeAll) {
+      query = query
+        .replace(/\s+AND r\.is_retired = 0/g, '')
+        .replace(/WHERE r\.is_retired = 0/g, 'WHERE 1=1')
+        .replace(/LIMIT 100\b/g, 'LIMIT 100000');
     }
 
     try {

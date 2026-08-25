@@ -42,10 +42,11 @@ import { renderStaticStageProfile } from '../race-sim/renderProfile';
 import {
   renderDashboardBroadcast,
   ensureSpotlightWinsLoaded,
+  spotlightStageId,
 } from './dashboardBroadcast';
 
 // Dynamically imported or declared interfaces to avoid circular import issues
-import { openRosterEditor, openRealtimeStage, openInstantStage } from './liveRace';
+import { openRosterEditor, openRealtimeStage, openInstantStage, openQuickStage, openOfflineStage } from './liveRace';
 
 export function raceCategoryBadge(race: Race): string {
   const categoryStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
@@ -125,7 +126,8 @@ export function renderGameState(): void {
           <div class="pending-stage-actions">
             ${rosterButton}
             <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
-            <button class="btn btn-secondary btn-sm" data-instant-stage="${pendingStage.stageId}">Instant</button>
+            <button class="btn btn-secondary btn-sm" data-quick-stage="${pendingStage.stageId}">Schnell</button>
+            <button class="btn btn-secondary btn-sm" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren">Instant</button>
           </div>
         </div>`;
     }).join('');
@@ -144,6 +146,14 @@ export function renderGameState(): void {
     pendingStagesContainer.classList.add('hidden');
     advanceButton.disabled = false;
   }
+
+  // Blockierendes Auswahlfenster (10.01.): Vertragsverlängerungs-Ziele wählen.
+  if (state.gameState.renewalSelectionPending) {
+    hint.textContent = 'Wähle deine Ziele für Vertragsverlängerungen, um fortzufahren.';
+    hint.classList.remove('hidden');
+    advanceButton.disabled = true;
+    void import('./contractRenewal').then((m) => m.openContractRenewalModal());
+  }
 }
 
 export function renderDashboard(): void {
@@ -156,6 +166,20 @@ export function renderDashboard(): void {
       $('view-dashboard').innerHTML = renderDashboardBroadcast();
     }
   });
+  // Echtes Höhenprofil der laufenden Etappe lazy nachladen (Spotlight-Mini-Widget).
+  void ensureSpotlightStageProfileLoaded();
+}
+
+// Laedt das Etappenprofil des Spotlight-Rennens (einmalig, gecacht in
+// state.stageSummariesByStageId) und rendert das Dashboard danach neu.
+async function ensureSpotlightStageProfileLoaded(): Promise<void> {
+  const stageId = spotlightStageId();
+  if (stageId == null) return;
+  if (state.stageSummariesByStageId[stageId] || state.stageSummaryErrorsByStageId[stageId]) return;
+  await ensureStageSummaryLoaded(stageId);
+  if (isActiveView('dashboard')) {
+    $('view-dashboard').innerHTML = renderDashboardBroadcast();
+  }
 }
 
 export async function loadRaces(): Promise<void> {
@@ -327,10 +351,11 @@ export async function openDashboardRaceStages(raceId: number): Promise<void> {
   if (!race) {
     return;
   }
-
   state.selectedDashboardRaceId = raceId;
-  renderDashboardRaceStagesModal();
-  showModal('raceStages');
+  // Renndetails-View im Broadcast-Stil (ersetzt die alte raceStages-Tabelle).
+  // Dynamischer Import bricht den Zyklus raceDetail.ts -> dashboard.ts.
+  const { openRaceDetail } = await import('./raceDetail');
+  await openRaceDetail(raceId);
 }
 
 export function renderProgramRaceRows(payload: RiderProgramRaceSummary): string {
@@ -546,7 +571,8 @@ export async function openDashboardStageProfile(stageId: number, selectedClimb: 
   }
 
   state.selectedDashboardProfileStageId = stageId;
-  $('stage-profile-title').textContent = `${location.race.name} · ${getStageDisplayName(location.stage)}`;
+  const catBadge = location.race.category?.name ? raceCategoryNameBadge(location.race) : '';
+  $('stage-profile-title').innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">${catBadge}${renderStageProfileBadge(location.stage.profile)}<span>${esc(location.race.name)} · ${esc(getStageDisplayName(location.stage))}</span></span>`;
   const climbMeta = selectedClimb != null
     ? ` · Anstieg ${selectedClimb.climbIndex}: ${selectedClimb.name}${selectedClimb.category != null ? ` · Kat. ${selectedClimb.category}` : ''} · ${selectedClimb.startKm.toFixed(1).replace('.', ',')}-${selectedClimb.endKm.toFixed(1).replace('.', ',')} km · Climb Score ${selectedClimb.climbScore}`
     : '';
@@ -581,6 +607,14 @@ export function initDashboardListeners(): void {
       return;
     }
 
+    const quickButton = (event.target as Element).closest<HTMLButtonElement>('button[data-quick-stage]');
+    if (quickButton) {
+      const stageId = Number(quickButton.dataset['quickStage']);
+      if (!Number.isFinite(stageId)) return;
+      void openQuickStage(stageId);
+      return;
+    }
+
     const instantButton = (event.target as Element).closest<HTMLButtonElement>('button[data-instant-stage]');
     if (instantButton) {
       const stageId = Number(instantButton.dataset['instantStage']);
@@ -611,10 +645,22 @@ export function initDashboardListeners(): void {
       if (Number.isFinite(stageId)) void openRosterEditor(stageId);
       return;
     }
+    const quickButton = target.closest<HTMLButtonElement>('button[data-quick-stage]');
+    if (quickButton) {
+      const stageId = Number(quickButton.dataset['quickStage']);
+      if (Number.isFinite(stageId)) void openQuickStage(stageId);
+      return;
+    }
     const instantButton = target.closest<HTMLButtonElement>('button[data-instant-stage]');
     if (instantButton) {
       const stageId = Number(instantButton.dataset['instantStage']);
       if (Number.isFinite(stageId)) void openInstantStage(stageId);
+      return;
+    }
+    const liveButton = target.closest<HTMLButtonElement>('button[data-live-stage]');
+    if (liveButton) {
+      const stageId = Number(liveButton.dataset['liveStage']);
+      if (Number.isFinite(stageId)) void openRealtimeStage(stageId, true);
       return;
     }
 
@@ -697,6 +743,9 @@ export async function executeDayAdvance(): Promise<boolean> {
     const newSeason = state.gameState?.season;
     if (oldSeason && newSeason && newSeason > oldSeason) {
       stopAutoProgress(); // Auto-Progress des Tageswechsels stoppen
+      // Saison-Rückblick der abgelaufenen Saison — vor dem Draft.
+      const { showSeasonWrapped } = await import('./seasonWrapped');
+      await showSeasonWrapped(oldSeason);
       const { startDraftPresentation } = await import('./draft');
       const { activateView } = await import('../state');
       activateView('draft');
@@ -760,7 +809,10 @@ async function runAutoProgressLoop(): Promise<void> {
     let success = false;
     if (pendingStages.length > 0) {
       const nextStage = pendingStages[0];
-      success = await openInstantStage(nextStage.stageId, true);
+      // Auto-Weiter benutzt den Standardmodus — das ist die Stelle, an der die
+      // Quick Simulation den Unterschied macht: eine Etappe kostet dort
+      // Millisekunden statt einer Sekunde.
+      success = await openOfflineStage(nextStage.stageId, undefined, true);
     } else {
       success = await executeDayAdvance();
     }

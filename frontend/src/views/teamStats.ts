@@ -15,7 +15,7 @@ import {
   FLAG_CODE_BY_CODE3,
 } from '../state';
 import { renderStageProfileBadge } from './dashboard';
-import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization } from '../../../shared/types';
+import type { TeamStatsPayload, TeamStatsRider, TeamStatsTopResult, TeamSuccessStats, RiderSpecialization, TeamChampionTitle, ChampionTitleType } from '../../../shared/types';
 import { RIDER_STATS_ICONS, getRankColor, renderRiderStatsRaceBadge, renderRiderStatsCategoryBadge, resolveCurrentSeasonRank, renderRiderStatsRankBadge, renderProfileWinBadge, renderWeatherWinBadge, renderStatusDotsColumn, resolveRiderStatsFinalTypeClassName, getRiderStatsRowTypeLabel, renderFilterButton } from './riderStats';
 import { renderStageEditorScoreBadge } from './stageEditor';
 
@@ -331,6 +331,7 @@ export function renderTeamStatsTabs(): string {
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="career" aria-selected="${state.teamStatsTab === 'career' ? 'true' : 'false'}">Erfolgsbilanz</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="contracts" aria-selected="${state.teamStatsTab === 'contracts' ? 'true' : 'false'}">Kader & Verträge</button>
       <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'transfers' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="transfers" aria-selected="${state.teamStatsTab === 'transfers' ? 'true' : 'false'}">Transfers</button>
+      <button type="button" class="team-detail-page-tab${state.teamStatsTab === 'champions' ? ' team-detail-page-tab-active' : ''}" data-team-stats-tab="champions" aria-selected="${state.teamStatsTab === 'champions' ? 'true' : 'false'}">Meister</button>
     </div>`;
 }
 
@@ -369,6 +370,10 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     } else {
       filteredRows = filteredRows.filter(r => r.raceCategoryName === filterVal);
     }
+  }
+  if (state.teamStatsTopResultsFilterRaceName != null) {
+    // Nach Rennname filtern -> alle Saisons dieses Rennens (Renn-IDs wechseln je Saison).
+    filteredRows = filteredRows.filter(r => r.raceName === state.teamStatsTopResultsFilterRaceName);
   }
   if (state.teamStatsTopResultsFilterSeason != null) {
     filteredRows = filteredRows.filter(r => r.season === state.teamStatsTopResultsFilterSeason);
@@ -437,6 +442,24 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     }
   }).join('');
 
+  // Rennen-Optionen, vorgefiltert durch die aktuell gewaehlte Rennklasse.
+  const rawTeamCatFilter = state.teamStatsTopResultsFilterCategory;
+  const effectiveTeamCatName = rawTeamCatFilter
+    ? (rawTeamCatFilter.endsWith('-etappen') ? rawTeamCatFilter.slice(0, -'-etappen'.length)
+      : rawTeamCatFilter.endsWith('-gc') ? rawTeamCatFilter.slice(0, -'-gc'.length)
+        : rawTeamCatFilter)
+    : null;
+  // Nur EINDEUTIGE Rennen (nach Name) — Renn-IDs wechseln je Saison, daher wuerde
+  // dasselbe Rennen sonst mehrfach erscheinen. Auswahl filtert nach Name -> alle Saisons.
+  const teamRaceOptions = Array.from(new Set(
+    payload.topResults
+      .filter(r => !effectiveTeamCatName || r.raceCategoryName === effectiveTeamCatName)
+      .map(r => r.raceName as string),
+  )).sort((a, b) => a.localeCompare(b, 'de'));
+  const teamRaceOptionsHtml = teamRaceOptions
+    .map(name => `<option value="${esc(name)}" ${state.teamStatsTopResultsFilterRaceName === name ? 'selected' : ''}>${esc(name)}</option>`)
+    .join('');
+
   const selStyle = "background:#0a1122; border:1px solid #1c2b47; border-radius:8px; color:#e2e8f0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:6px 9px; cursor:pointer;";
   const labStyle = "font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6a7a95; margin-right:8px;";
   const rowLabStyle = "font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:#5a6a85; min-width:82px; flex:0 0 auto;";
@@ -448,6 +471,13 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
           <select id="team-stats-filter-category" class="form-control" style="width:auto; ${selStyle}">
             <option value="all">Alle Rennklassen</option>
             ${categoryOptionsHtml}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="${labStyle}">Rennen</label>
+          <select id="team-stats-filter-race" class="form-control" style="width:auto; ${selStyle}">
+            <option value="all">Alle Rennen</option>
+            ${teamRaceOptionsHtml}
           </select>
         </div>
         <div style="display:flex; align-items:center;">
@@ -1148,6 +1178,113 @@ export function renderTeamStatsTransfersTab(payload: TeamStatsPayload): string {
   `;
 }
 
+// Meister-Tab: WM/EM/Nationale Meistertitel der aktuellen Teamfahrer, je Gruppe
+// getrennt nach Strasse und Zeitfahren.
+export function renderTeamStatsChampionsTab(payload: TeamStatsPayload): string {
+  const champions = payload.champions ?? [];
+
+  const CHAMPION_BADGE: Record<ChampionTitleType, string> = {
+    WM: '<span title="Weltmeister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    WM_U23: '<span title="Weltmeister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    WM_JUN: '<span title="Weltmeister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(236,72,153,.6));">🌈</span>',
+    EM: '<span title="Europameister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    EM_U23: '<span title="Europameister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    EM_JUN: '<span title="Europameister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(59,130,246,.7));">⭐</span>',
+    OLY: '<span title="Olympiasieger" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(251,191,36,.7));">🥇</span>',
+    NAT: '<span title="Nationaler Meister" style="font-size:15px;">🏅</span>',
+    CM_AO: '<span title="Asien-Ozeanien-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AO_U23: '<span title="Asien-Ozeanien-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AO_JUN: '<span title="Asien-Ozeanien-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(6,182,212,.7));">🌏</span>',
+    CM_AM: '<span title="Amerika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AM_U23: '<span title="Amerika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AM_JUN: '<span title="Amerika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(239,68,68,.7));">🌎</span>',
+    CM_AF: '<span title="Afrika-Meister" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+    CM_AF_U23: '<span title="Afrika-Meister U23" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+    CM_AF_JUN: '<span title="Afrika-Meister Junioren" style="font-size:15px;filter:drop-shadow(0 0 3px rgba(245,158,11,.7));">🌍</span>',
+  };
+
+  const renderChampionRow = (title: TeamChampionTitle): string => {
+    const badge = CHAMPION_BADGE[title.type] ?? CHAMPION_BADGE.NAT;
+    const flag = title.riderCountryCode ? renderFlag(title.riderCountryCode) : '';
+    const nameHtml = renderRiderNameLink(title.riderName, { riderId: title.riderId, teamId: payload.teamId, strong: true });
+    const context = title.type === 'NAT' && title.countryName ? ` · ${esc(title.countryName)}` : '';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid #14203a;">
+        ${badge}
+        <span style="flex:0 0 auto;">${flag}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:#e2e8f0;">${nameHtml}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;flex:0 0 auto;">Saison ${title.season}${context}</span>
+      </div>`;
+  };
+
+  const disciplines: Array<{ key: 'ROAD' | 'ITT'; label: string }> = [
+    { key: 'ROAD', label: 'Straßenrennen' },
+    { key: 'ITT', label: 'Zeitfahren' },
+  ];
+
+  const renderDisciplineColumn = (
+    type: ChampionTitleType,
+    discipline: 'ROAD' | 'ITT',
+    label: string,
+  ): string => {
+    const rows = champions.filter((c) => c.type === type && c.discipline === discipline);
+    const body = rows.length > 0
+      ? rows.map(renderChampionRow).join('')
+      : '<div style="padding:12px;color:#6a7a95;font-size:12px;">Keine Titel.</div>';
+    return `
+      <div style="border-radius:12px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #1c2b47;">
+          <span style="font-size:12px;font-weight:800;color:#e2e8f0;">${esc(label)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5f6f8a;">${rows.length}</span>
+        </div>
+        ${body}
+      </div>`;
+  };
+
+  const RAINBOW_ACCENT = 'linear-gradient(90deg,#3b82f6,#22d3ee,#4ade80,#facc15,#fb923c,#ef4444)';
+  const groups: Array<{ type: ChampionTitleType; title: string; accent: string }> = [
+    { type: 'OLY', title: 'Olympiasieger', accent: '#fbbf24' },
+    { type: 'WM', title: 'Weltmeister', accent: RAINBOW_ACCENT },
+    { type: 'EM', title: 'Europameister', accent: '#3b82f6' },
+    { type: 'WM_U23', title: 'Weltmeister U23', accent: RAINBOW_ACCENT },
+    { type: 'EM_U23', title: 'Europameister U23', accent: '#3b82f6' },
+    { type: 'WM_JUN', title: 'Weltmeister Junioren', accent: RAINBOW_ACCENT },
+    { type: 'EM_JUN', title: 'Europameister Junioren', accent: '#3b82f6' },
+    { type: 'NAT', title: 'Nationale Meister', accent: '#fbbf24' },
+  ];
+
+  const totalTitles = champions.length;
+
+  const groupsHtml = groups.filter((group) => champions.some((c) => c.type === group.type)).map((group) => {
+    const count = champions.filter((c) => c.type === group.type).length;
+    return `
+      <section style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);overflow:hidden;">
+        <div style="height:4px;background:${group.accent};"></div>
+        <div style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;font-size:15px;font-weight:800;color:#f1f5f9;">${group.title}</h3>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494ad;">${count} ${count === 1 ? 'Titel' : 'Titel'}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            ${disciplines.map((d) => renderDisciplineColumn(group.type, d.key, d.label)).join('')}
+          </div>
+        </div>
+      </section>`;
+  }).join('');
+
+  const emptyHtml = totalTitles === 0
+    ? '<div style="padding:16px;color:#6a7a95;font-size:13px;">Noch keine Meistertitel bei den aktuellen Teamfahrern.</div>'
+    : '';
+
+  return `
+    <section class="team-detail-section">
+      ${emptyHtml}
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${groupsHtml}
+      </div>
+    </section>`;
+}
+
 export function renderTeamStatsBody(payload: TeamStatsPayload): string {
   if (state.teamStatsTab === 'career') {
     return `
@@ -1170,6 +1307,14 @@ export function renderTeamStatsBody(payload: TeamStatsPayload): string {
       ${renderTeamStatsHeader(payload)}
       ${renderTeamStatsTabs()}
       ${renderTeamStatsTransfersTab(payload)}
+    `;
+  }
+
+  if (state.teamStatsTab === 'champions') {
+    return `
+      ${renderTeamStatsHeader(payload)}
+      ${renderTeamStatsTabs()}
+      ${renderTeamStatsChampionsTab(payload)}
     `;
   }
 
@@ -1287,7 +1432,7 @@ export function initTeamStatsListeners(): void {
     const tabButton = target.closest<HTMLButtonElement>('button[data-team-stats-tab]');
     if (tabButton) {
       const nextTab = tabButton.dataset['teamStatsTab'] as any;
-      if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers') {
+      if (nextTab === 'topResults' || nextTab === 'career' || nextTab === 'contracts' || nextTab === 'transfers' || nextTab === 'champions') {
         state.teamStatsTab = nextTab;
         if (state.teamStatsPayload) {
           $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
@@ -1334,6 +1479,14 @@ export function initTeamStatsListeners(): void {
     if (target.id === 'team-stats-filter-category') {
       const select = target as HTMLSelectElement;
       state.teamStatsTopResultsFilterCategory = select.value === 'all' ? null : select.value;
+      state.teamStatsTopResultsFilterRaceName = null;
+      state.teamStatsTopResultsPage = 1;
+      if (state.teamStatsPayload) {
+        $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);
+      }
+    } else if (target.id === 'team-stats-filter-race') {
+      const select = target as HTMLSelectElement;
+      state.teamStatsTopResultsFilterRaceName = select.value === 'all' ? null : select.value;
       state.teamStatsTopResultsPage = 1;
       if (state.teamStatsPayload) {
         $('team-stats-body').innerHTML = renderTeamStatsBody(state.teamStatsPayload);

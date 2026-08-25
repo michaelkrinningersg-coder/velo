@@ -11,7 +11,8 @@
  */
 import { api } from '../api';
 import { state, resolveRaceCategoryBadgeStyle } from '../state';
-import type { Race, Rider, Team, RiderStatsPayload } from '../../../shared/types';
+import { renderMiniStageProfileMarkup } from '../race-sim/renderProfile';
+import type { Race, Rider, Team, RiderStatsPayload, StageProfile } from '../../../shared/types';
 
 const MONO = "font-family:'JetBrains Mono',monospace";
 const MONTHS = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
@@ -116,39 +117,73 @@ function kpiCard(label: string, value: string, sub: string, valueColor = '#f1f5f
 }
 
 // ---- Renn-Radar-Zeile ------------------------------------------------------
+// Rennen mit heute offener Etappe bekommen je Zeile eigene Instant-/Live-
+// Buttons (wichtig bei den ~38 nationalen Meisterschaften am selben Tag, die
+// so einzeln direkt aus dem Radar heraus simuliert werden koennen). Rennen
+// ohne offene Etappe zeigen nur den Status (LÄUFT/GEPLANT).
 function radarRow(race: Race): string {
   const gs = state.gameState;
   const live = gs != null && race.startDate <= gs.currentDate && race.endDate >= gs.currentDate;
   const [, mm, dd] = race.startDate.split('-');
   const mon = MONTHS[Number(mm) - 1] ?? '';
-  const status = live
-    ? '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;">LÄUFT</span>'
-    : '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;letter-spacing:.04em;">GEPLANT</span>';
+  const pendingStage = (state.gameStatus?.pendingStages ?? []).find((p) => p.raceId === race.id) ?? null;
+  let actions: string;
+  if (pendingStage) {
+    actions = `
+      <span style="display:flex;gap:6px;flex:0 0 auto;">
+        <button type="button" data-quick-stage="${pendingStage.stageId}" title="Schnellsimulation" style="border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:11px;padding:6px 11px;border-radius:7px;white-space:nowrap;">Schnell ▸</button>
+        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren" style="border:none;cursor:pointer;background:rgba(148,163,184,0.18);color:#cbd5f5;font-weight:600;font-size:11px;padding:6px 9px;border-radius:7px;white-space:nowrap;">Instant</button>
+        <button type="button" data-live-stage="${pendingStage.stageId}" title="Live-Simulation" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:11px;padding:6px 10px;border-radius:7px;white-space:nowrap;">Live</button>
+      </span>`;
+  } else if (live) {
+    actions = '<span style="font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);padding:4px 10px;border-radius:99px;letter-spacing:.04em;flex:0 0 auto;">LÄUFT</span>';
+  } else {
+    actions = '<span style="font-size:10px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:4px 10px;border-radius:99px;letter-spacing:.04em;flex:0 0 auto;">GEPLANT</span>';
+  }
   const country = race.country?.name ?? '';
   const km = raceTotalKm(race);
   return `
-    <button type="button" data-dashboard-race-id="${race.id}" style="width:100%;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:11px 16px;border:none;border-top:1px solid #14203a;${live ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}">
-      <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:19px;font-weight:800;color:${live ? '#f1f5f9' : '#e2e8f0'};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
-      <span style="width:5px;height:34px;border-radius:3px;background:${catColor(race)};flex:0 0 auto;" title="${race.category?.name ?? ''}"></span>
-      <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${live ? '#f1f5f9' : '#e2e8f0'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${race.name}</span><span style="display:block;${MONO};font-size:11px;color:#8494ad;">${country}${km ? ' · ' + km.toFixed(0) + ' km' : ''}</span></span>
-      ${status}
-    </button>`;
+    <div style="display:flex;align-items:center;gap:14px;padding:11px 16px;border-top:1px solid #14203a;${live ? 'box-shadow:inset 3px 0 0 #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.10),transparent 55%);' : ''}">
+      <button type="button" data-dashboard-race-id="${race.id}" style="flex:1;min-width:0;text-align:left;background:none;cursor:pointer;display:flex;align-items:center;gap:14px;border:none;padding:0;">
+        <span style="text-align:center;min-width:38px;"><span style="display:block;font-size:19px;font-weight:800;color:${live ? '#f1f5f9' : '#e2e8f0'};line-height:1;">${dd}</span><span style="display:block;font-size:9px;color:#7c8aa3;letter-spacing:.1em;">${mon}</span></span>
+        <span style="width:5px;height:34px;border-radius:3px;background:${catColor(race)};flex:0 0 auto;" title="${race.category?.name ?? ''}"></span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:${live ? '#f1f5f9' : '#e2e8f0'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${race.name}</span><span style="display:block;${MONO};font-size:11px;color:#8494ad;">${country}${km ? ' · ' + km.toFixed(0) + ' km' : ''}</span></span>
+      </button>
+      ${actions}
+    </div>`;
 }
 
 // ---- Live-Spotlight (aktuelles laufendes Rennen) ---------------------------
-function renderLiveSpotlight(): string {
+interface SpotlightPick { race: Race; pendingStage: { stageId: number; stageNumber: number; profile: StageProfile } | null; }
+
+// Auswahl des Fokus-Rennens fürs Spotlight (bevorzugt ein Rennen mit heute
+// offener Etappe). Geteilt von renderLiveSpotlight und spotlightStageId, damit
+// das async nachgeladene Höhenprofil zur gerenderten Etappe passt.
+function pickSpotlight(): SpotlightPick | null {
   const gs = state.gameState;
-  if (!gs) return '';
+  if (!gs) return null;
   const today = gs.currentDate;
   const liveRaces = state.races
     .filter((r) => r.startDate <= today && r.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  if (liveRaces.length === 0) return '';
-
+  if (liveRaces.length === 0) return null;
   const pending = state.gameStatus?.pendingStages ?? [];
-  // Bevorzugt ein Rennen mit heute offener Etappe
   const race = liveRaces.find((r) => pending.some((p) => p.raceId === r.id)) ?? liveRaces[0];
   const pendingStage = pending.find((p) => p.raceId === race.id) ?? null;
+  return { race, pendingStage };
+}
+
+// Stage-ID des aktuell im Spotlight gezeigten Rennens (fürs Lazy-Laden des Profils).
+export function spotlightStageId(): number | null {
+  const pick = pickSpotlight();
+  if (!pick) return null;
+  return pick.pendingStage?.stageId ?? pick.race.upcomingStage?.stageId ?? null;
+}
+
+function renderLiveSpotlight(): string {
+  const pick = pickSpotlight();
+  if (!pick) return '';
+  const { race, pendingStage } = pick;
 
   const catStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
   const country = race.country?.code3 ?? race.country?.name ?? '';
@@ -159,18 +194,25 @@ function renderLiveSpotlight(): string {
     : country;
   const profileLabel = pendingStage?.profile ?? race.upcomingStage?.profile ?? '';
 
-  // stilisiertes Höhenprofil (repräsentativ, kein km-genaues Profil auf dem Dashboard)
-  const elevationSvg = `
-    <svg viewBox="0 0 600 90" preserveAspectRatio="none" style="width:100%;height:70px;display:block;margin-top:6px;">
-      <defs><linearGradient id="dash-elev" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.4)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>
-      <polygon points="0,80 0,66 60,60 110,64 170,48 230,55 300,36 360,44 420,20 470,30 520,8 560,22 600,10 600,80" fill="url(#dash-elev)"/>
-      <polyline points="0,66 60,60 110,64 170,48 230,55 300,36 360,44 420,20 470,30 520,8 560,22 600,10" fill="none" stroke="#22d3ee" stroke-width="2"/>
-    </svg>`;
+  // Echtes Etappen-Höhenprofil (Mini-Widget, Broadcast-1b). Wird lazy geladen
+  // (ensureSpotlightStageProfileLoaded in dashboard.ts) und aus dem Cache gerendert.
+  const stageId = pendingStage?.stageId ?? race.upcomingStage?.stageId ?? null;
+  const stageProfileType = (pendingStage?.profile ?? race.upcomingStage?.profile) as StageProfile | undefined;
+  const cachedSummary = stageId != null ? state.stageSummariesByStageId[stageId] : undefined;
+  let elevationSvg: string;
+  if (cachedSummary && stageProfileType) {
+    elevationSvg = `<div style="margin-top:8px;">${renderMiniStageProfileMarkup(cachedSummary, stageProfileType, race.name)}</div>`;
+  } else if (stageId != null && state.stageSummaryErrorsByStageId?.[stageId]) {
+    elevationSvg = `<div style="${MONO};font-size:10px;color:#6a7a95;margin-top:12px;">Höhenprofil nicht verfügbar.</div>`;
+  } else {
+    elevationSvg = `<div style="height:118px;margin-top:8px;border:1px dashed #1c2b47;border-radius:9px;display:flex;align-items:center;justify-content:center;${MONO};font-size:10px;letter-spacing:.08em;color:#6a7a95;">HÖHENPROFIL WIRD GELADEN…</div>`;
+  }
 
   const buttons = pendingStage
     ? `
       <div style="display:flex;gap:9px;margin-top:12px;">
-        <button type="button" data-instant-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Instant ▸</button>
+        <button type="button" data-quick-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Schnell ▸</button>
+        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren" style="border:none;cursor:pointer;background:rgba(148,163,184,0.18);color:#cbd5f5;font-weight:600;font-size:13px;padding:10px 12px;border-radius:9px;">Instant</button>
         <button type="button" data-edit-stage-roster="${pendingStage.stageId}" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:13px;padding:10px 16px;border-radius:9px;">Starterfeld</button>
       </div>`
     : `<div style="${MONO};font-size:11px;color:#7c8aa3;margin-top:12px;">Heutige Etappe abgeschlossen – Tageswechsel freigegeben.</div>`;
@@ -327,10 +369,20 @@ export function renderDashboardBroadcast(): string {
   const team = playerTeam();
   const today = gs?.currentDate ?? '';
   const maxDate = today ? addDays(today, 10) : '';
+  // Rennen mit heute offener Etappe zuerst (z. B. die ~38 nationalen
+  // Meisterschaften am selben Tag), damit sie direkt oben im scrollbaren
+  // Radar mit ihren Instant-Buttons stehen; danach chronologisch.
+  const pendingRaceIds = new Set((state.gameStatus?.pendingStages ?? []).map((p) => p.raceId));
   const upcoming = state.races
     .filter((r) => (r.startDate <= today && r.endDate >= today) || (r.startDate > today && r.startDate <= maxDate))
-    .sort((a, b) => a.startDate.localeCompare(b.startDate))
-    .slice(0, 6);
+    .sort((a, b) => {
+      const ap = pendingRaceIds.has(a.id) ? 0 : 1;
+      const bp = pendingRaceIds.has(b.id) ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+      return a.name.localeCompare(b.name);
+    });
+  const pendingCount = upcoming.filter((r) => pendingRaceIds.has(r.id)).length;
 
   const kpis = playerTeamKpis(team);
   const liveSpotlight = renderLiveSpotlight();
@@ -352,9 +404,11 @@ export function renderDashboardBroadcast(): string {
         <div style="border-radius:14px;overflow:hidden;border:1px solid #1e2c49;background:#0c1526;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1c2b47;">
             <span style="font-size:13px;font-weight:800;color:#e2e8f0;">Renn-Radar</span>
-            <span style="${MONO};font-size:10px;letter-spacing:.12em;color:#5f6f8a;text-transform:uppercase;">Nächste 10 Tage</span>
+            <span style="${MONO};font-size:10px;letter-spacing:.12em;color:#5f6f8a;text-transform:uppercase;">${pendingCount > 0 ? `${pendingCount} offen · ` : ''}Nächste 10 Tage</span>
           </div>
-          ${upcoming.map(radarRow).join('') || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Keine Rennen im Zeitraum.</div>'}
+          <div style="max-height:360px;overflow-y:auto;">
+            ${upcoming.map(radarRow).join('') || '<div style="padding:16px;color:#6a7a95;font-size:13px;">Keine Rennen im Zeitraum.</div>'}
+          </div>
         </div>
       </div>
 

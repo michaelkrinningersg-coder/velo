@@ -82,6 +82,9 @@
         <button class="nav-btn" data-view="leaderboards">
           <span class="nav-icon">⧉</span> Statistiken &amp; Rekorde
         </button>
+        <button class="nav-btn" data-view="rivalries">
+          <span class="nav-icon">⚔</span> Rivalen
+        </button>
         <button class="nav-btn" data-view="draft">
           <span class="nav-icon">♺</span> Draft
         </button>
@@ -350,15 +353,23 @@
         <div class="results-toolbar">
           <div class="form-group">
             <label for="results-race-select">Rennen</label>
-            <select id="results-race-select">
-              <option value="">– Rennen auswählen –</option>
-            </select>
+            <div class="results-race-nav">
+              <button type="button" id="results-race-prev" class="results-race-nav-btn" title="Vorheriges Rennen (nach Startdatum)" aria-label="Vorheriges Rennen">‹</button>
+              <select id="results-race-select">
+                <option value="">– Rennen auswählen –</option>
+              </select>
+              <button type="button" id="results-race-next" class="results-race-nav-btn" title="Nächstes Rennen (nach Startdatum)" aria-label="Nächstes Rennen">›</button>
+            </div>
           </div>
           <div class="form-group">
             <label for="results-stage-select">Etappe</label>
-            <select id="results-stage-select">
-              <option value="">– Etappe auswählen –</option>
-            </select>
+            <div class="results-race-nav">
+              <button type="button" id="results-stage-prev" class="results-race-nav-btn" title="Vorherige Etappe" aria-label="Vorherige Etappe">‹</button>
+              <select id="results-stage-select">
+                <option value="">– Etappe auswählen –</option>
+              </select>
+              <button type="button" id="results-stage-next" class="results-race-nav-btn" title="Nächste Etappe" aria-label="Nächste Etappe">›</button>
+            </div>
           </div>
         </div>
         <div id="results-type-tabs" class="results-type-tabs"></div>
@@ -413,11 +424,27 @@
           <div class="results-type-tabs" style="margin: 0;" id="leaderboards-scope-tabs">
             <button class="results-type-btn active" data-scope="riders">Fahrer</button>
             <button class="results-type-btn" data-scope="teams">Teams</button>
+            <button class="results-type-btn" data-scope="badge">Badge</button>
           </div>
 
           <div class="results-type-tabs" style="margin: 0;" id="leaderboards-period-tabs">
             <button class="results-type-btn active" data-period="season">Aktuelle Saison</button>
             <button class="results-type-btn" data-period="alltime">All-Time</button>
+          </div>
+        </div>
+
+        <div id="leaderboard-badge-panel" class="results-toolbar" style="display:none; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+          <div class="form-group">
+            <label for="leaderboard-badge-category">Kategorie ▾</label>
+            <select id="leaderboard-badge-category"><option value="">– Wählen –</option></select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-badge-badge">Badge ▾</label>
+            <select id="leaderboard-badge-badge"><option value="">– Wählen –</option></select>
+          </div>
+          <div class="form-group">
+            <label for="leaderboard-badge-threshold">Schwelle ▾</label>
+            <select id="leaderboard-badge-threshold"><option value="">– Wählen –</option></select>
           </div>
         </div>
 
@@ -433,12 +460,16 @@
           </label>
         </div>
 
-        <div class="results-toolbar" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <div id="leaderboard-metric-toolbar" class="results-toolbar" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
           <div class="form-group">
             <label for="leaderboard-select-performance">Rennerfolg ▾</label>
             <select id="leaderboard-select-performance">
               <option value="">– Wählen –</option>
               <option value="wins">Gesamtsiege</option>
+              <option value="wins_class_3">Siege: Monument</option>
+              <option value="wins_class_7">Siege: One Day High</option>
+              <option value="wins_class_8">Siege: One Day Middle</option>
+              <option value="wins_class_9">Siege: One Day Low</option>
               <option value="wins_terrain_Flat">Siege: Flach</option>
               <option value="wins_terrain_Rolling">Siege: Rolling</option>
               <option value="wins_terrain_Hilly">Siege: Hügelig</option>
@@ -617,6 +648,7 @@
           </div>
           <div id="leaderboard-thead" class="results-grid-head"></div>
           <div id="leaderboard-tbody" class="results-grid-body"></div>
+          <div id="leaderboard-pagination" style="display:none;"></div>
         </div>
       </div>
 
@@ -895,6 +927,16 @@
         </div>
       </div>
 
+      <div id="view-rivalries" class="view">
+        <div class="view-header view-header-stack">
+          <div>
+            <h2>Rivalen</h2>
+            <p class="text-muted">Die intensivsten Liga-Rivalitäten der Saison – automatisch erkannt.</p>
+          </div>
+        </div>
+        <div id="rivalries-body"></div>
+      </div>
+
       <div id="view-race-programs" class="view">
         <div class="view-header view-header-stack">
           <div>
@@ -960,6 +1002,28 @@
         <button class="btn btn-ghost modal-close" id="btn-close-race-stages">×</button>
       </div>
       <div id="race-stages-body" class="dashboard-race-stages-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-raceDetail" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card race-detail-modal-card">
+      <div class="modal-header">
+        <div id="race-detail-header"></div>
+        <button class="btn btn-ghost modal-close" id="btn-close-race-detail">×</button>
+      </div>
+      <div id="race-detail-body" class="dashboard-race-stages-body race-detail-body"></div>
+    </div>
+  </div>
+
+  <div id="modal-contractRenewal" class="modal hidden">
+    <div class="modal-card modal-card-xl dashboard-race-modal-card">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:15px;font-weight:800;color:#e2e8f0;">Vertragsverlängerungen</div>
+          <div id="contract-renewal-subtitle" style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#6a7a95;text-transform:uppercase;margin-top:3px;"></div>
+        </div>
+      </div>
+      <div id="contract-renewal-body" class="dashboard-race-stages-body"></div>
     </div>
   </div>
 

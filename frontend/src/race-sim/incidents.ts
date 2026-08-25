@@ -1,4 +1,5 @@
 import type { CrashSeverity, PrecalculatedRaceIncident, Rider, Stage, StageProfile } from '../../../shared/types';
+import { createRandomSeed, createSeededRandom, shuffled as shuffleRandomly, type RandomSource } from '../../../shared/rng';
 
 const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
   1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
@@ -27,8 +28,8 @@ const LATE_RECOVERY_FORM_BONUS = 8;
 const BASE_DAY_FORM_PENALTY = -0.75;
 const BASE_STAMINA_PENALTY = 10;
 
-function randomBetween(min: number, max: number): number {
-  return min + (Math.random() * (max - min));
+function randomBetween(random: RandomSource, min: number, max: number): number {
+  return min + (random() * (max - min));
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -57,8 +58,8 @@ function resolveSupportRiderIds(rider: Rider, riders: Rider[]): number[] {
     .map((candidate) => candidate.id);
 }
 
-function resolveCrashSeverity(): CrashSeverity {
-  const roll = Math.random();
+function resolveCrashSeverity(random: RandomSource): CrashSeverity {
+  const roll = random();
   if (roll < 0.1) {
     return 'severe';
   }
@@ -69,13 +70,14 @@ function resolveCrashSeverity(): CrashSeverity {
 }
 
 function buildIncident(
+  random: RandomSource,
   rider: Rider,
   riders: Rider[],
   stageLengthKm: number,
   type: 'crash' | 'mechanical',
 ): PrecalculatedRaceIncident {
-  const severity = type === 'crash' ? resolveCrashSeverity() : null;
-  const triggerDistanceKm = Number(randomBetween(0.5, Math.max(0.6, stageLengthKm - 0.25)).toFixed(2));
+  const severity = type === 'crash' ? resolveCrashSeverity(random) : null;
+  const triggerDistanceKm = Number(randomBetween(random, 0.5, Math.max(0.6, stageLengthKm - 0.25)).toFixed(2));
   const triggerDistanceMeters = Math.round(triggerDistanceKm * 1000);
   const triggerDistancePercent = clamp((triggerDistanceKm / Math.max(0.1, stageLengthKm)) * 100, 0, 100);
   const isEarlyIncident = triggerDistancePercent <= EARLY_INCIDENT_THRESHOLD_PERCENT;
@@ -88,8 +90,8 @@ function buildIncident(
     triggerDistanceMeters,
     triggerDistancePercent,
     waitDurationSeconds: type === 'crash'
-      ? Math.round(randomBetween(10, 60))
-      : Math.round(randomBetween(10, 45)),
+      ? Math.round(randomBetween(random, 10, 60))
+      : Math.round(randomBetween(random, 10, 45)),
     recoverySeconds: isEarlyIncident ? EARLY_RECOVERY_SECONDS : LATE_RECOVERY_SECONDS,
     recoveryFormBonus: isEarlyIncident ? EARLY_RECOVERY_FORM_BONUS : LATE_RECOVERY_FORM_BONUS,
     dayFormPenalty: BASE_DAY_FORM_PENALTY,
@@ -102,15 +104,20 @@ function buildIncident(
   };
 }
 
-export function precalculateRaceIncidents(riders: Rider[], stage: Stage, stageLengthKm: number): PrecalculatedRaceIncident[] {
+export function precalculateRaceIncidents(
+  riders: Rider[],
+  stage: Stage,
+  stageLengthKm: number,
+  random: RandomSource = createSeededRandom(createRandomSeed()),
+): PrecalculatedRaceIncident[] {
   if (isIncidentFreeStage(stage.profile) || stageLengthKm <= 0) {
     return [];
   }
 
   const incidents: PrecalculatedRaceIncident[] = [];
   for (const rider of riders) {
-    const crashRoll = Math.random();
-    const mechanicalRoll = Math.random();
+    const crashRoll = random();
+    const mechanicalRoll = random();
     const baseCrashChance = BASE_CRASH_CHANCE * Math.max(0, stage.crashIncidentMultiplier ?? 1);
     const baseMechanicalChance = BASE_MECHANICAL_CHANCE * Math.max(0, stage.mechanicalIncidentMultiplier ?? 1);
     let crashChance = baseCrashChance + (stage.rolledEffektSturz ?? 0) / 100;
@@ -137,18 +144,20 @@ export function precalculateRaceIncidents(riders: Rider[], stage: Stage, stageLe
         ? 'crash'
         : 'mechanical';
 
-    const incident = buildIncident(rider, riders, stageLengthKm, incidentType);
+    const incident = buildIncident(random, rider, riders, stageLengthKm, incidentType);
 
-    if (incidentType === 'crash' && Math.random() < 0.01) {
+    if (incidentType === 'crash' && random() < 0.01) {
       incident.isMassCrashTrigger = true;
-      const numAffected = Math.floor(randomBetween(2, 26)); // 2 to 25
+      const numAffected = Math.floor(randomBetween(random, 2, 26)); // 2 to 25
       const potentialVictims = riders.filter(r => r.id !== rider.id);
-      const shuffled = [...potentialVictims].sort(() => 0.5 - Math.random());
-      incident.massCrashPotentialRiderIds = shuffled.slice(0, numAffected).map(r => r.id);
+      // Fisher-Yates statt sort(() => 0.5 - rng()): letzteres ist keine
+      // Gleichverteilung, die Opferauswahl war dadurch verzerrt.
+      const shuffledVictims = shuffleRandomly(random, potentialVictims);
+      incident.massCrashPotentialRiderIds = shuffledVictims.slice(0, numAffected).map(r => r.id);
 
-      if (Math.random() < 0.20) {
+      if (random() < 0.20) {
         incident.hasAdditionalMechanical = true;
-        incident.waitDurationSeconds += Math.round(randomBetween(10, 45));
+        incident.waitDurationSeconds += Math.round(randomBetween(random, 10, 45));
       }
     }
 
@@ -162,18 +171,19 @@ export function buildDynamicCrashIncident(
   rider: Rider,
   riders: Rider[],
   triggerDistanceKm: number,
-  stageLengthKm: number
+  stageLengthKm: number,
+  random: RandomSource = createSeededRandom(createRandomSeed()),
 ): PrecalculatedRaceIncident {
-  const severity = resolveCrashSeverity();
+  const severity = resolveCrashSeverity(random);
   const triggerDistanceMeters = Math.round(triggerDistanceKm * 1000);
   const triggerDistancePercent = clamp((triggerDistanceKm / Math.max(0.1, stageLengthKm)) * 100, 0, 100);
   const isEarlyIncident = triggerDistancePercent <= EARLY_INCIDENT_THRESHOLD_PERCENT;
 
-  let waitDurationSeconds = Math.round(randomBetween(10, 60));
+  let waitDurationSeconds = Math.round(randomBetween(random, 10, 60));
   let hasAdditionalMechanical = false;
-  if (Math.random() < 0.20) {
+  if (random() < 0.20) {
     hasAdditionalMechanical = true;
-    waitDurationSeconds += Math.round(randomBetween(10, 45));
+    waitDurationSeconds += Math.round(randomBetween(random, 10, 45));
   }
 
   return {

@@ -1,20 +1,6 @@
 import type { Rider, Stage, Team } from '../../../shared/types';
+import { createRandomSeed, createSeededRandom, shuffled as shuffleWithRandom, type RandomSource } from '../../../shared/rng';
 import { calculateStageFavoriteRiderRanking, type StageFavoriteOptions } from './stageFavorites';
-
-function randomBetween(min: number, max: number): number {
-  return min + (Math.random() * (max - min));
-}
-
-function shuffleRiders(riders: Rider[]): Rider[] {
-  const shuffled = [...riders];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(randomBetween(0, index + 1));
-    const current = shuffled[index];
-    shuffled[index] = shuffled[swapIndex] ?? current;
-    shuffled[swapIndex] = current;
-  }
-  return shuffled;
-}
 
 function createFallbackTeams(riders: Rider[]): Team[] {
   const seen = new Map<number, Team>();
@@ -42,6 +28,11 @@ function createFallbackTeams(riders: Rider[]): Team[] {
 
 interface ApplySpecialFormStatesOptions extends StageFavoriteOptions {
   teams?: Team[];
+  /**
+   * Zufallsquelle. Ohne Angabe wird ein zufaelliger Seed gezogen — dann
+   * verhaelt sich die Funktion wie zuvor mit `Math.random()`.
+   */
+  random?: RandomSource;
 }
 
 export function applySpecialFormStates(riders: Rider[], stage: Stage): Rider[] {
@@ -60,6 +51,7 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
     specialFormDelta: 0,
   }));
 
+  const random = options.random ?? createSeededRandom(createRandomSeed());
   const teams = options.teams ?? createFallbackTeams(clonedRiders);
   const riderRanking = calculateStageFavoriteRiderRanking(clonedRiders, teams, stage, options);
   const topTwentyRiderIds = new Set(riderRanking.slice(0, 20).map((entry) => entry.rider.id));
@@ -73,10 +65,10 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
     clonedRiders.length,
   );
 
-  const superformPool = shuffleRiders(clonedRiders.filter((rider) => !topTwentyRiderIds.has(rider.id)));
+  const superformPool = shuffleWithRandom(random, clonedRiders.filter((rider) => !topTwentyRiderIds.has(rider.id)));
   const superformRiderIds = new Set(superformPool.slice(0, superformTargetCount).map((rider) => rider.id));
 
-  const supermalusPool = shuffleRiders(clonedRiders.filter((rider) => !superformRiderIds.has(rider.id)));
+  const supermalusPool = shuffleWithRandom(random, clonedRiders.filter((rider) => !superformRiderIds.has(rider.id)));
   const supermalusRiderIds = new Set(supermalusPool.slice(0, supermalusTargetCount).map((rider) => rider.id));
 
   return clonedRiders.map((rider) => {

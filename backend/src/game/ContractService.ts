@@ -62,17 +62,21 @@ export class ContractService {
         const earlyCount = Math.ceil(earlyCandidates.length * 0.025);
         const earlyRetirees = earlyCandidates.slice(0, earlyCount);
 
+        // retired_season = zuletzt bestrittene Saison (currentSeason ist bereits
+        // die neue Saison). So ist die Retiree-Kohorte pro Saison abfragbar
+        // (Saison-Wrapped).
+        const retiredSeason = currentSeason - 1;
         const retireStmt = this.db.prepare(`
           UPDATE riders
-          SET is_retired = 1
+          SET is_retired = 1, retired_season = ?
           WHERE id = ?
         `);
 
         for (const id of mandatoryRetirees) {
-          retireStmt.run(id);
+          retireStmt.run(retiredSeason, id);
         }
         for (const r of earlyRetirees) {
-          retireStmt.run(r.id);
+          retireStmt.run(retiredSeason, r.id);
         }
       }
 

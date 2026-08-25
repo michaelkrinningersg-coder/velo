@@ -1,5 +1,5 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
-import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
+import { CHAMPIONSHIP_CATEGORY_IDS, NATIONAL_SELECTION_TEAM_ID } from '../../simulation/championships';
 import Database from 'better-sqlite3';
 import {
   Country,
@@ -46,7 +46,9 @@ import {
   StageNonFinisherRow,
   StageResultsPayload,
   StageScoringRule,
+  ChampionTitleType,
   Team,
+  TeamChampionTitle,
   TeamStatsPayload,
   TeamStatsRider,
   TeamStatsTopResult,
@@ -164,6 +166,7 @@ export class TeamRepository {
       JOIN sta_country country ON country.id = t.country_id
       LEFT JOIN teams u23 ON u23.id = t.u23_team
       LEFT JOIN teams main ON main.u23_team = t.id
+      WHERE t.id != ${NATIONAL_SELECTION_TEAM_ID}
       ORDER BY dt.tier ASC, t.name ASC
     `).all() as TeamRow[];
     return rows.map(mapTeam);
@@ -334,7 +337,7 @@ export class TeamRepository {
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
-      JOIN race_categories_bonus cat_bonus ON cat_bonus.id = cat.bonus_system_id
+      JOIN race_categories_bonus cat_bonus ON cat_bonus.id = COALESCE(races.bonus_system_id, cat.bonus_system_id)
       WHERE results.team_id = ?
         AND results.rider_id IS NULL
         AND results.result_type_id = 1
@@ -840,9 +843,76 @@ export class TeamRepository {
       riders: teamRiders,
       topResults,
       successStats,
+      champions: this.getTeamChampionTitles(teamRiders.map((r) => r.id)),
       historyRosters: this.getTeamHistoryRosters(teamId),
       transfers: this.getTeamTransfers(teamId),
     };
+  }
+
+  /**
+   * Alle Meistertitel (WM/EM aus championship_titles, National aus
+   * national_champion_titles) der uebergebenen — aktuellen — Teamfahrer,
+   * neueste Saison zuerst. Grundlage fuer den Teamstats-Tab "Meister".
+   */
+  private getTeamChampionTitles(riderIds: number[]): TeamChampionTitle[] {
+    if (riderIds.length === 0) return [];
+    const placeholders = riderIds.map(() => '?').join(',');
+    const out: TeamChampionTitle[] = [];
+
+    if (tableExists(this.db, 'championship_titles')) {
+      const rows = this.db.prepare(`
+        SELECT ct.rider_id AS rider_id, ct.championship_type AS type, ct.discipline AS discipline,
+               ct.season AS season, r.first_name AS first_name, r.last_name AS last_name,
+               c.code_3 AS country_code
+        FROM championship_titles ct
+        JOIN riders r ON r.id = ct.rider_id
+        JOIN sta_country c ON c.id = r.country_id
+        WHERE ct.rider_id IN (${placeholders})
+      `).all(...riderIds) as Array<{
+        rider_id: number; type: ChampionTitleType; discipline: 'ITT' | 'ROAD'; season: number;
+        first_name: string; last_name: string; country_code: string | null;
+      }>;
+      for (const row of rows) {
+        out.push({
+          riderId: row.rider_id,
+          riderName: `${row.first_name} ${row.last_name}`,
+          riderCountryCode: row.country_code,
+          type: row.type,
+          discipline: row.discipline,
+          season: row.season,
+        });
+      }
+    }
+
+    if (tableExists(this.db, 'national_champion_titles')) {
+      const rows = this.db.prepare(`
+        SELECT nct.rider_id AS rider_id, nct.discipline AS discipline, nct.season AS season,
+               r.first_name AS first_name, r.last_name AS last_name, c.code_3 AS country_code,
+               nc.name AS country_name
+        FROM national_champion_titles nct
+        JOIN riders r ON r.id = nct.rider_id
+        JOIN sta_country c ON c.id = r.country_id
+        LEFT JOIN sta_country nc ON nc.id = nct.country_id
+        WHERE nct.rider_id IN (${placeholders})
+      `).all(...riderIds) as Array<{
+        rider_id: number; discipline: 'ITT' | 'ROAD'; season: number;
+        first_name: string; last_name: string; country_code: string | null; country_name: string | null;
+      }>;
+      for (const row of rows) {
+        out.push({
+          riderId: row.rider_id,
+          riderName: `${row.first_name} ${row.last_name}`,
+          riderCountryCode: row.country_code,
+          type: 'NAT',
+          discipline: row.discipline,
+          season: row.season,
+          countryName: row.country_name,
+        });
+      }
+    }
+
+    out.sort((a, b) => b.season - a.season || a.riderName.localeCompare(b.riderName, 'de'));
+    return out;
   }
 
   public getTeamTransfers(teamId: number): Record<number, {

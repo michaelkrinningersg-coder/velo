@@ -1,7 +1,7 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RacePalmaresPayload, PalmaresRiderRef, PalmaresSeasonEntry, PalmaresParticipationRow, RaceWinnerEntry, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -44,6 +44,139 @@ export class ResultRepository {
     return row?.rank ?? null;
   }
 
+  // Renn-Historie (Palmarès): Sieger/Podium + Wertungssieger je Saison sowie
+  // Rekordteilnahme (Fahrer mit >=3 Saisons mit erzielten UCI-Punkten).
+  // Quelle: season_point_events (survives Kompaktierung) — keine neuen Tabellen.
+  public getRacePalmares(raceId: number): RacePalmaresPayload {
+    const raceRow = this.db.prepare('SELECT is_stage_race, name FROM races WHERE id = ?').get(raceId) as { is_stage_race: number; name: string } | undefined;
+    const isStageRace = (raceRow?.is_stage_race ?? 0) === 1;
+    // Renn-IDs werden je Saison neu vergeben -> Palmarès ueber ALLE Editionen
+    // desselben Rennens (nach Name) aggregieren, damit auch Sieger frueherer
+    // Jahre erscheinen (die aktuelle Edition hat evtl. noch keinen Sieger).
+    const raceName = raceRow?.name ?? null;
+
+    if (!tableExists(this.db, 'season_point_events') || raceName == null) {
+      return { raceId, isStageRace, seasons: [], participation: [] };
+    }
+
+    const podiumAward = isStageRace ? 'gc_final' : 'one_day_result';
+    const rows = this.db.prepare(`
+      SELECT
+        spe.season AS season,
+        spe.award_type AS award_type,
+        spe.rank AS rank,
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        spe.team_id AS team_id,
+        teams.name AS team_name,
+        spec1.display_name AS spec1,
+        spec2.display_name AS spec2
+      FROM season_point_events spe
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = spe.team_id
+      LEFT JOIN type_rider spec1 ON spec1.id = riders.specialization_1_id
+      LEFT JOIN type_rider spec2 ON spec2.id = riders.specialization_2_id
+      WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?)
+        AND (
+          (spe.award_type = ? AND spe.rank <= 3)
+          OR (spe.award_type IN ('points_final', 'mountain_final', 'youth_final') AND spe.rank = 1)
+        )
+      ORDER BY spe.season DESC, spe.rank ASC
+    `).all(raceName, podiumAward) as Array<{
+      season: number; award_type: string; rank: number; rider_id: number;
+      first_name: string; last_name: string; country_code: string | null;
+      team_id: number | null; team_name: string | null; spec1: string | null; spec2: string | null;
+    }>;
+
+    const ref = (r: (typeof rows)[number]): PalmaresRiderRef => ({
+      riderId: r.rider_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      countryCode: r.country_code,
+      teamId: r.team_id,
+      teamName: r.team_name,
+      specialization1: r.spec1,
+      specialization2: r.spec2,
+    });
+
+    const bySeason = new Map<number, PalmaresSeasonEntry>();
+    const entryFor = (season: number): PalmaresSeasonEntry => {
+      let entry = bySeason.get(season);
+      if (!entry) {
+        entry = { season, winner: null, second: null, third: null, pointsChampion: null, mountainChampion: null, youthChampion: null };
+        bySeason.set(season, entry);
+      }
+      return entry;
+    };
+
+    for (const r of rows) {
+      const entry = entryFor(r.season);
+      if (r.award_type === podiumAward) {
+        if (r.rank === 1) entry.winner = ref(r);
+        else if (r.rank === 2) entry.second = ref(r);
+        else if (r.rank === 3) entry.third = ref(r);
+      } else if (r.award_type === 'points_final') {
+        entry.pointsChampion = ref(r);
+      } else if (r.award_type === 'mountain_final') {
+        entry.mountainChampion = ref(r);
+      } else if (r.award_type === 'youth_final') {
+        entry.youthChampion = ref(r);
+      }
+    }
+
+    const seasons = [...bySeason.values()].sort((a, b) => b.season - a.season);
+
+    const participationRows = this.db.prepare(`
+      SELECT
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        COUNT(DISTINCT spe.season) AS seasons,
+        SUM(spe.points_awarded) AS total_points
+      FROM season_point_events spe
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?) AND spe.points_awarded > 0
+      GROUP BY spe.rider_id, riders.first_name, riders.last_name, country.code_3
+      HAVING COUNT(DISTINCT spe.season) >= 3
+      ORDER BY seasons DESC, total_points DESC, riders.last_name ASC
+    `).all(raceName) as Array<{ rider_id: number; first_name: string; last_name: string; country_code: string | null; seasons: number; total_points: number }>;
+
+    const participation: PalmaresParticipationRow[] = participationRows.map((r) => ({
+      riderId: r.rider_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      countryCode: r.country_code,
+      seasons: r.seasons,
+      totalPoints: r.total_points,
+    }));
+
+    return { raceId, isStageRace, seasons, participation };
+  }
+
+  // Allzeit-UCI-Punkte (Summe ueber alle Saisons) + Rang danach — keine neuen Tabellen.
+  public getAllTimePointsAndRank(riderId: number): { points: number; rank: number | null } {
+    if (!tableExists(this.db, 'season_point_events')) {
+      return { points: 0, rank: null };
+    }
+    const row = this.db.prepare(`
+      WITH totals AS (
+        SELECT rider_id, SUM(points_awarded) AS pts
+        FROM season_point_events
+        GROUP BY rider_id
+      ), ranked AS (
+        SELECT rider_id, pts, RANK() OVER (ORDER BY pts DESC) AS rank FROM totals
+      )
+      SELECT pts, rank FROM ranked WHERE rider_id = ?
+    `).get(riderId) as { pts: number; rank: number } | undefined;
+    const points = row?.pts ?? 0;
+    return { points, rank: points > 0 ? row?.rank ?? null : null };
+  }
+
   private getAvailableStandingsSeasons(currentSeason: number): number[] {
     const seasons: number[] = [];
     for (let yr = 2026; yr <= currentSeason; yr++) {
@@ -65,7 +198,7 @@ export class ResultRepository {
         try {
           const payload = JSON.parse(snapshotRow.payload_json) as SeasonStandingsPayload;
           payload.availableSeasons = this.getAvailableStandingsSeasons(currentSeason);
-          return payload;
+          return this.attachChampionOverviews(payload, season);
         } catch (e) {
           // Fallback falls parsen fehlschlägt
         }
@@ -73,13 +206,13 @@ export class ResultRepository {
     }
 
     if (!tableExists(this.db, 'season_point_events')) {
-      return {
+      return this.attachChampionOverviews({
         season,
         riderStandings: [],
         teamStandings: [],
         countryStandings: [],
         availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
-      };
+      }, season);
     }
 
     const riderRows = this.db.prepare(`
@@ -131,14 +264,14 @@ export class ResultRepository {
       ORDER BY points_total DESC, country.name ASC
     `).all(season) as CountrySeasonStandingDbRow[];
 
-    return {
+    return this.attachChampionOverviews({
       season,
       riderStandings: this.mapRiderSeasonStandings(riderRows),
       teamStandings: this.mapTeamSeasonStandings(teamRows),
       countryStandings: this.mapCountrySeasonStandings(countryRows, riderRows),
       availableSeasons: this.getAvailableStandingsSeasons(currentSeason),
       reigningChampions: this.getReigningChampions(),
-    };
+    }, season);
   }
 
   // Regierende Welt-/Europameister: je (Typ, Disziplin) der Sieger der juengsten
@@ -147,16 +280,195 @@ export class ResultRepository {
     if (!tableExists(this.db, 'championship_titles')) {
       return [];
     }
+    // Nur die Elite-WM/EM speisen die Marker in Ergebnissen/Broadcast; die
+    // Altersklassen- und Olympia-Titel erscheinen ausschliesslich in riderStats.
     return this.db.prepare(`
       SELECT ct.rider_id AS riderId, ct.championship_type AS type, ct.discipline AS discipline, ct.season AS season
       FROM championship_titles ct
-      WHERE ct.season = (
-        SELECT MAX(inner_ct.season)
-        FROM championship_titles inner_ct
-        WHERE inner_ct.championship_type = ct.championship_type
-          AND inner_ct.discipline = ct.discipline
-      )
+      WHERE ct.championship_type IN ('WM', 'EM')
+        AND ct.season = (
+          SELECT MAX(inner_ct.season)
+          FROM championship_titles inner_ct
+          WHERE inner_ct.championship_type = ct.championship_type
+            AND inner_ct.discipline = ct.discipline
+        )
     `).all() as Array<{ riderId: number; type: 'WM' | 'EM'; discipline: 'ITT' | 'ROAD'; season: number }>;
+  }
+
+  // Aktuelle nationale Meister (Strasse/ITT) je Land — reigning = juengste
+  // Edition bis zur gewaehlten Saison. Sortiert nach der Country-Wertung der
+  // Saison (meiste Punkte oben); Laender mit Titel aber ohne Punkte hinten
+  // (alphabetisch). Speist den Season-Standings-Tab "Nationale Meister".
+  private getNationalChampionsByCountry(
+    season: number,
+    countryStandings: SeasonStandingCountryRow[],
+  ): SeasonNationalChampionGroup[] {
+    if (!tableExists(this.db, 'national_champion_titles')) return [];
+    const rows = this.db.prepare(`
+      SELECT nct.discipline AS discipline, nct.season AS season, nct.rider_id AS riderId,
+             r.first_name AS firstName, r.last_name AS lastName, rc.code_3 AS riderCountryCode,
+             cc.code_3 AS countryCode, cc.name AS countryName
+      FROM national_champion_titles nct
+      JOIN riders r ON r.id = nct.rider_id
+      LEFT JOIN sta_country rc ON rc.id = r.country_id
+      LEFT JOIN sta_country cc ON cc.id = nct.country_id
+      WHERE nct.season <= ?
+        AND nct.season = (
+          SELECT MAX(i.season) FROM national_champion_titles i
+          WHERE i.country_id IS nct.country_id AND i.discipline = nct.discipline AND i.season <= ?
+        )
+    `).all(season, season) as Array<{
+      discipline: 'ITT' | 'ROAD'; season: number; riderId: number;
+      firstName: string; lastName: string; riderCountryCode: Nationality | null;
+      countryCode: Nationality | null; countryName: string | null;
+    }>;
+
+    const groups = new Map<string, SeasonNationalChampionGroup>();
+    for (const row of rows) {
+      const key = row.countryCode ?? `?${row.countryName ?? ''}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          countryCode: row.countryCode,
+          countryName: row.countryName ?? row.countryCode ?? 'Unbekannt',
+          points: 0,
+          road: null,
+          itt: null,
+        };
+        groups.set(key, group);
+      }
+      const holder: SeasonChampionHolder = {
+        riderId: row.riderId,
+        riderName: `${row.firstName} ${row.lastName}`.trim(),
+        countryCode: row.riderCountryCode,
+        season: row.season,
+      };
+      if (row.discipline === 'ITT') group.itt = holder;
+      else group.road = holder;
+    }
+
+    // Country-Wertungspunkte + Rang je Land zuordnen.
+    const rankByCode = new Map<string, number>();
+    for (const cs of countryStandings) {
+      if (cs.countryCode) {
+        rankByCode.set(cs.countryCode, cs.rank);
+        const g = groups.get(cs.countryCode);
+        if (g) g.points = cs.points;
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      const ra = a.countryCode ? rankByCode.get(a.countryCode) : undefined;
+      const rb = b.countryCode ? rankByCode.get(b.countryCode) : undefined;
+      if (ra != null && rb != null) return ra - rb;      // beide gewertet: nach Rang
+      if (ra != null) return -1;                          // gewertete zuerst
+      if (rb != null) return 1;
+      return a.countryName.localeCompare(b.countryName, 'de'); // Rest alphabetisch
+    });
+  }
+
+  // Aktuell gueltige internationale Titel (WM/EM inkl. U23/Junioren + Olympia),
+  // reigning je (Typ, Disziplin) bis zur gewaehlten Saison. Speist den Season-
+  // Standings-Tab "WM / EM / Olympia".
+  private getReigningTitlesAsOf(season: number): SeasonReigningTitle[] {
+    if (!tableExists(this.db, 'championship_titles')) return [];
+    const rows = this.db.prepare(`
+      SELECT ct.championship_type AS type, ct.discipline AS discipline, ct.rider_id AS riderId,
+             ct.season AS season, r.first_name AS firstName, r.last_name AS lastName,
+             c.code_3 AS countryCode
+      FROM championship_titles ct
+      JOIN riders r ON r.id = ct.rider_id
+      LEFT JOIN sta_country c ON c.id = r.country_id
+      WHERE ct.season <= ?
+        AND ct.season = (
+          SELECT MAX(i.season) FROM championship_titles i
+          WHERE i.championship_type = ct.championship_type AND i.discipline = ct.discipline AND i.season <= ?
+        )
+    `).all(season, season) as Array<{
+      type: ChampionTitleType; discipline: 'ITT' | 'ROAD'; riderId: number; season: number;
+      firstName: string; lastName: string; countryCode: Nationality | null;
+    }>;
+
+    return rows.map((row) => ({
+      type: row.type,
+      discipline: row.discipline,
+      holder: {
+        riderId: row.riderId,
+        riderName: `${row.firstName} ${row.lastName}`.trim(),
+        countryCode: row.countryCode,
+        season: row.season,
+      },
+    }));
+  }
+
+  // Haengt die beiden Champion-Uebersichten an das Payload — fuer frische wie
+  // gecachte (Snapshot-)Standings, damit sie fuer alle Saisons verfuegbar sind.
+  private attachChampionOverviews(payload: SeasonStandingsPayload, season: number): SeasonStandingsPayload {
+    payload.nationalChampions = this.getNationalChampionsByCountry(season, payload.countryStandings ?? []);
+    payload.reigningTitles = this.getReigningTitlesAsOf(season);
+    payload.raceWinners = this.getRaceWinnersByTier(season);
+    return payload;
+  }
+
+  // Jahresuebersicht: Sieger + Podium aller Prestige-Rennen einer Saison.
+  // Stufen ueber category_id: TdF=1, weitere GTs=2, Monumente=3, WT-High=4, One-Day-High=7.
+  // Sieger-Logik wie getRacePalmares: gc_final (Etappenrennen) / one_day_result (Eintagesrennen), rank<=3.
+  private getRaceWinnersByTier(season: number): RaceWinnerEntry[] {
+    if (!tableExists(this.db, 'season_point_events')) {
+      return [];
+    }
+    const rows = this.db.prepare(`
+      SELECT
+        spe.race_id AS race_id,
+        races.name AS race_name,
+        races.category_id AS category_id,
+        races.start_date AS start_date,
+        spe.rank AS rank,
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        spe.team_id AS team_id,
+        teams.name AS team_name
+      FROM season_point_events spe
+      JOIN races ON races.id = spe.race_id
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      LEFT JOIN teams ON teams.id = spe.team_id
+      WHERE spe.season = ?
+        AND races.category_id IN (1, 2, 3, 4, 7, 10, 11, 12, 13, 24, 25, 28, 29, 34, 35, 40, 41)
+        AND spe.rank <= 3
+        AND (
+          (races.is_stage_race = 1 AND spe.award_type = 'gc_final')
+          OR (races.is_stage_race = 0 AND spe.award_type = 'one_day_result')
+        )
+      ORDER BY races.category_id ASC, races.start_date ASC, spe.rank ASC
+    `).all(season) as Array<{
+      race_id: number; race_name: string; category_id: number; start_date: string; rank: number;
+      rider_id: number; first_name: string; last_name: string; country_code: string | null;
+      team_id: number | null; team_name: string | null;
+    }>;
+
+    const ref = (r: (typeof rows)[number]): PalmaresRiderRef => ({
+      riderId: r.rider_id, firstName: r.first_name, lastName: r.last_name,
+      countryCode: r.country_code, teamId: r.team_id, teamName: r.team_name,
+      specialization1: null, specialization2: null,
+    });
+
+    const byRace = new Map<number, RaceWinnerEntry>();
+    const order: number[] = [];
+    for (const r of rows) {
+      let entry = byRace.get(r.race_id);
+      if (!entry) {
+        entry = { raceId: r.race_id, raceName: r.race_name, categoryId: r.category_id, winner: null, second: null, third: null };
+        byRace.set(r.race_id, entry);
+        order.push(r.race_id);
+      }
+      if (r.rank === 1) entry.winner = ref(r);
+      else if (r.rank === 2) entry.second = ref(r);
+      else if (r.rank === 3) entry.third = ref(r);
+    }
+    return order.map((id) => byRace.get(id)!);
   }
 
 

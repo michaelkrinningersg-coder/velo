@@ -6,12 +6,19 @@ import { GameRepository } from '../db/GameRepository';
 import { RiderRepository } from '../db/repositories/RiderRepository';
 import { ResultRepository } from '../db/repositories/ResultRepository';
 import { LeaderboardRepository } from '../db/repositories/LeaderboardRepository';
+import { BadgeRepository } from '../db/repositories/BadgeRepository';
 import { GameStateService } from '../game/GameStateService';
+import { createRandomSeed, createSeededRandom, deriveSeed } from '../../../shared/rng';
+import { getRenewalSelectionPayload, saveRenewalSelection } from '../simulation/contractRenewalSelection';
 import { RiderDraftService } from '../game/RiderDraftService';
+import { RivalryService } from '../game/RivalryService';
+import { WrappedService } from '../game/WrappedService';
 import { RouteImporter } from '../simulation/RouteImporter';
-import { applyRaceRosterSelection, ensureRaceEntries, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { applyRaceRosterSelection, finalizeChampionshipWithoutStarters, previewRaceRoster, previewRaceRosterEditor } from '../simulation/RaceRosterService';
+import { isChampionshipCategory, isNationalChampionshipCategory } from '../simulation/championships';
 import { StageResultCommitService } from '../simulation/StageResultCommitService';
 import { StageParser } from '../simulation/StageParser';
+import { assembleStageBootstrap, buildStageBootstrap, resolveRealtimeTeamStartOrder } from '../simulation/StageBootstrapService';
 import {
   ApiResponse,
   ParsedStageSummary,
@@ -27,6 +34,9 @@ import {
   RaceRosterSelectionRequest,
   RiderProgramRaceSummary,
   RiderStatsPayload,
+  RivalryOverviewPayload,
+  RivalryDetailPayload,
+  SeasonWrappedPayload,
   TeamStatsPayload,
   RiderTeamEditorExportPayload,
   RiderTeamEditorPayload,
@@ -46,6 +56,7 @@ import {
   StageEditorOverviewResponse,
   StageResultsPayload,
   RaceRosterPayload,
+  RacePalmaresPayload,
 } from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
@@ -58,73 +69,6 @@ function fail(res: Response, status: number, message: string): void {
   res.status(status).json(body);
 }
 
-function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber: number, riders: Rider[]): number[] {
-  const participatingTeams = new Map<number, Team>();
-  for (const team of repo.getTeams()) {
-    if (riders.some((rider) => rider.activeTeamId === team.id)) {
-      participatingTeams.set(team.id, team);
-    }
-  }
-
-  const participatingTeamIds = new Set(participatingTeams.keys());
-  if (participatingTeamIds.size === 0) {
-    return [];
-  }
-
-  if (race.isStageRace && stageNumber > 1) {
-    const previousGcStandings = repo.getPreviousGcStandings(race.id, stageNumber);
-    const riderById = new Map(riders.map((rider) => [rider.id, rider]));
-    const teamTotals = new Map<number, number[]>();
-
-    for (const standing of previousGcStandings) {
-      const rider = riderById.get(standing.riderId);
-      const teamId = rider?.activeTeamId;
-      if (teamId == null || !participatingTeamIds.has(teamId)) {
-        continue;
-      }
-
-      const bucket = teamTotals.get(teamId) ?? [];
-      bucket.push(standing.timeSeconds);
-      teamTotals.set(teamId, bucket);
-    }
-
-    return [...participatingTeams.values()]
-      .sort((left, right) => {
-        const leftTimes = teamTotals.get(left.id);
-        const rightTimes = teamTotals.get(right.id);
-        const leftTotal = leftTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, leftTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
-        const rightTotal = rightTimes?.slice().sort((a, b) => a - b).slice(0, Math.min(3, rightTimes.length)).reduce((sum, value) => sum + value, 0) ?? null;
-
-        if (leftTotal != null && rightTotal != null) {
-          return rightTotal - leftTotal || left.name.localeCompare(right.name, 'de');
-        }
-        if (leftTotal != null) return 1;
-        if (rightTotal != null) return -1;
-        return left.name.localeCompare(right.name, 'de');
-      })
-      .map((team) => team.id);
-  }
-
-  const seasonTeamPoints = new Map(
-    repo.getSeasonStandings().teamStandings
-      .filter((row: any) => row.teamId != null && participatingTeamIds.has(row.teamId))
-      .map((row: any) => [row.teamId as number, row.points] as const),
-  );
-
-  return [...participatingTeams.values()]
-    .sort((left, right) => {
-      const leftPoints = seasonTeamPoints.get(left.id) ?? 0;
-      const rightPoints = seasonTeamPoints.get(right.id) ?? 0;
-
-      if (leftPoints === 0 && rightPoints === 0) {
-        return left.name.localeCompare(right.name, 'de');
-      }
-      if (leftPoints === 0) return -1;
-      if (rightPoints === 0) return 1;
-      return (leftPoints as number) - (rightPoints as number) || left.name.localeCompare(right.name, 'de');
-    })
-    .map((team: any) => team.id);
-}
 
 function getSinglePickDetails(db: any, season: number, pickNumber: number): any {
   // 1. Get the draft history row
@@ -411,7 +355,42 @@ export function createRouter(dbService: DatabaseService): Router {
       const excludeFatigue = req.query['excludeFatigue'] === 'true';
       const payload = new RiderRepository(db).getRiderStats(riderId, excludeFatigue);
       if (!payload) return fail(res, 404, `Fahrer ${riderId} nicht gefunden.`);
+      payload.topRival = new RivalryService(db).getTopRivalForRider(riderId);
       ok<RiderStatsPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  // ---- Rivalen ----------------------------------------------------------
+  router.get('/rivalries', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const season = req.query['season'] != null ? Number(req.query['season']) : undefined;
+      ok<RivalryOverviewPayload>(res, new RivalryService(db).getOverview(Number.isFinite(season as number) ? season : undefined));
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/rivalries/:aId/:bId', (req: Request, res: Response) => {
+    const aId = Number(req.params['aId']);
+    const bId = Number(req.params['bId']);
+    if (!Number.isFinite(aId) || !Number.isFinite(bId)) return fail(res, 400, 'Ungueltige Rivalen-IDs.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      const season = req.query['season'] != null ? Number(req.query['season']) : undefined;
+      const payload = new RivalryService(db).getDetail(aId, bId, Number.isFinite(season as number) ? season : undefined);
+      if (!payload) return fail(res, 404, 'Rivalitaet nicht gefunden.');
+      ok<RivalryDetailPayload>(res, payload);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/season-wrapped/:season', (req: Request, res: Response) => {
+    const season = Number(req.params['season']);
+    if (!Number.isFinite(season)) return fail(res, 400, 'Ungueltige Saison.');
+    try {
+      const db = dbService.getActiveConnection();
+      getGss().ensureState();
+      ok<SeasonWrappedPayload>(res, new WrappedService(db).getWrapped(season));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -485,6 +464,15 @@ export function createRouter(dbService: DatabaseService): Router {
       const result = new ResultRepository(db).getRaceRoster(raceId);
       if (!result) return fail(res, 404, 'Keine Teilnehmerdaten verfügbar (Rennen noch nicht gestartet?).');
       ok<RaceRosterPayload>(res, result);
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.get('/races/:id/history', (req: Request, res: Response) => {
+    const raceId = Number(req.params['id']);
+    if (!Number.isFinite(raceId)) return fail(res, 400, 'Ungültige Rennen-ID.');
+    try {
+      const db = dbService.getActiveConnection();
+      ok<RacePalmaresPayload>(res, new ResultRepository(db).getRacePalmares(raceId));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -564,6 +552,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const db = dbService.getActiveConnection();
       ensureWeatherRolled(db, stageId);
+      const simSeed = ensureSimSeedRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -575,30 +564,21 @@ export function createRouter(dbService: DatabaseService): Router {
         return fail(res, 404, `Rennen ${stage.raceId} nicht gefunden.`);
       }
 
-      const riders = ensureRaceEntries(db, repo, race, stage);
-      if (riders.length === 0) {
+      const bootstrap = buildStageBootstrap(db, repo, stageId, { simSeed });
+      if (!bootstrap) {
+        // Meisterschaft ohne startberechtigte Fahrer: ohne Simulation als
+        // ergebnislos abschliessen (kein Meister), damit das Spiel weiterlaeuft.
+        if (isChampionshipCategory(race.categoryId) || isNationalChampionshipCategory(race.categoryId)) {
+          finalizeChampionshipWithoutStarters(db, race);
+          return ok<RealtimeSimulationBootstrap>(res, {
+            skipped: true,
+            skipMessage: `${race.name}: keine startberechtigten Fahrer — in diesem Jahr kein Meister.`,
+          } as unknown as RealtimeSimulationBootstrap);
+        }
         return fail(res, 400, 'Für diese Etappe konnte keine Startliste bestimmt werden.');
       }
 
-      const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number };
-      const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
-
-      ok<RealtimeSimulationBootstrap>(res, {
-        race,
-        stage,
-        riders,
-        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
-        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
-        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
-        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
-        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
-        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
-        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
-        skillWeightRules: repo.getSkillWeightRules(),
-        stageScoringRules: repo.getStageScoringRules(),
-        lieutenants,
-      });
+      ok<RealtimeSimulationBootstrap>(res, bootstrap);
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -680,6 +660,7 @@ export function createRouter(dbService: DatabaseService): Router {
 
       const db = dbService.getActiveConnection();
       ensureWeatherRolled(db, stageId);
+      const simSeed = ensureSimSeedRolled(db, stageId);
       const repo = new GameRepository(db);
       const stage = repo.getStageById(stageId);
       if (!stage) {
@@ -725,25 +706,7 @@ export function createRouter(dbService: DatabaseService): Router {
         }
       }
 
-      const season = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number };
-      const lieutenants = db.prepare('SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?').all(season?.season || 2026) as any[];
-
-      ok<RealtimeSimulationBootstrap>(res, {
-        race,
-        stage,
-        riders,
-        teams: repo.getTeams().filter((team: any) => riders.some((rider: any) => rider.activeTeamId === team.id)),
-        stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
-        gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
-        pointsStandings: repo.getPreviousPointsStandings(stage.raceId, stage.stageNumber),
-        mountainStandings: repo.getPreviousMountainStandings(stage.raceId, stage.stageNumber),
-        youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
-        classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
-        teamStartOrder: resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
-        skillWeightRules: repo.getSkillWeightRules(),
-        stageScoringRules: repo.getStageScoringRules(),
-        lieutenants,
-      });
+      ok<RealtimeSimulationBootstrap>(res, assembleStageBootstrap(db, repo, race, stage, riders, { simSeed }));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -809,8 +772,24 @@ export function createRouter(dbService: DatabaseService): Router {
       const db = dbService.getActiveConnection();
       const gameState = db.prepare('SELECT season FROM game_state').get() as { season: number } | undefined;
       const currentSeason = gameState?.season ?? 2026;
-      const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason);
+      const includeAll = req.query['all'] === '1' || req.query['all'] === 'true';
+      const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason, includeAll);
       ok(res, data);
+    } catch (e) {
+      fail(res, 400, (e as Error).message);
+    }
+  });
+
+  // Halter eines (bespoke) Hall-of-Fame-Badges aus der materialisierten
+  // Tabelle rider_badges — inkl. WorldTour/ProTour/sonstige/zurueckgetreten.
+  router.get('/badges/holders', (req: Request, res: Response) => {
+    const badgeKey = req.query['badgeKey'] as string;
+    if (!badgeKey) {
+      return fail(res, 400, 'Missing badgeKey parameter.');
+    }
+    try {
+      const db = dbService.getActiveConnection();
+      ok(res, new BadgeRepository(db).getBadgeHolders(badgeKey));
     } catch (e) {
       fail(res, 400, (e as Error).message);
     }
@@ -819,6 +798,20 @@ export function createRouter(dbService: DatabaseService): Router {
   router.post('/state/advance', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().advanceDay()); }
     catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  // Spieler-Vertragsverlängerungen: Auswahlfenster (10.01.)
+  router.get('/contract-renewals', (_req: Request, res: Response) => {
+    try { ok(res, getRenewalSelectionPayload(dbService.getActiveConnection())); }
+    catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
+  router.post('/contract-renewals/select', (req: Request, res: Response) => {
+    try {
+      const riderIds = Array.isArray(req.body?.riderIds) ? req.body.riderIds.map((n: any) => Number(n)) : [];
+      saveRenewalSelection(dbService.getActiveConnection(), riderIds);
+      ok(res, getRenewalSelectionPayload(dbService.getActiveConnection()));
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   
@@ -1280,7 +1273,37 @@ export function createRouter(dbService: DatabaseService): Router {
   return router;
 }
 
-function ensureWeatherRolled(db: any, stageId: number): void {
+/**
+ * Zieht einmal je Etappe den Seed der Rennsimulation und legt ihn ab. Ab dann
+ * liefert dieselbe Etappe mit demselben Starterfeld immer dasselbe Ergebnis —
+ * Grundlage fuer Wiederholungen, reproduzierbare Fehlerberichte und
+ * Golden-Master-Tests. Analog zu ensureWeatherRolled.
+ */
+export function ensureSimSeedRolled(db: any, stageId: number): number | null {
+  const row = db.prepare('SELECT sim_seed FROM stages WHERE id = ?').get(stageId) as
+    { sim_seed: number | null } | undefined;
+  if (!row) {
+    return null;
+  }
+  if (row.sim_seed != null) {
+    return row.sim_seed;
+  }
+
+  const seed = createRandomSeed();
+  db.prepare('UPDATE stages SET sim_seed = ? WHERE id = ?').run(seed, stageId);
+  return seed;
+}
+
+/**
+ * Wuerfelt das Wetter der Etappe einmal aus.
+ *
+ * Seit der Einfuehrung des Etappen-Seeds wird es aus diesem abgeleitet statt
+ * frei gezogen. Damit bestimmt der Seed die Etappe vollstaendig — vorher war
+ * die Simulation reproduzierbar, das Wetter aber nicht, sodass derselbe Seed in
+ * einer frisch aufgesetzten Datenbank ein anderes Rennen ergab. Das ist auch
+ * die Voraussetzung dafuer, dass Referenzlaeufe untereinander vergleichbar sind.
+ */
+export function ensureWeatherRolled(db: any, stageId: number): void {
   const row = db.prepare('SELECT rolled_weather_id, allowed_weather FROM stages WHERE id = ?').get(stageId) as { rolled_weather_id: number | null, allowed_weather: string } | undefined;
   if (!row) {
     return;
@@ -1294,8 +1317,9 @@ function ensureWeatherRolled(db: any, stageId: number): void {
     allowed.push(1);
   }
 
-  const randomIndex = Math.floor(Math.random() * allowed.length);
-  const rolledId = allowed[randomIndex];
+  const seed = ensureSimSeedRolled(db, stageId) ?? createRandomSeed();
+  const random = createSeededRandom(deriveSeed(seed, 'weather'));
+  const rolledId = allowed[Math.floor(random() * allowed.length)];
 
   db.prepare('UPDATE stages SET rolled_weather_id = ? WHERE id = ?').run(rolledId, stageId);
 }

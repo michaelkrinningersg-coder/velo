@@ -93,6 +93,9 @@ export const state: {
   selectedDashboardRaceId: number | null;
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
+  selectedRaceDetailRaceId: number | null;
+  raceDetailTab: 'detail' | 'palmares' | 'analysis' | 'record';
+  selectedRaceDetailStageId: number | null;
   stageSummariesByStageId: Record<number, ParsedStageSummary | undefined>;
   stageSummaryErrorsByStageId: Record<number, string | undefined>;
   selectedRealtimeStageId: number | null;
@@ -109,7 +112,7 @@ export const state: {
   draftOverlayCurrentIndex: number;
   draftSpeedMultiplier: number;
   draftPaused: boolean;
-  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries';
+  selectedSeasonStandingScope: 'riders' | 'teams' | 'countries' | 'nationalChampions' | 'internationalChampions' | 'raceWinners';
   teamTableSort: {
     key: TeamTableSortKey;
     direction: 'asc' | 'desc';
@@ -152,6 +155,9 @@ export const state: {
   riderStatsSelectedRiderId: number | null;
   riderStatsSelectedSeason: number | null;
   riderStatsTopResultsFilterCategory: string | null;
+  // Rennen-Filter nach Rennname (Renn-IDs wechseln je Saison -> Name ist die
+  // stabile Identitaet; Auswahl zeigt alle Saisons dieses Rennens).
+  riderStatsTopResultsFilterRaceName: string | null;
   riderStatsTopResultsFilterSeason: number | null;
   riderStatsTopResultsFilterRank: number | null;
   riderStatsTopResultsFilterProfile: string | null;
@@ -166,7 +172,7 @@ export const state: {
     stage: boolean;
   };
   teamStatsPayload: TeamStatsPayload | null;
-  teamStatsTab: 'topResults' | 'career' | 'contracts' | 'transfers';
+  teamStatsTab: 'topResults' | 'career' | 'contracts' | 'transfers' | 'champions';
   teamStatsSelectedTeamId: number | null;
   teamStatsSelectedRosterYear: number | null;
   teamStatsRosterSort: {
@@ -175,6 +181,7 @@ export const state: {
   };
   teamStatsSelectedSeason: number | 'all';
   teamStatsTopResultsFilterCategory: string | null;
+  teamStatsTopResultsFilterRaceName: string | null;
   teamStatsTopResultsFilterSeason: number | null;
   teamStatsTopResultsFilterRank: number | null;
   teamStatsTopResultsFilterProfile: string | null;
@@ -217,6 +224,9 @@ export const state: {
   selectedDashboardRaceId: null,
   selectedRaceParticipantsRaceId: null,
   selectedDashboardProfileStageId: null,
+  selectedRaceDetailRaceId: null,
+  raceDetailTab: 'detail',
+  selectedRaceDetailStageId: null,
   stageSummariesByStageId: {},
   stageSummaryErrorsByStageId: {},
   selectedRealtimeStageId: null,
@@ -276,6 +286,7 @@ export const state: {
   riderStatsSelectedRiderId: null,
   riderStatsSelectedSeason: null,
   riderStatsTopResultsFilterCategory: null,
+  riderStatsTopResultsFilterRaceName: null,
   riderStatsTopResultsFilterSeason: null,
   riderStatsTopResultsFilterRank: null,
   riderStatsTopResultsFilterProfile: null,
@@ -299,6 +310,7 @@ export const state: {
   },
   teamStatsSelectedSeason: 'all',
   teamStatsTopResultsFilterCategory: null,
+  teamStatsTopResultsFilterRaceName: null,
   teamStatsTopResultsFilterSeason: null,
   teamStatsTopResultsFilterRank: null,
   teamStatsTopResultsFilterProfile: null,
@@ -651,6 +663,7 @@ export type ViewName =
   | 'stage-editor-stages'
   | 'stage-editor-climbs'
   | 'leaderboards'
+  | 'rivalries'
   | 'race-programs';
 
 interface ActiveViewListener {

@@ -3499,10 +3499,10 @@ html, body {
   align-items: stretch;
   height: 428px;
   min-height: 428px;
-  border: 1px solid rgba(148, 163, 184, .14);
+  border: 1px solid #1e2c49;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: linear-gradient(180deg, #fffdf7 0%, #f8f1df 100%);
+  background: #0c1526;
 }
 
 .race-sim-profile-layout {
@@ -3550,8 +3550,8 @@ html, body {
 }
 
 .race-sim-cluster-dot {
-  fill: #0f172a;
-  stroke: rgba(255, 255, 255, .92);
+  fill: #e2e8f0;
+  stroke: #0b1424;
   stroke-width: 1.2;
 }
 
@@ -3799,7 +3799,7 @@ html, body {
 }
 
 .race-sim-marker-detail {
-  fill: rgba(31, 41, 55, .82);
+  fill: rgba(226, 232, 240, .9);
   font-size: 10px;
   font-weight: 600;
 }
@@ -4659,9 +4659,9 @@ html, body {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(148, 163, 184, .18);
+  border: 1px solid #1e2c49;
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: #0c1526;
   padding: .75rem;
   overflow: hidden;
 }
@@ -6508,6 +6508,47 @@ tr.calendar-highlight {
   box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
 }
 
+/* Rennen-Durchschalter (nach Startdatum) links/rechts vom Auswahlfeld */
+.results-race-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.results-race-nav select {
+  flex: 1;
+  min-width: 0;
+}
+
+.results-race-nav-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  color: #9fb0c9;
+  background: #0a1122;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.results-race-nav-btn:hover:not(:disabled) {
+  color: #22d3ee;
+  border-color: #22d3ee;
+  background: #0d1830;
+}
+
+.results-race-nav-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
 /* Wertungs-Tabs + Marker/Event-Sub-Leiste als Segment-Toggle */
 #view-results .results-type-tabs {
   gap: 3px;
@@ -6723,3 +6764,148 @@ tr.calendar-highlight {
 
 #view-results .results-grid-body .event-content { min-width: 0; }
 .results-grid-body { min-width: 0; }
+
+/* ===== Renndetails (Race Detail) — Broadcast ===== */
+.race-detail-body { padding: 0; }
+#race-detail-header h2 { font-size: 20px; }
+.race-detail-tabs { margin-bottom: 16px; }
+.race-detail-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.race-detail-stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.race-detail-stage-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid #1c2b47;
+  border-radius: 10px;
+  background: #0b1424;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+.race-detail-stage-row:hover { border-color: #2b3a55; background: #0e1930; }
+.race-detail-stage-row-active {
+  border-color: #22d3ee;
+  box-shadow: inset 3px 0 0 #22d3ee;
+  background: linear-gradient(90deg, rgba(34, 211, 238, .12), transparent 70%);
+}
+/* Zeile 1: Datum + "Etappe x" (nimmt volle Breite, damit der Name nicht mit dem
+   Badge um Platz konkurriert). Zeile 2: Profil-Badge. */
+.rd-stage-line1 { display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0; }
+.rd-stage-line2 { display: flex; }
+.rd-stage-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; flex: none; }
+.rd-stage-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.race-detail-main-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.race-detail-nav { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+/* Etappen-Auswahl zwischen den Pfeilen im Broadcast-Stil. */
+#race-detail-stage-select {
+  flex: 1;
+  min-width: 0;
+  background: #0a1122;
+  color: #e2e8f0;
+  border: 1px solid #1c2b47;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+#race-detail-stage-select:hover { border-color: #2b3a55; }
+#race-detail-stage-select:focus {
+  outline: none;
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, .22);
+}
+.race-detail-profile { min-width: 0; }
+.race-detail-profile-loading {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #1c2b47;
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: #6a7a95;
+}
+.race-detail-details { display: flex; flex-direction: column; gap: 14px; }
+.race-detail-stats-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 4px 2px; }
+.race-detail-stat { display: flex; flex-direction: column; gap: 3px; }
+.rd-stat-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .14em; color: #6a7a95; }
+.rd-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.race-detail-detail-group { display: flex; flex-direction: column; gap: 6px; }
+.rd-group-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
+.race-detail-climb-row {
+  display: grid;
+  grid-template-columns: 12px minmax(120px, 0.9fr) 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid #1c2b47;
+  border-radius: 9px;
+  background: #0b1424;
+}
+.rd-climb-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.rd-climb-name { font-size: 13px; font-weight: 700; color: #e8eef7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-climb-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; text-align: right; }
+@media (max-width: 900px) {
+  .race-detail-layout { grid-template-columns: 1fr; }
+  .race-detail-stage-col { max-height: 220px; flex-direction: row; overflow-x: auto; }
+}
+
+/* ===== Renndetails Tabs 2-4 (Palmarès / Analyse / Rekord) ===== */
+.rd-pal-table { display: flex; flex-direction: column; gap: 4px; }
+.rd-pal-row { display: grid; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; background: #0b1424; border: 1px solid #14203a; }
+.rd-pal-row.rd-pal-header { background: transparent; border: none; padding: 4px 12px; }
+.rd-pal-th { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .12em; color: #6a7a95; text-transform: uppercase; }
+.rd-pal-year { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; color: #e2e8f0; }
+.rd-pal-rider { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.rd-pal-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-pal-empty { color: #4a5a75; font-family: 'JetBrains Mono', monospace; }
+.rider-stats-final-type { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; border: 1px solid transparent; }
+
+.rd-analysis { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.rd-analysis-card { background: #0b1424; border: 1px solid #14203a; border-radius: 12px; padding: 16px; }
+.rd-analysis-title { font-size: 14px; font-weight: 800; color: #e8eef7; margin-bottom: 14px; }
+.rd-analysis-hint { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #6a7a95; }
+.rd-analysis-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6a7a95; margin: 16px 0 8px; }
+.rd-donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.rd-donut { width: 128px; height: 128px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+.rd-donut-hole { width: 84px; height: 84px; border-radius: 50%; background: #0b1424; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.rd-donut-top { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 800; color: #f1f5f9; }
+.rd-donut-bottom { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .14em; color: #6a7a95; margin-top: 3px; }
+.rd-legend { display: flex; flex-direction: column; gap: 6px; min-width: 160px; flex: 1; }
+.rd-legend-row { display: flex; align-items: center; gap: 8px; }
+.rd-legend-dot { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+.rd-legend-label { font-size: 12px; color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-legend-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8494ad; }
+.rd-list { display: flex; flex-direction: column; gap: 4px; }
+.rd-listrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #0c1526; border: 1px solid #14203a; }
+.rd-listrow-label { font-size: 12.5px; color: #e2e8f0; display: inline-flex; align-items: center; gap: 6px; }
+.rd-listrow-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: #8494ad; }
+
+.rd-record { display: flex; flex-direction: column; gap: 5px; }
+.rd-record-head { font-size: 14px; font-weight: 800; color: #e8eef7; margin-bottom: 10px; }
+.rd-record-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #6a7a95; }
+.rd-record-row { display: grid; grid-template-columns: 34px 1fr auto auto; align-items: center; gap: 14px; padding: 9px 12px; border-radius: 9px; background: #0b1424; border: 1px solid #14203a; }
+.rd-record-rank { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; color: #6a7a95; text-align: center; }
+.rd-record-seasons { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #22d3ee; }
+.rd-record-points { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #fbbf24; min-width: 90px; text-align: right; }
+@media (max-width: 820px) { .rd-analysis { grid-template-columns: 1fr; } }

@@ -9,6 +9,11 @@ import { SimulationEngine, type SimulationFrameSnapshot, type SimulationSnapshot
 import { buildNamedRaceGroups, mergeDisplayedClusters, type NamedRaceGroup } from './groupClusters';
 import { summarizeStageMarkers } from './stageSummary';
 import { openRiderStats } from '../views/riderStats';
+import { resolveRaceCategoryBadgeStyle, buildRaceCategoryBadgeCssVariables } from '../state';
+
+function escapeHtml(value: string): string {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
 
 interface RaceSimElements {
   layout: HTMLElement;
@@ -488,7 +493,14 @@ export class RaceSimView {
     const weatherEmoji = weatherId != null ? (weatherEmojis[weatherId] ?? '') : '';
     const weatherSuffix = weatherEmoji ? ` · ${weatherEmoji}` : '';
 
-    this.elements.meta.textContent = `${this.bootstrap.race.name} · Etappe ${this.bootstrap.stage.stageNumber} · ${this.bootstrap.stage.profile} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}${markerMeta ? ` · ${markerMeta}` : ''}${weatherSuffix}`;
+    const metaRace = this.bootstrap.race;
+    const metaProfile = this.bootstrap.stage.profile;
+    const metaCatBadge = metaRace.category?.name
+      ? `<span class="badge badge-race-category" style="${buildRaceCategoryBadgeCssVariables(resolveRaceCategoryBadgeStyle(metaRace.category.name))}">${escapeHtml(metaRace.category.name)}</span>`
+      : '';
+    const metaProfileBadge = `<span class="stage-profile-badge stage-profile-badge-${metaProfile.toLowerCase().replace(/_/g, '-')}">${escapeHtml(metaProfile)}</span>`;
+    this.elements.meta.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;vertical-align:middle;">${metaCatBadge}${metaProfileBadge}</span>`
+      + `${escapeHtml(metaRace.name)} · Etappe ${this.bootstrap.stage.stageNumber} · ${(this.bootstrap.stageSummary.distanceKm).toFixed(1).replace('.', ',')} km${ittSuffix}${markerMeta ? ` · ${markerMeta}` : ''}${weatherSuffix}`;
 
     const shouldRenderProfile = forceSidebar
       || !this.isRunning

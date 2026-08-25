@@ -8,13 +8,16 @@ import { TeamRepository } from "../db/repositories/TeamRepository";
 import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shared/types';
 import { isWinterBreak, tableExists } from '../db/mappers';
 import {
+  championshipAgeBounds,
+  championshipAllowsTeamless,
   CHAMPIONSHIP_FATIGUE_THRESHOLD,
-  championshipRestrictsToEurope,
+  championshipContinents,
   getChampionshipCategoryDef,
   isChampionshipCategory,
   isNationalChampionshipCategory,
   kaderSizeForRank,
   NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD,
+  NATIONAL_SELECTION_TEAM_ID,
 } from './championships';
 
 const DIVISION_BY_TIER: Record<number, Team['division']> = {
@@ -1218,23 +1221,32 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
     return [];
   }
   const season = repo.getCurrentSeason();
-  const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.type];
-  const europeOnly = championshipRestrictsToEurope(def.type);
+  const fatigueThreshold = CHAMPIONSHIP_FATIGUE_THRESHOLD[def.courseType];
+  // Kontinent-Filter (EM => Europa; kontinentale Meisterschaften => eigene
+  // Kontinentliste; WM/Olympia => offen). Flache Kadergrenze nur bei den
+  // kontinentalen Meisterschaften (def.maxRidersPerCountry gesetzt).
+  const continents = championshipContinents(def);
+  const flatCap = def.maxRidersPerCountry ?? null;
+  const { minAge, maxAge } = championshipAgeBounds(def.ageClass);
+  const allowTeamless = championshipAllowsTeamless(def.ageClass);
 
   // 1. Nationenwertung -> Rang je Land (bei Gleichstand gleicher Rang).
+  const continentFilter = continents
+    ? ` AND country.continent IN (${continents.map(() => '?').join(', ')})`
+    : '';
   const rankRows = db.prepare(`
     WITH nation_points AS (
       SELECT country.id AS country_id, SUM(spe.points_awarded) AS pts
       FROM season_point_events spe
       JOIN riders r ON r.id = spe.rider_id
       JOIN sta_country country ON country.id = r.country_id
-      WHERE spe.season = ?${europeOnly ? " AND country.continent = 'Europe'" : ''}
+      WHERE spe.season = ?${continentFilter}
       GROUP BY country.id
       HAVING SUM(spe.points_awarded) > 0
     )
     SELECT country_id, RANK() OVER (ORDER BY pts DESC) AS rank
     FROM nation_points
-  `).all(season) as Array<{ country_id: number; rank: number }>;
+  `).all(season, ...(continents ?? [])) as Array<{ country_id: number; rank: number }>;
   const rankByCountry = new Map<number, number>(rankRows.map((row) => [row.country_id, row.rank]));
   if (rankByCountry.size === 0) {
     return [];
@@ -1255,7 +1267,19 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   // 3. Waehlbare Fahrer je Land sammeln.
   const eligibleByCountry = new Map<number, Rider[]>();
   for (const rider of repo.getRiders() as Rider[]) {
-    if (rider.activeTeamId == null || rider.countryId == null) {
+    if (rider.countryId == null) {
+      continue;
+    }
+    // Teamlose Fahrer nur bei U23/Junioren zulassen (dort ausdruecklich erlaubt).
+    if (rider.activeTeamId == null && !allowTeamless) {
+      continue;
+    }
+    // Altersfilter je Klasse (Alter = Saison - Geburtsjahr).
+    const age = season - rider.birthYear;
+    if (minAge != null && age < minAge) {
+      continue;
+    }
+    if (maxAge != null && age > maxAge) {
       continue;
     }
     if (!rankByCountry.has(rider.countryId)) {
@@ -1278,7 +1302,11 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   // 4. Je Land nach Disziplin sortieren und auf die Kadergroesse kuerzen.
   const selected: Rider[] = [];
   for (const [countryId, riders] of eligibleByCountry) {
-    const size = kaderSizeForRank(rankByCountry.get(countryId)!, def.discipline);
+    // Kontinentale Meisterschaften: flache Grenze (gleich fuer alle Laender);
+    // WM/EM: Abstufung nach Nationenrang.
+    const size = flatCap != null
+      ? flatCap
+      : kaderSizeForRank(rankByCountry.get(countryId)!, def.discipline);
     if (size <= 0) {
       continue;
     }
@@ -1312,20 +1340,31 @@ export function buildNationalChampionshipRoster(db: Database.Database, repo: any
     : [];
   const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
 
-  const selected: Rider[] = [];
-  for (const rider of repo.getRiders() as Rider[]) {
-    if (rider.activeTeamId == null || rider.countryId !== countryId) {
-      continue;
-    }
+  // Alle Fahrer des Landes (mit ODER ohne Team).
+  const countryRiders = (repo.getRiders() as Rider[]).filter(
+    (rider) => rider.countryId === countryId,
+  );
+
+  // Startberechtigt = gesund, verfuegbar und nicht zu ermuedet. Verletzte/kranke
+  // oder zu erschoepfte Fahrer starten NICHT — auch nicht als Notloesung.
+  const isEligible = (rider: Rider): boolean => {
     const state = stateByRider.get(rider.id);
-    if (state) {
-      if (state.health_status !== 'healthy') continue;
-      if (state.unavailable_until) continue;
-      if (state.combined_fatigue > NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD) continue;
-    }
-    selected.push(rider);
-  }
-  return selected;
+    if (!state) return true;
+    if (state.health_status !== 'healthy') return false;
+    if (state.unavailable_until) return false;
+    if (state.combined_fatigue > NATIONAL_CHAMPIONSHIP_FATIGUE_THRESHOLD) return false;
+    return true;
+  };
+
+  // 1) Bevorzugt startberechtigte Fahrer mit Team.
+  const withTeam = countryRiders.filter((rider) => rider.activeTeamId != null && isEligible(rider));
+  if (withTeam.length > 0) return withTeam;
+
+  // 2) Fallback: alle startberechtigten Fahrer des Landes (auch teamlose).
+  const eligibleAny = countryRiders.filter(isEligible);
+  // 3) Sind keine startberechtigt, bleibt die Startliste leer -> in diesem Jahr
+  //    gibt es fuer dieses Land keinen nationalen Meister (Rennen ohne Ergebnis).
+  return eligibleAny;
 }
 
 function applyChampionshipEntries(
@@ -1343,6 +1382,12 @@ function applyChampionshipEntries(
   }
 
   const selected = rosterBuilder(db, repo, race, stage);
+  const champDef = getChampionshipCategoryDef(race.categoryId);
+  // Nationale Meisterschaften duerfen ebenfalls teamlose Fahrer des Landes
+  // starten lassen (Fallback, wenn keine startberechtigten Team-Fahrer da sind).
+  const allowTeamless = champDef
+    ? championshipAllowsTeamless(champDef.ageClass)
+    : isNationalChampionshipCategory(race.categoryId);
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const insertEntry = db.prepare(
@@ -1353,15 +1398,36 @@ function applyChampionshipEntries(
     deleteStageEntries.run(race.id);
     deleteRaceEntries.run(race.id);
     for (const rider of selected) {
-      if (rider.activeTeamId == null) {
+      // Teamlose U23/Junioren-Starter laufen ueber das Pseudo-Team; sonst wird
+      // ein teamloser Fahrer uebersprungen (Elite/National/Olympia).
+      const teamId = rider.activeTeamId ?? (allowTeamless ? NATIONAL_SELECTION_TEAM_ID : null);
+      if (teamId == null) {
         continue;
       }
-      insertEntry.run(race.id, rider.activeTeamId, rider.id);
+      insertEntry.run(race.id, teamId, rider.id);
     }
   })();
 
   repo.ensureStageEntries(stage);
   return repo.getStageRiders(stage.id);
+}
+
+/**
+ * Schliesst ein Championship-Rennen ohne startberechtigte Fahrer ab, ohne es zu
+ * simulieren: ein leerer race_results_compact-Eintrag nimmt das Rennen aus den
+ * offenen Etappen (Spielfortschritt bleibt moeglich), es gibt kein Ergebnis und
+ * keinen Meister. Fuer nationale Meisterschaften ohne verfuegbare Fahrer.
+ */
+export function finalizeChampionshipWithoutStarters(db: Database.Database, race: Race): void {
+  if (!tableExists(db, 'race_results_compact')) return;
+  const season = (db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined)?.season;
+  if (season == null) return;
+  db.transaction(() => {
+    db.prepare('DELETE FROM stage_entries WHERE race_id = ?').run(race.id);
+    db.prepare('DELETE FROM active_race_entries WHERE race_id = ?').run(race.id);
+    db.prepare('INSERT OR REPLACE INTO race_results_compact (race_id, season, payload) VALUES (?, ?, ?)')
+      .run(race.id, season, '{}');
+  })();
 }
 
 export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {

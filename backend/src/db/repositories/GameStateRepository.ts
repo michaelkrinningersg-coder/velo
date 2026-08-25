@@ -703,7 +703,7 @@ export class GameStateRepository {
       FROM stages
       JOIN races ON races.id = stages.race_id
       JOIN race_categories ON race_categories.id = races.category_id
-      JOIN race_categories_bonus ON race_categories_bonus.id = race_categories.bonus_system_id
+      JOIN race_categories_bonus ON race_categories_bonus.id = COALESCE(races.bonus_system_id, race_categories.bonus_system_id)
       WHERE CAST(substr(stages.date, 1, 4) AS INTEGER) = ?
         ${stageId != null ? 'AND stages.id = ?' : ''}
         AND EXISTS (

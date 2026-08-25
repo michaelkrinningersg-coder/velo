@@ -165,6 +165,12 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS idx_contracts_rider_season ON contracts(rider_id, start_season, end_season);
 CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 
+-- Idempotenz-Marker fuer die automatische Vertragsverlaengerung zum 01.08.
+-- (eine Zeile je Saison, in der der Lauf bereits stattgefunden hat).
+CREATE TABLE IF NOT EXISTS contract_renewal_runs (
+  season INTEGER PRIMARY KEY
+);
+
 -- ---- Rennkategorien / Punkte- und Bonussysteme -------------
 CREATE TABLE IF NOT EXISTS race_categories_bonus (
   id                           INTEGER PRIMARY KEY,
@@ -268,6 +274,7 @@ CREATE TABLE IF NOT EXISTS races (
   prestige                    INTEGER NOT NULL CHECK(prestige BETWEEN 0 AND 100),
   preferred_nationality_group TEXT,
   required_specs              TEXT,
+  bonus_system_id             INTEGER REFERENCES race_categories_bonus(id),
   CHECK(end_date >= start_date)
 );
 
@@ -318,6 +325,41 @@ CREATE INDEX IF NOT EXISTS idx_rider_season_programs_program
   ON rider_season_programs(season, program_id);
 
 -- ---- Wetter --------------------------------------------------
+-- ---- Quick-Simulation: Parameter je Etappenprofil ----------
+-- Kalibrierbare Kennwerte des schnellen Simulationsmodus. Bewusst als Daten
+-- statt als Konstanten im Code: die Werte werden gegen die Instant-Simulation
+-- gefittet und muessen ohne Rebuild anpassbar bleiben.
+CREATE TABLE IF NOT EXISTS quick_sim_profiles (
+  profile                     TEXT PRIMARY KEY,
+  -- Referenzgeschwindigkeit fuer die Siegerzeit.
+  base_speed_kmh              REAL NOT NULL,
+  -- Achsenabschnitt der Regime-Ziehung: P(geschlossene Ankunft) =
+  -- sigmoid(bunch_intercept + BUNCH_SLOPE * stage_score / km). Gemessen.
+  bunch_intercept             REAL NOT NULL,
+  -- Mittlerer Anteil der ersten Zeitgruppe bei geschlossener Ankunft. Gemessen.
+  bunched_share_mean          REAL NOT NULL,
+  -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
+  -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
+  split_share_intercept       REAL NOT NULL,
+  -- Rueckstand des letzten Fahrers in Sekunden je Kilometer; skaliert die
+  -- ganze Rueckstandskurve hinter der ersten Gruppe. Gemessen.
+  tail_gap_per_km             REAL NOT NULL,
+  -- Mittlere Zahl Fahrer je Zeitgruppe im Feld dahinter. Gemessen.
+  tail_group_size             REAL NOT NULL,
+  -- Streuung des Rueckstands. Regelt, wie vorhersagbar das Ergebnis ist.
+  noise_sigma                 REAL NOT NULL,
+  -- Faktor auf den Zeitverlust eines Vorfalls (Anschluss verlieren kostet mehr als die Wartezeit).
+  incident_loss_multiplier    REAL NOT NULL,
+  -- Wahrscheinlichkeit, dass ein schwerer Sturz zur Aufgabe fuehrt.
+  severe_dnf_chance           REAL NOT NULL,
+  -- Exponent der Ausduennung der Ausreissergruppe bis zum Einholpunkt.
+  breakaway_shrink_exponent   REAL NOT NULL,
+  -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit.
+  time_trial_slope            REAL NOT NULL,
+  -- Nur Zeitfahren: Reststreuung um diese Gerade (Tagesform), ebenso relativ.
+  time_trial_noise            REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS wetter (
   id INTEGER PRIMARY KEY,
   wetter_name TEXT NOT NULL UNIQUE,
@@ -350,6 +392,9 @@ CREATE TABLE IF NOT EXISTS stages (
   stage_score      INTEGER NOT NULL DEFAULT 0 CHECK(stage_score BETWEEN 0 AND 1000),
   allowed_weather TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7',
   rolled_weather_id INTEGER REFERENCES wetter(id),
+  -- Seed der Rennsimulation. Wird einmal je Etappe gezogen; dieselbe Etappe mit
+  -- demselben Starterfeld liefert damit immer dasselbe Ergebnis.
+  sim_seed INTEGER,
   super_team_id INTEGER REFERENCES teams(id),
   UNIQUE(race_id, stage_number)
 );
