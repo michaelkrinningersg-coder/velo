@@ -492,8 +492,41 @@ function mapSkillWeightRule(row) {
         tttSpeedMultiplier: row.ttt_speed_multiplier,
     };
 }
+// Deterministischer Wettereffekt — Zeichen fuer Zeichen dieselbe Rechnung wie in
+// mappers.ts. Ein zweiter Zufallsstrom haette bedeutet, dass dieselbe Etappe je
+// nach Aufrufweg anderes Wetter bekommt.
+function getDeterministicRandom(seedStr) {
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+        hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const x = Math.sin(hash) * 10000;
+    return x - Math.floor(x);
+}
+function getDeterministicWeatherEffect(stageId, effectKey, min, max) {
+    if (min === max)
+        return min;
+    return min + getDeterministicRandom(`${stageId}:${effectKey}`) * (max - min);
+}
 function mapStage(row) {
     const summary = (0, StageParser_1.summarizeStageProfile)(row.details_csv_file, row.start_elevation);
+    // Wetter: stand hier bisher gar nicht. Die Engine las deshalb ueberall
+    // weatherId = 1 und Effekt 0 — das gerollte Wetter erreichte die Simulation
+    // nie, obwohl es in der Datenbank stand.
+    const rolledWeatherId = row.rolled_weather_id ?? null;
+    const rolledWetterName = row.wetter_name ?? null;
+    let rolledEffektSturz = 0;
+    let rolledEffektDefekt = 0;
+    let rolledWindkantenGefahr = 0;
+    let rolledEffektFatigue = 0;
+    let rolledBreakawayBonus = 0;
+    if (rolledWeatherId != null) {
+        rolledEffektSturz = getDeterministicWeatherEffect(row.id, 'sturz', row.effekt_sturz_min ?? 0, row.effekt_sturz_max ?? 0);
+        rolledEffektDefekt = getDeterministicWeatherEffect(row.id, 'defekt', row.effekt_defekt_min ?? 0, row.effekt_defekt_max ?? 0);
+        rolledWindkantenGefahr = getDeterministicWeatherEffect(row.id, 'windkante', row.windkanten_gefahr_min ?? 0, row.windkanten_gefahr_max ?? 0);
+        rolledEffektFatigue = getDeterministicWeatherEffect(row.id, 'fatigue', row.effekt_fatigue_min ?? 0, row.effekt_fatigue_max ?? 0);
+        rolledBreakawayBonus = getDeterministicWeatherEffect(row.id, 'breakaway', row.breakaway_bonus_min ?? 0, row.breakaway_bonus_max ?? 0);
+    }
     return {
         id: row.id,
         raceId: row.race_id,
@@ -513,6 +546,14 @@ function mapStage(row) {
         // Kilometer ab. Fehlte hier, waehrend mappers.ts ihn laengst abbildet —
         // die zweite Fassung des Mappers in dieser Bruecke war stehengeblieben.
         profileScore: row.stage_score,
+        allowedWeather: row.allowed_weather,
+        rolledWeatherId,
+        rolledWetterName,
+        rolledEffektSturz,
+        rolledEffektDefekt,
+        rolledWindkantenGefahr,
+        rolledEffektFatigue,
+        rolledBreakawayBonus,
     };
 }
 function loadFallbackStages(raceIds) {
