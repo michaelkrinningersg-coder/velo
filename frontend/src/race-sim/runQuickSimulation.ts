@@ -17,7 +17,7 @@ import {
   resolveMarkerRanking,
   type QuickSimBreakawayPlan,
 } from '../../../shared/quickSim/breakaway';
-import type { QuickSimIncident } from '../../../shared/quickSim/incidents';
+import { expandMassCrashes, type QuickSimIncident } from '../../../shared/quickSim/incidents';
 import {
   simulateQuickStage,
   type QuickSimResultEntry,
@@ -38,7 +38,8 @@ import type {
   StageMarkerClassificationEntry,
   StageProfile,
 } from '../../../shared/types';
-import { precalculateRaceIncidents } from './incidents';
+import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
+import { resolveFatigueMalus } from './riderCondition';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
@@ -138,13 +139,36 @@ export function runQuickSimulation(
     distanceKm,
     createSeededRandom(deriveSeed(seed, 'incidents')),
   );
-  const incidents: QuickSimIncident[] = precalculatedIncidents.map((incident) => ({
+  const toQuickIncident = (incident: PrecalculatedRaceIncident): QuickSimIncident => ({
     riderId: incident.riderId,
     type: incident.type,
     severity: incident.severity,
     triggerDistanceKm: incident.triggerDistanceKm,
     waitDurationSeconds: incident.waitDurationSeconds,
-  }));
+    ...(incident.isMassCrashTrigger ? { isMassCrashTrigger: true } : {}),
+    ...(incident.massCrashPotentialRiderIds ? { massCrashPotentialRiderIds: incident.massCrashPotentialRiderIds } : {}),
+  });
+
+  // Massenstuerze aufloesen: die volle Simulation zieht die Fahrer hinein, die
+  // im Moment des Sturzes hoechstens 50 Meter entfernt sind. Ohne Positionen
+  // tritt an deren Stelle ein gemessener Anteil der Kandidaten.
+  const massCrashRandom = createSeededRandom(deriveSeed(seed, 'mass-crash'));
+  const riderForVictim = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
+  const incidents = expandMassCrashes(
+    massCrashRandom,
+    precalculatedIncidents.map(toQuickIncident),
+    parameters.massCrashInvolvement,
+    (riderId, triggerDistanceKm) => {
+      const rider = riderForVictim.get(riderId);
+      if (!rider) {
+        return { riderId, type: 'crash', severity: 'light', triggerDistanceKm, waitDurationSeconds: 30 };
+      }
+      // Derselbe Opfer-Vorfall, den auch die Engine baut.
+      return toQuickIncident(buildDynamicCrashIncident(
+        rider, bootstrap.riders, triggerDistanceKm, distanceKm, massCrashRandom,
+      ));
+    },
+  );
 
   const plan = precalculateStageBreakaway(
     bootstrap.riders,
@@ -175,14 +199,22 @@ export function runQuickSimulation(
     random: createSeededRandom(deriveSeed(seed, 'special-form')),
   });
   // Die Sonderzustaende verschieben die Tagesform — genau so rechnet die Engine.
-  const effectiveRiders = ridersWithSpecialStates.map((rider) => rider);
+  //
+  // Die Ermuedung kommt hier ebenfalls hinein, und zwar aus einem Grund:
+  // `calculateStageFavoriteRiderRanking` rechnet Saisonform und Rennform ein,
+  // die drei Ermuedungswerte aber nicht. Fuer eine Favoritenanzeige reicht das;
+  // fuer einen Leistungsscore nicht — sonst waere ein muerber Fahrer so stark
+  // wie ein frischer. Ueber die Tagesform eingespeist, entspricht der Score
+  // danach genau dem `resolveConditionFormBonus` der Engine.
   const effectiveDailyForm = new Map(ridersWithSpecialStates.map((rider) => [
     rider.id,
-    (dailyFormByRiderId.get(rider.id) ?? 0) + (rider.specialFormDelta ?? 0),
+    (dailyFormByRiderId.get(rider.id) ?? 0)
+    + (rider.specialFormDelta ?? 0)
+    - resolveFatigueMalus(rider),
   ]));
 
   const ranking = calculateStageFavoriteRiderRanking(
-    effectiveRiders,
+    ridersWithSpecialStates,
     bootstrap.teams,
     bootstrap.stage,
     { distanceKm, elevationGainMeters, dailyFormByRiderId: effectiveDailyForm },

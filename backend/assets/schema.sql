@@ -357,7 +357,9 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit.
   time_trial_slope            REAL NOT NULL,
   -- Nur Zeitfahren: Reststreuung um diese Gerade (Tagesform), ebenso relativ.
-  time_trial_noise            REAL NOT NULL
+  time_trial_noise            REAL NOT NULL,
+  -- Anteil der Kandidaten eines Massensturzes, den es tatsaechlich trifft.
+  mass_crash_involvement      REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wetter (

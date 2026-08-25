@@ -23,6 +23,7 @@ import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
+import { resolveConditionFormBonus } from './riderCondition';
 import {
   buildStageScoringWeightMap,
   resolveMarkerWeightProfile,
@@ -521,12 +522,6 @@ function resolveBaseSkill(rider: Rider, skillName: TerrainSkillName): number {
     default:
       return rider.skills.flat;
   }
-}
-
-function resolveConditionFormBonus(rider: Rider): number {
-  return (rider.formBonus ?? 0)
-    + (rider.raceFormBonus ?? 0)
-    - ((rider.fatigueMalus ?? 0) + (rider.longTermFatigueMalus ?? 0) + (rider.shortTermFatigueMalus ?? 0)) * 0.5;
 }
 
 function formatSkillBreakdown(rider: Rider, components: WeightedSkillComponent[]): string {

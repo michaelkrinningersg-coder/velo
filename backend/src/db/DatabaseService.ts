@@ -3298,7 +3298,7 @@ export class DatabaseService {
       'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_mean',
       'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
       'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
-      'time_trial_slope', 'time_trial_noise',
+      'time_trial_slope', 'time_trial_noise', 'mass_crash_involvement',
     ];
     if (tableExists(db, 'quick_sim_profiles')) {
       const actual = (db.prepare('PRAGMA table_info(quick_sim_profiles)').all() as Array<{ name: string }>)
@@ -3332,7 +3332,9 @@ export class DatabaseService {
         -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit
         -- und die Reststreuung um diese Gerade (Tagesform).
         time_trial_slope            REAL NOT NULL,
-        time_trial_noise            REAL NOT NULL
+        time_trial_noise            REAL NOT NULL,
+        -- Anteil der Kandidaten eines Massensturzes, den es tatsaechlich trifft.
+        mass_crash_involvement      REAL NOT NULL
       )
     `).run();
 

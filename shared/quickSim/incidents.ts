@@ -26,6 +26,56 @@ export interface QuickSimIncident {
   severity: 'light' | 'medium' | 'severe' | null;
   triggerDistanceKm: number;
   waitDurationSeconds: number;
+  /** Dieser Sturz kann weitere Fahrer mitreissen. */
+  isMassCrashTrigger?: boolean;
+  /** Wer dabei ueberhaupt in Frage kommt. Vorberechnet, wie in der vollen Sim. */
+  massCrashPotentialRiderIds?: readonly number[];
+}
+
+/**
+ * Loest Massenstuerze in einzelne Vorfaelle auf.
+ *
+ * Die volle Simulation kennt Positionen: sie zieht in einen Massensturz genau
+ * die Fahrer hinein, die im Moment des Sturzes hoechstens 50 Meter entfernt
+ * sind. Die Quick Simulation hat keine Positionen — an ihre Stelle tritt ein
+ * Anteil: welcher Teil der vorberechneten Kandidaten es tatsaechlich trifft.
+ *
+ * Ohne diese Aufloesung stuerzt nur der Ausloeser. Das faellt umso mehr ins
+ * Gewicht, seit das Wetter die Simulation wieder erreicht: bei Regen
+ * verfuenffacht sich die Sturzwahrscheinlichkeit, und damit auch die Zahl der
+ * Massenstuerze.
+ *
+ * Der Opfer-Vorfall wird nicht hier gebaut, sondern hereingereicht — die volle
+ * Simulation hat dafuer `buildDynamicCrashIncident`, und zwei Fassungen
+ * derselben Sturzschwere waeren genau die Doppelpflege, die auseinanderlaeuft.
+ */
+export function expandMassCrashes(
+  random: RandomSource,
+  incidents: readonly QuickSimIncident[],
+  involvementShare: number,
+  buildVictimIncident: (riderId: number, triggerDistanceKm: number) => QuickSimIncident,
+): QuickSimIncident[] {
+  const expanded = [...incidents];
+  if (involvementShare <= 0) {
+    return expanded;
+  }
+
+  // Wer schon einen Vorfall hat, wird nicht zusaetzlich mitgerissen — sonst
+  // zaehlte derselbe Sturz doppelt.
+  const alreadyAffected = new Set(incidents.map((incident) => incident.riderId));
+  for (const incident of incidents) {
+    if (!incident.isMassCrashTrigger || !incident.massCrashPotentialRiderIds) {
+      continue;
+    }
+    for (const victimId of incident.massCrashPotentialRiderIds) {
+      if (alreadyAffected.has(victimId) || random() >= involvementShare) {
+        continue;
+      }
+      alreadyAffected.add(victimId);
+      expanded.push(buildVictimIncident(victimId, incident.triggerDistanceKm));
+    }
+  }
+  return expanded;
 }
 
 export interface QuickSimIncidentOutcome {

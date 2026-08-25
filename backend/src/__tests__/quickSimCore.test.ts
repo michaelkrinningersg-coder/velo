@@ -7,6 +7,7 @@ import {
   type QuickSimBreakawayPlan,
 } from '../../../shared/quickSim/breakaway';
 import {
+  expandMassCrashes,
   resolveIncidentOutcomes,
   resolveIncidentTimeLossSeconds,
   type QuickSimIncident,
@@ -124,6 +125,75 @@ describe('resolveIncidentOutcomes', () => {
     );
     expect(outcomes.get(1)?.isAbandon).toBe(true);
     expect(outcomes.get(1)?.triggerDistanceKm).toBe(50);
+  });
+});
+
+describe('expandMassCrashes', () => {
+  const victim = (riderId: number, triggerDistanceKm: number): QuickSimIncident => ({
+    riderId, type: 'crash', severity: 'light', triggerDistanceKm, waitDurationSeconds: 30,
+  });
+  const trigger = incident({
+    riderId: 1,
+    isMassCrashTrigger: true,
+    massCrashPotentialRiderIds: Array.from({ length: 24 }, (_, index) => index + 2),
+  });
+
+  it('zieht ungefaehr den vorgegebenen Anteil der Kandidaten hinein', () => {
+    const random = createSeededRandom(21);
+    let involved = 0;
+    const rounds = 400;
+    for (let round = 0; round < rounds; round += 1) {
+      involved += expandMassCrashes(random, [trigger], 0.35, victim).length - 1;
+    }
+    const share = involved / (rounds * 24);
+    expect(share).toBeGreaterThan(0.32);
+    expect(share).toBeLessThan(0.38);
+  });
+
+  it('laesst die Liste unveraendert, wenn niemand mitgerissen wird', () => {
+    expect(expandMassCrashes(createSeededRandom(22), [trigger], 0, victim)).toEqual([trigger]);
+  });
+
+  it('ruehrt Vorfaelle ohne Massensturz nicht an', () => {
+    const plain = [incident({ riderId: 1 }), incident({ riderId: 2, type: 'mechanical', severity: null })];
+    expect(expandMassCrashes(createSeededRandom(23), plain, 1, victim)).toEqual(plain);
+  });
+
+  it('trifft niemanden zweimal', () => {
+    // Zwei Massenstuerze mit denselben Kandidaten, alle werden mitgerissen.
+    const second = incident({
+      riderId: 30,
+      isMassCrashTrigger: true,
+      massCrashPotentialRiderIds: Array.from({ length: 24 }, (_, index) => index + 2),
+    });
+    const expanded = expandMassCrashes(createSeededRandom(24), [trigger, second], 1, victim);
+    const ids = expanded.map((entry) => entry.riderId);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Ausloeser 1 und 30 plus die 24 Kandidaten.
+    expect(expanded).toHaveLength(26);
+  });
+
+  it('reisst niemanden mit, der schon einen Vorfall hat', () => {
+    const alreadyHurt = incident({ riderId: 5, type: 'mechanical', severity: null });
+    const expanded = expandMassCrashes(createSeededRandom(25), [trigger, alreadyHurt], 1, victim);
+    const forRider5 = expanded.filter((entry) => entry.riderId === 5);
+    expect(forRider5).toHaveLength(1);
+    expect(forRider5[0]!.type).toBe('mechanical');
+  });
+
+  it('setzt die Opfer an den Kilometer des Ausloesers', () => {
+    const expanded = expandMassCrashes(
+      createSeededRandom(26),
+      [incident({
+        riderId: 1, triggerDistanceKm: 88,
+        isMassCrashTrigger: true, massCrashPotentialRiderIds: [2, 3, 4],
+      })],
+      1,
+      victim,
+    );
+    for (const entry of expanded) {
+      expect(entry.triggerDistanceKm).toBe(88);
+    }
   });
 });
 
