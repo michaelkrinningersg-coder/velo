@@ -277,6 +277,61 @@ export class GameStateService {
     }
   }
 
+  /**
+   * Schreibt die Tageszustaende gebuendelt.
+   *
+   * Vorher eine `UPDATE`-Ausfuehrung je Fahrer — bei rund tausend geaenderten
+   * Zeilen 5,8 ms und der viertgroesste Posten des Tageswechsels. `UPDATE …
+   * FROM (VALUES …)` schreibt dieselben Zeilen in einer Anweisung; gemessen
+   * etwa die Haelfte.
+   *
+   * Die Blockgroessen sind fest (512, 64, 8) statt "was uebrig bleibt". Sonst
+   * entstuende je Tag eine andere Anweisung, und der Anweisungs-Zwischenspeicher
+   * an der Verbindung liefe voll, statt zu helfen. Der Rest geht einzeln.
+   * SQLite erlaubt hoechstens 32 766 Platzhalter je Anweisung; bei fuenfzehn
+   * Werten je Fahrer sind 512 Zeilen (7680) sicher darunter.
+   */
+  private writeDailyStates(updates: unknown[][], fallback: Database.Statement): void {
+    const SPALTEN = 15;
+    const BLOCKGROESSEN = [512, 64, 8];
+    const werte = `(${Array.from({ length: SPALTEN }, () => '?').join(', ')})`;
+
+    const stapel = (groesse: number): Database.Statement => this.db.prepare(`
+      UPDATE rider_daily_state
+      SET season = v.column1,
+          form_bonus = v.column2,
+          race_form_bonus = v.column3,
+          peak_s_form = v.column4,
+          peak_r_form = v.column5,
+          active_peak_date = v.column6,
+          peak_dates_json = v.column7,
+          health_status = v.column8,
+          unavailable_until = v.column9,
+          unavailable_days_remaining = v.column10,
+          short_term_fatigue = v.column11,
+          long_term_fatigue_decayable = v.column12,
+          long_term_fatigue_locked = v.column13,
+          consecutive_non_race_days = v.column14
+      FROM (VALUES ${Array.from({ length: groesse }, () => werte).join(', ')}) AS v
+      WHERE rider_daily_state.rider_id = v.column15
+    `);
+
+    this.db.transaction(() => {
+      let index = 0;
+      for (const groesse of BLOCKGROESSEN) {
+        const anweisung = updates.length - index >= groesse ? stapel(groesse) : null;
+        while (anweisung && updates.length - index >= groesse) {
+          const block = updates.slice(index, index + groesse);
+          anweisung.run(...(block.flat() as Parameters<Database.Statement['run']>));
+          index += groesse;
+        }
+      }
+      for (; index < updates.length; index += 1) {
+        fallback.run(...((updates[index] as unknown[]) as Parameters<Database.Statement['run']>));
+      }
+    })();
+  }
+
   public advanceDay(): GameState {
     ResultRepository.clearInMemoryStageEvents();
     let isNewSeason = false;
@@ -1179,6 +1234,13 @@ export class GameStateService {
 
     // Bulk-load program windows once, then look up per rider from the in-memory map.
     const programWindows = this.getProgramWindowsForSeason(currentSeason);
+    // Nur laden, wenn tatsaechlich jemand neue Peaks braucht — bei einem
+    // gesunden Spielstand ist das keiner, und dann kostet es nichts.
+    let peakKandidatenCache: Map<number, PeakRaceRow[]> | null = null;
+    const peakKandidaten = (): Map<number, PeakRaceRow[]> => {
+      peakKandidatenCache ??= loadPeakRaceCandidatesForAllRiders(this.db, currentSeason);
+      return peakKandidatenCache;
+    };
 
     for (const row of rows) {
       const seasonChanged = row.season !== currentSeason;
@@ -1193,13 +1255,17 @@ export class GameStateService {
       }
 
       const windows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
-      const peakDates = resolveSeasonPeakDatesFromWindows(
-        seasonChanged || peaksStale ? [] : storedPeaks,
-        currentSeason,
-        windows,
-        this.db,
-        row.rider_id,
-      );
+      const neuAbleiten = seasonChanged || peaksStale;
+      const peakDates = (neuAbleiten
+        ? pickPeakDatesFromRows(peakKandidaten().get(row.rider_id) ?? [])
+        : null)
+        ?? resolveSeasonPeakDatesFromWindows(
+          neuAbleiten ? [] : storedPeaks,
+          currentSeason,
+          windows,
+          this.db,
+          row.rider_id,
+        );
       const phase = resolvePeakPhase(currentDate, peakDates);
       let formBonus = row.form_bonus;
       let peakSForm = row.peak_s_form;
@@ -1315,7 +1381,14 @@ export class GameStateService {
       JOIN riders r ON r.id = rds.rider_id
       LEFT JOIN teams t ON t.id = r.active_team_id
       LEFT JOIN division_teams dt ON dt.id = t.division_id
-    `).all() as RiderDailyStateRow[];
+      -- Dieselben Bedingungen, unter denen die Schleife unten weiterarbeitet
+      -- (Tier 1 oder Saisonwechsel). Am Monatsersten alle, weil
+      -- RiderDevelopmentService dann auch die uebrigen Fahrer entwickelt und
+      -- dafuer deren Kontext aus dieser Schleife braucht.
+      WHERE ? = 1
+         OR rds.season <> ?
+         OR (r.active_team_id IS NOT NULL AND dt.tier = 1)
+    `).all(nextDate.endsWith('-01') ? 1 : 0, nextSeason) as RiderDailyStateRow[];
     const updateState = this.db.prepare(`
       UPDATE rider_daily_state
       SET season = ?,
@@ -1379,6 +1452,14 @@ export class GameStateService {
     // Bulk-load program windows for the current season ONCE instead of doing
     // a per-rider SELECT in `loadProgramPeakWindows` (the previous N+1 hot spot).
     const programWindows = this.getProgramWindowsForSeason(nextSeason);
+    // Beim Saisonwechsel bekommt jeder Fahrer neue Peaks. Das lief bisher ueber
+    // `generateHighlightBasedPeakDates` je Fahrer — im Testlauf 6420 Aufrufe
+    // und 22,7 Sekunden je Jahreswechsel. Die Kandidatenrennen holt jetzt eine
+    // Abfrage fuer alle; ausserhalb des Saisonwechsels wird sie nicht gebraucht.
+    const saisonwechsel = rows.some((row) => row.season !== nextSeason);
+    const peakKandidaten = saisonwechsel
+      ? loadPeakRaceCandidatesForAllRiders(this.db, nextSeason)
+      : null;
     const seasonChangedRiderIds: number[] = [];
     const developmentContexts: RiderDevelopmentDailyContext[] = [];
     const deleteFormEvents = this.db.prepare(`
@@ -1395,13 +1476,16 @@ export class GameStateService {
       }
 
       const riderProgramWindows = seasonChanged ? null : (programWindows.get(row.rider_id) ?? null);
-      const peakDates = resolveSeasonPeakDatesFromWindows(
-        seasonChanged ? [] : parsePeakDates(row.peak_dates_json),
-        nextSeason,
-        riderProgramWindows,
-        this.db,
-        row.rider_id,
-      );
+      const peakDates = (seasonChanged && peakKandidaten
+        ? pickPeakDatesFromRows(peakKandidaten.get(row.rider_id) ?? [])
+        : null)
+        ?? resolveSeasonPeakDatesFromWindows(
+          seasonChanged ? [] : parsePeakDates(row.peak_dates_json),
+          nextSeason,
+          riderProgramWindows,
+          this.db,
+          row.rider_id,
+        );
       let formBonus = seasonChanged ? SEASON_FORM_MIN_RAW : row.form_bonus;
       let raceFormBonus = seasonChanged ? 0 : row.race_form_bonus;
       let peakSForm = seasonChanged ? 0 : row.peak_s_form;
@@ -1671,11 +1755,7 @@ export class GameStateService {
     }
 
     if (updates.length > 0) {
-      this.db.transaction(() => {
-        for (const u of updates) {
-          updateState.run(...u);
-        }
-      })();
+      this.writeDailyStates(updates, updateState);
     }
 
     if (seasonChangedRiderIds.length > 0) {
@@ -2216,10 +2296,16 @@ export class GameStateService {
       WHERE rider_id = ?
     `);
 
+    // Kandidatenrennen aller Fahrer in einer Abfrage statt je Fahrer — der
+    // Unterschied zwischen 22,9 Sekunden und einem Bruchteil davon.
+    const kandidaten = loadPeakRaceCandidatesForAllRiders(this.db, season);
+    const programWindows = this.getProgramWindowsForSeason(season);
+
     this.db.transaction(() => {
       for (const row of rows) {
         // [] erzwingt die Neuableitung aus dem aktuellen Programm (Highlight-Rennen).
-        const peakDates = resolveSeasonPeakDatesFromWindows([], season, null, this.db, row.rider_id);
+        const peakDates = pickPeakDatesFromRows(kandidaten.get(row.rider_id) ?? [])
+          ?? resolveSeasonPeakDatesFromWindows([], season, programWindows.get(row.rider_id) ?? null);
         const phase = resolvePeakPhase(currentDate, peakDates);
         let formBonus = 0;
         let peakSForm = 0;
@@ -2675,6 +2761,122 @@ function matchesProgramRaces(db: Database.Database | undefined, riderId: number 
   } catch {
     return false;
   }
+}
+
+interface PeakRaceRow {
+  rider_id: number;
+  id: number;
+  start_date: string;
+  end_date: string;
+  is_stage_race: number;
+  prestige: number;
+  category_id: number;
+  teammates_stronger: number;
+}
+
+/**
+ * Die Kandidatenrennen aller Fahrer in einer Abfrage.
+ *
+ * `generateHighlightBasedPeakDates` fragt sie je Fahrer ab, und darin steckt
+ * je Programmrennen ein korrelierter `COUNT(*)` ueber die Teamkollegen. Fuer
+ * einen Fahrer ist das guenstig; fuer alle 3210 dauerte es 22,9 Sekunden —
+ * beim ersten Laden eines Altspielstands und erneut bei jedem Saisonwechsel.
+ *
+ * Dieselbe Zahl liefert `RANK() OVER (PARTITION BY Rennen, Team ORDER BY
+ * Gesamtwert DESC) - 1`: die Anzahl der Teamkollegen mit echt hoeherem Wert,
+ * bei Gleichstand gleicher Rang — genau die Semantik des `> me.overall_rating`
+ * im Original.
+ */
+function loadPeakRaceCandidatesForAllRiders(
+  db: Database.Database,
+  season: number,
+): Map<number, PeakRaceRow[]> {
+  const result = new Map<number, PeakRaceRow[]>();
+  if (!tableExists(db, 'rider_season_programs') || !tableExists(db, 'race_program_races') || !tableExists(db, 'races')) {
+    return result;
+  }
+
+  const rows = db.prepare(`
+    WITH programmrennen AS (
+      SELECT rsp.rider_id AS rider_id,
+             r.id AS id,
+             r.start_date AS start_date,
+             r.end_date AS end_date,
+             r.is_stage_race AS is_stage_race,
+             r.prestige AS prestige,
+             r.category_id AS category_id,
+             me.active_team_id AS team_id,
+             me.overall_rating AS overall_rating
+      FROM rider_season_programs rsp
+      JOIN race_program_races rpr ON rpr.program_id = rsp.program_id
+      JOIN races r ON r.id = rpr.race_id
+      JOIN riders me ON me.id = rsp.rider_id
+      JOIN sta_country ON sta_country.id = me.country_id
+      WHERE rsp.season = ?
+        AND me.is_retired = 0
+        AND substr(r.start_date, 1, 4) = ?
+        AND (
+          rpr.allowed_program_group_ids IS NULL
+          OR rpr.allowed_program_group_ids = ''
+          OR ('|' || rpr.allowed_program_group_ids || '|') LIKE ('%|' || sta_country.program_group_id || '|%')
+        )
+    )
+    SELECT rider_id, id, start_date, end_date, is_stage_race, prestige, category_id,
+           CASE
+             WHEN team_id IS NULL THEN 0
+             ELSE RANK() OVER (PARTITION BY id, team_id ORDER BY overall_rating DESC) - 1
+           END AS teammates_stronger
+    FROM programmrennen
+  `).all(season, String(season)) as PeakRaceRow[];
+
+  for (const row of rows) {
+    let bucket = result.get(row.rider_id);
+    if (!bucket) {
+      bucket = [];
+      result.set(row.rider_id, bucket);
+    }
+    bucket.push(row);
+  }
+  return result;
+}
+
+/** Auswahl der drei Peaks aus bereits geladenen Kandidatenrennen. */
+function pickPeakDatesFromRows(rows: readonly PeakRaceRow[]): string[] | null {
+  if (rows.length < 3) {
+    return null;
+  }
+
+  const races: PeakRaceCandidate[] = rows
+    .map((row) => {
+      let startDay = isoDateToDayNumber(row.start_date);
+      if (row.is_stage_race === 1 && row.end_date) {
+        const endDay = isoDateToDayNumber(row.end_date);
+        if (!isNaN(endDay)) {
+          startDay = Math.floor((startDay + endDay) / 2);
+        }
+      }
+      const topN = row.category_id === TOUR_DE_FRANCE_CATEGORY_ID
+        ? PEAK_QUALIFY_TOP_N_TDF
+        : PEAK_QUALIFY_TOP_N;
+      return {
+        id: row.id,
+        prestige: row.prestige,
+        startDay,
+        qualifies: (row.teammates_stronger + 1) <= topN,
+      };
+    })
+    .filter((r) => !isNaN(r.startDay));
+
+  races.sort((a, b) => b.prestige - a.prestige || a.startDay - b.startDay || a.id - b.id);
+
+  let picked = pickPeaksByPrestige(races.filter((r) => r.qualifies), 3, PEAK_MIN_SPACING_DAYS);
+  if (picked.length < 3) {
+    picked = pickPeaksRandomly(races.slice(0, PEAK_PRESTIGE_POOL_SIZE), 3, PEAK_MIN_SPACING_DAYS, picked);
+  }
+  if (picked.length < 3) {
+    picked = pickPeaksRandomly(races, 3, PEAK_MIN_SPACING_DAYS, picked);
+  }
+  return picked.length === 3 ? finalizePeakDates(picked) : null;
 }
 
 function generateHighlightBasedPeakDates(

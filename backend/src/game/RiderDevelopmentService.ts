@@ -411,7 +411,15 @@ export class RiderDevelopmentService {
       JOIN type_rider ON type_rider.id = riders.rider_type_id
       LEFT JOIN teams t ON t.id = riders.active_team_id
       LEFT JOIN division_teams dt ON dt.id = t.division_id
-    `).all() as DailyDevelopmentRow[];
+      -- Dieselbe Bedingung, die die Schleife unten als erstes prueft
+      -- (if !isTier1 && !isFirstOfMonth: continue). Vorher wurden alle 3210
+      -- Fahrer mit 45 Spalten geladen und die meisten sofort verworfen — 14,2 ms
+      -- an dreissig von einunddreissig Tagen umsonst.
+      --
+      -- Die Mentorenliste unten bleibt vollstaendig: sie wird je Team
+      -- ausgewertet, und Teamkollegen teilen die Division, also den Tier.
+      WHERE ? = 1 OR (riders.active_team_id IS NOT NULL AND dt.tier = 1)
+    `).all(currentDate.endsWith('-01') ? 1 : 0) as DailyDevelopmentRow[];
 
     const mentorsByTeam = new Map<number, Array<{ spec1: number }>>();
     for (const row of rows) {
