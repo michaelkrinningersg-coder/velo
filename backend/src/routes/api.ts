@@ -530,6 +530,29 @@ export function createRouter(dbService: DatabaseService): Router {
 
   // ---- Game State ---------------------------------------
 
+  /**
+   * Alles, was das Frontend nach einem Tageswechsel oder einem gespeicherten
+   * Ergebnis neu braucht — in einem Aufruf.
+   *
+   * Vorher waren das vier nacheinander abgesetzte Anfragen (`/riders`,
+   * `/state`, `/game/status`, `/races`), jede mit eigenem Verbindungsaufbau,
+   * eigenem `ensureState()` und eigener Netzwerkrunde. Zusammen kosteten sie
+   * mehr als die Aktion, die sie begleiten.
+   */
+  router.get('/reload-bundle', (_req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const gss = getGss();
+      gss.ensureState();
+      ok(res, {
+        gameState: gss.loadState(),
+        gameStatus: gss.loadStatus(),
+        races: new GameRepository(db).getRaces(),
+        riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false),
+      });
+    } catch (e) { fail(res, 400, (e as Error).message); }
+  });
+
   router.get('/state', (_req: Request, res: Response) => {
     try { ok<GameState>(res, getGss().loadState()); }
     catch (e) { fail(res, 400, (e as Error).message); }

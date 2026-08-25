@@ -2393,25 +2393,25 @@ export class StageResultCommitService {
       if (isRaceFinished) {
         const currentSeason = this.repo.getCurrentSeason();
 
-        // 1. Archive stage entries
-        const stageEntries = this.db.prepare(`
-          SELECT stage_id, team_id, rider_id, status, status_reason
-          FROM stage_entries
-          WHERE race_id = ?
-        `).all(race.id) as any[];
-
-        const compactStageEntries = stageEntries.map(row => [
-          row.stage_id,
-          row.team_id,
-          row.rider_id,
-          row.status,
-          row.status_reason
-        ]);
-
+        // 1. Startlisten archivieren.
+        //
+        // Frueher wanderten sie zusaetzlich als JSON-Blob nach
+        // `stage_entries_compact` — dieselben Zeilen ein zweites Mal, nur
+        // unindiziert. `stage_entries_flat` bekommt sie ohnehin nach jeder
+        // Etappe; die Sicht `stage_entries_history` steht jetzt darauf. Hier
+        // bleibt nur noch das Aufraeumen der laufenden Tabelle. Der Nachtrag
+        // faengt Etappen ab, die vor dem Umbau nicht in die flache Tabelle
+        // gelangt sind.
         this.db.prepare(`
-          INSERT OR REPLACE INTO stage_entries_compact (race_id, season, payload)
-          VALUES (?, ?, ?)
-        `).run(race.id, currentSeason, JSON.stringify(compactStageEntries));
+          INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+          SELECT e.stage_id, e.race_id, e.team_id, e.rider_id, e.status, e.status_reason
+          FROM stage_entries e
+          WHERE e.race_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM stage_entries_flat f
+              WHERE f.stage_id = e.stage_id AND f.rider_id = e.rider_id
+            )
+        `).run(race.id);
 
         this.db.prepare(`
           DELETE FROM stage_entries

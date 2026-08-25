@@ -92,6 +92,11 @@ export const api = {
   getRaceProgramParticipants: (raceId: number) => call<RaceProgramParticipant[]>('GET', `/api/races/${raceId}/program-participants`),
   getRaceResultsRoster:       (raceId: number) => call<RaceRosterPayload>('GET', `/api/races/${raceId}/results-roster`),
   getRacePalmares:            (raceId: number) => call<RacePalmaresPayload>('GET', `/api/races/${raceId}/history`),
+  /**
+   * Fahrer, Spielstand, Status und Rennen in einem Aufruf. Ersetzt nach dem
+   * Tageswechsel und nach einem gespeicherten Ergebnis vier einzelne Anfragen.
+   */
+  getReloadBundle:     () => call<{ gameState: GameState; gameStatus: GameStatus; races: Race[]; riders: Rider[] }>('GET', '/api/reload-bundle'),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   getContractRenewals: () => call<any>('GET', '/api/contract-renewals'),

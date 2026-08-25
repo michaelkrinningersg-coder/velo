@@ -460,8 +460,9 @@ export class GameStateService {
 
             // results_flat mit derselben Regel prunen wie die Kompakt-Payloads:
             // Rang-1-Zeilen immer behalten, sonst nur Zeilen mit Saisonpunkten.
-            // stage_entries_flat bleibt unangetastet (wie stage_entries_compact),
-            // damit DNF-Eintraege in der Fahrer-Historie sichtbar bleiben.
+            // stage_entries_flat bleibt unangetastet — es ist seit dem Wegfall von
+            // stage_entries_compact das Archiv der Startlisten, und die DNF-Eintraege
+            // darin traegt die Fahrer-Historie.
             if (tableExists(this.db, 'results_flat')) {
               const pruned = this.db.prepare(`
                 DELETE FROM results_flat
@@ -1059,11 +1060,25 @@ export class GameStateService {
       `).all(seasonPrefix) as Array<{ race_id: number; stage_id: number }>;
       for (const row of finals) finalStageByRace.set(row.race_id, row.stage_id);
 
-      const entriesCompactByRace = new Map<number, any[]>();
-      if (tableExists(this.db, 'stage_entries_compact')) {
-        const entryRows = this.db.prepare(`SELECT race_id, payload FROM stage_entries_compact WHERE season = ?`).all(season) as Array<{ race_id: number; payload: string }>;
+      // Fruher aus `stage_entries_compact` (ein JSON-Blob je Rennen). Die
+      // flache Tabelle haelt dieselben Zeilen indiziert vor — kein Entpacken,
+      // und die kompakte Kopie kann damit ganz entfallen.
+      const finisherByRaceStageTeam = new Map<string, number[]>();
+      if (tableExists(this.db, 'stage_entries_flat')) {
+        const entryRows = this.db.prepare(`
+          SELECT f.race_id, f.stage_id, f.team_id, f.rider_id
+          FROM stage_entries_flat f
+          JOIN stages s ON s.id = f.stage_id
+          WHERE f.status = 'finished' AND f.rider_id IS NOT NULL AND s.date LIKE ?
+        `).all(seasonPrefix) as Array<{ race_id: number; stage_id: number; team_id: number; rider_id: number }>;
         for (const row of entryRows) {
-          try { entriesCompactByRace.set(row.race_id, JSON.parse(row.payload)); } catch { /* korrupte Payload ueberspringen */ }
+          const key = `${row.race_id}|${row.stage_id}|${row.team_id}`;
+          const bucket = finisherByRaceStageTeam.get(key);
+          if (bucket) {
+            bucket.push(row.rider_id);
+          } else {
+            finisherByRaceStageTeam.set(key, [row.rider_id]);
+          }
         }
       }
 
@@ -1081,12 +1096,10 @@ export class GameStateService {
           } else {
             const teamId = res[2];
             const stageId = res[0];
-            // Finisher des Teams aus stage_entries_compact: [stage_id, team_id, rider_id, status, reason]
-            for (const entry of entriesCompactByRace.get(row.race_id) ?? []) {
-              if (entry[0] === stageId && entry[1] === teamId && entry[3] === 'finished' && entry[2] != null) {
-                bump(wins, entry[2]);
-                bump(tttWins, entry[2]);
-              }
+            // Finisher des Teams auf dieser Etappe.
+            for (const riderIdOfTeam of finisherByRaceStageTeam.get(`${row.race_id}|${stageId}|${teamId}`) ?? []) {
+              bump(wins, riderIdOfTeam);
+              bump(tttWins, riderIdOfTeam);
             }
           }
         }
@@ -1445,22 +1458,19 @@ export class GameStateService {
     const racingRiderIds = new Set(racingRidersRow.map((r: any) => r.rider_id));
 
     const yesterday = addDaysIso(nextDate, -1);
-    // Performance: NICHT ueber die all_stage_entries-View gehen (sie entpackt bei
-    // jeder Query ALLE stage_entries_compact-Payloads per json_each, ~370ms).
-    // Stattdessen live-Tabelle + gezieltes Entpacken NUR der Rennen, die gestern
-    // eine Etappe hatten (idx_stages_date treibt die Suche, 0-3 Payloads).
-    const racedYesterdayRow = (tableExists(this.db, 'stage_entries_compact')
+    // Nicht ueber die Sicht `all_stage_entries` gehen — sie entpackte alle
+    // kompakten Startlisten per json_each. Die flache Tabelle beantwortet
+    // dieselbe Frage ueber idx_stages_date und idx_stage_entries_flat_stage.
+    const racedYesterdayRow = (tableExists(this.db, 'stage_entries_flat')
       ? this.db.prepare(`
           SELECT se.rider_id, s.stage_score FROM stage_entries se
           JOIN stages s ON s.id = se.stage_id
           WHERE s.date = ? AND se.status IN ('finished', 'dnf')
-          UNION ALL
-          SELECT CAST(j.value->>2 AS INTEGER) AS rider_id, s.stage_score
+          UNION
+          SELECT f.rider_id, s.stage_score
           FROM stages s
-          JOIN stage_entries_compact c ON c.race_id = s.race_id, json_each(c.payload) j
-          WHERE s.date = ?
-            AND CAST(j.value->>0 AS INTEGER) = s.id
-            AND j.value->>3 IN ('finished', 'dnf')
+          JOIN stage_entries_flat f ON f.stage_id = s.id
+          WHERE s.date = ? AND f.status IN ('finished', 'dnf') AND f.rider_id IS NOT NULL
         `).all(yesterday, yesterday)
       : this.db.prepare(`
           SELECT se.rider_id, s.stage_score FROM stage_entries se

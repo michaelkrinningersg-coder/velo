@@ -11,7 +11,7 @@ describe('test fixture', () => {
   it('builds a production-equivalent in-memory schema', () => {
     const db = createTestDb();
     // A sampling of tables from schema.sql + migrations should all exist.
-    for (const table of ['riders', 'teams', 'game_state', 'stages', 'results', 'stage_entries_compact']) {
+    for (const table of ['riders', 'teams', 'game_state', 'stages', 'results', 'stage_entries_flat', 'stage_entries_history']) {
       const row = db
         .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?")
         .get(table);

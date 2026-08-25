@@ -2358,35 +2358,76 @@ export class DatabaseService {
     }
   }
 
-  private ensureRiderCategoryStatsSchema(db: Database.Database): void {
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS stage_entries_compact (
-        race_id  INTEGER PRIMARY KEY REFERENCES races(id) ON DELETE CASCADE,
-        season   INTEGER NOT NULL,
-        payload  TEXT    NOT NULL
-      )
-    `).run();
+  /**
+   * Uebernimmt vorhandene `stage_entries_compact`-Bestaende in
+   * `stage_entries_flat` und entfernt die Tabelle.
+   *
+   * Der Backfill in `ensureResultsFlatSchema` hat sie zwar schon einmal
+   * uebernommen — aber nur bis zu seinem Zeitpunkt; danach schrieb der
+   * Etappen-Commit weiter in beide. Deshalb hier noch einmal, und nur was
+   * fehlt.
+   */
+  private migrateStageEntriesCompact(db: Database.Database): void {
+    if (!tableExists(db, 'stage_entries_compact') || !tableExists(db, 'stage_entries_flat')) {
+      return;
+    }
+    try {
+      db.prepare(`
+        INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+        SELECT
+          CAST(j.value->>0 AS INTEGER) AS stage_id,
+          c.race_id,
+          CAST(j.value->>1 AS INTEGER) AS team_id,
+          CAST(j.value->>2 AS INTEGER) AS rider_id,
+          j.value->>3 AS status,
+          j.value->>4 AS status_reason
+        FROM stage_entries_compact c, json_each(c.payload) j
+        WHERE NOT EXISTS (
+          SELECT 1 FROM stage_entries_flat f
+          WHERE f.stage_id = CAST(j.value->>0 AS INTEGER)
+            AND f.rider_id = CAST(j.value->>2 AS INTEGER)
+        )
+      `).run();
+      db.prepare('DROP TABLE stage_entries_compact').run();
+      console.log("'stage_entries_compact' uebernommen und entfernt.");
+    } catch (e) {
+      console.error('Uebernahme von stage_entries_compact fehlgeschlagen:', e);
+    }
+  }
 
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS idx_stage_entries_compact_season
-        ON stage_entries_compact(season)
-    `).run();
+  private ensureRiderCategoryStatsSchema(db: Database.Database): void {
+    // `stage_entries_compact` gibt es nicht mehr.
+    //
+    // Die Tabelle hielt dieselben Startlisten wie `stage_entries_flat` ein
+    // zweites Mal, nur als JSON je Rennen — im gemessenen Spielstand 6,5 MB
+    // neben 5,8 MB derselben Daten, zusammen ein Viertel der Datei. Jede
+    // Abfrage ueber `stage_entries_history` musste sie entpacken; ein Vollscan
+    // von `all_stage_entries` kostete 0,2 s heute und 0,6 s nach drei Saisons.
+    //
+    // Die Sicht steht jetzt auf der flachen Tabelle. Waehrend ein Rennen
+    // laeuft, stehen dessen Etappen in beiden — `stage_entries` fuer den
+    // laufenden Stand, `stage_entries_flat` ab dem Zieleinlauf der Etappe.
+    // Der NOT-EXISTS-Filter haelt `all_stage_entries` deshalb doppelfrei; er
+    // laeuft ueber den Primaerschluessel von `stage_entries`, die nur die
+    // laufenden Rennen enthaelt.
+    this.migrateStageEntriesCompact(db);
 
     db.prepare(`DROP VIEW IF EXISTS stage_entries_history;`).run();
 
     db.prepare(`
       CREATE VIEW stage_entries_history AS
       SELECT
-        s.id AS stage_id,
-        c.race_id AS race_id,
-        CAST(j.value->>1 AS INTEGER) AS team_id,
-        CAST(j.value->>2 AS INTEGER) AS rider_id,
-        j.value->>3 AS status,
-        j.value->>4 AS status_reason
-      FROM stage_entries_compact c
-      JOIN stages s ON s.race_id = c.race_id,
-      json_each(c.payload) j
-      WHERE CAST(j.value->>0 AS INTEGER) = s.id
+        f.stage_id AS stage_id,
+        f.race_id AS race_id,
+        f.team_id AS team_id,
+        f.rider_id AS rider_id,
+        f.status AS status,
+        f.status_reason AS status_reason
+      FROM stage_entries_flat f
+      WHERE NOT EXISTS (
+        SELECT 1 FROM stage_entries e
+        WHERE e.stage_id = f.stage_id AND e.rider_id = f.rider_id
+      )
     `).run();
 
     db.prepare(`DROP VIEW IF EXISTS all_stage_entries;`).run();

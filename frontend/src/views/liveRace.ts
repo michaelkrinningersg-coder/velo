@@ -39,7 +39,7 @@ import { SimulationSnapshot } from '../race-sim/SimulationEngine';
 import { RaceSimView } from '../race-sim/RaceSimView';
 
 // Dynamically or directly imported view updates
-import { loadGameState, loadRaces, loadRiders } from './dashboard';
+import { loadGameState, loadRaces, reloadCoreState } from './dashboard';
 import { loadStageResults } from './results';
 import { refreshTeamsViewData } from './teams';
 import { buildRealtimeCommitEntries } from '../race-sim/commitEntries';
@@ -475,10 +475,10 @@ export async function completeRealtimeStage(
     state.selectedResultTypeId = 1;
     state.realtimeBootstrap = null;
     state.realtimeError = null;
-    await loadStageResults(stageId, false);
-    await loadRiders();
-    await loadGameState();
-    await loadRaces();
+    await Promise.all([
+      loadStageResults(stageId, false),
+      reloadCoreState(),
+    ]);
     if (isActiveView('teams') || isActiveView('riders')) {
       await refreshTeamsViewData();
     }

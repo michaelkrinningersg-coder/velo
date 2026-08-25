@@ -193,6 +193,34 @@ export async function loadRaces(): Promise<void> {
 
 // Laedt die Fahrerliste neu (Saisonpunkte/-siege), damit Dashboard-KPIs und
 // Top-10 nach Etappen/Tageswechsel aktuelle Werte zeigen statt der Ladewerte.
+/**
+ * Laedt Fahrer, Spielstand, Status und Rennen in einem Aufruf neu.
+ *
+ * Nach dem Tageswechsel und nach jedem gespeicherten Ergebnis liefen dafuer
+ * `loadRiders`, `loadGameState` und `loadRaces` nacheinander — vier Anfragen,
+ * jede mit eigenem Verbindungsaufbau und eigener Netzwerkrunde, und danach
+ * dreimal dasselbe Neuzeichnen. Zusammen kosteten sie mehr als die Aktion
+ * selbst.
+ *
+ * Faellt der gebuendelte Aufruf aus (aelteres Backend), greifen die drei
+ * einzelnen Funktionen weiterhin.
+ */
+export async function reloadCoreState(): Promise<void> {
+  const res = await api.getReloadBundle();
+  if (!res.success || !res.data) {
+    await Promise.all([loadRiders(), loadGameState(), loadRaces()]);
+    return;
+  }
+  state.riders = res.data.riders ?? [];
+  state.gameState = res.data.gameState ?? null;
+  state.gameStatus = res.data.gameStatus ?? null;
+  state.races = res.data.races ?? [];
+  renderGameState();
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+}
+
 export async function loadRiders(): Promise<void> {
   const res = await api.getRiders(undefined, false);
   if (!res.success) { console.error(res.error); return; }
@@ -732,9 +760,7 @@ export async function executeDayAdvance(): Promise<boolean> {
       return false;
     }
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
-    await loadRiders();
-    await loadGameState();
-    await loadRaces();
+    await reloadCoreState();
     if (isActiveView('teams')) {
       const { refreshTeamsViewData } = await import('./teams');
       await refreshTeamsViewData();
