@@ -36,6 +36,10 @@ export interface QuickSimBreakawayPlan {
  * ist eine strukturelle Entscheidung, kein Score-Bonus: der Etappensieg faellt
  * dann zwingend aus der Gruppe, sonst gaebe es Etappen, deren Ausreisser nie
  * eingeholt wurden und die trotzdem ein Sprinter gewinnt.
+ *
+ * Den Einholpunkt zieht `resolveBreakawaySurvivalChance()` aus
+ * `breakawaySurvival.ts` ins Ziel, wenn die Gruppe laufen gelassen wird — die
+ * Entscheidung faellt also weiterhin allein an dieser einen Stelle.
  */
 export function resolveBreakawaySurvives(
   plan: QuickSimBreakawayPlan | null,

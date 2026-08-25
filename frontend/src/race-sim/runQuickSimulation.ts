@@ -54,6 +54,7 @@ import { resolveFatigueMalus, resolveSkillsWithMentorBoosts } from './riderCondi
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
+import { resolveBreakawaySurvivalChance } from '../../../shared/quickSim/breakawaySurvival';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import {
   buildStageScoringWeightMap,
@@ -219,10 +220,27 @@ export function runQuickSimulation(
     bootstrap.teams,
     createSeededRandom(deriveSeed(seed, 'breakaway')),
   );
+  // Kommt die Gruppe durch? `precalculateStageBreakaway` zieht den Einholpunkt
+  // hoechstens bei 0,85 der Distanz — nach dem Plan allein wuerde also nie eine
+  // Gruppe ueberleben. Die Entscheidung faellt deshalb hier, nach Rennstruktur
+  // und Etappennummer, und verschiebt bei Erfolg den Einholpunkt ins Ziel.
+  // Dadurch stimmen Zwischenwertungen, Meldungen und Zeitabstaende von selbst.
+  const survivalRandom = createSeededRandom(deriveSeed(seed, 'breakaway-survival'));
+  const survivalChance = resolveBreakawaySurvivalChance({
+    profile,
+    isStageRace: bootstrap.race.isStageRace,
+    stageNumber: bootstrap.stage.stageNumber,
+    numberOfStages: bootstrap.race.numberOfStages,
+    random: survivalRandom,
+  });
+  const stageDistanceMeters = Math.round(distanceKm * 1000);
+  const breakawaySurvives = plan != null && survivalRandom() < survivalChance;
   const breakaway: QuickSimBreakawayPlan | null = plan
     ? {
       riderIds: plan.riderIds,
-      phaseEndDistanceMeters: plan.phaseEndDistanceMeters,
+      phaseEndDistanceMeters: breakawaySurvives
+        ? Math.max(plan.phaseEndDistanceMeters, stageDistanceMeters)
+        : plan.phaseEndDistanceMeters,
       triggerDistanceMeters: plan.triggerDistanceMeters,
       skillBonus: plan.skillBonus,
       malusValue: plan.malusValue,
@@ -656,7 +674,7 @@ function buildEvents(
     });
 
     const catchKm = plan.phaseEndDistanceMeters / 1000;
-    if (catchKm < distanceKm) {
+    if (catchKm < distanceKm && !result.breakawaySurvived) {
       events.push({
         id: nextId += 1,
         elapsedSeconds: atKm(catchKm),

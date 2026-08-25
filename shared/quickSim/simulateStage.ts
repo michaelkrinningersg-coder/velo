@@ -63,6 +63,13 @@ export const BREAKAWAY_CLOSING_SECONDS_PER_KM = 20;
 /** Obergrenze des Restvorsprungs, damit ein weit gezogener Einholpunkt keine Stunde ergibt. */
 const MAX_BREAKAWAY_LEAD_SECONDS = 600;
 
+/**
+ * Vorsprung einer Gruppe, die per Ziehung durchgekommen ist. Ungemessen: im
+ * Referenzlauf gab es keinen einzigen solchen Fall, weil es die Ziehung noch
+ * nicht gab. Die Spanne entspricht dem, was in einer Rundfahrt ueblich ist.
+ */
+const DRAWN_BREAKAWAY_LEAD_SECONDS = { min: 20, max: 240 };
+
 export interface QuickSimRiderInput {
   riderId: number;
   /** Leistungsscore aus `calculateStageFavorites()`, hoeher ist besser. */
@@ -239,8 +246,19 @@ function applyScoreShiftToEntries(
 export function resolveSurvivingBreakawayLeadSeconds(
   plan: QuickSimBreakawayPlan,
   distanceKm: number,
+  random?: RandomSource,
 ): number {
   const surplusKm = Math.max(0, (plan.phaseEndDistanceMeters / 1000) - distanceKm);
+  if (surplusKm <= 0) {
+    // Die Gruppe kam nicht deshalb durch, weil der Einholpunkt hinter dem Ziel
+    // lag, sondern weil die Ziehung sie hat laufen lassen. Dann gibt der Plan
+    // keinen Vorsprung her und er wird gezogen.
+    if (!random) {
+      return DRAWN_BREAKAWAY_LEAD_SECONDS.min;
+    }
+    const { min, max } = DRAWN_BREAKAWAY_LEAD_SECONDS;
+    return Math.round(min + (random() * (max - min)));
+  }
   return Math.min(MAX_BREAKAWAY_LEAD_SECONDS, Math.max(1, Math.round(surplusKm * BREAKAWAY_CLOSING_SECONDS_PER_KM)));
 }
 
@@ -319,7 +337,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     const breakawayIds = new Set(input.breakaway.riderIds);
     const head = sorted.filter((rider) => breakawayIds.has(rider.riderId));
     const field = sorted.filter((rider) => !breakawayIds.has(rider.riderId));
-    const leadSeconds = resolveSurvivingBreakawayLeadSeconds(input.breakaway, distanceKm);
+    const leadSeconds = resolveSurvivingBreakawayLeadSeconds(input.breakaway, distanceKm, random);
 
     for (const rider of head) {
       gapByRiderId.set(rider.riderId, 0);
