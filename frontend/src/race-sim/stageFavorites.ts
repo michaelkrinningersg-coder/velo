@@ -1,6 +1,6 @@
 import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
-import { resolveSeasonFormFactor } from './terrainModifiers';
+import { resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
 
 export interface FavoriteItem {
   rank: number;

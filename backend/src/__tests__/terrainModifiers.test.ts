@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   LEADOUT_BONUS_FACTOR,
+  RANK_NOISE_FACTOR,
   resolveLeadoutBonusFactor,
+  resolveRankNoiseFactor,
   resolveSeasonFormFactor,
+  resolveTieBreakNoiseFactor,
   SEASON_FORM_FACTOR,
-} from '../../../frontend/src/race-sim/terrainModifiers';
+  TIE_BREAK_NOISE_FACTOR,
+} from '../../../shared/quickSim/terrainModifiers';
 import { calculateStageFavoriteRiderRanking } from '../../../frontend/src/race-sim/stageFavorites';
 import type { Rider, Stage, StageProfile, Team } from '../../../shared/types';
 
@@ -25,6 +29,35 @@ describe('Terrainfaktoren', () => {
     }
     expect(resolveSeasonFormFactor(null)).toBe(1);
     expect(resolveLeadoutBonusFactor(undefined)).toBe(1);
+  });
+
+  it('viertelt den Anteil des Rangrauschens am Zielsprint auf Flat, Rolling und Hilly', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly'] as StageProfile[]) {
+      expect(resolveTieBreakNoiseFactor(profile)).toBe(0.25);
+    }
+    for (const profile of ['Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      expect(resolveTieBreakNoiseFactor(profile)).toBe(1);
+    }
+    expect(resolveTieBreakNoiseFactor(null)).toBe(1);
+  });
+
+  it('senkt das Rangrauschen insgesamt ab Hilly_Difficult auf drei Viertel', () => {
+    for (const profile of ['Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      expect(resolveRankNoiseFactor(profile)).toBe(0.75);
+    }
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      expect(resolveRankNoiseFactor(profile)).toBe(1);
+    }
+    expect(resolveRankNoiseFactor(undefined)).toBe(1);
+  });
+
+  it('haelt die beiden Rauschtabellen ueberschneidungsfrei', () => {
+    // Wo der Tie-Break gedaempft wird, bleibt das Rauschen insgesamt stehen —
+    // und umgekehrt. Ueberschnitten sie sich, waere der Zielsprint dort
+    // doppelt gedaempft, ohne dass es jemand beabsichtigt haette.
+    const geviertelt = Object.keys(TIE_BREAK_NOISE_FACTOR);
+    const gesenkt = Object.keys(RANK_NOISE_FACTOR);
+    expect(geviertelt.filter((profile) => gesenkt.includes(profile))).toEqual([]);
   });
 
   it('hebt den Anfahrtsbonus flach und rollend um ein Viertel, huegelig um 15 Prozent', () => {

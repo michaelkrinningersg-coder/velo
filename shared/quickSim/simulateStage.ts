@@ -45,6 +45,7 @@ import {
   type FinishRegime,
 } from './groupModel';
 import { applyGroupProtection, PROTECTION_STRENGTH } from './groupProtection';
+import { resolveRankNoiseFactor, resolveTieBreakNoiseFactor } from './terrainModifiers';
 import {
   resolveIncidentOutcomes,
   type QuickSimIncident,
@@ -150,8 +151,10 @@ export interface QuickSimGroupDiagnostics {
    * Fahrers nicht aus seinen Faehigkeiten nachrechnen.
    */
   rankNoiseByRiderId: ReadonlyMap<number, number>;
-  /** Streuung, aus der das Rangrauschen gezogen wurde. */
+  /** Streuung, aus der das Rangrauschen gezogen wurde — inklusive Terrainfaktor. */
   rankNoiseSigma: number;
+  /** Anteil des Rangrauschens, der auf den Tie-Break geht. */
+  tieBreakNoiseFactor: number;
 }
 
 export interface QuickSimStageResult {
@@ -278,12 +281,14 @@ function applyScoreShiftToEntries(
   input: QuickSimStageInput,
   breakawaySurvived: boolean,
   rankNoise: ReadonlyMap<number, number>,
+  tieBreakNoiseFactor: number,
 ): QuickSimRiderInput[] {
   const plan = input.breakaway;
   const shift = plan ? (breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0)) : 0;
   const affected = new Set(plan?.riderIds ?? []);
   return riders.map((rider) => {
-    const delta = (affected.has(rider.riderId) ? shift : 0) + (rankNoise.get(rider.riderId) ?? 0);
+    const delta = (affected.has(rider.riderId) ? shift : 0)
+      + ((rankNoise.get(rider.riderId) ?? 0) * tieBreakNoiseFactor);
     return delta === 0 ? rider : { ...rider, photoFinishScore: rider.photoFinishScore + delta };
   });
 }
@@ -364,11 +369,16 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
 
   // 4 · Gruppen und Abstaende.
   const scores = buildScoreMap(input, breakawaySurvived);
-  const rankNoise = drawRankNoise(random, scores, parameters.rankNoise);
+  // Das Rangrauschen wird einmal gezogen und zweimal verwendet: voll auf die
+  // Reihenfolge des Feldes, abgeschwaecht auf den Tie-Break. Beides mit
+  // demselben Zufallswert je Fahrer, damit ein Fahrer, den der Zufall nach
+  // vorne traegt, im Sprint nicht gegenlaeufig behandelt wird.
+  const rankNoise = drawRankNoise(random, scores, parameters.rankNoise * resolveRankNoiseFactor(profile));
   for (const [riderId, delta] of rankNoise) {
     scores.set(riderId, (scores.get(riderId) as number) + delta);
   }
-  const sorted = applyScoreShiftToEntries(finishers, input, breakawaySurvived, rankNoise).sort(
+  const tieBreakFactor = resolveTieBreakNoiseFactor(profile);
+  const sorted = applyScoreShiftToEntries(finishers, input, breakawaySurvived, rankNoise, tieBreakFactor).sort(
     (left, right) => (scores.get(right.riderId) as number) - (scores.get(left.riderId) as number)
       || left.riderId - right.riderId,
   );
@@ -421,7 +431,8 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       protectionStrength: 0,
       breakawayHeadSize: head.length,
       rankNoiseByRiderId: rankNoise,
-      rankNoiseSigma: parameters.rankNoise,
+      rankNoiseSigma: parameters.rankNoise * resolveRankNoiseFactor(profile),
+      tieBreakNoiseFactor: tieBreakFactor,
     };
   } else {
     const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
@@ -466,7 +477,8 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       protectionStrength: PROTECTION_STRENGTH[profile] ?? 0,
       breakawayHeadSize: 0,
       rankNoiseByRiderId: rankNoise,
-      rankNoiseSigma: parameters.rankNoise,
+      rankNoiseSigma: parameters.rankNoise * resolveRankNoiseFactor(profile),
+      tieBreakNoiseFactor: tieBreakFactor,
     };
     groups.forEach((group, index) => {
       for (const memberIndex of group.memberIndices) {

@@ -49,7 +49,7 @@ import {
   resolveFinishMarkerType,
   resolveLeadoutBonus,
 } from './sprintLeadout';
-import { resolveLeadoutBonusFactor, resolveSeasonFormFactor } from './terrainModifiers';
+import { resolveLeadoutBonusFactor, resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
 import { resolveQuickSimFatigueMalus, resolveSkillsWithMentorBoosts, sampleDailyForm } from './riderCondition';
@@ -448,7 +448,8 @@ function logPhotoFinishFormula(
   console.log(
     'wirksame Tagesform = Tagesform (-4 bis +4) + Superform/Supermalus (+5 / -6)'
     + ' - halbierte Kurz- und Langzeitermuedung.'
-    + `  Rangrauschen: Normalverteilung mit Sigma ${(result.groupDiagnostics?.rankNoiseSigma ?? 0).toFixed(3)} x Streuung der Etappenscores.`,
+    + `  Rangrauschen: Normalverteilung mit Sigma ${(result.groupDiagnostics?.rankNoiseSigma ?? 0).toFixed(3)} x Streuung der Etappenscores,`
+    + ` davon ${((result.groupDiagnostics?.tieBreakNoiseFactor ?? 1) * 100).toFixed(0)} % auf den Tie-Break.`,
   );
   console.log(`Zielgewichte (${finishType}): ` + gewichte.map(([key, weight]) => `${key} ${weight.toFixed(2)}`).join('  ·  '));
 
@@ -461,7 +462,8 @@ function logPhotoFinishFormula(
       continue;
     }
     const form = effectiveDailyForm.get(entry.riderId) ?? 0;
-    const rauschen = result.groupDiagnostics?.rankNoiseByRiderId.get(entry.riderId) ?? 0;
+    const rauschen = (result.groupDiagnostics?.rankNoiseByRiderId.get(entry.riderId) ?? 0)
+      * (result.groupDiagnostics?.tieBreakNoiseFactor ?? 1);
     const skills = resolveSkillsWithMentorBoosts(rider);
     let summe = 0;
     const zeilen = gewichte.map(([key, weight]) => {

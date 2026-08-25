@@ -77,12 +77,45 @@ describe('groupDiagnostics', () => {
     const ergebnis = laufe('Flat', 5);
     const d = ergebnis.groupDiagnostics!;
     expect(d.rankNoiseSigma).toBe(DEFAULT_QUICK_SIM_PROFILES.Flat.rankNoise);
+    expect(d.tieBreakNoiseFactor).toBe(0.25);
     expect(d.rankNoiseByRiderId.size).toBe(150);
     // Ohne das Rauschen laesst sich der photoFinishScore nicht nachrechnen:
     // Eingabewert plus Rauschen muss den Ausgabewert ergeben.
     for (const entry of ergebnis.entries.filter((e) => !e.isAbandon).slice(0, 20)) {
       const eingabe = 90 - ((entry.riderId - 1) * 0.1);
-      expect(entry.photoFinishScore).toBeCloseTo(eingabe + (d.rankNoiseByRiderId.get(entry.riderId) ?? 0), 6);
+      const rauschen = (d.rankNoiseByRiderId.get(entry.riderId) ?? 0) * d.tieBreakNoiseFactor;
+      expect(entry.photoFinishScore).toBeCloseTo(eingabe + rauschen, 6);
     }
+  });
+});
+
+describe('Terrainfaktoren auf das Rangrauschen', () => {
+  it('zieht ab Hilly_Difficult mit drei Vierteln der Streuung', () => {
+    for (const profile of ['Hilly_Difficult', 'Mountain', 'High_Mountain', 'Medium_Mountain'] as StageProfile[]) {
+      const d = laufe(profile, 11).groupDiagnostics!;
+      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise * 0.75, 10);
+      expect(d.tieBreakNoiseFactor).toBe(1);
+    }
+  });
+
+  it('zieht flach, rollend und huegelig unveraendert, daempft aber den Tie-Break', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly'] as StageProfile[]) {
+      const d = laufe(profile, 12).groupDiagnostics!;
+      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise, 10);
+      expect(d.tieBreakNoiseFactor).toBe(0.25);
+    }
+  });
+
+  it('laesst die Reihenfolge des Feldes vom vollen Rauschen bestimmen', () => {
+    // Der Tie-Break-Faktor darf die Gruppenreihenfolge nicht beruehren: die
+    // Streuung der gezogenen Werte entspricht weiter dem Sigma.
+    const d = laufe('Flat', 13).groupDiagnostics!;
+    const werte = [...d.rankNoiseByRiderId.values()];
+    const mittel = werte.reduce((sum, value) => sum + value, 0) / werte.length;
+    const sd = Math.sqrt(werte.reduce((sum, value) => sum + ((value - mittel) ** 2), 0) / (werte.length - 1));
+    // Score-Streuung des Feldes: 150 Fahrer im Abstand 0,1 -> rund 4,33.
+    const feldStreuung = 4.33;
+    expect(sd / feldStreuung).toBeGreaterThan(d.rankNoiseSigma * 0.6);
+    expect(sd / feldStreuung).toBeLessThan(d.rankNoiseSigma * 1.6);
   });
 });
