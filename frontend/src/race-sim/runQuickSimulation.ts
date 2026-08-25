@@ -27,7 +27,7 @@ import {
   DEFAULT_QUICK_SIM_PROFILES,
   type QuickSimProfileParameters,
 } from '../../../shared/quickSimProfiles';
-import { createRandomSeed, createSeededRandom, deriveSeed } from '../../../shared/rng';
+import { createRandomSeed, createSeededRandom, deriveSeed, randomBetween, type RandomSource } from '../../../shared/rng';
 import type {
   PrecalculatedRaceIncident,
   RaceSimMessage,
@@ -39,6 +39,7 @@ import type {
   StageProfile,
 } from '../../../shared/types';
 import { precalculateRaceIncidents } from './incidents';
+import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
@@ -51,11 +52,26 @@ import {
 /** Wie viele Raenge je Zwischenwertung geliefert werden. Der Commit-Dienst vergibt danach die Punkte. */
 const MARKER_RANKS = 15;
 
+/**
+ * Tagesform eines Fahrers. Dieselbe Spanne wie `sampleDailyForm` in der Engine:
+ * der Traeger des Gesamttrikots faellt seltener nach oben aus, weil er
+ * ohnehin unter Beobachtung faehrt.
+ *
+ * Ohne diese Ziehung waere das Ergebnis bei gleichem Kader immer dasselbe —
+ * genau der Fehler, vor dem der Entwurf warnt: Zeiten und Abstaende sehen
+ * richtig aus, aber es gewinnen immer dieselben fuenf.
+ */
+function sampleDailyForm(random: RandomSource, isGcLeader: boolean): number {
+  return Math.round(randomBetween(random, -3, isGcLeader ? 1.5 : 3) * 100) / 100;
+}
+
 export interface QuickSimulationOutcome {
   entries: RealtimeStageCommitEntry[];
   markerClassifications: StageMarkerClassification[];
   incidents: PrecalculatedRaceIncident[];
   events: RaceSimMessage[];
+  /** Mannschaft mit dem Tagesbonus, falls eine gezogen wurde. */
+  superTeamId: number | undefined;
   /** Kennzahlen des Laufs — fuer Anzeige und Kalibrierung. */
   result: QuickSimStageResult;
   seed: number;
@@ -105,12 +121,14 @@ export function runQuickSimulation(
     ?? bootstrap.quickSimProfiles?.[profile]
     ?? DEFAULT_QUICK_SIM_PROFILES[profile];
 
-  const ranking = calculateStageFavoriteRiderRanking(
-    bootstrap.riders,
-    bootstrap.teams,
-    bootstrap.stage,
-    { distanceKm, elevationGainMeters },
-  );
+  // Tagesform zuerst: sie geht in jede spaetere Bewertung ein.
+  const gcLeaderRiderId = bootstrap.gcStandings.find((standing) => standing.rank === 1)?.riderId ?? null;
+  const dailyFormRandom = createSeededRandom(deriveSeed(seed, 'daily-form'));
+  const dailyFormByRiderId = new Map(bootstrap.riders.map((rider) => [
+    rider.id,
+    sampleDailyForm(dailyFormRandom, rider.id === gcLeaderRiderId),
+  ]));
+  const favoriteOptions = { distanceKm, elevationGainMeters, dailyFormByRiderId };
 
   // Dieselben abgeleiteten Stroeme wie in SimulationEngine — gleicher Seed,
   // gleiche Stuerze, gleicher Einholpunkt.
@@ -133,7 +151,7 @@ export function runQuickSimulation(
     bootstrap.race,
     bootstrap.stage,
     bootstrap.stageSummary,
-    calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, { distanceKm, elevationGainMeters }),
+    calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, favoriteOptions),
     bootstrap.gcStandings,
     bootstrap.mountainStandings,
     bootstrap.teams,
@@ -148,6 +166,27 @@ export function runQuickSimulation(
       malusValue: plan.malusValue,
     }
     : null;
+
+  // Superform und Supermalus: derselbe Zufallsstrom wie in der Engine, damit
+  // beide Modi auf derselben Etappe dieselben Fahrer treffen.
+  const ridersWithSpecialStates = applySpecialFormStatesWithContext(bootstrap.riders, bootstrap.stage, {
+    teams: bootstrap.teams,
+    ...favoriteOptions,
+    random: createSeededRandom(deriveSeed(seed, 'special-form')),
+  });
+  // Die Sonderzustaende verschieben die Tagesform — genau so rechnet die Engine.
+  const effectiveRiders = ridersWithSpecialStates.map((rider) => rider);
+  const effectiveDailyForm = new Map(ridersWithSpecialStates.map((rider) => [
+    rider.id,
+    (dailyFormByRiderId.get(rider.id) ?? 0) + (rider.specialFormDelta ?? 0),
+  ]));
+
+  const ranking = calculateStageFavoriteRiderRanking(
+    effectiveRiders,
+    bootstrap.teams,
+    bootstrap.stage,
+    { distanceKm, elevationGainMeters, dailyFormByRiderId: effectiveDailyForm },
+  );
 
   const result = simulateQuickStage({
     profile,
@@ -167,7 +206,7 @@ export function runQuickSimulation(
     random: createSeededRandom(deriveSeed(seed, 'quicksim')),
   });
 
-  const riderById = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
+  const riderById = new Map(ridersWithSpecialStates.map((rider) => [rider.id, rider]));
   const breakawayRiderIds = new Set(plan?.riderIds ?? []);
   const entries = buildCommitEntries(result, bootstrap, breakawayRiderIds);
   const markerClassifications = buildMarkerClassifications({
@@ -178,7 +217,8 @@ export function runQuickSimulation(
     entries,
     markerClassifications,
     incidents: precalculatedIncidents,
-    events: buildEvents(result, bootstrap, plan, riderById),
+    events: buildEvents(result, bootstrap, plan, riderById, ridersWithSpecialStates),
+    superTeamId: plan?.superTeamId,
     result,
     seed,
   };
@@ -322,8 +362,9 @@ function resolveDeterministicRatio(input: string): number {
 function buildEvents(
   result: QuickSimStageResult,
   bootstrap: RealtimeSimulationBootstrap,
-  plan: { riderIds: number[]; triggerDistanceMeters: number; phaseEndDistanceMeters: number } | null,
+  plan: { riderIds: number[]; triggerDistanceMeters: number; phaseEndDistanceMeters: number; superTeamId?: number } | null,
   riderById: ReadonlyMap<number, Rider>,
+  ridersWithSpecialStates: readonly Rider[],
 ): RaceSimMessage[] {
   const events: RaceSimMessage[] = [];
   const distanceKm = bootstrap.stageSummary.distanceKm;
@@ -336,6 +377,40 @@ function buildEvents(
     return rider ? `${rider.firstName} ${rider.lastName}` : `Fahrer ${riderId}`;
   };
   let nextId = 1;
+
+  if (plan?.superTeamId != null) {
+    const team = bootstrap.teams.find((entry) => entry.id === plan.superTeamId);
+    events.push({
+      id: nextId += 1,
+      elapsedSeconds: 0,
+      riderId: null,
+      riderName: null,
+      riderTeamId: plan.superTeamId,
+      type: 'superteam',
+      tone: 'neutral',
+      title: `Superteam des Tages: ${team ? team.name : `Team ${plan.superTeamId}`}`,
+      detail: 'Die Mannschaft faehrt heute ueber ihrem Niveau.',
+      kmMark: 0,
+    });
+  }
+
+  for (const rider of ridersWithSpecialStates) {
+    if (!rider.hasSuperform && !rider.hasSupermalus) {
+      continue;
+    }
+    events.push({
+      id: nextId += 1,
+      elapsedSeconds: 0,
+      riderId: rider.id,
+      riderName: `${rider.firstName} ${rider.lastName}`,
+      riderTeamId: rider.activeTeamId ?? null,
+      type: 'superteam',
+      tone: rider.hasSuperform ? 'neutral' : 'warning',
+      title: rider.hasSuperform ? 'Superform' : 'Supermalus',
+      detail: `${rider.firstName} ${rider.lastName} startet mit ${(rider.specialFormDelta ?? 0) >= 0 ? '+' : ''}${(rider.specialFormDelta ?? 0).toFixed(1)} Form.`,
+      kmMark: 0,
+    });
+  }
 
   if (plan && plan.riderIds.length > 0) {
     const triggerKm = plan.triggerDistanceMeters / 1000;

@@ -28,6 +28,7 @@ import {
 } from './bootstrap';
 import { computeStageRunMetrics, summarize, type Distribution, type StageRunMetrics } from './metrics';
 import { runQuickStage } from './quickSimAdapter';
+import { calculateStageFavoriteRiderRanking } from '../../frontend/src/race-sim/stageFavorites';
 
 interface StageReferenceFile {
   stage: {
@@ -171,9 +172,20 @@ function main(): void {
       continue;
     }
 
-    const favouriteRiderIdsInOrder = withSilencedConsole(() => runQuickStage({
-      bootstrap, seed: stageSeed, stageScore,
-    })).entries.map((entry) => entry.riderId);
+    // Favoritenwertung *vor* dem Rennen — exakt dieselbe Liste, gegen die auch
+    // der Referenzlauf seine Rangkorrelation misst. Vorher stand hier die
+    // Zielreihenfolge eines Quick-Laufs; das mass die Streuung zwischen zwei
+    // Laeufen, nicht die Vorhersagbarkeit, und war mit der Referenz nicht
+    // vergleichbar.
+    const favouriteRiderIdsInOrder = withSilencedConsole(() => calculateStageFavoriteRiderRanking(
+      bootstrap.riders,
+      bootstrap.teams,
+      bootstrap.stage,
+      {
+        distanceKm: bootstrap.stageSummary.distanceKm,
+        elevationGainMeters: bootstrap.stageSummary.elevationGainMeters,
+      },
+    )).map((candidate) => candidate.rider.id);
 
     const quick = quickByProfile.get(profile) ?? emptySide();
     for (let run = 0; run < options.runs; run += 1) {
@@ -192,9 +204,6 @@ function main(): void {
         otlCount: result.outsideTimeLimitCount,
         breakawayRiderIds: [],
         breakawayCatchKm: null,
-        // Die Favoritenreihenfolge ist bei der Quick Sim der Score selbst —
-        // die Rangkorrelation misst hier also, wie stark Vorfaelle, Regime und
-        // Rauschen die Reihenfolge noch verdrehen.
         favouriteRiderIdsInOrder,
       });
       if (metrics) {
@@ -224,6 +233,10 @@ function main(): void {
     { label: 's/km (letzter)', digits: 3, pick: (side) => median(side.lastGapPerKm) },
     { label: 'Aufgaben', digits: 2, pick: (side) => median(side.dnfCount) },
     { label: 'OTL', digits: 2, pick: (side) => median(side.otlCount) },
+    // Die wichtigste Zahl: wie stark das Ergebnis vorhersagbar ist. Liegt die
+    // Quick Sim hier deutlich hoeher, ist sie zu deterministisch — dann
+    // gewinnen immer dieselben, auch wenn alle anderen Kennzahlen passen.
+    { label: 'Spearman rho', digits: 3, pick: (side) => median(side.spearman) },
     { label: 'Laufzeit ms', digits: 2, pick: (side) => median(side.runtimeMs) },
   ];
 

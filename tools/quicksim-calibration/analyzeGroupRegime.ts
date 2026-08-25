@@ -32,6 +32,7 @@ interface StageReferenceFile {
     stageScore: number | null;
     distanceKm: number | null;
   };
+  weatherId: number | null;
   runs: StageRunMetrics[];
 }
 
@@ -47,6 +48,8 @@ interface StagePoint {
   shareWhenBunched: number | null;
   /** Mittlerer Anteil in Laeufen ohne geschlossene Ankunft. */
   shareWhenSplit: number | null;
+  /** Gerolltes Wetter der Etappe. Seit es die Simulation erreicht, eine Groesse. */
+  weatherId: number | null;
 }
 
 function mean(values: number[]): number | null {
@@ -85,6 +88,7 @@ function collectPoints(inputDir: string): StagePoint[] {
       bunchFraction: bunched.length / shares.length,
       shareWhenBunched: mean(bunched),
       shareWhenSplit: mean(shares.filter((share) => share <= BUNCH_SHARE_THRESHOLD)),
+      weatherId: reference.weatherId ?? null,
     });
   }
   return points.sort((left, right) => left.difficultyPerKm - right.difficultyPerKm);
@@ -184,6 +188,31 @@ function main(): void {
   console.log(`  geschlossene Ankunft: ${((mean(bunchedShares) ?? 0) * 100).toFixed(1)} %`);
   console.log(`  zerfallenes Feld:     ${((mean(splitShares) ?? 0) * 100).toFixed(1)} %`);
   console.log('');
+
+  // Wetter wirkt seit der Korrektur an mapStage wieder auf die Simulation.
+  // Wenn es die Gruppenbildung systematisch verschiebt, muss es ins Modell —
+  // das Residuum je Wetter zeigt es.
+  const residualsByWeather = new Map<number, number[]>();
+  for (const point of points) {
+    if (point.weatherId == null) {
+      continue;
+    }
+    const predicted = 1 / (1 + Math.exp(-(intercept + (slope * point.difficultyPerKm))));
+    const bucket = residualsByWeather.get(point.weatherId) ?? [];
+    bucket.push(point.bunchFraction - predicted);
+    residualsByWeather.set(point.weatherId, bucket);
+  }
+  if (residualsByWeather.size > 1) {
+    console.log('Residuum je Wetter (positiv = klumpt staerker als erwartet):');
+    for (const [weatherId, residuals] of [...residualsByWeather.entries()].sort((a, b) => a[0] - b[0])) {
+      const average = mean(residuals) ?? 0;
+      console.log(
+        `  Wetter ${String(weatherId).padStart(2)}       ${average >= 0 ? '+' : ''}${average.toFixed(3)}`
+        + `   (${residuals.length} Etappen)`,
+      );
+    }
+    console.log('');
+  }
 
   console.log('Etappen nach Schwierigkeit je Kilometer:');
   console.log('   D      Profil            beobachtet  erwartet');
