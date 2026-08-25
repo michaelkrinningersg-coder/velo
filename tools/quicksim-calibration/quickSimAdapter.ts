@@ -96,6 +96,9 @@ export function runQuickStage(options: RunQuickStageOptions): QuickSimStageResul
     riders: ranking.map((candidate) => ({
       riderId: candidate.rider.id,
       score: candidate.effectiveSkill,
+      // Nur das Mannschaftszeitfahren braucht die Zuordnung — dort ist das
+      // Team die Zeitgruppe.
+      teamId: candidate.rider.activeTeamId ?? undefined,
       // Der Tie-Break innerhalb einer Zeitgruppe ist in der vollen Simulation
       // ein eigener Wert; hier reicht der Score, solange er nicht identisch
       // ist — die Fahrer-ID entscheidet den Rest.

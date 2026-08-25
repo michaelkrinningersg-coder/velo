@@ -18,7 +18,13 @@
  * reproduzierbar, und derselbe Kern laeuft im Frontend wie im Kalibrierwerkzeug.
  */
 
-import { rankStageResultEntries, resolveStageTimeLimitSeconds, roundStageResultSeconds } from '../stageResultRules';
+import {
+  isTimeTrialProfile,
+  rankStageResultEntries,
+  resolveStageTimeLimitSeconds,
+  roundStageResultSeconds,
+  TIME_TIE_THRESHOLD_SECONDS,
+} from '../stageResultRules';
 import type { StageProfile } from '../types';
 import type { QuickSimProfileParameters } from '../quickSimProfiles';
 import type { RandomSource } from '../rng';
@@ -40,6 +46,7 @@ import {
   type QuickSimIncident,
   type QuickSimIncidentOutcome,
 } from './incidents';
+import { buildIndividualTimeTrialGaps, buildTeamTimeTrialGaps } from './timeTrial';
 
 /**
  * Sekunden Restvorsprung je Kilometer, den die Ausreissergruppe frueher im
@@ -60,6 +67,8 @@ export interface QuickSimRiderInput {
   score: number;
   /** Tie-Break innerhalb einer Zeitgruppe, wie in der vollen Simulation. */
   photoFinishScore: number;
+  /** Nur fuer das Mannschaftszeitfahren noetig — dort ist das Team die Gruppe. */
+  teamId?: number;
 }
 
 export interface QuickSimStageInput {
@@ -99,6 +108,28 @@ export interface QuickSimStageResult {
   breakawaySurvived: boolean;
   abandonCount: number;
   outsideTimeLimitCount: number;
+}
+
+/**
+ * Zeitgruppen aus aufsteigend sortierten Zielzeiten, nach der 1-Sekunden-Regel
+ * des Spiels. Die Groessen kommen damit aus den Zeiten und nicht aus der
+ * Ziehung — beim Zeitfahren gibt es gar keine Ziehung, und auf der Strasse
+ * koennen zwei gezogene Gruppen naeher als eine Sekunde beieinander liegen.
+ */
+function resolveTimeGroupSizes(sortedTimesSeconds: readonly number[]): number[] {
+  if (sortedTimesSeconds.length === 0) {
+    return [];
+  }
+  const sizes: number[] = [1];
+  for (let index = 1; index < sortedTimesSeconds.length; index += 1) {
+    const step = (sortedTimesSeconds[index] as number) - (sortedTimesSeconds[index - 1] as number);
+    if (step > TIME_TIE_THRESHOLD_SECONDS) {
+      sizes.push(1);
+      continue;
+    }
+    sizes[sizes.length - 1] = (sizes[sizes.length - 1] as number) + 1;
+  }
+  return sizes;
 }
 
 /**
@@ -175,6 +206,26 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
   // 3 · Siegerzeit. Haengt an Distanz und Profil, nicht an den Fahrern.
   const winnerTimeSeconds = resolveWinnerTimeSeconds(random, parameters, distanceKm);
 
+  // Zeitfahren gehen einen eigenen Weg: keine Regime-Ziehung, keine
+  // Ausreissergruppe, keine gezogenen Zeitgruppen.
+  if (isTimeTrialProfile(profile)) {
+    const gapByRiderId = profile === 'TTT'
+      ? buildTeamTimeTrialGaps(random, finishers, parameters, winnerTimeSeconds)
+      : buildIndividualTimeTrialGaps(random, finishers, parameters, winnerTimeSeconds);
+    return assembleResult({
+      input,
+      finishers,
+      abandons,
+      incidentOutcomes,
+      gapByRiderId,
+      groupIndexByRiderId: null,
+      winnerTimeSeconds,
+      regime: 'split',
+      difficultyPerKm,
+      breakawaySurvived,
+    });
+  }
+
   // 4 · Gruppen und Abstaende.
   const scores = buildScoreMap(input, breakawaySurvived);
   const sorted = [...finishers].sort(
@@ -185,9 +236,6 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
   const regime = drawFinishRegime(random, parameters, difficultyPerKm);
   const gapByRiderId = new Map<number, number>();
   const groupIndexByRiderId = new Map<number, number>();
-  let firstGroupSize = 0;
-  let timeGroupCount = 0;
-
   if (breakawaySurvived && input.breakaway) {
     // Die Ausreisser bilden Gruppe 1, das Feld beginnt bei Gruppe 2. Der
     // Etappensieg faellt damit zwingend aus der Gruppe — nicht als Bonus, der
@@ -201,8 +249,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       gapByRiderId.set(rider.riderId, 0);
       groupIndexByRiderId.set(rider.riderId, 0);
     }
-    firstGroupSize = head.length;
-    timeGroupCount = head.length > 0 ? 1 : 0;
+    const headGroupCount = head.length > 0 ? 1 : 0;
 
     const fieldGroups = buildFinishGroups({
       scoresDescending: field.map((rider) => scores.get(rider.riderId) as number),
@@ -218,16 +265,14 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       for (const memberIndex of group.memberIndices) {
         const rider = field[memberIndex] as QuickSimRiderInput;
         gapByRiderId.set(rider.riderId, leadSeconds + group.gapSeconds);
-        groupIndexByRiderId.set(rider.riderId, timeGroupCount + index);
+        groupIndexByRiderId.set(rider.riderId, headGroupCount + index);
       }
     });
-    timeGroupCount += fieldGroups.length;
   } else {
     const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
-    firstGroupSize = resolveFirstGroupSize(share, sorted.length);
     const groups = buildFinishGroups({
       scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
-      firstGroupSize,
+      firstGroupSize: resolveFirstGroupSize(share, sorted.length),
       distanceKm,
       parameters,
       random,
@@ -239,10 +284,48 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
         groupIndexByRiderId.set(rider.riderId, index);
       }
     });
-    timeGroupCount = groups.length;
   }
 
-  const finisherEntries: QuickSimResultEntry[] = sorted.map((rider) => {
+  return assembleResult({
+    input,
+    finishers: sorted,
+    abandons,
+    incidentOutcomes,
+    gapByRiderId,
+    groupIndexByRiderId,
+    winnerTimeSeconds,
+    regime,
+    difficultyPerKm,
+    breakawaySurvived,
+  });
+}
+
+interface AssembleInput {
+  input: QuickSimStageInput;
+  finishers: readonly QuickSimRiderInput[];
+  abandons: readonly QuickSimRiderInput[];
+  incidentOutcomes: ReadonlyMap<number, QuickSimIncidentOutcome>;
+  gapByRiderId: ReadonlyMap<number, number>;
+  /** Nur die Strassenfassung kennt gezogene Gruppen; beim Zeitfahren null. */
+  groupIndexByRiderId: ReadonlyMap<number, number> | null;
+  winnerTimeSeconds: number;
+  regime: FinishRegime;
+  difficultyPerKm: number;
+  breakawaySurvived: boolean;
+}
+
+/**
+ * Schritte 5 bis 7: Vorfallverluste aufschlagen, Zeitlimit setzen, Rangfolge
+ * bilden. Gemeinsam fuer Strasse und Zeitfahren — was sich unterscheidet, sind
+ * nur die Rueckstaende, die hier schon feststehen.
+ */
+function assembleResult(assemble: AssembleInput): QuickSimStageResult {
+  const {
+    input, finishers, abandons, incidentOutcomes, gapByRiderId,
+    groupIndexByRiderId, winnerTimeSeconds, regime, difficultyPerKm, breakawaySurvived,
+  } = assemble;
+
+  const finisherEntries: QuickSimResultEntry[] = finishers.map((rider) => {
     const incident = incidentOutcomes.get(rider.riderId) ?? null;
     const gapSeconds = (gapByRiderId.get(rider.riderId) ?? 0) + (incident?.timeLossSeconds ?? 0);
     return {
@@ -252,14 +335,14 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       photoFinishScore: rider.photoFinishScore,
       isAbandon: false,
       isOutsideTimeLimit: false,
-      groupIndex: groupIndexByRiderId.get(rider.riderId) ?? null,
+      groupIndex: groupIndexByRiderId?.get(rider.riderId) ?? null,
       incident,
     };
   });
 
   // 6 · Zeitlimit — dieselbe Regel wie in der vollen Simulation.
   const timeLimitSeconds = resolveStageTimeLimitSeconds(
-    profile,
+    input.profile,
     finisherEntries.map((entry) => entry.stageTimeSeconds as number),
   );
   if (timeLimitSeconds != null) {
@@ -271,7 +354,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
   // 7 · Rangfolge und Tie-Break, unveraendert aus den Etappenregeln.
   const ranked = rankStageResultEntries(
     finisherEntries.map((entry) => ({ ...entry, stageTimeSeconds: entry.stageTimeSeconds as number })),
-    profile,
+    input.profile,
   );
 
   // Die Rueckstaende beziehen sich auf den tatsaechlichen Sieger, nicht auf die
@@ -282,14 +365,29 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     entry.gapSeconds = entry.stageTimeSeconds - actualWinnerTimeSeconds;
   }
 
+  const groupSizes = resolveTimeGroupSizes(ranked.map((entry) => entry.stageTimeSeconds));
+  if (groupIndexByRiderId == null) {
+    // Beim Zeitfahren gibt es keine gezogenen Gruppen — der Index kommt aus den
+    // Zeiten, damit das Feld trotzdem eine Gruppenstruktur hat.
+    let groupIndex = 0;
+    let cursor = 0;
+    for (const size of groupSizes) {
+      for (let offset = 0; offset < size; offset += 1) {
+        (ranked[cursor + offset] as QuickSimResultEntry).groupIndex = groupIndex;
+      }
+      cursor += size;
+      groupIndex += 1;
+    }
+  }
+
   return {
     entries: [...ranked, ...abandons.map((rider) => toAbandonEntry(rider, incidentOutcomes))],
     winnerTimeSeconds: actualWinnerTimeSeconds,
     timeLimitSeconds,
     regime,
     difficultyPerKm,
-    firstGroupSize,
-    timeGroupCount,
+    firstGroupSize: groupSizes[0] ?? 0,
+    timeGroupCount: groupSizes.length,
     breakawaySurvived,
     abandonCount: abandons.length,
     outsideTimeLimitCount: ranked.filter((entry) => entry.isOutsideTimeLimit).length,

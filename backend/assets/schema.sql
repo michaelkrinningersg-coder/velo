@@ -353,7 +353,11 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   -- Wahrscheinlichkeit, dass ein schwerer Sturz zur Aufgabe fuehrt.
   severe_dnf_chance           REAL NOT NULL,
   -- Exponent der Ausduennung der Ausreissergruppe bis zum Einholpunkt.
-  breakaway_shrink_exponent   REAL NOT NULL
+  breakaway_shrink_exponent   REAL NOT NULL,
+  -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit.
+  time_trial_slope            REAL NOT NULL,
+  -- Nur Zeitfahren: Reststreuung um diese Gerade (Tagesform), ebenso relativ.
+  time_trial_noise            REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wetter (

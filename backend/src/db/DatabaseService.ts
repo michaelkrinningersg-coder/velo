@@ -3298,6 +3298,7 @@ export class DatabaseService {
       'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_mean',
       'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
       'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
+      'time_trial_slope', 'time_trial_noise',
     ];
     if (tableExists(db, 'quick_sim_profiles')) {
       const actual = (db.prepare('PRAGMA table_info(quick_sim_profiles)').all() as Array<{ name: string }>)
@@ -3327,7 +3328,11 @@ export class DatabaseService {
         noise_sigma                 REAL NOT NULL,
         incident_loss_multiplier    REAL NOT NULL,
         severe_dnf_chance           REAL NOT NULL,
-        breakaway_shrink_exponent   REAL NOT NULL
+        breakaway_shrink_exponent   REAL NOT NULL,
+        -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit
+        -- und die Reststreuung um diese Gerade (Tagesform).
+        time_trial_slope            REAL NOT NULL,
+        time_trial_noise            REAL NOT NULL
       )
     `).run();
 

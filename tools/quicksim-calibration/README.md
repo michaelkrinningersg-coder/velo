@@ -61,6 +61,7 @@ schreibt in die Datenbank.
 | `quickSimAdapter.ts` | Speist den reinen Quick-Kern aus einem echten Etappen-Bootstrap |
 | `compareQuickSim.ts` | Fährt dieselben Etappen mit dem Quick-Kern und stellt sie gegenüber |
 | `fitTailModel.ts` | Fittet `tail_group_size` gegen die Zahl der Zeitgruppen |
+| `fitTimeTrialModel.ts` | Fittet `time_trial_slope` und `time_trial_noise` fuer ITT und TTT |
 | `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
@@ -137,6 +138,7 @@ npm run calibrate:groups       # Regime-Analyse der Gruppenbildung
 npm run calibrate:validate     # Modell gegen die Referenz pruefen
 npm run calibrate:compare      # Quick-Kern gegen Instant, Kennzahl fuer Kennzahl
 npm run calibrate:fit-tail     # Klumpung des Feldendes anpassen
+npm run calibrate:fit-tt       # Zeitfahrmodell anpassen
 ```
 
 | Profil | Etappen | km/h | 1. Zeitgruppe | Anteil | Zeitgruppen | s/km (Letzter) | Spearman |
@@ -294,7 +296,8 @@ mit **derselben** `computeStageRunMetrics`. Das ist die Prüfung, die
 `calibrate:validate` nicht leisten kann: ein Modell kann die Momente einer einzelnen
 Größe treffen und trotzdem Etappenergebnisse liefern, die kein Radrennen sind.
 
-55 Etappen, 20 Quick-Läufe je Etappe, Median über alle Läufe eines Profils:
+55 Etappen, 20 Quick-Läufe je Etappe, Median über alle Läufe eines Profils
+(I = Instant, Q = Quick):
 
 | Profil | km/h I → Q | 1. Gruppe I → Q | Zeitgruppen I → Q | s/km Letzter I → Q |
 | :-- | :-- | :-- | :-- | :-- |
@@ -307,17 +310,68 @@ Größe treffen und trotzdem Etappenergebnisse liefern, die kein Radrennen sind.
 | Medium_Mountain | 41,18 → 40,86 | 0,039 → 0,073 | 41 → 41 | 9,94 → 10,56 |
 | Mountain | 38,28 → 38,46 | 0,016 → 0,033 | 70,5 → 72 | 13,77 → 13,47 |
 | High_Mountain | 37,40 → 38,32 | 0,017 → 0,020 | 86,5 → 87 | 14,84 → 16,40 |
+| **ITT** | 48,53 → 50,03 | 0,020 → 0,020 | 34 → 29 | 11,83 → 12,07 |
+| **TTT** | 57,44 → 57,45 | 0,047 → 0,050 | 30,5 → 31 | 22,38 → 22,27 |
 
-Alle neun Straßenprofile treffen: Geschwindigkeit auf ±0,9 km/h, Anteil der ersten
-Gruppe auf ±0,07, Zahl der Zeitgruppen auf ±3, Rückstand des Letzten auf ±1,6 s/km.
-Der Kern läuft dabei rund **1.580-mal schneller** als die Instant-Simulation
-(0,49 ms gegen 774 ms je Etappe).
+Alle elf Profile treffen: Geschwindigkeit auf ±0,9 km/h (ITT siehe unten), Anteil
+der ersten Gruppe auf ±0,07, Zahl der Zeitgruppen auf ±5, Rückstand des Letzten auf
+±1,6 s/km. Der Kern läuft dabei rund **1.460-mal schneller** als die
+Instant-Simulation (0,53 ms gegen 774 ms je Etappe).
 
-**ITT und TTT treffen nicht** — Zeitgruppen 15 statt 34 und 23 statt 30,5, erste
-Gruppe 0,154 statt 0,020. Das ist erwartet: beide laufen derzeit durch dasselbe
-Straßenmodell, obwohl es dort keine Gruppendynamik gibt. Das TTT hat mit
-`TimeTrialSimulator.ts` ohnehin ein eigenes Modell, beim ITT ist der Rückstand
-linear im Score-Abstand. Beide gehören noch angebunden.
+Die **+1,51 km/h beim ITT sind kein Modellfehler, sondern die Streuung zwischen zwei
+Referenzläufen**: gegen Lauf 1 gemessen liegt derselbe Wert bei −1,68 km/h. Das
+Modell steht mit 50,0 km/h zwischen den beiden Messungen (51,74 und 48,53), weil
+`base_speed_kmh` das Mittel aus beiden ist. Beim ITT hängt die Siegerzeit an einem
+einzelnen Fahrer, und die Startliste ist noch nicht geseedet.
+
+### Zeitfahren: ein eigenes Modell
+
+ITT und TTT liefen zunächst durch das Straßenmodell und trafen als einzige nicht —
+15 Zeitgruppen statt 34 beim ITT, eine erste Gruppe von 15 % des Feldes statt 2 %.
+Das war zu erwarten: eine Regime-Ziehung, eine Ausreißergruppe und gezogene
+Zeitgruppen gibt es beim Zeitfahren nicht.
+
+Eine Sonde über die Instant-Simulation zeigt, was stattdessen passiert:
+
+**TTT — die Mannschaft *ist* die Zeitgruppe.** Über zwei Etappen und 51 Mannschaften
+beträgt die Spanne innerhalb eines Teams **exakt 0,0 Sekunden**, ausnahmslos. Die
+Zahl der Zeitgruppen ist damit die Zahl der Mannschaften. Die Teamzeit hängt am
+Mittel der besten fünf, minus einem Punkt je fehlendem Fahrer — dieselbe Regel wie
+in `applyTeamTimeTrialTempo`, hier übernommen statt nachgebaut.
+
+Die anfangs vermuteten „Abreißer" gibt es nicht. Ohne die Messung wäre ein
+Mechanismus dafür eingebaut worden, den das Spiel gar nicht kennt.
+
+**ITT — jeder fährt allein.** Der Rückstand wächst linear mit dem Score-Abstand zum
+Besten, dazu die Tagesform als Streuung. Über fünf Etappen gemessen: Steigung 0,0042
+der Siegerzeit je Score-Punkt (0,0027–0,0063), Reststreuung 1,9 % (1,75–2,26 %),
+Pearson 0,53–0,85. Der Score erklärt also das meiste, aber nicht alles — auf einer
+Etappe lag der Fünftplatzierte mit dem *höchsten* Score 11 Sekunden zurück.
+
+Beide Profile bekommen dieselbe Konstruktion:
+
+```
+versatz_i = time_trial_slope · (bester_score − score_i) + N(0, time_trial_noise)
+rueckstand_i = siegerzeit · (versatz_i − min versatz)
+```
+
+Beim TTT je Mannschaft statt je Fahrer. Die Normierung auf den tatsächlich
+Schnellsten ist nötig, damit die gezogene Siegerzeit die Siegerzeit bleibt —
+`base_speed_kmh` ist selbst eine Siegergeschwindigkeit.
+
+Die Zeitgruppen entstehen in beiden Fällen **aus den Zeiten**, nicht aus einer
+Ziehung. Das erklärt nebenbei eine Beobachtung, die vorher unverständlich war: ein
+10-km-Zeitfahren hat 35 Zeitgruppen, ein 23-km-Zeitfahren 80 — bei gleichem Feld.
+Dieselbe relative Streuung, auf mehr Sekunden verteilt, reißt mehr Ein-Sekunden-
+Lücken.
+
+Die Werte aus der Sonde trafen die Zielgrößen noch nicht (TTT: 13,8 s/km statt
+22,4), weil die Streuung zwischen den Etappen groß ist. `npm run calibrate:fit-tt`
+fittet beide Parameter über ein Raster gegen den Rückstand des Letzten und die Zahl
+der Zeitgruppen. Ergebnis: ITT 0,0060 / 0,0200, TTT 0,0150 / 0,0050. Beim TTT ist
+die Steigung deutlich höher und die Streuung fast null — was zur Beobachtung passt,
+dass eine Mannschaft geschlossen ankommt: das Ergebnis steht mit der Teamaufstellung
+praktisch fest.
 
 ### Wie das Rückstandsmodell zustande kam
 
@@ -395,8 +449,9 @@ behauptet, die niemand gemessen hat, wäre schlechter, nicht besser.
   der naheliegende Zielwert, entsteht nicht durch Stürze — er ist auch in Läufen
   ohne jeden Vorfall da. Es fehlt eine Kennzahl, die den Zeitverlust *eines
   gestürzten Fahrers* isoliert.
-- **ITT und TTT laufen durch das Straßenmodell.** Beide brauchen ein eigenes; siehe
-  den Vergleich oben.
+- **`time_trial_slope` und `time_trial_noise` ruhen auf je fünf Etappen.** Für ITT
+  und TTT gibt es im Spielstand nicht mehr. Die Streuung zwischen den Etappen ist
+  entsprechend groß (TTT-Steigung 0,0032 bis 0,0123 in der Sonde).
 - **Cobble ruht auf zwei Etappen.** Der Achsenabschnitt −4,03 ist plausibel, aber
   dünn belegt.
 - **19 der 82 ausgewählten Etappen lieferten keine Startliste.** Die Stichprobe ist

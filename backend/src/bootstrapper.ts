@@ -917,8 +917,9 @@ export function seedQuickSimProfiles(db: Database.Database): void {
     INSERT OR IGNORE INTO quick_sim_profiles (
       profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
       tail_gap_per_km, tail_group_size,
-      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
+      time_trial_slope, time_trial_noise
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -935,6 +936,8 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       real(req(row, 'incident_loss_multiplier', ctx), `${ctx} / incident_loss_multiplier`),
       real(req(row, 'severe_dnf_chance', ctx), `${ctx} / severe_dnf_chance`),
       real(req(row, 'breakaway_shrink_exponent', ctx), `${ctx} / breakaway_shrink_exponent`),
+      real(req(row, 'time_trial_slope', ctx), `${ctx} / time_trial_slope`),
+      real(req(row, 'time_trial_noise', ctx), `${ctx} / time_trial_noise`),
     );
   }
 }
