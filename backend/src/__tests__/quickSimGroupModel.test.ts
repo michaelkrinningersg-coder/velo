@@ -372,6 +372,47 @@ describe('buildFinishGroups', () => {
   });
 });
 
+describe('Steilere Rueckstandskurve am Berg', () => {
+  it('endet auf beiden Kurven beim letzten Fahrer bei genau 1', () => {
+    // Der Endpunkt ist die Zusicherung: der Letzte verliert `tailGapPerKm`,
+    // unabhaengig von der Form. Sonst haette die Formaenderung auch das
+    // Verhaeltnis zum Zeitlimit verschoben.
+    expect(resolveTailGapShare(1)).toBeCloseTo(1, 10);
+    expect(resolveTailGapShare(1, 'Mountain')).toBeCloseTo(1, 10);
+    expect(resolveTailGapShare(1, 'High_Mountain')).toBeCloseTo(1, 10);
+  });
+
+  it('hebt die Mitte an und laesst den Bereich hinter der Spitze enger', () => {
+    // Position 0,24 entspricht bei 176 Fahrern und einer Spitze von zehn
+    // etwa Rang 50 — dort soll sich nichts aendern.
+    expect(resolveTailGapShare(0.24, 'Mountain') / resolveTailGapShare(0.24)).toBeCloseTo(1, 1);
+    // Davor flacher, danach steiler.
+    expect(resolveTailGapShare(0.10, 'Mountain')).toBeLessThan(resolveTailGapShare(0.10));
+    for (const position of [0.4, 0.54, 0.72, 0.9]) {
+      expect(resolveTailGapShare(position, 'Mountain')).toBeGreaterThan(resolveTailGapShare(position));
+    }
+  });
+
+  it('laesst alle anderen Profile unveraendert', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      for (const position of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
+        expect(resolveTailGapShare(position, profile)).toBeCloseTo(resolveTailGapShare(position), 10);
+      }
+    }
+  });
+
+  it('bleibt monoton steigend', () => {
+    for (const profile of [undefined, 'Mountain', 'High_Mountain'] as Array<StageProfile | undefined>) {
+      let vorher = -1;
+      for (let position = 0; position <= 1.0001; position += 0.02) {
+        const wert = resolveTailGapShare(Math.min(1, position), profile);
+        expect(wert).toBeGreaterThanOrEqual(vorher);
+        vorher = wert;
+      }
+    }
+  });
+});
+
 describe('resolveTailGapShare', () => {
   it('beginnt bei null und endet beim vollen Rueckstand', () => {
     expect(resolveTailGapShare(0)).toBe(0);

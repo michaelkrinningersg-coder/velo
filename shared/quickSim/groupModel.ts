@@ -17,12 +17,16 @@ import {
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
+  STEEP_TAIL_SHAPE_EPSILON,
+  STEEP_TAIL_SHAPE_EXPONENT,
+  STEEP_TAIL_SHAPE_PROFILES,
   TAIL_SHAPE_EPSILON,
   TAIL_SHAPE_EXPONENT,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
 import { randomBetween, type RandomSource } from '../rng';
 import { TIME_TIE_THRESHOLD_SECONDS } from '../stageResultRules';
+import type { StageProfile } from '../types';
 
 export type FinishRegime = 'bunched' | 'split';
 
@@ -190,6 +194,8 @@ export interface BuildFinishGroupsInput {
   firstGroupSize: number;
   distanceKm: number;
   parameters: QuickSimProfileParameters;
+  /** Entscheidet ueber die Form der Rueckstandskurve — siehe `resolveTailGapShare`. */
+  profile?: StageProfile;
   random: RandomSource;
 }
 
@@ -206,9 +212,12 @@ const MIN_SPLIT_SECONDS = TIME_TIE_THRESHOLD_SECONDS + 1;
  * Ende des Feldes. Ueber alle neun Strassenprofile ist sie nach dieser
  * Normierung dieselbe; nur ihre Hoehe (`tailGapPerKm`) haengt am Profil.
  */
-export function resolveTailGapShare(position: number): number {
+export function resolveTailGapShare(position: number, profile?: StageProfile): number {
   const v = Math.min(1, Math.max(0, position));
-  return (TAIL_SHAPE_EPSILON * Math.pow(v, TAIL_SHAPE_EXPONENT)) / (1 - v + TAIL_SHAPE_EPSILON);
+  const steil = profile != null && STEEP_TAIL_SHAPE_PROFILES.has(profile);
+  const epsilon = steil ? STEEP_TAIL_SHAPE_EPSILON : TAIL_SHAPE_EPSILON;
+  const exponent = steil ? STEEP_TAIL_SHAPE_EXPONENT : TAIL_SHAPE_EXPONENT;
+  return (epsilon * Math.pow(v, exponent)) / (1 - v + epsilon);
 }
 
 /**
@@ -279,7 +288,7 @@ export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] 
     const lastIndex = index + size - 1;
     // Die Gruppe sitzt auf der Kurve an der Position ihres letzten Fahrers —
     // damit trifft der Letzte im Feld genau `tailGapPerKm`.
-    const share = resolveTailGapShare((lastIndex - headSize + 1) / tailCount);
+    const share = resolveTailGapShare((lastIndex - headSize + 1) / tailCount, input.profile);
     const noise = 1 + (drawStandardNormal(random) * parameters.noiseSigma);
     const step = totalGapSeconds * (share - previousShare) * Math.max(0.05, noise);
     previousShare = share;

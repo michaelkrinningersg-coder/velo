@@ -408,6 +408,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       firstGroupSize: resolveFirstGroupSize(fieldShare, field.length),
       distanceKm,
       parameters,
+      profile,
       random,
     });
     fieldGroups.forEach((group, index) => {
@@ -442,6 +443,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       firstGroupSize,
       distanceKm,
       parameters,
+      profile,
       random,
     });
     // Zustand vor dem Kapitaensschutz festhalten — `applyGroupProtection`
