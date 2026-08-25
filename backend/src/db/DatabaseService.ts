@@ -3129,6 +3129,23 @@ export class DatabaseService {
       `);
     }
 
+    // Der Abgleich mit der Vorlagendatenbank steht bewusst NICHT mehr hier.
+    // Siehe `syncRaceProgramsFromMaster` — er loescht die Tabelle und legt sie
+    // aus den Rennen der Basissaison neu an; in einer Funktion, die frueher bei
+    // jedem API-Aufruf lief, hat er die Verknuepfungen aller spaeteren Saisons
+    // sekuendlich vernichtet.
+  }
+
+  /**
+   * Uebernimmt Programme, Programm-Rennen-Verknuepfungen und
+   * Wahrscheinlichkeitsregeln aus der Vorlagendatenbank.
+   *
+   * Nur beim Anlegen eines Spielstands. Die Verknuepfungen beziehen sich auf
+   * die Rennen-IDs der Vorlage, also auf den Basiskalender; spaetere Saisons
+   * bekommen ihre eigenen beim Saisonwechsel
+   * (`GameStateService.duplicateCalendarForSeason`).
+   */
+  public syncRaceProgramsFromMaster(db: Database.Database): void {
     if (!fs.existsSync(this.masterDbPath)) {
       return;
     }
@@ -3232,6 +3249,10 @@ export class DatabaseService {
     const previousForeignKeys = db.pragma('foreign_keys', { simple: true });
     try {
       this.ensureAllSchemas(db, { disableForeignKeys: true });
+      // Der Programm-Abgleich haengt nicht mehr an der Schema-Kette (er wuerde
+      // dort die Verknuepfungen spaeterer Saisons loeschen). Fuer einen frisch
+      // aufgesetzten Spielstand gehoert er trotzdem dazu.
+      this.syncRaceProgramsFromMaster(db);
     } finally {
       db.pragma(`foreign_keys = ${previousForeignKeys ? 'ON' : 'OFF'}`);
     }
@@ -3473,6 +3494,10 @@ export class DatabaseService {
     const db = new Database(savePath);
     try {
       this.ensureAllSchemas(db);
+      // Programme und ihre Rennen einmalig aus der Vorlage uebernehmen. Ab hier
+      // gehoert die Tabelle dem Spielstand; der Saisonwechsel schreibt sie
+      // fort, niemand baut sie mehr neu.
+      this.syncRaceProgramsFromMaster(db);
 
       // Spielerteam setzen
       const teamRow = db.prepare('SELECT name FROM teams WHERE id = ?').get(teamId) as { name: string } | undefined;

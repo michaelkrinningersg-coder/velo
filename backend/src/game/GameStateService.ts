@@ -196,7 +196,18 @@ export class GameStateService {
   public ensureState(): GameState {
     this.ensureSchemaOnce();
     const state = this.loadState();
-    this.repairMissingRaceProgramRaces();
+    // Einmalige Wanderung fuer Altspielstaende: bis zur Umstellung wurden die
+    // Verknuepfungen bei jedem API-Aufruf geloescht und beim naechsten
+    // ensureState wieder hergestellt. Jetzt genau einmal.
+    const linkFlag = this.db.prepare("SELECT value FROM career_meta WHERE key = 'raceProgramLinksBuilt'").get() as { value: string } | undefined;
+    if (!linkFlag) {
+      try {
+        this.buildMissingRaceProgramRaces();
+      } catch (e) {
+        console.error('Programm-Verknuepfungen konnten nicht aufgebaut werden:', e);
+      }
+      this.db.prepare("INSERT OR REPLACE INTO career_meta (key, value) VALUES ('raceProgramLinksBuilt', '1')").run();
+    }
     new RiderProgramService(this.db).ensureSeasonPrograms(state.season, state.currentDate);
 
     // Einmalige Peak-Neuausrichtung fuer Altbestaende: aeltere Saves haben durch
@@ -478,6 +489,10 @@ export class GameStateService {
 
         // Duplicate calendar dates (stages and races) to the new season's year
         this.duplicateCalendarForSeason(currentRow.season, nextSeason);
+        // Der Kalender ist dupliziert, die Verknuepfungen sind mitgekommen.
+        // Falls dabei etwas gefehlt hat (Rennen, die es in der Vorsaison nicht
+        // gab), einmal hier auffuellen statt spaeter bei jedem API-Aufruf.
+        this.buildMissingRaceProgramRaces();
 
         new ContractService(this.db).checkContractStatuses(nextSeason, true);
         const draftService = new RiderDraftService(this.db);
@@ -702,17 +717,29 @@ export class GameStateService {
   }
 
   /**
-   * Selbstheilende Reparatur: Aeltere Saves haben den Saisonwechsel unter Code
-   * durchlaufen, der `race_program_races` beim Kalender-Duplizieren noch nicht
-   * mitkopiert hat. Betroffene Saisons haben dann Rennen, aber keinerlei
-   * Programm-Verknuepfungen — Folge: im Programm-Tab ist jeder Fahrer "nicht
-   * dabei" und es gibt keine Form-Peaks/Grenzen (die aus den Programmfenstern
-   * abgeleitet werden). Fehlt fuer eine Saison JEDE Verknuepfung, werden sie
-   * aus einer Vorlagensaison uebernommen (Rennen per Name+Kategorie gematcht;
-   * duplizierte Rennen behalten Name und Kategorie). Der Check ist eine
-   * einzelne guenstige Aggregat-Query; ohne Schaden ist der Aufwand minimal.
+   * Ergaenzt fehlende Programm-Rennen-Verknuepfungen einer Saison.
+   *
+   * Frueher lief das bei jedem `ensureState()` und hiess "selbstheilende
+   * Reparatur". Geheilt hat es einen Schaden, den das Spiel sich selbst
+   * zufuegte: `ensureRaceProgramSchema` leerte `race_program_races` und legte
+   * sie aus den Rennen der Basissaison neu an — und lief ueber
+   * `getActiveConnection()` bei jedem API-Aufruf. Gemessener Zyklus:
+   *
+   *   nach dem Laden        2026: 1326   2027: 0
+   *   nach der Reparatur    2026: 1326   2027: 1326
+   *   nach einem Aufruf     2026: 1326   2027: 0
+   *
+   * Der Abgleich mit der Vorlage steht jetzt beim Anlegen des Spielstands, und
+   * dieser Aufbau laeuft einmal je Saison — beim Saisonwechsel und nach dem
+   * Draft, also sobald Kader und Rollen stehen. Fuer Altspielstaende bleibt er
+   * als einmalige Wanderung erhalten, ueber `career_meta` abgesichert.
+   *
+   * Fehlt fuer eine Saison JEDE Verknuepfung, werden sie aus einer
+   * Vorlagensaison uebernommen (Rennen per Name und Kategorie gematcht;
+   * duplizierte Rennen behalten beides). Teilbestaende bleiben unberuehrt —
+   * sie koennten gewollt sein.
    */
-  private repairMissingRaceProgramRaces(): void {
+  public buildMissingRaceProgramRaces(): void {
     if (!tableExists(this.db, 'races') || !tableExists(this.db, 'race_program_races')) {
       return;
     }
@@ -2337,6 +2364,10 @@ export class GameStateService {
       new ContractService(this.db).checkContractStatuses(season); // activate new draft contracts
       new RiderDevelopmentService(this.db).recalculateSpecializations(season);
       new RiderRoleService(this.db).recalculateAllTeamRoles();
+      // Hier stehen Kader und Rollen fest — der richtige Zeitpunkt, die
+      // Programm-Verknuepfungen der Saison endgueltig zu setzen, bevor die
+      // Programme darauf verteilt werden.
+      this.buildMissingRaceProgramRaces();
       new RiderProgramService(this.db).ensureSeasonPrograms(season, nextDate);
 
       // Newgens für die nächste Saison erzeugen
