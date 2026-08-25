@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFinishGroups,
+  drawTailGroupSize,
+  resolveTailGapShare,
   drawBeta,
   drawFinishRegime,
   drawFirstGroupShare,
@@ -266,6 +268,53 @@ describe('buildFinishGroups', () => {
     expect(groups[0]!.memberIndices).toHaveLength(scores.length);
   });
 
+  it('setzt den letzten Fahrer auf den gemessenen Rueckstand', () => {
+    // tailGapPerKm ist genau das: der Rueckstand des Letzten je Kilometer.
+    const distanceKm = 180;
+    const lastGaps = Array.from({ length: 200 }, (_, seed) => {
+      const groups = buildFinishGroups({
+        scoresDescending: scores,
+        firstGroupSize: 5,
+        distanceKm,
+        parameters,
+        random: createSeededRandom(700 + seed),
+      });
+      return groups[groups.length - 1]!.gapSeconds / distanceKm;
+    });
+    expect(moments(lastGaps).mean).toBeGreaterThan(parameters.tailGapPerKm * 0.8);
+    expect(moments(lastGaps).mean).toBeLessThan(parameters.tailGapPerKm * 1.2);
+  });
+
+  it('haengt nicht an den Score-Abstaenden, sondern an der Position', () => {
+    // Zwei Felder gleicher Groesse, aber voellig verschiedener Score-Spreizung:
+    // die Rueckstaende muessen dieselben sein.
+    const dense = Array.from({ length: 60 }, (_, index) => 100 - (index * 0.01));
+    const wide = Array.from({ length: 60 }, (_, index) => 100 - (index * 5));
+    const build = (values: number[]) => buildFinishGroups({
+      scoresDescending: values,
+      firstGroupSize: 10,
+      distanceKm: 180,
+      parameters,
+      random: createSeededRandom(71),
+    });
+    expect(build(dense)).toEqual(build(wide));
+  });
+
+  it('bildet Gruppen in der vorgegebenen mittleren Groesse', () => {
+    const groups = buildFinishGroups({
+      scoresDescending: Array.from({ length: 200 }, (_, index) => 100 - index),
+      firstGroupSize: 20,
+      distanceKm: 180,
+      parameters: { ...parameters, tailGroupSize: 5 },
+      random: createSeededRandom(72),
+    });
+    const tailGroups = groups.slice(1);
+    const tailRiders = tailGroups.reduce((sum, group) => sum + group.memberIndices.length, 0);
+    expect(tailRiders).toBe(180);
+    expect(tailRiders / tailGroups.length).toBeGreaterThan(3);
+    expect(tailRiders / tailGroups.length).toBeLessThan(7);
+  });
+
   it('zerfaellt am Berg staerker als im Flachen', () => {
     // Gleiche Scores, gleiche Gruppengroesse — nur andere Profilparameter.
     const flatGroups = buildFinishGroups({
@@ -307,6 +356,71 @@ describe('buildFinishGroups', () => {
       random: createSeededRandom(48),
     });
     expect(build()).toEqual(build());
+  });
+});
+
+describe('resolveTailGapShare', () => {
+  it('beginnt bei null und endet beim vollen Rueckstand', () => {
+    expect(resolveTailGapShare(0)).toBe(0);
+    expect(resolveTailGapShare(1)).toBeCloseTo(1, 10);
+  });
+
+  it('waechst monoton', () => {
+    let previous = -1;
+    for (let position = 0; position <= 1.0001; position += 0.02) {
+      const share = resolveTailGapShare(position);
+      expect(share).toBeGreaterThan(previous);
+      previous = share;
+    }
+  });
+
+  it('trifft die gemessene Kurve', () => {
+    // Aus 11.601 Messpunkten, normiert auf den Rueckstand des Letzten.
+    expect(resolveTailGapShare(0.5)).toBeCloseTo(0.10, 1);
+    expect(resolveTailGapShare(0.9)).toBeCloseTo(0.42, 1);
+    expect(resolveTailGapShare(0.95)).toBeCloseTo(0.60, 1);
+  });
+
+  it('laesst die Haelfte des Feldes weniger als ein Fuenftel verlieren', () => {
+    // Der Kern der Messung: der Rueckstand sitzt ganz hinten, nicht in der Mitte.
+    expect(resolveTailGapShare(0.5)).toBeLessThan(0.2);
+    expect(resolveTailGapShare(0.99)).toBeGreaterThan(0.8);
+  });
+
+  it('haelt sich an die Grenzen', () => {
+    expect(resolveTailGapShare(-1)).toBe(0);
+    expect(resolveTailGapShare(2)).toBeCloseTo(1, 10);
+  });
+});
+
+describe('drawTailGroupSize', () => {
+  it('trifft die vorgegebene mittlere Groesse', () => {
+    const random = createSeededRandom(61);
+    for (const mean of [2, 4, 7]) {
+      const draws = Array.from({ length: 20_000 }, () => drawTailGroupSize(random, mean, 1_000));
+      // Die geometrische Ziehung liegt konstruktionsbedingt knapp unter dem
+      // Mittelwert (Abrunden auf ganze Fahrer).
+      expect(moments(draws).mean).toBeGreaterThan(mean - 0.7);
+      expect(moments(draws).mean).toBeLessThan(mean + 0.3);
+    }
+  });
+
+  it('gibt immer mindestens einen Fahrer und nie mehr als uebrig sind', () => {
+    const random = createSeededRandom(62);
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const size = drawTailGroupSize(random, 6, 3);
+      expect(size).toBeGreaterThanOrEqual(1);
+      expect(size).toBeLessThanOrEqual(3);
+    }
+    expect(drawTailGroupSize(random, 6, 1)).toBe(1);
+    expect(drawTailGroupSize(random, 6, 0)).toBe(0);
+  });
+
+  it('laesst bei Gruppengroesse 1 jeden allein fahren', () => {
+    const random = createSeededRandom(63);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      expect(drawTailGroupSize(random, 1, 50)).toBe(1);
+    }
   });
 });
 

@@ -33,7 +33,7 @@ export function loadQuickSimProfiles(
   const rows = db.prepare(`
     SELECT
       profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
-      gap_factor, gap_exponent,
+      tail_gap_per_km, tail_group_size,
       noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent
     FROM quick_sim_profiles
   `).all() as QuickSimProfileRow[];

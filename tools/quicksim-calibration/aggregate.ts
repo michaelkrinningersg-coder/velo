@@ -7,7 +7,7 @@
  * hier normalisiert:
  *
  *   Siegerzeit      → Durchschnittsgeschwindigkeit in km/h   (→ base_speed_kmh)
- *   Rueckstaende    → Sekunden je Kilometer                  (→ gap_factor)
+ *   Rueckstaende    → Sekunden je Kilometer                  (→ tail_gap_per_km)
  *   erste Gruppe    → absolut und als Anteil der Finisher    (→ Regime-Ziehung)
  *   Spearman        → unveraendert                           (→ noise_sigma)
  *

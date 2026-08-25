@@ -60,7 +60,7 @@ schreibt in die Datenbank.
 | `validateGroupModel.ts` | Stellt die Modellvorhersage gegen die gemessenen Etappen |
 | `quickSimAdapter.ts` | Speist den reinen Quick-Kern aus einem echten Etappen-Bootstrap |
 | `compareQuickSim.ts` | Fährt dieselben Etappen mit dem Quick-Kern und stellt sie gegenüber |
-| `fitGapModel.ts` | Passt `gap_factor`, `gap_exponent` und den Vorfall-Multiplikator an |
+| `fitTailModel.ts` | Fittet `tail_group_size` gegen die Zahl der Zeitgruppen |
 | `determinism.test.ts` | Beweist, dass derselbe Etappen-Seed dasselbe Rennen ergibt |
 | `run.js` | Plattformunabhängiger Starter über das `ts-node` des Backends |
 
@@ -136,7 +136,7 @@ npm run calibrate:aggregate    # Zielwerte je Profil
 npm run calibrate:groups       # Regime-Analyse der Gruppenbildung
 npm run calibrate:validate     # Modell gegen die Referenz pruefen
 npm run calibrate:compare      # Quick-Kern gegen Instant, Kennzahl fuer Kennzahl
-npm run calibrate:fit-gaps     # Abstandsmodell an die Referenz anpassen
+npm run calibrate:fit-tail     # Klumpung des Feldendes anpassen
 ```
 
 | Profil | Etappen | km/h | 1. Zeitgruppe | Anteil | Zeitgruppen | s/km (Letzter) | Spearman |
@@ -156,8 +156,32 @@ npm run calibrate:fit-gaps     # Abstandsmodell an die Referenz anpassen
 Von 82 ausgewählten Etappen lieferten 19 keine Startliste und wurden übersprungen;
 für Cobble gibt es im Spielstand nur zwei Etappen.
 
-`base_speed_kmh` in `quick_sim_profiles.csv` stammt aus dieser Messung — es ist die
-einzige Modellgröße, die sich direkt ablesen lässt.
+### Der zweite Lauf — und eine Korrektur
+
+Für die Kurve des Feldendes wurde derselbe Lauf mit den neuen Kennzahlen wiederholt
+(`debug/quicksim-reference-v2`): dieselben 63 Etappen, dieselben Distanzen, derselbe
+Spielstand. Der Vergleich beider Läufe ist damit auch eine Messung der
+Wiederholbarkeit — und die fällt schlechter aus, als hier vorher stand.
+
+| Profil | km/h Lauf 1 | km/h Lauf 2 | Delta |
+| :-- | --: | --: | --: |
+| ITT | 51,74 | 48,53 | **−6,2 %** |
+| High_Mountain | 38,98 | 37,52 | −3,7 % |
+| Hilly | 44,41 | 43,65 | −1,7 % |
+| Rolling | 43,66 | 43,02 | −1,5 % |
+| Cobble | 47,07 | 47,53 | +1,0 % |
+| übrige | | | < 1 % |
+
+**Die frühere Angabe „innerhalb von 0,3 %" war falsch.** Sie stammte aus einem
+Vergleich zweier Läufe *derselben* Etappen nach der Wetterkorrektur, nicht aus zwei
+vollständigen Referenzläufen. Der verbliebene Unterschied ist die noch ungeseedete
+Startliste (`useTrueRandom` in `RaceRosterService`): jede frische Kopie des
+Spielstands lost die letzten Kaderplätze neu. Beim ITT schlägt das am stärksten
+durch, weil dort die Siegerzeit an einem einzelnen Fahrer hängt.
+
+Die gemessenen Parameter in `quick_sim_profiles.csv` sind deshalb das **Mittel aus
+beiden Läufen**. Für `base_speed_kmh` heißt das eine Unsicherheit von rund ±2 %,
+beim ITT ±3 %.
 
 ## Das Gruppenmodell: Regime statt Schwelle
 
@@ -270,74 +294,91 @@ mit **derselben** `computeStageRunMetrics`. Das ist die Prüfung, die
 `calibrate:validate` nicht leisten kann: ein Modell kann die Momente einer einzelnen
 Größe treffen und trotzdem Etappenergebnisse liefern, die kein Radrennen sind.
 
-Stand nach dem Kern (12 Etappen, 20 Läufe je Etappe):
+55 Etappen, 20 Quick-Läufe je Etappe, Median über alle Läufe eines Profils:
 
-| Kennzahl | Flat Instant | Flat Quick | High_Mountain Instant | High_Mountain Quick |
-| :-- | --: | --: | --: | --: |
-| km/h | 44,28 | 44,57 | 38,98 | 39,01 |
-| 1. Gruppe (Anteil) | 0,830 | 0,844 | 0,010 | 0,015 |
-| Zeitgruppen | 11,0 | 12,0 | 107,0 | 92,0 |
-| s/km (Letzter) | 7,690 | 0,581 | 17,499 | 9,112 |
-| Laufzeit je Etappe | 715 ms | 0,53 ms | 997 ms | 1,07 ms |
+| Profil | km/h I → Q | 1. Gruppe I → Q | Zeitgruppen I → Q | s/km Letzter I → Q |
+| :-- | :-- | :-- | :-- | :-- |
+| Flat | 44,56 → 44,46 | 0,858 → 0,844 | 11 → 9 | 6,00 → 6,89 |
+| Rolling | 43,28 → 43,43 | 0,699 → 0,682 | 16 → 17,5 | 8,84 → 8,18 |
+| Hilly | 43,52 → 44,08 | 0,375 → 0,305 | 19 → 17,5 | 8,93 → 8,55 |
+| Cobble_Hill | 47,48 → 47,37 | 0,207 → 0,216 | 23 → 26 | 7,44 → 8,13 |
+| Hilly_Difficult | 41,81 → 41,56 | 0,038 → 0,044 | 46,5 → 47 | 10,25 → 9,70 |
+| Cobble | 47,61 → 46,79 | 0,030 → 0,019 | 34,5 → 34 | 12,90 → 12,78 |
+| Medium_Mountain | 41,18 → 40,86 | 0,039 → 0,073 | 41 → 41 | 9,94 → 10,56 |
+| Mountain | 38,28 → 38,46 | 0,016 → 0,033 | 70,5 → 72 | 13,77 → 13,47 |
+| High_Mountain | 37,40 → 38,32 | 0,017 → 0,020 | 86,5 → 87 | 14,84 → 16,40 |
 
-Geschwindigkeit, Anteil der ersten Gruppe und Zahl der Zeitgruppen stimmen; der Kern
-läuft rund **1.000-mal schneller** als die Instant-Simulation.
+Alle neun Straßenprofile treffen: Geschwindigkeit auf ±0,9 km/h, Anteil der ersten
+Gruppe auf ±0,07, Zahl der Zeitgruppen auf ±3, Rückstand des Letzten auf ±1,6 s/km.
+Der Kern läuft dabei rund **1.580-mal schneller** als die Instant-Simulation
+(0,49 ms gegen 774 ms je Etappe).
 
-Die Zeitgruppen stimmen erst, seit die zweite Strukturregel raus ist. Der Entwurf
-ließ hinter der ersten Gruppe eine neue beginnen, wenn der Score-Abstand größer war
-als der mittlere im Restfeld — das fasste viel zu großzügig zusammen (Hochgebirge 55
-statt 107). Jetzt bekommt jeder Fahrer hinter der Spitzengruppe seinen eigenen
-Rückstand, und die Zeitgruppen entstehen daraus nach der 1-Sekunden-Regel des Spiels.
-Eine Annahme weniger, und das Ergebnis ist näher an der Referenz.
+**ITT und TTT treffen nicht** — Zeitgruppen 15 statt 34 und 23 statt 30,5, erste
+Gruppe 0,154 statt 0,020. Das ist erwartet: beide laufen derzeit durch dasselbe
+Straßenmodell, obwohl es dort keine Gruppendynamik gibt. Das TTT hat mit
+`TimeTrialSimulator.ts` ohnehin ein eigenes Modell, beim ITT ist der Rückstand
+linear im Score-Abstand. Beide gehören noch angebunden.
 
-### Das abgehängte Ende
+### Wie das Rückstandsmodell zustande kam
 
-Der Rückstand des Letzten bleibt weit daneben, und der Grund ist ein Modellfehler,
-kein Fitfehler. Auf einer Flachetappe liegt Rang 100 bei 0,063 Sekunden je Kilometer
-zurück, der letzte Fahrer bei 7,691 — **Faktor 120**. So einen Sprung erzeugt kein
-Score-Abstand, denn die Scores springen dort nicht.
+Zwei Fassungen sind an der Messung gescheitert, bevor die dritte stand.
 
-Eine Sonde über die volle Rückstandskurve zeigt, was passiert (Median über 6 Läufe):
+**Fassung 1 — Rückstand aus dem Score-Abstand.** `Δt = f · (S_vorn − S)^γ · km`.
+Sie erzeugt auf einer Flachetappe einen Rückstand des Letzten von 0,58 s/km statt
+gemessener 6,5. Ein Fit über `f` und `γ` hilft nicht, weil das Problem nicht die
+Skalierung ist: Rang 100 liegt bei 0,035 s/km, der Letzte bei 6,5 — **Faktor 185**.
+So einen Sprung erzeugt kein Score-Abstand, denn die Scores springen dort nicht.
+
+**Was stattdessen passiert:** das Ende des Feldes wird abgehängt. Eine Sonde über
+die volle Rückstandskurve (Median über 6 Läufe):
 
 | Rang | Etappe 260 (Flat, 109 km, 183 Finisher) | Etappe 336 (Flat, 235 km, 178 Finisher) |
 | --: | --: | --: |
 | 100 | 10,9 s | 62,7 s |
 | 140 | 18,2 s | 242,8 s |
-| 160 | 21,9 s | 487,1 s |
 | 170 | 28,4 s | 742,5 s |
 | 175 | **196,4 s** | 876,5 s |
 | letzter | 891,8 s | 1007,4 s |
 
-Das Ende des Feldes wird abgehängt — und *wo* das anfängt, hängt an der Etappe: bei
-109 km um Rang 172 von 183, bei 235 km schon um Rang 130 von 178. Es sind auch keine
-Stürze: der Effekt tritt in **jedem** Lauf auf (Minimum über die Läufe ebenso hoch),
-und die DNF-Zahl ist im Median null. Ein Versuch, ihn über
+*Wo* das anfängt, hängt an der Etappe: bei 109 km um Rang 172 von 183, bei 235 km
+schon um Rang 130 von 178. Es sind keine Stürze — der Effekt tritt in **jedem** Lauf
+auf und die DNF-Zahl ist im Median null. Ein Versuch, ihn über
 `incident_loss_multiplier` zu erklären, lief bis an die Obergrenze 200, ohne den
 beobachteten Wert zu erreichen.
 
-Der Kern braucht dafür eine eigene Komponente. Damit sie fittbar wird, erhebt
-`metrics.ts` den Rückstand jetzt zusätzlich an **relativen Feldpositionen**
-(`TRACKED_FIELD_POSITIONS`: 50 %, 75 %, 90 %, 95 %, 99 %) — feste Ränge sagen über
-das Ende eines Feldes nichts, dessen Größe sich von Etappe zu Etappe ändert. Der
-vorhandene Referenzdatensatz kennt sie noch nicht; ein neuer Lauf ist die
-Voraussetzung für diesen Fit.
+**Fassung 2 — eine Kurve über der Position im Feld.** Der zweite Referenzlauf misst
+den Rückstand an relativen Feldpositionen. Aufgetragen über der Position *hinter der
+ersten Zeitgruppe* — also v = (u − Anteil) / (1 − Anteil) — fallen die Kurven aller
+neun Straßenprofile zusammen:
 
-## Das Abstandsmodell fitten
+```
+rueckstand(v) = tail_gap_per_km · km · ε · v^α / (1 − v + ε)      ε = 0,081   α = 0,50
+```
 
-`npm run calibrate:fit-gaps` passt `gap_factor` und `gap_exponent` an. Zwei Stufen,
-weil zwei verschiedene Phänomene gemessen werden:
+Bei v = 1 ergibt das genau `tail_gap_per_km`, den gemessenen Rückstand des letzten
+Fahrers. Beide Formparameter sind **gemeinsam** über alle Profile, nur die Höhe ist
+profilabhängig — aus 11.601 Messpunkten über 53 Etappen, RMSE 0,69 im Log-Raum
+(0,25 im Hochgebirge, 0,50 gepoolt bei den mittleren Profilen).
 
-**A — die Rückstandskurve im Feld** (Ränge 2 bis 100). Der Rückstand ist in
-`gap_factor` *linear*; deshalb genügt je Exponent ein einziger Lauf mit f = 1, und
-das optimale f folgt in geschlossener Form als geometrisches Mittel der
-Verhältnisse. Gesucht wird nur über γ.
+Damit stimmte der Rückstand, aber das Feld zerfiel zu fein: 28 Zeitgruppen auf einer
+Flachetappe statt 11, 174 im Hochgebirge statt 87. Jeder Fahrer fuhr allein.
 
-**B — der Rückstand des Letzten** über `incident_loss_multiplier`, per Bisektion.
+**Fassung 3 — die Klumpung dazu.** Das abgehängte Ende fährt in kleinen Gruppen. Die
+Zahl der Fahrer je Gruppe wird geometrisch gezogen; ihr Mittelwert ist der neue
+Parameter `tail_group_size`.
 
-Solange das abgehängte Ende fehlt, sind die Ergebnisse beider Stufen nicht
-übernehmbar: Stufe B läuft ins Leere, und Stufe A würde einen Modellfehler in die
-Parameter hineinfitten. Die Werte in `quick_sim_profiles.csv` bleiben deshalb
-vorerst die geschätzten Startwerte.
+Er lässt sich nicht ablesen: der Median des Verhältnisses „Fahrer je Gruppe" über
+die Läufe ergibt für Flat 2,00, gepoolt 4,49 — **keiner von beiden** reproduziert die
+gemessenen 11 Zeitgruppen. `npm run calibrate:fit-tail` fittet ihn deshalb direkt
+gegen die Zielgröße (Bisektion, ein Parameter, ein Ziel) und trifft jedes Profil auf
+eine Gruppe genau. Für Flat kommt 4,83 heraus.
+
+**Was das Modell dafür aufgibt:** die Rückstände hängen jetzt nur noch an der
+Position im Feld, nicht mehr an den Score-Abständen. Zwei Felder gleicher Größe mit
+völlig verschiedener Stärkespreizung bekommen dieselben Zeiten — nur die Reihenfolge
+unterscheidet sich. Das ist bewusst: die Messung zeigt, dass die Instant-Simulation
+sich im Wesentlichen genauso verhält, und ein Modell, das eine Abhängigkeit
+behauptet, die niemand gemessen hat, wäre schlechter, nicht besser.
 
 ## Bekannte Grenzen der Messung
 
@@ -345,8 +386,17 @@ vorerst die geschätzten Startwerte.
   Kaderplätze bewusst mit echtem Zufall (`useTrueRandom`), damit ein Team nicht
   immer dieselben Wasserträger schickt. Auf einer frischen Kopie des Spielstands
   wird der Kader dadurch neu gelost. Nach der Wetterkorrektur ist das die einzige
-  verbliebene Quelle von Unterschieden zwischen zwei Referenzläufen — gemessen
-  liegen die Siegerzeiten jetzt innerhalb von 0,3 %.
+  verbliebene Quelle von Unterschieden zwischen zwei Referenzläufen — und sie ist
+  **größer als hier vorher stand**: zwei vollständige Läufe derselben 63 Etappen
+  unterscheiden sich in der mittleren Geschwindigkeit um bis zu 6,2 % (ITT), 3,7 %
+  (High_Mountain) und unter 2 % bei den übrigen. Die gemessenen Parameter sind
+  deshalb das Mittel aus beiden Läufen.
+- **`incident_loss_multiplier` ist ungemessen.** Der Rückstand des letzten Fahrers,
+  der naheliegende Zielwert, entsteht nicht durch Stürze — er ist auch in Läufen
+  ohne jeden Vorfall da. Es fehlt eine Kennzahl, die den Zeitverlust *eines
+  gestürzten Fahrers* isoliert.
+- **ITT und TTT laufen durch das Straßenmodell.** Beide brauchen ein eigenes; siehe
+  den Vergleich oben.
 - **Cobble ruht auf zwei Etappen.** Der Achsenabschnitt −4,03 ist plausibel, aber
   dünn belegt.
 - **19 der 82 ausgewählten Etappen lieferten keine Startliste.** Die Stichprobe ist

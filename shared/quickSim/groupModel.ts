@@ -16,6 +16,8 @@ import {
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
+  TAIL_SHAPE_EPSILON,
+  TAIL_SHAPE_EXPONENT,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
 import { randomBetween, type RandomSource } from '../rng';
@@ -173,7 +175,11 @@ export interface FinishGroup {
 }
 
 export interface BuildFinishGroupsInput {
-  /** Leistungsscores, absteigend sortiert. */
+  /**
+   * Leistungsscores, absteigend sortiert. Nur die Laenge und die Reihenfolge
+   * zaehlen — die Rueckstaende haengen an der Position im Feld, nicht an den
+   * Score-Abstaenden.
+   */
   scoresDescending: readonly number[];
   firstGroupSize: number;
   distanceKm: number;
@@ -185,22 +191,60 @@ export interface BuildFinishGroupsInput {
 const MIN_SPLIT_SECONDS = TIME_TIE_THRESHOLD_SECONDS + 1;
 
 /**
+ * Form der Rueckstandskurve hinter der ersten Zeitgruppe.
+ *
+ * `position` ist 0 direkt hinter der Spitzengruppe und 1 beim letzten Fahrer.
+ * Der Wert ist der Anteil am Rueckstand des Letzten, also 1 bei position = 1.
+ *
+ * Die Kurve steigt vorne flach und bricht zum Ende hin weg — das abgehaengte
+ * Ende des Feldes. Ueber alle neun Strassenprofile ist sie nach dieser
+ * Normierung dieselbe; nur ihre Hoehe (`tailGapPerKm`) haengt am Profil.
+ */
+export function resolveTailGapShare(position: number): number {
+  const v = Math.min(1, Math.max(0, position));
+  return (TAIL_SHAPE_EPSILON * Math.pow(v, TAIL_SHAPE_EXPONENT)) / (1 - v + TAIL_SHAPE_EPSILON);
+}
+
+/**
+ * Groesse einer Zeitgruppe im Feld hinter der Spitze.
+ *
+ * Geometrisch verteilt um den gemessenen Mittelwert: viele kleine Gruppen,
+ * gelegentlich eine grosse. Das abgehaengte Ende faehrt nicht einzeln — ohne
+ * diese Klumpung ergibt das Modell auf einer Flachetappe 28 Zeitgruppen statt
+ * gemessener 11 und im Hochgebirge 174 statt 87.
+ */
+export function drawTailGroupSize(random: RandomSource, meanSize: number, remaining: number): number {
+  if (remaining <= 1) {
+    return Math.max(0, remaining);
+  }
+  const mean = Math.max(1, meanSize);
+  if (mean <= 1) {
+    return 1;
+  }
+  // u darf nicht 0 sein, sonst ist der Logarithmus nicht definiert.
+  const draw = 1 + Math.floor(-Math.log(1 - random()) * (mean - 1));
+  return Math.min(remaining, Math.max(1, draw));
+}
+
+/**
  * Vergibt die Rueckstaende hinter der ersten Zeitgruppe und bildet daraus die
  * Zeitgruppen.
  *
  * Die erste Gruppe ist durch `firstGroupSize` gesetzt — sie kommt aus der
- * Regime-Ziehung, nicht aus den Scores. Dahinter bekommt *jeder* Fahrer seinen
- * eigenen Rueckstand aus dem Score-Abstand zum Vordermann; die Zeitgruppen
- * entstehen daraus nach derselben 1-Sekunden-Regel, die auch das Spiel
- * anwendet.
+ * Regime-Ziehung, nicht aus den Scores. Dahinter zerfaellt das Feld in weitere
+ * Zeitgruppen von gemessener mittlerer Groesse, und jede bekommt ihren
+ * Rueckstand aus ihrer *Position im Feld*, nicht aus dem Score-Abstand zum
+ * Vordermann.
  *
- * Der erste Entwurf hatte hier eine zweite Strukturregel — eine neue Gruppe
- * beginnt, wenn der Score-Abstand groesser ist als der mittlere im Restfeld.
- * Der Vergleich mit der Instant-Simulation hat sie widerlegt: sie fasste viel
- * zu grosszuegig zusammen (Hochgebirge 55 Zeitgruppen gegen gemessene 107).
- * Ohne sie ergibt sich die Gruppenzahl aus den Zeiten statt aus einer zweiten
- * Annahme — am Berg faehrt fast jeder allein, im Flachen bleibt das Feld
- * zusammen, ohne dass das irgendwo hineingeschrieben waere.
+ * Die Scores bestimmen damit nur noch die Reihenfolge. Das ist die zweite
+ * Korrektur, die aus der Messung kam: der Rueckstand des letzten Fahrers ist
+ * auf einer Flachetappe 185-mal so gross wie der von Rang 100, und die Scores
+ * springen dort nicht. Was das Ende des Feldes verliert, haengt daran, *wie
+ * weit hinten* es faehrt.
+ *
+ * Das Rauschen wirkt auf die Zuwaechse, nicht auf die Summe — sonst koennte
+ * ein Fahrer den vor ihm liegenden ueberholen, und die Reihenfolge waere nicht
+ * mehr die der Scores.
  */
 export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] {
   const { scoresDescending, firstGroupSize, distanceKm, parameters, random } = input;
@@ -218,29 +262,31 @@ export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] 
     return groups;
   }
 
-  let current: FinishGroup | null = null;
-  let cumulative = 0;
-  for (let index = headSize; index < riderCount; index += 1) {
-    const scoreGap = Math.max(
-      0,
-      (scoresDescending[index - 1] as number) - (scoresDescending[index] as number),
-    );
-    const noise = 1 + (drawStandardNormal(random) * parameters.noiseSigma);
-    const delta = parameters.gapFactor
-      * Math.pow(scoreGap, parameters.gapExponent)
-      * distanceKm
-      * Math.max(0.1, noise);
-    // Der erste Fahrer hinter der Spitzengruppe muss sichtbar dahinter liegen,
-    // sonst waere die gezogene Gruppengroesse durch die 1-Sekunden-Regel wieder
-    // aufgehoben.
-    cumulative += index === headSize ? Math.max(MIN_SPLIT_SECONDS, delta) : Math.max(0, delta);
+  const tailCount = riderCount - headSize;
+  const totalGapSeconds = parameters.tailGapPerKm * distanceKm;
 
-    if (current && cumulative - current.gapSeconds <= TIME_TIE_THRESHOLD_SECONDS) {
-      current.memberIndices.push(index);
-      continue;
-    }
-    current = { memberIndices: [index], gapSeconds: cumulative };
-    groups.push(current);
+  let index = headSize;
+  let cumulative = 0;
+  let previousShare = 0;
+  while (index < riderCount) {
+    const size = drawTailGroupSize(random, parameters.tailGroupSize, riderCount - index);
+    const lastIndex = index + size - 1;
+    // Die Gruppe sitzt auf der Kurve an der Position ihres letzten Fahrers —
+    // damit trifft der Letzte im Feld genau `tailGapPerKm`.
+    const share = resolveTailGapShare((lastIndex - headSize + 1) / tailCount);
+    const noise = 1 + (drawStandardNormal(random) * parameters.noiseSigma);
+    const step = totalGapSeconds * (share - previousShare) * Math.max(0.05, noise);
+    previousShare = share;
+    // Die erste Gruppe hinter der Spitze muss sichtbar dahinter liegen, sonst
+    // waere die gezogene Spitzengruppe durch die 1-Sekunden-Regel wieder
+    // aufgehoben.
+    cumulative += index === headSize ? Math.max(MIN_SPLIT_SECONDS, step) : Math.max(0, step);
+
+    groups.push({
+      memberIndices: Array.from({ length: size }, (_, offset) => index + offset),
+      gapSeconds: cumulative,
+    });
+    index = lastIndex + 1;
   }
 
   return groups;

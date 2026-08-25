@@ -26,10 +26,22 @@ export interface QuickSimProfileParameters {
    * anteil = splitShareIntercept + SPLIT_SHARE_SLOPE · ln(D). Gemessen.
    */
   splitShareIntercept: number;
-  /** Sekunden Rueckstand je Score-Punkt und Kilometer. */
-  gapFactor: number;
-  /** Exponent auf den Score-Abstand. Groesser als 1 zieht das Feld hinten auseinander. */
-  gapExponent: number;
+  /**
+   * Rueckstand des letzten Fahrers in Sekunden je Kilometer. Der eine Wert,
+   * der die ganze Rueckstandskurve hinter der ersten Gruppe skaliert. Gemessen.
+   */
+  tailGapPerKm: number;
+  /**
+   * Mittlere Zahl Fahrer je Zeitgruppe im Feld hinter der ersten Gruppe.
+   * Das abgehaengte Ende faehrt nicht einzeln, sondern in kleinen Gruppen.
+   *
+   * Gegen die Zahl der Zeitgruppen gefittet, nicht abgelesen: der Median des
+   * Verhaeltnisses "Fahrer je Gruppe" ueber die Laeufe trifft die Gruppenzahl
+   * nicht (Flat 2,00 abgelesen gegen 4,83 gefittet). Fuer ITT und TTT sind es
+   * Platzhalter aus dem gepoolten Verhaeltnis — beide bekommen ein eigenes
+   * Modell.
+   */
+  tailGroupSize: number;
   /** Streuung des Rueckstands. Regelt die Vorhersagbarkeit des Ergebnisses. */
   noiseSigma: number;
   /** Faktor auf den Zeitverlust eines Vorfalls. */
@@ -69,6 +81,30 @@ export const BUNCHED_SHARE_RELATIVE_SD = 0.123;
 export const SPLIT_SHARE_RELATIVE_SD = 0.694;
 
 /**
+ * Form der Rueckstandskurve hinter der ersten Zeitgruppe.
+ *
+ *   rueckstand(v) = tailGapPerKm · km · TAIL_SHAPE_EPSILON · v^TAIL_SHAPE_EXPONENT
+ *                                       / (1 − v + TAIL_SHAPE_EPSILON)
+ *
+ * `v` ist die Position hinter der ersten Gruppe: 0 direkt dahinter, 1 beim
+ * letzten Fahrer. Bei v = 1 ergibt die Kurve genau `tailGapPerKm`.
+ *
+ * Der erste Entwurf leitete den Rueckstand aus dem Score-Abstand zum
+ * Vordermann ab. Die Messung widerlegt das: auf einer Flachetappe liegt Rang
+ * 100 bei 0,035 Sekunden je Kilometer zurueck, der letzte Fahrer bei 6,5 —
+ * Faktor 185. So einen Sprung erzeugt kein Score-Abstand, denn die Scores
+ * springen dort nicht. Das Ende des Feldes wird abgehaengt, und das haengt an
+ * der Position im Feld, nicht an der Staerke des Vordermanns.
+ *
+ * Auf die Position hinter der ersten Gruppe normiert, fallen die Kurven aller
+ * neun Strassenprofile zusammen — deshalb sind beide Formparameter gemeinsam
+ * und nur die Hoehe (`tailGapPerKm`) profilabhaengig. Aus 11.601 Messpunkten
+ * ueber 53 Etappen.
+ */
+export const TAIL_SHAPE_EPSILON = 0.081;
+export const TAIL_SHAPE_EXPONENT = 0.50;
+
+/**
  * Anzahl Zeitgruppen je Regime (Median, 10./90. Perzentil) — Kontrollgroesse
  * fuer die Kalibrierung des Abstandsmodells, kein Eingabeparameter.
  */
@@ -78,21 +114,24 @@ export const TIME_GROUP_COUNT_REFERENCE = {
 } as const;
 
 /**
- * Werte je Profil. `baseSpeedKmh` und `bunchIntercept` sind gemessen; die
- * uebrigen sind weiterhin geschaetzte Startwerte fuer den Fit.
+ * Werte je Profil. `baseSpeedKmh`, `bunchIntercept`, `bunchedShareMean`,
+ * `splitShareIntercept` und `tailGapPerKm` sind gemessen — die Geschwindigkeit
+ * und die Kurvenhoehe als Mittel aus zwei vollstaendigen Referenzlaeufen.
+ * `noiseSigma`, `incidentLossMultiplier`, `severeDnfChance` und
+ * `breakawayShrinkExponent` sind weiterhin geschaetzte Startwerte.
  */
 export const DEFAULT_QUICK_SIM_PROFILES: Record<StageProfile, QuickSimProfileParameters> = {
-  Flat:            { baseSpeedKmh: 44.7, bunchIntercept: 1.57, bunchedShareMean: 0.8575, splitShareIntercept: -0.0861, gapFactor: 0.060, gapExponent: 1.3, noiseSigma: 0.15, incidentLossMultiplier: 1.2, severeDnfChance: 0.25, breakawayShrinkExponent: 1.5 },
-  Rolling:         { baseSpeedKmh: 43.7, bunchIntercept: 3.02, bunchedShareMean: 0.7043, splitShareIntercept: 0.1522, gapFactor: 0.100, gapExponent: 1.3, noiseSigma: 0.18, incidentLossMultiplier: 1.4, severeDnfChance: 0.25, breakawayShrinkExponent: 1.5 },
-  Hilly:           { baseSpeedKmh: 44.4, bunchIntercept: 2.0, bunchedShareMean: 0.7862, splitShareIntercept: 0.0915, gapFactor: 0.180, gapExponent: 1.4, noiseSigma: 0.20, incidentLossMultiplier: 1.7, severeDnfChance: 0.28, breakawayShrinkExponent: 1.5 },
-  Hilly_Difficult: { baseSpeedKmh: 41.6, bunchIntercept: 2.73, bunchedShareMean: 0.7335, splitShareIntercept: 0.0247, gapFactor: 0.260, gapExponent: 1.4, noiseSigma: 0.22, incidentLossMultiplier: 2.0, severeDnfChance: 0.30, breakawayShrinkExponent: 1.5 },
-  Cobble:          { baseSpeedKmh: 47.1, bunchIntercept: -4.03, bunchedShareMean: 0.7, splitShareIntercept: -0.0628, gapFactor: 0.300, gapExponent: 1.5, noiseSigma: 0.30, incidentLossMultiplier: 2.4, severeDnfChance: 0.35, breakawayShrinkExponent: 1.4 },
-  Cobble_Hill:     { baseSpeedKmh: 47.3, bunchIntercept: 1.64, bunchedShareMean: 0.6237, splitShareIntercept: 0.1757, gapFactor: 0.300, gapExponent: 1.5, noiseSigma: 0.30, incidentLossMultiplier: 2.4, severeDnfChance: 0.35, breakawayShrinkExponent: 1.4 },
-  Medium_Mountain: { baseSpeedKmh: 40.8, bunchIntercept: -2.69, bunchedShareMean: 0.7, splitShareIntercept: 0.0632, gapFactor: 0.340, gapExponent: 1.5, noiseSigma: 0.22, incidentLossMultiplier: 2.2, severeDnfChance: 0.30, breakawayShrinkExponent: 1.6 },
-  Mountain:        { baseSpeedKmh: 38.5, bunchIntercept: -1.33, bunchedShareMean: 0.7, splitShareIntercept: 0.0533, gapFactor: 0.450, gapExponent: 1.6, noiseSigma: 0.24, incidentLossMultiplier: 2.6, severeDnfChance: 0.30, breakawayShrinkExponent: 1.7 },
-  High_Mountain:   { baseSpeedKmh: 39.0, bunchIntercept: -0.98, bunchedShareMean: 0.7, splitShareIntercept: 0.0558, gapFactor: 0.580, gapExponent: 1.7, noiseSigma: 0.26, incidentLossMultiplier: 3.0, severeDnfChance: 0.32, breakawayShrinkExponent: 1.8 },
-  ITT:             { baseSpeedKmh: 51.7, bunchIntercept: 0.0, bunchedShareMean: 0.7, splitShareIntercept: 0.0, gapFactor: 0.700, gapExponent: 1.0, noiseSigma: 0.10, incidentLossMultiplier: 1.0, severeDnfChance: 0.20, breakawayShrinkExponent: 1.0 },
-  TTT:             { baseSpeedKmh: 57.9, bunchIntercept: 0.0, bunchedShareMean: 0.7, splitShareIntercept: 0.0, gapFactor: 0.700, gapExponent: 1.0, noiseSigma: 0.08, incidentLossMultiplier: 1.0, severeDnfChance: 0.20, breakawayShrinkExponent: 1.0 },
+  Flat:            { baseSpeedKmh: 44.59, bunchIntercept: 1.57, bunchedShareMean: 0.8575, splitShareIntercept: -0.0861, tailGapPerKm: 6.92, tailGroupSize: 4.83, noiseSigma: 0.15, incidentLossMultiplier: 1.2, severeDnfChance: 0.25, breakawayShrinkExponent: 1.5 },
+  Rolling:         { baseSpeedKmh: 43.34, bunchIntercept: 3.02, bunchedShareMean: 0.7043, splitShareIntercept: 0.1522, tailGapPerKm: 8.29, tailGroupSize: 4.58, noiseSigma: 0.18, incidentLossMultiplier: 1.4, severeDnfChance: 0.25, breakawayShrinkExponent: 1.5 },
+  Hilly:           { baseSpeedKmh: 44.03, bunchIntercept: 2.0, bunchedShareMean: 0.7862, splitShareIntercept: 0.0915, tailGapPerKm: 8.56, tailGroupSize: 7.26, noiseSigma: 0.20, incidentLossMultiplier: 1.7, severeDnfChance: 0.28, breakawayShrinkExponent: 1.5 },
+  Hilly_Difficult: { baseSpeedKmh: 41.76, bunchIntercept: 2.73, bunchedShareMean: 0.7335, splitShareIntercept: 0.0247, tailGapPerKm: 9.78, tailGroupSize: 4.11, noiseSigma: 0.22, incidentLossMultiplier: 2.0, severeDnfChance: 0.30, breakawayShrinkExponent: 1.5 },
+  Cobble:          { baseSpeedKmh: 47.30, bunchIntercept: -4.03, bunchedShareMean: 0.7, splitShareIntercept: -0.0628, tailGapPerKm: 12.59, tailGroupSize: 5.44, noiseSigma: 0.30, incidentLossMultiplier: 2.4, severeDnfChance: 0.35, breakawayShrinkExponent: 1.4 },
+  Cobble_Hill:     { baseSpeedKmh: 47.39, bunchIntercept: 1.64, bunchedShareMean: 0.6237, splitShareIntercept: 0.1757, tailGapPerKm: 8.07, tailGroupSize: 5.37, noiseSigma: 0.30, incidentLossMultiplier: 2.4, severeDnfChance: 0.35, breakawayShrinkExponent: 1.4 },
+  Medium_Mountain: { baseSpeedKmh: 40.97, bunchIntercept: -2.69, bunchedShareMean: 0.7, splitShareIntercept: 0.0632, tailGapPerKm: 10.39, tailGroupSize: 4.44, noiseSigma: 0.22, incidentLossMultiplier: 2.2, severeDnfChance: 0.30, breakawayShrinkExponent: 1.6 },
+  Mountain:        { baseSpeedKmh: 38.39, bunchIntercept: -1.33, bunchedShareMean: 0.7, splitShareIntercept: 0.0533, tailGapPerKm: 13.71, tailGroupSize: 2.96, noiseSigma: 0.24, incidentLossMultiplier: 2.6, severeDnfChance: 0.30, breakawayShrinkExponent: 1.7 },
+  High_Mountain:   { baseSpeedKmh: 38.25, bunchIntercept: -0.98, bunchedShareMean: 0.7, splitShareIntercept: 0.0558, tailGapPerKm: 16.28, tailGroupSize: 2.57, noiseSigma: 0.26, incidentLossMultiplier: 3.0, severeDnfChance: 0.32, breakawayShrinkExponent: 1.8 },
+  ITT:             { baseSpeedKmh: 50.14, bunchIntercept: 0.0, bunchedShareMean: 0.7, splitShareIntercept: 0.0, tailGapPerKm: 12.54, tailGroupSize: 2.45, noiseSigma: 0.10, incidentLossMultiplier: 1.0, severeDnfChance: 0.20, breakawayShrinkExponent: 1.0 },
+  TTT:             { baseSpeedKmh: 57.66, bunchIntercept: 0.0, bunchedShareMean: 0.7, splitShareIntercept: 0.0, tailGapPerKm: 21.94, tailGroupSize: 6.43, noiseSigma: 0.08, incidentLossMultiplier: 1.0, severeDnfChance: 0.20, breakawayShrinkExponent: 1.0 },
 };
 
 /** Zeile der Tabelle `quick_sim_profiles`, wie sie aus SQLite kommt. */
@@ -102,8 +141,8 @@ export interface QuickSimProfileRow {
   bunch_intercept: number;
   bunched_share_mean: number;
   split_share_intercept: number;
-  gap_factor: number;
-  gap_exponent: number;
+  tail_gap_per_km: number;
+  tail_group_size: number;
   noise_sigma: number;
   incident_loss_multiplier: number;
   severe_dnf_chance: number;
@@ -116,8 +155,8 @@ export function mapQuickSimProfileRow(row: QuickSimProfileRow): QuickSimProfileP
     bunchIntercept: row.bunch_intercept,
     bunchedShareMean: row.bunched_share_mean,
     splitShareIntercept: row.split_share_intercept,
-    gapFactor: row.gap_factor,
-    gapExponent: row.gap_exponent,
+    tailGapPerKm: row.tail_gap_per_km,
+    tailGroupSize: row.tail_group_size,
     noiseSigma: row.noise_sigma,
     incidentLossMultiplier: row.incident_loss_multiplier,
     severeDnfChance: row.severe_dnf_chance,

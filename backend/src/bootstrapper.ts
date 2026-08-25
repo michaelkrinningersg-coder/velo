@@ -916,7 +916,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO quick_sim_profiles (
       profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
-      gap_factor, gap_exponent,
+      tail_gap_per_km, tail_group_size,
       noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
@@ -929,8 +929,8 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       real(req(row, 'bunch_intercept', ctx), `${ctx} / bunch_intercept`),
       real(req(row, 'bunched_share_mean', ctx), `${ctx} / bunched_share_mean`),
       real(req(row, 'split_share_intercept', ctx), `${ctx} / split_share_intercept`),
-      real(req(row, 'gap_factor', ctx), `${ctx} / gap_factor`),
-      real(req(row, 'gap_exponent', ctx), `${ctx} / gap_exponent`),
+      real(req(row, 'tail_gap_per_km', ctx), `${ctx} / tail_gap_per_km`),
+      real(req(row, 'tail_group_size', ctx), `${ctx} / tail_group_size`),
       real(req(row, 'noise_sigma', ctx), `${ctx} / noise_sigma`),
       real(req(row, 'incident_loss_multiplier', ctx), `${ctx} / incident_loss_multiplier`),
       real(req(row, 'severe_dnf_chance', ctx), `${ctx} / severe_dnf_chance`),

@@ -3288,6 +3288,27 @@ export class DatabaseService {
    * Werte nur an einer Stelle gepflegt werden.
    */
   private ensureQuickSimProfilesSchema(db: Database.Database): void {
+    // Die Tabelle traegt ausschliesslich Parameter aus der CSV — keine
+    // Spielerdaten. Aendert sich der Spaltensatz, wird sie deshalb neu angelegt
+    // statt Spalte fuer Spalte migriert. Ohne das bleibt ein bestehender
+    // Spielstand still auf dem alten Satz stehen: `CREATE TABLE IF NOT EXISTS`
+    // tut nichts, das Befuellen scheitert an der fehlenden Spalte, und die
+    // Quick Simulation faellt unbemerkt auf ihre eingebauten Vorgaben zurueck.
+    const expectedColumns = [
+      'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_mean',
+      'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
+      'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
+    ];
+    if (tableExists(db, 'quick_sim_profiles')) {
+      const actual = (db.prepare('PRAGMA table_info(quick_sim_profiles)').all() as Array<{ name: string }>)
+        .map((column) => column.name);
+      const matches = actual.length === expectedColumns.length
+        && expectedColumns.every((column) => actual.includes(column));
+      if (!matches) {
+        db.prepare('DROP TABLE quick_sim_profiles').run();
+      }
+    }
+
     db.prepare(`
       CREATE TABLE IF NOT EXISTS quick_sim_profiles (
         profile                     TEXT PRIMARY KEY,
@@ -3298,8 +3319,11 @@ export class DatabaseService {
         -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
         -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
         split_share_intercept       REAL NOT NULL,
-        gap_factor                  REAL NOT NULL,
-        gap_exponent                REAL NOT NULL,
+        -- Rueckstand des letzten Fahrers in Sekunden je Kilometer; skaliert die
+        -- ganze Rueckstandskurve hinter der ersten Gruppe. Gemessen.
+        tail_gap_per_km             REAL NOT NULL,
+        -- Mittlere Zahl Fahrer je Zeitgruppe im Feld dahinter. Gemessen.
+        tail_group_size             REAL NOT NULL,
         noise_sigma                 REAL NOT NULL,
         incident_loss_multiplier    REAL NOT NULL,
         severe_dnf_chance           REAL NOT NULL,
@@ -3315,6 +3339,7 @@ export class DatabaseService {
       console.warn('quick_sim_profiles konnten nicht geladen werden:', (error as Error).message);
     }
   }
+
 
   /**
    * Bringt eine geoeffnete Savegame-Datenbank auf den aktuellen Schemastand.

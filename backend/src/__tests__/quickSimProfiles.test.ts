@@ -22,8 +22,8 @@ function row(profile: string, overrides: Partial<QuickSimProfileRow> = {}): Quic
     bunch_intercept: 1,
     bunched_share_mean: 0.7,
     split_share_intercept: 0.05,
-    gap_factor: 0.2,
-    gap_exponent: 1.4,
+    tail_gap_per_km: 8.5,
+    tail_group_size: 3,
     noise_sigma: 0.2,
     incident_loss_multiplier: 2,
     severe_dnf_chance: 0.3,
@@ -40,8 +40,8 @@ function createTable(db: Database.Database): void {
       bunch_intercept             REAL NOT NULL,
       bunched_share_mean          REAL NOT NULL,
       split_share_intercept       REAL NOT NULL,
-      gap_factor                  REAL NOT NULL,
-      gap_exponent                REAL NOT NULL,
+      tail_gap_per_km             REAL NOT NULL,
+      tail_group_size             REAL NOT NULL,
       noise_sigma                 REAL NOT NULL,
       incident_loss_multiplier    REAL NOT NULL,
       severe_dnf_chance           REAL NOT NULL,
@@ -55,8 +55,8 @@ function insert(db: Database.Database, entry: QuickSimProfileRow): void {
     INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     entry.profile, entry.base_speed_kmh, entry.bunch_intercept,
-    entry.bunched_share_mean, entry.split_share_intercept, entry.gap_factor,
-    entry.gap_exponent, entry.noise_sigma, entry.incident_loss_multiplier,
+    entry.bunched_share_mean, entry.split_share_intercept, entry.tail_gap_per_km,
+    entry.tail_group_size, entry.noise_sigma, entry.incident_loss_multiplier,
     entry.severe_dnf_chance, entry.breakaway_shrink_exponent,
   );
 }
@@ -76,8 +76,8 @@ describe('Vorgabewerte', () => {
     expect(flat.baseSpeedKmh).toBeGreaterThan(high.baseSpeedKmh);
     // … und kommt viel eher geschlossen an.
     expect(flat.bunchIntercept).toBeGreaterThan(high.bunchIntercept);
-    // … und reisst weniger auseinander.
-    expect(flat.gapFactor).toBeLessThan(high.gapFactor);
+    // … und das Ende des Feldes verliert weniger.
+    expect(flat.tailGapPerKm).toBeLessThan(high.tailGapPerKm);
   });
 
   it('gibt Zeitfahren keine Regime-Ziehung', () => {
@@ -91,13 +91,13 @@ describe('mapQuickSimProfileRow', () => {
   it('uebertraegt jede Spalte auf das passende Feld', () => {
     const mapped = mapQuickSimProfileRow(row('Flat', {
       base_speed_kmh: 43.5, bunch_intercept: 3.1, bunched_share_mean: 0.857,
-      split_share_intercept: -0.086, gap_factor: 0.061, gap_exponent: 1.31,
+      split_share_intercept: -0.086, tail_gap_per_km: 6.91, tail_group_size: 2.01,
       noise_sigma: 0.151, incident_loss_multiplier: 1.21, severe_dnf_chance: 0.251,
       breakaway_shrink_exponent: 1.51,
     }));
     expect(mapped).toEqual({
       baseSpeedKmh: 43.5, bunchIntercept: 3.1, bunchedShareMean: 0.857,
-      splitShareIntercept: -0.086, gapFactor: 0.061, gapExponent: 1.31,
+      splitShareIntercept: -0.086, tailGapPerKm: 6.91, tailGroupSize: 2.01,
       noiseSigma: 0.151, incidentLossMultiplier: 1.21, severeDnfChance: 0.251,
       breakawayShrinkExponent: 1.51,
     });

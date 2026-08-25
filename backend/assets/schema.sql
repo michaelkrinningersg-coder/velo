@@ -341,10 +341,11 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
   -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
   split_share_intercept       REAL NOT NULL,
-  -- Sekunden Rueckstand je Score-Punkt und Kilometer.
-  gap_factor                  REAL NOT NULL,
-  -- Exponent auf den Score-Abstand: > 1 staut das Feld vorne und zieht es hinten auseinander.
-  gap_exponent                REAL NOT NULL,
+  -- Rueckstand des letzten Fahrers in Sekunden je Kilometer; skaliert die
+  -- ganze Rueckstandskurve hinter der ersten Gruppe. Gemessen.
+  tail_gap_per_km             REAL NOT NULL,
+  -- Mittlere Zahl Fahrer je Zeitgruppe im Feld dahinter. Gemessen.
+  tail_group_size             REAL NOT NULL,
   -- Streuung des Rueckstands. Regelt, wie vorhersagbar das Ergebnis ist.
   noise_sigma                 REAL NOT NULL,
   -- Faktor auf den Zeitverlust eines Vorfalls (Anschluss verlieren kostet mehr als die Wartezeit).
