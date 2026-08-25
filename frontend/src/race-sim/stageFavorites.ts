@@ -1,5 +1,6 @@
-import type { Rider, RiderSkillKey, Stage, Team } from '../../../shared/types';
+import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
+import { resolveSeasonFormFactor } from './terrainModifiers';
 
 export interface FavoriteItem {
   rank: number;
@@ -53,17 +54,27 @@ function resolveElevationGainMeters(stage: Stage, options?: StageFavoriteOptions
   return options?.elevationGainMeters ?? stageWithElevation.elevationGainMeters ?? 0;
 }
 
-function resolveFormContribution(rider: Rider, dailyForm: number): number {
-  return dailyForm + (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0);
+/**
+ * Formanteil am Etappenscore.
+ *
+ * Die Tagesform geht immer voll ein — sie ist der Zufall des Tages. Saison-
+ * und Rennform dagegen je nach Terrain abgeschwaecht: auf Flach- und
+ * Rollingetappen zur Haelfte, auf Huegeletappen zu drei Vierteln. Sonst
+ * entscheidet ein Formhoch darueber, wer den Zielsprint erreicht, und der
+ * Anfahrtszug bleibt Beiwerk. Siehe `terrainModifiers.ts`.
+ */
+function resolveFormContribution(rider: Rider, dailyForm: number, profile: StageProfile): number {
+  const factor = resolveSeasonFormFactor(profile);
+  return dailyForm + (((rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0)) * factor);
 }
 
 function resolveStaminaContribution(rider: Rider, distanceKm: number): number {
   return rider.skills.stamina * resolveStaminaWeight(distanceKm);
 }
 
-function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number): number {
+function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile): number {
   return rider.skills.timeTrial
-    + resolveFormContribution(rider, dailyForm)
+    + resolveFormContribution(rider, dailyForm, profile)
     + (rider.skills.mountain * (elevationGainMeters / 500));
 }
 
@@ -90,12 +101,12 @@ function calculateRoadScore(
   for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
     weighted += rider.skills[key] * weight;
   }
-  return weighted + resolveFormContribution(rider, dailyForm) + resolveStaminaContribution(rider, distanceKm);
+  return weighted + resolveFormContribution(rider, dailyForm, stage.profile) + resolveStaminaContribution(rider, distanceKm);
 }
 
 function calculateRiderScore(rider: Rider, stage: Stage, distanceKm: number, elevationGainMeters: number, dailyForm: number): number {
   if (stage.profile === 'ITT' || stage.profile === 'TTT') {
-    return calculateIttScore(rider, dailyForm, elevationGainMeters);
+    return calculateIttScore(rider, dailyForm, elevationGainMeters, stage.profile);
   }
   return calculateRoadScore(rider, stage, distanceKm, dailyForm);
 }
@@ -134,7 +145,7 @@ export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: S
     const teamFavorites: TeamFavoriteCandidate[] = [...ridersByTeamId.entries()].map(([teamId, teamRiders]) => {
       const team = teamById.get(teamId);
       const scoredRiders = teamRiders
-        .map((rider) => calculateIttScore(rider, resolveDailyForm(rider.id, options?.dailyFormByRiderId), elevationGainMeters))
+        .map((rider) => calculateIttScore(rider, resolveDailyForm(rider.id, options?.dailyFormByRiderId), elevationGainMeters, stage.profile))
         .sort((left, right) => right - left);
       const bestFive = scoredRiders.slice(0, 5);
       const availableCount = bestFive.length;

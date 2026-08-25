@@ -48,6 +48,7 @@ import {
   resolveFinishMarkerType,
   resolveLeadoutBonus,
 } from './sprintLeadout';
+import { resolveLeadoutBonusFactor, resolveSeasonFormFactor } from './terrainModifiers';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
 import { resolveQuickSimFatigueMalus, resolveSkillsWithMentorBoosts, sampleDailyForm } from './riderCondition';
@@ -304,6 +305,7 @@ export function runQuickSimulation(
     bootstrap, result, riderById,
     random: createSeededRandom(deriveSeed(seed, 'leadout')),
   });
+  logPhotoFinish(result, bootstrap, riderById, leadout.perSprinter);
   const entries = buildCommitEntries(result, bootstrap, breakawayRiderIds, leadout.perSprinter);
   const markerClassifications = buildMarkerClassifications({
     bootstrap, result, breakaway, parameters, riderById,
@@ -319,6 +321,71 @@ export function runQuickSimulation(
     result,
     seed,
   };
+}
+
+/**
+ * Zeigt, wer die Zeitgleichheit gewonnen hat und womit.
+ *
+ * Innerhalb einer Zeitgruppe entscheidet nicht die Zeit, sondern der
+ * `photoFinishScore` (`rankStageResultEntries`, 1-Sekunden-Regel). Der Wert
+ * ist damit die eigentliche Begruendung des Etappensiegs — und war bisher
+ * nirgends sichtbar. Ausgegeben werden die Siegergruppe und jede weitere
+ * Zeitgruppe mit mehr als einem Fahrer.
+ */
+function logPhotoFinish(
+  result: QuickSimStageResult,
+  bootstrap: RealtimeSimulationBootstrap,
+  riderById: ReadonlyMap<number, Rider>,
+  perSprinter: ReadonlyMap<number, { leadoutBonus: number; leadoutRiderId: number | null }>,
+): void {
+  const finisher = result.entries.filter((entry) => !entry.isAbandon && entry.groupIndex != null);
+  if (finisher.length === 0) {
+    return;
+  }
+
+  const gruppen = new Map<number, QuickSimResultEntry[]>();
+  for (const entry of finisher) {
+    const bucket = gruppen.get(entry.groupIndex as number);
+    if (bucket) {
+      bucket.push(entry);
+    } else {
+      gruppen.set(entry.groupIndex as number, [entry]);
+    }
+  }
+
+  const name = (riderId: number): string => {
+    const rider = riderById.get(riderId);
+    return rider ? `${rider.firstName} ${rider.lastName}` : `#${riderId}`;
+  };
+
+  const profile = bootstrap.stage.profile as StageProfile;
+  console.groupCollapsed(
+    `[QuickSim] Zeitgleichheit · ${bootstrap.race?.name ?? 'Rennen'} Etappe ${bootstrap.stage.stageNumber}`
+    + ` (${profile}) · Anfahrtsfaktor ×${resolveLeadoutBonusFactor(profile).toFixed(2)}`
+    + ` · Form ×${resolveSeasonFormFactor(profile).toFixed(2)}`,
+  );
+  for (const [index, gruppe] of [...gruppen.entries()].sort((a, b) => a[0] - b[0])) {
+    if (gruppe.length < 2 && index > 0) {
+      continue;
+    }
+    console.log(
+      `Zeitgruppe ${index + 1}: ${gruppe.length} Fahrer, Rueckstand ${(gruppe[0]?.gapSeconds ?? 0).toFixed(0)} s`
+      + ' — Reihenfolge nach photoFinishScore',
+    );
+    console.table(gruppe.slice(0, 15).map((entry, position) => {
+      const anfahrt = perSprinter.get(entry.riderId);
+      return {
+        Platz: position + 1,
+        Fahrer: name(entry.riderId),
+        photoFinishScore: Number(entry.photoFinishScore.toFixed(3)),
+        Anfahrtsbonus: anfahrt ? Number(anfahrt.leadoutBonus.toFixed(3)) : 0,
+        ohneAnfahrt: Number((entry.photoFinishScore - (anfahrt?.leadoutBonus ?? 0)).toFixed(3)),
+        Anfahrer: anfahrt?.leadoutRiderId != null ? name(anfahrt.leadoutRiderId) : '—',
+        Zeit: entry.stageTimeSeconds,
+      };
+    }));
+  }
+  console.groupEnd();
 }
 
 interface LeadoutInput {
@@ -424,7 +491,19 @@ function applySprintLeadout(input: LeadoutInput): {
         skills: rider.skills,
         isAvailable: availableByRiderId.get(rider.id) ?? false,
       }));
-    const leadout = resolveLeadoutBonus(teammates, drawTeamLeadoutRandoms(random));
+    // Terrainfaktor: auf Flach- und Rollingetappen wirkt die Anfahrt um ein
+    // Viertel staerker, huegelig um 15 Prozent — der Gegenwert dazu, dass
+    // Saison- und Rennform dort abgeschwaecht in den Etappenscore eingehen.
+    const roher = resolveLeadoutBonus(teammates, drawTeamLeadoutRandoms(random));
+    const faktor = resolveLeadoutBonusFactor(profile);
+    const leadout = {
+      ...roher,
+      bonus: roher.bonus * faktor,
+      contributions: roher.contributions.map((eintrag) => ({
+        ...eintrag,
+        contribution: Number((eintrag.contribution * faktor).toFixed(2)),
+      })),
+    };
     if (leadout.bonus <= 0) {
       continue;
     }
