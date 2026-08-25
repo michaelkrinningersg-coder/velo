@@ -382,14 +382,27 @@ describe('Steilere Rueckstandskurve am Berg', () => {
     expect(resolveTailGapShare(1, 'High_Mountain')).toBeCloseTo(1, 10);
   });
 
-  it('hebt die Mitte an und laesst den Bereich hinter der Spitze enger', () => {
-    // Position 0,24 entspricht bei 176 Fahrern und einer Spitze von zehn
-    // etwa Rang 50 — dort soll sich nichts aendern.
-    expect(resolveTailGapShare(0.24, 'Mountain') / resolveTailGapShare(0.24)).toBeCloseTo(1, 1);
-    // Davor flacher, danach steiler.
-    expect(resolveTailGapShare(0.10, 'Mountain')).toBeLessThan(resolveTailGapShare(0.10));
-    for (const position of [0.4, 0.54, 0.72, 0.9]) {
-      expect(resolveTailGapShare(position, 'Mountain')).toBeGreaterThan(resolveTailGapShare(position));
+  it('hebt die Mitte deutlich an und laesst den Bereich hinter der Spitze enger', () => {
+    // Position 0,04 entspricht bei 200 Fahrern und einer Spitze von drei etwa
+    // Rang 10 — dort darf es hoechstens moderat mehr werden.
+    expect(resolveTailGapShare(0.04, 'Mountain')).toBeLessThanOrEqual(resolveTailGapShare(0.04));
+    // Ab etwa Rang 50 (Position 0,24) deutlich mehr: mindestens das Doppelte.
+    for (const position of [0.24, 0.34, 0.49, 0.64]) {
+      expect(resolveTailGapShare(position, 'Mountain') / resolveTailGapShare(position)).toBeGreaterThan(2);
+    }
+    // Zum Ende hin laeuft der Vorsprung wieder auf 1 zusammen.
+    expect(resolveTailGapShare(0.95, 'Mountain') / resolveTailGapShare(0.95)).toBeGreaterThan(1);
+    expect(resolveTailGapShare(0.95, 'Mountain') / resolveTailGapShare(0.95)).toBeLessThan(1.6);
+  });
+
+  it('naehert sich dem Endpunkt ohne Stufe', () => {
+    // Der Sprung zwischen dem vorletzten und dem letzten Fahrer darf nicht
+    // groesser sein als der davor — mit einem Exponenten unter 1 am linearen
+    // Term entstuenden dort mehrere Minuten Unterschied.
+    for (const profile of [undefined, 'Mountain', 'High_Mountain'] as Array<StageProfile | undefined>) {
+      const letzter = resolveTailGapShare(1, profile) - resolveTailGapShare(0.995, profile);
+      const davor = resolveTailGapShare(0.995, profile) - resolveTailGapShare(0.99, profile);
+      expect(letzter).toBeLessThan(davor * 1.5);
     }
   });
 

@@ -156,19 +156,33 @@ export const TAIL_SHAPE_EXPONENT = 0.65;
  * den Top 10 der Gesamtwertung, was in einem simulierten Giro auf den
  * Plaetzen 8, 9 und 11 auch passiert ist.
  *
- * Angehoben wird deshalb die *Mitte* der Kurve, nicht ihr Ende: bei v = 1
- * ergibt die Formel unabhaengig von beiden Parametern genau 1, der Rueckstand
- * des letzten Fahrers bleibt also `tailGapPerKm` — und damit auch sein
- * Verhaeltnis zum Zeitlimit. Der groessere Exponent laesst zugleich den
- * Bereich direkt hinter der Spitzengruppe enger werden, wo die Favoriten
- * fahren.
+ * Angehoben wird deshalb die *Mitte* der Kurve, nicht ihr Ende. Die gemessene
+ * Form `eps v^p / (1 - v + eps)` kann das nicht: sie ist ueberall konvex, ihr
+ * Wert bei v = 0,5 liegt bauartbedingt unter `v^p`, und mehr Mitte gab es dort
+ * nur zusammen mit mehr Anfang. Ein erster Versuch mit eps 0,35 und p 1,30
+ * brachte deshalb bei Rang 50 den Faktor 1,00 statt der gewuenschten Spreizung.
  *
- * Wirkung gegenueber der gemessenen Kurve, bei 176 Fahrern und einer ersten
- * Gruppe von zehn:
+ * Diese Form dagegen ist S-foermig:
  *
- *   Rang  27   0,59-fach      Rang 100   1,52-fach
- *   Rang  50   1,00-fach      Rang 130   1,61-fach
- *   Rang  70   1,26-fach      Rang 160   1,40-fach
+ *   f(v) = v^a / (v^a + c (1 - v))
+ *
+ * Sie ist bei v = 0 exakt 0 und bei v = 1 exakt 1, unabhaengig von beiden
+ * Parametern — der Rueckstand des letzten Fahrers bleibt also `tailGapPerKm`
+ * und damit auch sein Verhaeltnis zum Zeitlimit. `a` steuert, wie eng es
+ * direkt hinter der Spitzengruppe zugeht, `c`, wie frueh die Kurve in die
+ * Mitte kippt. Der lineare Term `(1 - v)` sorgt dafuer, dass sie sich dem
+ * Endpunkt mit endlicher Steigung naehert: mit einem Exponenten unter 1 an
+ * dieser Stelle entstuende zwischen dem vorletzten und dem letzten Fahrer eine
+ * Stufe von mehreren Minuten.
+ *
+ * Wirkung gegenueber der gemessenen Kurve, bei 200 Fahrern und einer ersten
+ * Gruppe von drei:
+ *
+ *   Rang  10   0,91-fach      Rang 100   2,90-fach
+ *   Rang  20   1,54-fach      Rang 130   2,55-fach
+ *   Rang  30   2,00-fach      Rang 150   2,01-fach
+ *   Rang  50   2,66-fach      Rang 175   1,48-fach
+ *   Rang  70   3,10-fach      Rang 190   1,19-fach
  *                             Letzter    1,00-fach
  *
  * Das ist eine Spielentscheidung, keine Messung — anders als die gemeinsame
@@ -177,8 +191,10 @@ export const TAIL_SHAPE_EXPONENT = 0.65;
 export const STEEP_TAIL_SHAPE_PROFILES: ReadonlySet<StageProfile> = new Set<StageProfile>([
   'Mountain', 'High_Mountain',
 ]);
-export const STEEP_TAIL_SHAPE_EPSILON = 0.35;
-export const STEEP_TAIL_SHAPE_EXPONENT = 1.30;
+/** Exponent `a`: je groesser, desto enger direkt hinter der Spitzengruppe. */
+export const STEEP_TAIL_SHAPE_EXPONENT = 1.90;
+/** Gewicht `c` des linearen Terms: je groesser, desto spaeter kippt die Kurve. */
+export const STEEP_TAIL_SHAPE_TAIL_WEIGHT = 0.58;
 
 /**
  * Anzahl Zeitgruppen je Regime (Median, 10./90. Perzentil) — Kontrollgroesse
