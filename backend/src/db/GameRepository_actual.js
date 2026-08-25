@@ -1179,7 +1179,7 @@ class GameRepository {
             ? `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE COALESCE(current_contract.team_id, riders.active_team_id) = ? AND riders.is_retired = 0 ORDER BY riders.overall_rating DESC`
             : `${selectWithResolvedContract} ${freeRaceFormJoin} WHERE riders.is_retired = 0 ORDER BY riders.overall_rating DESC`;
     }
-    getRiders(teamId, includeFormDebug = false) {
+    getRiders(teamId, includeFormDebug = false, includeProgramRaceIds = false) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
         const isCurrentSeason = true;
@@ -1210,7 +1210,7 @@ class GameRepository {
             seasonRaceDays: isCurrentSeason ? (row.season_race_days_total ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0),
             seasonWins: isCurrentSeason ? (row.season_wins ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0),
         }));
-        const ridersWithPrograms = this.attachProgramData(riders, season);
+        const ridersWithPrograms = this.attachProgramData(riders, season, includeProgramRaceIds);
         const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
         return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, season, currentDate) : ridersWithMentors;
     }
@@ -1271,7 +1271,19 @@ class GameRepository {
         }
         return map;
     }
-    attachProgramData(riders, season) {
+    // `includeRaceIds`: die Liste aller Programm-Rennen je Fahrer. Sie kostete
+    // 68,8 der 153 ms dieses Aufrufs und lieferte dabei 75 578 Zeilen — je zur
+    // Haelfte Rennen der laufenden und der vorigen Saison, denn ein Programm
+    // ist mit Rennen aller Saisons verknuepft. Der Anteil waechst mit jeder
+    // weiteren Saison.
+    //
+    // Gelesen wurde sie an genau einer Stelle (buildRiderLockMap, nur bei
+    // Grand Tours, drei von 145 Rennen einer Saison), und die holt sich die
+    // Antwort jetzt gezielt fuer ihr eines Rennen. Deshalb standardmaessig
+    // aus; wer sie braucht, fordert sie an. Dann auch nur noch die Rennen der
+    // angefragten Saison — Rennen anderer Saisons konnte ohnehin niemand
+    // sinnvoll verwenden.
+    attachProgramData(riders, season, includeRaceIds = false) {
         if (riders.length === 0 || !tableExists(this.db, 'rider_season_programs') || !tableExists(this.db, 'race_programs')) {
             return riders;
         }
@@ -1296,16 +1308,18 @@ class GameRepository {
                 peak3Min: null,
                 peak3Max: null,
             }]));
-        const raceRows = tableExists(this.db, 'race_program_races')
+        const raceRows = (includeRaceIds && tableExists(this.db, 'race_program_races'))
             ? this.db.prepare(`
           SELECT rider_season_programs.rider_id,
                  race_program_races.race_id
           FROM rider_season_programs
           JOIN race_program_races ON race_program_races.program_id = rider_season_programs.program_id
+          JOIN races ON races.id = race_program_races.race_id
           WHERE rider_season_programs.season = ?
+            AND substr(races.start_date, 1, 4) = ?
             AND rider_season_programs.rider_id IN (${placeholders})
           ORDER BY race_program_races.race_id ASC
-        `).all(season, ...riderIds)
+        `).all(season, String(season), ...riderIds)
             : [];
         const raceIdsByRiderId = new Map();
         for (const row of raceRows) {
