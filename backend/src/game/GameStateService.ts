@@ -13,7 +13,7 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
 
-import { getDeterministicWeatherEffect, isWinterBreak } from '../db/mappers';
+import { getDeterministicWeatherEffect, isoDateToDayNumber, isWinterBreak } from '../db/mappers';
 import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
@@ -2318,9 +2318,7 @@ function roundFormBonus(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isoDateToDayNumber(isoDate: string): number {
-  return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
-}
+
 
 // Kanonische Formphasen-Aufloesung — identisch zu resolvePeakPhase in
 // db/mappers.ts, das die im Chart gezeichnete Formkurve speist. WICHTIG: Peaks

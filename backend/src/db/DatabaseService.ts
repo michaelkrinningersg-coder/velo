@@ -7,6 +7,7 @@ import { SavegameMeta } from '../../../shared/types';
 import { bootstrap, readStageScoreSegments, seedQuickSimProfiles } from '../bootstrapper';
 import { resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
+import { installStatementCache } from './statementCache';
 import { GameStateService } from '../game/GameStateService';
 import { RiderProgramService } from '../game/RiderProgramService';
 import { BadgeMaterializationService } from '../game/BadgeMaterializationService';
@@ -89,6 +90,19 @@ export class DatabaseService {
   private readonly savegamesDir: string;
   private activeConnection: Database.Database | null = null;
   private activeSaveName: string | null = null;
+  /**
+   * Verbindungen, deren Schema in diesem Prozess bereits sichergestellt wurde.
+   *
+   * `getActiveConnection()` laeuft bei jedem einzelnen API-Aufruf, und darin
+   * stand bisher die vollstaendige Migration: `applyLatestSchema` plus rund
+   * vierzig `ensureXxx`-Schritte, gemessen 38 ms. Der Schemastand einer
+   * geoeffneten Verbindung kann sich zwischen zwei Aufrufen aber nicht aendern
+   * — nur ein Wechsel des Spielstands legt eine neue Verbindung an, und die
+   * steht dann nicht in dieser Menge.
+   *
+   * `WeakSet`, damit geschlossene Verbindungen nicht festgehalten werden.
+   */
+  private readonly migratedConnections = new WeakSet<Database.Database>();
 
   constructor() {
     const assetsDir = resolveAssetsDir();
@@ -3357,6 +3371,28 @@ export class DatabaseService {
    * Spiel — statt sie zu duplizieren und damit auseinanderlaufen zu lassen.
    */
   public ensureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
+    if (this.migratedConnections.has(db)) {
+      return;
+    }
+    this.runAllSchemaMigrations(db, opts);
+    this.migratedConnections.add(db);
+  }
+
+  /**
+   * Erzwingt den vollstaendigen Durchlauf, auch wenn die Verbindung schon
+   * migriert wurde. Fuer Stellen, die das Schema tatsaechlich veraendert
+   * haben — etwa nach dem Duplizieren des Kalenders.
+   */
+  public forceEnsureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
+    this.runAllSchemaMigrations(db, opts);
+    this.migratedConnections.add(db);
+  }
+
+  private runAllSchemaMigrations(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
+    // Vor der Migration: ab hier liefert `db.prepare` zwischengespeicherte
+    // Anweisungen. Jede Verbindung laeuft genau einmal hier durch — auch die
+    // der Werkzeuge unter tools/ und die der Tests.
+    installStatementCache(db);
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
     // `PRAGMA foreign_keys = ON`. When applying to a not-yet-populated DB

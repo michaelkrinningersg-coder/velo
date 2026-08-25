@@ -769,8 +769,18 @@ export function createRouter(dbService: DatabaseService): Router {
   });
 
   router.post('/state/advance', (_req: Request, res: Response) => {
-    try { ok<GameState>(res, getGss().advanceDay()); }
-    catch (e) { fail(res, 400, (e as Error).message); }
+    try {
+      const gss = getGss();
+      const vorher = gss.loadState().season;
+      const nachher = gss.advanceDay();
+      // Die Schema-Migration laeuft nur noch einmal je Verbindung. Der
+      // Saisonwechsel legt aber Rennen an (Meisterschaften, Olympia), an denen
+      // Schritte der Kette haengen — deshalb dort einmal erzwingen.
+      if (nachher.season !== vorher) {
+        dbService.forceEnsureAllSchemas(dbService.getActiveConnection());
+      }
+      ok<GameState>(res, nachher);
+    } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
   // Spieler-Vertragsverlängerungen: Auswahlfenster (10.01.)

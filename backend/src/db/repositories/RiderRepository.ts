@@ -25,11 +25,35 @@ export class RiderRepository {
   }
 
 
-  private getRidersQuery(useContracts: boolean, filterByTeam: boolean, onlyWithTeam = false, isCurrentSeason = true): string {
+  /**
+   * Spalten von `riders`, die der schlanke Modus nicht braucht.
+   *
+   * `riders.*` liefert 59 Spalten, die Aliase der Joins bringen weitere 25 —
+   * better-sqlite3 baut daraus je Fahrer ein Objekt mit ueber achtzig Feldern,
+   * 3164-mal. Im schlanken Modus baut `mapRider` weder `potentials` noch
+   * `yearStartSkills`, also braucht die Abfrage die zugehoerigen Spalten nicht.
+   */
+  private leanRiderColumns(): string {
+    let columns = this.leanColumnCache;
+    if (!columns) {
+      const info = this.db.prepare('PRAGMA table_info(riders)').all() as Array<{ name: string }>;
+      columns = info
+        .map((column) => column.name)
+        .filter((name) => !name.startsWith('pot_') && name !== 'yearly_baseline_skills')
+        .map((name) => `riders."${name}"`)
+        .join(', ');
+      this.leanColumnCache = columns;
+    }
+    return columns;
+  }
+
+  private leanColumnCache: string | null = null;
+
+  private getRidersQuery(useContracts: boolean, filterByTeam: boolean, onlyWithTeam = false, isCurrentSeason = true, lean = false): string {
     const useDailyState = tableExists(this.db, 'rider_daily_state');
     const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
     const countrySelect = `
-      riders.*,
+      ${lean ? this.leanRiderColumns() : 'riders.*'},
       role.name AS role_name,
       role.weighting AS role_weighting,
       rider_type.type_key AS rider_type,
@@ -152,26 +176,27 @@ export class RiderRepository {
     const useContracts = tableExists(this.db, 'contracts');
     const isCurrentSeason = activeSeason === gameStateRepo.getCurrentSeason();
 
+    const lean = !includeDetailedStats;
     let rows: RiderRow[];
     if (teamId != null) {
       if (useContracts) {
         if (isCurrentSeason) {
-          rows = this.db.prepare(this.getRidersQuery(true, true, false, true)).all(teamId) as RiderRow[];
+          rows = this.db.prepare(this.getRidersQuery(true, true, false, true, lean)).all(teamId) as RiderRow[];
         } else {
-          rows = this.db.prepare(this.getRidersQuery(true, true, false, false)).all(activeSeason, activeSeason, teamId) as RiderRow[];
+          rows = this.db.prepare(this.getRidersQuery(true, true, false, false, lean)).all(activeSeason, activeSeason, teamId) as RiderRow[];
         }
       } else {
-        rows = this.db.prepare(this.getRidersQuery(false, true, false)).all(teamId) as RiderRow[];
+        rows = this.db.prepare(this.getRidersQuery(false, true, false, true, lean)).all(teamId) as RiderRow[];
       }
     } else {
       if (useContracts) {
         if (isCurrentSeason) {
-          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, true)).all() as RiderRow[];
+          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, true, lean)).all() as RiderRow[];
         } else {
-          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, false)).all(activeSeason, activeSeason) as RiderRow[];
+          rows = this.db.prepare(this.getRidersQuery(true, false, onlyWithTeam, false, lean)).all(activeSeason, activeSeason) as RiderRow[];
         }
       } else {
-        rows = this.db.prepare(this.getRidersQuery(false, false, onlyWithTeam)).all() as RiderRow[];
+        rows = this.db.prepare(this.getRidersQuery(false, false, onlyWithTeam, true, lean)).all() as RiderRow[];
       }
     }
     
@@ -180,23 +205,22 @@ export class RiderRepository {
     const raceFormSourcesByRiderId = includeDetailedStats ? this.loadRaceFormSourcesByRiderId(rows.map((row) => row.id), activeSeason, currentDate) : new Map();
     const seasonRaceStatsByRiderId = (includeDetailedStats && !isCurrentSeason) ? this.getSeasonRaceStatsByRiderId(activeSeason, riderIdsForStats, isCurrentSeason) : new Map();
     const riders = rows.map((row) => ({
-      ...mapRider(row, activeSeason, currentDate, isCurrentSeason ? (row.season_points ?? 0) : (seasonPointsByRiderId.get(row.id) ?? 0)),
+      ...mapRider(
+        row, activeSeason, currentDate,
+        isCurrentSeason ? (row.season_points ?? 0) : (seasonPointsByRiderId.get(row.id) ?? 0),
+        undefined,
+        { lean: !includeDetailedStats },
+      ),
       raceFormSources: raceFormSourcesByRiderId.get(row.id) ?? [],
       seasonRaceDays: isCurrentSeason ? (row.season_race_days_total ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.raceDays ?? 0),
       seasonWins: isCurrentSeason ? (row.season_wins ?? 0) : (seasonRaceStatsByRiderId.get(row.id)?.wins ?? 0),
       seasonTttWins: isCurrentSeason ? ((row as any).season_ttt_wins ?? 0) : 0,
     }));
-    if (!includeDetailedStats) {
-      // Summary-Modus (Standard des Frontends nach jedem Tageswechsel): schwere,
-      // nur in Detail-Ansichten benoetigte Felder strippen. Teams-/Fahrer-Views
-      // laden Details bei Bedarf gezielt nach (needsDetails-Mechanismus).
-      // Spart ~2 MB Serialisierung/Transfer/Parse pro Reload bei 3200 Fahrern.
-      for (const rider of riders) {
-        delete (rider as any).potentials;
-        delete (rider as any).favoriteRaces;
-        delete (rider as any).nonFavoriteRaces;
-      }
-    }
+    // Summary-Modus (Standard des Frontends nach jedem Tageswechsel): schwere,
+    // nur in Detail-Ansichten benoetigte Felder entstehen gar nicht erst —
+    // `mapRider` bekommt `lean` und `attachProgramData` bleibt aus. Teams- und
+    // Fahreransicht laden Details bei Bedarf gezielt nach.
+    // Spart ~2 MB Serialisierung/Transfer/Parse pro Reload bei 3200 Fahrern.
     const ridersWithPrograms = includeDetailedStats ? this.attachProgramData(riders, activeSeason) : riders;
     const ridersWithMentors = this.attachMentorData(ridersWithPrograms);
     return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, activeSeason, currentDate) : ridersWithMentors;

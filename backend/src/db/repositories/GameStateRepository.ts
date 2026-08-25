@@ -331,6 +331,19 @@ export class GameStateRepository {
       return 0;
     }
 
+    // `active_race_entries` statt der Sicht `race_entries`.
+    //
+    // `race_entries` ist ein View: `active_race_entries UNION ALL
+    // json_each(race_entries_compact)`. Die Abfrage expandierte damit bei jedem
+    // Tageswechsel die komplette Startlisten-Historie aus JSON — 22 062 Zeilen
+    // im gemessenen Spielstand, 73 802 nach drei weiteren Saisons, davon 200 in
+    // laufenden Rennen. SQLite baute darauf jedes Mal einen automatischen Index
+    // (`SEARCH race_entries USING AUTOMATIC COVERING INDEX`), zusammen 21 ms.
+    //
+    // Ein abgeschlossenes Rennen kann keinen neuen DNF mehr bekommen — die
+    // Historie beantwortet die Frage also gar nicht mit. Auf der aktiven
+    // Tabelle greift der vorhandene Index idx_active_race_entries_rider_race.
+    const quelle = tableExists(this.db, 'active_race_entries') ? 'active_race_entries' : 'race_entries';
     const candidates = this.db.prepare(`
       SELECT
         target_stage.id AS stage_id,
@@ -345,7 +358,7 @@ export class GameStateRepository {
           race_entries.rider_id AS rider_id,
           rider_daily_state.health_status AS health_status,
           MAX(stages.stage_number) AS last_finished_stage_number
-        FROM race_entries
+        FROM ${quelle} AS race_entries
         JOIN races ON races.id = race_entries.race_id
         JOIN rider_daily_state ON rider_daily_state.rider_id = race_entries.rider_id
         JOIN stage_entries ON stage_entries.race_id = race_entries.race_id

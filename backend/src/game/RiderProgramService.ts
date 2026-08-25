@@ -196,8 +196,27 @@ export class RiderProgramService {
 
     this.ensureSchema();
 
-    // Clean up any existing program assignments for teamless riders
-    this.db.prepare(`
+    // Programme vereinsloser Fahrer aufraeumen. Der DELETE selbst kostet 1,65 ms,
+    // die Pruefung, ob es ueberhaupt etwas zu loeschen gibt, 0,73 — und zu
+    // loeschen gibt es fast nie etwas.
+    const verwaisteProgramme = this.db.prepare(`
+      SELECT 1
+      FROM rider_season_programs rsp
+      JOIN riders r ON r.id = rsp.rider_id
+      LEFT JOIN contracts c ON c.id = (
+        SELECT contracts.id FROM contracts
+        WHERE contracts.rider_id = r.id
+          AND contracts.start_season <= ?
+          AND contracts.end_season >= ?
+        ORDER BY contracts.start_season DESC, contracts.id DESC
+        LIMIT 1
+      )
+      WHERE rsp.season = ?
+        AND COALESCE(c.team_id, r.active_team_id) IS NULL
+      LIMIT 1
+    `).get(season, season, season);
+    if (verwaisteProgramme) {
+      this.db.prepare(`
       DELETE FROM rider_season_programs
       WHERE season = ? AND rider_id IN (
         SELECT r.id
@@ -212,9 +231,44 @@ export class RiderProgramService {
         )
         WHERE COALESCE(c.team_id, r.active_team_id) IS NULL
       )
-    `).run(season, season, season);
+      `).run(season, season, season);
+    }
 
     const assignedDate = assignedOn ?? this.resolveAssignedOn(season);
+
+    // Zuerst pruefen, ob ueberhaupt etwas fehlt.
+    //
+    // Vorher stand `allActiveRiders` davor — ein SELECT ueber alle Fahrer mit
+    // einem korrelierten Vertrags-Unterausdruck je Zeile — und der Ausstieg
+    // `if (missingRiders.length === 0) return` kam erst danach. Im Normalfall
+    // fehlt nichts, die Arbeit war also umsonst. Gemessen: 6,4 ms bei jedem
+    // `ensureState()`, und das laeuft in neun GET-Routen.
+    const fehlend = this.db.prepare(`
+      SELECT 1
+      FROM riders
+      LEFT JOIN contracts current_contract
+        ON current_contract.id = (
+          SELECT contracts.id
+          FROM contracts
+          WHERE contracts.rider_id = riders.id
+            AND contracts.start_season <= ?
+            AND contracts.end_season >= ?
+          ORDER BY contracts.start_season DESC, contracts.id DESC
+          LIMIT 1
+        )
+      WHERE riders.is_retired = 0
+        AND COALESCE(current_contract.team_id, riders.active_team_id) IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM rider_season_programs existing_program
+          WHERE existing_program.season = ?
+            AND existing_program.rider_id = riders.id
+        )
+      LIMIT 1
+    `).get(season, season, season);
+    if (!fehlend) {
+      return;
+    }
 
     // Load all active riders for the season to determine global rankings
     const allActiveRiders = this.db.prepare(`

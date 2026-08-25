@@ -640,8 +640,36 @@ export function resolveStageResultPointValues(stage: SeasonPointStageRow): numbe
   return parseRankedValues(stage.points_stage);
 }
 
+/**
+ * Tagesnummer eines ISO-Datums, gemessen ab dem 1. Januar 1970.
+ *
+ * Vorher `new Date(\`${iso}T00:00:00.000Z\`).getTime()` — String-Aufbau plus
+ * Datumsparser. Die Funktion laeuft im Tageswechsel je Fahrer mehrfach (drei
+ * Peaks, Fenstergrenzen) und stand im Profil bei 5 Prozent der Zeit. Da das
+ * Format immer `YYYY-MM-DD` ist, geht es ohne Parser.
+ *
+ * Der Zwischenspeicher lohnt zusaetzlich, weil im Tageswechsel immer wieder
+ * dieselben Datumsangaben vorkommen — Peaks, Saisonanfang, heutiges Datum.
+ */
+const DAY_NUMBER_CACHE = new Map<string, number>();
+const DAY_NUMBER_CACHE_MAX = 4096;
+
 export function isoDateToDayNumber(isoDate: string): number {
-  return Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
+  const cached = DAY_NUMBER_CACHE.get(isoDate);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const year = Number(isoDate.slice(0, 4));
+  const month = Number(isoDate.slice(5, 7));
+  const day = Number(isoDate.slice(8, 10));
+  const value = Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
+    ? Math.floor(Date.UTC(year, month - 1, day) / 86400000)
+    : Math.floor(new Date(`${isoDate}T00:00:00.000Z`).getTime() / 86400000);
+  if (DAY_NUMBER_CACHE.size >= DAY_NUMBER_CACHE_MAX) {
+    DAY_NUMBER_CACHE.clear();
+  }
+  DAY_NUMBER_CACHE.set(isoDate, value);
+  return value;
 }
 
 export function isWinterBreak(dateString: string): boolean {
@@ -776,9 +804,32 @@ export function columnExists(db: Database.Database, tableName: string, columnNam
   return columns.some((column) => column.name === columnName);
 }
 
+/**
+ * Spaltennamen je Praefix vorberechnet.
+ *
+ * `mapSkillObject` lief zweimal je Fahrer und baute dabei jedes Mal fuenfzehn
+ * Zwei-Element-Arrays, einen Ergebnis-Array und daraus per `Object.fromEntries`
+ * das Objekt — bei 3164 Fahrern rund hunderttausend Wegwerf-Arrays je Aufruf
+ * von `GET /riders`. Im Profil waren das 11 % Eigenzeit und der Loewenanteil
+ * der 30 % Garbage Collection.
+ */
+const SKILL_COLUMNS_BY_PREFIX = new Map<string, ReadonlyArray<readonly [RiderSkillKey, string]>>();
+
+function resolveSkillColumns(prefix: string): ReadonlyArray<readonly [RiderSkillKey, string]> {
+  let columns = SKILL_COLUMNS_BY_PREFIX.get(prefix);
+  if (!columns) {
+    columns = RIDER_SKILL_COLUMNS.map(([key, column]) => [key, `${prefix}${column}`] as const);
+    SKILL_COLUMNS_BY_PREFIX.set(prefix, columns);
+  }
+  return columns;
+}
+
 export function mapSkillObject<T extends RiderSkills | RiderPotentials>(row: RiderRow, prefix = ''): T {
-  const entries = RIDER_SKILL_COLUMNS.map(([key, column]) => [key, row[`${prefix}${column}` as keyof RiderRow]]);
-  return Object.fromEntries(entries) as T;
+  const target = {} as Record<RiderSkillKey, unknown>;
+  for (const [key, column] of resolveSkillColumns(prefix)) {
+    target[key] = row[column as keyof RiderRow];
+  }
+  return target as T;
 }
 
 export function mapCountry(row: Pick<RiderRow, 'country_id' | 'country_name' | 'country_code_3' | 'country_continent' | 'country_regen_rating' | 'country_number_regen_min' | 'country_number_regen_max'>): Country {
@@ -805,7 +856,27 @@ export function mapRole(row: Pick<RiderRow, 'role_id' | 'role_name' | 'role_weig
   };
 }
 
-export function mapRider(row: RiderRow, currentYear: number, _currentDate: string, seasonPoints = 0, stageNumber?: number): Rider {
+export interface MapRiderOptions {
+  /**
+   * Schlanker Modus fuer `GET /riders?summary=true` — den Aufruf, den das
+   * Frontend nach jedem Tageswechsel und jedem Ergebnis macht.
+   *
+   * Vorher wurden `potentials` und `yearStartSkills` fuer alle 3164 Fahrer
+   * gebaut und danach wieder geloescht; ein `delete` je Fahrer verwirft die
+   * Objektform und kostet mehr als das Bauen selbst, und `yearStartSkills`
+   * ist ein `JSON.parse` je Fahrer.
+   */
+  lean?: boolean;
+}
+
+export function mapRider(
+  row: RiderRow,
+  currentYear: number,
+  _currentDate: string,
+  seasonPoints = 0,
+  stageNumber?: number,
+  options: MapRiderOptions = {},
+): Rider {
   const country = mapCountry(row);
   const role = mapRole(row);
   const peakDates = parsePeakDates(row.peak_dates_json);
@@ -847,7 +918,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     potential: row.pot_overall,
     overallRating: row.overall_rating,
     skills: mapSkillObject<RiderSkills>(row, 'skill_'),
-    potentials: mapSkillObject<RiderPotentials>(row, 'pot_'),
+    potentials: options.lean ? undefined as unknown as RiderPotentials : mapSkillObject<RiderPotentials>(row, 'pot_'),
     riderType: row.rider_type,
     specialization1: row.specialization_1,
     specialization2: row.specialization_2,
@@ -876,7 +947,7 @@ export function mapRider(row: RiderRow, currentYear: number, _currentDate: strin
     shortTermFatigueMalus,
     totalFatigueLoadMalus,
     shortTermFatigueWarning,
-    yearStartSkills: row.yearly_baseline_skills ? JSON.parse(row.yearly_baseline_skills) : undefined,
+    yearStartSkills: (!options.lean && row.yearly_baseline_skills) ? JSON.parse(row.yearly_baseline_skills) : undefined,
     peakSForm: resolveEffectiveSeasonForm(row.peak_s_form ?? 0),
     peakRForm: row.peak_r_form ?? 0,
     activePeakDate: row.active_peak_date,
