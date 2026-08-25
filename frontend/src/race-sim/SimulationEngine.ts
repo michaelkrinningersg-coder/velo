@@ -1349,6 +1349,7 @@ export class SimulationEngine {
       distanceKm: bootstrap.stageSummary.distanceKm,
       elevationGainMeters: bootstrap.stageSummary.elevationGainMeters,
       dailyFormByRiderId: preStartDailyFormByRiderId,
+      isStageRace: bootstrap.race.isStageRace,
     });
     const top15FavoriteRiders = this.stageFavorites
       .filter((favorite) => favorite.kind === 'rider' && favorite.riderId != null)

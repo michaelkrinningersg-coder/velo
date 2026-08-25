@@ -271,6 +271,7 @@ export function precalculateStageBreakaway(
     const fullRiderRanking = calculateStageFavoriteRiderRanking(riders, resolvedTeams, stage, {
       distanceKm: stageSummary.distanceKm,
       elevationGainMeters: stageSummary.elevationGainMeters,
+      isStageRace: race.isStageRace,
     });
 
     let candidateTeams: number[] = [];

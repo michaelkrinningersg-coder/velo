@@ -158,7 +158,12 @@ export function runQuickSimulation(
     rider.id,
     sampleDailyForm(dailyFormRandom, rider.id === gcLeaderRiderId),
   ]));
-  const favoriteOptions = { distanceKm, elevationGainMeters, dailyFormByRiderId };
+  const favoriteOptions = {
+    distanceKm,
+    elevationGainMeters,
+    dailyFormByRiderId,
+    isStageRace: bootstrap.race.isStageRace,
+  };
 
   // Dieselben abgeleiteten Stroeme wie in SimulationEngine — gleicher Seed,
   // gleiche Stuerze, gleicher Einholpunkt.
@@ -266,7 +271,12 @@ export function runQuickSimulation(
     ridersWithSpecialStates,
     bootstrap.teams,
     bootstrap.stage,
-    { distanceKm, elevationGainMeters, dailyFormByRiderId: effectiveDailyForm },
+    {
+      distanceKm,
+      elevationGainMeters,
+      dailyFormByRiderId: effectiveDailyForm,
+      isStageRace: bootstrap.race.isStageRace,
+    },
   );
 
   // Der Zielscore ist nicht der Etappenscore: wer zeitgleich ankommt, gewinnt

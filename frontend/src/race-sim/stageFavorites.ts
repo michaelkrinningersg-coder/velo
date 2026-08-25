@@ -17,6 +17,13 @@ export interface StageFavoriteOptions {
   distanceKm?: number;
   elevationGainMeters?: number;
   dailyFormByRiderId?: Map<number, number> | Record<number, number>;
+  /**
+   * Gehoert die Etappe zu einem Etappenrennen? Entscheidet ueber die
+   * Gewichtstabelle — siehe `STAGE_RACE_SCORE_WEIGHTS`. Ohne Angabe gilt die
+   * Eintagesvariante, weil eine einzelne Etappe ohne Rennkontext nicht als
+   * Rundfahrtetappe gelten soll.
+   */
+  isStageRace?: boolean;
 }
 
 interface TeamFavoriteCandidate {
@@ -91,11 +98,13 @@ function calculateRoadScore(
   stage: Stage,
   distanceKm: number,
   dailyForm: number,
+  isStageRace: boolean,
 ): number {
   const weights = resolveStageScoreWeights(
     stage.profile,
     (stage as Stage & { profileScore?: number | null }).profileScore ?? null,
     distanceKm,
+    isStageRace,
   );
   let weighted = 0;
   for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
@@ -104,11 +113,18 @@ function calculateRoadScore(
   return weighted + resolveFormContribution(rider, dailyForm, stage.profile) + resolveStaminaContribution(rider, distanceKm);
 }
 
-function calculateRiderScore(rider: Rider, stage: Stage, distanceKm: number, elevationGainMeters: number, dailyForm: number): number {
+function calculateRiderScore(
+  rider: Rider,
+  stage: Stage,
+  distanceKm: number,
+  elevationGainMeters: number,
+  dailyForm: number,
+  isStageRace: boolean,
+): number {
   if (stage.profile === 'ITT' || stage.profile === 'TTT') {
     return calculateIttScore(rider, dailyForm, elevationGainMeters, stage.profile);
   }
-  return calculateRoadScore(rider, stage, distanceKm, dailyForm);
+  return calculateRoadScore(rider, stage, distanceKm, dailyForm, isStageRace);
 }
 
 function toFavoriteItem(candidate: { rider: Rider; teamName: string; effectiveSkill: number }, rank: number): FavoriteItem {
@@ -213,6 +229,7 @@ export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[
         distanceKm,
         elevationGainMeters,
         resolveDailyForm(rider.id, options?.dailyFormByRiderId),
+        options?.isStageRace ?? false,
       ),
     }))
     .sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.rider.id - right.rider.id);

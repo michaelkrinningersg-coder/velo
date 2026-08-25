@@ -41,20 +41,20 @@ describe('Terrainfaktoren', () => {
     expect(resolveTieBreakNoiseFactor(null)).toBe(1);
   });
 
-  it('halbiert das Rangrauschen insgesamt, auf jedem Profil', () => {
-    expect(RANK_NOISE_FACTOR).toBe(0.5);
+  it('senkt das Rangrauschen insgesamt auf ein Fuenftel, auf jedem Profil', () => {
+    expect(RANK_NOISE_FACTOR).toBe(0.2);
     for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'ITT', 'TTT'] as StageProfile[]) {
-      expect(resolveRankNoiseFactor(profile)).toBe(0.5);
+      expect(resolveRankNoiseFactor(profile)).toBe(RANK_NOISE_FACTOR);
     }
-    expect(resolveRankNoiseFactor(undefined)).toBe(0.5);
-    expect(resolveRankNoiseFactor(null)).toBe(0.5);
+    expect(resolveRankNoiseFactor(undefined)).toBe(RANK_NOISE_FACTOR);
+    expect(resolveRankNoiseFactor(null)).toBe(RANK_NOISE_FACTOR);
   });
 
   it('verrechnet beide Rauschfaktoren im Sprint miteinander', () => {
-    // Flach: erst halbieren, dann vierteln — zusammen ein Achtel.
-    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Flat')).toBeCloseTo(0.125, 10);
-    // Am Berg wirkt nur die Halbierung.
-    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Mountain')).toBeCloseTo(0.5, 10);
+    // Flach: erst auf ein Fuenftel, dann vierteln — zusammen ein Zwanzigstel.
+    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Flat')).toBeCloseTo(0.05, 10);
+    // Am Berg wirkt nur der Gesamtfaktor.
+    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Mountain')).toBeCloseTo(0.2, 10);
   });
 
   it('hebt den Anfahrtsbonus flach und rollend um ein Viertel, huegelig um 15 Prozent', () => {

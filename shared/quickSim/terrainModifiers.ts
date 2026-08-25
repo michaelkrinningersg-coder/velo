@@ -60,7 +60,10 @@ export const TIE_BREAK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
  * `rank_noise` stammt aus dem Kalibrierlauf und ist dort gegen die
  * Rangkorrelation zur vollen Simulation angepasst worden. Als Spielgroesse war
  * das Ergebnis zu gross: der Zufall verschob die Feldreihenfolge staerker, als
- * es die Unterschiede zwischen den Fahrern taten. Die Haelfte davon bleibt.
+ * es die Unterschiede zwischen den Fahrern taten. Erst blieb die Haelfte
+ * davon, inzwischen ein Fuenftel — der Etappenscore soll die Reihenfolge
+ * bestimmen, das Rauschen nur noch die Faelle entscheiden, in denen zwei
+ * Fahrer ohnehin gleichauf liegen.
  *
  * Bewusst eine einzelne Zahl und keine Tabelle je Profil: eine Tabelle mit
  * neunmal demselben Wert taeuscht eine Terrainabhaengigkeit vor, die es nicht
@@ -68,7 +71,7 @@ export const TIE_BREAK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
  * Aufrufstellen unveraendert bleiben, falls das je wieder terrainabhaengig
  * werden soll.
  */
-export const RANK_NOISE_FACTOR = 0.5;
+export const RANK_NOISE_FACTOR = 0.2;
 
 export function resolveTieBreakNoiseFactor(profile: StageProfile | null | undefined): number {
   return (profile ? TIE_BREAK_NOISE_FACTOR[profile] : undefined) ?? 1;

@@ -108,11 +108,44 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
  *
  * Vorher `km / 300`: bei 190 Kilometern 0,63 — mehr als Antritt und Flach
  * zusammen, und auf einer *kurzen* Bergetappe weniger als auf einer langen
- * Flachetappe. Jetzt greift sie erst ab 120 Kilometern und erreicht bei 300
- * Kilometern 0,75.
+ * Flachetappe. Dann `(km - 120) / 240`, also erst ab 120 Kilometern und bei
+ * 300 Kilometern 0,75.
+ *
+ * Auch das war noch zu viel: 0,29 bei einer 190er Etappe stand gegen ein
+ * Bergprofil, dessen groesstes Einzelgewicht 0,84 betraegt — die Ausdauer war
+ * damit die zweitwichtigste Faehigkeit am Berg und schob Helfer mit gutem
+ * Ausdauerwert nach vorne. Dieselbe Schwelle, halbe Steigung: bei 190
+ * Kilometern 0,15, bei 300 Kilometern 0,375.
  */
 export function resolveStaminaWeight(distanceKm: number): number {
-  return Math.max(0, (distanceKm - 120) / 240);
+  return Math.max(0, (distanceKm - 120) / 480);
+}
+
+/**
+ * Abweichende Gewichte fuer Etappen eines Etappenrennens.
+ *
+ * `Hilly_Difficult` faellt dort ohne Flach-Anteil aus. Der Grund ist die
+ * Rundfahrtwertung: eine schwere Huegeletappe ist in einem Etappenrennen eine
+ * Vorentscheidung, bei der das Feld am Anstieg auseinanderfaellt — wer flach
+ * stark ist, holt das nicht zurueck. In einem Eintagesrennen dagegen wird eine
+ * solche Etappe oft geschlossen angefahren und im Finale entschieden, dort
+ * bleibt der Flach-Anteil stehen.
+ *
+ * Das freigewordene Gewicht wird anteilig auf die uebrigen Faehigkeiten
+ * verteilt, damit die Summe 1 bleibt und der Score seine Groessenordnung
+ * behaelt.
+ */
+export const STAGE_RACE_SCORE_WEIGHTS: Partial<Record<StageProfile, ProfileScoreWeights>> = {
+  Hilly_Difficult: {
+    difficultyRange: [0.45, 1.10],
+    easy: { hill: 0.82, mediumMountain: 0.10, sprint: 0.04, acceleration: 0.04 },
+    hard: { hill: 0.64, mediumMountain: 0.30, sprint: 0.03, acceleration: 0.03 },
+  },
+};
+
+/** Die fuer diese Etappe gueltige Gewichtstabelle. */
+function resolveProfileWeights(profile: StageProfile, isStageRace: boolean): ProfileScoreWeights {
+  return (isStageRace ? STAGE_RACE_SCORE_WEIGHTS[profile] : undefined) ?? PROFILE_SCORE_WEIGHTS[profile];
 }
 
 /** Lage der Etappe zwischen leichter und schwerer Auspraegung, 0 bis 1. */
@@ -134,8 +167,9 @@ export function resolveStageScoreWeights(
   profile: StageProfile,
   stageScore: number | null,
   distanceKm: number,
+  isStageRace = false,
 ): SkillWeights {
-  const entry = PROFILE_SCORE_WEIGHTS[profile];
+  const entry = resolveProfileWeights(profile, isStageRace);
   const position = resolveDifficultyPosition(profile, stageScore, distanceKm);
   const keys = new Set([...Object.keys(entry.easy), ...Object.keys(entry.hard)] as RiderSkillKey[]);
   const weights: SkillWeights = {};

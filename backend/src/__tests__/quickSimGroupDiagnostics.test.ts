@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { simulateQuickStage } from '../../../shared/quickSim/simulateStage';
 import { DEFAULT_QUICK_SIM_PROFILES } from '../../../shared/quickSimProfiles';
+import { RANK_NOISE_FACTOR } from '../../../shared/quickSim/terrainModifiers';
 import { createSeededRandom } from '../../../shared/rng';
 import type { StageProfile } from '../../../shared/types';
 
@@ -76,7 +77,7 @@ describe('groupDiagnostics', () => {
   it('gibt das Rangrauschen je Fahrer heraus', () => {
     const ergebnis = laufe('Flat', 5);
     const d = ergebnis.groupDiagnostics!;
-    expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES.Flat.rankNoise * 0.5, 10);
+    expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES.Flat.rankNoise * RANK_NOISE_FACTOR, 10);
     expect(d.tieBreakNoiseFactor).toBe(0.25);
     expect(d.rankNoiseByRiderId.size).toBe(150);
     // Ohne das Rauschen laesst sich der photoFinishScore nicht nachrechnen:
@@ -90,10 +91,10 @@ describe('groupDiagnostics', () => {
 });
 
 describe('Terrainfaktoren auf das Rangrauschen', () => {
-  it('zieht ueberall mit der halben Streuung', () => {
+  it('zieht ueberall mit demselben gedaempften Sigma', () => {
     for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Mountain', 'High_Mountain', 'Medium_Mountain'] as StageProfile[]) {
       const d = laufe(profile, 11).groupDiagnostics!;
-      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise * 0.5, 10);
+      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise * RANK_NOISE_FACTOR, 10);
     }
   });
 

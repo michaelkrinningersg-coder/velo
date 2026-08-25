@@ -722,6 +722,7 @@ function renderInstantSimPanel(): void {
   const favorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, {
     distanceKm: bootstrap.stageSummary?.distanceKm,
     elevationGainMeters: bootstrap.stageSummary?.elevationGainMeters,
+    isStageRace: bootstrap.race.isStageRace,
   });
   const topFavs = favorites.slice(0, 10);
   const gcByRiderId = new Map(bootstrap.gcStandings.map((s) => [s.riderId, s]));
