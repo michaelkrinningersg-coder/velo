@@ -49,7 +49,7 @@ import {
 } from './sprintLeadout';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
-import { resolveFatigueMalus } from './riderCondition';
+import { resolveFatigueMalus, resolveSkillsWithMentorBoosts } from './riderCondition';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
@@ -144,7 +144,13 @@ export function runQuickSimulation(
     rivalries: bootstrap.rivalries,
     random: createSeededRandom(deriveSeed(seed, 'pre-race')),
   });
-  const riders = preRace.riders;
+  // Mentorenbonus: die volle Simulation schlaegt ihn im Leistungsscore auf die
+  // Faehigkeit auf. Hier gleich auf die Faehigkeiten, damit jede spaetere
+  // Bewertung ihn sieht.
+  const riders = preRace.riders.map((rider) => {
+    const skills = resolveSkillsWithMentorBoosts(rider);
+    return skills === rider.skills ? rider : { ...rider, skills };
+  });
 
   // Tagesform: sie geht in jede spaetere Bewertung ein.
   const gcLeaderRiderId = bootstrap.gcStandings.find((standing) => standing.rank === 1)?.riderId ?? null;

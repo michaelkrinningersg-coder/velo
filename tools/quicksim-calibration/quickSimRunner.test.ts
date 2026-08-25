@@ -213,6 +213,33 @@ describe('runQuickSimulation', () => {
     expect(better).toBeGreaterThan(15);
   });
 
+  it('rechnet den Mentorenbonus ein — aber nur, wo die volle Simulation es tut', () => {
+    // Die volle Simulation wendet ihn nur bei Kapitaenen und Co-Kapitaenen an.
+    // Beide Modi muessen sich hier gleich verhalten, sonst laufen sie
+    // auseinander, sobald ein junger Kapitaen im Feld steht.
+    const captain = bootstrap.riders.find((entry) => entry.role?.name === 'Kapitaen');
+    const helper = bootstrap.riders.find((entry) => entry.role?.name !== 'Kapitaen'
+      && entry.role?.name !== 'Co-Kapitaen');
+    if (!captain || !helper) {
+      return;
+    }
+    const boosted = (target: number): RealtimeSimulationBootstrap => ({
+      ...bootstrap,
+      riders: bootstrap.riders.map((entry) => (entry.id === target
+        ? { ...entry, mentorBoosts: { flat: 5, mountain: 5, hill: 5, stamina: 5 } }
+        : entry)),
+    });
+    const positionOf = (input: RealtimeSimulationBootstrap, riderId: number): number =>
+      runQuickSimulation(input, { seed: 8080 }).result.entries.findIndex((entry) => entry.riderId === riderId);
+
+    // Der Kapitaen rueckt vor …
+    expect(positionOf(boosted(captain.id), captain.id))
+      .toBeLessThan(positionOf(bootstrap, captain.id));
+    // … der Helfer nicht, weil die volle Simulation ihm den Bonus nicht gibt.
+    expect(positionOf(boosted(helper.id), helper.id))
+      .toBe(positionOf(bootstrap, helper.id));
+  });
+
   it('braucht keine Profiltabelle im Bootstrap', () => {
     // Altspielstaende liefern sie nicht — dann greifen die eingebauten Vorgaben.
     const withoutProfiles = { ...bootstrap };

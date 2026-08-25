@@ -23,7 +23,7 @@ import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
-import { resolveConditionFormBonus } from './riderCondition';
+import { resolveConditionFormBonus, usesMentorBoosts } from './riderCondition';
 import {
   applyPreRaceRiderModifiers,
   getWeatherRelation,
@@ -3776,7 +3776,7 @@ export class SimulationEngine {
     if (components.length === 1) {
       const comp = components[0];
       let skillVal = rider.skills[comp.key];
-      const isCaptain = rider.role?.name === 'Kapitaen' || rider.role?.name === 'Co-Kapitaen';
+      const isCaptain = usesMentorBoosts(rider);
       if (isCaptain && rider.mentorBoosts) {
         const boost = rider.mentorBoosts[comp.key];
         if (typeof boost === 'number') {
@@ -3788,7 +3788,7 @@ export class SimulationEngine {
 
     let totalWeight = 0;
     let weightedSum = 0;
-    const isCaptain = rider.role?.name === 'Kapitaen' || rider.role?.name === 'Co-Kapitaen';
+    const isCaptain = usesMentorBoosts(rider);
     for (const component of components) {
       totalWeight += component.weight;
       let skillVal = rider.skills[component.key];
@@ -3811,7 +3811,7 @@ export class SimulationEngine {
 
     let totalWeight = 0;
     let weightedSum = 0;
-    const isCaptain = rider.role?.name === 'Kapitaen' || rider.role?.name === 'Co-Kapitaen';
+    const isCaptain = usesMentorBoosts(rider);
     for (const component of components) {
       totalWeight += component.weight;
       let skillVal = rider.skills[component.key];

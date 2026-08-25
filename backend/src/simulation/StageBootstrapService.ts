@@ -26,6 +26,8 @@ import type {
 import type { QuickSimProfileParameters } from '../../../shared/quickSimProfiles';
 import { RivalryService } from '../game/RivalryService';
 import { loadQuickSimProfiles } from './quickSimProfileLoader';
+import { applyMentorBoosts } from './mentorBoosts';
+import { createSeededRandom, deriveSeed } from '../../../shared/rng';
 import { ensureRaceEntries } from './RaceRosterService';
 import { StageParser } from './StageParser';
 
@@ -202,11 +204,19 @@ export function assembleStageBootstrap(
     (team) => riders.some((rider: any) => rider.activeTeamId === team.id),
   );
 
+  // Mentorenbonus: stand bisher nur in der Roster-Route und entstand damit nur,
+  // wenn der Spieler die Startliste bearbeitet hatte. Hier gilt er fuer jede
+  // Etappe, und die Ziehung haengt am Etappen-Seed statt an Math.random().
+  const ridersWithMentors = applyMentorBoosts(
+    riders,
+    createSeededRandom(deriveSeed(options.simSeed ?? stage.id, 'mentor')),
+  );
+
   return {
     simSeed: options.simSeed ?? undefined,
     race,
     stage,
-    riders,
+    riders: ridersWithMentors,
     teams: participatingTeams,
     stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
     gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),
@@ -215,7 +225,7 @@ export function assembleStageBootstrap(
     youthStandings: repo.getPreviousYouthStandings(stage.raceId, stage.stageNumber),
     classificationLeaders: repo.getPreviousClassificationLeaders(stage.raceId, stage.stageNumber),
     teamStartOrder: options.teamStartOrder
-      ?? resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
+      ?? resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, ridersWithMentors),
     skillWeightRules: context.skillWeightRules,
     stageScoringRules: context.stageScoringRules,
     quickSimProfiles: context.quickSimProfiles,

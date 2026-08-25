@@ -9,7 +9,7 @@
  * frischer, und das ausgerechnet in Rundfahrten, wo sich Ermuedung aufbaut.
  */
 
-import type { Rider } from '../../../shared/types';
+import type { Rider, RiderSkillKey } from '../../../shared/types';
 
 /** Ermuedung geht nur halb ein — dieselbe Gewichtung wie im TimeTrialSimulator. */
 export const FATIGUE_WEIGHT = 0.5;
@@ -27,4 +27,31 @@ export function resolveFatigueMalus(rider: Rider): number {
  */
 export function resolveConditionFormBonus(rider: Rider): number {
   return (rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0) - resolveFatigueMalus(rider);
+}
+
+/**
+ * Wer vom Mentorenbonus ueberhaupt profitiert.
+ *
+ * Die volle Simulation rechnet ihn nur fuer Kapitaene und Co-Kapitaene ein —
+ * obwohl er an Fahrer bis 22 vergeben wird, und junge Kapitaene selten sind
+ * (im aktuellen Spielstand zwei von 252 jungen Fahrern). Ob das so gewollt
+ * ist, ist eine Balance-Frage; hier wird die bestehende Regel gespiegelt,
+ * damit beide Modi dasselbe Ergebnis liefern.
+ */
+export function usesMentorBoosts(rider: Rider): boolean {
+  return rider.role?.name === 'Kapitaen' || rider.role?.name === 'Co-Kapitaen';
+}
+
+/** Faehigkeiten eines Fahrers inklusive Mentorenbonus, falls er ihn nutzt. */
+export function resolveSkillsWithMentorBoosts(rider: Rider): Record<RiderSkillKey, number> {
+  if (!rider.mentorBoosts || !usesMentorBoosts(rider)) {
+    return rider.skills;
+  }
+  const skills = { ...rider.skills };
+  for (const [key, boost] of Object.entries(rider.mentorBoosts)) {
+    if (typeof boost === 'number') {
+      skills[key as RiderSkillKey] += boost;
+    }
+  }
+  return skills;
 }
