@@ -148,6 +148,25 @@ export function resolveMarkerWeightProfile(
 }
 
 /**
+ * Gewichte der Zielankunft: Flach, Huegel oder Berg.
+ *
+ * Hier steht der Sprint gross — anders als im Etappenscore, und das mit Grund:
+ * wer zeitgleich ankommt, gewinnt den Zielsprint nach diesen Gewichten. Die
+ * Etappe selbst bewertet `stageScoreWeights.ts`.
+ */
+export function resolveFinishWeightProfile(
+  weightMap: ReadonlyMap<string, MarkerWeightProfile>,
+  finishType: 'finish_flat' | 'finish_hill' | 'finish_mountain',
+): MarkerWeightProfile {
+  const fallback = finishType === 'finish_flat'
+    ? FINISH_FLAT_WEIGHTS
+    : finishType === 'finish_hill'
+      ? FINISH_HILL_WEIGHTS
+      : FINISH_MOUNTAIN_WEIGHTS;
+  return weightMap.get(finishType) ?? fallback;
+}
+
+/**
  * Gewichteter Wert aus rohen Faehigkeiten.
  *
  * Die Engine rechnet mit ihrem Fahrerzustand (Ermuedung, Mikroform,

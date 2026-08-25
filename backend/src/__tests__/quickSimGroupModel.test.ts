@@ -132,11 +132,16 @@ describe('resolveFirstGroupShareMean', () => {
     // ankommt als Cobble_Hill; ein gepoolter Wert war der groesste Fehler der
     // ersten Fassung.
     for (const profile of ['Flat', 'Cobble_Hill', 'Rolling'] as const) {
-      expect(resolveFirstGroupShareMean(DEFAULT_QUICK_SIM_PROFILES[profile], 'bunched', 0.1))
-        .toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].bunchedShareMean, 6);
+      const parameters = DEFAULT_QUICK_SIM_PROFILES[profile];
+      // Bei D = 1 verschwindet der Logarithmus, uebrig bleibt der Achsenabschnitt.
+      expect(resolveFirstGroupShareMean(parameters, 'bunched', 1))
+        .toBeCloseTo(parameters.bunchedShareIntercept, 6);
+      // Und leichter heisst groessere Gruppe.
+      expect(resolveFirstGroupShareMean(parameters, 'bunched', 0.1))
+        .toBeGreaterThan(resolveFirstGroupShareMean(parameters, 'bunched', 1.0));
     }
-    expect(DEFAULT_QUICK_SIM_PROFILES.Flat.bunchedShareMean)
-      .toBeGreaterThan(DEFAULT_QUICK_SIM_PROFILES.Cobble_Hill.bunchedShareMean);
+    expect(DEFAULT_QUICK_SIM_PROFILES.Flat.bunchedShareIntercept)
+      .toBeGreaterThan(DEFAULT_QUICK_SIM_PROFILES.Cobble_Hill.bunchedShareIntercept);
   });
 
   it('faellt im zerfallenen Regime mit der Schwierigkeit', () => {
@@ -191,7 +196,7 @@ describe('drawFirstGroupShare', () => {
     const random = createSeededRandom(31);
     const parameters = DEFAULT_QUICK_SIM_PROFILES.Flat;
     const values = Array.from({ length: 30_000 }, () => drawFirstGroupShare(random, parameters, 'bunched', 0.1));
-    expect(moments(values).mean).toBeCloseTo(parameters.bunchedShareMean, 2);
+    expect(moments(values).mean).toBeCloseTo(resolveFirstGroupShareMean(parameters, 'bunched', 0.1), 2);
   });
 
   it('trifft den erwarteten Mittelwert im zerfallenen Regime', () => {

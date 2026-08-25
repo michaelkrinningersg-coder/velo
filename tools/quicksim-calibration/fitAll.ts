@@ -102,7 +102,7 @@ interface DataFits {
   baseSpeedKmh: Map<string, number>;
   bunchIntercepts: Map<string, number>;
   bunchSlope: number;
-  bunchedShareMean: Map<string, number>;
+  bunchedShareIntercept: Map<string, number>;
   bunchedShareRelativeSd: number;
   splitShareIntercepts: Map<string, number>;
   splitShareSlope: number;
@@ -242,7 +242,7 @@ function fitFromData(references: readonly StageReferenceFile[]): DataFits {
     baseSpeedKmh: toMedianMap(speeds),
     bunchIntercepts: bunchFit.intercepts,
     bunchSlope: bunchFit.slope,
-    bunchedShareMean: toMeanMap(bunchedShares),
+    bunchedShareIntercept: toMeanMap(bunchedShares),
     bunchedShareRelativeSd: relativeSd(bunchedShares),
     splitShareIntercepts: splitFit.intercepts,
     splitShareSlope: splitFit.slope,
@@ -425,7 +425,7 @@ function writeCsv(
   const columns: Array<[string, (p: QuickSimProfileParameters) => number, number]> = [
     ['base_speed_kmh', (p) => p.baseSpeedKmh, 2],
     ['bunch_intercept', (p) => p.bunchIntercept, 2],
-    ['bunched_share_mean', (p) => p.bunchedShareMean, 4],
+    ['bunched_share_intercept', (p) => p.bunchedShareIntercept, 4],
     ['split_share_intercept', (p) => p.splitShareIntercept, 4],
     ['tail_gap_per_km', (p) => p.tailGapPerKm, 2],
     ['tail_group_size', (p) => p.tailGroupSize, 2],
@@ -484,7 +484,7 @@ function rewriteDefaults(
   const format = (parameters: QuickSimProfileParameters): string => [
     `baseSpeedKmh: ${parameters.baseSpeedKmh.toFixed(2)}`,
     `bunchIntercept: ${parameters.bunchIntercept.toFixed(2)}`,
-    `bunchedShareMean: ${parameters.bunchedShareMean.toFixed(4)}`,
+    `bunchedShareIntercept: ${parameters.bunchedShareIntercept.toFixed(4)}`,
     `splitShareIntercept: ${parameters.splitShareIntercept.toFixed(4)}`,
     `tailGapPerKm: ${parameters.tailGapPerKm.toFixed(2)}`,
     `tailGroupSize: ${parameters.tailGroupSize.toFixed(2)}`,
@@ -627,7 +627,7 @@ function main(): void {
       ...fallback,
       baseSpeedKmh: data.baseSpeedKmh.get(profile) ?? fallback.baseSpeedKmh,
       bunchIntercept: ROAD_ONLY(profile) ? (data.bunchIntercepts.get(profile) ?? fallback.bunchIntercept) : 0,
-      bunchedShareMean: data.bunchedShareMean.get(profile) ?? fallback.bunchedShareMean,
+      bunchedShareIntercept: data.bunchedShareIntercept.get(profile) ?? fallback.bunchedShareIntercept,
       splitShareIntercept: ROAD_ONLY(profile)
         ? (data.splitShareIntercepts.get(profile) ?? fallback.splitShareIntercept)
         : 0,
@@ -677,7 +677,7 @@ function main(): void {
       profile.padEnd(17)
       + parameters.baseSpeedKmh.toFixed(2).padStart(6)
       + parameters.bunchIntercept.toFixed(2).padStart(11)
-      + parameters.bunchedShareMean.toFixed(3).padStart(9)
+      + parameters.bunchedShareIntercept.toFixed(3).padStart(9)
       + parameters.splitShareIntercept.toFixed(4).padStart(11)
       + parameters.tailGapPerKm.toFixed(2).padStart(7)
       + parameters.tailGroupSize.toFixed(2).padStart(9),

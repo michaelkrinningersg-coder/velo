@@ -915,7 +915,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
   const rows = readCsv('quick_sim_profiles.csv');
   const insert = db.prepare(`
     INSERT OR IGNORE INTO quick_sim_profiles (
-      profile, base_speed_kmh, bunch_intercept, bunched_share_mean, split_share_intercept,
+      profile, base_speed_kmh, bunch_intercept, bunched_share_intercept, split_share_intercept,
       tail_gap_per_km, tail_group_size,
       noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
       time_trial_slope, time_trial_noise, mass_crash_involvement, rank_noise
@@ -928,7 +928,7 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       req(row, 'profile', ctx),
       real(req(row, 'base_speed_kmh', ctx), `${ctx} / base_speed_kmh`),
       real(req(row, 'bunch_intercept', ctx), `${ctx} / bunch_intercept`),
-      real(req(row, 'bunched_share_mean', ctx), `${ctx} / bunched_share_mean`),
+      real(req(row, 'bunched_share_intercept', ctx), `${ctx} / bunched_share_intercept`),
       real(req(row, 'split_share_intercept', ctx), `${ctx} / split_share_intercept`),
       real(req(row, 'tail_gap_per_km', ctx), `${ctx} / tail_gap_per_km`),
       real(req(row, 'tail_group_size', ctx), `${ctx} / tail_group_size`),

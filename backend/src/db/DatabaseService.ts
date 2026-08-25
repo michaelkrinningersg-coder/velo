@@ -3295,7 +3295,7 @@ export class DatabaseService {
     // tut nichts, das Befuellen scheitert an der fehlenden Spalte, und die
     // Quick Simulation faellt unbemerkt auf ihre eingebauten Vorgaben zurueck.
     const expectedColumns = [
-      'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_mean',
+      'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_intercept',
       'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
       'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
       'time_trial_slope', 'time_trial_noise', 'mass_crash_involvement', 'rank_noise',
@@ -3316,7 +3316,7 @@ export class DatabaseService {
         base_speed_kmh              REAL NOT NULL,
         bunch_intercept             REAL NOT NULL,
         -- Mittlerer Anteil der ersten Zeitgruppe bei geschlossener Ankunft. Gemessen.
-        bunched_share_mean          REAL NOT NULL,
+        bunched_share_intercept          REAL NOT NULL,
         -- Achsenabschnitt fuer den Anteil bei zerfallenem Feld:
         -- anteil = split_share_intercept + SPLIT_SHARE_SLOPE * ln(D). Gemessen.
         split_share_intercept       REAL NOT NULL,

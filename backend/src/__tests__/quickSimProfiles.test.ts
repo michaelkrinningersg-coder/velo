@@ -20,7 +20,7 @@ function row(profile: string, overrides: Partial<QuickSimProfileRow> = {}): Quic
     profile,
     base_speed_kmh: 40,
     bunch_intercept: 1,
-    bunched_share_mean: 0.7,
+    bunched_share_intercept: 0.7,
     split_share_intercept: 0.05,
     tail_gap_per_km: 8.5,
     tail_group_size: 3,
@@ -42,7 +42,7 @@ function createTable(db: Database.Database): void {
       profile                     TEXT PRIMARY KEY,
       base_speed_kmh              REAL NOT NULL,
       bunch_intercept             REAL NOT NULL,
-      bunched_share_mean          REAL NOT NULL,
+      bunched_share_intercept          REAL NOT NULL,
       split_share_intercept       REAL NOT NULL,
       tail_gap_per_km             REAL NOT NULL,
       tail_group_size             REAL NOT NULL,
@@ -63,7 +63,7 @@ function insert(db: Database.Database, entry: QuickSimProfileRow): void {
     INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     entry.profile, entry.base_speed_kmh, entry.bunch_intercept,
-    entry.bunched_share_mean, entry.split_share_intercept, entry.tail_gap_per_km,
+    entry.bunched_share_intercept, entry.split_share_intercept, entry.tail_gap_per_km,
     entry.tail_group_size, entry.noise_sigma, entry.incident_loss_multiplier,
     entry.severe_dnf_chance, entry.breakaway_shrink_exponent,
     entry.time_trial_slope, entry.time_trial_noise, entry.mass_crash_involvement,
@@ -100,13 +100,13 @@ describe('Vorgabewerte', () => {
 describe('mapQuickSimProfileRow', () => {
   it('uebertraegt jede Spalte auf das passende Feld', () => {
     const mapped = mapQuickSimProfileRow(row('Flat', {
-      base_speed_kmh: 43.5, bunch_intercept: 3.1, bunched_share_mean: 0.857,
+      base_speed_kmh: 43.5, bunch_intercept: 3.1, bunched_share_intercept: 0.857,
       split_share_intercept: -0.086, tail_gap_per_km: 6.91, tail_group_size: 2.01,
       noise_sigma: 0.151, incident_loss_multiplier: 1.21, severe_dnf_chance: 0.251,
       breakaway_shrink_exponent: 1.51, time_trial_slope: 0.0041, time_trial_noise: 0.0191, mass_crash_involvement: 0.31, rank_noise: 0.41,
     }));
     expect(mapped).toEqual({
-      baseSpeedKmh: 43.5, bunchIntercept: 3.1, bunchedShareMean: 0.857,
+      baseSpeedKmh: 43.5, bunchIntercept: 3.1, bunchedShareIntercept: 0.857,
       splitShareIntercept: -0.086, tailGapPerKm: 6.91, tailGroupSize: 2.01,
       noiseSigma: 0.151, incidentLossMultiplier: 1.21, severeDnfChance: 0.251,
       breakawayShrinkExponent: 1.51, timeTrialSlope: 0.0041, timeTrialNoise: 0.0191, massCrashInvolvement: 0.31, rankNoise: 0.41,
@@ -186,5 +186,33 @@ describe('CSV und Vorgabewerte', () => {
       expect({ profile, ...fromCsv[index] })
         .toEqual({ profile, ...DEFAULT_QUICK_SIM_PROFILES[profile as keyof typeof DEFAULT_QUICK_SIM_PROFILES] });
     });
+  });
+});
+
+describe('unvollstaendige Zeilen', () => {
+  // Eine Zeile aus einem aelteren Spielstand hat weniger Spalten. Frueher
+  // wurde daraus stillschweigend NaN, und das pflanzte sich bis in eine
+  // Gruppengroesse fort, die dann keine war.
+  it('faellt Feld fuer Feld auf die Vorgabe zurueck', () => {
+    const partial = { profile: 'Flat', base_speed_kmh: 41 } as unknown as QuickSimProfileRow;
+    const mapped = mapQuickSimProfileRow(partial);
+    expect(mapped.baseSpeedKmh).toBe(41);
+    expect(mapped.bunchedShareIntercept).toBe(DEFAULT_QUICK_SIM_PROFILES.Flat.bunchedShareIntercept);
+    expect(Object.values(mapped).every((value) => Number.isFinite(value))).toBe(true);
+  });
+
+  it('ersetzt auch unbrauchbare Zahlen', () => {
+    const broken = row('Mountain', { tail_gap_per_km: Number.NaN, rank_noise: Number.POSITIVE_INFINITY });
+    const mapped = mapQuickSimProfileRow(broken);
+    expect(mapped.tailGapPerKm).toBe(DEFAULT_QUICK_SIM_PROFILES.Mountain.tailGapPerKm);
+    expect(mapped.rankNoise).toBe(DEFAULT_QUICK_SIM_PROFILES.Mountain.rankNoise);
+  });
+
+  it('nimmt beim Bauen der Tabelle die Vorgabe des richtigen Profils', () => {
+    const result = buildQuickSimProfileMap([
+      { profile: 'High_Mountain', base_speed_kmh: 30 } as unknown as QuickSimProfileRow,
+    ]);
+    expect(result.High_Mountain.baseSpeedKmh).toBe(30);
+    expect(result.High_Mountain.tailGapPerKm).toBe(DEFAULT_QUICK_SIM_PROFILES.High_Mountain.tailGapPerKm);
   });
 });

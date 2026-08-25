@@ -1,4 +1,5 @@
-import type { Rider, Stage, Team } from '../../../shared/types';
+import type { Rider, RiderSkillKey, Stage, Team } from '../../../shared/types';
+import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
 
 export interface FavoriteItem {
   rank: number;
@@ -57,7 +58,7 @@ function resolveFormContribution(rider: Rider, dailyForm: number): number {
 }
 
 function resolveStaminaContribution(rider: Rider, distanceKm: number): number {
-  return rider.skills.stamina * (distanceKm / 300);
+  return rider.skills.stamina * resolveStaminaWeight(distanceKm);
 }
 
 function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number): number {
@@ -66,42 +67,30 @@ function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters:
     + (rider.skills.mountain * (elevationGainMeters / 500));
 }
 
-function calculateRoadScore(rider: Rider, stage: Stage, distanceKm: number, dailyForm: number): number {
-  const staminaContribution = resolveStaminaContribution(rider, distanceKm);
-  const formContribution = resolveFormContribution(rider, dailyForm);
-
-  switch (stage.profile) {
-    case 'Flat':
-      return (0.8 * rider.skills.sprint) + (0.15 * rider.skills.acceleration) + (0.05 * rider.skills.flat) + formContribution + staminaContribution;
-    case 'Rolling':
-      return (0.7 * rider.skills.sprint) + (0.2 * rider.skills.acceleration) + (0.1 * rider.skills.hill) + formContribution + staminaContribution;
-    case 'Hilly':
-      return (0.45 * rider.skills.sprint) + (0.1 * rider.skills.flat) + (0.45 * rider.skills.hill) + formContribution + staminaContribution;
-    case 'Hilly_Difficult':
-      return (0.2 * rider.skills.sprint) + (0.1 * rider.skills.flat) + (0.7 * rider.skills.hill) + formContribution + staminaContribution;
-    case 'Medium_Mountain':
-      return (0.05 * rider.skills.sprint)
-        + (0.1 * rider.skills.flat)
-        + (0.35 * rider.skills.hill)
-        + (0.45 * rider.skills.mediumMountain)
-        + (0.05 * rider.skills.mountain)
-        + formContribution
-        + staminaContribution;
-    case 'Mountain':
-      return (0.05 * rider.skills.hill)
-        + (0.2 * rider.skills.mediumMountain)
-        + (0.75 * rider.skills.mountain)
-        + formContribution
-        + staminaContribution;
-    case 'High_Mountain':
-      return rider.skills.mountain + formContribution + staminaContribution;
-    case 'Cobble':
-      return (0.3 * rider.skills.sprint) + (0.2 * rider.skills.flat) + (0.5 * rider.skills.cobble) + formContribution + staminaContribution;
-    case 'Cobble_Hill':
-      return (0.3 * rider.skills.sprint) + (0.2 * rider.skills.flat) + (0.2 * rider.skills.hill) + (0.3 * rider.skills.cobble) + formContribution + staminaContribution;
-    default:
-      return (0.8 * rider.skills.sprint) + (0.2 * rider.skills.flat) + formContribution + staminaContribution;
+/**
+ * Etappenscore einer Strassenetappe.
+ *
+ * Die Gewichte kommen aus `stageScoreWeights.ts` und haengen an Profil *und*
+ * Schwierigkeit je Kilometer. Vorher stand hier je Profil eine feste Formel,
+ * in der der Sprint die Flachetappe mit 0,80 dominierte — das ist die
+ * Gewichtung eines Zielsprints, nicht die einer 190 Kilometer langen Anfahrt.
+ */
+function calculateRoadScore(
+  rider: Rider,
+  stage: Stage,
+  distanceKm: number,
+  dailyForm: number,
+): number {
+  const weights = resolveStageScoreWeights(
+    stage.profile,
+    (stage as Stage & { profileScore?: number | null }).profileScore ?? null,
+    distanceKm,
+  );
+  let weighted = 0;
+  for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
+    weighted += rider.skills[key] * weight;
   }
+  return weighted + resolveFormContribution(rider, dailyForm) + resolveStaminaContribution(rider, distanceKm);
 }
 
 function calculateRiderScore(rider: Rider, stage: Stage, distanceKm: number, elevationGainMeters: number, dailyForm: number): number {

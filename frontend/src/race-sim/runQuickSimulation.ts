@@ -45,6 +45,7 @@ import {
   drawTeamLeadoutRandoms,
   hasSprintFinish,
   LEADOUT_SPRINTER_THRESHOLD,
+  resolveFinishMarkerType,
   resolveLeadoutBonus,
 } from './sprintLeadout';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
@@ -56,6 +57,7 @@ import { precalculateStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import {
   buildStageScoringWeightMap,
+  resolveFinishWeightProfile,
   resolveMarkerWeightProfile,
   resolveWeightProfileValue,
 } from './markerWeights';
@@ -250,6 +252,19 @@ export function runQuickSimulation(
     { distanceKm, elevationGainMeters, dailyFormByRiderId: effectiveDailyForm },
   );
 
+  // Der Zielscore ist nicht der Etappenscore: wer zeitgleich ankommt, gewinnt
+  // den Sprint nach den Gewichten der Zielankunft. Vorher stand hier derselbe
+  // Wert wie fuer die Etappe — mit der neuen Etappengewichtung waere ein
+  // Sprinter dadurch auch im Zielsprint nicht mehr vorne gewesen.
+  const finishWeights = resolveFinishWeightProfile(
+    buildStageScoringWeightMap(bootstrap.stageScoringRules ?? []),
+    resolveFinishMarkerType(bootstrap.stageSummary, profile),
+  );
+  const photoFinishByRiderId = new Map(ridersWithSpecialStates.map((rider) => [
+    rider.id,
+    resolveWeightProfileValue(rider.skills, finishWeights, effectiveDailyForm.get(rider.id) ?? 0),
+  ]));
+
   const result = simulateQuickStage({
     profile,
     distanceKm,
@@ -258,9 +273,7 @@ export function runQuickSimulation(
     riders: ranking.map((candidate) => ({
       riderId: candidate.rider.id,
       score: candidate.effectiveSkill,
-      // Der Tie-Break innerhalb einer Zeitgruppe: derselbe Wert wie die
-      // Reihenfolge, die Fahrer-ID entscheidet den Rest.
-      photoFinishScore: candidate.effectiveSkill,
+      photoFinishScore: photoFinishByRiderId.get(candidate.rider.id) ?? candidate.effectiveSkill,
       teamId: candidate.rider.activeTeamId ?? undefined,
     })),
     incidents,

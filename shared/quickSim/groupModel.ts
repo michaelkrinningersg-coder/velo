@@ -13,6 +13,7 @@
 
 import {
   BUNCHED_SHARE_RELATIVE_SD,
+  BUNCHED_SHARE_SLOPE,
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
@@ -118,18 +119,23 @@ const MAX_SHARE = 0.98;
  *
  * Beide haengen vom Profil ab — ein gepoolter Mittelwert war der groesste
  * Fehler der ersten Fassung: er sagte fuer alle Bergprofile 0,092 voraus,
- * beobachtet waren 0,022 bis 0,034, und fuer Flat 0,772 statt 0,858. Im
- * zerfallenen Regime kommt die Schwierigkeit je Kilometer hinzu.
+ * beobachtet waren 0,022 bis 0,034, und fuer Flat 0,772 statt 0,858.
+ *
+ * Und beide haengen an der Schwierigkeit je Kilometer, nicht nur am Profil:
+ * eine leichte Flachetappe bringt ein groesseres Feld geschlossen ins Ziel als
+ * eine schwere. Innerhalb eines Profils gemessen liegt die Rangkorrelation bei
+ * -0,42 bis -0,59.
  */
 export function resolveFirstGroupShareMean(
   parameters: QuickSimProfileParameters,
   regime: FinishRegime,
   difficultyPerKm: number,
 ): number {
-  if (regime === 'bunched') {
-    return Math.min(MAX_SHARE, Math.max(MIN_SHARE, parameters.bunchedShareMean));
-  }
   const logDifficulty = Math.log(Math.max(0.01, difficultyPerKm));
+  if (regime === 'bunched') {
+    const mean = parameters.bunchedShareIntercept + (BUNCHED_SHARE_SLOPE * logDifficulty);
+    return Math.min(MAX_SHARE, Math.max(MIN_SHARE, mean));
+  }
   const mean = parameters.splitShareIntercept + (SPLIT_SHARE_SLOPE * logDifficulty);
   return Math.min(0.5, Math.max(MIN_SHARE, mean));
 }
