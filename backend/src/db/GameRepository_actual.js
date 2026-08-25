@@ -509,6 +509,10 @@ function mapStage(row) {
         mechanicalIncidentMultiplier: row.mechanical_incident_multiplier,
         distanceKm: summary.distanceKm,
         elevationGainMeters: summary.elevationGainMeters,
+        // Etappenwert: die Quick Simulation leitet daraus die Schwierigkeit je
+        // Kilometer ab. Fehlte hier, waehrend mappers.ts ihn laengst abbildet —
+        // die zweite Fassung des Mappers in dieser Bruecke war stehengeblieben.
+        profileScore: row.stage_score,
     };
 }
 function loadFallbackStages(raceIds) {

@@ -1,3 +1,7 @@
+// Reiner Typ-Import; er wird beim Uebersetzen entfernt, der Ringschluss mit
+// quickSimProfiles.ts existiert also nur auf Typebene.
+import type { QuickSimProfileParameters } from './quickSimProfiles';
+
 // ============================================================
 //  SHARED TYPES â€“ verwendet von Backend und Frontend
 // ============================================================
@@ -882,6 +886,11 @@ export interface RealtimeSimulationBootstrap {
   teamStartOrder: number[];
   skillWeightRules: SkillWeightRule[];
   stageScoringRules: StageScoringRule[];
+  /**
+   * Parameter der Quick Simulation je Etappenprofil, aus `quick_sim_profiles`.
+   * Optional — fehlt sie, benutzt der Modus seine eingebauten Vorgaben.
+   */
+  quickSimProfiles?: Record<StageProfile, QuickSimProfileParameters>;
   lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
   /** Aktive Liga-Rivalitaeten (Fahrerpaare) fuer Renn-Boni & Konterattacken. */
   rivalries?: Array<{ aId: number; bId: number }> | null;

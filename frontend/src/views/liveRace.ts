@@ -72,7 +72,45 @@ export function buildRealtimeLeadoutContributions(
   return contributions;
 }
 
-export async function openInstantStage(stageId: number, skipViewActivation = false): Promise<boolean> {
+/**
+ * Etappe ohne Live-Ansicht abschliessen.
+ *
+ * Zwei Modi teilen sich denselben Rahmen: Bootstrap holen, Sonderfaelle
+ * abfangen, Ergebnis speichern. Sie unterscheiden sich nur darin, wie aus dem
+ * Bootstrap ein Ergebnis wird — Schritt fuer Schritt (`instant`) oder aus
+ * Profil und Fahrerstaerken (`quick`).
+ */
+export type OfflineStageMode = 'quick' | 'instant';
+
+const STAGE_MODE_STORAGE_KEY = 'velo.offlineStageMode';
+
+/**
+ * Standardmodus. Quick, solange nichts anderes gespeichert ist — er trifft die
+ * Instant-Simulation in allen gemessenen Kennzahlen und ist rund tausendmal
+ * schneller.
+ */
+export function resolveDefaultStageMode(): OfflineStageMode {
+  try {
+    return localStorage.getItem(STAGE_MODE_STORAGE_KEY) === 'instant' ? 'instant' : 'quick';
+  } catch {
+    // Privater Modus oder gesperrter Speicher — dann eben die Vorgabe.
+    return 'quick';
+  }
+}
+
+export function setDefaultStageMode(mode: OfflineStageMode): void {
+  try {
+    localStorage.setItem(STAGE_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Nicht speichern zu koennen ist kein Grund, den Aufruf scheitern zu lassen.
+  }
+}
+
+export async function openOfflineStage(
+  stageId: number,
+  mode: OfflineStageMode = resolveDefaultStageMode(),
+  skipViewActivation = false,
+): Promise<boolean> {
   if (instantStageInFlightId != null || realtimeCompletionInFlight) {
     return false;
   }
@@ -82,7 +120,7 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
   try {
     const res = await api.getRealtimeSimulation(stageId);
     if (!res.success || !res.data) {
-      alert('Instant-Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
+      alert('Simulation fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
       return false;
     }
 
@@ -97,18 +135,41 @@ export async function openInstantStage(stageId: number, skipViewActivation = fal
       return true;
     }
     state.realtimeBootstrap = bootstrap;
+
+    if (mode === 'quick') {
+      const { runQuickSimulation } = await import('../race-sim/runQuickSimulation');
+      updateInstantProgress(0.5);
+      const outcome = runQuickSimulation(bootstrap);
+      updateInstantProgress(1);
+      await completeRealtimeStage(
+        stageId, outcome.entries, outcome.markerClassifications, outcome.incidents,
+        outcome.events, skipViewActivation, [], undefined,
+      );
+      return true;
+    }
+
     const snapshot = await runInstantSimulation(bootstrap, (progress) => updateInstantProgress(progress));
     const entries = buildRealtimeCommitEntries(snapshot, bootstrap);
     const leadoutContributions = buildRealtimeLeadoutContributions(snapshot, bootstrap);
     await completeRealtimeStage(stageId, entries, snapshot.markerClassifications, snapshot.incidents, snapshot.allEvents, skipViewActivation, leadoutContributions, snapshot.superTeamId);
     return true;
   } catch (error) {
-    alert('Unerwarteter Fehler bei der Instant-Simulation: ' + (error as Error).message);
+    alert('Unerwarteter Fehler bei der Simulation: ' + (error as Error).message);
     return false;
   } finally {
     setInstantStageInFlightId(null);
     hideLoading();
   }
+}
+
+/** Schritt-fuer-Schritt-Simulation, ohne Live-Ansicht. */
+export async function openInstantStage(stageId: number, skipViewActivation = false): Promise<boolean> {
+  return openOfflineStage(stageId, 'instant', skipViewActivation);
+}
+
+/** Ergebnis aus Profil und Fahrerstaerken, ohne Substep-Schleife. */
+export async function openQuickStage(stageId: number, skipViewActivation = false): Promise<boolean> {
+  return openOfflineStage(stageId, 'quick', skipViewActivation);
 }
 
 export function getRosterEditorSelectedCount(teamId: number): number {

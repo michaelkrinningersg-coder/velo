@@ -46,7 +46,7 @@ import {
 } from './dashboardBroadcast';
 
 // Dynamically imported or declared interfaces to avoid circular import issues
-import { openRosterEditor, openRealtimeStage, openInstantStage } from './liveRace';
+import { openRosterEditor, openRealtimeStage, openInstantStage, openQuickStage, openOfflineStage } from './liveRace';
 
 export function raceCategoryBadge(race: Race): string {
   const categoryStyle = resolveRaceCategoryBadgeStyle(race.category?.name);
@@ -126,7 +126,8 @@ export function renderGameState(): void {
           <div class="pending-stage-actions">
             ${rosterButton}
             <button class="btn btn-secondary btn-sm" data-live-stage="${pendingStage.stageId}">Live-Sim</button>
-            <button class="btn btn-secondary btn-sm" data-instant-stage="${pendingStage.stageId}">Instant</button>
+            <button class="btn btn-secondary btn-sm" data-quick-stage="${pendingStage.stageId}">Schnell</button>
+            <button class="btn btn-secondary btn-sm" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren">Instant</button>
           </div>
         </div>`;
     }).join('');
@@ -606,6 +607,14 @@ export function initDashboardListeners(): void {
       return;
     }
 
+    const quickButton = (event.target as Element).closest<HTMLButtonElement>('button[data-quick-stage]');
+    if (quickButton) {
+      const stageId = Number(quickButton.dataset['quickStage']);
+      if (!Number.isFinite(stageId)) return;
+      void openQuickStage(stageId);
+      return;
+    }
+
     const instantButton = (event.target as Element).closest<HTMLButtonElement>('button[data-instant-stage]');
     if (instantButton) {
       const stageId = Number(instantButton.dataset['instantStage']);
@@ -634,6 +643,12 @@ export function initDashboardListeners(): void {
     if (editButton) {
       const stageId = Number(editButton.dataset['editStageRoster']);
       if (Number.isFinite(stageId)) void openRosterEditor(stageId);
+      return;
+    }
+    const quickButton = target.closest<HTMLButtonElement>('button[data-quick-stage]');
+    if (quickButton) {
+      const stageId = Number(quickButton.dataset['quickStage']);
+      if (Number.isFinite(stageId)) void openQuickStage(stageId);
       return;
     }
     const instantButton = target.closest<HTMLButtonElement>('button[data-instant-stage]');
@@ -794,7 +809,10 @@ async function runAutoProgressLoop(): Promise<void> {
     let success = false;
     if (pendingStages.length > 0) {
       const nextStage = pendingStages[0];
-      success = await openInstantStage(nextStage.stageId, true);
+      // Auto-Weiter benutzt den Standardmodus — das ist die Stelle, an der die
+      // Quick Simulation den Unterschied macht: eine Etappe kostet dort
+      // Millisekunden statt einer Sekunde.
+      success = await openOfflineStage(nextStage.stageId, undefined, true);
     } else {
       success = await executeDayAdvance();
     }

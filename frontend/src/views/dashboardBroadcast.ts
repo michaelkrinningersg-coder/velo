@@ -131,7 +131,8 @@ function radarRow(race: Race): string {
   if (pendingStage) {
     actions = `
       <span style="display:flex;gap:6px;flex:0 0 auto;">
-        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Instant-Simulation" style="border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:11px;padding:6px 11px;border-radius:7px;white-space:nowrap;">Instant ▸</button>
+        <button type="button" data-quick-stage="${pendingStage.stageId}" title="Schnellsimulation" style="border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:11px;padding:6px 11px;border-radius:7px;white-space:nowrap;">Schnell ▸</button>
+        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren" style="border:none;cursor:pointer;background:rgba(148,163,184,0.18);color:#cbd5f5;font-weight:600;font-size:11px;padding:6px 9px;border-radius:7px;white-space:nowrap;">Instant</button>
         <button type="button" data-live-stage="${pendingStage.stageId}" title="Live-Simulation" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:11px;padding:6px 10px;border-radius:7px;white-space:nowrap;">Live</button>
       </span>`;
   } else if (live) {
@@ -210,7 +211,8 @@ function renderLiveSpotlight(): string {
   const buttons = pendingStage
     ? `
       <div style="display:flex;gap:9px;margin-top:12px;">
-        <button type="button" data-instant-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Instant ▸</button>
+        <button type="button" data-quick-stage="${pendingStage.stageId}" style="flex:1;border:none;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#061019;font-weight:700;font-size:13px;padding:10px;border-radius:9px;">Schnell ▸</button>
+        <button type="button" data-instant-stage="${pendingStage.stageId}" title="Schritt fuer Schritt simulieren" style="border:none;cursor:pointer;background:rgba(148,163,184,0.18);color:#cbd5f5;font-weight:600;font-size:13px;padding:10px 12px;border-radius:9px;">Instant</button>
         <button type="button" data-edit-stage-roster="${pendingStage.stageId}" style="border:1px solid #2b3a55;cursor:pointer;background:transparent;color:#9fb0c9;font-weight:700;font-size:13px;padding:10px 16px;border-radius:9px;">Starterfeld</button>
       </div>`
     : `<div style="${MONO};font-size:11px;color:#7c8aa3;margin-top:12px;">Heutige Etappe abgeschlossen – Tageswechsel freigegeben.</div>`;

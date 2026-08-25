@@ -24,6 +24,14 @@ import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import {
+  buildStageScoringWeightMap,
+  resolveMarkerWeightProfile,
+  FINISH_FLAT_WEIGHTS,
+  FINISH_HILL_WEIGHTS,
+  FINISH_MOUNTAIN_WEIGHTS,
+  type MarkerWeightProfile,
+} from './markerWeights';
+import {
   ATTACK_SKILL_BONUS,
   COUNTER_ATTACK_DURATION_SECONDS,
   precalculateStageAttacks,
@@ -242,118 +250,6 @@ interface RiderState {
 }
 
 
-
-type MarkerWeightProfile = Partial<Record<RiderSkillKey, number>>;
-
-const SPRINT_INTERMEDIATE_WEIGHTS: MarkerWeightProfile = {
-  sprint: 0.46,
-  acceleration: 0.24,
-  hill: 0.06,
-  attack: 0.08,
-  resistance: 0.08,
-  stamina: 0.04,
-  flat: 0.04,
-};
-
-const FINISH_FLAT_WEIGHTS: MarkerWeightProfile = {
-  sprint: 0.45,
-  acceleration: 0.2,
-  hill: 0.04,
-  attack: 0.06,
-  resistance: 0.06,
-  stamina: 0.04,
-  flat: 0.15,
-};
-
-const FINISH_HILL_WEIGHTS: MarkerWeightProfile = {
-  mountain: 0.05,
-  mediumMountain: 0.05,
-  hill: 0.28,
-  sprint: 0.18,
-  acceleration: 0.12,
-  attack: 0.12,
-  resistance: 0.1,
-  stamina: 0.06,
-  flat: 0.04,
-};
-
-const FINISH_MOUNTAIN_WEIGHTS: MarkerWeightProfile = {
-  mountain: 0.38,
-  mediumMountain: 0.2,
-  hill: 0.1,
-  sprint: 0.03,
-  acceleration: 0.03,
-  attack: 0.12,
-  resistance: 0.08,
-  stamina: 0.06,
-};
-
-const CLIMB_TOP_WEIGHTS: Record<Exclude<StageMarkerCategory, 'Sprint'>, MarkerWeightProfile> = {
-  HC: {
-    mountain: 0.4,
-    mediumMountain: 0.2,
-    hill: 0.07,
-    sprint: 0.01,
-    acceleration: 0.02,
-    attack: 0.16,
-    resistance: 0.08,
-    stamina: 0.06,
-  },
-  '1': {
-    mountain: 0.31,
-    mediumMountain: 0.18,
-    hill: 0.12,
-    sprint: 0.03,
-    acceleration: 0.04,
-    attack: 0.16,
-    resistance: 0.09,
-    stamina: 0.07,
-  },
-  '2': {
-    mountain: 0.2,
-    mediumMountain: 0.14,
-    hill: 0.22,
-    sprint: 0.08,
-    acceleration: 0.08,
-    attack: 0.15,
-    resistance: 0.08,
-    stamina: 0.05,
-  },
-  '3': {
-    mountain: 0.05,
-    mediumMountain: 0.09,
-    hill: 0.27,
-    sprint: 0.14,
-    acceleration: 0.12,
-    attack: 0.16,
-    resistance: 0.1,
-    stamina: 0.07,
-  },
-  '4': {
-    hill: 0.3,
-    sprint: 0.18,
-    acceleration: 0.16,
-    attack: 0.16,
-    resistance: 0.12,
-    stamina: 0.08,
-  },
-};
-
-function buildStageScoringWeightMap(rules: StageScoringRule[]): Map<string, MarkerWeightProfile> {
-  const map = new Map<string, MarkerWeightProfile>();
-  for (const rule of rules) {
-    const weights = rule.weights as MarkerWeightProfile;
-    if (rule.appliesTo === 'sprint_intermediate') {
-      map.set('sprint_intermediate', weights);
-    } else if (rule.appliesTo === 'climb_top') {
-      const category = (!rule.markerCategory || rule.markerCategory === 'Sprint') ? 'HC' : rule.markerCategory;
-      map.set(`climb_top|${category}`, weights);
-    } else if (rule.appliesTo === 'finish') {
-      map.set(rule.markerType, weights);
-    }
-  }
-  return map;
-}
 
 type TeamGroupBonusByRiderId = Map<number, number>;
 
@@ -4364,12 +4260,11 @@ export class SimulationEngine {
   }
 
   private resolveSprintWeightProfile(): MarkerWeightProfile {
-    return this.stageScoringWeightMap.get('sprint_intermediate') ?? SPRINT_INTERMEDIATE_WEIGHTS;
+    return resolveMarkerWeightProfile(this.stageScoringWeightMap, 'sprint_intermediate', null);
   }
 
   private resolveClimbWeightProfile(category: StageMarkerCategory | null): MarkerWeightProfile {
-    const normalized = (!category || category === 'Sprint') ? 'HC' : category;
-    return this.stageScoringWeightMap.get(`climb_top|${normalized}`) ?? CLIMB_TOP_WEIGHTS[normalized];
+    return resolveMarkerWeightProfile(this.stageScoringWeightMap, 'climb_top', category);
   }
 
   private calculatePreLeadoutFinishScore(rider: RiderState): number {

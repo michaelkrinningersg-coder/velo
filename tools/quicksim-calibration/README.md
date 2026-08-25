@@ -58,7 +58,8 @@ schreibt in die Datenbank.
 | `aggregate.ts` | Verdichtet die Etappenmessung zu Kalibrierzielen je Profil |
 | `analyzeGroupRegime.ts` | Passt die Regime-Kurve an und weist Residuen je Profil aus |
 | `validateGroupModel.ts` | Stellt die Modellvorhersage gegen die gemessenen Etappen |
-| `quickSimAdapter.ts` | Speist den reinen Quick-Kern aus einem echten Etappen-Bootstrap |
+| `quickSimAdapter.ts` | Ruft denselben Läufer auf wie das Spiel (`runQuickSimulation`) |
+| `quickSimRunner.test.ts` | Prüft die Anbindung: Ergebniszeilen, Wertungen, Ereignisse |
 | `compareQuickSim.ts` | Fährt dieselben Etappen mit dem Quick-Kern und stellt sie gegenüber |
 | `fitTailModel.ts` | Fittet `tail_group_size` gegen die Zahl der Zeitgruppen |
 | `fitTimeTrialModel.ts` | Fittet `time_trial_slope` und `time_trial_noise` fuer ITT und TTT |
@@ -84,9 +85,18 @@ wird einmal je Etappe gezogen (`ensureSimSeedRolled`) und über `bootstrap.simSe
 an die Engine gereicht. Fehlt er, zieht die Engine einen — dann verhält sie sich wie
 zuvor, nur eben nicht wiederholbar.
 
-**Auch das Wetter wird aus dem Seed abgeleitet** (`deriveSeed(seed, 'weather')`).
-Vorher war die Simulation reproduzierbar, das Wetter aber nicht: derselbe Seed ergab
-in einer frisch aufgesetzten Datenbank ein anderes Rennen.
+**Auch das Wetter wird aus dem Seed abgeleitet** (`deriveSeed(seed, 'weather')`), so
+dass `stages.rolled_weather_id` bei gleichem Seed derselbe Wert ist.
+
+**Korrektur:** hier stand vorher, das habe eine Quelle von Unterschieden zwischen
+zwei Referenzläufen beseitigt. Das war falsch. Eine Sonde zeigt, dass die gerollten
+Wetterwerte den Bootstrap gar nicht erreichen — `rolledWeatherId`,
+`rolledEffektSturz`, `rolledEffektDefekt`, `rolledWindkantenGefahr`,
+`rolledEffektFatigue` und `rolledBreakawayBonus` sind dort alle `undefined`, obwohl
+sie in der Datenbank stehen. Die Engine fällt auf `weatherId = 1` und Effekt 0
+zurück; **Wetter beeinflusst das Rennergebnis auf diesem Weg überhaupt nicht.** Der
+gemessene Unterschied zwischen zwei Läufen kommt allein aus der ungeseedeten
+Startliste. Ursache und Umfang stehen unter „Bekannte Grenzen".
 
 Für Messungen nagelt der Harness den Etappen-Seed deterministisch fest
 (`pinStageSeed`, abgeleitet aus der Etappen-ID) und gibt jedem Lauf einen eigenen
@@ -449,6 +459,16 @@ behauptet, die niemand gemessen hat, wäre schlechter, nicht besser.
   der naheliegende Zielwert, entsteht nicht durch Stürze — er ist auch in Läufen
   ohne jeden Vorfall da. Es fehlt eine Kennzahl, die den Zeitverlust *eines
   gestürzten Fahrers* isoliert.
+- **Wetter erreicht die Simulation nicht.** `mapStage` existiert zweimal: einmal in
+  `backend/src/db/mappers.ts` (vollständig) und einmal als eigene Fassung in
+  `backend/src/db/GameRepository_actual.js` — der kompilierten Brücke, die
+  `GameRepository` tatsächlich re-exportiert und über die der Bootstrap läuft. Die
+  zweite Fassung war stehengeblieben und ließ neun Felder aus. `profileScore` ist
+  ergänzt (die Quick Simulation braucht ihn für die Schwierigkeit je Kilometer, die
+  Instant-Simulation liest ihn nicht — der Referenzdatensatz bleibt gültig). Die
+  sechs Wetterfelder sind **bewusst noch nicht** ergänzt: sie einzuschalten ändert
+  das Verhalten der Instant-Simulation und macht damit den Referenzdatensatz und
+  alle daraus gefitteten Parameter ungültig.
 - **`time_trial_slope` und `time_trial_noise` ruhen auf je fünf Etappen.** Für ITT
   und TTT gibt es im Spielstand nicht mehr. Die Streuung zwischen den Etappen ist
   entsprechend groß (TTT-Steigung 0,0032 bis 0,0123 in der Sonde).

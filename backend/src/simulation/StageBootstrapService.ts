@@ -19,10 +19,13 @@ import type {
   RealtimeSimulationBootstrap,
   Rider,
   SkillWeightRule,
+  StageProfile,
   StageScoringRule,
   Team,
 } from '../../../shared/types';
+import type { QuickSimProfileParameters } from '../../../shared/quickSimProfiles';
 import { RivalryService } from '../game/RivalryService';
+import { loadQuickSimProfiles } from './quickSimProfileLoader';
 import { ensureRaceEntries } from './RaceRosterService';
 import { StageParser } from './StageParser';
 
@@ -37,6 +40,8 @@ export interface StageBootstrapContext {
   stageScoringRules: StageScoringRule[];
   lieutenants: Array<{ leaderId: number; lieutenantId: number }>;
   rivalries: Array<{ aId: number; bId: number }>;
+  /** Parameter der Quick Simulation. Etappenunabhaengig, deshalb hier. */
+  quickSimProfiles: Record<StageProfile, QuickSimProfileParameters>;
 }
 
 const DEFAULT_SEASON = 2026;
@@ -59,6 +64,7 @@ export function createStageBootstrapContext(db: Database.Database, repo: any): S
       'SELECT leader_id AS leaderId, lieutenant_id AS lieutenantId FROM rider_lieutenants WHERE season = ?',
     ).all(season) as Array<{ leaderId: number; lieutenantId: number }>,
     rivalries: new RivalryService(db).getActivePairs(),
+    quickSimProfiles: loadQuickSimProfiles(db),
   };
 }
 
@@ -212,6 +218,7 @@ export function assembleStageBootstrap(
       ?? resolveRealtimeTeamStartOrder(repo, race, stage.stageNumber, riders),
     skillWeightRules: context.skillWeightRules,
     stageScoringRules: context.stageScoringRules,
+    quickSimProfiles: context.quickSimProfiles,
     lieutenants: context.lieutenants,
     rivalries: context.rivalries,
   } as RealtimeSimulationBootstrap;
