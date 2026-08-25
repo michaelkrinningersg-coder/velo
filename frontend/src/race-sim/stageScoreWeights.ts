@@ -46,13 +46,13 @@ export interface ProfileScoreWeights {
 export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = {
   Flat: {
     difficultyRange: [0.05, 0.15],
-    easy: { flat: 0.85, hill: 0.05, sprint: 0.07, acceleration: 0.03 },
-    hard: { flat: 0.62, hill: 0.28, sprint: 0.07, acceleration: 0.03 },
+    easy: { flat: 0.72, hill: 0.05, sprint: 0.20, acceleration: 0.03 },
+    hard: { flat: 0.57, hill: 0.20, sprint: 0.20, acceleration: 0.03 },
   },
   Rolling: {
     difficultyRange: [0.15, 0.50],
-    easy: { flat: 0.72, hill: 0.18, sprint: 0.07, acceleration: 0.03 },
-    hard: { flat: 0.42, hill: 0.48, sprint: 0.07, acceleration: 0.03 },
+    easy: { flat: 0.64, hill: 0.18, sprint: 0.15, acceleration: 0.03 },
+    hard: { flat: 0.47, hill: 0.35, sprint: 0.15, acceleration: 0.03 },
   },
   Hilly: {
     difficultyRange: [0.20, 1.00],
@@ -61,8 +61,8 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
   },
   Hilly_Difficult: {
     difficultyRange: [0.45, 1.10],
-    easy: { flat: 0.28, hill: 0.58, mediumMountain: 0.07, sprint: 0.04, acceleration: 0.03 },
-    hard: { flat: 0.10, hill: 0.58, mediumMountain: 0.27, sprint: 0.03, acceleration: 0.02 },
+    easy: { flat: 0.29, hill: 0.58, mediumMountain: 0.07, sprint: 0.03, acceleration: 0.03 },
+    hard: { flat: 0.09, hill: 0.58, mediumMountain: 0.27, sprint: 0.03, acceleration: 0.03 },
   },
   Medium_Mountain: {
     difficultyRange: [0.65, 1.10],

@@ -66,6 +66,12 @@ import {
 const MARKER_RANKS = 15;
 
 /**
+ * Rollen, die auf Flach- und Huegeletappen vor der ersten Zeitgruppe geschuetzt
+ * sind. Siehe `shared/quickSim/groupProtection.ts`.
+ */
+const PROTECTED_ROLES = new Set(['Kapitaen', 'Co-Kapitaen', 'Edelhelfer']);
+
+/**
  * Tagesform eines Fahrers. Dieselbe Spanne wie `sampleDailyForm` in der Engine:
  * der Traeger des Gesamttrikots faellt seltener nach oben aus, weil er
  * ohnehin unter Beobachtung faehrt.
@@ -275,6 +281,7 @@ export function runQuickSimulation(
       score: candidate.effectiveSkill,
       photoFinishScore: photoFinishByRiderId.get(candidate.rider.id) ?? candidate.effectiveSkill,
       teamId: candidate.rider.activeTeamId ?? undefined,
+      isProtected: PROTECTED_ROLES.has(candidate.rider.role?.name ?? ''),
     })),
     incidents,
     breakaway,

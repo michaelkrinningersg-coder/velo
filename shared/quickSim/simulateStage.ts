@@ -42,6 +42,7 @@ import {
   resolveWinnerTimeSeconds,
   type FinishRegime,
 } from './groupModel';
+import { applyGroupProtection } from './groupProtection';
 import {
   resolveIncidentOutcomes,
   type QuickSimIncident,
@@ -70,6 +71,11 @@ export interface QuickSimRiderInput {
   photoFinishScore: number;
   /** Nur fuer das Mannschaftszeitfahren noetig — dort ist das Team die Gruppe. */
   teamId?: number;
+  /**
+   * Kapitaen, Co-Kapitaen oder Edelhelfer: faellt auf Flach- und
+   * Huegeletappen nur mit Sturz oder Defekt aus der ersten Gruppe.
+   */
+  isProtected?: boolean;
 }
 
 export interface QuickSimStageInput {
@@ -340,11 +346,20 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     });
   } else {
     const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
-    const groups = buildFinishGroups({
-      scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
-      firstGroupSize: resolveFirstGroupSize(share, sorted.length),
-      distanceKm,
-      parameters,
+    const groups = applyGroupProtection({
+      groups: buildFinishGroups({
+        scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
+        firstGroupSize: resolveFirstGroupSize(share, sorted.length),
+        distanceKm,
+        parameters,
+        random,
+      }),
+      profile,
+      // Wer gestuerzt ist oder einen Defekt hatte, verliert den Anschluss auch
+      // als Kapitaen — dafuer ist die Ausnahme da.
+      protectedIndices: new Set(sorted.flatMap((rider, index) => (
+        rider.isProtected && !incidentOutcomes.has(rider.riderId) ? [index] : []
+      ))),
       random,
     });
     groups.forEach((group, index) => {
