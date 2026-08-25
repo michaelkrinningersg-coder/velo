@@ -43,6 +43,33 @@ describe('applyGroupProtection', () => {
     expect(inFirst).toBeLessThanOrEqual(Math.floor(10 * MAX_PROTECTED_SHARE));
   });
 
+  it('reicht auch einen gestuerzten Kapitaen nicht als Tauschopfer nach hinten', () => {
+    // Fahrer 5 ist Kapitaen, hatte aber einen Defekt: er rueckt nicht mehr auf
+    // (nicht in `protectedIndices`), darf aber auch nicht zurueckfallen.
+    for (let seed = 0; seed < 40; seed += 1) {
+      const result = applyGroupProtection({
+        groups: groups(),
+        profile: 'Flat',
+        protectedIndices: new Set([31, 32]),
+        undisplaceableIndices: new Set([5, 31, 32]),
+        random: createSeededRandom(seed),
+      });
+      expect(result[0]!.memberIndices).toContain(5);
+    }
+  });
+
+  it('faellt ohne eigene Angabe auf die aufrueckenden Fahrer zurueck', () => {
+    // Ohne `undisplaceableIndices` bleibt das alte Verhalten: geschuetzt ist,
+    // wer aufruecken darf.
+    const result = applyGroupProtection({
+      groups: groups(),
+      profile: 'Flat',
+      protectedIndices: new Set([2, 31, 32]),
+      random: createSeededRandom(7),
+    });
+    expect(result[0]!.memberIndices).toContain(2);
+  });
+
   it('verliert keinen Fahrer', () => {
     for (let seed = 0; seed < 30; seed += 1) {
       const result = applyGroupProtection({

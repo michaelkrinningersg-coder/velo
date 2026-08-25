@@ -47,17 +47,17 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
   Flat: {
     difficultyRange: [0.05, 0.15],
     easy: { flat: 0.72, hill: 0.05, sprint: 0.20, acceleration: 0.03 },
-    hard: { flat: 0.57, hill: 0.20, sprint: 0.20, acceleration: 0.03 },
+    hard: { flat: 0.62, hill: 0.15, sprint: 0.20, acceleration: 0.03 },
   },
   Rolling: {
     difficultyRange: [0.15, 0.50],
-    easy: { flat: 0.64, hill: 0.18, sprint: 0.15, acceleration: 0.03 },
-    hard: { flat: 0.47, hill: 0.35, sprint: 0.15, acceleration: 0.03 },
+    easy: { flat: 0.69, hill: 0.13, sprint: 0.15, acceleration: 0.03 },
+    hard: { flat: 0.52, hill: 0.30, sprint: 0.15, acceleration: 0.03 },
   },
   Hilly: {
     difficultyRange: [0.20, 1.00],
-    easy: { flat: 0.45, hill: 0.45, sprint: 0.06, acceleration: 0.04 },
-    hard: { flat: 0.18, hill: 0.70, mediumMountain: 0.04, sprint: 0.05, acceleration: 0.03 },
+    easy: { flat: 0.50, hill: 0.40, sprint: 0.06, acceleration: 0.04 },
+    hard: { flat: 0.28, hill: 0.60, mediumMountain: 0.04, sprint: 0.05, acceleration: 0.03 },
   },
   Hilly_Difficult: {
     difficultyRange: [0.45, 1.10],

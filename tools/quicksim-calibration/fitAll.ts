@@ -396,7 +396,10 @@ function fitRankNoise(
 function fitTimeTrial(
   work: readonly StageWork[],
   base: QuickSimProfileParameters,
-  targets: SimulationTargets,
+  // Nur die beiden Kennzahlen, gegen die das Zeitfahren angepasst wird. Die
+  // Rangkorrelation gehoert nicht dazu: sie haengt am Etappenscore, nicht an
+  // Steigung und Streuung der Zeitfahrformel.
+  targets: Pick<SimulationTargets, 'timeGroupCount' | 'lastGapPerKm'>,
   runs: number,
 ): { slope: number; noise: number; achieved: SimulationTargets } | null {
   let best: { slope: number; noise: number; error: number; achieved: SimulationTargets } | null = null;

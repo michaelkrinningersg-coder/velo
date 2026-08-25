@@ -360,6 +360,12 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       protectedIndices: new Set(sorted.flatMap((rider, index) => (
         rider.isProtected && !incidentOutcomes.has(rider.riderId) ? [index] : []
       ))),
+      // Zurueckfallen darf dagegen keiner von ihnen: ein gestuerzter Kapitaen
+      // rueckt zwar nicht mehr auf, soll aber auch nicht als Tauschopfer nach
+      // hinten gereicht werden, nur weil ein anderer aufrueckt.
+      undisplaceableIndices: new Set(sorted.flatMap((rider, index) => (
+        rider.isProtected ? [index] : []
+      ))),
       random,
     });
     groups.forEach((group, index) => {

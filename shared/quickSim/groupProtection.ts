@@ -43,6 +43,13 @@ export interface GroupProtectionInput {
   profile: StageProfile;
   /** Indizes (in die nach Score sortierte Liste) der geschuetzten Fahrer. */
   protectedIndices: ReadonlySet<number>;
+  /**
+   * Fahrer, die beim Tausch nicht zurueckfallen duerfen. Nicht dieselbe Menge
+   * wie `protectedIndices`: ein gestuerzter Kapitaen rueckt nicht mehr auf,
+   * soll aber auch nicht als Tauschopfer nach hinten gereicht werden. Ohne
+   * Angabe gilt `protectedIndices`.
+   */
+  undisplaceableIndices?: ReadonlySet<number>;
   random: RandomSource;
 }
 
@@ -59,6 +66,7 @@ export interface GroupProtectionInput {
  */
 export function applyGroupProtection(input: GroupProtectionInput): FinishGroup[] {
   const { groups, profile, protectedIndices, random } = input;
+  const undisplaceable = input.undisplaceableIndices ?? protectedIndices;
   const strength = PROTECTION_STRENGTH[profile] ?? 0;
   if (strength <= 0 || protectedIndices.size === 0 || groups.length < 2) {
     return groups;
@@ -104,7 +112,7 @@ export function applyGroupProtection(input: GroupProtectionInput): FinishGroup[]
         // Tauschen: der schwaechste ungeschuetzte Fahrer der Gruppe rueckt in
         // die Gruppe, aus welcher der geschuetzte gekommen ist.
         const displaced = [...group.memberIndices]
-          .filter((entry) => !protectedIndices.has(entry))
+          .filter((entry) => !undisplaceable.has(entry))
           .sort((left, right) => right - left)[0];
         if (displaced != null) {
           group.memberIndices = group.memberIndices.filter((entry) => entry !== displaced);
