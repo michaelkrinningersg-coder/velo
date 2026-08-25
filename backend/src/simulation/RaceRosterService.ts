@@ -514,7 +514,10 @@ function resolveParticipatingTeams(repo: any, race: Race, riderLocks: Map<number
 
 function buildLegacyRaceRoster(db: Database.Database, repo: any, race: Race, stage: Stage, enableDebug = false): Rider[] {
   const season = repo.getCurrentSeason();
-  const riders = repo.getRiders();
+  // Wie in `buildRaceRoster`: teamlose Fahrer kommen ueber
+  // `resolveParticipatingTeams` und `groupRidersByTeam` ohnehin nie in einen
+  // Kader.
+  const riders = repo.getRiders(undefined, false, { onlyWithTeam: true, lean: true });
   const ridersByTeamId = groupRidersByTeam(riders);
   const riderLocks = buildRiderLockMap(db, repo, race, riders);
   const eligibleTeams = resolveParticipatingTeams(repo, race, riderLocks, ridersByTeamId);
@@ -873,7 +876,17 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
     return buildLegacyRaceRoster(db, repo, race, stage, enableDebug);
   }
 
-  const riders = repo.getRiders();
+  // Nur Fahrer mit Team, und ohne die Felder, die der Kaderaufbau nicht liest.
+  //
+  // Teamlose Fahrer koennen hier strukturell nie ausgewaehlt werden: die
+  // Auswahl laeuft ausschliesslich ueber `groupRidersByTeam()` und
+  // `repo.getTeams()`, und wer kein Team hat, landet in keinem Eimer. Geladen
+  // und abgebildet wurden sie trotzdem — im gemessenen Spielstand 2164 von
+  // 3164 Fahrern.
+  //
+  // Die Nationalmeisterschaften bleiben davon unberuehrt: deren Roster kennt
+  // ausdruecklich einen Rueckfall auf teamlose Fahrer.
+  const riders = repo.getRiders(undefined, false, { onlyWithTeam: true, lean: true });
   const programIds = new Set(racePrograms.map((program: any) => program.id));
   const riderLocks = buildRiderLockMap(db, repo, race, riders);
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
