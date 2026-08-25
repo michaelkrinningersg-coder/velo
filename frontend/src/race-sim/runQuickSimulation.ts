@@ -36,6 +36,7 @@ import {
   type RealtimeSimulationBootstrap,
   type RealtimeStageCommitEntry,
   type Rider,
+  type RiderSkillKey,
   type StageMarkerClassification,
   type StageMarkerClassificationEntry,
   type StageProfile,
@@ -62,6 +63,7 @@ import {
   resolveFinishWeightProfile,
   resolveMarkerWeightProfile,
   resolveWeightProfileValue,
+  type MarkerWeightProfile,
 } from './markerWeights';
 
 /** Wie viele Raenge je Zwischenwertung geliefert werden. Der Commit-Dienst vergibt danach die Punkte. */
@@ -305,6 +307,8 @@ export function runQuickSimulation(
     bootstrap, result, riderById,
     random: createSeededRandom(deriveSeed(seed, 'leadout')),
   });
+  logGroupAssembly(result, bootstrap);
+  logPhotoFinishFormula(result, bootstrap, riderById, finishWeights, effectiveDailyForm);
   logPhotoFinish(result, bootstrap, riderById, leadout.perSprinter);
   const entries = buildCommitEntries(result, bootstrap, breakawayRiderIds, leadout.perSprinter);
   const markerClassifications = buildMarkerClassifications({
@@ -321,6 +325,168 @@ export function runQuickSimulation(
     result,
     seed,
   };
+}
+
+/**
+ * Schluesselt auf, wie die Zeitgruppen einer Etappe zustande kamen.
+ *
+ * Vier Ziehungen hintereinander, danach der Kapitaensschutz — am Ergebnis
+ * sieht man nur die Endaufstellung. Dieses Log zeigt jeden Schritt:
+ *
+ *   1  Schwierigkeit je Kilometer  D = stage_score / km
+ *   2  Regime                      P(geschlossen) = sigmoid(a + b·D), gezogen
+ *   3  Anteil der ersten Gruppe    Beta-Ziehung um einen Erwartungswert
+ *   4  Rueckstandskurve            Gruppengroessen und Abstaende
+ *   5  Kapitaensschutz             Aufruecken geschuetzter Rollen
+ *   6  Zeitgruppen                 aus den Zielzeiten, 1-Sekunden-Regel
+ *
+ * Schritt 6 muss nicht zu Schritt 5 passen: gezogene Gruppen, die naeher als
+ * eine Sekunde beieinander liegen, verschmelzen zu einer Zeitgruppe.
+ */
+function logGroupAssembly(result: QuickSimStageResult, bootstrap: RealtimeSimulationBootstrap): void {
+  const d = result.groupDiagnostics;
+  const profile = bootstrap.stage.profile as StageProfile;
+  const distanceKm = bootstrap.stageSummary.distanceKm;
+
+  console.groupCollapsed(
+    `[QuickSim] Gruppenbildung · ${bootstrap.race?.name ?? 'Rennen'} Etappe ${bootstrap.stage.stageNumber}`
+    + ` (${profile}, ${distanceKm.toFixed(1)} km)`,
+  );
+
+  if (!d) {
+    console.log('Zeitfahren — keine Gruppenziehung. Die Zeitgruppen entstehen allein aus den Zielzeiten.');
+    console.log(`Zeitgruppen: ${result.timeGroupCount}, erste Gruppe: ${result.firstGroupSize} Fahrer`);
+    console.groupEnd();
+    return;
+  }
+
+  console.log(
+    `1 Schwierigkeit   D = ${bootstrap.stage.profileScore ?? '—'} / ${distanceKm.toFixed(1)} km`
+    + ` = ${d.difficultyPerKm.toFixed(4)} Punkte je km`,
+  );
+  console.log(
+    `2 Regime          P(geschlossene Ankunft) = ${(d.bunchProbability * 100).toFixed(1)} %`
+    + `  ->  gezogen: ${d.regime === 'bunched' ? 'geschlossen' : 'zerfallen'}`,
+  );
+  console.log(
+    `3 Erste Gruppe    Erwartungswert ${(d.shareMean * 100).toFixed(1)} %`
+    + `  ->  gezogen ${(d.drawnShare * 100).toFixed(1)} %`
+    + `  ->  ${d.firstGroupSize} von ${d.finisherCount} Fahrern`,
+  );
+  if (d.breakawayHeadSize > 0) {
+    console.log(`  Ausreissergruppe vorne: ${d.breakawayHeadSize} Fahrer bilden Gruppe 1, das Feld beginnt bei Gruppe 2.`);
+  }
+
+  console.log(`4 Gezogene Gruppen (${d.drawnGroups.length}):`);
+  console.table(d.drawnGroups.slice(0, 20).map((group, index) => ({
+    Gruppe: index + 1,
+    Fahrer: group.size,
+    Rueckstand: `${group.gapSeconds.toFixed(0)} s`,
+    'je km': `${(group.gapSeconds / Math.max(1, distanceKm)).toFixed(2)} s`,
+  })));
+
+  if (d.protectedPromotions > 0 || d.protectionStrength > 0) {
+    console.log(
+      `5 Kapitaensschutz  Wirkung auf ${profile}: ${(d.protectionStrength * 100).toFixed(0)} %`
+      + `  ->  ${d.protectedPromotions} Fahrer zusaetzlich in Gruppe 1`
+      + ` (${d.drawnGroups[0]?.size ?? 0} -> ${d.protectedGroups[0]?.size ?? 0})`,
+    );
+  } else {
+    console.log('5 Kapitaensschutz  wirkt auf diesem Profil nicht.');
+  }
+
+  const zeitgruppen = new Map<number, number>();
+  for (const entry of result.entries) {
+    if (entry.isAbandon || entry.groupIndex == null) {
+      continue;
+    }
+    zeitgruppen.set(entry.groupIndex, (zeitgruppen.get(entry.groupIndex) ?? 0) + 1);
+  }
+  console.log(
+    `6 Zeitgruppen     ${result.timeGroupCount} aus den Zielzeiten (1-Sekunden-Regel),`
+    + ` erste Gruppe ${result.firstGroupSize} Fahrer`
+    + `  ->  ${[...zeitgruppen.entries()].sort((a, b) => a[0] - b[0]).slice(0, 12).map(([index, n]) => `G${index + 1}:${n}`).join('  ')}`,
+  );
+  console.groupEnd();
+}
+
+/**
+ * Zeigt, wie der `photoFinishScore` entsteht.
+ *
+ * Er ist nicht der Etappenscore. Der Etappenscore entscheidet, wer vorne
+ * mitfaehrt; der Zielscore entscheidet den Sprint unter denen, die zeitgleich
+ * ankommen. Beide benutzen andere Gewichte, und genau das ist die haeufigste
+ * Verwechslung — deshalb steht die Formel hier ausgeschrieben.
+ *
+ *   photoFinishScore = Summe ueber die Zielgewichte von
+ *                      max(0, Faehigkeit + wirksame Tagesform) · Gewicht
+ *
+ * "Wirksame Tagesform" ist Tagesform + Superform/Supermalus − Ermuedung.
+ * Danach kommen noch der Ausreisser-Bonus/Malus und der Anfahrtsbonus dazu.
+ */
+function logPhotoFinishFormula(
+  result: QuickSimStageResult,
+  bootstrap: RealtimeSimulationBootstrap,
+  riderById: ReadonlyMap<number, Rider>,
+  finishWeights: MarkerWeightProfile,
+  effectiveDailyForm: ReadonlyMap<number, number>,
+): void {
+  const profile = bootstrap.stage.profile as StageProfile;
+  const finishType = resolveFinishMarkerType(bootstrap.stageSummary, profile);
+  const gewichte = Object.entries(finishWeights)
+    .filter(([, weight]) => (weight ?? 0) > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)) as Array<[RiderSkillKey, number]>;
+
+  console.groupCollapsed(
+    `[QuickSim] Zielscore · ${bootstrap.race?.name ?? 'Rennen'} Etappe ${bootstrap.stage.stageNumber}`
+    + ` · Ankunft ${finishType}`,
+  );
+  console.log(
+    'photoFinishScore = SUMME( max(0, Faehigkeit + wirksame Tagesform) x Gewicht )'
+    + '  + Rangrauschen  + Ausreisserbonus/-malus  + Anfahrtsbonus',
+  );
+  console.log(
+    'wirksame Tagesform = Tagesform (-4 bis +4) + Superform/Supermalus (+5 / -6)'
+    + ' - halbierte Kurz- und Langzeitermuedung.'
+    + `  Rangrauschen: Normalverteilung mit Sigma ${(result.groupDiagnostics?.rankNoiseSigma ?? 0).toFixed(3)} x Streuung der Etappenscores.`,
+  );
+  console.log(`Zielgewichte (${finishType}): ` + gewichte.map(([key, weight]) => `${key} ${weight.toFixed(2)}`).join('  ·  '));
+
+  const ersteGruppe = result.entries
+    .filter((entry) => !entry.isAbandon && entry.groupIndex === 0)
+    .slice(0, 5);
+  for (const entry of ersteGruppe) {
+    const rider = riderById.get(entry.riderId);
+    if (!rider) {
+      continue;
+    }
+    const form = effectiveDailyForm.get(entry.riderId) ?? 0;
+    const rauschen = result.groupDiagnostics?.rankNoiseByRiderId.get(entry.riderId) ?? 0;
+    const skills = resolveSkillsWithMentorBoosts(rider);
+    let summe = 0;
+    const zeilen = gewichte.map(([key, weight]) => {
+      const wert = Math.max(0, (skills[key] ?? 0) + form);
+      const beitrag = wert * weight;
+      summe += beitrag;
+      return {
+        Faehigkeit: key,
+        Wert: skills[key] ?? 0,
+        'mit Tagesform': Number(wert.toFixed(2)),
+        Gewicht: weight,
+        Beitrag: Number(beitrag.toFixed(3)),
+      };
+    });
+    const rest = entry.photoFinishScore - summe - rauschen;
+    console.log(
+      `${rider.firstName} ${rider.lastName}: Basis ${summe.toFixed(3)}`
+      + `  (wirksame Tagesform ${form >= 0 ? '+' : ''}${form.toFixed(2)})`
+      + `  ${rauschen >= 0 ? '+' : ''}${rauschen.toFixed(3)} Rangrauschen`
+      + `  ${rest >= 0 ? '+' : ''}${rest.toFixed(3)} Anfahrt/Ausreisser`
+      + `  =  ${entry.photoFinishScore.toFixed(3)}`,
+    );
+    console.table(zeilen);
+  }
+  console.groupEnd();
 }
 
 /**

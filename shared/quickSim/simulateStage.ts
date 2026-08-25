@@ -37,12 +37,14 @@ import {
   drawFinishRegime,
   drawStandardNormal,
   drawFirstGroupShare,
+  resolveBunchProbability,
   resolveDifficultyPerKm,
+  resolveFirstGroupShareMean,
   resolveFirstGroupSize,
   resolveWinnerTimeSeconds,
   type FinishRegime,
 } from './groupModel';
-import { applyGroupProtection } from './groupProtection';
+import { applyGroupProtection, PROTECTION_STRENGTH } from './groupProtection';
 import {
   resolveIncidentOutcomes,
   type QuickSimIncident,
@@ -110,6 +112,48 @@ export interface QuickSimResultEntry {
   incident: QuickSimIncidentOutcome | null;
 }
 
+/**
+ * Nachvollziehbarkeit der Gruppenbildung.
+ *
+ * Die Zeitgruppen entstehen aus vier Ziehungen hintereinander — Regime,
+ * Anteil der ersten Gruppe, Rueckstandskurve, Gruppengroessen — und werden
+ * danach vom Kapitaensschutz noch einmal verschoben. Am Ergebnis ist von
+ * alldem nur die Endaufstellung zu sehen. Diese Aufschluesselung haelt die
+ * Zwischenschritte fest, damit sich eine ueberraschende Gruppe erklaeren
+ * laesst, ohne den Lauf nachzustellen.
+ */
+export interface QuickSimGroupDiagnostics {
+  difficultyPerKm: number;
+  /** P(geschlossene Ankunft) aus der Schwierigkeit je Kilometer. */
+  bunchProbability: number;
+  regime: FinishRegime;
+  /** Erwartungswert des Anteils der ersten Gruppe vor der Ziehung. */
+  shareMean: number;
+  /** Gezogener Anteil. */
+  drawnShare: number;
+  finisherCount: number;
+  /** Groesse der ersten Gruppe aus dem gezogenen Anteil. */
+  firstGroupSize: number;
+  /** Gruppen wie gezogen, vor dem Kapitaensschutz. */
+  drawnGroups: Array<{ size: number; gapSeconds: number }>;
+  /** Gruppen nach dem Kapitaensschutz. */
+  protectedGroups: Array<{ size: number; gapSeconds: number }>;
+  /** Wie viele Fahrer der Schutz nach vorne gezogen hat. */
+  protectedPromotions: number;
+  /** Anteil der geschuetzten Fahrer, die aufruecken durften. */
+  protectionStrength: number;
+  /** Ausreissergruppe vorne? Dann ist Gruppe 1 die Ausreissergruppe. */
+  breakawayHeadSize: number;
+  /**
+   * Rangrauschen je Fahrer. Es trifft den Ordnungsscore *und* den
+   * `photoFinishScore` — ohne diese Groesse laesst sich der Zielscore eines
+   * Fahrers nicht aus seinen Faehigkeiten nachrechnen.
+   */
+  rankNoiseByRiderId: ReadonlyMap<number, number>;
+  /** Streuung, aus der das Rangrauschen gezogen wurde. */
+  rankNoiseSigma: number;
+}
+
 export interface QuickSimStageResult {
   /** Alle Fahrer in Rangfolge; Aufgaben haengen unsortiert hinten an. */
   entries: QuickSimResultEntry[];
@@ -122,6 +166,8 @@ export interface QuickSimStageResult {
   breakawaySurvived: boolean;
   abandonCount: number;
   outsideTimeLimitCount: number;
+  /** Nur auf Strassenetappen belegt; beim Zeitfahren gibt es keine Ziehung. */
+  groupDiagnostics?: QuickSimGroupDiagnostics;
 }
 
 /**
@@ -330,6 +376,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
   const regime = drawFinishRegime(random, parameters, difficultyPerKm);
   const gapByRiderId = new Map<number, number>();
   const groupIndexByRiderId = new Map<number, number>();
+  let diagnostics: QuickSimGroupDiagnostics | undefined;
   if (breakawaySurvived && input.breakaway) {
     // Die Ausreisser bilden Gruppe 1, das Feld beginnt bei Gruppe 2. Der
     // Etappensieg faellt damit zwingend aus der Gruppe — nicht als Bonus, der
@@ -345,12 +392,10 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     }
     const headGroupCount = head.length > 0 ? 1 : 0;
 
+    const fieldShare = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
     const fieldGroups = buildFinishGroups({
       scoresDescending: field.map((rider) => scores.get(rider.riderId) as number),
-      firstGroupSize: resolveFirstGroupSize(
-        drawFirstGroupShare(random, parameters, regime, difficultyPerKm),
-        field.length,
-      ),
+      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length),
       distanceKm,
       parameters,
       random,
@@ -362,16 +407,37 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
         groupIndexByRiderId.set(rider.riderId, headGroupCount + index);
       }
     });
+    diagnostics = {
+      difficultyPerKm,
+      bunchProbability: resolveBunchProbability(parameters, difficultyPerKm),
+      regime,
+      shareMean: resolveFirstGroupShareMean(parameters, regime, difficultyPerKm),
+      drawnShare: fieldShare,
+      finisherCount: sorted.length,
+      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length),
+      drawnGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
+      protectedGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
+      protectedPromotions: 0,
+      protectionStrength: 0,
+      breakawayHeadSize: head.length,
+      rankNoiseByRiderId: rankNoise,
+      rankNoiseSigma: parameters.rankNoise,
+    };
   } else {
     const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
+    const firstGroupSize = resolveFirstGroupSize(share, sorted.length);
+    const drawnGroups = buildFinishGroups({
+      scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
+      firstGroupSize,
+      distanceKm,
+      parameters,
+      random,
+    });
+    // Zustand vor dem Kapitaensschutz festhalten — `applyGroupProtection`
+    // aendert die Gruppen an Ort und Stelle.
+    const vorSchutz = drawnGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: group.gapSeconds }));
     const groups = applyGroupProtection({
-      groups: buildFinishGroups({
-        scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
-        firstGroupSize: resolveFirstGroupSize(share, sorted.length),
-        distanceKm,
-        parameters,
-        random,
-      }),
+      groups: drawnGroups,
       profile,
       // Wer gestuerzt ist oder einen Defekt hatte, verliert den Anschluss auch
       // als Kapitaen — dafuer ist die Ausnahme da.
@@ -386,6 +452,22 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       ))),
       random,
     });
+    diagnostics = {
+      difficultyPerKm,
+      bunchProbability: resolveBunchProbability(parameters, difficultyPerKm),
+      regime,
+      shareMean: resolveFirstGroupShareMean(parameters, regime, difficultyPerKm),
+      drawnShare: share,
+      finisherCount: sorted.length,
+      firstGroupSize,
+      drawnGroups: vorSchutz,
+      protectedGroups: groups.map((group) => ({ size: group.memberIndices.length, gapSeconds: group.gapSeconds })),
+      protectedPromotions: Math.max(0, (groups[0]?.memberIndices.length ?? 0) - (vorSchutz[0]?.size ?? 0)),
+      protectionStrength: PROTECTION_STRENGTH[profile] ?? 0,
+      breakawayHeadSize: 0,
+      rankNoiseByRiderId: rankNoise,
+      rankNoiseSigma: parameters.rankNoise,
+    };
     groups.forEach((group, index) => {
       for (const memberIndex of group.memberIndices) {
         const rider = sorted[memberIndex] as QuickSimRiderInput;
@@ -406,6 +488,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     regime,
     difficultyPerKm,
     breakawaySurvived,
+    diagnostics,
   });
 }
 
@@ -421,6 +504,7 @@ interface AssembleInput {
   regime: FinishRegime;
   difficultyPerKm: number;
   breakawaySurvived: boolean;
+  diagnostics?: QuickSimGroupDiagnostics | undefined;
 }
 
 /**
@@ -432,6 +516,7 @@ function assembleResult(assemble: AssembleInput): QuickSimStageResult {
   const {
     input, finishers, abandons, incidentOutcomes, gapByRiderId,
     groupIndexByRiderId, winnerTimeSeconds, regime, difficultyPerKm, breakawaySurvived,
+    diagnostics,
   } = assemble;
 
   const finisherEntries: QuickSimResultEntry[] = finishers.map((rider) => {
@@ -500,6 +585,7 @@ function assembleResult(assemble: AssembleInput): QuickSimStageResult {
     breakawaySurvived,
     abandonCount: abandons.length,
     outsideTimeLimitCount: ranked.filter((entry) => entry.isOutsideTimeLimit).length,
+    ...(diagnostics ? { groupDiagnostics: diagnostics } : {}),
   };
 }
 
