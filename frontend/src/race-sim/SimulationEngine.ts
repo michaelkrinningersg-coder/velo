@@ -25,6 +25,12 @@ import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import { resolveConditionFormBonus } from './riderCondition';
 import {
+  drawTeamLeadoutRandoms,
+  LEADOUT_SPRINTER_THRESHOLD,
+  resolveFinishMarkerType,
+  resolveLeadoutBonus,
+} from './sprintLeadout';
+import {
   buildStageScoringWeightMap,
   resolveMarkerWeightProfile,
   FINISH_FLAT_WEIGHTS,
@@ -1083,8 +1089,8 @@ export class SimulationEngine {
   private readonly elevationGrid: Float32Array;
 
   private readonly skillBreakdownCache = new Map<string, string>();
-  private readonly teamSprintRandomValues = new Map<number, number>();
-  private readonly teamSprintSpecialRandomValues = new Map<number, number>();
+  /** Je Mannschaft einmal gezogen, damit alle Helfer konsistent bewertet werden. */
+  private readonly teamLeadoutRandomValues = new Map<number, { sprint: number; special: number }>();
   private readonly teamBestSprinterRiderId = new Map<number, number>();
 
   private lastTeamGroupBonusByRiderId: TeamGroupBonusByRiderId | null = null;
@@ -4338,7 +4344,7 @@ export class SimulationEngine {
         (rider.finishStatus as string) !== 'otl' &&
         (rider.finishStatus as string) !== 'dns' &&
         rider.finishTimeSeconds != null &&
-        rider.rider.skills.sprint >= 73 &&
+        rider.rider.skills.sprint >= LEADOUT_SPRINTER_THRESHOLD &&
         this.teamGroupIdOf(rider) != null &&
         winnerGroupRiderIds.has(rider.rider.id)
       ) {
@@ -4397,106 +4403,37 @@ export class SimulationEngine {
       return 0;
     }
 
-    // Check teammate bonuses
-    let teamSprintRand = this.teamSprintRandomValues.get(teamId);
-    if (teamSprintRand === undefined) {
-      teamSprintRand = randomBetween(this.random, 0.25, 0.6);
-      this.teamSprintRandomValues.set(teamId, teamSprintRand);
+    let randoms = this.teamLeadoutRandomValues.get(teamId);
+    if (randoms === undefined) {
+      randoms = drawTeamLeadoutRandoms(this.random);
+      this.teamLeadoutRandomValues.set(teamId, randoms);
     }
 
-    let teamSpecialRand = this.teamSprintSpecialRandomValues.get(teamId);
-    if (teamSpecialRand === undefined) {
-      teamSpecialRand = randomBetween(this.random, 0.1, 0.3);
-      this.teamSprintSpecialRandomValues.set(teamId, teamSpecialRand);
-    }
-
-    rider.leadoutRiderId = null;
-
-    let totalBonus = 0;
-    let maxContribution = 0;
-    let bestTeammateId: number | null = null;
-    const contributions: Array<{ riderId: number; name: string; contribution: number }> = [];
-
-    for (const r of teamRiders) {
-      if (r.rider.id === rider.rider.id) {
-        continue;
-      }
-      if (r.finishStatus === 'dnf' || (r.finishStatus as string) === 'otl' || (r.finishStatus as string) === 'dns') {
-        continue;
-      }
-
-      let metCount = 0;
-      const c1 = r.rider.skills.sprint >= 72;
-      const c2 = r.rider.skills.flat >= 78;
-      const c3 = r.rider.skills.timeTrial >= 76;
-      const c4 = r.rider.skills.acceleration >= 80;
-
-      if (c1) metCount++;
-      if (c2) metCount++;
-      if (c3) metCount++;
-      if (c4) metCount++;
-
-      if (metCount > 0) {
-        const baseBonus = c1 ? teamSprintRand : teamSpecialRand;
-        let multiplier = 1.0;
-        if (metCount === 2) {
-          multiplier = 1.25;
-        } else if (metCount === 3) {
-          multiplier = 1.5;
-        } else if (metCount === 4) {
-          multiplier = 2.0;
-        }
-        const contribution = baseBonus * multiplier * 1.5;
-        totalBonus += baseBonus * multiplier;
-
-        contributions.push({
+    const result = resolveLeadoutBonus(
+      teamRiders
+        .filter((r) => r.rider.id !== rider.rider.id)
+        .map((r) => ({
           riderId: r.rider.id,
           name: r.riderName,
-          contribution: Number(contribution.toFixed(2)),
-        });
+          skills: r.rider.skills,
+          isAvailable: r.finishStatus !== 'dnf'
+            && (r.finishStatus as string) !== 'otl'
+            && (r.finishStatus as string) !== 'dns',
+        })),
+      randoms,
+    );
 
-        if (baseBonus * multiplier > maxContribution) {
-          maxContribution = baseBonus * multiplier;
-          bestTeammateId = r.rider.id;
-        } else if (baseBonus * multiplier === maxContribution && bestTeammateId !== null) {
-          const existingRider = this.riders.find((x) => x.rider.id === bestTeammateId);
-          if (existingRider && r.rider.skills.sprint > existingRider.rider.skills.sprint) {
-            bestTeammateId = r.rider.id;
-          }
-        }
-      }
+    rider.leadoutRiderId = result.leadoutRiderId;
+    if (result.contributions.length > 0) {
+      rider.leadoutContributions = result.contributions;
     }
-
-    if (totalBonus > 0) {
-      rider.leadoutRiderId = bestTeammateId;
-      rider.leadoutContributions = contributions;
-    }
-    return totalBonus * 1.5;
+    return result.bonus;
   }
 
   private resolveFinishMarkerType(): 'finish_flat' | 'finish_hill' | 'finish_mountain' {
-    const markers = collectStageBoundaryMarkers(this.bootstrap.stageSummary);
-    for (let index = markers.length - 1; index >= 0; index -= 1) {
-      const type = markers[index].marker.type;
-      if (type === 'finish_flat' || type === 'finish_hill' || type === 'finish_mountain') {
-        return type;
-      }
-    }
-
-    switch (this.bootstrap.stage.profile) {
-      case 'Hilly':
-      case 'Hilly_Difficult':
-      case 'Rolling':
-      case 'Cobble_Hill':
-        return 'finish_hill';
-      case 'Medium_Mountain':
-      case 'Mountain':
-      case 'High_Mountain':
-        return 'finish_mountain';
-      default:
-        return 'finish_flat';
-    }
+    return resolveFinishMarkerType(this.bootstrap.stageSummary, this.bootstrap.stage.profile);
   }
+
 
   private resolveFinishWeightProfile(): MarkerWeightProfile {
     const finishType = this.resolveFinishMarkerType();

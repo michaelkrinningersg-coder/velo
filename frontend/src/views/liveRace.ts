@@ -143,7 +143,7 @@ export async function openOfflineStage(
       updateInstantProgress(1);
       await completeRealtimeStage(
         stageId, outcome.entries, outcome.markerClassifications, outcome.incidents,
-        outcome.events, skipViewActivation, [], outcome.superTeamId,
+        outcome.events, skipViewActivation, outcome.leadoutContributions, outcome.superTeamId,
       );
       return true;
     }

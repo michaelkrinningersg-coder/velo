@@ -16,7 +16,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runQuickSimulation } from '../../frontend/src/race-sim/runQuickSimulation';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from '../../frontend/src/race-sim/stageSummary';
-import type { RealtimeSimulationBootstrap } from '../../shared/types';
+import { hasSprintFinish, LEADOUT_SPRINTER_THRESHOLD } from '../../frontend/src/race-sim/sprintLeadout';
+import type { RealtimeSimulationBootstrap, Rider } from '../../shared/types';
 
 const FIXTURE = path.join(
   __dirname, '..', '..', 'backend', 'src', '__tests__', 'fixtures', 'stage-549-bootstrap.json',
@@ -112,6 +113,68 @@ describe('runQuickSimulation', () => {
       expect(bootstrap.riders.some((rider) => rider.id === incident.riderId)).toBe(true);
       expect(incident.triggerDistanceKm).toBeGreaterThan(0);
     }
+  });
+
+  it('beruecksichtigt Ermuedung im Leistungsscore', () => {
+    // Derselbe Kader, einmal frisch und einmal muerbe: der ermuedete Fahrer
+    // muss zurueckfallen. Die Favoritenwertung allein rechnet das nicht.
+    const target = bootstrap.riders[0] as Rider;
+    const tired: RealtimeSimulationBootstrap = {
+      ...bootstrap,
+      riders: bootstrap.riders.map((rider) => (rider.id === target.id
+        ? { ...rider, fatigueMalus: 20, longTermFatigueMalus: 20, shortTermFatigueMalus: 20 }
+        : rider)),
+    };
+    const positionOf = (outcome: ReturnType<typeof runQuickSimulation>): number =>
+      outcome.result.entries.findIndex((entry) => entry.riderId === target.id);
+
+    const fresh = positionOf(runQuickSimulation(bootstrap, { seed: 5150 }));
+    const worn = positionOf(runQuickSimulation(tired, { seed: 5150 }));
+    expect(worn).toBeGreaterThan(fresh);
+  });
+
+  it('wendet den Anfahrtsbonus auf Sprintankuenften an', () => {
+    // Die Vorlage ist eine Bergankunft. Fuer diesen Test wird der Zielmarker
+    // auf eine Flachankunft umgeschrieben — das Profil allein genuegt nicht,
+    // der Marker entscheidet.
+    const flat: RealtimeSimulationBootstrap = {
+      ...bootstrap,
+      stage: { ...bootstrap.stage, profile: 'Flat' },
+      stageSummary: {
+        ...bootstrap.stageSummary,
+        segments: bootstrap.stageSummary.segments.map((segment) => ({
+          ...segment,
+          end_markers: (segment.end_markers ?? []).map((marker) => (
+            marker.type === 'finish_mountain' || marker.type === 'finish_hill'
+              ? { ...marker, type: 'finish_flat' as const, cat: null }
+              : marker
+          )),
+        })),
+      },
+    };
+    expect(hasSprintFinish(flat.stageSummary, 'Flat')).toBe(true);
+
+    const outcome = runQuickSimulation(flat, { seed: 4711 });
+    // Auf einer Flachetappe kommt das Feld geschlossen an, in der Spitzengruppe
+    // stehen also Sprinter mehrerer Mannschaften.
+    expect(outcome.leadoutContributions.length).toBeGreaterThan(0);
+    for (const contribution of outcome.leadoutContributions) {
+      expect(contribution.leadoutBonus).toBeGreaterThan(0);
+      const helpers = JSON.parse(contribution.contributorsJson) as Array<{ riderId: number }>;
+      expect(helpers.length).toBeGreaterThan(0);
+      // Der Bonus steht auch an der Ergebniszeile des Sprinters.
+      const entry = outcome.entries.find((item) => item.riderId === contribution.sprinterId);
+      expect(entry?.leadoutBonus).toBeCloseTo(contribution.leadoutBonus, 10);
+      // Und der Sprinter ist stark genug, um ueberhaupt in Frage zu kommen.
+      const rider = flat.riders.find((item) => item.id === contribution.sprinterId);
+      expect(rider!.skills.sprint).toBeGreaterThanOrEqual(LEADOUT_SPRINTER_THRESHOLD);
+    }
+  });
+
+  it('vergibt am Berg keinen Anfahrtsbonus', () => {
+    // Die Vorlage ist eine Bergankunft — dort entscheidet kein Anfahrtszug.
+    expect(hasSprintFinish(bootstrap.stageSummary, 'Mountain')).toBe(false);
+    expect(runQuickSimulation(bootstrap, { seed: 4711 }).leadoutContributions).toEqual([]);
   });
 
   it('braucht keine Profiltabelle im Bootstrap', () => {

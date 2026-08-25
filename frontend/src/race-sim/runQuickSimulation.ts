@@ -28,16 +28,25 @@ import {
   type QuickSimProfileParameters,
 } from '../../../shared/quickSimProfiles';
 import { createRandomSeed, createSeededRandom, deriveSeed, randomBetween, type RandomSource } from '../../../shared/rng';
-import type {
-  PrecalculatedRaceIncident,
-  RaceSimMessage,
-  RealtimeSimulationBootstrap,
-  RealtimeStageCommitEntry,
-  Rider,
-  StageMarkerClassification,
-  StageMarkerClassificationEntry,
-  StageProfile,
+import {
+  isChampionshipCategory,
+  type PrecalculatedRaceIncident,
+  type RaceSimMessage,
+  type RealtimeLeadoutContribution,
+  type RealtimeSimulationBootstrap,
+  type RealtimeStageCommitEntry,
+  type Rider,
+  type StageMarkerClassification,
+  type StageMarkerClassificationEntry,
+  type StageProfile,
 } from '../../../shared/types';
+import { rankStageResultEntries } from '../../../shared/stageResultRules';
+import {
+  drawTeamLeadoutRandoms,
+  hasSprintFinish,
+  LEADOUT_SPRINTER_THRESHOLD,
+  resolveLeadoutBonus,
+} from './sprintLeadout';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { resolveFatigueMalus } from './riderCondition';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
@@ -71,6 +80,8 @@ export interface QuickSimulationOutcome {
   markerClassifications: StageMarkerClassification[];
   incidents: PrecalculatedRaceIncident[];
   events: RaceSimMessage[];
+  /** Anfahrtsboni des Zielsprints, fuer die Statistik im Commit-Dienst. */
+  leadoutContributions: RealtimeLeadoutContribution[];
   /** Mannschaft mit dem Tagesbonus, falls eine gezogen wurde. */
   superTeamId: number | undefined;
   /** Kennzahlen des Laufs — fuer Anzeige und Kalibrierung. */
@@ -240,7 +251,13 @@ export function runQuickSimulation(
 
   const riderById = new Map(ridersWithSpecialStates.map((rider) => [rider.id, rider]));
   const breakawayRiderIds = new Set(plan?.riderIds ?? []);
-  const entries = buildCommitEntries(result, bootstrap, breakawayRiderIds);
+  // Der Anfahrtsbonus wirkt auf den Tie-Break innerhalb der ersten Zeitgruppe,
+  // nicht auf die Zielzeit — er kann den Etappensieg drehen, sonst nichts.
+  const leadout = applySprintLeadout({
+    bootstrap, result, riderById,
+    random: createSeededRandom(deriveSeed(seed, 'leadout')),
+  });
+  const entries = buildCommitEntries(result, bootstrap, breakawayRiderIds, leadout.perSprinter);
   const markerClassifications = buildMarkerClassifications({
     bootstrap, result, breakaway, parameters, riderById,
   });
@@ -250,10 +267,148 @@ export function runQuickSimulation(
     markerClassifications,
     incidents: precalculatedIncidents,
     events: buildEvents(result, bootstrap, plan, riderById, ridersWithSpecialStates),
+    leadoutContributions: leadout.contributions,
     superTeamId: plan?.superTeamId,
     result,
     seed,
   };
+}
+
+interface LeadoutInput {
+  bootstrap: RealtimeSimulationBootstrap;
+  result: QuickSimStageResult;
+  riderById: ReadonlyMap<number, Rider>;
+  random: RandomSource;
+}
+
+/**
+ * Anfahrtsbonus im Zielsprint.
+ *
+ * Nur auf Flach- und Huegelankuenften, nur fuer Fahrer in der ersten
+ * Zeitgruppe, und je Mannschaft nur fuer deren besten Sprinter. Der Bonus geht
+ * auf den `photoFinishScore` — er entscheidet also, wer den Sprint gewinnt,
+ * nicht wer wie viel Zeit verliert.
+ *
+ * Ohne ihn waere der Etappensieg auf einer Sprintetappe allein eine Frage des
+ * Fahrerscores, und der Anfahrtszug — das Sichtbarste am Sprint — bliebe
+ * wirkungslos.
+ *
+ * Aendert `result.entries` in der Reihenfolge, wenn der Bonus die erste Gruppe
+ * umsortiert.
+ */
+function applySprintLeadout(input: LeadoutInput): {
+  contributions: RealtimeLeadoutContribution[];
+  perSprinter: Map<number, { leadoutBonus: number; leadoutRiderId: number | null }>;
+} {
+  const { bootstrap, result, riderById, random } = input;
+  const perSprinter = new Map<number, { leadoutBonus: number; leadoutRiderId: number | null }>();
+  const profile = bootstrap.stage.profile as StageProfile;
+  if (!hasSprintFinish(bootstrap.stageSummary, profile)) {
+    return { contributions: [], perSprinter };
+  }
+
+  const finishers = result.entries.filter((entry) => !entry.isAbandon);
+  const firstGroup = finishers.filter((entry) => entry.groupIndex === 0);
+  if (firstGroup.length === 0) {
+    return { contributions: [], perSprinter };
+  }
+
+  // Bei Meisterschaften sind die "Teamkollegen" die Landsleute.
+  const isChampionship = isChampionshipCategory(bootstrap.race?.categoryId);
+  const groupIdOf = (rider: Rider): number | null => {
+    if (isChampionship) {
+      return rider.countryId != null ? -1 - rider.countryId : null;
+    }
+    return rider.activeTeamId ?? null;
+  };
+
+  const availableByRiderId = new Map(
+    result.entries.map((entry) => [entry.riderId, !entry.isAbandon && !entry.isOutsideTimeLimit]),
+  );
+  const scoreByRiderId = new Map(finishers.map((entry) => [entry.riderId, entry.photoFinishScore]));
+
+  // Je Gruppe der beste Sprinter, der es in die erste Zeitgruppe geschafft hat.
+  const bestSprinterByGroupId = new Map<number, QuickSimResultEntry>();
+  for (const entry of firstGroup) {
+    const rider = riderById.get(entry.riderId);
+    if (!rider || (rider.skills.sprint ?? 0) < LEADOUT_SPRINTER_THRESHOLD) {
+      continue;
+    }
+    const groupId = groupIdOf(rider);
+    if (groupId == null) {
+      continue;
+    }
+    const current = bestSprinterByGroupId.get(groupId);
+    const currentRider = current ? riderById.get(current.riderId) : null;
+    const isBetter = !current
+      || (scoreByRiderId.get(entry.riderId) as number) > (scoreByRiderId.get(current.riderId) as number)
+      || ((scoreByRiderId.get(entry.riderId) as number) === (scoreByRiderId.get(current.riderId) as number)
+        && (rider.skills.sprint ?? 0) > (currentRider?.skills.sprint ?? 0));
+    if (isBetter) {
+      bestSprinterByGroupId.set(groupId, entry);
+    }
+  }
+  if (bestSprinterByGroupId.size === 0) {
+    return { contributions: [], perSprinter };
+  }
+
+  const ridersByGroupId = new Map<number, Rider[]>();
+  for (const rider of riderById.values()) {
+    const groupId = groupIdOf(rider);
+    if (groupId == null) {
+      continue;
+    }
+    const bucket = ridersByGroupId.get(groupId) ?? [];
+    bucket.push(rider);
+    ridersByGroupId.set(groupId, bucket);
+  }
+
+  const contributions: RealtimeLeadoutContribution[] = [];
+  let changed = false;
+  // Nach Gruppen-Kennung sortiert, damit die Ziehung nicht an der
+  // Fahrerreihenfolge haengt.
+  for (const [groupId, sprinter] of [...bestSprinterByGroupId.entries()].sort((a, b) => a[0] - b[0])) {
+    const teammates = (ridersByGroupId.get(groupId) ?? [])
+      .filter((rider) => rider.id !== sprinter.riderId)
+      .sort((left, right) => left.id - right.id)
+      .map((rider) => ({
+        riderId: rider.id,
+        name: `${rider.firstName} ${rider.lastName}`,
+        skills: rider.skills,
+        isAvailable: availableByRiderId.get(rider.id) ?? false,
+      }));
+    const leadout = resolveLeadoutBonus(teammates, drawTeamLeadoutRandoms(random));
+    if (leadout.bonus <= 0) {
+      continue;
+    }
+    sprinter.photoFinishScore += leadout.bonus;
+    changed = true;
+    perSprinter.set(sprinter.riderId, {
+      leadoutBonus: leadout.bonus,
+      leadoutRiderId: leadout.leadoutRiderId,
+    });
+    const teamId = riderById.get(sprinter.riderId)?.activeTeamId;
+    if (teamId != null) {
+      contributions.push({
+        teamId,
+        sprinterId: sprinter.riderId,
+        leadoutBonus: leadout.bonus,
+        contributorsJson: JSON.stringify(leadout.contributions),
+      });
+    }
+  }
+
+  if (changed) {
+    // Der Bonus kann die erste Gruppe umsortieren — neu ranken, sonst stimmt
+    // der Etappensieg nicht mehr mit dem photoFinishScore ueberein.
+    const abandons = result.entries.filter((entry) => entry.isAbandon);
+    const ranked = rankStageResultEntries(
+      finishers.map((entry) => ({ ...entry, stageTimeSeconds: entry.stageTimeSeconds as number })),
+      profile,
+    );
+    result.entries = [...ranked, ...abandons];
+  }
+  return { contributions, perSprinter };
 }
 
 /**
@@ -264,6 +419,7 @@ function buildCommitEntries(
   result: QuickSimStageResult,
   bootstrap: RealtimeSimulationBootstrap,
   breakawayRiderIds: ReadonlySet<number>,
+  leadoutByRiderId: ReadonlyMap<number, { leadoutBonus: number; leadoutRiderId: number | null }> = new Map(),
 ): RealtimeStageCommitEntry[] {
   const byRiderId = new Map(result.entries.map((entry) => [entry.riderId, entry]));
   return bootstrap.riders.map((starter) => {
@@ -276,6 +432,7 @@ function buildCommitEntries(
       isBreakaway: breakawayRiderIds.has(starter.id),
       statusReason: isDnf ? resolveAbandonReason(entry) : null,
       photoFinishScore: entry?.photoFinishScore,
+      ...(leadoutByRiderId.get(starter.id) ?? {}),
     } satisfies RealtimeStageCommitEntry;
   });
 }
