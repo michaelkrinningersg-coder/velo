@@ -15,7 +15,7 @@ export const TIME_LIMIT_PERCENT_BY_PROFILE: Record<StageProfile, number> = {
   Hilly_Difficult: 19,
   Medium_Mountain: 20,
   Mountain: 31,
-  High_Mountain: 35,
+  High_Mountain: 40,
   ITT: 32,
   TTT: 42,
   Cobble: 20,
