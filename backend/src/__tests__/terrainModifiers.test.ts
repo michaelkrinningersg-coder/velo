@@ -41,23 +41,20 @@ describe('Terrainfaktoren', () => {
     expect(resolveTieBreakNoiseFactor(null)).toBe(1);
   });
 
-  it('senkt das Rangrauschen insgesamt ab Hilly_Difficult auf drei Viertel', () => {
-    for (const profile of ['Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
-      expect(resolveRankNoiseFactor(profile)).toBe(0.75);
+  it('halbiert das Rangrauschen insgesamt, auf jedem Profil', () => {
+    expect(RANK_NOISE_FACTOR).toBe(0.5);
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain', 'Cobble', 'Cobble_Hill', 'ITT', 'TTT'] as StageProfile[]) {
+      expect(resolveRankNoiseFactor(profile)).toBe(0.5);
     }
-    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
-      expect(resolveRankNoiseFactor(profile)).toBe(1);
-    }
-    expect(resolveRankNoiseFactor(undefined)).toBe(1);
+    expect(resolveRankNoiseFactor(undefined)).toBe(0.5);
+    expect(resolveRankNoiseFactor(null)).toBe(0.5);
   });
 
-  it('haelt die beiden Rauschtabellen ueberschneidungsfrei', () => {
-    // Wo der Tie-Break gedaempft wird, bleibt das Rauschen insgesamt stehen —
-    // und umgekehrt. Ueberschnitten sie sich, waere der Zielsprint dort
-    // doppelt gedaempft, ohne dass es jemand beabsichtigt haette.
-    const geviertelt = Object.keys(TIE_BREAK_NOISE_FACTOR);
-    const gesenkt = Object.keys(RANK_NOISE_FACTOR);
-    expect(geviertelt.filter((profile) => gesenkt.includes(profile))).toEqual([]);
+  it('verrechnet beide Rauschfaktoren im Sprint miteinander', () => {
+    // Flach: erst halbieren, dann vierteln — zusammen ein Achtel.
+    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Flat')).toBeCloseTo(0.125, 10);
+    // Am Berg wirkt nur die Halbierung.
+    expect(RANK_NOISE_FACTOR * resolveTieBreakNoiseFactor('Mountain')).toBeCloseTo(0.5, 10);
   });
 
   it('hebt den Anfahrtsbonus flach und rollend um ein Viertel, huegelig um 15 Prozent', () => {

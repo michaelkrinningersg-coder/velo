@@ -46,7 +46,7 @@ export const LEADOUT_BONUS_FACTOR: Partial<Record<StageProfile, number>> = {
  *
  * Auf Flach-, Rolling- und Huegeletappen zaehlt es deshalb nur noch zu einem
  * Viertel. Die Reihenfolge des Feldes bleibt davon unberuehrt — dort wirkt
- * weiterhin der volle Wert.
+ * `RANK_NOISE_FACTOR`.
  */
 export const TIE_BREAK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
   Flat: 0.25,
@@ -55,26 +55,27 @@ export const TIE_BREAK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
 };
 
 /**
- * Faktor auf das Rangrauschen insgesamt.
+ * Faktor auf das Rangrauschen insgesamt — fuer jedes Profil derselbe.
  *
- * Ab `Hilly_Difficult` aufwaerts entscheiden die Beine, nicht die Position im
- * Feld — dort darf der Zufall kleiner ausfallen. Flach, rollend und huegelig
- * bleibt der kalibrierte Wert stehen; dort ist er die Grundlage der
- * Rangkorrelation gegen die volle Simulation.
+ * `rank_noise` stammt aus dem Kalibrierlauf und ist dort gegen die
+ * Rangkorrelation zur vollen Simulation angepasst worden. Als Spielgroesse war
+ * das Ergebnis zu gross: der Zufall verschob die Feldreihenfolge staerker, als
+ * es die Unterschiede zwischen den Fahrern taten. Die Haelfte davon bleibt.
+ *
+ * Bewusst eine einzelne Zahl und keine Tabelle je Profil: eine Tabelle mit
+ * neunmal demselben Wert taeuscht eine Terrainabhaengigkeit vor, die es nicht
+ * gibt. Die Funktion behaelt trotzdem ihren Profilparameter, damit die
+ * Aufrufstellen unveraendert bleiben, falls das je wieder terrainabhaengig
+ * werden soll.
  */
-export const RANK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
-  Hilly_Difficult: 0.75,
-  Medium_Mountain: 0.75,
-  Mountain: 0.75,
-  High_Mountain: 0.75,
-};
+export const RANK_NOISE_FACTOR = 0.5;
 
 export function resolveTieBreakNoiseFactor(profile: StageProfile | null | undefined): number {
   return (profile ? TIE_BREAK_NOISE_FACTOR[profile] : undefined) ?? 1;
 }
 
-export function resolveRankNoiseFactor(profile: StageProfile | null | undefined): number {
-  return (profile ? RANK_NOISE_FACTOR[profile] : undefined) ?? 1;
+export function resolveRankNoiseFactor(_profile?: StageProfile | null): number {
+  return RANK_NOISE_FACTOR;
 }
 
 export function resolveSeasonFormFactor(profile: StageProfile | null | undefined): number {

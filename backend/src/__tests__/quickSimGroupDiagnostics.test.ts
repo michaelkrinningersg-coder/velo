@@ -76,7 +76,7 @@ describe('groupDiagnostics', () => {
   it('gibt das Rangrauschen je Fahrer heraus', () => {
     const ergebnis = laufe('Flat', 5);
     const d = ergebnis.groupDiagnostics!;
-    expect(d.rankNoiseSigma).toBe(DEFAULT_QUICK_SIM_PROFILES.Flat.rankNoise);
+    expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES.Flat.rankNoise * 0.5, 10);
     expect(d.tieBreakNoiseFactor).toBe(0.25);
     expect(d.rankNoiseByRiderId.size).toBe(150);
     // Ohne das Rauschen laesst sich der photoFinishScore nicht nachrechnen:
@@ -90,19 +90,19 @@ describe('groupDiagnostics', () => {
 });
 
 describe('Terrainfaktoren auf das Rangrauschen', () => {
-  it('zieht ab Hilly_Difficult mit drei Vierteln der Streuung', () => {
-    for (const profile of ['Hilly_Difficult', 'Mountain', 'High_Mountain', 'Medium_Mountain'] as StageProfile[]) {
+  it('zieht ueberall mit der halben Streuung', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Mountain', 'High_Mountain', 'Medium_Mountain'] as StageProfile[]) {
       const d = laufe(profile, 11).groupDiagnostics!;
-      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise * 0.75, 10);
-      expect(d.tieBreakNoiseFactor).toBe(1);
+      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise * 0.5, 10);
     }
   });
 
-  it('zieht flach, rollend und huegelig unveraendert, daempft aber den Tie-Break', () => {
+  it('daempft den Tie-Break nur flach, rollend und huegelig', () => {
     for (const profile of ['Flat', 'Rolling', 'Hilly'] as StageProfile[]) {
-      const d = laufe(profile, 12).groupDiagnostics!;
-      expect(d.rankNoiseSigma).toBeCloseTo(DEFAULT_QUICK_SIM_PROFILES[profile].rankNoise, 10);
-      expect(d.tieBreakNoiseFactor).toBe(0.25);
+      expect(laufe(profile, 12).groupDiagnostics!.tieBreakNoiseFactor).toBe(0.25);
+    }
+    for (const profile of ['Hilly_Difficult', 'Mountain', 'Cobble'] as StageProfile[]) {
+      expect(laufe(profile, 12).groupDiagnostics!.tieBreakNoiseFactor).toBe(1);
     }
   });
 
