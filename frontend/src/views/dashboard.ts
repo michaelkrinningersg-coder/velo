@@ -205,13 +205,17 @@ export async function loadRaces(): Promise<void> {
  * Faellt der gebuendelte Aufruf aus (aelteres Backend), greifen die drei
  * einzelnen Funktionen weiterhin.
  */
-export async function reloadCoreState(): Promise<void> {
-  const res = await api.getReloadBundle();
+export async function reloadCoreState(light = false): Promise<void> {
+  const res = await api.getReloadBundle(light);
   if (!res.success || !res.data) {
     await Promise.all([loadRiders(), loadGameState(), loadRaces()]);
     return;
   }
-  state.riders = res.data.riders ?? [];
+  // Im schlanken Modus fehlt die Fahrerliste; der vorhandene Stand bleibt
+  // stehen, bis der Auto-Weiter anhaelt und einmal voll nachlaedt.
+  if (res.data.riders) {
+    state.riders = res.data.riders;
+  }
   state.gameState = res.data.gameState ?? null;
   state.gameStatus = res.data.gameStatus ?? null;
   state.races = res.data.races ?? [];
@@ -750,7 +754,7 @@ export function initDashboardListeners(): void {
   });
 }
 
-export async function executeDayAdvance(): Promise<boolean> {
+export async function executeDayAdvance(light = false): Promise<boolean> {
   showLoading('Tag wird fortgeschrieben...');
   const oldSeason = state.gameState?.season;
   try {
@@ -760,7 +764,7 @@ export async function executeDayAdvance(): Promise<boolean> {
       return false;
     }
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
-    await reloadCoreState();
+    await reloadCoreState(light);
     if (isActiveView('teams')) {
       const { refreshTeamsViewData } = await import('./teams');
       await refreshTeamsViewData();
@@ -821,7 +825,13 @@ export function stopAutoProgress(): void {
   setAutoProgressActive(false);
   state.autoProgressTargetDate = null;
   updateAutoProgressUI();
+  // Waehrend des Laufs wurde die Fahrerliste nicht mitgeladen — jetzt einmal
+  // nachziehen, damit Saisonpunkte und -siege wieder stimmen.
+  void reloadCoreState();
 }
+
+/** Pause zwischen zwei Schritten des Auto-Weiter. */
+const AUTO_PROGRESS_PAUSE_MS = 10;
 
 async function runAutoProgressLoop(): Promise<void> {
   while (autoProgressActive) {
@@ -838,9 +848,9 @@ async function runAutoProgressLoop(): Promise<void> {
       // Auto-Weiter benutzt den Standardmodus — das ist die Stelle, an der die
       // Quick Simulation den Unterschied macht: eine Etappe kostet dort
       // Millisekunden statt einer Sekunde.
-      success = await openOfflineStage(nextStage.stageId, undefined, true);
+      success = await openOfflineStage(nextStage.stageId, undefined, true, true);
     } else {
-      success = await executeDayAdvance();
+      success = await executeDayAdvance(true);
     }
 
     if (!success) {
@@ -848,7 +858,13 @@ async function runAutoProgressLoop(): Promise<void> {
       break;
     }
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    // Kurz an den Browser zurueckgeben, damit Neuzeichnen und die Leertaste
+    // drankommen. Die Pause stand auf 100 ms, aus der Zeit der Instant-
+    // Simulation: dort dauerte ein Schritt eine Sekunde und die Oberflaeche
+    // brauchte Luft. Mit der Quick Simulation ist ein Schritt kuerzer als die
+    // Pause — ueber einen Monat waren das 8,4 Sekunden reines Warten, knapp
+    // ein Drittel der Gesamtzeit.
+    await new Promise<void>((resolve) => setTimeout(resolve, AUTO_PROGRESS_PAUSE_MS));
   }
   updateAutoProgressUI();
 }

@@ -5,7 +5,7 @@ import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
 import { bootstrap, readStageScoreSegments, seedQuickSimProfiles } from '../bootstrapper';
-import { resolveDataCsvDir } from './mappers';
+import { forgetTableExistence, resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
 import { installStatementCache } from './statementCache';
 import { GameStateService } from '../game/GameStateService';
@@ -3438,6 +3438,7 @@ export class DatabaseService {
     }
     this.runAllSchemaMigrations(db, opts);
     this.migratedConnections.add(db);
+    this.finishSchemaMigrations(db);
   }
 
   /**
@@ -3448,6 +3449,14 @@ export class DatabaseService {
   public forceEnsureAllSchemas(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
     this.runAllSchemaMigrations(db, opts);
     this.migratedConnections.add(db);
+    this.finishSchemaMigrations(db);
+  }
+
+  private finishSchemaMigrations(db: Database.Database): void {
+    // Nach der Migration noch einmal: sie hat Tabellen angelegt und (etwa
+    // `stage_entries_compact`) entfernt. Was waehrenddessen gemerkt wurde,
+    // koennte veraltet sein.
+    forgetTableExistence(db);
   }
 
   private runAllSchemaMigrations(db: Database.Database, opts: { disableForeignKeys?: boolean } = {}): void {
@@ -3455,6 +3464,9 @@ export class DatabaseService {
     // Anweisungen. Jede Verbindung laeuft genau einmal hier durch — auch die
     // der Werkzeuge unter tools/ und die der Tests.
     installStatementCache(db);
+    // Die Migration legt Tabellen an und entfernt welche — was `tableExists`
+    // vorher gemerkt hat, gilt danach nicht mehr.
+    forgetTableExistence(db);
     this.applyLatestSchema(db);
     // `applyLatestSchema` re-executes schema.sql, which contains
     // `PRAGMA foreign_keys = ON`. When applying to a not-yet-populated DB

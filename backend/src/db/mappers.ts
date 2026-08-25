@@ -790,9 +790,42 @@ export function resolveRiderSeasonFormPhase(currentDate: string, peakDates: stri
   return 'fall';
 }
 
+/**
+ * Tabellen, deren Vorhandensein je Verbindung schon bestaetigt wurde.
+ *
+ * `tableExists` steht an ueber hundert Stellen und laeuft in Schleifen mit —
+ * beim Aufbau einer Startliste rund sechzig Mal, ueber einen Spieltag einige
+ * hundert. Nur *positive* Antworten werden gemerkt: eine vorhandene Tabelle
+ * verschwindet im laufenden Betrieb nicht mehr. Fehlende Tabellen werden
+ * dagegen zur Laufzeit angelegt (`CREATE TABLE IF NOT EXISTS`), deshalb wird
+ * ein "nein" jedes Mal neu geprueft.
+ *
+ * Die Schema-Migration darf trotzdem Tabellen entfernen (zuletzt
+ * `stage_entries_compact`) — sie leert den Zwischenspeicher deshalb ueber
+ * `forgetTableExistence`.
+ */
+const knownTablesByDb = new WeakMap<Database.Database, Set<string>>();
+
 export function tableExists(db: Database.Database, tableName: string): boolean {
+  let known = knownTablesByDb.get(db);
+  if (known?.has(tableName)) {
+    return true;
+  }
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
-  return row != null;
+  if (row == null) {
+    return false;
+  }
+  if (!known) {
+    known = new Set();
+    knownTablesByDb.set(db, known);
+  }
+  known.add(tableName);
+  return true;
+}
+
+/** Vergisst, was ueber die Tabellen einer Verbindung bekannt war. */
+export function forgetTableExistence(db: Database.Database): void {
+  knownTablesByDb.delete(db);
 }
 
 export function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {

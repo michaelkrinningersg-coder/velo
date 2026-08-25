@@ -96,7 +96,8 @@ export const api = {
    * Fahrer, Spielstand, Status und Rennen in einem Aufruf. Ersetzt nach dem
    * Tageswechsel und nach einem gespeicherten Ergebnis vier einzelne Anfragen.
    */
-  getReloadBundle:     () => call<{ gameState: GameState; gameStatus: GameStatus; races: Race[]; riders: Rider[] }>('GET', '/api/reload-bundle'),
+  getReloadBundle:     (light = false) => call<{ gameState: GameState; gameStatus: GameStatus; races: Race[]; riders?: Rider[] }>(
+    'GET', `/api/reload-bundle${light ? '?light=true' : ''}`),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
   getContractRenewals: () => call<any>('GET', '/api/contract-renewals'),

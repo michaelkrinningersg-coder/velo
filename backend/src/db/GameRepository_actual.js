@@ -274,9 +274,25 @@ function resolveRiderSeasonFormPhase(currentDate, peakDates) {
         return 'rise';
     return 'fall';
 }
+// Nur positive Antworten merken: eine vorhandene Tabelle verschwindet im
+// laufenden Betrieb nicht, fehlende werden dagegen zur Laufzeit angelegt.
+// Dieselbe Ueberlegung wie in mappers.ts, hier fuer den Altbestand.
+const knownTablesByDb = new WeakMap();
 function tableExists(db, tableName) {
+    let known = knownTablesByDb.get(db);
+    if (known && known.has(tableName)) {
+        return true;
+    }
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
-    return row != null;
+    if (row == null) {
+        return false;
+    }
+    if (!known) {
+        known = new Set();
+        knownTablesByDb.set(db, known);
+    }
+    known.add(tableName);
+    return true;
 }
 function columnExists(db, tableName, columnName) {
     if (!tableExists(db, tableName)) {
@@ -285,9 +301,24 @@ function columnExists(db, tableName, columnName) {
     const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
     return columns.some((column) => column.name === columnName);
 }
+// Spaltennamen je Praefix vorberechnet. Die Funktion laeuft zweimal je Fahrer;
+// bei 3164 Fahrern waren das rund hunderttausend Wegwerf-Arrays je Aufruf von
+// getRiders. Dieselbe Umformulierung wie in mappers.ts.
+const SKILL_COLUMNS_BY_PREFIX = new Map();
+function resolveSkillColumns(prefix) {
+    let columns = SKILL_COLUMNS_BY_PREFIX.get(prefix);
+    if (!columns) {
+        columns = RIDER_SKILL_COLUMNS.map(([key, column]) => [key, `${prefix}${column}`]);
+        SKILL_COLUMNS_BY_PREFIX.set(prefix, columns);
+    }
+    return columns;
+}
 function mapSkillObject(row, prefix = '') {
-    const entries = RIDER_SKILL_COLUMNS.map(([key, column]) => [key, row[`${prefix}${column}`]]);
-    return Object.fromEntries(entries);
+    const target = {};
+    for (const [key, column] of resolveSkillColumns(prefix)) {
+        target[key] = row[column];
+    }
+    return target;
 }
 function mapCountry(row) {
     return {
@@ -1184,10 +1215,25 @@ class GameRepository {
         return includeFormDebug ? this.attachFormDebugData(ridersWithMentors, season, currentDate) : ridersWithMentors;
     }
     attachMentorData(riders) {
+        // Vorher filterte diese Funktion je jungem Fahrer die gesamte
+        // Fahrerliste — bei rund 600 jungen Fahrern und 3164 insgesamt fast
+        // zwei Millionen Vergleiche je Aufruf. Mentoren kommen immer aus dem
+        // eigenen Team, also reicht ein Eimer je Team.
+        const ridersByTeam = new Map();
+        for (const rider of riders) {
+            if (rider.activeTeamId == null) {
+                continue;
+            }
+            let bucket = ridersByTeam.get(rider.activeTeamId);
+            if (!bucket) {
+                bucket = [];
+                ridersByTeam.set(rider.activeTeamId, bucket);
+            }
+            bucket.push(rider);
+        }
         return riders.map((rider) => {
             if ((rider.age ?? 0) <= 23 && rider.activeTeamId != null) {
-                const mentors = riders.filter(m => m.id !== rider.id &&
-                    m.activeTeamId === rider.activeTeamId &&
+                const mentors = (ridersByTeam.get(rider.activeTeamId) ?? []).filter(m => m.id !== rider.id &&
                     (m.age ?? 0) >= 31 &&
                     m.overallRating >= 73 &&
                     (m.riderType === rider.riderType ||

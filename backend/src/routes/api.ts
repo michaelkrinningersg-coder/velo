@@ -539,16 +539,21 @@ export function createRouter(dbService: DatabaseService): Router {
    * eigenem `ensureState()` und eigener Netzwerkrunde. Zusammen kosteten sie
    * mehr als die Aktion, die sie begleiten.
    */
-  router.get('/reload-bundle', (_req: Request, res: Response) => {
+  router.get('/reload-bundle', (req: Request, res: Response) => {
     try {
       const db = dbService.getActiveConnection();
       const gss = getGss();
       gss.ensureState();
+      // `?light=true` laesst die Fahrerliste weg. Sie ist mit rund 55 ms der
+      // groesste Posten des Buendels, und im Auto-Weiter braucht sie niemand:
+      // dort laeuft der Aufruf nach jedem Schritt, die Fahrerwerte aendern
+      // sich aber nur langsam und die Ansicht zeigt sie waehrenddessen nicht.
+      const light = req.query['light'] === 'true';
       ok(res, {
         gameState: gss.loadState(),
         gameStatus: gss.loadStatus(),
         races: new GameRepository(db).getRaces(),
-        riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false),
+        ...(light ? {} : { riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false) }),
       });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });

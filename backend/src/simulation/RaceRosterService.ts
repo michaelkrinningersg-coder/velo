@@ -590,6 +590,83 @@ export function orderProgramCandidates(candidates: Rider[], race?: Race, useHome
   return sortWaterCarriersAscending(sorted);
 }
 
+/**
+ * Vorberechnete Antworten fuer `hasActiveOrEarmarkedCollision`.
+ *
+ * Die Funktion laeuft je Fahrer und je Kaderplatz — bei einem Rennstart rund
+ * 1200 Mal — und stellte dabei jedes Mal dieselben drei Fragen an die
+ * Datenbank: welche Rennen ueberlappen, ist deren Kader schon gefuellt, steht
+ * dieser Fahrer darin. Die Antworten haengen nur am Zielrennen, nicht am
+ * Fahrer. Gemessen waren das 169 der 390 ms eines Rennstarts, und die
+ * Ueberlappungsabfrage wuchs mit jeder Saison (0,02 -> 0,21 ms nach drei
+ * Saisons, weil sie den gesamten kuenftigen Kalender liest).
+ *
+ * Der Zwischenspeicher lebt nur waehrend eines Kaderaufbaus. Laenger duerfte
+ * er nicht leben: `ensureRaceEntries` schreibt am Ende neue Startlisten, und
+ * ein am selben Tag folgendes Rennen muss die sehen.
+ */
+interface KollisionsDaten {
+  overlappingRaces: Race[];
+  /** Je ueberlappendem Rennen: Teams, die bereits Starter gemeldet haben. */
+  finalisierteTeams: Map<number, Set<number>>;
+  /** Je ueberlappendem Rennen: gemeldete Fahrer. */
+  gemeldeteFahrer: Map<number, Set<number>>;
+}
+
+let kollisionsDaten: KollisionsDaten | null = null;
+let kollisionsTiefe = 0;
+
+function ladeKollisionsDaten(db: Database.Database, targetRace: Race): KollisionsDaten {
+  const overlappingRaces = db.prepare(`
+    SELECT id, name, category_id, start_date, end_date
+    FROM races
+    WHERE id != ?
+      AND start_date <= ?
+      AND end_date >= ?
+  `).all(targetRace.id, targetRace.endDate, targetRace.startDate) as Race[];
+
+  const finalisierteTeams = new Map<number, Set<number>>();
+  const gemeldeteFahrer = new Map<number, Set<number>>();
+  if (overlappingRaces.length > 0) {
+    const platzhalter = overlappingRaces.map(() => '?').join(', ');
+    const ids = overlappingRaces.map((race) => race.id);
+    const rows = db.prepare(`
+      SELECT race_id, team_id, rider_id
+      FROM race_entries
+      WHERE race_id IN (${platzhalter})
+    `).all(...ids) as Array<{ race_id: number; team_id: number; rider_id: number }>;
+    for (const row of rows) {
+      let teams = finalisierteTeams.get(row.race_id);
+      if (!teams) { teams = new Set(); finalisierteTeams.set(row.race_id, teams); }
+      teams.add(row.team_id);
+      let fahrer = gemeldeteFahrer.get(row.race_id);
+      if (!fahrer) { fahrer = new Set(); gemeldeteFahrer.set(row.race_id, fahrer); }
+      fahrer.add(row.rider_id);
+    }
+  }
+  return { overlappingRaces, finalisierteTeams, gemeldeteFahrer };
+}
+
+/**
+ * Klammert einen Kaderaufbau. Innerhalb der Klammer beantwortet
+ * `hasActiveOrEarmarkedCollision` seine Fragen aus dem Zwischenspeicher.
+ * Verschachtelte Aufrufe teilen sich ihn ueber den Tiefenzaehler.
+ */
+function mitKollisionsDaten<T>(db: Database.Database, targetRace: Race, run: () => T): T {
+  if (kollisionsTiefe === 0) {
+    kollisionsDaten = ladeKollisionsDaten(db, targetRace);
+  }
+  kollisionsTiefe += 1;
+  try {
+    return run();
+  } finally {
+    kollisionsTiefe -= 1;
+    if (kollisionsTiefe === 0) {
+      kollisionsDaten = null;
+    }
+  }
+}
+
 function hasActiveOrEarmarkedCollision(
   db: Database.Database,
   repo: any,
@@ -599,29 +676,14 @@ function hasActiveOrEarmarkedCollision(
   targetRace: Race,
   riderLocks: Map<number, RiderLockReason>
 ): boolean {
-  const overlappingRaces = db.prepare(`
-    SELECT id, name, category_id, start_date, end_date
-    FROM races
-    WHERE id != ?
-      AND start_date <= ?
-      AND end_date >= ?
-  `).all(targetRace.id, targetRace.endDate, targetRace.startDate) as Race[];
+  const daten = kollisionsDaten ?? ladeKollisionsDaten(db, targetRace);
+  const { overlappingRaces } = daten;
 
   for (const overlapRace of overlappingRaces) {
-    const entriesCountRow = db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM race_entries
-      WHERE race_id = ? AND team_id = ?
-    `).get(overlapRace.id, rider.activeTeamId) as { count: number } | undefined;
-    const isRosterFinalized = (entriesCountRow?.count ?? 0) > 0;
+    const isRosterFinalized = daten.finalisierteTeams.get(overlapRace.id)?.has(rider.activeTeamId as number) ?? false;
 
     if (isRosterFinalized) {
-      const hasEntry = db.prepare(`
-        SELECT 1
-        FROM race_entries
-        WHERE race_id = ? AND rider_id = ?
-      `).get(overlapRace.id, rider.id);
-      if (hasEntry) {
+      if (daten.gemeldeteFahrer.get(overlapRace.id)?.has(rider.id)) {
         return true;
       }
     } else {
@@ -1075,7 +1137,7 @@ export function previewRaceRoster(db: Database.Database, repo: any, race: Race, 
     return repo.getStageRiders(stage.id);
   }
 
-  const selected = buildRaceRoster(db, repo, race, stage);
+  const selected = mitKollisionsDaten(db, race, () => buildRaceRoster(db, repo, race, stage));
   if (race.isStageRace) {
     repo.prepareStageRaceFatigue(race.id, stage.stageNumber, selected.map((rider: any) => rider.id));
     return repo.attachStageRaceFatigue(race.id, selected, stage.stageNumber);
@@ -1446,7 +1508,7 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
     return repo.getStageRiders(stage.id);
   }
 
-  const selected = buildRaceRoster(db, repo, race, stage, true);
+  const selected = mitKollisionsDaten(db, race, () => buildRaceRoster(db, repo, race, stage, true));
   const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');
 
   db.transaction(() => {
@@ -1473,7 +1535,7 @@ export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any,
   if (isNationalChampionshipCategory(race.categoryId)) {
     return applyChampionshipEntries(db, repo, race, stage, true, buildNationalChampionshipRoster);
   }
-  const selected = buildRaceRoster(db, repo, race, stage);
+  const selected = mitKollisionsDaten(db, race, () => buildRaceRoster(db, repo, race, stage));
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const insertEntry = db.prepare('INSERT OR IGNORE INTO active_race_entries (race_id, team_id, rider_id) VALUES (?, ?, ?)');

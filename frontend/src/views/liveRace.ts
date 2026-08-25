@@ -110,6 +110,8 @@ export async function openOfflineStage(
   stageId: number,
   mode: OfflineStageMode = resolveDefaultStageMode(),
   skipViewActivation = false,
+  /** Im Auto-Weiter: die Fahrerliste beim Nachladen weglassen. */
+  lightReload = false,
 ): Promise<boolean> {
   if (instantStageInFlightId != null || realtimeCompletionInFlight) {
     return false;
@@ -150,6 +152,7 @@ export async function openOfflineStage(
       await completeRealtimeStage(
         stageId, outcome.entries, outcome.markerClassifications, outcome.incidents,
         outcome.events, skipViewActivation, outcome.leadoutContributions, outcome.superTeamId,
+        lightReload,
       );
       return true;
     }
@@ -448,6 +451,8 @@ export async function completeRealtimeStage(
   skipViewActivation = false,
   leadoutContributions?: RealtimeLeadoutContribution[],
   superTeamId?: number,
+  /** Im Auto-Weiter: die Fahrerliste beim Nachladen weglassen. */
+  lightReload = false,
 ): Promise<void> {
   if (realtimeCompletionInFlight) {
     return;
@@ -477,7 +482,7 @@ export async function completeRealtimeStage(
     state.realtimeError = null;
     await Promise.all([
       loadStageResults(stageId, false),
-      reloadCoreState(),
+      reloadCoreState(lightReload),
     ]);
     if (isActiveView('teams') || isActiveView('riders')) {
       await refreshTeamsViewData();
