@@ -25,6 +25,11 @@ import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
 import { resolveConditionFormBonus } from './riderCondition';
 import {
+  applyPreRaceRiderModifiers,
+  getWeatherRelation,
+  WEATHER_PROFILES,
+} from './preRaceModifiers';
+import {
   drawTeamLeadoutRandoms,
   LEADOUT_SPRINTER_THRESHOLD,
   resolveFinishMarkerType,
@@ -309,12 +314,6 @@ const STAMINA_SKILL_MAX = 85;
 // Rivalen-Feature: Radius, in dem ein Rivale einen Angriff kontert, sowie
 // Wahrscheinlichkeit/Grenzen des Druck-Boosts bzw. -Malus bei Rennstart.
 const RIVAL_COUNTER_RADIUS_METERS = 250;
-const RIVAL_PRESSURE_MALUS_CHANCE = 0.2;
-const RIVAL_PRESSURE_SKILL_COUNT = 3;
-const ALL_RIDER_SKILL_KEYS: readonly RiderSkillKey[] = [
-  'flat', 'mountain', 'mediumMountain', 'hill', 'timeTrial', 'prologue', 'cobble',
-  'sprint', 'acceleration', 'downhill', 'attack', 'stamina', 'resistance', 'recuperation', 'bikeHandling',
-];
 const STAMINA_DISTANCE_DIFF_ANCHORS = [
   { kmMark: 100, value: 0.5 },
   { kmMark: 150, value: 1 },
@@ -414,22 +413,9 @@ function clamp(value: number, min: number, max: number): number {
 
 
 
-export const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
-  1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
-  2: { pref: [3, 5], malus: [2, 7], neutral: [1, 4, 6] },
-  3: { pref: [4, 7], malus: [2, 5], neutral: [1, 3, 6] },
-  4: { pref: [6, 7], malus: [2, 5], neutral: [1, 3, 4] },
-  5: { pref: [1, 5], malus: [6, 7], neutral: [2, 3, 4] },
-  6: { pref: [1, 3], malus: [4, 7], neutral: [2, 5, 6] },
-  7: { pref: [3, 4], malus: [2, 7], neutral: [1, 5, 6] },
-};
-
-export function getWeatherRelation(profileId: number, weatherId: number): 'pref' | 'malus' | 'neutral' {
-  const profile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
-  if (profile.pref.includes(weatherId)) return 'pref';
-  if (profile.malus.includes(weatherId)) return 'malus';
-  return 'neutral';
-}
+// Aus preRaceModifiers weitergereicht: die Wetterprofile standen dreimal im
+// Code (hier, in incidents.ts und in views/riderStats.ts).
+export { WEATHER_PROFILES, getWeatherRelation };
 
 function chooseOne<T>(random: RandomSource, values: T[]): T {
   return values[Math.floor(random() * values.length)] as T;
@@ -1165,10 +1151,24 @@ export class SimulationEngine {
   /** Zufallsstrom der Engine selbst. Teilsysteme bekommen eigene Stroeme. */
   private readonly random: RandomSource;
 
+  private readonly bootstrap: RealtimeSimulationBootstrap;
+
   constructor(
-    private readonly bootstrap: RealtimeSimulationBootstrap,
+    bootstrapInput: RealtimeSimulationBootstrap,
     options?: { maxSubstepSeconds?: number; isInstantSimulation?: boolean; seed?: number },
   ) {
+    // Der Konstruktor schreibt die Fahrerliste dreimal um: Heimvorteil,
+    // Wetterprofil und Rivalendruck veraendern Faehigkeiten. Bisher traf das
+    // den Bootstrap des Aufrufers — und weil derselbe Bootstrap fuer mehrere
+    // Laeufe benutzt wird (Kalibrierlauf: einmal bauen, fuenfzigmal fahren),
+    // summierten sich die Zuschlaege von Lauf zu Lauf auf. Gemessen: +2,9 auf
+    // Flach nach fuenf Engines, und mit genug Laeufen laufen die Werte in die
+    // Obergrenze 100.
+    //
+    // Die Kopie ist flach: die Aenderungen ersetzen Fahrer, statt sie an Ort
+    // und Stelle zu veraendern.
+    const bootstrap: RealtimeSimulationBootstrap = { ...bootstrapInput, riders: [...bootstrapInput.riders] };
+    this.bootstrap = bootstrap;
     this.maxSubstepSeconds = options?.maxSubstepSeconds ?? 1;
     this.isInstantSimulation = options?.isInstantSimulation ?? false;
     this.seed = options?.seed ?? bootstrap.simSeed ?? createRandomSeed();
@@ -1177,180 +1177,20 @@ export class SimulationEngine {
     // Ausreisserplan und Vorfaelle derselben Etappe.
     this.random = createSeededRandom(deriveSeed(this.seed, 'engine'));
 
-    // Apply Home Advantage / Pressure modifications
-    const raceCountryCode = bootstrap.race.country?.code3;
-    if (raceCountryCode) {
-      bootstrap.riders = bootstrap.riders.map((originalRider) => {
-        const riderNation = originalRider.nationality || originalRider.country?.code3;
-        if (riderNation && riderNation.trim().toUpperCase() === raceCountryCode.trim().toUpperCase()) {
-          const clonedRider = {
-            ...originalRider,
-            skills: { ...originalRider.skills },
-          };
-
-          const roll = this.random();
-          const profile = bootstrap.stage.profile;
-          const isTimeTrial = profile === 'ITT' || profile === 'TTT';
-
-          // Allowed skills: flat, hill, sprint, acceleration, stamina, resistance, recuperation, bikeHandling
-          const allowedPool: RiderSkillKey[] = [
-            'flat', 'hill', 'sprint', 'acceleration', 'stamina', 'resistance', 'recuperation', 'bikeHandling'
-          ];
-
-          // Add cobble only if stage is Cobble or Cobble_Hill
-          if (profile === 'Cobble' || profile === 'Cobble_Hill') {
-            allowedPool.push('cobble');
-          }
-
-          // Add mountain and mediumMountain only if profile is not flat, rolling, cobble, cobble_hill, itt, ttt
-          const excludeMountain = [
-            'Flat', 'Rolling', 'Cobble', 'Cobble_Hill', 'ITT', 'TTT'
-          ].includes(profile);
-
-          if (!excludeMountain) {
-            allowedPool.push('mountain', 'mediumMountain');
-          }
-
-          const pickRandomSkills = (n: number): RiderSkillKey[] => {
-            const keys = [...allowedPool];
-            const result: RiderSkillKey[] = [];
-
-            if (isTimeTrial) {
-              // TimeTrial skill is guaranteed to be one of the selected skills.
-              result.push('timeTrial');
-              // We need to pick n - 1 additional skills from the allowed pool.
-              const limit = Math.min(n - 1, keys.length);
-              for (let i = 0; i < limit; i++) {
-                const idx = Math.floor(this.random() * keys.length);
-                result.push(keys.splice(idx, 1)[0]);
-              }
-            } else {
-              // We pick n skills from the allowed pool.
-              const limit = Math.min(n, keys.length);
-              for (let i = 0; i < limit; i++) {
-                const idx = Math.floor(this.random() * keys.length);
-                result.push(keys.splice(idx, 1)[0]);
-              }
-            }
-            return result;
-          };
-
-          const selectedSkills = pickRandomSkills(5);
-          // Shuffle to randomize which of the selected skills gets the +3 (which is index 0)
-          // Fisher-Yates statt sort(() => rng() - 0.5): letzteres ist keine
-          // Gleichverteilung und bevorzugte bisher bestimmte Skills.
-          const shuffledSkills = shuffled(this.random, selectedSkills);
-          clonedRider.homeEffectSkills = shuffledSkills;
-
-          if (roll < 0.05) {
-            // Heimdruck (5% chance): -0.5 on 5 random skills
-            clonedRider.homeEffect = 'home_pressure';
-            for (const key of shuffledSkills) {
-              clonedRider.skills[key] = Math.max(0, clonedRider.skills[key] - 0.5);
-            }
-          } else if (roll < 0.10) {
-            // Super Heimvorteil (5% chance): +1 on 4 skills, +3 on 1 skill
-            clonedRider.homeEffect = 'super_home';
-            const plus3Key = shuffledSkills[0];
-            clonedRider.skills[plus3Key] = Math.min(100, clonedRider.skills[plus3Key] + 3);
-            for (let i = 1; i < 5; i++) {
-              const key = shuffledSkills[i];
-              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
-            }
-          } else {
-            // Normal Heimvorteil (90% chance): +1 on 5 random skills
-            clonedRider.homeEffect = 'normal_home';
-            for (const key of shuffledSkills) {
-              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
-            }
-          }
-          return clonedRider;
-        }
-        return originalRider;
-      });
-    }
-
-    // Apply Weather Profile modifications
-    const weatherId = bootstrap.stage.rolledWeatherId || 1;
-    bootstrap.riders = bootstrap.riders.map((originalRider) => {
-      const profileId = originalRider.weatherProfileId || 1;
-      const relation = getWeatherRelation(profileId, weatherId);
-
-      if (relation === 'neutral') {
-        return originalRider;
-      }
-
-      const clonedRider = {
-        ...originalRider,
-        skills: { ...originalRider.skills },
-      };
-
-      const skillsToModify: RiderSkillKey[] = ['flat', 'mountain', 'stamina', 'bikeHandling', 'recuperation', 'downhill'];
-
-      if (relation === 'pref') {
-        for (const skill of skillsToModify) {
-          const mod = randomBetween(this.random, 0.2, 1.0);
-          clonedRider.skills[skill] = Math.min(100, clonedRider.skills[skill] + mod);
-        }
-      } else if (relation === 'malus') {
-        // Check if there is a lieutenant starting the race who has this weather as a preference
-        let reduction = 0;
-        if (bootstrap.lieutenants) {
-          const relationObj = bootstrap.lieutenants.find((l) => l.leaderId === originalRider.id);
-          if (relationObj) {
-            const hasLtStarting = bootstrap.riders.some((r) => r.id === relationObj.lieutenantId);
-            if (hasLtStarting) {
-              const ltRider = bootstrap.riders.find((r) => r.id === relationObj.lieutenantId);
-              const ltProfileId = ltRider?.weatherProfileId || 1;
-              const ltRelation = getWeatherRelation(ltProfileId, weatherId);
-              if (ltRelation === 'pref') {
-                reduction = randomBetween(this.random, 0.40, 0.75);
-              }
-            }
-          }
-        }
-
-        for (const skill of skillsToModify) {
-          const mod = randomBetween(this.random, 0.2, 1.0) * (1 - reduction);
-          clonedRider.skills[skill] = Math.max(0, clonedRider.skills[skill] - mod);
-        }
-      }
-
-      return clonedRider;
+    // Heimvorteil, Wetterprofil (samt Leutnant-Ausgleich) und Rivalendruck.
+    // Ausgelagert, damit die Quick Simulation dieselben Zuschlaege rechnet —
+    // sie lagen hier und fehlten dort vollstaendig.
+    const preRace = applyPreRaceRiderModifiers({
+      riders: bootstrap.riders,
+      race: bootstrap.race,
+      stage: bootstrap.stage,
+      lieutenants: bootstrap.lieutenants,
+      rivalries: bootstrap.rivalries,
+      random: this.random,
     });
-
-    // Rivalen-Druck: Starten beide Fahrer eines Rivalen-Paares, bekommt jeder
-    // auf 3 zufaellige Skills +0.2..1.0 (80%) bzw. -0.2..1.0 (20%, Druck).
-    // Nur pro Rennen (geklont), DB unberuehrt. Ausserdem die Rivalen-Map fuer
-    // die Konterattacken fuellen (nur Paare, bei denen beide starten).
-    if (bootstrap.rivalries && bootstrap.rivalries.length > 0) {
-      const startingIds = new Set(bootstrap.riders.map((r) => r.id));
-      const pressuredIds = new Set<number>();
-      for (const pair of bootstrap.rivalries) {
-        if (startingIds.has(pair.aId) && startingIds.has(pair.bId)) {
-          this.rivalByRiderId.set(pair.aId, pair.bId);
-          this.rivalByRiderId.set(pair.bId, pair.aId);
-          pressuredIds.add(pair.aId);
-          pressuredIds.add(pair.bId);
-        }
-      }
-      if (pressuredIds.size > 0) {
-        bootstrap.riders = bootstrap.riders.map((rider) => {
-          if (!pressuredIds.has(rider.id)) return rider;
-          const cloned = { ...rider, skills: { ...rider.skills } };
-          const isMalus = this.random() < RIVAL_PRESSURE_MALUS_CHANCE;
-          const pool = [...ALL_RIDER_SKILL_KEYS];
-          for (let k = 0; k < RIVAL_PRESSURE_SKILL_COUNT && pool.length > 0; k++) {
-            const idx = Math.floor(this.random() * pool.length);
-            const skill = pool.splice(idx, 1)[0];
-            const mod = randomBetween(this.random, 0.2, 1.0);
-            cloned.skills[skill] = isMalus
-              ? Math.max(0, cloned.skills[skill] - mod)
-              : Math.min(100, cloned.skills[skill] + mod);
-          }
-          return cloned;
-        });
-      }
+    bootstrap.riders = preRace.riders;
+    for (const [riderId, rivalId] of preRace.rivalByRiderId) {
+      this.rivalByRiderId.set(riderId, rivalId);
     }
 
     this.stageDistanceMeters = bootstrap.stageSummary.distanceKm * 1000;

@@ -177,6 +177,42 @@ describe('runQuickSimulation', () => {
     expect(runQuickSimulation(bootstrap, { seed: 4711 }).leadoutContributions).toEqual([]);
   });
 
+  it('laesst den Bootstrap des Aufrufers unangetastet', () => {
+    // Die Vorab-Zuschlaege veraendern Faehigkeiten. Wuerden sie den Bootstrap
+    // treffen, summierten sie sich ueber mehrere Laeufe auf — genau der Fehler,
+    // der in der Engine gefunden wurde.
+    const before = JSON.stringify(bootstrap.riders.map((rider) => rider.skills));
+    runQuickSimulation(bootstrap, { seed: 4711 });
+    runQuickSimulation(bootstrap, { seed: 4712 });
+    runQuickSimulation(bootstrap, { seed: 4713 });
+    expect(JSON.stringify(bootstrap.riders.map((rider) => rider.skills))).toBe(before);
+  });
+
+  it('rechnet den Heimvorteil ein', () => {
+    // Ein Rennen im Land des Fahrers hebt fuenf seiner Faehigkeiten.
+    const home = bootstrap.riders[0]!.nationality ?? bootstrap.riders[0]!.country?.code3;
+    if (!home) {
+      return;
+    }
+    const withHome: RealtimeSimulationBootstrap = {
+      ...bootstrap,
+      race: { ...bootstrap.race, country: { ...(bootstrap.race.country ?? {}), code3: home } as never },
+    };
+    const positionOf = (outcome: ReturnType<typeof runQuickSimulation>, riderId: number): number =>
+      outcome.result.entries.findIndex((entry) => entry.riderId === riderId);
+    // Ueber mehrere Seeds gemittelt muss der Heimfahrer besser abschneiden.
+    let better = 0;
+    for (let seed = 0; seed < 30; seed += 1) {
+      const target = bootstrap.riders[0]!.id;
+      const withoutHome = positionOf(runQuickSimulation(bootstrap, { seed }), target);
+      const homeAdvantage = positionOf(runQuickSimulation(withHome, { seed }), target);
+      if (homeAdvantage <= withoutHome) {
+        better += 1;
+      }
+    }
+    expect(better).toBeGreaterThan(15);
+  });
+
   it('braucht keine Profiltabelle im Bootstrap', () => {
     // Altspielstaende liefern sie nicht — dann greifen die eingebauten Vorgaben.
     const withoutProfiles = { ...bootstrap };

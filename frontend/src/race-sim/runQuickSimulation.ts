@@ -48,6 +48,7 @@ import {
   resolveLeadoutBonus,
 } from './sprintLeadout';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
+import { applyPreRaceRiderModifiers } from './preRaceModifiers';
 import { resolveFatigueMalus } from './riderCondition';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
@@ -133,10 +134,22 @@ export function runQuickSimulation(
     ?? bootstrap.quickSimProfiles?.[profile]
     ?? DEFAULT_QUICK_SIM_PROFILES[profile];
 
-  // Tagesform zuerst: sie geht in jede spaetere Bewertung ein.
+  // Heimvorteil, Wetterprofil (samt Leutnant-Ausgleich) und Rivalendruck —
+  // dieselben Zuschlaege wie in der vollen Simulation, aus demselben Modul.
+  const preRace = applyPreRaceRiderModifiers({
+    riders: bootstrap.riders,
+    race: bootstrap.race,
+    stage: bootstrap.stage,
+    lieutenants: bootstrap.lieutenants,
+    rivalries: bootstrap.rivalries,
+    random: createSeededRandom(deriveSeed(seed, 'pre-race')),
+  });
+  const riders = preRace.riders;
+
+  // Tagesform: sie geht in jede spaetere Bewertung ein.
   const gcLeaderRiderId = bootstrap.gcStandings.find((standing) => standing.rank === 1)?.riderId ?? null;
   const dailyFormRandom = createSeededRandom(deriveSeed(seed, 'daily-form'));
-  const dailyFormByRiderId = new Map(bootstrap.riders.map((rider) => [
+  const dailyFormByRiderId = new Map(riders.map((rider) => [
     rider.id,
     sampleDailyForm(dailyFormRandom, rider.id === gcLeaderRiderId),
   ]));
@@ -145,7 +158,7 @@ export function runQuickSimulation(
   // Dieselben abgeleiteten Stroeme wie in SimulationEngine — gleicher Seed,
   // gleiche Stuerze, gleicher Einholpunkt.
   const precalculatedIncidents = precalculateRaceIncidents(
-    bootstrap.riders,
+    riders,
     bootstrap.stage,
     distanceKm,
     createSeededRandom(deriveSeed(seed, 'incidents')),
@@ -164,7 +177,7 @@ export function runQuickSimulation(
   // im Moment des Sturzes hoechstens 50 Meter entfernt sind. Ohne Positionen
   // tritt an deren Stelle ein gemessener Anteil der Kandidaten.
   const massCrashRandom = createSeededRandom(deriveSeed(seed, 'mass-crash'));
-  const riderForVictim = new Map(bootstrap.riders.map((rider) => [rider.id, rider]));
+  const riderForVictim = new Map(riders.map((rider) => [rider.id, rider]));
   const incidents = expandMassCrashes(
     massCrashRandom,
     precalculatedIncidents.map(toQuickIncident),
@@ -176,17 +189,17 @@ export function runQuickSimulation(
       }
       // Derselbe Opfer-Vorfall, den auch die Engine baut.
       return toQuickIncident(buildDynamicCrashIncident(
-        rider, bootstrap.riders, triggerDistanceKm, distanceKm, massCrashRandom,
+        rider, riders, triggerDistanceKm, distanceKm, massCrashRandom,
       ));
     },
   );
 
   const plan = precalculateStageBreakaway(
-    bootstrap.riders,
+    riders,
     bootstrap.race,
     bootstrap.stage,
     bootstrap.stageSummary,
-    calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, favoriteOptions),
+    calculateStageFavorites(riders, bootstrap.teams, bootstrap.stage, favoriteOptions),
     bootstrap.gcStandings,
     bootstrap.mountainStandings,
     bootstrap.teams,
@@ -204,7 +217,7 @@ export function runQuickSimulation(
 
   // Superform und Supermalus: derselbe Zufallsstrom wie in der Engine, damit
   // beide Modi auf derselben Etappe dieselben Fahrer treffen.
-  const ridersWithSpecialStates = applySpecialFormStatesWithContext(bootstrap.riders, bootstrap.stage, {
+  const ridersWithSpecialStates = applySpecialFormStatesWithContext(riders, bootstrap.stage, {
     teams: bootstrap.teams,
     ...favoriteOptions,
     random: createSeededRandom(deriveSeed(seed, 'special-form')),

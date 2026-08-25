@@ -1,22 +1,7 @@
 import type { CrashSeverity, PrecalculatedRaceIncident, Rider, Stage, StageProfile } from '../../../shared/types';
+// Die Wetterprofile standen hier ein zweites Mal — jetzt aus einer Quelle.
+import { getWeatherRelation } from './preRaceModifiers';
 import { createRandomSeed, createSeededRandom, shuffled as shuffleRandomly, type RandomSource } from '../../../shared/rng';
-
-const WEATHER_PROFILES: Record<number, { pref: number[]; malus: number[]; neutral: number[] }> = {
-  1: { pref: [1, 2], malus: [4, 7], neutral: [3, 5, 6] },
-  2: { pref: [3, 5], malus: [2, 7], neutral: [1, 4, 6] },
-  3: { pref: [4, 7], malus: [2, 5], neutral: [1, 3, 6] },
-  4: { pref: [6, 7], malus: [2, 5], neutral: [1, 3, 4] },
-  5: { pref: [1, 5], malus: [6, 7], neutral: [2, 3, 4] },
-  6: { pref: [1, 3], malus: [4, 7], neutral: [2, 5, 6] },
-  7: { pref: [3, 4], malus: [2, 7], neutral: [1, 5, 6] },
-};
-
-function getWeatherRelation(profileId: number, weatherId: number): 'pref' | 'malus' | 'neutral' {
-  const profile = WEATHER_PROFILES[profileId] || WEATHER_PROFILES[1];
-  if (profile.pref.includes(weatherId)) return 'pref';
-  if (profile.malus.includes(weatherId)) return 'malus';
-  return 'neutral';
-}
 
 const BASE_CRASH_CHANCE = 0.005;
 const BASE_MECHANICAL_CHANCE = 0.005;
