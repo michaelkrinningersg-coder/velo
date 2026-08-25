@@ -15,7 +15,7 @@ import {
   resolveFirstGroupSize,
   resolveWinnerTimeSeconds,
 } from '../../../shared/quickSim/groupModel';
-import { DEFAULT_QUICK_SIM_PROFILES } from '../../../shared/quickSimProfiles';
+import { DEFAULT_QUICK_SIM_PROFILES, TAIL_SHAPE_BY_PROFILE } from '../../../shared/quickSimProfiles';
 import { createSeededRandom } from '../../../shared/rng';
 
 function moments(values: number[]): { mean: number; sd: number } {
@@ -406,12 +406,34 @@ describe('Steilere Rueckstandskurve am Berg', () => {
     }
   });
 
-  it('laesst alle anderen Profile unveraendert', () => {
-    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+  it('laesst die Profile ohne eigenen Eintrag auf der gemessenen Kurve', () => {
+    for (const profile of ['Hilly_Difficult', 'Cobble', 'Cobble_Hill', 'ITT', 'TTT'] as StageProfile[]) {
+      expect(TAIL_SHAPE_BY_PROFILE[profile]).toBeUndefined();
       for (const position of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
         expect(resolveTailGapShare(position, profile)).toBeCloseTo(resolveTailGapShare(position), 10);
       }
     }
+  });
+
+  it('bricht flach, rollend und huegelig spaeter weg als die gemessene Kurve', () => {
+    // Bis weit ins Feld hinein passiert dort fast nichts; erst das wirklich
+    // abgehaengte Ende verliert. Der Endpunkt bleibt in jedem Fall 1.
+    for (const profile of ['Flat', 'Rolling', 'Hilly'] as StageProfile[]) {
+      for (const position of [0.3, 0.5, 0.7, 0.9]) {
+        expect(resolveTailGapShare(position, profile)).toBeLessThan(resolveTailGapShare(position));
+      }
+      expect(resolveTailGapShare(1, profile)).toBeCloseTo(1, 10);
+      expect(resolveTailGapShare(0, profile)).toBe(0);
+    }
+  });
+
+  it('kippt im Mittelgebirge frueh und saettigt dann', () => {
+    // Vorne mehr Spreizung als die gemessene Kurve, hinten weniger Ausschlag.
+    expect(resolveTailGapShare(0.55, 'Medium_Mountain')).toBeGreaterThan(resolveTailGapShare(0.55));
+    expect(resolveTailGapShare(0.10, 'Medium_Mountain')).toBeLessThan(resolveTailGapShare(0.10));
+    // Und flacher als am Hochgebirge, wo dieselbe Familie steiler steht.
+    expect(resolveTailGapShare(0.85, 'Medium_Mountain')).toBeGreaterThan(resolveTailGapShare(0.85, 'High_Mountain'));
+    expect(resolveTailGapShare(1, 'Medium_Mountain')).toBeCloseTo(1, 10);
   });
 
   it('bleibt monoton steigend', () => {

@@ -148,53 +148,72 @@ export const TAIL_SHAPE_EPSILON = 0.108;
 export const TAIL_SHAPE_EXPONENT = 0.65;
 
 /**
- * Abweichende Kurvenform fuer Berg- und Hochgebirgsetappen.
+ * Abweichende Kurvenformen je Profil.
  *
- * Die gemessene Kurve trennt das Feld am Berg zu wenig: ueber acht
- * Bergetappen eines Giro verliert Rang 20 zusammen 5:26 und Rang 50 16:35.
- * Damit landen Fahrer mit Bergwerten um 70 — Helfer und Wassertraeger — in
- * den Top 10 der Gesamtwertung, was in einem simulierten Giro auf den
- * Plaetzen 8, 9 und 11 auch passiert ist.
+ * Die gemessene Kurve ist ein Referenzwert, keine Spielentscheidung — und als
+ * Spielgroesse passt sie an drei Stellen nicht:
  *
- * Angehoben wird deshalb die *Mitte* der Kurve, nicht ihr Ende. Die gemessene
- * Form `eps v^p / (1 - v + eps)` kann das nicht: sie ist ueberall konvex, ihr
- * Wert bei v = 0,5 liegt bauartbedingt unter `v^p`, und mehr Mitte gab es dort
- * nur zusammen mit mehr Anfang. Ein erster Versuch mit eps 0,35 und p 1,30
- * brachte deshalb bei Rang 50 den Faktor 1,00 statt der gewuenschten Spreizung.
+ * `sform` fuer Mountain und High_Mountain. Die gemessene Kurve trennt das Feld
+ * am Berg zu wenig: ueber acht Bergetappen eines Giro verliert Rang 20
+ * zusammen 5:26 und Rang 50 16:35. Damit landen Fahrer mit Bergwerten um 70 —
+ * Helfer und Wassertraeger — in den Top 10 der Gesamtwertung. Angehoben werden
+ * muss dafuer die *Mitte* der Kurve, nicht ihr Ende, und genau das gibt die
+ * gemessene Familie `eps v^p / (1 - v + eps)` nicht her: sie ist ueberall
+ * konvex, mehr Mitte gab es dort nur zusammen mit mehr Anfang.
  *
- * Diese Form dagegen ist S-foermig:
+ * `sform` mit flacheren Parametern fuer Medium_Mountain. Dieselbe Familie,
+ * aber frueh kippend und dann saettigend: das Feld faellt am Anstieg
+ * auseinander, das abgehaengte Ende verliert aber nicht Stunden.
  *
- *   f(v) = v^a / (v^a + c (1 - v))
+ * `gemessen` mit kleinerem `eps` fuer Flat, Rolling und Hilly. Dort soll die
+ * Kurve umgekehrt *spaeter* wegbrechen als gemessen: bis weit ins Feld hinein
+ * passiert fast nichts, und erst das wirklich abgehaengte Ende verliert. Ein
+ * kleineres `eps` schiebt genau das nach hinten.
  *
- * Sie ist bei v = 0 exakt 0 und bei v = 1 exakt 1, unabhaengig von beiden
- * Parametern — der Rueckstand des letzten Fahrers bleibt also `tailGapPerKm`
- * und damit auch sein Verhaeltnis zum Zeitlimit. `a` steuert, wie eng es
- * direkt hinter der Spitzengruppe zugeht, `c`, wie frueh die Kurve in die
- * Mitte kippt. Der lineare Term `(1 - v)` sorgt dafuer, dass sie sich dem
- * Endpunkt mit endlicher Steigung naehert: mit einem Exponenten unter 1 an
- * dieser Stelle entstuende zwischen dem vorletzten und dem letzten Fahrer eine
- * Stufe von mehreren Minuten.
+ * Beide Familien sind bei v = 0 exakt 0 und bei v = 1 exakt 1, unabhaengig von
+ * ihren Parametern — der Rueckstand des letzten Fahrers bleibt also immer
+ * `tailGapPerKm` und damit auch sein Verhaeltnis zum Zeitlimit. Die Form
+ * verteilt nur um, wer davon wieviel abbekommt.
  *
- * Wirkung gegenueber der gemessenen Kurve, bei 200 Fahrern und einer ersten
- * Gruppe von drei:
+ *   gemessen   f(v) = w v^e / (1 - v + w)
+ *   sform      f(v) = v^e / (v^e + w (1 - v))
  *
- *   Rang  10   0,91-fach      Rang 100   2,90-fach
- *   Rang  20   1,54-fach      Rang 130   2,55-fach
- *   Rang  30   2,00-fach      Rang 150   2,01-fach
- *   Rang  50   2,66-fach      Rang 175   1,48-fach
- *   Rang  70   3,10-fach      Rang 190   1,19-fach
- *                             Letzter    1,00-fach
+ * Bei `sform` ist der lineare Term bewusst linear: mit einem Exponenten unter
+ * 1 an dieser Stelle entstuende zwischen dem vorletzten und dem letzten Fahrer
+ * eine Stufe von mehreren Minuten.
  *
- * Das ist eine Spielentscheidung, keine Messung — anders als die gemeinsame
- * Kurve, die aus dem Referenzlauf stammt.
+ * Das sind Spielentscheidungen, keine Messungen — anders als der Eintrag fuer
+ * die uebrigen Profile, der aus dem Referenzlauf stammt.
  */
-export const STEEP_TAIL_SHAPE_PROFILES: ReadonlySet<StageProfile> = new Set<StageProfile>([
-  'Mountain', 'High_Mountain',
-]);
-/** Exponent `a`: je groesser, desto enger direkt hinter der Spitzengruppe. */
-export const STEEP_TAIL_SHAPE_EXPONENT = 1.90;
-/** Gewicht `c` des linearen Terms: je groesser, desto spaeter kippt die Kurve. */
-export const STEEP_TAIL_SHAPE_TAIL_WEIGHT = 0.58;
+export type TailShapeKind = 'gemessen' | 'sform';
+
+export interface TailShapeParameters {
+  kind: TailShapeKind;
+  /** Exponent auf die Position — je groesser, desto enger vorne. */
+  exponent: number;
+  /** Gewicht des Nennerterms — steuert, wann die Kurve kippt. */
+  weight: number;
+}
+
+/** Die gemessene Form, gueltig fuer jedes Profil ohne eigenen Eintrag. */
+export const DEFAULT_TAIL_SHAPE: TailShapeParameters = {
+  kind: 'gemessen',
+  exponent: TAIL_SHAPE_EXPONENT,
+  weight: TAIL_SHAPE_EPSILON,
+};
+
+export const TAIL_SHAPE_BY_PROFILE: Partial<Record<StageProfile, TailShapeParameters>> = {
+  Flat: { kind: 'gemessen', exponent: 0.65, weight: 0.020 },
+  Rolling: { kind: 'gemessen', exponent: 0.65, weight: 0.020 },
+  Hilly: { kind: 'gemessen', exponent: 0.65, weight: 0.020 },
+  Medium_Mountain: { kind: 'sform', exponent: 2.50, weight: 0.25 },
+  Mountain: { kind: 'sform', exponent: 1.90, weight: 0.58 },
+  High_Mountain: { kind: 'sform', exponent: 1.90, weight: 0.58 },
+};
+
+export function resolveTailShape(profile?: StageProfile | null): TailShapeParameters {
+  return (profile != null ? TAIL_SHAPE_BY_PROFILE[profile] : undefined) ?? DEFAULT_TAIL_SHAPE;
+}
 
 /**
  * Anzahl Zeitgruppen je Regime (Median, 10./90. Perzentil) — Kontrollgroesse
@@ -213,13 +232,13 @@ export const TIME_GROUP_COUNT_REFERENCE = {
  * `breakawayShrinkExponent` sind weiterhin geschaetzte Startwerte.
  */
 export const DEFAULT_QUICK_SIM_PROFILES: Record<StageProfile, QuickSimProfileParameters> = {
-  Flat:             { baseSpeedKmh: 44.01, bunchIntercept: 1.63, bunchedShareIntercept: 0.8813, splitShareIntercept: 0.0054, tailGapPerKm: 7.20, tailGroupSize: 8.44, noiseSigma: 0.15, incidentLossMultiplier: 1.20, severeDnfChance: 0.25, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.41 },
-  Rolling:          { baseSpeedKmh: 42.49, bunchIntercept: 2.38, bunchedShareIntercept: 0.7527, splitShareIntercept: 0.2947, tailGapPerKm: 8.11, tailGroupSize: 4.18, noiseSigma: 0.18, incidentLossMultiplier: 1.40, severeDnfChance: 0.25, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.41 },
-  Hilly:            { baseSpeedKmh: 42.83, bunchIntercept: 1.66, bunchedShareIntercept: 0.7860, splitShareIntercept: 0.2417, tailGapPerKm: 8.58, tailGroupSize: 4.15, noiseSigma: 0.20, incidentLossMultiplier: 1.70, severeDnfChance: 0.28, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.29 },
+  Flat:             { baseSpeedKmh: 44.01, bunchIntercept: 1.63, bunchedShareIntercept: 0.8813, splitShareIntercept: 0.0054, tailGapPerKm: 4.90, tailGroupSize: 8.44, noiseSigma: 0.15, incidentLossMultiplier: 1.20, severeDnfChance: 0.25, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.41 },
+  Rolling:          { baseSpeedKmh: 42.49, bunchIntercept: 2.38, bunchedShareIntercept: 0.7527, splitShareIntercept: 0.2947, tailGapPerKm: 5.35, tailGroupSize: 4.18, noiseSigma: 0.18, incidentLossMultiplier: 1.40, severeDnfChance: 0.25, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.41 },
+  Hilly:            { baseSpeedKmh: 42.83, bunchIntercept: 1.66, bunchedShareIntercept: 0.7860, splitShareIntercept: 0.2417, tailGapPerKm: 6.12, tailGroupSize: 4.15, noiseSigma: 0.20, incidentLossMultiplier: 1.70, severeDnfChance: 0.28, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.29 },
   Hilly_Difficult:  { baseSpeedKmh: 41.41, bunchIntercept: 1.13, bunchedShareIntercept: 0.6951, splitShareIntercept: 0.0490, tailGapPerKm: 9.93, tailGroupSize: 3.96, noiseSigma: 0.22, incidentLossMultiplier: 2.00, severeDnfChance: 0.30, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.02 },
   Cobble:           { baseSpeedKmh: 46.08, bunchIntercept: -3.03, bunchedShareIntercept: 0.5725, splitShareIntercept: -0.0112, tailGapPerKm: 13.08, tailGroupSize: 5.42, noiseSigma: 0.30, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.40, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.38 },
   Cobble_Hill:      { baseSpeedKmh: 46.85, bunchIntercept: 1.16, bunchedShareIntercept: 0.6661, splitShareIntercept: 0.1715, tailGapPerKm: 8.35, tailGroupSize: 5.25, noiseSigma: 0.30, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.40, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.84 },
-  Medium_Mountain:  { baseSpeedKmh: 39.83, bunchIntercept: -1.49, bunchedShareIntercept: 0.5717, splitShareIntercept: 0.0610, tailGapPerKm: 10.64, tailGroupSize: 4.38, noiseSigma: 0.22, incidentLossMultiplier: 2.20, severeDnfChance: 0.30, breakawayShrinkExponent: 1.60, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.79 },
+  Medium_Mountain:  { baseSpeedKmh: 39.83, bunchIntercept: -1.49, bunchedShareIntercept: 0.5717, splitShareIntercept: 0.0610, tailGapPerKm: 6.76, tailGroupSize: 4.38, noiseSigma: 0.22, incidentLossMultiplier: 2.20, severeDnfChance: 0.30, breakawayShrinkExponent: 1.60, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.79 },
   Mountain:         { baseSpeedKmh: 36.91, bunchIntercept: -6.24, bunchedShareIntercept: 0.7000, splitShareIntercept: 0.1099, tailGapPerKm: 23.25, tailGroupSize: 1.85, noiseSigma: 0.24, incidentLossMultiplier: 2.60, severeDnfChance: 0.30, breakawayShrinkExponent: 1.70, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.51 },
   High_Mountain:    { baseSpeedKmh: 35.85, bunchIntercept: -5.18, bunchedShareIntercept: 0.7000, splitShareIntercept: 0.0517, tailGapPerKm: 36.82, tailGroupSize: 2.25, noiseSigma: 0.26, incidentLossMultiplier: 3.00, severeDnfChance: 0.32, breakawayShrinkExponent: 1.80, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.26 },
   ITT:              { baseSpeedKmh: 45.94, bunchIntercept: 0.00, bunchedShareIntercept: 0.7000, splitShareIntercept: 0.0000, tailGapPerKm: 10.70, tailGroupSize: 2.45, noiseSigma: 0.10, incidentLossMultiplier: 1.00, severeDnfChance: 0.20, breakawayShrinkExponent: 1.00, timeTrialSlope: 0.00300, timeTrialNoise: 0.0300, massCrashInvolvement: 0.00, rankNoise: 0.35 },

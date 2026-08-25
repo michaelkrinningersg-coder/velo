@@ -17,11 +17,7 @@ import {
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
-  STEEP_TAIL_SHAPE_EXPONENT,
-  STEEP_TAIL_SHAPE_PROFILES,
-  STEEP_TAIL_SHAPE_TAIL_WEIGHT,
-  TAIL_SHAPE_EPSILON,
-  TAIL_SHAPE_EXPONENT,
+  resolveTailShape,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
 import { randomBetween, type RandomSource } from '../rng';
@@ -208,27 +204,18 @@ const MIN_SPLIT_SECONDS = TIME_TIE_THRESHOLD_SECONDS + 1;
  * `position` ist 0 direkt hinter der Spitzengruppe und 1 beim letzten Fahrer.
  * Der Wert ist der Anteil am Rueckstand des Letzten, also 1 bei position = 1.
  *
- * Zwei Formen, beide bei 0 exakt 0 und bei 1 exakt 1:
- *
- *   gemessen   `eps v^p / (1 - v + eps)`   sieben Profile
- *   steil      `v^a / (v^a + c (1 - v))`   Mountain und High_Mountain
- *
- * Die gemessene Kurve steigt vorne flach und bricht zum Ende hin weg — das
- * abgehaengte Ende des Feldes. Ueber alle neun Strassenprofile ist sie nach
- * dieser Normierung dieselbe; nur ihre Hoehe (`tailGapPerKm`) haengt am Profil.
- *
- * Am Berg reicht das als Spielgroesse nicht: dort soll die *Mitte* des Feldes
- * deutlich mehr verlieren, ohne dass der Letzte weiter zurueckfaellt. Das
- * verlangt eine S-Form, die die gemessene Familie nicht hergibt — siehe
- * `STEEP_TAIL_SHAPE_PROFILES`.
+ * Welche der beiden Formen und mit welchen Parametern, steht je Profil in
+ * `TAIL_SHAPE_BY_PROFILE`; ohne Eintrag gilt die gemessene Kurve aus dem
+ * Referenzlauf. Beide Formen sind bei 0 exakt 0 und bei 1 exakt 1, die Hoehe
+ * kommt in jedem Fall aus `tailGapPerKm`.
  */
 export function resolveTailGapShare(position: number, profile?: StageProfile): number {
   const v = Math.min(1, Math.max(0, position));
-  if (profile != null && STEEP_TAIL_SHAPE_PROFILES.has(profile)) {
-    const front = Math.pow(v, STEEP_TAIL_SHAPE_EXPONENT);
-    return front / (front + (STEEP_TAIL_SHAPE_TAIL_WEIGHT * (1 - v)));
-  }
-  return (TAIL_SHAPE_EPSILON * Math.pow(v, TAIL_SHAPE_EXPONENT)) / (1 - v + TAIL_SHAPE_EPSILON);
+  const { kind, exponent, weight } = resolveTailShape(profile);
+  const front = Math.pow(v, exponent);
+  return kind === 'sform'
+    ? front / (front + (weight * (1 - v)))
+    : (weight * front) / (1 - v + weight);
 }
 
 /**
