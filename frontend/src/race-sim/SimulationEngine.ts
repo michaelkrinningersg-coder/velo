@@ -23,7 +23,7 @@ import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, type FavoriteItem } from './stageFavorites';
 import { precalculateStageBreakaway, type PrecalculatedStageBreakaway } from './stageBreakaways';
 import { collectStageBoundaryMarkers, isMountainClassificationMarker } from './stageSummary';
-import { resolveConditionFormBonus, usesMentorBoosts } from './riderCondition';
+import { resolveConditionFormBonus, sampleDailyForm, usesMentorBoosts } from './riderCondition';
 import {
   applyPreRaceRiderModifiers,
   getWeatherRelation,
@@ -579,13 +579,6 @@ function sampleMicroForm(random: RandomSource): number {
     return roundToTwoDecimals(chooseOne(random, [-1, 1]) * randomBetween(random, 1, 2));
   }
   return roundToTwoDecimals(chooseOne(random, [-1, 1]) * randomBetween(random, 3, 4));
-}
-
-// Tagesform je Fahrer (einmal pro Etappe, additive Skillpunkte): +/- 3.
-// Der aktuelle GC-Fuehrende ist nach oben gedeckelt (Druck/Markierung): die
-// Tagesform liegt fuer ihn zufaellig in [-3; +1,5].
-function sampleDailyForm(random: RandomSource, isGcLeader = false): number {
-  return roundToTwoDecimals(randomBetween(random, -3, isGcLeader ? 1.5 : 3));
 }
 
 function createWindZones(random: RandomSource, stageDistanceMeters: number): WindZone[] {

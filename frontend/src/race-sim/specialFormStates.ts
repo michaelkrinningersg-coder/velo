@@ -2,6 +2,15 @@ import type { Rider, Stage, Team } from '../../../shared/types';
 import { createRandomSeed, createSeededRandom, shuffled as shuffleWithRandom, type RandomSource } from '../../../shared/rng';
 import { calculateStageFavoriteRiderRanking, type StageFavoriteOptions } from './stageFavorites';
 
+/**
+ * Zuschlag der Superform, additiv auf jede Faehigkeit. Trifft zwei Prozent des
+ * Feldes und nie einen der zwanzig Favoriten — der Sinn ist der Aussenseiter,
+ * der an einem Tag mitfahren kann.
+ */
+export const SUPERFORM_DELTA = 5;
+/** Abzug des Supermalus. Trifft ein Prozent des Feldes. */
+export const SUPERMALUS_DELTA = -6;
+
 function createFallbackTeams(riders: Rider[]): Team[] {
   const seen = new Map<number, Team>();
   for (const rider of riders) {
@@ -77,7 +86,7 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
         ...rider,
         hasSuperform: true,
         hasSupermalus: false,
-        specialFormDelta: 4,
+        specialFormDelta: SUPERFORM_DELTA,
       } satisfies Rider;
     }
 
@@ -86,7 +95,7 @@ export function applySpecialFormStatesWithContext(riders: Rider[], stage: Stage,
         ...rider,
         hasSuperform: false,
         hasSupermalus: true,
-        specialFormDelta: -6,
+        specialFormDelta: SUPERMALUS_DELTA,
       } satisfies Rider;
     }
 

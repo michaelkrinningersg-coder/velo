@@ -27,7 +27,7 @@ import {
   DEFAULT_QUICK_SIM_PROFILES,
   type QuickSimProfileParameters,
 } from '../../../shared/quickSimProfiles';
-import { createRandomSeed, createSeededRandom, deriveSeed, randomBetween, type RandomSource } from '../../../shared/rng';
+import { createRandomSeed, createSeededRandom, deriveSeed, type RandomSource } from '../../../shared/rng';
 import {
   isChampionshipCategory,
   type PrecalculatedRaceIncident,
@@ -50,7 +50,7 @@ import {
 } from './sprintLeadout';
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
-import { resolveFatigueMalus, resolveSkillsWithMentorBoosts } from './riderCondition';
+import { resolveQuickSimFatigueMalus, resolveSkillsWithMentorBoosts, sampleDailyForm } from './riderCondition';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
@@ -71,19 +71,6 @@ const MARKER_RANKS = 15;
  * sind. Siehe `shared/quickSim/groupProtection.ts`.
  */
 const PROTECTED_ROLES = new Set(['Kapitaen', 'Co-Kapitaen', 'Edelhelfer']);
-
-/**
- * Tagesform eines Fahrers. Dieselbe Spanne wie `sampleDailyForm` in der Engine:
- * der Traeger des Gesamttrikots faellt seltener nach oben aus, weil er
- * ohnehin unter Beobachtung faehrt.
- *
- * Ohne diese Ziehung waere das Ergebnis bei gleichem Kader immer dasselbe —
- * genau der Fehler, vor dem der Entwurf warnt: Zeiten und Abstaende sehen
- * richtig aus, aber es gewinnen immer dieselben fuenf.
- */
-function sampleDailyForm(random: RandomSource, isGcLeader: boolean): number {
-  return Math.round(randomBetween(random, -3, isGcLeader ? 1.5 : 3) * 100) / 100;
-}
 
 export interface QuickSimulationOutcome {
   entries: RealtimeStageCommitEntry[];
@@ -258,15 +245,18 @@ export function runQuickSimulation(
   //
   // Die Ermuedung kommt hier ebenfalls hinein, und zwar aus einem Grund:
   // `calculateStageFavoriteRiderRanking` rechnet Saisonform und Rennform ein,
-  // die drei Ermuedungswerte aber nicht. Fuer eine Favoritenanzeige reicht das;
+  // die Ermuedungswerte aber nicht. Fuer eine Favoritenanzeige reicht das;
   // fuer einen Leistungsscore nicht — sonst waere ein muerber Fahrer so stark
-  // wie ein frischer. Ueber die Tagesform eingespeist, entspricht der Score
-  // danach genau dem `resolveConditionFormBonus` der Engine.
+  // wie ein frischer.
+  //
+  // Anders als die Engine zaehlt die Quick Simulation dabei nur Kurz- und
+  // Langzeitermuedung. Die Rundfahrt-Ermuedung erfasst dieselbe Belastung ein
+  // zweites Mal — Begruendung in `resolveQuickSimFatigueMalus`.
   const effectiveDailyForm = new Map(ridersWithSpecialStates.map((rider) => [
     rider.id,
     (dailyFormByRiderId.get(rider.id) ?? 0)
     + (rider.specialFormDelta ?? 0)
-    - resolveFatigueMalus(rider),
+    - resolveQuickSimFatigueMalus(rider),
   ]));
 
   const ranking = calculateStageFavoriteRiderRanking(

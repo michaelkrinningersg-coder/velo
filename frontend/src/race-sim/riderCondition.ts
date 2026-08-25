@@ -9,6 +9,7 @@
  * frischer, und das ausgerechnet in Rundfahrten, wo sich Ermuedung aufbaut.
  */
 
+import { randomBetween, type RandomSource } from '../../../shared/rng';
 import type { Rider, RiderSkillKey } from '../../../shared/types';
 
 /** Ermuedung geht nur halb ein — dieselbe Gewichtung wie im TimeTrialSimulator. */
@@ -19,6 +20,48 @@ export function resolveFatigueMalus(rider: Rider): number {
   return ((rider.fatigueMalus ?? 0)
     + (rider.longTermFatigueMalus ?? 0)
     + (rider.shortTermFatigueMalus ?? 0)) * FATIGUE_WEIGHT;
+}
+
+/**
+ * Ermuedung fuer die Quick Simulation — ohne die Rundfahrt-Ermuedung.
+ *
+ * `fatigueMalus` rechnet die Belastung innerhalb des laufenden Rennens ein
+ * (Etappennummer gegen Regeneration) und erreicht auf der 21. Etappe je nach
+ * Fahrer 4 bis 27 Punkte. Kurz- und Langzeitermuedung erfassen dieselbe
+ * Belastung ein zweites Mal, nur ueber die Saison hinweg — beide zusammen
+ * ergaeben am Ende einer grossen Rundfahrt einen Abzug von bis zu 27
+ * Skillpunkten, gegen den keine Form mehr ankommt.
+ *
+ * Die Quick Simulation zaehlt die Belastung deshalb nur einmal, ueber die
+ * beiden Saisonwerte. Die volle Simulation bleibt unveraendert.
+ */
+export function resolveQuickSimFatigueMalus(rider: Rider): number {
+  return ((rider.longTermFatigueMalus ?? 0)
+    + (rider.shortTermFatigueMalus ?? 0)) * FATIGUE_WEIGHT;
+}
+
+/** Untere Grenze der Tagesform. */
+export const DAILY_FORM_MIN = -4;
+/** Obere Grenze der Tagesform. */
+export const DAILY_FORM_MAX = 4;
+/**
+ * Obere Grenze fuer den Traeger des Gesamttrikots. Er faellt seltener nach
+ * oben aus, weil er unter Beobachtung faehrt — nach unten gilt fuer ihn
+ * dieselbe Grenze wie fuer alle anderen.
+ */
+export const DAILY_FORM_GC_LEADER_MAX = 1.5;
+
+/**
+ * Tagesform eines Fahrers, einmal je Etappe gezogen und additiv auf jede
+ * Faehigkeit gerechnet.
+ *
+ * Stand frueher zweimal da — einmal in der Engine, einmal in der Quick
+ * Simulation. Zwei Kopien einer Spanne, die in beiden Modi gleich sein muss,
+ * driften auseinander; deshalb jetzt hier.
+ */
+export function sampleDailyForm(random: RandomSource, isGcLeader = false): number {
+  const max = isGcLeader ? DAILY_FORM_GC_LEADER_MAX : DAILY_FORM_MAX;
+  return Math.round(randomBetween(random, DAILY_FORM_MIN, max) * 100) / 100;
 }
 
 /**
