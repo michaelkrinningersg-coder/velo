@@ -4,6 +4,9 @@ Liest, was `hole_ergebnisse.py` nach `ergebnisse/` geschrieben hat, und
 erzeugt `ziele_real.csv` — je Terrain die gemessenen Korridore, gegen die
 das Modell kalibriert wird.
 
+`Flat` und `Rolling` werden mitgemessen, aber nicht nachgezogen — siehe
+`NICHT_KALIBRIEREN`. Die Messung dient dort nur der Kontrolle.
+
 Zwei Dinge sind bewusst so und nicht anders gerechnet:
 
 Rueckstaende an *relativen* Positionen, nicht an festen Raengen. Ein echtes
@@ -42,6 +45,10 @@ ZEITLIMIT_PROZENT = {
     'Flat': 16, 'Rolling': 17, 'Hilly': 18, 'Hilly_Difficult': 19,
     'Medium_Mountain': 20, 'Mountain': 31, 'High_Mountain': 40,
 }
+# Diese Terrains werden gemessen, aber nicht nachgezogen — die eingestellten
+# Werte bleiben stehen. Die Messung ist trotzdem nuetzlich: sie zeigt, ob das
+# Modell dort in einer plausiblen Groessenordnung liegt.
+NICHT_KALIBRIEREN = {'Flat', 'Rolling'}
 
 
 def sekunden(text: str) -> int | None:
@@ -141,9 +148,13 @@ def main() -> int:
             hole = lambda p: werte[min(len(werte) - 1, int(len(werte) * p))]  # noqa: E731
             return f'{statistics.median(werte):.{nachkomma}f} ({hole(0.1):.{nachkomma}f}–{hole(0.9):.{nachkomma}f})'
 
+        vermerk = '   nur Kontrolle' if terrain in NICHT_KALIBRIEREN else ''
         print(f'  {terrain:17}{len(gruppe):4}  {band("erste_gruppe", 0):>14}'
               f'  {band("zeitgruppen", 0):>13}  {band("gruppengroesse_hinten", 1):>14}'
-              f'  {band("letzter_je_km"):>18}')
+              f'  {band("letzter_je_km"):>18}{vermerk}')
+    if NICHT_KALIBRIEREN & set(nach_terrain):
+        print(f'\n  Nicht nachgezogen: {", ".join(sorted(NICHT_KALIBRIEREN))} — dort bleiben die'
+              ' eingestellten Werte stehen.')
     return 0
 
 

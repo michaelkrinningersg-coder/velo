@@ -117,6 +117,25 @@ der Etappennummer in `breakawaySurvival.ts` stuetzt. Unsere Tabelle liegt im
 Mittel bei 2,5 / 6,7 / 10,6 % und damit deutlich unter der Grenze; ob sie zu
 niedrig steht, entscheiden erst die Ergebnislisten.
 
+## Was nicht kalibriert wird
+
+Festgelegt, bevor die Daten da sind, damit die Messung die Entscheidung
+nicht rueckwirkend aufweicht:
+
+| | bleibt stehen, weil |
+|---|---|
+| `RANK_NOISE_FACTOR`, `TIE_BREAK_NOISE_FACTOR` | Spielentscheidung — wie stark der Zufall die Reihenfolge verschiebt, ist keine Frage an die Wirklichkeit |
+| `BREAKAWAY_SURVIVAL_*` in `breakawaySurvival.ts` | eingestellte Werte; die Daten liefern dafuer ohnehin nur eine Obergrenze, keinen Messwert |
+| Profil `Flat` und `Rolling`, vollstaendig | eingestellte Werte |
+
+`Flat` und `Rolling` werden trotzdem mitgemessen. Der Vergleich zeigt, ob
+das Modell dort in einer plausiblen Groessenordnung liegt — nachgezogen wird
+er nicht. `werte_ergebnisse_aus.py` markiert die beiden Zeilen als
+"nur Kontrolle", damit das beim Lesen der Delta-Tabelle nicht untergeht.
+
+Nachgezogen werden also: `Hilly`, `Hilly_Difficult`, `Medium_Mountain`,
+`Mountain`, `High_Mountain`.
+
 ## Was fehlt
 
 Ergebnislisten je Fahrer und Etappe. Ohne sie sind Gruppengroessen,
