@@ -1,0 +1,585 @@
+
+####################################################################################################
+Giro d'Italia 2027
+####################################################################################################
+
+Gesamtwertung Top 50
+  Rang  Fahrer                        Rueckstand  Huegel   MM   Berg  Sprint  Rolle
+     1  Joe Blackmore                         —     79    77    76      71  Kapitaen
+     2  Giulio Ciccone                    +4:42     78    80    79      68  Kapitaen
+     3  Alessandro Pinarello              +7:54     74    75    73      68  Starke Helfer
+     4  Pavel Sivakov                    +15:37     77    78    78      67  Kapitaen
+     5  Paul Seixas                      +22:28     78    78    79      71  Kapitaen
+     6  Chris Harper                     +33:54     75    77    77      64  Co-Kapitaen
+     7  Felix Großschartner              +38:58     76    77    75      69  Edelhelfer
+     8  Tom Pidcock                      +40:16     79    79    75      71  Kapitaen
+     9  Mathias Vacek                    +41:19     75    74    71      73  Kapitaen
+    10  Jefferson Cepeda                 +41:42     76    77    75      65  Edelhelfer
+    11  Davide De Pretto                 +43:20     78    77    73      73  Co-Kapitaen
+    12  Marco Brenner                    +59:14     78    79    77      71  Kapitaen
+    13  César Pérez                      +61:26     73    73    69      71  Starke Helfer
+    14  Clément Champoussin              +63:00     77    77    71      71  Kapitaen
+    15  Giulio Pellizzari                +63:04     78    78    79      68  Co-Kapitaen
+    16  Enzo Paleni                      +66:17     71    73    70      68  Starke Helfer
+    17  Matteo Scalco                    +66:57     76    76    73      68  Edelhelfer
+    18  Jonas Abrahamsen                 +67:51     73    72    68      71  Edelhelfer
+    19  Simon Yates                      +75:01     77    79    79      65  Kapitaen
+    20  Magnus Sheffield                 +77:01     77    77    75      70  Co-Kapitaen
+    21  Matteo Sobrero                   +77:35     76    75    73      69  Co-Kapitaen
+    22  Markus Hoelgaard                 +80:07     75    73    69      67  Co-Kapitaen
+    23  Bob Jungels                      +80:46     74    74    75      65  Co-Kapitaen
+    24  Mathieu van der Poel             +81:20     80    73    66      73  Kapitaen
+    25  Will Barta                       +81:25     74    74    74      65  Starke Helfer
+    26  Marc Soler                       +81:40     76    78    76      67  Kapitaen
+    27  Oscar Onley                      +84:13     77    77    76      67  Kapitaen
+    28  Ugo Fabries                      +85:02     76    75    71      71  Starke Helfer
+    29  Ahron Dick                       +85:31     69    74    74      66  Starke Helfer
+    30  Trym Holther                     +86:54     71    73    69      70  Starke Helfer
+    31  Harold Martín López              +88:54     74    77    76      65  Edelhelfer
+    32  Fred Wright                      +89:27     74    70    67      72  Kapitaen
+    33  Jhonatan Narváez                 +89:42     79    74    73      71  Kapitaen
+    34  Léo Bisiaux                      +90:42     74    74    74      65  Starke Helfer
+    35  Louis Vervaeke                   +91:11     73    74    74      67  Co-Kapitaen
+    36  Clément Berthet                  +94:05     75    76    76      65  Edelhelfer
+    37  Arno Wuyts                       +96:31     71    76    74      68  Wassertraeger
+    38  António Morgado                  +97:03     76    76    71      71  Kapitaen
+    39  Mikkel Bjerg                    +102:07     72    73    73      70  Kapitaen
+    40  Viego Tijssen                   +102:23     70    73    72      69  Starke Helfer
+    41  Filippo Ganna                   +103:04     76    74    71      76  Kapitaen
+    42  Cian Uijtdebroeks               +108:14     74    77    78      60  Starke Helfer
+    43  Laurens Huys                    +109:30     72    73    72      63  Starke Helfer
+    44  Rik van der Wal                 +110:10     70    70    67      68  Wassertraeger
+    45  Elliot Rowe                     +111:58     75    74    71      70  Starke Helfer
+    46  Michal Kwiatkowski              +115:24     73    71    72      66  Edelhelfer
+    47  Thibau Nys                      +117:34     78    75    72      71  Kapitaen
+    48  Pavel Bittner                   +120:57     74    69    69      79  Sprinter
+    49  James Shaw                      +126:34     74    74    73      67  Starke Helfer
+    50  Andrea Vendrame                 +127:58     75    73    70      72  Edelhelfer
+  Top 10 nach Rolle: Kapitaen=6  Co-Kapitaen=1  Edelhelfer=2  Starke Helfer=1
+  Top 30 nach Rolle: Kapitaen=12  Co-Kapitaen=7  Edelhelfer=4  Starke Helfer=7
+  Top 50 nach Rolle: Kapitaen=18  Co-Kapitaen=8  Edelhelfer=8  Starke Helfer=13  Wassertraeger=2  Sprinter=1
+
+  Etappe 1  Flat  155.8 km  stage_score 15  (D 0.10)   erste Zeitgruppe 199   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.674  sprint 0.200  hill 0.096  acceleration 0.030  |  Ausdauer 0.075
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Sente Sentjens            Sprinter        70   66    65   77     76         0:00   86.60 -0.43      81.94     1.08
+       2  Mike Teunissen            Edelhelfer      74   68    65   74     77         0:00   84.99 -0.78      81.72     5.15
+       3  Milan Fretin              Sprinter        72   61    56   77     74         0:00   85.81+  1.07      81.15     2.72
+       4  Arnaud De Lie             Sprinter        75   66    62   77     76         0:00   85.94+  0.33      80.07     2.05
+       5  Aldo Taillieu             Wassertraeger   72   71    67   74     74         0:00   84.97+  1.32      79.87     3.17
+       6  Sam Welsford              Sprinter        63   61    60   77     74         0:00   83.53+  0.78      79.59     2.51
+       7  Alexis Renard             Starke Helfer   69   64    60   74     74         0:00   82.07+  0.76      78.57     3.52
+       8  Evan Pavis                Wassertraeger   70   69    66   74     73         0:00   87.01+  3.01      78.20     1.41
+       9  Even Yemane               Wassertraeger   73   71    67   75     71         0:00   81.94+  0.64      78.07     0.64
+      10  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   81.72+  0.23      77.93     2.03
+    Zerlegung der Top 5:
+      1. Sente Sentjens         flat 76x0.674=51.36  hill 70x0.096=6.78  sprint 77x0.200=15.35  acceleration 77x0.030=2.31  Ausdauer 72x0.075=5.40
+         Summe Faehigkeiten 81.19   Score 86.60   Differenz +5.40 (Form, Ermuedung, Boni)   mit Rauschen 86.17
+      2. Mike Teunissen         flat 77x0.674=51.88  hill 74x0.096=7.10  sprint 74x0.200=14.88  acceleration 73x0.030=2.20  Ausdauer 75x0.075=5.59
+         Summe Faehigkeiten 81.66   Score 84.99   Differenz +3.33 (Form, Ermuedung, Boni)   mit Rauschen 84.21
+      3. Milan Fretin           flat 74x0.674=49.86  hill 72x0.096=6.93  sprint 77x0.200=15.40  acceleration 77x0.030=2.31  Ausdauer 71x0.075=5.29
+         Summe Faehigkeiten 79.79   Score 85.81   Differenz +6.02 (Form, Ermuedung, Boni)   mit Rauschen 86.88
+      4. Arnaud De Lie          flat 76x0.674=51.20  hill 75x0.096=7.22  sprint 77x0.200=15.40  acceleration 79x0.030=2.37  Ausdauer 72x0.075=5.37
+         Summe Faehigkeiten 81.56   Score 85.94   Differenz +4.37 (Form, Ermuedung, Boni)   mit Rauschen 86.26
+      5. Aldo Taillieu          flat 74x0.674=50.06  hill 72x0.096=6.92  sprint 74x0.200=14.81  acceleration 74x0.030=2.21  Ausdauer 69x0.075=5.16
+         Summe Faehigkeiten 79.16   Score 84.97   Differenz +5.80 (Form, Ermuedung, Boni)   mit Rauschen 86.29
+
+  Etappe 2  Hilly_Difficult  219.2 km  stage_score 101  (D 0.46)   erste Zeitgruppe 17
+    Gewichte: hill 0.543  mediumMountain 0.327  mountain 0.051  sprint 0.040  acceleration 0.040  |  Ausdauer 0.207
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Milkias Kudus             Wassertraeger   74   70    69   71     72         0:00   97.93 -0.89      78.26
+       2  Søren Kragh Andersen      Kapitaen        75   72    67   74     77         0:00   95.13+  0.48      77.97
+       3  Clément Berthet           Edelhelfer      75   76    76   65     71         0:00   99.86+  0.47      74.71
+       4  Matteo Jorgenson          Kapitaen        77   79    79   69     76         0:00  100.09+  0.48      74.57
+       5  Tom Pidcock               Kapitaen        79   79    75   71     74         0:00   98.92+  0.53      74.26
+       6  Marco Brenner             Kapitaen        78   79    77   71     73         0:00   95.97+  0.39      74.24
+       7  Alessandro Pinarello      Starke Helfer   74   75    73   68     67         0:00   98.81+  0.97      73.32
+       8  Magnus Sheffield          Co-Kapitaen     77   77    75   70     76         0:00   97.17+  0.22      72.53
+       9  António Morgado           Kapitaen        76   76    71   71     74         0:00   93.67 -0.30      72.34
+      10  Joe Blackmore             Kapitaen        79   77    76   71     73         0:00   95.71+  0.44      71.02
+    Zerlegung der Top 5:
+      1. Milkias Kudus          hill 74x0.543=40.32  mediumMountain 70x0.327=23.02  mountain 69x0.051=3.50  sprint 71x0.040=2.82  acceleration 72x0.040=2.87  Ausdauer 70x0.207=14.47
+         Summe Faehigkeiten 87.00   Score 97.93   Differenz +10.93 (Form, Ermuedung, Boni)   mit Rauschen 97.04
+      2. Søren Kragh Andersen   hill 75x0.543=40.70  mediumMountain 72x0.327=23.54  mountain 67x0.051=3.41  sprint 74x0.040=2.93  acceleration 73x0.040=2.89  Ausdauer 74x0.207=15.29
+         Summe Faehigkeiten 88.76   Score 95.13   Differenz +6.37 (Form, Ermuedung, Boni)   mit Rauschen 95.61
+      3. Clément Berthet        hill 75x0.543=40.70  mediumMountain 76x0.327=24.85  mountain 76x0.051=3.86  sprint 65x0.040=2.58  acceleration 74x0.040=2.94  Ausdauer 75x0.207=15.49
+         Summe Faehigkeiten 90.43   Score 99.86   Differenz +9.42 (Form, Ermuedung, Boni)   mit Rauschen 100.33
+      4. Matteo Jorgenson       hill 77x0.543=41.78  mediumMountain 79x0.327=25.83  mountain 79x0.051=4.01  sprint 69x0.040=2.74  acceleration 74x0.040=2.94  Ausdauer 78x0.207=16.11
+         Summe Faehigkeiten 93.41   Score 100.09   Differenz +6.68 (Form, Ermuedung, Boni)   mit Rauschen 100.58
+      5. Tom Pidcock            hill 79x0.543=42.87  mediumMountain 79x0.327=25.83  mountain 75x0.051=3.81  sprint 71x0.040=2.82  acceleration 76x0.040=3.02  Ausdauer 77x0.207=15.91
+         Summe Faehigkeiten 94.26   Score 98.92   Differenz +4.66 (Form, Ermuedung, Boni)   mit Rauschen 99.45
+
+  Etappe 3  Medium_Mountain  175.4 km  stage_score 32  (D 0.18)   erste Zeitgruppe 9
+    Gewichte: mediumMountain 0.582  mountain 0.242  hill 0.145  sprint 0.020  acceleration 0.010  |  Ausdauer 0.115
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Marco Brenner             Kapitaen        78   79    77   71     73         0:00   90.79+  0.67      75.74
+       2  Joe Blackmore             Kapitaen        79   77    76   71     73         0:00   91.38 -0.30      74.04
+       3  Magnus Sheffield          Co-Kapitaen     77   77    75   70     76         0:00   91.73 -0.03      73.56
+       4  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00   98.11+  0.60      72.78
+       5  Marc Soler                Kapitaen        76   78    76   67     72         0:00   91.91+  0.33      70.07
+       6  Pavel Sivakov             Kapitaen        77   78    78   67     72         0:00   95.00+  0.79      69.78
+       7  Matteo Scalco             Edelhelfer      76   76    73   68     71         0:00   90.43 -1.21      69.24
+       8  Giulio Ciccone            Kapitaen        78   80    79   68     70         0:00   93.41+  0.92      68.72
+       9  Chris Harper              Co-Kapitaen     75   77    77   64     72         0:00   93.48+  1.44      66.66
+      10  Tom Pidcock               Kapitaen        79   79    75   71     74        +0:02   90.38 -0.23      73.00
+    Zerlegung der Top 5:
+      1. Marco Brenner          hill 78x0.145=11.37  mediumMountain 79x0.582=45.92  mountain 77x0.242=18.71  sprint 71x0.020=1.41  acceleration 78x0.010=0.78  Ausdauer 76x0.115=8.77
+         Summe Faehigkeiten 86.96   Score 90.79   Differenz +3.83 (Form, Ermuedung, Boni)   mit Rauschen 91.46
+      2. Joe Blackmore          hill 79x0.145=11.42  mediumMountain 77x0.582=44.90  mountain 76x0.242=18.33  sprint 71x0.020=1.42  acceleration 77x0.010=0.77  Ausdauer 76x0.115=8.73
+         Summe Faehigkeiten 85.58   Score 91.38   Differenz +5.80 (Form, Ermuedung, Boni)   mit Rauschen 91.07
+      3. Magnus Sheffield       hill 77x0.145=11.13  mediumMountain 77x0.582=44.86  mountain 75x0.242=18.20  sprint 70x0.020=1.39  acceleration 73x0.010=0.73  Ausdauer 75x0.115=8.67
+         Summe Faehigkeiten 84.99   Score 91.73   Differenz +6.74 (Form, Ermuedung, Boni)   mit Rauschen 91.70
+      4. Felix Großschartner    hill 76x0.145=11.05  mediumMountain 77x0.582=44.81  mountain 75x0.242=18.19  sprint 69x0.020=1.37  acceleration 72x0.010=0.72  Ausdauer 76x0.115=8.77
+         Summe Faehigkeiten 84.91   Score 98.11   Differenz +13.20 (Form, Ermuedung, Boni)   mit Rauschen 98.72
+      5. Marc Soler             hill 76x0.145=11.06  mediumMountain 78x0.582=45.40  mountain 76x0.242=18.43  sprint 67x0.020=1.34  acceleration 72x0.010=0.72  Ausdauer 78x0.115=9.00
+         Summe Faehigkeiten 85.95   Score 91.91   Differenz +5.96 (Form, Ermuedung, Boni)   mit Rauschen 92.24
+
+  Etappe 4  Medium_Mountain  142.9 km  stage_score 55  (D 0.38)   erste Zeitgruppe 3
+    Gewichte: mediumMountain 0.582  mountain 0.242  hill 0.145  sprint 0.020  acceleration 0.010  |  Ausdauer 0.048
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00   89.39+  0.67      69.58
+       2  Pavel Sivakov             Kapitaen        77   78    78   67     72         0:00   88.49+  0.56      68.98
+       3  Giulio Ciccone            Kapitaen        78   80    79   68     70         0:00   87.16 -1.31      67.80
+       4  Arno Wuyts                Wassertraeger   71   76    74   68     71        +0:09   87.01+  0.76      72.70
+       5  Matteo Jorgenson          Kapitaen        77   79    79   69     76        +0:09   86.75 -0.26      71.79
+       6  Alessandro Pinarello      Starke Helfer   74   75    73   68     67        +0:09   86.09 -0.06      71.60
+       7  Matteo Scalco             Edelhelfer      76   76    73   68     71        +0:09   86.08+  0.02      69.16
+       8  Jesús David Peña          Edelhelfer      74   74    75   64     67        +0:09   85.82+  0.91      68.44
+       9  Jefferson Cepeda          Edelhelfer      76   77    75   65     71        +0:09   86.38 -0.04      67.87
+      10  Harold Martín López       Edelhelfer      74   77    76   65     66        +0:09   85.50+  0.56      66.53
+    Zerlegung der Top 5:
+      1. Felix Großschartner    hill 76x0.145=11.05  mediumMountain 77x0.582=44.81  mountain 75x0.242=18.19  sprint 69x0.020=1.37  acceleration 72x0.010=0.72  Ausdauer 76x0.048=3.63
+         Summe Faehigkeiten 79.77   Score 89.39   Differenz +9.62 (Form, Ermuedung, Boni)   mit Rauschen 90.06
+      2. Pavel Sivakov          hill 77x0.145=11.20  mediumMountain 78x0.582=45.40  mountain 78x0.242=18.91  sprint 67x0.020=1.34  acceleration 69x0.010=0.69  Ausdauer 77x0.048=3.68
+         Summe Faehigkeiten 81.22   Score 88.49   Differenz +7.27 (Form, Ermuedung, Boni)   mit Rauschen 89.06
+      3. Giulio Ciccone         hill 78x0.145=11.35  mediumMountain 80x0.582=46.56  mountain 79x0.242=19.16  sprint 68x0.020=1.36  acceleration 77x0.010=0.77  Ausdauer 77x0.048=3.68
+         Summe Faehigkeiten 82.88   Score 87.16   Differenz +4.28 (Form, Ermuedung, Boni)   mit Rauschen 85.85
+      4. Arno Wuyts             hill 71x0.145=10.38  mediumMountain 76x0.582=44.16  mountain 74x0.242=18.04  sprint 68x0.020=1.36  acceleration 69x0.010=0.69  Ausdauer 72x0.048=3.45
+         Summe Faehigkeiten 78.08   Score 87.01   Differenz +8.93 (Form, Ermuedung, Boni)   mit Rauschen 87.77
+      5. Matteo Jorgenson       hill 77x0.145=11.20  mediumMountain 79x0.582=45.97  mountain 79x0.242=19.15  sprint 69x0.020=1.38  acceleration 74x0.010=0.74  Ausdauer 78x0.048=3.73
+         Summe Faehigkeiten 82.17   Score 86.75   Differenz +4.58 (Form, Ermuedung, Boni)   mit Rauschen 86.49
+
+  Etappe 5  Hilly_Difficult  204.6 km  stage_score 151  (D 0.74)   erste Zeitgruppe 7
+    Gewichte: mediumMountain 0.472  hill 0.286  mountain 0.175  sprint 0.033  acceleration 0.033  |  Ausdauer 0.176
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Trym Holther              Starke Helfer   71   73    69   70     73         0:00   96.41+  1.57      77.36
+       2  Andrea Vendrame           Edelhelfer      75   73    70   72     73         0:00   97.06+  1.62      77.34
+       3  Paul Seixas               Kapitaen        78   78    79   71     74         0:00   96.99 -0.48      74.90
+       4  Magnus Sheffield          Co-Kapitaen     77   77    75   70     76         0:00   96.10+  1.14      72.86
+       5  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00   99.93+  1.07      71.28
+       6  Giulio Ciccone            Kapitaen        78   80    79   68     70         0:00   97.78 -0.96      70.20
+       7  Jefferson Cepeda          Edelhelfer      76   77    75   65     71         0:00   95.16+  1.33      67.84
+       8  Giulio Pellizzari         Co-Kapitaen     78   78    79   68     74        +0:28   93.61+  0.38      71.57
+       9  Arno Wuyts                Wassertraeger   71   76    74   68     71        +0:28   94.46 -0.76      69.42
+      10  Emiel Verstrynge          Starke Helfer   75   72    71   67     68        +0:28   94.58 -0.22      69.13
+    Zerlegung der Top 5:
+      1. Trym Holther           hill 71x0.286=20.31  mediumMountain 73x0.472=34.48  mountain 69x0.175=12.14  sprint 70x0.033=2.33  acceleration 71x0.033=2.34  Ausdauer 70x0.176=12.29
+         Summe Faehigkeiten 83.90   Score 96.41   Differenz +12.52 (Form, Ermuedung, Boni)   mit Rauschen 97.99
+      2. Andrea Vendrame        hill 75x0.286=21.47  mediumMountain 73x0.472=34.48  mountain 70x0.175=12.24  sprint 72x0.033=2.38  acceleration 74x0.033=2.45  Ausdauer 75x0.176=13.22
+         Summe Faehigkeiten 86.24   Score 97.06   Differenz +10.83 (Form, Ermuedung, Boni)   mit Rauschen 98.68
+      3. Paul Seixas            hill 78x0.286=22.34  mediumMountain 78x0.472=36.70  mountain 79x0.175=13.74  sprint 71x0.033=2.36  acceleration 75x0.033=2.50  Ausdauer 76x0.176=13.34
+         Summe Faehigkeiten 90.97   Score 96.99   Differenz +6.02 (Form, Ermuedung, Boni)   mit Rauschen 96.52
+      4. Magnus Sheffield       hill 77x0.286=21.90  mediumMountain 77x0.472=36.42  mountain 75x0.175=13.13  sprint 70x0.033=2.31  acceleration 73x0.033=2.42  Ausdauer 75x0.176=13.24
+         Summe Faehigkeiten 89.42   Score 96.10   Differenz +6.68 (Form, Ermuedung, Boni)   mit Rauschen 97.24
+      5. Felix Großschartner    hill 76x0.286=21.75  mediumMountain 77x0.472=36.38  mountain 75x0.175=13.12  sprint 69x0.033=2.27  acceleration 72x0.033=2.37  Ausdauer 76x0.176=13.40
+         Summe Faehigkeiten 89.29   Score 99.93   Differenz +10.64 (Form, Ermuedung, Boni)   mit Rauschen 101.00
+
+  Etappe 6  Rolling  160.3 km  stage_score 25  (D 0.16)   erste Zeitgruppe 154   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.687  sprint 0.150  hill 0.133  acceleration 0.030  |  Ausdauer 0.084
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Jordan Labrosse           Kapitaen        77   75    71   73     75         0:00   87.56 -1.12      80.49     1.03
+       2  Milan Fretin              Sprinter        72   61    56   77     74         0:00   84.92 -1.19      79.50     1.25
+       3  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   83.42 -0.12      79.38     1.51
+       4  Albert Roca               Edelhelfer      72   71    73   74     71         0:00   81.28+  1.45      79.31     4.02
+       5  Kaden Groves              Sprinter        73   70    65   78     75         0:00   81.50 -0.67      79.25     3.26
+       6  Sente Sentjens            Sprinter        70   66    65   77     76         0:00   82.98 -0.86      77.96     1.69
+       7  Mathieu van der Poel      Kapitaen        80   73    66   73     82         0:00   91.17+  0.28      77.42     0.00
+       8  Olav Kooij                Kapitaen        73   64    63   81     76         0:00   81.51 -0.62      77.20     0.71
+       9  Danny van Poppel          Sprinter        73   68    63   77     77         0:00   85.63+  1.04      77.19     1.72
+      10  Jenthe Biermans           Wassertraeger   73   65    60   73     75         0:00   85.44 -0.01      76.76     3.20
+    Zerlegung der Top 5:
+      1. Jordan Labrosse        flat 75x0.687=51.20  hill 77x0.133=10.28  sprint 73x0.150=10.97  acceleration 76x0.030=2.27  Ausdauer 76x0.084=6.35
+         Summe Faehigkeiten 81.08   Score 87.56   Differenz +6.48 (Form, Ermuedung, Boni)   mit Rauschen 86.44
+      2. Milan Fretin           flat 74x0.687=50.84  hill 72x0.133=9.57  sprint 77x0.150=11.55  acceleration 77x0.030=2.31  Ausdauer 71x0.084=5.96
+         Summe Faehigkeiten 80.23   Score 84.92   Differenz +4.69 (Form, Ermuedung, Boni)   mit Rauschen 83.73
+      3. Biniam Girmay          flat 76x0.687=52.22  hill 75x0.133=9.97  sprint 80x0.150=12.00  acceleration 79x0.030=2.37  Ausdauer 74x0.084=6.21
+         Summe Faehigkeiten 82.76   Score 83.42   Differenz +0.66 (Form, Ermuedung, Boni)   mit Rauschen 83.30
+      4. Albert Roca            flat 71x0.687=49.06  hill 72x0.133=9.63  sprint 74x0.150=11.08  acceleration 75x0.030=2.26  Ausdauer 69x0.084=5.80
+         Summe Faehigkeiten 77.82   Score 81.28   Differenz +3.46 (Form, Ermuedung, Boni)   mit Rauschen 82.73
+      5. Kaden Groves           flat 75x0.687=51.53  hill 73x0.133=9.70  sprint 78x0.150=11.70  acceleration 77x0.030=2.31  Ausdauer 74x0.084=6.21
+         Summe Faehigkeiten 81.45   Score 81.50   Differenz +0.05 (Form, Ermuedung, Boni)   mit Rauschen 80.82
+
+  Etappe 7  Mountain  243.8 km  stage_score 341  (D 1.40)   erste Zeitgruppe 1
+    Gewichte: mountain 0.605  mediumMountain 0.326  downhill 0.050  sprint 0.020  |  Ausdauer 0.258
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00  104.11+  0.22      74.82
+       2  Giulio Ciccone            Kapitaen        78   80    79   68     70        +0:11  103.46+  0.01      76.94
+       3  Pavel Sivakov             Kapitaen        77   78    78   67     72        +0:11  103.73+  0.09      76.49
+       4  Tom Pidcock               Kapitaen        79   79    75   71     74        +0:17  103.46+  0.94      79.67
+       5  Joe Blackmore             Kapitaen        79   77    76   71     73        +0:47  102.29+  0.55      76.83
+       6  Jesús David Peña          Edelhelfer      74   74    75   64     67        +0:47  100.45 -0.23      73.63
+       7  Chris Harper              Co-Kapitaen     75   77    77   64     72        +0:47  100.72 -1.00      73.25
+       8  Giulio Pellizzari         Co-Kapitaen     78   78    79   68     74        +0:56   99.62+  0.44      77.89
+       9  Ahron Dick                Starke Helfer   69   74    74   66     70        +1:09   99.22+  0.16      69.98
+      10  Alessandro Pinarello      Starke Helfer   74   75    73   68     67        +1:21   99.10+  0.30      72.84
+    Zerlegung der Top 5:
+      1. Felix Großschartner    mediumMountain 77x0.326=25.06  mountain 75x0.605=45.33  downhill 71x0.050=3.55  sprint 69x0.020=1.37  Ausdauer 76x0.258=19.59
+         Summe Faehigkeiten 94.91   Score 104.11   Differenz +9.20 (Form, Ermuedung, Boni)   mit Rauschen 104.33
+      2. Giulio Ciccone         mediumMountain 80x0.326=26.04  mountain 79x0.605=47.76  downhill 75x0.050=3.75  sprint 68x0.020=1.36  Ausdauer 77x0.258=19.85
+         Summe Faehigkeiten 98.76   Score 103.46   Differenz +4.71 (Form, Ermuedung, Boni)   mit Rauschen 103.47
+      3. Pavel Sivakov          mediumMountain 78x0.326=25.39  mountain 78x0.605=47.15  downhill 74x0.050=3.70  sprint 67x0.020=1.34  Ausdauer 77x0.258=19.85
+         Summe Faehigkeiten 97.43   Score 103.73   Differenz +6.30 (Form, Ermuedung, Boni)   mit Rauschen 103.82
+      4. Tom Pidcock            mediumMountain 79x0.326=25.71  mountain 75x0.605=45.34  downhill 84x0.050=4.20  sprint 71x0.020=1.42  Ausdauer 77x0.258=19.85
+         Summe Faehigkeiten 96.52   Score 103.46   Differenz +6.94 (Form, Ermuedung, Boni)   mit Rauschen 104.40
+      5. Joe Blackmore          mediumMountain 77x0.326=25.11  mountain 76x0.605=45.69  downhill 78x0.050=3.89  sprint 71x0.020=1.42  Ausdauer 76x0.258=19.49
+         Summe Faehigkeiten 95.60   Score 102.29   Differenz +6.69 (Form, Ermuedung, Boni)   mit Rauschen 102.84
+
+  Etappe 8  Hilly_Difficult  157.7 km  stage_score 112  (D 0.71)   erste Zeitgruppe 4
+    Gewichte: mediumMountain 0.453  hill 0.317  mountain 0.162  sprint 0.034  acceleration 0.034  |  Ausdauer 0.079
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Giulio Ciccone            Kapitaen        78   80    79   68     70         0:00   88.25+  0.99      76.49
+       2  Milkias Kudus             Wassertraeger   74   70    69   71     72         0:00   88.42 -0.22      76.32
+       3  Paul Seixas               Kapitaen        78   78    79   71     74         0:00   86.41+  0.40      75.83
+       4  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00   89.41 -1.50      74.21
+       5  Giulio Pellizzari         Co-Kapitaen     78   78    79   68     74        +0:17   86.33+  0.51      78.94
+       6  Nicolò Arrighetti         Starke Helfer   73   68    67   74     72        +0:17   87.89+  2.78      78.56
+       7  Simon Yates               Kapitaen        77   79    79   65     71        +0:17   85.10 -0.34      77.58
+       8  Pavel Sivakov             Kapitaen        77   78    78   67     72        +0:17   87.06 -0.12      75.12
+       9  César Pérez               Starke Helfer   73   73    69   71     71        +0:17   87.15+  1.74      73.91
+      10  Jonas Abrahamsen          Edelhelfer      73   72    68   71     78        +0:17   84.96+  0.52      73.71
+    Zerlegung der Top 5:
+      1. Giulio Ciccone         hill 78x0.317=24.72  mediumMountain 80x0.453=36.25  mountain 79x0.162=12.82  sprint 68x0.034=2.30  acceleration 77x0.034=2.60  Ausdauer 77x0.079=6.05
+         Summe Faehigkeiten 84.75   Score 88.25   Differenz +3.50 (Form, Ermuedung, Boni)   mit Rauschen 89.24
+      2. Milkias Kudus          hill 74x0.317=23.55  mediumMountain 70x0.453=31.90  mountain 69x0.162=11.19  sprint 71x0.034=2.40  acceleration 72x0.034=2.44  Ausdauer 70x0.079=5.51
+         Summe Faehigkeiten 76.99   Score 88.42   Differenz +11.43 (Form, Ermuedung, Boni)   mit Rauschen 88.20
+      3. Paul Seixas            hill 78x0.317=24.73  mediumMountain 78x0.453=35.20  mountain 79x0.162=12.74  sprint 71x0.034=2.41  acceleration 75x0.034=2.55  Ausdauer 76x0.079=5.95
+         Summe Faehigkeiten 83.58   Score 86.41   Differenz +2.83 (Form, Ermuedung, Boni)   mit Rauschen 86.80
+      4. Felix Großschartner    hill 76x0.317=24.07  mediumMountain 77x0.453=34.89  mountain 75x0.162=12.17  sprint 69x0.034=2.32  acceleration 72x0.034=2.42  Ausdauer 76x0.079=5.98
+         Summe Faehigkeiten 81.85   Score 89.41   Differenz +7.56 (Form, Ermuedung, Boni)   mit Rauschen 87.90
+      5. Giulio Pellizzari      hill 78x0.317=24.63  mediumMountain 78x0.453=35.45  mountain 79x0.162=12.85  sprint 68x0.034=2.31  acceleration 74x0.034=2.49  Ausdauer 77x0.079=6.02
+         Summe Faehigkeiten 83.74   Score 86.33   Differenz +2.58 (Form, Ermuedung, Boni)   mit Rauschen 86.84
+
+  Etappe 9  Medium_Mountain  157.7 km  stage_score 112  (D 0.71)   erste Zeitgruppe 7
+    Gewichte: mediumMountain 0.582  mountain 0.242  hill 0.145  sprint 0.020  acceleration 0.010  |  Ausdauer 0.079
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Simon Yates               Kapitaen        77   79    79   65     71         0:00   86.62 -0.36      78.22
+       2  Laurens Huys              Starke Helfer   72   73    72   63     66         0:00   90.41+  0.89      77.44
+       3  Joe Blackmore             Kapitaen        79   77    76   71     73         0:00   89.77 -0.64      76.78
+       4  Pavel Sivakov             Kapitaen        77   78    78   67     72         0:00   88.31 -1.23      76.11
+       5  Felix Großschartner       Edelhelfer      76   77    75   69     74         0:00   89.23 -0.65      73.96
+       6  Bob Jungels               Co-Kapitaen     74   74    75   65     75         0:00   85.56+  0.31      73.42
+       7  Elliot Rowe               Starke Helfer   75   74    71   70     71         0:00   85.62+  0.66      72.12
+       8  Magnus Sheffield          Co-Kapitaen     77   77    75   70     76        +0:07   84.98+  0.56      73.77
+       9  Jesús David Peña          Edelhelfer      74   74    75   64     67        +0:07   84.79+  1.26      71.02
+      10  Viego Tijssen             Starke Helfer   70   73    72   69     69        +0:11   84.70 -0.54      71.54
+    Zerlegung der Top 5:
+      1. Simon Yates            hill 77x0.145=11.20  mediumMountain 79x0.582=45.98  mountain 79x0.242=19.16  sprint 65x0.020=1.30  acceleration 75x0.010=0.75  Ausdauer 75x0.079=5.90
+         Summe Faehigkeiten 84.28   Score 86.62   Differenz +2.34 (Form, Ermuedung, Boni)   mit Rauschen 86.25
+      2. Laurens Huys           hill 72x0.145=10.48  mediumMountain 73x0.582=42.49  mountain 72x0.242=17.46  sprint 63x0.020=1.26  acceleration 72x0.010=0.72  Ausdauer 68x0.079=5.35
+         Summe Faehigkeiten 77.75   Score 90.41   Differenz +12.66 (Form, Ermuedung, Boni)   mit Rauschen 91.30
+      3. Joe Blackmore          hill 79x0.145=11.42  mediumMountain 77x0.582=44.90  mountain 76x0.242=18.33  sprint 71x0.020=1.42  acceleration 77x0.010=0.77  Ausdauer 76x0.079=5.94
+         Summe Faehigkeiten 82.80   Score 89.77   Differenz +6.98 (Form, Ermuedung, Boni)   mit Rauschen 89.13
+      4. Pavel Sivakov          hill 77x0.145=11.20  mediumMountain 78x0.582=45.40  mountain 78x0.242=18.91  sprint 67x0.020=1.34  acceleration 69x0.010=0.69  Ausdauer 77x0.079=6.05
+         Summe Faehigkeiten 83.59   Score 88.31   Differenz +4.72 (Form, Ermuedung, Boni)   mit Rauschen 87.08
+      5. Felix Großschartner    hill 76x0.145=11.05  mediumMountain 77x0.582=44.81  mountain 75x0.242=18.19  sprint 69x0.020=1.37  acceleration 72x0.010=0.72  Ausdauer 76x0.079=5.98
+         Summe Faehigkeiten 82.11   Score 89.23   Differenz +7.11 (Form, Ermuedung, Boni)   mit Rauschen 88.58
+
+  Etappe 10  ITT  41.0 km  stage_score 5  (D 0.12)   erste Zeitgruppe 1
+    Gewichte: timeTrial 1.000  |  Ausdauer 0.000
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Markus Hoelgaard          Co-Kapitaen     75   73    69   67     75         0:00    0.00+  0.00      64.87
+       2  Mathieu van der Poel      Kapitaen        80   73    66   73     82        +0:36    0.00+  0.00      75.80
+       3  Magnus Sheffield          Co-Kapitaen     77   77    75   70     76        +0:53    0.00+  0.00      64.72
+       4  Oier Lazkano              Co-Kapitaen     76   74    75   68     76        +0:54    0.00+  0.00      73.83
+       5  Chris Harper              Co-Kapitaen     75   77    77   64     72        +1:00    0.00+  0.00      65.72
+       6  Pavel Sivakov             Kapitaen        77   78    78   67     72        +1:01    0.00+  0.00      68.80
+       7  Federico Savino           Starke Helfer   76   74    69   70     73        +1:07    0.00+  0.00      69.88
+       8  Thibault Guernalec        Starke Helfer   72   68    67   67     73        +1:09    0.00+  0.00      69.68
+       9  Colby Simmons             Co-Kapitaen     74   70    68   73     76        +1:32    0.00+  0.00      72.56
+      10  Sente Sentjens            Sprinter        70   66    65   77     76        +1:34    0.00+  0.00      77.05
+    Zerlegung der Top 5:
+      1. Markus Hoelgaard       timeTrial NaNx1.000=NaN  Ausdauer 77x0.000=0.00
+         Summe Faehigkeiten NaN   Score 0.00   Differenz NaN (Form, Ermuedung, Boni)   mit Rauschen 0.00
+      2. Mathieu van der Poel   timeTrial NaNx1.000=NaN  Ausdauer 83x0.000=0.00
+         Summe Faehigkeiten NaN   Score 0.00   Differenz NaN (Form, Ermuedung, Boni)   mit Rauschen 0.00
+      3. Magnus Sheffield       timeTrial NaNx1.000=NaN  Ausdauer 75x0.000=0.00
+         Summe Faehigkeiten NaN   Score 0.00   Differenz NaN (Form, Ermuedung, Boni)   mit Rauschen 0.00
+      4. Oier Lazkano           timeTrial NaNx1.000=NaN  Ausdauer 75x0.000=0.00
+         Summe Faehigkeiten NaN   Score 0.00   Differenz NaN (Form, Ermuedung, Boni)   mit Rauschen 0.00
+      5. Chris Harper           timeTrial NaNx1.000=NaN  Ausdauer 75x0.000=0.00
+         Summe Faehigkeiten NaN   Score 0.00   Differenz NaN (Form, Ermuedung, Boni)   mit Rauschen 0.00
+
+  Etappe 11  Hilly_Difficult  178.5 km  stage_score 113  (D 0.63)   erste Zeitgruppe 24
+    Gewichte: mediumMountain 0.406  hill 0.395  mountain 0.128  sprint 0.036  acceleration 0.036  |  Ausdauer 0.122
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Mike Teunissen            Edelhelfer      74   68    65   74     77         0:00   87.84+  1.85      78.95
+       2  Ugo Fabries               Starke Helfer   76   75    71   71     73         0:00   91.03+  2.07      74.90
+       3  Joshua Tarling            Kapitaen        72   73    73   73     79         0:00   85.29+  0.26      74.02
+       4  Abram Stockman            Wassertraeger   70   67    65   69     74         0:00   91.51+  0.24      73.44
+       5  Clément Champoussin       Kapitaen        77   77    71   71     70         0:00   88.49+  0.82      73.11
+       6  Melvin Crommelinck        Edelhelfer      76   72    72   70     71         0:00   87.15+  2.06      72.66
+       7  Thibau Nys                Kapitaen        78   75    72   71     71         0:00   89.23+  0.90      72.66
+       8  Mathias Vacek             Kapitaen        75   74    71   73     76         0:00   87.54 -0.50      72.63
+       9  Andrea Vendrame           Edelhelfer      75   73    70   72     73         0:00   86.98 -0.65      72.52
+      10  Alberto Bettiol           Co-Kapitaen     75   73    70   70     77         0:00   85.64+  0.07      71.80
+    Zerlegung der Top 5:
+      1. Mike Teunissen         hill 74x0.395=29.14  mediumMountain 68x0.406=27.60  mountain 65x0.128=8.27  sprint 74x0.036=2.65  acceleration 73x0.036=2.62  Ausdauer 75x0.122=9.14
+         Summe Faehigkeiten 79.42   Score 87.84   Differenz +8.42 (Form, Ermuedung, Boni)   mit Rauschen 89.69
+      2. Ugo Fabries            hill 76x0.395=29.87  mediumMountain 75x0.406=30.37  mountain 71x0.128=9.03  sprint 71x0.036=2.53  acceleration 74x0.036=2.62  Ausdauer 71x0.122=8.68
+         Summe Faehigkeiten 83.11   Score 91.03   Differenz +7.92 (Form, Ermuedung, Boni)   mit Rauschen 93.10
+      3. Joshua Tarling         hill 72x0.395=28.44  mediumMountain 73x0.406=29.65  mountain 73x0.128=9.31  sprint 73x0.036=2.60  acceleration 65x0.036=2.32  Ausdauer 76x0.122=9.26
+         Summe Faehigkeiten 81.58   Score 85.29   Differenz +3.71 (Form, Ermuedung, Boni)   mit Rauschen 85.55
+      4. Abram Stockman         hill 70x0.395=27.65  mediumMountain 67x0.406=27.21  mountain 65x0.128=8.29  sprint 69x0.036=2.46  acceleration 69x0.036=2.46  Ausdauer 73x0.122=8.89
+         Summe Faehigkeiten 76.96   Score 91.51   Differenz +14.54 (Form, Ermuedung, Boni)   mit Rauschen 91.75
+      5. Clément Champoussin    hill 77x0.395=30.42  mediumMountain 77x0.406=31.27  mountain 71x0.128=9.06  sprint 71x0.036=2.52  acceleration 74x0.036=2.63  Ausdauer 74x0.122=9.01
+         Summe Faehigkeiten 84.91   Score 88.49   Differenz +3.58 (Form, Ermuedung, Boni)   mit Rauschen 89.31
+
+  Etappe 12  Rolling  177.5 km  stage_score 60  (D 0.34)   erste Zeitgruppe 156   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.599  hill 0.221  sprint 0.150  acceleration 0.030  |  Ausdauer 0.120
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Sam Welsford              Sprinter        63   61    60   77     74         0:00   83.59+  0.77      78.86     4.60
+       2  Milan Fretin              Sprinter        72   61    56   77     74         0:00   86.51+  1.45      77.52     1.23
+       3  Albert Roca               Edelhelfer      72   71    73   74     71         0:00   81.98+  0.58      77.00     3.46
+       4  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   81.51 -1.59      76.59     1.91
+       5  Bryan Coquard             Edelhelfer      72   67    63   73     72         0:00   82.89 -0.10      76.30     3.10
+       6  Matthew Brennan           Kapitaen        75   72    69   77     77         0:00   86.36 -0.90      76.26     0.50
+       7  Mike Teunissen            Edelhelfer      74   68    65   74     77         0:00   83.65 -1.89      76.20     5.20
+       8  Danny van Poppel          Sprinter        73   68    63   77     77         0:00   85.67 -2.21      76.04     1.60
+       9  Jordan Labrosse           Kapitaen        77   75    71   73     75         0:00   87.80+  2.23      75.94     0.91
+      10  Marijn van den Berg       Sprinter        75   70    65   75     74         0:00   84.31+  0.79      75.92     2.65
+    Zerlegung der Top 5:
+      1. Sam Welsford           flat 74x0.599=44.31  hill 63x0.221=13.94  sprint 77x0.150=11.55  acceleration 76x0.030=2.28  Ausdauer 64x0.120=7.67
+         Summe Faehigkeiten 79.75   Score 83.59   Differenz +3.84 (Form, Ermuedung, Boni)   mit Rauschen 84.36
+      2. Milan Fretin           flat 74x0.599=44.31  hill 72x0.221=15.93  sprint 77x0.150=11.55  acceleration 77x0.030=2.31  Ausdauer 71x0.120=8.51
+         Summe Faehigkeiten 82.61   Score 86.51   Differenz +3.90 (Form, Ermuedung, Boni)   mit Rauschen 87.97
+      3. Albert Roca            flat 71x0.599=42.75  hill 72x0.221=16.03  sprint 74x0.150=11.08  acceleration 75x0.030=2.26  Ausdauer 69x0.120=8.29
+         Summe Faehigkeiten 80.40   Score 81.98   Differenz +1.58 (Form, Ermuedung, Boni)   mit Rauschen 82.57
+      4. Biniam Girmay          flat 76x0.599=45.50  hill 75x0.221=16.60  sprint 80x0.150=12.00  acceleration 79x0.030=2.37  Ausdauer 74x0.120=8.87
+         Summe Faehigkeiten 85.34   Score 81.51   Differenz -3.83 (Form, Ermuedung, Boni)   mit Rauschen 79.92
+      5. Bryan Coquard          flat 72x0.599=43.11  hill 72x0.221=16.04  sprint 73x0.150=10.99  acceleration 77x0.030=2.32  Ausdauer 72x0.120=8.63
+         Summe Faehigkeiten 81.09   Score 82.89   Differenz +1.79 (Form, Ermuedung, Boni)   mit Rauschen 82.79
+
+  Etappe 13  Hilly  186.3 km  stage_score 71  (D 0.38)   erste Zeitgruppe 10
+    Gewichte: hill 0.390  flat 0.381  mediumMountain 0.138  sprint 0.055  acceleration 0.035  mountain 0.003  |  Ausdauer 0.138
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Pavel Bittner             Sprinter        74   69    69   79     78         0:00   91.45+  1.19      78.43
+       2  Filippo Ganna             Kapitaen        76   74    71   76     83         0:00   90.37+  0.87      77.36
+       3  Axel Zingle               Sprinter        75   69    63   76     74         0:00   91.88+  2.54      76.83
+       4  Davide De Pretto          Co-Kapitaen     78   77    73   73     75         0:00   89.41 -1.03      76.37
+       5  Mathieu van der Poel      Kapitaen        80   73    66   73     82         0:00   91.67 -0.90      74.82
+       6  Sander De Pestel          Starke Helfer   73   72    64   72     73         0:00   90.09+  1.02      73.76
+       7  Joe Blackmore             Kapitaen        79   77    76   71     73         0:00   93.07+  1.82      73.62
+       8  Jacopo Mosca              Wassertraeger   72   70    67   71     74         0:00   90.14 -0.46      73.45
+       9  Paul Seixas               Kapitaen        78   78    79   71     74         0:00   88.93+  0.19      72.24
+      10  Rik van der Wal           Wassertraeger   70   70    67   68     74         0:00   90.30+  1.16      67.94
+    Zerlegung der Top 5:
+      1. Pavel Bittner          flat 78x0.381=29.53  hill 74x0.390=28.88  mediumMountain 69x0.138=9.52  sprint 79x0.055=4.31  acceleration 77x0.035=2.67  mountain 69x0.003=0.18  Ausdauer 73x0.138=10.14
+         Summe Faehigkeiten 85.24   Score 91.45   Differenz +6.21 (Form, Ermuedung, Boni)   mit Rauschen 92.64
+      2. Filippo Ganna          flat 83x0.381=31.62  hill 76x0.390=29.60  mediumMountain 74x0.138=10.19  sprint 76x0.055=4.15  acceleration 72x0.035=2.49  mountain 71x0.003=0.19  Ausdauer 79x0.138=10.91
+         Summe Faehigkeiten 89.15   Score 90.37   Differenz +1.22 (Form, Ermuedung, Boni)   mit Rauschen 91.24
+      3. Axel Zingle            flat 74x0.381=28.19  hill 75x0.390=29.21  mediumMountain 69x0.138=9.50  sprint 76x0.055=4.15  acceleration 76x0.035=2.63  mountain 63x0.003=0.17  Ausdauer 74x0.138=10.22
+         Summe Faehigkeiten 84.07   Score 91.88   Differenz +7.81 (Form, Ermuedung, Boni)   mit Rauschen 94.42
+      4. Davide De Pretto       flat 75x0.381=28.48  hill 78x0.390=30.41  mediumMountain 77x0.138=10.58  sprint 73x0.055=3.98  acceleration 76x0.035=2.63  mountain 73x0.003=0.19  Ausdauer 75x0.138=10.33
+         Summe Faehigkeiten 86.60   Score 89.41   Differenz +2.81 (Form, Ermuedung, Boni)   mit Rauschen 88.38
+      5. Mathieu van der Poel   flat 82x0.381=31.23  hill 80x0.390=31.15  mediumMountain 73x0.138=10.05  sprint 73x0.055=3.97  acceleration 82x0.035=2.85  mountain 66x0.003=0.17  Ausdauer 83x0.138=11.46
+         Summe Faehigkeiten 90.88   Score 91.67   Differenz +0.79 (Form, Ermuedung, Boni)   mit Rauschen 90.77
+
+  Etappe 14  High_Mountain  132.8 km  stage_score 244  (D 1.84)   erste Zeitgruppe 1
+    Gewichte: mountain 0.950  downhill 0.050  |  Ausdauer 0.027
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Jesús David Peña          Edelhelfer      74   74    75   64     67         0:00   84.43 -0.31      71.92
+       2  Mikkel Bjerg              Kapitaen        72   73    73   70     76        +0:05   81.94+  0.91      72.43
+       3  Joe Blackmore             Kapitaen        79   77    76   71     73        +0:25   80.18+  0.25      72.92
+       4  Laurens Huys              Starke Helfer   72   73    72   63     66        +0:25   80.58+  0.31      72.40
+       5  Mathias Vacek             Kapitaen        75   74    71   73     76        +0:37   79.80 -0.19      72.06
+       6  Jhonatan Narváez          Kapitaen        79   74    73   71     74        +1:53   78.95+  0.55      75.91
+       7  Pavel Sivakov             Kapitaen        77   78    78   67     72        +1:53   79.30 -0.13      75.54
+       8  Clément Berthet           Edelhelfer      75   76    76   65     71        +1:53   78.89+  0.15      74.16
+       9  Felix Großschartner       Edelhelfer      76   77    75   69     74        +1:53   79.58+  0.05      72.68
+      10  Nicolas Halter            Starke Helfer   75   74    72   67     69        +1:53   79.52 -0.15      72.36
+    Zerlegung der Top 5:
+      1. Jesús David Peña       mountain 75x0.950=71.23  downhill 71x0.050=3.55  Ausdauer 73x0.027=1.94
+         Summe Faehigkeiten 76.73   Score 84.43   Differenz +7.71 (Form, Ermuedung, Boni)   mit Rauschen 84.12
+      2. Mikkel Bjerg           mountain 73x0.950=69.35  downhill 71x0.050=3.55  Ausdauer 75x0.027=2.00
+         Summe Faehigkeiten 74.90   Score 81.94   Differenz +7.04 (Form, Ermuedung, Boni)   mit Rauschen 82.85
+      3. Joe Blackmore          mountain 76x0.950=71.80  downhill 78x0.050=3.89  Ausdauer 76x0.027=2.01
+         Summe Faehigkeiten 77.70   Score 80.18   Differenz +2.48 (Form, Ermuedung, Boni)   mit Rauschen 80.43
+      4. Laurens Huys           mountain 72x0.950=68.40  downhill 65x0.050=3.25  Ausdauer 68x0.027=1.81
+         Summe Faehigkeiten 73.46   Score 80.58   Differenz +7.12 (Form, Ermuedung, Boni)   mit Rauschen 80.89
+      5. Mathias Vacek          mountain 71x0.950=67.45  downhill 71x0.050=3.55  Ausdauer 77x0.027=2.05
+         Summe Faehigkeiten 73.05   Score 79.80   Differenz +6.75 (Form, Ermuedung, Boni)   mit Rauschen 79.61
+
+  Etappe 15  Flat  137.8 km  stage_score 12  (D 0.09)   erste Zeitgruppe 164   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.683  sprint 0.200  hill 0.087  acceleration 0.030  |  Ausdauer 0.037
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   78.58 -0.17      79.13     2.19
+       2  Milan Fretin              Sprinter        72   61    56   77     74         0:00   79.77+  0.67      77.55     1.28
+       3  Danny van Poppel          Sprinter        73   68    63   77     77         0:00   84.61+  2.05      77.54     2.30
+       4  Davide Donati             Sprinter        74   71    68   76     75         0:00   79.43+  1.16      75.67     1.54
+       5  Arnaud De Lie             Sprinter        75   66    62   77     76         0:00   80.46+  0.11      75.35     1.86
+       6  Kaden Groves              Sprinter        73   70    65   78     75         0:00   76.22 -0.64      75.22     0.94
+       7  Bryan Coquard             Edelhelfer      72   67    63   73     72         0:00   73.50 -2.73      74.94     2.67
+       8  Juan Pablo Ortega         Edelhelfer      72   71    70   74     73         0:00   72.82 -0.71      74.33     3.86
+       9  Jenthe Biermans           Wassertraeger   73   65    60   73     75         0:00   79.41 -1.32      74.08     2.55
+      10  Ashlin Barry              Wassertraeger   72   68    65   74     73         0:00   74.01 -1.89      73.94     1.44
+    Zerlegung der Top 5:
+      1. Biniam Girmay          flat 76x0.683=51.90  hill 75x0.087=6.53  sprint 80x0.200=16.00  acceleration 79x0.030=2.37  Ausdauer 74x0.037=2.74
+         Summe Faehigkeiten 79.54   Score 78.58   Differenz -0.96 (Form, Ermuedung, Boni)   mit Rauschen 78.41
+      2. Milan Fretin           flat 74x0.683=50.53  hill 72x0.087=6.27  sprint 77x0.200=15.40  acceleration 77x0.030=2.31  Ausdauer 71x0.037=2.63
+         Summe Faehigkeiten 77.14   Score 79.77   Differenz +2.62 (Form, Ermuedung, Boni)   mit Rauschen 80.44
+      3. Danny van Poppel       flat 77x0.683=52.58  hill 73x0.087=6.36  sprint 77x0.200=15.35  acceleration 75x0.030=2.24  Ausdauer 73x0.037=2.70
+         Summe Faehigkeiten 79.23   Score 84.61   Differenz +5.38 (Form, Ermuedung, Boni)   mit Rauschen 86.66
+      4. Davide Donati          flat 75x0.683=50.92  hill 74x0.087=6.46  sprint 76x0.200=15.10  acceleration 76x0.030=2.27  Ausdauer 73x0.037=2.70
+         Summe Faehigkeiten 77.44   Score 79.43   Differenz +1.99 (Form, Ermuedung, Boni)   mit Rauschen 80.58
+      5. Arnaud De Lie          flat 76x0.683=51.90  hill 75x0.087=6.53  sprint 77x0.200=15.40  acceleration 79x0.030=2.37  Ausdauer 72x0.037=2.66
+         Summe Faehigkeiten 78.87   Score 80.46   Differenz +1.59 (Form, Ermuedung, Boni)   mit Rauschen 80.57
+
+  Etappe 16  Mountain  113.2 km  stage_score 189  (D 1.67)   erste Zeitgruppe 21
+    Gewichte: mountain 0.703  mediumMountain 0.237  downhill 0.045  sprint 0.015  |  Ausdauer 0.000
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Giulio Pellizzari         Co-Kapitaen     78   78    79   68     74         0:00   82.19 -0.64      78.46
+       2  Jefferson Cepeda          Edelhelfer      76   77    75   65     71         0:00   81.10+  0.36      77.98
+       3  Simon Yates               Kapitaen        77   79    79   65     71         0:00   81.76+  0.25      77.92
+       4  Tom Pidcock               Kapitaen        79   79    75   71     74         0:00   78.27+  0.10      76.27
+       5  Matteo Sobrero            Co-Kapitaen     76   75    73   69     74         0:00   78.68+  0.09      74.05
+       6  Mathieu van der Poel      Kapitaen        80   73    66   73     82         0:00   70.93+  0.07      73.27
+       7  Jonas Abrahamsen          Edelhelfer      73   72    68   71     78         0:00   78.47+  0.83      73.09
+       8  Toms Skujins              Co-Kapitaen     75   72    70   69     76         0:00   71.87 -0.21      72.63
+       9  Even Yemane               Wassertraeger   73   71    67   75     71         0:00   69.51 -0.27      72.33
+      10  Abram Stockman            Wassertraeger   70   67    65   69     74         0:00   74.51+  2.21      71.46
+    Zerlegung der Top 5:
+      1. Giulio Pellizzari      mediumMountain 78x0.237=18.52  mountain 79x0.703=55.65  downhill 75x0.045=3.38  sprint 68x0.015=1.03  Ausdauer 77x0.000=0.00
+         Summe Faehigkeiten 78.59   Score 82.19   Differenz +3.60 (Form, Ermuedung, Boni)   mit Rauschen 81.55
+      2. Jefferson Cepeda       mediumMountain 77x0.237=18.24  mountain 75x0.703=52.72  downhill 71x0.045=3.20  sprint 65x0.015=0.98  Ausdauer 73x0.000=0.00
+         Summe Faehigkeiten 75.14   Score 81.10   Differenz +5.96 (Form, Ermuedung, Boni)   mit Rauschen 81.47
+      3. Simon Yates            mediumMountain 79x0.237=18.71  mountain 79x0.703=55.54  downhill 72x0.045=3.25  sprint 65x0.015=0.98  Ausdauer 75x0.000=0.00
+         Summe Faehigkeiten 78.47   Score 81.76   Differenz +3.29 (Form, Ermuedung, Boni)   mit Rauschen 82.00
+      4. Tom Pidcock            mediumMountain 79x0.237=18.71  mountain 75x0.703=52.72  downhill 84x0.045=3.79  sprint 71x0.015=1.07  Ausdauer 77x0.000=0.00
+         Summe Faehigkeiten 76.29   Score 78.27   Differenz +1.98 (Form, Ermuedung, Boni)   mit Rauschen 78.38
+      5. Matteo Sobrero         mediumMountain 75x0.237=17.76  mountain 73x0.703=51.30  downhill 71x0.045=3.20  sprint 69x0.015=1.05  Ausdauer 75x0.000=0.00
+         Summe Faehigkeiten 73.32   Score 78.68   Differenz +5.36 (Form, Ermuedung, Boni)   mit Rauschen 78.76
+
+  Etappe 17  Hilly_Difficult  200.5 km  stage_score 139  (D 0.69)   erste Zeitgruppe 23
+    Gewichte: mediumMountain 0.442  hill 0.335  mountain 0.155  sprint 0.034  acceleration 0.034  |  Ausdauer 0.168
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Sente Sentjens            Sprinter        70   66    65   77     76         0:00   87.56+  0.66      82.98
+       2  Mathieu van der Poel      Kapitaen        80   73    66   73     82         0:00   97.11 -1.01      81.76
+       3  Marcel Gladek             Sprinter        73   68    67   76     75         0:00   88.37+  1.62      81.10
+       4  Ethan Vernon              Sprinter        71   65    62   76     75         0:00   89.77 -0.28      79.70
+       5  Danny van Poppel          Sprinter        73   68    63   77     77         0:00   91.89 -1.78      78.64
+       6  Pavel Bittner             Sprinter        74   69    69   79     78         0:00   90.93+  0.41      78.57
+       7  Even Yemane               Wassertraeger   73   71    67   75     71         0:00   89.72+  2.05      78.20
+       8  Giulio Pellizzari         Co-Kapitaen     78   78    79   68     74         0:00   98.55+  0.57      76.42
+       9  Tom Pidcock               Kapitaen        79   79    75   71     74         0:00   94.72+  0.22      76.18
+      10  Marijn van den Berg       Sprinter        75   70    65   75     74         0:00   83.69+  1.80      76.15
+    Zerlegung der Top 5:
+      1. Sente Sentjens         hill 70x0.335=23.63  mediumMountain 66x0.442=29.29  mountain 65x0.155=10.06  sprint 77x0.034=2.63  acceleration 77x0.034=2.64  Ausdauer 72x0.168=12.14
+         Summe Faehigkeiten 80.37   Score 87.56   Differenz +7.19 (Form, Ermuedung, Boni)   mit Rauschen 88.22
+      2. Mathieu van der Poel   hill 80x0.335=26.82  mediumMountain 73x0.442=32.22  mountain 66x0.155=10.20  sprint 73x0.034=2.49  acceleration 82x0.034=2.82  Ausdauer 83x0.168=13.92
+         Summe Faehigkeiten 88.47   Score 97.11   Differenz +8.64 (Form, Ermuedung, Boni)   mit Rauschen 96.10
+      3. Marcel Gladek          hill 73x0.335=24.39  mediumMountain 68x0.442=30.22  mountain 67x0.155=10.28  sprint 76x0.034=2.61  acceleration 75x0.034=2.56  Ausdauer 69x0.168=11.58
+         Summe Faehigkeiten 81.65   Score 88.37   Differenz +6.72 (Form, Ermuedung, Boni)   mit Rauschen 89.99
+      4. Ethan Vernon           hill 71x0.335=23.82  mediumMountain 65x0.442=28.70  mountain 62x0.155=9.59  sprint 76x0.034=2.60  acceleration 75x0.034=2.57  Ausdauer 71x0.168=11.91
+         Summe Faehigkeiten 79.18   Score 89.77   Differenz +10.60 (Form, Ermuedung, Boni)   mit Rauschen 89.49
+      5. Danny van Poppel       hill 73x0.335=24.49  mediumMountain 68x0.442=30.02  mountain 63x0.155=9.74  sprint 77x0.034=2.63  acceleration 75x0.034=2.55  Ausdauer 73x0.168=12.24
+         Summe Faehigkeiten 81.68   Score 91.89   Differenz +10.22 (Form, Ermuedung, Boni)   mit Rauschen 90.11
+
+  Etappe 18  Rolling  166.3 km  stage_score 59  (D 0.35)   erste Zeitgruppe 150   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.591  hill 0.229  sprint 0.150  acceleration 0.030  |  Ausdauer 0.097
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   81.94 -1.77      79.60     2.34
+       2  Arnaud Démare             Sprinter        72   64    57   76     73         0:00   84.26+  1.09      78.56     3.72
+       3  Aldo Taillieu             Wassertraeger   72   71    67   74     74         0:00   85.27+  0.40      77.51     1.16
+       4  Sente Sentjens            Sprinter        70   66    65   77     76         0:00   81.31 -2.06      76.91     1.43
+       5  Danny van Poppel          Sprinter        73   68    63   77     77         0:00   84.66 -0.49      76.02     2.56
+       6  Arnaud De Lie             Sprinter        75   66    62   77     76         0:00   87.40+  2.09      75.92     1.18
+       7  Marcel Gladek             Sprinter        73   68    67   76     75         0:00   79.68+  0.43      74.08     2.64
+       8  Caleb Ewan                Wassertraeger   74   63    62   74     70         0:00   82.66+  0.56      74.04     0.74
+       9  Eike Behrens              Wassertraeger   72   71    70   73     74         0:00   80.80+  0.96      74.03     3.97
+      10  Kaden Groves              Sprinter        73   70    65   78     75         0:00   82.81+  2.55      73.81     0.00
+    Zerlegung der Top 5:
+      1. Biniam Girmay          flat 76x0.591=44.88  hill 75x0.229=17.21  sprint 80x0.150=12.00  acceleration 79x0.030=2.37  Ausdauer 74x0.097=7.15
+         Summe Faehigkeiten 83.61   Score 81.94   Differenz -1.67 (Form, Ermuedung, Boni)   mit Rauschen 80.17
+      2. Arnaud Démare          flat 73x0.591=43.11  hill 72x0.229=16.43  sprint 76x0.150=11.46  acceleration 76x0.030=2.29  Ausdauer 72x0.097=6.95
+         Summe Faehigkeiten 80.25   Score 84.26   Differenz +4.00 (Form, Ermuedung, Boni)   mit Rauschen 85.35
+      3. Aldo Taillieu          flat 74x0.591=43.89  hill 72x0.229=16.49  sprint 74x0.150=11.11  acceleration 74x0.030=2.21  Ausdauer 69x0.097=6.68
+         Summe Faehigkeiten 80.38   Score 85.27   Differenz +4.89 (Form, Ermuedung, Boni)   mit Rauschen 85.67
+      4. Sente Sentjens         flat 76x0.591=45.02  hill 70x0.229=16.16  sprint 77x0.150=11.51  acceleration 77x0.030=2.31  Ausdauer 72x0.097=6.99
+         Summe Faehigkeiten 81.99   Score 81.31   Differenz -0.67 (Form, Ermuedung, Boni)   mit Rauschen 79.25
+      5. Danny van Poppel       flat 77x0.591=45.48  hill 73x0.229=16.75  sprint 77x0.150=11.51  acceleration 75x0.030=2.24  Ausdauer 73x0.097=7.05
+         Summe Faehigkeiten 83.02   Score 84.66   Differenz +1.64 (Form, Ermuedung, Boni)   mit Rauschen 84.17
+
+  Etappe 19  High_Mountain  151.5 km  stage_score 304  (D 2.01)   erste Zeitgruppe 9
+    Gewichte: mountain 0.950  downhill 0.050  |  Ausdauer 0.066
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Davide De Pretto          Co-Kapitaen     78   77    73   73     75         0:00   87.60+  0.19      78.91
+       2  Simon Yates               Kapitaen        77   79    79   65     71         0:00   88.32+  0.09      78.40
+       3  Mathieu van der Poel      Kapitaen        80   73    66   73     82         0:00   78.63 -0.05      77.20
+       4  Cian Uijtdebroeks         Starke Helfer   74   77    78   60     71         0:00   87.44+  0.55      75.24
+       5  Fred Wright               Kapitaen        74   70    67   72     75         0:00   81.81+  0.20      73.45
+       6  Pavel Bittner             Sprinter        74   69    69   79     78         0:00   83.10 -0.49      73.24
+       7  Stan Dewulf               Edelhelfer      73   71    67   71     75         0:00   75.34 -0.88      72.14
+       8  Mattia Negrente           Sprinter        72   69    65   75     72         0:00   73.81 -0.03      71.22
+       9  Alessandro Pinarello      Starke Helfer   74   75    73   68     67        +0:01   85.28 -0.44      69.59
+      10  Marco Brenner             Kapitaen        78   79    77   71     73        +0:23   84.72 -0.30      74.42
+    Zerlegung der Top 5:
+      1. Davide De Pretto       mountain 73x0.950=69.57  downhill 73x0.050=3.64  Ausdauer 75x0.066=4.91
+         Summe Faehigkeiten 78.12   Score 87.60   Differenz +9.47 (Form, Ermuedung, Boni)   mit Rauschen 87.78
+      2. Simon Yates            mountain 79x0.950=75.09  downhill 72x0.050=3.57  Ausdauer 75x0.066=4.92
+         Summe Faehigkeiten 83.58   Score 88.32   Differenz +4.74 (Form, Ermuedung, Boni)   mit Rauschen 88.41
+      3. Mathieu van der Poel   mountain 66x0.950=62.70  downhill 81x0.050=4.01  Ausdauer 83x0.066=5.45
+         Summe Faehigkeiten 72.16   Score 78.63   Differenz +6.47 (Form, Ermuedung, Boni)   mit Rauschen 78.58
+      4. Cian Uijtdebroeks      mountain 78x0.950=74.21  downhill 69x0.050=3.43  Ausdauer 73x0.066=4.81
+         Summe Faehigkeiten 82.45   Score 87.44   Differenz +4.99 (Form, Ermuedung, Boni)   mit Rauschen 87.99
+      5. Fred Wright            mountain 67x0.950=63.68  downhill 73x0.050=3.62  Ausdauer 78x0.066=5.12
+         Summe Faehigkeiten 72.42   Score 81.81   Differenz +9.39 (Form, Ermuedung, Boni)   mit Rauschen 82.01
+
+  Etappe 20  Mountain  199.3 km  stage_score 299  (D 1.50)   erste Zeitgruppe 1
+    Gewichte: mountain 0.641  mediumMountain 0.292  downhill 0.048  sprint 0.018  |  Ausdauer 0.165
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break
+       1  Marco Brenner             Kapitaen        78   79    77   71     73         0:00   93.34 -0.70      75.01
+       2  Jesús David Peña          Edelhelfer      74   74    75   64     67        +0:02   90.94+  0.69      68.99
+       3  Jonas Abrahamsen          Edelhelfer      73   72    68   71     78        +0:06   90.76 -0.58      71.17
+       4  Cian Uijtdebroeks         Starke Helfer   74   77    78   60     71        +0:10   90.43+  1.19      71.53
+       5  Matteo Sobrero            Co-Kapitaen     76   75    73   69     74        +0:15   90.33+  0.70      72.22
+       6  Joe Blackmore             Kapitaen        79   77    76   71     73        +0:22   90.20 -0.18      73.09
+       7  James Shaw                Starke Helfer   74   74    73   67     71        +0:30   90.18 -0.08      71.98
+       8  Mathias Vacek             Kapitaen        75   74    71   73     76        +0:37   89.96 -0.57      69.49
+       9  Louis Vervaeke            Co-Kapitaen     73   74    74   67     72        +0:46   89.87 -0.48      72.85
+      10  Jordan Labrosse           Kapitaen        77   75    71   73     75        +1:03   89.54+  0.34      76.14
+    Zerlegung der Top 5:
+      1. Marco Brenner          mediumMountain 79x0.292=23.07  mountain 77x0.641=49.46  downhill 75x0.048=3.62  sprint 71x0.018=1.29  Ausdauer 76x0.165=12.55
+         Summe Faehigkeiten 90.00   Score 93.34   Differenz +3.34 (Form, Ermuedung, Boni)   mit Rauschen 92.63
+      2. Jesús David Peña       mediumMountain 74x0.292=21.64  mountain 75x0.641=48.08  downhill 71x0.048=3.42  sprint 64x0.018=1.16  Ausdauer 73x0.165=12.05
+         Summe Faehigkeiten 86.35   Score 90.94   Differenz +4.59 (Form, Ermuedung, Boni)   mit Rauschen 91.63
+      3. Jonas Abrahamsen       mediumMountain 72x0.292=21.06  mountain 68x0.641=43.60  downhill 72x0.048=3.47  sprint 71x0.018=1.29  Ausdauer 80x0.165=13.21
+         Summe Faehigkeiten 82.63   Score 90.76   Differenz +8.13 (Form, Ermuedung, Boni)   mit Rauschen 90.18
+      4. Cian Uijtdebroeks      mediumMountain 77x0.292=22.39  mountain 78x0.641=50.07  downhill 69x0.048=3.33  sprint 60x0.018=1.09  Ausdauer 73x0.165=12.09
+         Summe Faehigkeiten 88.96   Score 90.43   Differenz +1.47 (Form, Ermuedung, Boni)   mit Rauschen 91.62
+      5. Matteo Sobrero         mediumMountain 75x0.292=21.93  mountain 73x0.641=46.80  downhill 71x0.048=3.42  sprint 69x0.018=1.26  Ausdauer 75x0.165=12.39
+         Summe Faehigkeiten 85.80   Score 90.33   Differenz +4.53 (Form, Ermuedung, Boni)   mit Rauschen 91.03
+
+  Etappe 21  Rolling  133.3 km  stage_score 12  (D 0.09)   erste Zeitgruppe 165   Tie-Break-Faktor 0.25
+    Gewichte: flat 0.690  sprint 0.150  hill 0.130  acceleration 0.030  |  Ausdauer 0.028
+    Rang  Fahrer                     Rolle          Hue   MM  Berg  Spr  Flach   Rueckstand   Score  Rausch  Tie-Break  Anfahrt
+       1  Kaden Groves              Sprinter        73   70    65   78     75         0:00   77.36 -0.56      76.65     1.51
+       2  Madis Mihkels             Sprinter        72   65    63   76     76         0:00   78.15+  0.09      76.52     3.36
+       3  Albert Roca               Edelhelfer      72   71    73   74     71         0:00   73.82+  1.56      74.82     4.58
+       4  Filippo Ganna             Kapitaen        76   74    71   76     83         0:00   80.64 -1.14      74.46     1.33
+       5  Jenthe Biermans           Wassertraeger   73   65    60   73     75         0:00   77.42+  0.38      74.44     4.36
+       6  Amaury Capiot             Sprinter        74   66    63   75     75         0:00   75.68 -0.48      73.18     1.29
+       7  Even Yemane               Wassertraeger   73   71    67   75     71         0:00   73.99+  0.20      72.94     1.98
+       8  Matthew Brennan           Kapitaen        75   72    69   77     77         0:00   78.93+  0.41      72.93     0.67
+       9  Biniam Girmay             Kapitaen        75   68    65   80     76         0:00   74.11 -0.71      72.91     0.00
+      10  Marcel Gladek             Sprinter        73   68    67   76     75         0:00   75.44+  3.26      72.69     1.85
+    Zerlegung der Top 5:
+      1. Kaden Groves           flat 75x0.690=51.75  hill 73x0.130=9.49  sprint 78x0.150=11.70  acceleration 77x0.030=2.31  Ausdauer 74x0.028=2.04
+         Summe Faehigkeiten 77.29   Score 77.36   Differenz +0.07 (Form, Ermuedung, Boni)   mit Rauschen 76.80
+      2. Madis Mihkels          flat 76x0.690=52.44  hill 72x0.130=9.36  sprint 76x0.150=11.40  acceleration 76x0.030=2.28  Ausdauer 76x0.028=2.10
+         Summe Faehigkeiten 77.58   Score 78.15   Differenz +0.57 (Form, Ermuedung, Boni)   mit Rauschen 78.24
+      3. Albert Roca            flat 71x0.690=49.27  hill 72x0.130=9.42  sprint 74x0.150=11.08  acceleration 75x0.030=2.26  Ausdauer 69x0.028=1.91
+         Summe Faehigkeiten 73.93   Score 73.82   Differenz -0.10 (Form, Ermuedung, Boni)   mit Rauschen 75.39
+      4. Filippo Ganna          flat 83x0.690=57.27  hill 76x0.130=9.88  sprint 76x0.150=11.40  acceleration 72x0.030=2.16  Ausdauer 79x0.028=2.18
+         Summe Faehigkeiten 82.89   Score 80.64   Differenz -2.25 (Form, Ermuedung, Boni)   mit Rauschen 79.50
+      5. Jenthe Biermans        flat 75x0.690=51.75  hill 73x0.130=9.49  sprint 73x0.150=10.95  acceleration 73x0.030=2.19  Ausdauer 74x0.028=2.04
+         Summe Faehigkeiten 76.42   Score 77.42   Differenz +1.00 (Form, Ermuedung, Boni)   mit Rauschen 77.81
