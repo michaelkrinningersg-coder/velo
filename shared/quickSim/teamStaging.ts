@@ -16,10 +16,11 @@
  * Die Werte gelten fuer jedes Terrain gleich: die Arbeit, die eine Mannschaft
  * verteilt, haengt nicht am Profil.
  *
- * Eine Ausnahme gibt es doch: Kapitaene, Co-Kapitaene und Sprinter fallen nie
- * unter -1. Sie fahren ihr eigenes Rennen, auch wenn sie an diesem Tag hinten
+ * Zwei Ausnahmen gibt es doch. Kapitaene, Co-Kapitaene und Sprinter fallen nie
+ * unter -1: sie fahren ihr eigenes Rennen, auch wenn sie an diesem Tag hinten
  * in ihrer Mannschaft stehen — die Abstufung bildet Helferdienste ab, und die
- * leisten sie nicht.
+ * leisten sie nicht. Und der beste Etappenfahrer einer Mannschaft faellt in
+ * einer Rundfahrt gar nicht ins Minus, weil er die Gesamtwertung faehrt.
  */
 
 /** Zuschlag je Platz innerhalb der Mannschaft, vom besten an. */
@@ -72,12 +73,45 @@ export function resolveTeamStagingDelta(positionInTeam: number, roleName?: strin
     : roh;
 }
 
+/**
+ * Untergrenze fuer den besten Etappenfahrer einer Mannschaft.
+ *
+ * In einer Rundfahrt schickt eine Mannschaft einen Fahrer auf die
+ * Gesamtwertung. Er faehrt jeden Tag sein eigenes Rennen — auch an einem Tag,
+ * an dem ihm das Profil nicht liegt und zwei Kollegen vor ihm stehen. Die
+ * Abstufung darf ihn deshalb nicht ins Minus druecken; sie soll die Arbeit
+ * verteilen, nicht die Gesamtwertung umwerfen.
+ *
+ * Gilt nur in Rundfahrten: an einem Eintagesrennen gibt es keine
+ * Gesamtwertung, fuer die jemand geschont werden muesste.
+ */
+export const TEAM_STAGING_LEADER_FLOOR = 0;
+
+/**
+ * Wie der Etappenfahrer einer Mannschaft bestimmt wird.
+ *
+ * Berg, Mittelgebirge und Zeitfahren — die drei Faehigkeiten, die eine
+ * Gesamtwertung entscheiden. Sprint, Flach und Huegel stehen bewusst nicht
+ * darin: wer sie hat, gewinnt Etappen, keine Rundfahrten.
+ */
+export const STAGE_RACER_WEIGHTS = { mountain: 0.6, mediumMountain: 0.25, timeTrial: 0.15 } as const;
+
+export function resolveStageRacerValue(
+  skills: { mountain: number; mediumMountain: number; timeTrial: number },
+): number {
+  return (skills.mountain * STAGE_RACER_WEIGHTS.mountain)
+    + (skills.mediumMountain * STAGE_RACER_WEIGHTS.mediumMountain)
+    + (skills.timeTrial * STAGE_RACER_WEIGHTS.timeTrial);
+}
+
 export interface TeamStagingRider {
   riderId: number;
   teamId?: number | null;
   score: number;
   /** Rollenname aus der Datenbank. Entscheidet ueber die Untergrenze. */
   roleName?: string | null;
+  /** Wert aus `resolveStageRacerValue`. Der beste einer Mannschaft faellt nicht unter null. */
+  stageRacerValue?: number;
 }
 
 /**
@@ -88,7 +122,10 @@ export interface TeamStagingRider {
  * Bei gleichem Score entscheidet die Fahrer-Id, damit die Reihenfolge nicht
  * von der Eingabereihenfolge abhaengt.
  */
-export function buildTeamStagingDeltas(riders: readonly TeamStagingRider[]): Map<number, number> {
+export function buildTeamStagingDeltas(
+  riders: readonly TeamStagingRider[],
+  isStageRace = false,
+): Map<number, number> {
   const nachTeam = new Map<number, TeamStagingRider[]>();
   for (const rider of riders) {
     const teamId = rider.teamId ?? -rider.riderId;
@@ -99,11 +136,34 @@ export function buildTeamStagingDeltas(riders: readonly TeamStagingRider[]): Map
 
   const deltas = new Map<number, number>();
   for (const mitglieder of nachTeam.values()) {
+    // Der beste Etappenfahrer der Mannschaft, gemessen an den drei
+    // Faehigkeiten, die eine Gesamtwertung entscheiden. Bei Gleichstand
+    // entscheidet die Fahrer-Id, damit die Wahl nicht an der
+    // Eingabereihenfolge haengt.
+    let kapitaenDerRundfahrt: number | null = null;
+    if (isStageRace) {
+      let bester = Number.NEGATIVE_INFINITY;
+      for (const rider of mitglieder) {
+        const wert = rider.stageRacerValue;
+        if (wert == null) {
+          continue;
+        }
+        if (wert > bester || (wert === bester && kapitaenDerRundfahrt != null && rider.riderId < kapitaenDerRundfahrt)) {
+          bester = wert;
+          kapitaenDerRundfahrt = rider.riderId;
+        }
+      }
+    }
+
     const sortiert = [...mitglieder].sort(
       (links, rechts) => rechts.score - links.score || links.riderId - rechts.riderId,
     );
     sortiert.forEach((rider, position) => {
-      deltas.set(rider.riderId, resolveTeamStagingDelta(position, rider.roleName));
+      const roh = resolveTeamStagingDelta(position, rider.roleName);
+      deltas.set(
+        rider.riderId,
+        rider.riderId === kapitaenDerRundfahrt ? Math.max(TEAM_STAGING_LEADER_FLOOR, roh) : roh,
+      );
     });
   }
   return deltas;

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STAGE_RACER_WEIGHTS,
   TEAM_STAGING_FLOOR_ROLES,
+  TEAM_STAGING_LEADER_FLOOR,
   TEAM_STAGING_ROLE_FLOOR,
   TEAM_STAGING_STEPS,
   buildTeamStagingDeltas,
+  resolveStageRacerValue,
   resolveTeamStagingDelta,
 } from '../../../shared/quickSim/teamStaging';
 import {
@@ -265,5 +268,102 @@ describe('Mannschaftszeitfahren nach der Neukalibrierung', () => {
     expect(neu.mitte).toBeLessThan(0.055);
     expect(neu.letzter).toBeGreaterThan(0.065);
     expect(neu.letzter).toBeLessThan(0.100);
+  });
+});
+
+describe('Bester Etappenfahrer einer Mannschaft', () => {
+  const wert = (mountain: number, mediumMountain: number, timeTrial: number) =>
+    resolveStageRacerValue({ mountain, mediumMountain, timeTrial });
+
+  it('gewichtet Berg, Mittelgebirge und Zeitfahren wie vorgegeben', () => {
+    expect(STAGE_RACER_WEIGHTS).toEqual({ mountain: 0.6, mediumMountain: 0.25, timeTrial: 0.15 });
+    expect(Object.values(STAGE_RACER_WEIGHTS).reduce((s, x) => s + x, 0)).toBeCloseTo(1, 10);
+    expect(wert(80, 80, 80)).toBeCloseTo(80, 10);
+    expect(wert(80, 70, 60)).toBeCloseTo((80 * 0.6) + (70 * 0.25) + (60 * 0.15), 10);
+    // Sprint, Flach und Huegel spielen keine Rolle — sie stehen gar nicht drin.
+    expect(wert(70, 70, 70)).toBeCloseTo(70, 10);
+  });
+
+  it('haelt ihn in der Rundfahrt bei null oder darueber', () => {
+    expect(TEAM_STAGING_LEADER_FLOOR).toBe(0);
+    // Acht Wassertraeger; der schwaechste im Tagesscore ist der beste
+    // Etappenfahrer — er faellt trotzdem nicht ins Minus.
+    const mannschaft = Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
+      stageRacerValue: wert(60 + i, 60, 60),
+    }));
+    const deltas = buildTeamStagingDeltas(mannschaft, true);
+    expect(deltas.get(8)).toBe(0);
+    // Alle anderen tragen die volle Staffel.
+    expect([1, 2, 3, 4, 5, 6, 7].map((id) => deltas.get(id))).toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5]);
+  });
+
+  it('greift im Eintagesrennen nicht', () => {
+    const mannschaft = Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
+      stageRacerValue: wert(60 + i, 60, 60),
+    }));
+    expect(buildTeamStagingDeltas(mannschaft, false).get(8)).toBe(-3);
+    // Ohne Angabe gilt dieselbe Vorgabe wie fuer ein Eintagesrennen.
+    expect(buildTeamStagingDeltas(mannschaft).get(8)).toBe(-3);
+  });
+
+  it('nimmt den Besseren, nicht den mit dem hoeheren Bergwert allein', () => {
+    // Kletterer ohne Zeitfahren gegen den ausgeglichenen Fahrer.
+    const kletterer = wert(82, 70, 55);
+    const allrounder = wert(78, 78, 78);
+    expect(allrounder).toBeGreaterThan(kletterer);
+    const deltas = buildTeamStagingDeltas([
+      { riderId: 1, teamId: 1, score: 95, roleName: 'Wassertraeger', stageRacerValue: kletterer },
+      { riderId: 2, teamId: 1, score: 60, roleName: 'Wassertraeger', stageRacerValue: allrounder },
+    ], true);
+    expect(deltas.get(1)).toBe(1);
+    expect(deltas.get(2)).toBe(0);
+  });
+
+  it('entscheidet Gleichstand nach der Fahrer-Id, unabhaengig von der Eingabereihenfolge', () => {
+    const mannschaft = [
+      { riderId: 9, teamId: 1, score: 90, roleName: 'Wassertraeger', stageRacerValue: 75 },
+      { riderId: 4, teamId: 1, score: 80, roleName: 'Wassertraeger', stageRacerValue: 75 },
+      { riderId: 7, teamId: 1, score: 70, roleName: 'Wassertraeger', stageRacerValue: 75 },
+    ];
+    const a = buildTeamStagingDeltas(mannschaft, true);
+    const b = buildTeamStagingDeltas([...mannschaft].reverse(), true);
+    expect(a).toEqual(b);
+    // Fahrer 4 ist der Etappenfahrer; als Dritter im Tagesscore bekaeme er
+    // -0,5, durch die Untergrenze steht er bei 0.
+    expect(a.get(4)).toBe(0);
+    expect(a.get(7)).toBe(-0.5);
+  });
+
+  it('gilt je Mannschaft, nicht fuers ganze Feld', () => {
+    const deltas = buildTeamStagingDeltas([
+      { riderId: 1, teamId: 1, score: 95, roleName: 'Wassertraeger', stageRacerValue: 90 },
+      { riderId: 2, teamId: 1, score: 60, roleName: 'Wassertraeger', stageRacerValue: 95 },
+      { riderId: 3, teamId: 2, score: 90, roleName: 'Wassertraeger', stageRacerValue: 50 },
+      { riderId: 4, teamId: 2, score: 55, roleName: 'Wassertraeger', stageRacerValue: 60 },
+    ], true);
+    // In jeder Mannschaft steht ihr eigener Bester bei null, auch der
+    // schwaechere aus Mannschaft 2.
+    expect(deltas.get(2)).toBe(0);
+    expect(deltas.get(4)).toBe(0);
+  });
+
+  it('vertraegt sich mit der Rollenuntergrenze — es gilt die guenstigere', () => {
+    const deltas = buildTeamStagingDeltas([
+      ...Array.from({ length: 7 }, (_, i) => ({
+        riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger', stageRacerValue: 60,
+      })),
+      { riderId: 8, teamId: 1, score: 50, roleName: 'Kapitaen', stageRacerValue: 90 },
+    ], true);
+    // Als Achter waere es -3, als Kapitaen -1, als Etappenfahrer 0.
+    expect(deltas.get(8)).toBe(TEAM_STAGING_LEADER_FLOOR);
+  });
+
+  it('bleibt ohne Etappenfahrerwerte unveraendert', () => {
+    const ohne = Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
+    }));
+    expect([...buildTeamStagingDeltas(ohne, true).values()]).toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
   });
 });

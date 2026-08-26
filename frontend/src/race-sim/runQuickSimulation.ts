@@ -53,7 +53,7 @@ import { resolveLeadoutBonusFactor, resolveSeasonFormFactor } from '../../../sha
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
 import { resolveQuickSimFatigueMalus, resolveSkillsWithMentorBoosts, sampleDailyForm } from './riderCondition';
-import { buildTeamStagingDeltas } from '../../../shared/quickSim/teamStaging';
+import { buildTeamStagingDeltas, resolveStageRacerValue } from '../../../shared/quickSim/teamStaging';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
@@ -299,7 +299,8 @@ export function runQuickSimulation(
       teamId: candidate.rider.activeTeamId,
       score: candidate.effectiveSkill,
       roleName: candidate.rider.role?.name,
-    })));
+      stageRacerValue: resolveStageRacerValue(candidate.rider.skills),
+    })), bootstrap.race.isStageRace);
 
   const scoreDeltaByRiderId = new Map(preRace.scoreDeltaByRiderId);
   for (const [riderId, delta] of stagingDeltas) {
