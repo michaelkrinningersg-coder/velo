@@ -8,8 +8,8 @@ eigenen Referenzlauf.
 
 | Datei | Inhalt |
 |---|---|
-| `gt_stages_2020_2024.csv` | 283 Strassenetappen der Grand Tours 2020–2024, mit Distanz, Hoehenmetern, `profile_score`, Siegerschnitt, `won_how` — und dem von uns zugeordneten Terrain |
-| `tdf_gc_2020_2026.csv` | Gesamtwertung der Tour de France 2020–2026, 1.031 Zeilen, mit Rueckstand in Sekunden |
+| `gt_stages_2010_2024.csv` | 843 Strassenetappen der Grand Tours 2010–2024, mit Distanz, Hoehenmetern, `profile_score`, Siegerschnitt, `won_how` — und dem von uns zugeordneten Terrain |
+| `tdf_gc_2010_2026.csv` | Gesamtwertung der Tour de France 2010–2026, 2.647 Zeilen, mit Rueckstand in Sekunden |
 | `eigene_etappen.json` | Distanz, Hoehenmeter und `stage_score` unserer 359 eigenen Etappen — die Lerngrundlage der Zuordnung |
 | `sammle_eigene_etappen.ts` + `run.js` | erzeugt `eigene_etappen.json` |
 | `klassifiziere_etappen.py` | laedt die echten Etappen und ordnet sie ein |
@@ -21,7 +21,8 @@ Egress-Proxy dieser Umgebung geblockt werden (403 auf CONNECT).
 
 - Etappen: [jenslemb/cyclingdata](https://github.com/jenslemb/cyclingdata) —
   Etappen-Metadaten aus procyclingstats, 1903 bis 2024. Fuer Grand Tours ab
-  2020 sind Distanz, Hoehenmeter und `profile_score` zu 100 % besetzt.
+  2010 sind Distanz, Hoehenmeter und `profile_score` in jedem einzelnen Jahr
+  zu 100 % besetzt; davor wird es lueckig.
 - Gesamtwertung: [thomascamminady/LeTourDataSet](https://github.com/thomascamminady/LeTourDataSet)
   — bis einschliesslich 2026.
 
@@ -52,6 +53,39 @@ Hoehenmetern (0,27).
 Pflaster steht bewusst weder als Lern- noch als Zielklasse darin: ob eine
 Etappe ueber Pflaster fuehrt, laesst sich aus Hoehenprofil und Score nicht
 ablesen. Pflasteretappen bekommen hier das Terrain ihrer Hoehenform.
+
+## Haengt die Rennstruktur an der Etappennummer?
+
+Roh sieht es stark danach aus. Ueber alle 843 Etappen:
+
+| | Woche 1 | Woche 2 | Woche 3 |
+|---|---|---|---|
+| Solo-Sieg | 26 % | 47 % | 54 % |
+| Massensprint | 52 % | 25 % | 22 % |
+
+Je Terrain getrennt bleibt davon fast nichts uebrig:
+
+| Terrain | Massensprint W1 / W2 / W3 | Spearman Etappennr. ↔ Solo |
+|---|---|---|
+| Flat | 89 % / 82 % / 82 % | −0,03 (p 0,74) |
+| Rolling | 73 % / 66 % / 65 % | +0,03 (p 0,79) |
+| Hilly_Difficult | 31 % / 11 % / 11 % | +0,07 (p 0,37) |
+| Medium_Mountain | 15 % / 1 % / 7 % | +0,15 (p 0,05) |
+| Mountain | 0 % / 0 % / 1 % | +0,04 (p 0,65) |
+| High_Mountain | 0 % / 0 % | +0,18 (p 0,20) |
+
+Der Wocheneffekt ist also fast vollstaendig ein Artefakt der Streckenplanung:
+Woche 1 hat 74 Flach- und 17 Bergetappen, Woche 3 hat 45 Flach- und 70
+Bergetappen. Innerhalb eines Terrains zerfaellt das Feld in Woche 3 kaum
+anders als in Woche 1.
+
+Einzige Ausnahme mit erkennbarem Rest: `Medium_Mountain` und
+`High_Mountain`, beide schwach und keiner sauber signifikant.
+
+Das gilt fuer die Zielankunft. Fuer die *Ausreissergruppe* ist der Effekt
+eine andere Frage — dort haengt die Tabelle in `breakawaySurvival.ts` bewusst
+an der Etappennummer, und `win_type` misst, wer gewinnt, nicht wie gross die
+erste Gruppe war.
 
 ## Was fehlt
 

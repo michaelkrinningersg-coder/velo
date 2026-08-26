@@ -3,8 +3,8 @@
 Quellen (beide ueber GitHub erreichbar, PCS und FirstCycling sind es nicht):
 
   jenslemb/cyclingdata      Etappen-Metadaten aus procyclingstats, 1903-2024.
-                            Fuer Grand Tours ab 2020: Distanz, Hoehenmeter,
-                            profile_score, parcours_type, won_how - alle 312
+                            Fuer Grand Tours ab 2010: Distanz, Hoehenmeter,
+                            profile_score, parcours_type, won_how - alle 942
                             Etappen vollstaendig.
   thomascamminady/LeTourDataSet   Gesamtwertung der Tour de France je Jahr,
                             bis 2026, mit Rueckstand in Sekunden.
@@ -44,6 +44,9 @@ HIER = Path(__file__).resolve().parent
 QUELLE_ETAPPEN = 'https://raw.githubusercontent.com/jenslemb/cyclingdata/master/data/cyclingdata.rda'
 MERKMALE = ['D', 'hm_km', 'km', 'hm']
 GRAND_TOURS = {'Tour de France': 'TdF', "Giro d'Italia": 'Giro', 'La Vuelta ciclista a España': 'Vuelta'}
+# Ab 2010 sind Distanz, Hoehenmeter und profile_score zu 100 % besetzt; davor
+# wird es lueckig. `cyclingdata` endet 2024.
+AB_JAHR = 2010
 # Pflaster braucht ein Merkmal, das in den Daten nicht steht.
 NICHT_LERNBAR = {'ITT', 'TTT', 'Cobble', 'Cobble_Hill'}
 
@@ -68,7 +71,7 @@ def echte_etappen() -> pd.DataFrame:
     if not roh.exists():
         subprocess.run(['curl', '-sSfL', '-o', str(roh), QUELLE_ETAPPEN], check=True)
     df = pyreadr.read_r(str(roh))['cyclingdata']
-    df = df[df['race'].isin(GRAND_TOURS) & (df['year'].astype(float) >= 2020)].copy()
+    df = df[df['race'].isin(GRAND_TOURS) & (df['year'].astype(float) >= AB_JAHR)].copy()
     for quelle, ziel in [('distance', 'km'), ('vertical_meters', 'hm'), ('profile_score', 'ps')]:
         df[ziel] = pd.to_numeric(df[quelle], errors='coerce')
     df['rennen'] = df['race'].map(GRAND_TOURS)
@@ -95,7 +98,7 @@ def main() -> None:
 
     spalten = ['rennen', 'jahr', 'stage_id', 'stage_num', 'km', 'hm', 'ps', 'D', 'parcours_type',
                'terrain', 'sicherheit', 'avg_speed_winner', 'won_how', 'win_type', 'startlist_quality']
-    ziel = HIER / 'gt_stages_2020_2024.csv'
+    ziel = HIER / 'gt_stages_2010_2024.csv'
     echte[spalten].to_csv(ziel, index=False)
     print(f'{len(echte)} Etappen geschrieben nach {ziel.relative_to(WURZEL)}', file=sys.stderr)
     print(echte['terrain'].value_counts().to_string(), file=sys.stderr)

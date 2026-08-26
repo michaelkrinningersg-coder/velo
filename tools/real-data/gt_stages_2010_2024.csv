@@ -1,0 +1,844 @@
+rennen,jahr,stage_id,stage_num,km,hm,ps,D,parcours_type,terrain,sicherheit,avg_speed_winner,won_how,win_type,startlist_quality
+TdF,2010,1,2,223.5,420.0,0.0,0.0,Flat,Flat,0.8694866818230789,43.31,Sprint of large group,Large group sprint,1685.0
+TdF,2010,2,3,201.0,2708.0,98.0,0.48756218905472637,Hills flat finish,Hilly_Difficult,0.7494330584993907,42.95,19 km solo,Solo,1685.0
+TdF,2010,3,4,213.0,1168.0,7.0,0.03286384976525822,Flat,Flat,0.7892779344408604,44.125,Sprint of 19 riders,Small group sprint,1685.0
+TdF,2010,4,5,153.5,1107.0,7.0,0.04560260586319218,Flat,Flat,0.8649179176194466,42.854,Sprint of large group,Large group sprint,1685.0
+TdF,2010,5,6,187.5,1374.0,19.0,0.10133333333333333,Flat,Flat,0.7611123706874481,41.54,Sprint of large group,Large group sprint,1685.0
+TdF,2010,6,7,227.5,2345.0,44.0,0.1934065934065934,Flat,Hilly,0.4434385632390397,40.42,Sprint of large group,Large group sprint,1685.0
+TdF,2010,7,8,165.5,3446.0,211.0,1.2749244712990937,Mountains uphill finish,Medium_Mountain,0.4555224025974027,37.78,13.5 km solo,Solo,1685.0
+TdF,2010,8,9,189.0,3636.0,297.0,1.5714285714285714,Mountains uphill finish,Medium_Mountain,0.4424542027417028,38.547,Sprint à deux,Sprint à deux,1685.0
+TdF,2010,9,10,204.5,5144.0,264.0,1.2909535452322738,Mountains flat finish,High_Mountain,0.41270968822843834,36.284,Sprint of small group,Small group sprint,1685.0
+TdF,2010,10,11,179.0,3187.0,162.0,0.9050279329608939,Hills flat finish,Medium_Mountain,0.63825,34.541,Sprint à deux,Sprint à deux,1685.0
+TdF,2010,11,12,184.5,1264.0,21.0,0.11382113821138211,Hills flat finish,Flat,0.8137074295780757,39.19,Sprint of large group,Large group sprint,1685.0
+TdF,2010,12,13,210.5,3485.0,143.0,0.6793349168646081,Hills uphill finish,Medium_Mountain,0.816594062881563,42.32,Sprint à deux,Sprint à deux,1685.0
+TdF,2010,13,14,196.0,2163.0,60.0,0.30612244897959184,Hills flat finish,Rolling,0.4374090649417661,44.139,7.3 km solo,Solo,1685.0
+TdF,2010,14,15,184.5,3796.0,324.0,1.7560975609756098,Mountains uphill finish,Medium_Mountain,0.42408576839826856,37.82,30 km solo,Solo,1685.0
+TdF,2010,15,16,187.5,3542.0,237.0,1.264,Mountains flat finish,Medium_Mountain,0.49172813852813846,39.48,29 km solo,Solo,1685.0
+TdF,2010,16,17,199.5,4721.0,202.0,1.012531328320802,Mountains flat finish,Mountain,0.41559948997081364,36.09,Sprint of 51 riders,Small group sprint,1685.0
+TdF,2010,17,18,174.0,4681.0,410.0,2.3563218390804597,Mountains uphill finish,Mountain,0.46692522530574015,34.401,Sprint à deux,Sprint à deux,1685.0
+TdF,2010,18,19,198.0,1056.0,9.0,0.045454545454545456,Flat,Flat,0.7892779344408604,42.86,Sprint of large group,Large group sprint,1685.0
+TdF,2010,20,21,102.5,481.0,6.0,0.05853658536585366,Flat,Flat,0.9861458333333334,37.881,Sprint of large group,Large group sprint,1685.0
+TdF,2011,1,1,191.5,1286.0,35.0,0.18276762402088773,Hills uphill finish,Hilly,0.4376530070806388,40.81,Sprint of large group,Large group sprint,1713.0
+TdF,2011,3,3,198.0,1066.0,11.0,0.05555555555555555,Flat,Flat,0.7892779344408604,42.376,Sprint of large group,Large group sprint,1713.0
+TdF,2011,4,4,172.5,2250.0,83.0,0.4811594202898551,Hills uphill finish,Hilly_Difficult,0.5346707782730235,41.13,Sprint of 29 riders,Small group sprint,1713.0
+TdF,2011,5,5,164.5,1652.0,39.0,0.23708206686930092,Flat,Rolling,0.6253363095238095,45.16,Sprint of large group,Large group sprint,1713.0
+TdF,2011,6,6,226.5,2373.0,52.0,0.22958057395143489,Hills uphill finish,Rolling,0.4682226843041971,43.33,Sprint of large group,Large group sprint,1713.0
+TdF,2011,7,7,215.0,1304.0,6.0,0.027906976744186046,Flat,Flat,0.7988857862016726,38.066,Sprint of large group,Large group sprint,1713.0
+TdF,2011,8,8,190.0,3019.0,130.0,0.6842105263157895,Mountains uphill finish,Hilly_Difficult,0.747982508354219,41.19,5.6 km solo,Solo,1713.0
+TdF,2011,9,9,208.0,3975.0,160.0,0.7692307692307693,Hills flat finish,Mountain,0.47796958596958583,38.148,Sprint of small group,Small group sprint,1713.0
+TdF,2011,10,10,161.0,1933.0,77.0,0.4782608695652174,Hills flat finish,Hilly_Difficult,0.4708495649865641,45.706,Sprint of large group,Large group sprint,1713.0
+TdF,2011,11,11,168.5,1695.0,42.0,0.24925816023738873,Hills flat finish,Rolling,0.6197946428571428,44.71,Sprint of large group,Large group sprint,1713.0
+TdF,2011,12,12,211.0,4563.0,399.0,1.8909952606635072,Mountains uphill finish,Mountain,0.6604882201132203,35.04,Sprint à deux,Sprint à deux,1713.0
+TdF,2011,13,13,152.5,2605.0,148.0,0.9704918032786886,Mountains flat finish,Medium_Mountain,0.6583078102453102,40.2,2.2 km solo,Solo,1713.0
+TdF,2011,14,14,168.5,5420.0,462.0,2.741839762611276,Mountains uphill finish,High_Mountain,0.7477793903970165,32.26,6.9 km solo,Solo,1713.0
+TdF,2011,15,15,192.5,1464.0,25.0,0.12987012987012986,Flat,Flat,0.7493027105763176,44.35,Sprint of large group,Large group sprint,1713.0
+TdF,2011,16,16,162.5,2372.0,90.0,0.5538461538461539,Mountains flat finish,Hilly_Difficult,0.5062947463768114,46.07,Sprint of small group,Small group sprint,1713.0
+TdF,2011,17,17,179.0,3193.0,170.0,0.9497206703910615,Mountains flat finish,Medium_Mountain,0.6355059523809524,41.628,11 km solo,Solo,1713.0
+TdF,2011,18,18,189.0,5268.0,329.0,1.7407407407407407,Mountains uphill finish,High_Mountain,0.6947587336124489,30.821,8 km solo,Solo,1713.0
+TdF,2011,19,19,109.5,3571.0,368.0,3.3607305936073057,Mountains uphill finish,Hilly_Difficult,0.42559285159285165,33.97,2 km solo,Solo,1713.0
+TdF,2011,21,21,95.0,436.0,2.0,0.021052631578947368,Flat,Flat,0.9861458333333334,38.767,Sprint of large group,Large group sprint,1713.0
+TdF,2012,1,2,198.0,2680.0,66.0,0.3333333333333333,Hills uphill finish,Rolling,0.3660386321195145,39.823,Sprint of large group,Large group sprint,1703.0
+TdF,2012,2,3,207.5,1509.0,18.0,0.08674698795180723,Flat,Flat,0.7283522894696465,41.92,Sprint of large group,Large group sprint,1703.0
+TdF,2012,3,4,197.0,1551.0,86.0,0.4365482233502538,Hills uphill finish,Hilly,0.5795362103174605,41.772,Sprint of 48 riders,Small group sprint,1703.0
+TdF,2012,4,5,214.5,1698.0,25.0,0.11655011655011654,Flat,Flat,0.7446598534334605,40.4,Sprint of large group,Large group sprint,1703.0
+TdF,2012,5,6,196.5,1250.0,11.0,0.05597964376590331,Flat,Flat,0.8088910296789555,41.88,Sprint of large group,Large group sprint,1703.0
+TdF,2012,6,7,205.0,1535.0,16.0,0.07804878048780488,Flat,Flat,0.7291856228029797,44.4,Sprint of large group,Large group sprint,1703.0
+TdF,2012,7,8,199.0,2736.0,168.0,0.8442211055276382,Mountains uphill finish,Hilly_Difficult,0.6920097222222223,39.989,Sprint of small group,Small group sprint,1703.0
+TdF,2012,8,9,157.5,3072.0,179.0,1.1365079365079365,Mountains flat finish,Medium_Mountain,0.6305952380952379,40.01,18.9 km solo,Solo,1703.0
+TdF,2012,10,11,194.5,3350.0,208.0,1.069408740359897,Mountains flat finish,Medium_Mountain,0.6665626984126982,40.74,Sprint of 17 riders,Small group sprint,1703.0
+TdF,2012,11,12,148.0,4987.0,387.0,2.614864864864865,Mountains uphill finish,Mountain,0.7748261227366509,31.28,10.3 km solo,Solo,1703.0
+TdF,2012,12,13,226.0,3399.0,126.0,0.5575221238938053,Mountains flat finish,Medium_Mountain,0.8634104686979687,39.56,Sprint à deux,Sprint à deux,1703.0
+TdF,2012,13,14,217.0,1795.0,50.0,0.2304147465437788,Flat,Hilly,0.7122807338494838,43.69,Sprint of large group,Large group sprint,1703.0
+TdF,2012,14,15,191.0,3284.0,206.0,1.0785340314136125,Mountains flat finish,Medium_Mountain,0.6775746031746028,39.45,10 km solo,Solo,1703.0
+TdF,2012,15,16,158.5,2173.0,71.0,0.4479495268138801,Flat,Hilly_Difficult,0.4726938895485728,43.18,Sprint à deux,Sprint à deux,1703.0
+TdF,2012,16,17,197.0,5291.0,293.0,1.4873096446700507,Mountains flat finish,High_Mountain,0.49471581196581205,35.28,21 km solo,Solo,1703.0
+TdF,2012,17,18,143.5,4383.0,400.0,2.7874564459930316,Mountains uphill finish,High_Mountain,0.8008218694393023,34.14,35 km solo,Solo,1703.0
+TdF,2012,18,19,222.5,2146.0,55.0,0.24719101123595505,Flat,Rolling,0.6510551735845854,45.38,Sprint of large group,Large group sprint,1703.0
+TdF,2012,20,21,120.0,699.0,7.0,0.058333333333333334,Flat,Flat,0.9114877313841129,38.27,Sprint of large group,Large group sprint,1703.0
+TdF,2013,1,1,213.0,1529.0,13.0,0.06103286384976526,Flat,Flat,0.7603522894696465,43.05,Sprint of large group,Large group sprint,1690.0
+TdF,2013,2,2,156.0,2373.0,95.0,0.6089743589743589,Mountains flat finish,Hilly_Difficult,0.4895650432900432,41.94,1.7 km solo,Solo,1690.0
+TdF,2013,3,3,145.5,2426.0,109.0,0.7491408934707904,Hills flat finish,Medium_Mountain,0.5404457972582974,39.43,Sprint of large group,Large group sprint,1690.0
+TdF,2013,5,5,228.5,2775.0,68.0,0.2975929978118162,Hills flat finish,Rolling,0.45365197204870006,41.31,Sprint of large group,Large group sprint,1690.0
+TdF,2013,6,6,176.5,837.0,8.0,0.0453257790368272,Flat,Flat,0.8267069866945062,44.3,Sprint of large group,Large group sprint,1690.0
+TdF,2013,7,7,205.5,2675.0,66.0,0.32116788321167883,Hills flat finish,Rolling,0.36941389091868637,41.91,Sprint of large group,Large group sprint,1690.0
+TdF,2013,8,8,195.0,3839.0,345.0,1.7692307692307692,Mountains uphill finish,Mountain,0.4748251401376404,38.58,5 km solo,Solo,1690.0
+TdF,2013,9,9,168.5,4411.0,252.0,1.4955489614243322,Mountains flat finish,Mountain,0.5218709500209116,35.72,Sprint à deux,Sprint à deux,1690.0
+TdF,2013,10,10,197.0,1762.0,25.0,0.12690355329949238,Flat,Flat,0.6358775056642704,40.28,Sprint of large group,Large group sprint,1690.0
+TdF,2013,12,12,218.0,1425.0,10.0,0.045871559633027525,Flat,Flat,0.7616439561363131,45.13,Sprint of large group,Large group sprint,1690.0
+TdF,2013,13,13,173.0,1036.0,7.0,0.04046242774566474,Flat,Flat,0.8023423057313346,47.15,Sprint of 44 riders,Small group sprint,1690.0
+TdF,2013,14,14,191.0,2158.0,60.0,0.31413612565445026,Hills flat finish,Rolling,0.4301623329156222,44.91,Sprint of 127 riders,Small group sprint,1690.0
+TdF,2013,15,15,242.5,4146.0,342.0,1.4103092783505156,Mountains uphill finish,Mountain,0.699250846375847,41.72,1.4 km solo,Solo,1690.0
+TdF,2013,16,16,168.0,3073.0,123.0,0.7321428571428571,Mountains flat finish,Medium_Mountain,0.8446607142857141,43.31,19 km solo,Solo,1690.0
+TdF,2013,18,18,172.5,4789.0,417.0,2.417391304347826,Mountains uphill finish,High_Mountain,0.5958131756094258,35.5,2 km solo,Solo,1690.0
+TdF,2013,19,19,204.5,5567.0,369.0,1.80440097799511,Mountains flat finish,High_Mountain,0.6350284312350877,34.18,19.4 km solo,Solo,1690.0
+TdF,2013,20,20,125.0,3909.0,353.0,2.824,Mountains uphill finish,High_Mountain,0.6057879329058489,34.24,0.9 km solo,Solo,1690.0
+TdF,2013,21,21,118.0,766.0,8.0,0.06779661016949153,Flat,Flat,0.8867847260561077,38.02,Sprint of large group,Large group sprint,1690.0
+TdF,2014,1,1,190.5,2092.0,50.0,0.26246719160104987,Hills flat finish,Rolling,0.42012066624895544,40.23,Sprint of large group,Large group sprint,1612.0
+TdF,2014,2,2,201.0,3347.0,160.0,0.7960199004975125,Hills flat finish,Medium_Mountain,0.8584654761904764,39.08,1.9 km solo,Solo,1612.0
+TdF,2014,3,3,155.0,834.0,4.0,0.025806451612903226,Flat,Flat,0.8619318130377535,42.56,Sprint of large group,Large group sprint,1612.0
+TdF,2014,4,4,163.5,1118.0,21.0,0.12844036697247707,Flat,Flat,0.7947898130850918,45.28,Sprint of large group,Large group sprint,1612.0
+TdF,2014,5,5,155.5,475.0,0.0,0.0,Flat,Flat,0.8232340367965368,46.98,6.2 km solo,Solo,1612.0
+TdF,2014,6,6,194.0,1422.0,23.0,0.11855670103092783,Flat,Flat,0.7540943772429841,46.25,Sprint of large group,Large group sprint,1612.0
+TdF,2014,7,7,234.5,2076.0,55.0,0.2345415778251599,Hills flat finish,Rolling,0.5971567059372259,44.16,Sprint of large group,Large group sprint,1612.0
+TdF,2014,8,8,161.0,1872.0,150.0,0.9316770186335404,Mountains uphill finish,Medium_Mountain,0.4752906746031746,42.1,25 km solo,Solo,1612.0
+TdF,2014,9,9,170.0,3373.0,137.0,0.8058823529411765,Mountains flat finish,Medium_Mountain,0.7416648809523809,40.87,59.1 km solo,Solo,1612.0
+TdF,2014,10,10,161.5,3906.0,303.0,1.8761609907120742,Mountains uphill finish,Mountain,0.7204249020995346,36.23,0.8 km solo,Solo,1612.0
+TdF,2014,11,11,187.5,2711.0,128.0,0.6826666666666666,Hills flat finish,Hilly_Difficult,0.694482770959261,42.33,2.7 km solo,Solo,1612.0
+TdF,2014,12,12,185.5,2530.0,64.0,0.3450134770889488,Hills flat finish,Rolling,0.3957533040355383,40.89,Sprint of large group,Large group sprint,1612.0
+TdF,2014,13,13,197.5,3865.0,363.0,1.8379746835443038,Mountains uphill finish,Mountain,0.645809311807474,37.92,3.3 km solo,Solo,1612.0
+TdF,2014,14,14,177.0,4838.0,344.0,1.9435028248587571,Mountains uphill finish,High_Mountain,0.5839449475210889,34.43,8.5 km solo,Solo,1612.0
+TdF,2014,15,15,222.0,1675.0,20.0,0.09009009009009009,Flat,Flat,0.7270427656601225,44.89,Sprint of large group,Large group sprint,1612.0
+TdF,2014,16,16,237.5,4047.0,247.0,1.04,Mountains flat finish,Mountain,0.45663567682317646,38.81,4.6 km solo,Solo,1612.0
+TdF,2014,17,17,124.5,3810.0,410.0,3.2931726907630523,Mountains uphill finish,Hilly_Difficult,0.6060695831945833,34.68,2.4 km solo,Solo,1612.0
+TdF,2014,18,18,145.5,3748.0,336.0,2.3092783505154637,Mountains uphill finish,Medium_Mountain,0.3959863365800866,35.74,8 km solo,Solo,1612.0
+TdF,2014,19,19,208.5,1659.0,43.0,0.20623501199040767,Flat,Hilly,0.741524277805528,44.1,12 km solo,Solo,1612.0
+TdF,2014,21,21,137.5,805.0,6.0,0.04363636363636364,Flat,Flat,0.8489711438050255,41.08,Sprint of large group,Large group sprint,1612.0
+TdF,2015,2,2,166.0,241.0,0.0,0.0,Flat,Flat,0.9273898809523808,47.64,Sprint of large group,Large group sprint,1812.0
+TdF,2015,3,3,159.5,1435.0,100.0,0.6269592476489029,Hills uphill finish,Hilly_Difficult,0.39644940476190466,46.25,Sprint of small group,Small group sprint,1812.0
+TdF,2015,4,4,223.5,1552.0,15.0,0.06711409395973154,Flat,Flat,0.7579356228029798,40.76,3.4 km solo,Solo,1812.0
+TdF,2015,5,5,189.5,1606.0,24.0,0.1266490765171504,Flat,Flat,0.6375354424986778,40.75,Sprint of large group,Large group sprint,1812.0
+TdF,2015,6,6,191.5,1694.0,38.0,0.19843342036553524,Hills uphill finish,Hilly,0.4034080020856338,39.11,0.8 km solo,Solo,1812.0
+TdF,2015,7,7,190.5,1694.0,25.0,0.13123359580052493,Flat,Flat,0.6365176016793663,42.74,Sprint of large group,Large group sprint,1812.0
+TdF,2015,8,8,181.5,2057.0,72.0,0.39669421487603307,Hills uphill finish,Rolling,0.4703986424394319,41.74,0.7 km solo,Solo,1812.0
+TdF,2015,10,10,167.0,2655.0,271.0,1.622754491017964,Mountains uphill finish,Medium_Mountain,0.37798575036075044,38.23,6.5 km solo,Solo,1812.0
+TdF,2015,11,11,188.0,4099.0,275.0,1.4627659574468086,Mountains uphill finish,Mountain,0.5823976054582675,37.35,48.4 km solo,Solo,1812.0
+TdF,2015,12,12,195.0,4948.0,393.0,2.0153846153846153,Mountains uphill finish,Mountain,0.48344940047697427,34.39,7.7 km solo,Solo,1812.0
+TdF,2015,13,13,198.5,2299.0,81.0,0.4080604534005038,Hills flat finish,Rolling,0.4883614286492736,41.98,Sprint of small group,Small group sprint,1812.0
+TdF,2015,14,14,178.5,2772.0,186.0,1.0420168067226891,Mountains uphill finish,Hilly_Difficult,0.5181865079365079,40.61,0.5 km solo,Solo,1812.0
+TdF,2015,15,15,183.0,1993.0,53.0,0.2896174863387978,Hills flat finish,Rolling,0.4446861424394318,46.41,Sprint of large group,Large group sprint,1812.0
+TdF,2015,16,16,201.0,2322.0,89.0,0.4427860696517413,Mountains flat finish,Hilly_Difficult,0.6719001820670205,44.64,18.5 km solo,Solo,1812.0
+TdF,2015,17,17,161.0,4208.0,253.0,1.5714285714285714,Mountains uphill finish,Mountain,0.7389629930935081,38.29,48.7 km solo,Solo,1812.0
+TdF,2015,18,18,186.5,4424.0,260.0,1.3941018766756033,Mountains flat finish,Mountain,0.5361406610138229,36.85,35 km solo,Solo,1812.0
+TdF,2015,19,19,138.0,4545.0,376.0,2.7246376811594204,Mountains uphill finish,High_Mountain,0.6756501425915883,31.5,16.2 km solo,Solo,1812.0
+TdF,2015,20,20,110.5,3164.0,332.0,3.004524886877828,Mountains uphill finish,Hilly_Difficult,0.3150565961815962,33.6,6.4 km solo,Solo,1812.0
+TdF,2015,21,21,109.5,562.0,5.0,0.045662100456621,Flat,Flat,0.9393969332933148,38.72,Sprint of large group,Large group sprint,1812.0
+TdF,2016,1,1,188.0,1071.0,10.0,0.05319148936170213,Hills flat finish,Flat,0.7933961887355853,44.39,Sprint of large group,Large group sprint,1758.0
+TdF,2016,2,2,183.0,1985.0,70.0,0.3825136612021858,Hills uphill finish,Rolling,0.43550975355054283,42.09,Sprint of large group,Large group sprint,1758.0
+TdF,2016,3,3,223.5,1975.0,20.0,0.0894854586129754,Hills flat finish,Flat,0.6193181101986248,37.26,Sprint of large group,Large group sprint,1758.0
+TdF,2016,4,4,237.5,1934.0,47.0,0.19789473684210526,Hills flat finish,Hilly,0.713590910540782,43.38,Sprint of large group,Large group sprint,1758.0
+TdF,2016,5,5,216.0,4105.0,225.0,1.0416666666666667,Mountains flat finish,Mountain,0.4496676934176932,39.08,17.4 km solo,Solo,1758.0
+TdF,2016,6,6,190.5,2025.0,47.0,0.24671916010498687,Hills flat finish,Rolling,0.3994877297410191,40.27,Sprint of large group,Large group sprint,1758.0
+TdF,2016,7,7,162.5,2578.0,176.0,1.083076923076923,Mountains flat finish,Medium_Mountain,0.43281746031746043,42.74,26.8 km solo,Solo,1758.0
+TdF,2016,8,8,184.0,4597.0,302.0,1.641304347826087,Mountains flat finish,Mountain,0.45076101941359303,37.1,15.5 km solo,Solo,1758.0
+TdF,2016,9,9,184.0,4948.0,366.0,1.9891304347826086,Mountains uphill finish,Mountain,0.4535005458185607,34.89,12.8 km solo,Solo,1758.0
+TdF,2016,10,10,197.0,2432.0,80.0,0.40609137055837563,Mountains flat finish,Rolling,0.44233408768472365,45.01,Sprint of 127 riders,Small group sprint,1758.0
+TdF,2016,11,11,162.5,1381.0,24.0,0.1476923076923077,Hills flat finish,Rolling,0.3862176212268125,47.24,Sprint of 3 riders,Small group sprint,1758.0
+TdF,2016,12,12,178.0,2416.0,268.0,1.5056179775280898,Mountains uphill finish,Hilly_Difficult,0.3578894300144301,39.29,Sprint à deux,Sprint à deux,1758.0
+TdF,2016,14,14,208.5,1958.0,30.0,0.14388489208633093,Hills flat finish,Flat,0.46385969912440495,36.39,Sprint of large group,Large group sprint,1758.0
+TdF,2016,15,15,159.0,4386.0,286.0,1.79874213836478,Mountains flat finish,Mountain,0.7426286207664886,36.02,Sprint à deux,Sprint à deux,1758.0
+TdF,2016,16,16,209.0,1967.0,48.0,0.22966507177033493,Hills flat finish,Rolling,0.5001842320261438,47.14,Sprint of large group,Large group sprint,1758.0
+TdF,2016,17,17,184.5,3891.0,359.0,1.9457994579945799,Mountains uphill finish,Mountain,0.5923606444617477,40.03,6.5 km solo,Solo,1758.0
+TdF,2016,19,19,146.0,4436.0,337.0,2.308219178082192,Mountains uphill finish,High_Mountain,0.8158565206186148,34.47,3.3 km solo,Solo,1758.0
+TdF,2016,20,20,146.5,4127.0,314.0,2.143344709897611,Mountains flat finish,High_Mountain,0.5969803606481237,35.62,8.5 km solo,Solo,1758.0
+TdF,2016,21,21,113.0,713.0,7.0,0.061946902654867256,Flat,Flat,0.9192545964634781,41.56,Sprint of large group,Large group sprint,1758.0
+TdF,2017,2,2,203.5,1278.0,25.0,0.12285012285012285,Flat,Flat,0.760393899616036,44.06,Sprint of large group,Large group sprint,1791.0
+TdF,2017,3,3,212.5,2706.0,77.0,0.3623529411764706,Flat,Rolling,0.39283563736810234,41.49,Sprint of large group,Large group sprint,1791.0
+TdF,2017,4,4,207.5,1404.0,24.0,0.11566265060240964,Flat,Flat,0.7233443772429843,42.36,Sprint of large group,Large group sprint,1791.0
+TdF,2017,5,5,160.5,2348.0,151.0,0.940809968847352,Mountains uphill finish,Hilly_Difficult,0.40923313492063507,42.97,2.4 km solo,Solo,1791.0
+TdF,2017,6,6,216.0,1735.0,29.0,0.13425925925925927,Flat,Flat,0.7857134411855776,42.41,Sprint of large group,Large group sprint,1791.0
+TdF,2017,7,7,213.5,1578.0,20.0,0.0936768149882904,Flat,Flat,0.7404379121802692,42.24,Sprint of large group,Large group sprint,1791.0
+TdF,2017,8,8,187.5,3591.0,229.0,1.2213333333333334,Mountains flat finish,Medium_Mountain,0.5442579004329002,41.59,17.9 km solo,Solo,1791.0
+TdF,2017,9,9,181.5,4696.0,275.0,1.5151515151515151,Mountains flat finish,Mountain,0.4555864162389899,35.43,Sprint of small group,Small group sprint,1791.0
+TdF,2017,10,10,178.0,1407.0,25.0,0.1404494382022472,Flat,Flat,0.8019750423295318,44.32,Sprint of large group,Large group sprint,1791.0
+TdF,2017,11,11,203.5,1163.0,15.0,0.07371007371007371,Flat,Flat,0.7833493630122891,44.49,Sprint of large group,Large group sprint,1791.0
+TdF,2017,12,12,214.5,4903.0,375.0,1.7482517482517483,Mountains uphill finish,Mountain,0.6047404848011465,36.81,Sprint of small group,Small group sprint,1791.0
+TdF,2017,13,13,101.0,2856.0,243.0,2.405940594059406,Mountains flat finish,Hilly,0.3186873783895843,38.73,Sprint of 10 riders,Small group sprint,1791.0
+TdF,2017,14,14,181.5,1786.0,85.0,0.46831955922865015,Flat,Hilly_Difficult,0.4540131538074067,41.58,Sprint of large group,Large group sprint,1791.0
+TdF,2017,15,15,189.5,3164.0,154.0,0.8126649076517151,Hills flat finish,Hilly_Difficult,0.5196587301587302,40.35,30 km solo,Solo,1791.0
+TdF,2017,16,16,165.0,2033.0,47.0,0.28484848484848485,Flat,Rolling,0.5542694757727653,45.36,Sprint of large group,Large group sprint,1791.0
+TdF,2017,17,17,183.0,5064.0,300.0,1.639344262295082,Mountains flat finish,High_Mountain,0.6012074218673481,35.69,34.4 km solo,Solo,1791.0
+TdF,2017,18,18,179.5,4059.0,338.0,1.883008356545961,Mountains uphill finish,Mountain,0.5898196160457192,38.39,1 km solo,Solo,1791.0
+TdF,2017,19,19,222.5,2613.0,59.0,0.2651685393258427,Flat,Rolling,0.4140218567242124,43.61,2.6 km solo,Solo,1791.0
+TdF,2017,21,21,105.0,519.0,4.0,0.0380952380952381,Flat,Flat,0.9545306477148583,43.25,Sprint of large group,Large group sprint,1791.0
+TdF,2018,1,1,201.0,454.0,2.0,0.009950248756218905,Flat,Flat,0.8326950151564122,45.76,Sprint of large group,Large group sprint,1689.0
+TdF,2018,2,2,182.5,1395.0,14.0,0.07671232876712329,Flat,Flat,0.7526971921160197,44.4,Sprint of large group,Large group sprint,1689.0
+TdF,2018,4,4,195.0,1155.0,14.0,0.07179487179487179,Flat,Flat,0.785849363012289,44.15,Sprint of large group,Large group sprint,1689.0
+TdF,2018,5,5,204.5,2704.0,107.0,0.5232273838630807,Hills uphill finish,Hilly_Difficult,0.7933637625053305,42.59,Sprint of large group,Large group sprint,1689.0
+TdF,2018,6,6,181.0,2027.0,95.0,0.5248618784530387,Hills uphill finish,Hilly_Difficult,0.6024580582461013,42.804,1.1 km solo,Solo,1689.0
+TdF,2018,7,7,231.0,2255.0,40.0,0.17316017316017315,Flat,Rolling,0.6954143371948571,40.33,Sprint of large group,Large group sprint,1689.0
+TdF,2018,8,8,181.0,1284.0,17.0,0.09392265193370165,Flat,Flat,0.8006080100562495,41.2,Sprint of large group,Large group sprint,1689.0
+TdF,2018,9,9,156.5,618.0,1.0,0.006389776357827476,Flat,Flat,0.852457919531449,45.93,Sprint of 27 riders,Small group sprint,1689.0
+TdF,2018,10,10,158.5,4254.0,320.0,2.0189274447949526,Mountains flat finish,Mountain,0.6761370057316267,35.83,29.4 km solo,Solo,1689.0
+TdF,2018,11,11,108.5,4093.0,349.0,3.216589861751152,Mountains uphill finish,High_Mountain,0.45198331365598987,31.06,0.4 km solo,Solo,1689.0
+TdF,2018,12,12,175.5,5362.0,405.0,2.3076923076923075,Mountains uphill finish,High_Mountain,0.9266129839372875,33.05,Sprint of small group,Small group sprint,1689.0
+TdF,2018,13,13,169.5,1302.0,46.0,0.2713864306784661,Flat,Hilly,0.5216198593073593,45.02,Sprint of large group,Large group sprint,1689.0
+TdF,2018,14,14,188.0,3365.0,189.0,1.0053191489361701,Hills flat finish,Medium_Mountain,0.6594019841269839,40.01,2 km solo,Solo,1689.0
+TdF,2018,15,15,181.0,2917.0,118.0,0.6519337016574586,Mountains flat finish,Hilly_Difficult,0.7205162385129493,40.85,Sprint of 15 riders,Small group sprint,1689.0
+TdF,2018,16,16,218.0,3521.0,202.0,0.926605504587156,Mountains flat finish,Medium_Mountain,0.6831834387834387,41.74,? km solo,Solo,1689.0
+TdF,2018,17,17,65.0,3274.0,428.0,6.584615384615384,Mountains uphill finish,Hilly_Difficult,0.39737481962481974,27.57,8 km solo,Solo,1689.0
+TdF,2018,18,18,171.0,1312.0,34.0,0.19883040935672514,Flat,Hilly,0.47999297960811127,45.23,Sprint of large group,Large group sprint,1689.0
+TdF,2018,19,19,200.5,5046.0,290.0,1.4463840399002494,Mountains flat finish,Mountain,0.49166028681286056,36.65,8 km solo,Solo,1689.0
+TdF,2018,21,21,116.0,732.0,6.0,0.05172413793103448,Flat,Flat,0.9089877313841128,41.78,Sprint of large group,Large group sprint,1689.0
+TdF,2019,1,1,194.5,1582.0,20.0,0.10282776349614396,Hills uphill finish,Flat,0.6503714006581655,44.409,Sprint of large group,Large group sprint,1699.0
+TdF,2019,3,3,215.0,2299.0,97.0,0.4511627906976744,Hills uphill finish,Hilly_Difficult,0.5167023671298486,45.992,16 km solo,Solo,1699.0
+TdF,2019,4,4,213.5,1555.0,32.0,0.14988290398126464,Hills flat finish,Flat,0.42795690819113813,41.412,Sprint of large group,Large group sprint,1699.0
+TdF,2019,5,5,175.5,2325.0,132.0,0.7521367521367521,Hills flat finish,Hilly_Difficult,0.6441448412698414,43.41,Sprint of large group,Large group sprint,1699.0
+TdF,2019,6,6,160.5,3944.0,329.0,2.0498442367601246,Mountains uphill finish,Mountain,0.723509910196443,35.793,0.1 km solo,Solo,1699.0
+TdF,2019,7,7,230.0,2367.0,36.0,0.1565217391304348,Hills flat finish,Rolling,0.38117441494757875,38.044,Sprint of large group,Large group sprint,1699.0
+TdF,2019,8,8,200.0,3844.0,189.0,0.945,Hills flat finish,Medium_Mountain,0.6238642857142855,39.962,14.1 km solo,Solo,1699.0
+TdF,2019,9,9,170.5,2717.0,114.0,0.6686217008797654,Hills flat finish,Hilly_Difficult,0.5408453701656101,42.064,Sprint à deux,Sprint à deux,1699.0
+TdF,2019,10,10,217.5,3031.0,85.0,0.39080459770114945,Hills flat finish,Rolling,0.3914257810248859,45.054,Sprint of large group,Large group sprint,1699.0
+TdF,2019,11,11,167.0,1827.0,43.0,0.25748502994011974,Hills flat finish,Rolling,0.5129182852965747,43.3,Sprint of large group,Large group sprint,1699.0
+TdF,2019,12,12,209.5,3088.0,177.0,0.8448687350835322,Mountains flat finish,Hilly_Difficult,0.6825976800976801,42.198,Sprint of 14 riders,Small group sprint,1699.0
+TdF,2019,14,14,111.0,3376.0,359.0,3.234234234234234,Mountains uphill finish,Hilly_Difficult,0.428878565878566,34.991,0.2 km solo,Solo,1699.0
+TdF,2019,15,15,185.0,4345.0,365.0,1.972972972972973,Mountains uphill finish,Mountain,0.5478324365585396,38.667,9 km solo,Solo,1699.0
+TdF,2019,16,16,177.0,1626.0,29.0,0.1638418079096045,Hills flat finish,Rolling,0.4291070755225166,44.785,Sprint of large group,Large group sprint,1699.0
+TdF,2019,17,17,200.0,2472.0,85.0,0.425,Hills flat finish,Hilly_Difficult,0.6230147509766149,45.872,14 km solo,Solo,1699.0
+TdF,2019,18,18,208.0,5215.0,232.0,1.1153846153846154,Mountains flat finish,High_Mountain,0.3285396443833944,37.337,26 km solo,Solo,1699.0
+TdF,2019,19,19,89.0,2995.0,317.0,3.561797752808989,Mountains uphill finish,Mountain,0.33532629967716265,33.27,,,1699.0
+TdF,2019,20,20,59.5,2228.0,267.0,4.487394957983193,Mountains uphill finish,Hilly,0.29829086885336875,31.908,12 km solo,Solo,1699.0
+TdF,2019,21,21,128.0,781.0,10.0,0.078125,Flat,Flat,0.7550049641513454,41.709,Sprint of large group,Large group sprint,1699.0
+TdF,2020,1,1,156.0,1597.0,46.0,0.2948717948717949,Hills flat finish,Rolling,0.5572867063492063,41.35,Sprint of large group,Large group sprint,1662.0
+TdF,2020,2,2,185.0,4066.0,188.0,1.0162162162162163,Mountains flat finish,Mountain,0.38548878511194684,37.57,Sprint of small group,Small group sprint,1662.0
+TdF,2020,3,3,198.0,3003.0,81.0,0.4090909090909091,Hills flat finish,Hilly_Difficult,0.41127437464496297,37.39,Sprint of large group,Large group sprint,1662.0
+TdF,2020,4,4,160.5,3200.0,200.0,1.2461059190031152,Mountains uphill finish,Medium_Mountain,0.5195047258297258,38.86,Sprint of small group,Small group sprint,1662.0
+TdF,2020,5,5,183.0,1388.0,31.0,0.16939890710382513,Flat,Hilly,0.5187322195348512,42.01,Sprint of large group,Large group sprint,1662.0
+TdF,2020,6,6,191.0,3087.0,227.0,1.1884816753926701,Mountains uphill finish,Hilly_Difficult,0.4206277958152959,42.04,17 km solo,Solo,1662.0
+TdF,2020,7,7,168.0,2011.0,47.0,0.27976190476190477,Hills flat finish,Rolling,0.5114645515303411,47.54,Sprint of large group,Large group sprint,1662.0
+TdF,2020,8,8,141.0,3821.0,295.0,2.0921985815602837,Mountains flat finish,Medium_Mountain,0.3838952318106731,34.93,35 km solo,Solo,1662.0
+TdF,2020,9,9,153.0,3500.0,239.0,1.5620915032679739,Mountains flat finish,Mountain,0.39093055025040313,39.02,Sprint of small group,Small group sprint,1662.0
+TdF,2020,10,10,168.5,531.0,2.0,0.011869436201780416,Flat,Flat,0.8062548701298702,46.94,Sprint of large group,Large group sprint,1662.0
+TdF,2020,11,11,166.5,1008.0,13.0,0.07807807807807808,Flat,Flat,0.7528531282421571,41.62,Sprint of large group,Large group sprint,1662.0
+TdF,2020,12,12,218.0,3389.0,142.0,0.6513761467889908,Hills uphill finish,Medium_Mountain,0.8174304625929628,42.36,28 km solo,Solo,1662.0
+TdF,2020,13,13,191.5,4459.0,302.0,1.577023498694517,Mountains uphill finish,Mountain,0.5455295499027117,38.07,0.1 km solo,Solo,1662.0
+TdF,2020,14,14,194.0,2646.0,73.0,0.37628865979381443,Mountains flat finish,Hilly_Difficult,0.40124100289545334,43.41,3 km solo,Solo,1662.0
+TdF,2020,15,15,174.5,3724.0,390.0,2.2349570200573066,Mountains uphill finish,Medium_Mountain,0.4134607683982685,38.18,Sprint à deux,Sprint à deux,1662.0
+TdF,2020,16,16,164.0,3903.0,250.0,1.524390243902439,Mountains uphill finish,Mountain,0.731349956212089,38.91,25 km solo,Solo,1662.0
+TdF,2020,17,17,170.0,4430.0,444.0,2.611764705882353,Mountains uphill finish,Mountain,0.5124871820244266,35.28,3.5 km solo,Solo,1662.0
+TdF,2020,18,18,175.0,5166.0,314.0,1.7942857142857143,Mountains flat finish,High_Mountain,0.9060119460862497,36.52,Other,Unknown type,1662.0
+TdF,2020,19,19,166.5,2208.0,77.0,0.4624624624624625,Hills flat finish,Hilly_Difficult,0.46788138954857283,46.13,16 km solo,Solo,1662.0
+TdF,2020,21,21,122.0,816.0,11.0,0.09016393442622951,Flat,Flat,0.7648409302685617,42.18,Sprint of large group,Large group sprint,1662.0
+TdF,2021,1,1,197.8,2843.0,109.0,0.551061678463094,Hills uphill finish,Hilly_Difficult,0.7451202240827629,42.525,2.2 km solo,Solo,1646.0
+TdF,2021,2,2,183.5,2210.0,102.0,0.555858310626703,Hills uphill finish,Hilly_Difficult,0.6919751023131456,42.592,0.75 km solo,Solo,1646.0
+TdF,2021,3,3,182.9,1534.0,34.0,0.1858939311098961,Hills flat finish,Rolling,0.4722518315018314,45.447,Sprint of large group,Large group sprint,1646.0
+TdF,2021,4,4,150.4,1404.0,24.0,0.15957446808510636,Flat,Rolling,0.5853868374272785,45.056,Sprint of large group,Large group sprint,1646.0
+TdF,2021,6,6,160.4,977.0,5.0,0.031172069825436407,Flat,Flat,0.8191150330040619,48.704,Sprint of large group,Large group sprint,1646.0
+TdF,2021,7,7,249.1,3120.0,146.0,0.586109995985548,Hills flat finish,Hilly_Difficult,0.49404423561633387,45.521,18 km solo,Solo,1646.0
+TdF,2021,8,8,150.8,3557.0,310.0,2.055702917771883,Mountains flat finish,Medium_Mountain,0.3954625270562771,38.554,15.4 km solo,Solo,1646.0
+TdF,2021,9,9,144.9,4628.0,381.0,2.629399585921325,Mountains uphill finish,High_Mountain,0.6783947313361769,32.596,17.3 km solo,Solo,1646.0
+TdF,2021,10,10,190.7,1488.0,29.0,0.15207131620346095,Hills flat finish,Flat,0.4129021296363595,45.027,Sprint of large group,Large group sprint,1646.0
+TdF,2021,11,11,198.9,4671.0,282.0,1.4177978883861238,Mountains flat finish,Mountain,0.5592728860192098,37.562,33.1 km solo,Solo,1646.0
+TdF,2021,12,12,159.4,2052.0,52.0,0.3262233375156838,Hills flat finish,Rolling,0.5428640873015874,47.3,11.8 km solo,Solo,1646.0
+TdF,2021,13,13,219.9,2023.0,29.0,0.1318781264211005,Hills flat finish,Flat,0.6381929981782922,43.332,Sprint of large group,Large group sprint,1646.0
+TdF,2021,14,14,183.7,2877.0,125.0,0.6804572672836147,Mountains flat finish,Hilly_Difficult,0.7413674289891397,43.01,42.7 km solo,Solo,1646.0
+TdF,2021,15,15,191.3,4572.0,234.0,1.2232096184004182,Mountains flat finish,Mountain,0.35805839605655776,36.777,19.5 km solo,Solo,1646.0
+TdF,2021,16,16,169.0,3260.0,177.0,1.047337278106509,Mountains flat finish,Medium_Mountain,0.5100793650793651,41.904,34.6 km solo,Solo,1646.0
+TdF,2021,17,17,178.4,4375.0,450.0,2.522421524663677,Mountains uphill finish,Mountain,0.5540165519600463,35.267,Sprint of small group,Small group sprint,1646.0
+TdF,2021,18,18,129.7,3561.0,367.0,2.829606784888204,Mountains uphill finish,Hilly_Difficult,0.4706556221556224,36.407,0.6 km solo,Solo,1646.0
+TdF,2021,19,19,207.0,1181.0,16.0,0.07729468599033816,Hills flat finish,Flat,0.7710457915837177,47.901,26 km solo,Solo,1646.0
+TdF,2021,21,21,108.4,699.0,14.0,0.12915129151291513,Flat,Flat,0.8032585889987205,40.748,Sprint of large group,Large group sprint,1646.0
+TdF,2022,2,2,202.2,1149.0,11.0,0.05440158259149357,Flat,Flat,0.7892779344408604,44.186,Sprint of large group,Large group sprint,1551.0
+TdF,2022,3,3,182.0,1280.0,16.0,0.08791208791208792,Flat,Flat,0.7809390221813792,43.411,Sprint of large group,Large group sprint,1551.0
+TdF,2022,4,4,171.5,1785.0,63.0,0.3673469387755102,Flat,Rolling,0.4278829365079364,42.591,11.6 km solo,Solo,1551.0
+TdF,2022,5,5,157.0,601.0,1.0,0.006369426751592357,Flat,Flat,0.8186239177489176,48.661,Sprint of small group,Small group sprint,1551.0
+TdF,2022,6,6,219.9,2477.0,85.0,0.38653933606184626,Hills uphill finish,Rolling,0.4364764718576992,49.376,Sprint of small group,Small group sprint,1551.0
+TdF,2022,7,7,176.3,2526.0,192.0,1.0890527509926262,Mountains uphill finish,Hilly_Difficult,0.40388347763347754,44.321,Sprint à deux,Sprint à deux,1551.0
+TdF,2022,8,8,186.3,2556.0,87.0,0.46698872785829304,Hills uphill finish,Hilly_Difficult,0.7047353627902812,44.164,Sprint of small group,Small group sprint,1551.0
+TdF,2022,9,9,192.9,3743.0,223.0,1.1560393986521513,Hills uphill finish,Medium_Mountain,0.5705225108225106,40.377,60.5 km solo,Solo,1551.0
+TdF,2022,10,10,148.1,2733.0,143.0,0.9655638082376773,Mountains uphill finish,Medium_Mountain,0.784886093073593,44.691,Sprint of small group,Small group sprint,1551.0
+TdF,2022,11,11,151.7,4070.0,400.0,2.636783124588003,Mountains uphill finish,Mountain,0.5876022876790057,35.275,3.9 km solo,Solo,1551.0
+TdF,2022,12,12,165.1,4660.0,389.0,2.3561477892186553,Mountains uphill finish,High_Mountain,0.676134072648198,33.534,11 km solo,Solo,1551.0
+TdF,2022,13,13,192.6,2109.0,78.0,0.40498442367601245,Hills flat finish,Rolling,0.4439998329156223,45.667,Sprint of small group,Small group sprint,1551.0
+TdF,2022,14,14,192.5,3441.0,170.0,0.8831168831168831,Hills flat finish,Medium_Mountain,0.8421827380952387,42.638,1.9 km solo,Solo,1551.0
+TdF,2022,15,15,202.5,2416.0,64.0,0.3160493827160494,Hills flat finish,Rolling,0.3938980989234439,45.429,Sprint of large group,Large group sprint,1551.0
+TdF,2022,16,16,178.5,3418.0,204.0,1.1428571428571428,Mountains flat finish,Medium_Mountain,0.4876832251082251,40.602,39 km solo,Solo,1551.0
+TdF,2022,17,17,129.7,3364.0,324.0,2.4980724749421745,Mountains uphill finish,Hilly_Difficult,0.46443064574314574,37.806,Sprint à deux,Sprint à deux,1551.0
+TdF,2022,18,18,143.2,4036.0,408.0,2.849162011173185,Mountains uphill finish,High_Mountain,0.6132096081518276,35.825,3.6 km solo,Solo,1551.0
+TdF,2022,19,19,188.3,1316.0,35.0,0.18587360594795538,Hills uphill finish,Hilly,0.44244467374730545,48.684,0.4 km solo,Solo,1551.0
+TdF,2022,21,21,115.6,748.0,13.0,0.11245674740484429,Flat,Flat,0.8027987294138608,38.85,Sprint of large group,Large group sprint,1551.0
+TdF,2023,1,1,182.0,3221.0,166.0,0.9120879120879121,Hills uphill finish,Medium_Mountain,0.6730714285714285,41.55,0.35 km solo,Solo,1584.0
+TdF,2023,2,2,208.9,2949.0,141.0,0.67496409765438,Hills flat finish,Hilly_Difficult,0.7000397857688333,43.726,0.95 km solo,Solo,1584.0
+TdF,2023,3,3,193.5,2667.0,68.0,0.35142118863049093,Hills flat finish,Rolling,0.359713374452345,40.989,Sprint of large group,Large group sprint,1584.0
+TdF,2023,4,4,181.8,1427.0,20.0,0.11001100110011,Flat,Flat,0.7601943303944079,41.09,Sprint of large group,Large group sprint,1584.0
+TdF,2023,5,5,162.7,3652.0,239.0,1.468961278426552,Mountains flat finish,Mountain,0.39114483596468885,41.17,20.2 km solo,Solo,1584.0
+TdF,2023,6,6,144.9,3894.0,310.0,2.139406487232574,Mountains uphill finish,Mountain,0.5042761384856975,37.083,2.7 km solo,Solo,1584.0
+TdF,2023,7,7,169.9,808.0,7.0,0.04120070629782225,Flat,Flat,0.8415415410290605,45.013,Sprint of large group,Large group sprint,1584.0
+TdF,2023,8,8,200.7,1996.0,61.0,0.3039362232187344,Hills flat finish,Rolling,0.5369342320261438,47.704,Sprint of large group,Large group sprint,1584.0
+TdF,2023,9,9,182.4,3441.0,273.0,1.4967105263157894,Mountains uphill finish,Medium_Mountain,0.40048991702741715,42.144,0.44 km solo,Solo,1584.0
+TdF,2023,10,10,167.2,3151.0,118.0,0.7057416267942584,Hills flat finish,Medium_Mountain,0.7555634920634919,43.136,Sprint of small group,Small group sprint,1584.0
+TdF,2023,11,11,179.3,1873.0,34.0,0.18962632459564974,Hills flat finish,Hilly,0.3733086431112747,44.62,Sprint of large group,Large group sprint,1584.0
+TdF,2023,12,12,168.8,3120.0,147.0,0.8708530805687204,Hills flat finish,Medium_Mountain,0.7374166666666667,43.712,30.8 km solo,Solo,1584.0
+TdF,2023,13,13,137.8,2413.0,260.0,1.8867924528301885,Mountains uphill finish,Medium_Mountain,0.5412485119047619,41.853,11.7 km solo,Solo,1584.0
+TdF,2023,14,14,151.8,4281.0,308.0,2.0289855072463765,Mountains flat finish,High_Mountain,0.5547813797292317,38.149,8 km solo,Solo,1584.0
+TdF,2023,15,15,179.0,4483.0,335.0,1.8715083798882681,Mountains uphill finish,Mountain,0.5139347751921285,38.255,10.8 km solo,Solo,1584.0
+TdF,2023,17,17,165.7,5399.0,445.0,2.6855763427881714,Mountains flat finish,High_Mountain,0.7442793903970165,34.386,13.1 km solo,Solo,1584.0
+TdF,2023,18,18,184.9,1216.0,18.0,0.0973499188750676,Flat,Flat,0.7820558728015193,44.951,Sprint of small group,Small group sprint,1584.0
+TdF,2023,19,19,172.8,1934.0,50.0,0.28935185185185186,Hills flat finish,Rolling,0.4282932852965747,49.13,Sprint of 3 riders,Small group sprint,1584.0
+TdF,2023,20,20,133.5,3471.0,303.0,2.269662921348315,Mountains flat finish,Medium_Mountain,0.35836999458874463,38.64,Sprint of 5 riders,Small group sprint,1584.0
+TdF,2023,21,21,115.1,577.0,14.0,0.12163336229365769,Flat,Flat,0.8184009258285571,39.19,Sprint of large group,Large group sprint,1584.0
+Vuelta,2010,2,2,173.0,2506.0,80.0,0.4624277456647399,Flat,Hilly_Difficult,0.5450954922634907,37.652,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,3,3,156.0,2868.0,178.0,1.141025641025641,Hills uphill finish,Medium_Mountain,0.6711157467532466,38.018,0.6 km solo,Solo,1123.0
+Vuelta,2010,4,4,177.0,3442.0,171.0,0.9661016949152542,Hills uphill finish,Medium_Mountain,0.6781886904761905,35.343,Sprint of small group,Small group sprint,1123.0
+Vuelta,2010,5,5,194.0,1763.0,23.0,0.11855670103092783,Flat,Flat,0.6358775056642704,38.34,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,6,6,144.0,1243.0,56.0,0.3888888888888889,Hills flat finish,Rolling,0.4514149114774115,39.938,Sprint of 72 riders,Small group sprint,1123.0
+Vuelta,2010,7,7,187.1,1161.0,36.0,0.19241047568145378,Flat,Hilly,0.44380364810627987,40.644,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,8,8,188.8,3870.0,230.0,1.2182203389830508,Mountains flat finish,Mountain,0.39811456211272384,36.02,4.8 km solo,Solo,1123.0
+Vuelta,2010,9,9,187.0,4329.0,238.0,1.2727272727272727,Hills flat finish,Mountain,0.3797210944692562,34.97,5 km solo,Solo,1123.0
+Vuelta,2010,10,10,173.7,2459.0,126.0,0.7253886010362695,Hills flat finish,Hilly_Difficult,0.6079484126984126,41.11,20 km solo,Solo,1123.0
+Vuelta,2010,11,11,208.0,4199.0,234.0,1.125,Mountains uphill finish,Mountain,0.44097126484626464,38.314,1.1 km solo,Solo,1123.0
+Vuelta,2010,12,12,196.0,2133.0,67.0,0.34183673469387754,Flat,Rolling,0.4384507316084328,48.898,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,13,13,193.7,2305.0,53.0,0.27361899845121324,Flat,Rolling,0.45167068507911806,40.034,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,14,14,178.8,3248.0,236.0,1.319910514541387,Mountains uphill finish,Medium_Mountain,0.4543987554112555,40.222,0.8 km solo,Solo,1123.0
+Vuelta,2010,15,15,170.0,2673.0,230.0,1.3529411764705883,Mountains uphill finish,Medium_Mountain,0.3517979256854255,37.19,11 km solo,Solo,1123.0
+Vuelta,2010,16,16,181.4,4431.0,340.0,1.8743109151047408,Mountains uphill finish,Mountain,0.5475831164342194,37.276,6 km solo,Solo,1123.0
+Vuelta,2010,18,18,148.9,964.0,4.0,0.026863666890530557,Flat,Flat,0.8487095842861132,43.121,Sprint of large group,Large group sprint,1123.0
+Vuelta,2010,19,19,200.0,2554.0,57.0,0.285,Flat,Hilly_Difficult,0.3793173097869137,34.916,Sprint of 34 riders,Small group sprint,1123.0
+Vuelta,2010,20,20,168.8,4189.0,323.0,1.9135071090047393,Mountains uphill finish,Mountain,0.5761352641381671,35.479,Sprint à deux,Sprint à deux,1123.0
+Vuelta,2010,21,21,85.0,750.0,8.0,0.09411764705882353,Flat,Flat,0.673355078948829,41.667,Sprint of large group,Large group sprint,1123.0
+Vuelta,2011,2,2,171.5,1305.0,27.0,0.15743440233236153,Flat,Hilly,0.26896624209124204,40.885,Sprint of large group,Large group sprint,1170.0
+Vuelta,2011,3,3,164.0,1956.0,82.0,0.5,Hills flat finish,Hilly_Difficult,0.5342316938734725,41.34,13 km solo,Solo,1170.0
+Vuelta,2011,4,4,170.2,3687.0,250.0,1.4688601645123385,Mountains uphill finish,Medium_Mountain,0.4066353715728717,34.99,Sprint à deux,Sprint à deux,1170.0
+Vuelta,2011,5,5,187.0,3510.0,170.0,0.9090909090909091,Hills uphill finish,Medium_Mountain,0.7730220238095241,39.66,Sprint of small group,Small group sprint,1170.0
+Vuelta,2011,6,6,193.4,2181.0,91.0,0.47052740434332985,Hills flat finish,Hilly_Difficult,0.6225834183064471,41.69,Sprint of 46 riders,Small group sprint,1170.0
+Vuelta,2011,7,7,185.0,2128.0,44.0,0.23783783783783785,Hills flat finish,Rolling,0.4017932852965746,38.544,Sprint of large group,Large group sprint,1170.0
+Vuelta,2011,8,8,183.0,3835.0,218.0,1.1912568306010929,Hills uphill finish,Medium_Mountain,0.4648001803751803,37.99,0.6 km solo,Solo,1170.0
+Vuelta,2011,9,9,179.5,2741.0,227.0,1.2646239554317549,Mountains uphill finish,Hilly_Difficult,0.364140422077922,36.854,Sprint of small group,Small group sprint,1170.0
+Vuelta,2011,11,11,171.0,4166.0,295.0,1.7251461988304093,Mountains uphill finish,Mountain,0.6010606874742906,36.906,6 km solo,Solo,1170.0
+Vuelta,2011,12,12,160.0,2433.0,61.0,0.38125,Hills uphill finish,Rolling,0.4204308849363197,39.503,Sprint of large group,Large group sprint,1170.0
+Vuelta,2011,13,13,150.0,3923.0,189.0,1.26,Mountains flat finish,Mountain,0.5950761324051766,34.662,Sprint of 19 riders,Small group sprint,1170.0
+Vuelta,2011,14,14,173.2,3631.0,360.0,2.0785219399538106,Mountains uphill finish,Medium_Mountain,0.4147107683982685,37.25,2 km solo,Solo,1170.0
+Vuelta,2011,15,15,144.0,3765.0,438.0,3.0416666666666665,Mountains uphill finish,Medium_Mountain,0.40119466991341995,35.712,6 km solo,Solo,1170.0
+Vuelta,2011,16,16,180.0,1044.0,9.0,0.05,Flat,Flat,0.7992597736800526,38.307,Sprint of large group,Large group sprint,1170.0
+Vuelta,2011,17,17,212.5,3207.0,203.0,0.9552941176470588,Mountains uphill finish,Hilly_Difficult,0.449977118319417,43.57,Sprint à deux,Sprint à deux,1170.0
+Vuelta,2011,18,18,169.7,3618.0,158.0,0.9310548025928109,Hills flat finish,Medium_Mountain,0.7052904942279941,38.466,Sprint à deux,Sprint à deux,1170.0
+Vuelta,2011,19,19,157.9,2708.0,168.0,1.0639645345155162,Hills flat finish,Medium_Mountain,0.6877124819624817,40.562,21 km solo,Solo,1170.0
+Vuelta,2011,20,20,187.0,3206.0,124.0,0.6631016042780749,Hills flat finish,Medium_Mountain,0.6295714285714284,40.167,Sprint of large group,Large group sprint,1170.0
+Vuelta,2011,21,21,94.0,828.0,9.0,0.09574468085106383,Flat,Flat,0.663254904817405,40.0,Sprint of large group,Large group sprint,1170.0
+Vuelta,2012,2,2,180.0,1915.0,40.0,0.2222222222222222,Hills flat finish,Rolling,0.40951640939469863,38.756,Sprint of large group,Large group sprint,852.0
+Vuelta,2012,3,3,153.0,2470.0,162.0,1.0588235294117647,Mountains flat finish,Medium_Mountain,0.42472348484848493,39.98,Sprint of small group,Small group sprint,852.0
+Vuelta,2012,4,4,155.4,2870.0,144.0,0.9266409266409266,Mountains uphill finish,Medium_Mountain,0.8235349025974028,34.478,Sprint à deux,Sprint à deux,852.0
+Vuelta,2012,5,5,172.0,1079.0,8.0,0.046511627906976744,Flat,Flat,0.8048423057313346,41.178,Sprint of large group,Large group sprint,852.0
+Vuelta,2012,6,6,174.8,2291.0,133.0,0.7608695652173912,Hills uphill finish,Hilly_Difficult,0.5723829365079364,38.087,Sprint à deux,Sprint à deux,852.0
+Vuelta,2012,7,7,160.0,1300.0,32.0,0.2,Hills flat finish,Hilly,0.317631456043956,42.013,Sprint of large group,Large group sprint,852.0
+Vuelta,2012,8,8,175.0,3565.0,257.0,1.4685714285714286,Mountains uphill finish,Medium_Mountain,0.4320373556998558,42.57,Sprint of small group,Small group sprint,852.0
+Vuelta,2012,9,9,194.0,2442.0,80.0,0.41237113402061853,Hills uphill finish,Rolling,0.4384974433778781,40.775,Sprint à deux,Sprint à deux,852.0
+Vuelta,2012,10,10,166.4,2240.0,47.0,0.2824519230769231,Flat,Rolling,0.6373472222222224,34.739,Sprint of large group,Large group sprint,852.0
+Vuelta,2012,12,12,184.6,2589.0,101.0,0.5471289274106176,Hills uphill finish,Hilly_Difficult,0.8081773001620359,41.87,0.4 km solo,Solo,852.0
+Vuelta,2012,13,13,172.7,2443.0,89.0,0.5153445280833816,Flat,Hilly_Difficult,0.6749778887217956,42.288,4 km solo,Solo,852.0
+Vuelta,2012,14,14,152.0,3951.0,354.0,2.3289473684210527,Mountains uphill finish,Mountain,0.6064017609927055,36.412,Sprint à deux,Sprint à deux,852.0
+Vuelta,2012,15,15,186.7,3549.0,305.0,1.6336368505623997,Mountains uphill finish,Medium_Mountain,0.44022007575757577,37.169,11.3 km solo,Solo,852.0
+Vuelta,2012,16,16,185.0,5159.0,438.0,2.3675675675675674,Mountains uphill finish,High_Mountain,0.7135438443350596,34.855,1 km solo,Solo,852.0
+Vuelta,2012,17,17,187.3,3834.0,208.0,1.1105178857447944,Mountains uphill finish,Medium_Mountain,0.4756527958152958,41.73,13.6 km solo,Solo,852.0
+Vuelta,2012,18,18,186.4,1082.0,19.0,0.101931330472103,Flat,Flat,0.7498635651092116,43.47,Sprint of large group,Large group sprint,852.0
+Vuelta,2012,19,19,178.4,1719.0,66.0,0.36995515695067266,Hills uphill finish,Rolling,0.5210238095238094,36.111,Sprint of small group,Small group sprint,852.0
+Vuelta,2012,20,20,169.5,4291.0,337.0,1.9882005899705015,Mountains uphill finish,Mountain,0.527491322811176,35.21,Sprint à deux,Sprint à deux,852.0
+Vuelta,2012,21,21,111.9,751.0,7.0,0.06255585344057193,Flat,Flat,0.9148670673259489,40.703,Sprint of large group,Large group sprint,852.0
+Vuelta,2013,2,2,177.7,2317.0,132.0,0.742824985931345,Mountains uphill finish,Hilly_Difficult,0.7078234126984129,38.47,Sprint of 17 riders,Small group sprint,1128.0
+Vuelta,2013,3,3,184.8,1878.0,70.0,0.3787878787878788,Hills uphill finish,Rolling,0.4568166666666665,41.02,1 km solo,Solo,1128.0
+Vuelta,2013,4,4,189.0,2799.0,107.0,0.5661375661375662,Hills uphill finish,Hilly_Difficult,0.7298175923878324,40.82,Sprint of 22 riders,Small group sprint,1128.0
+Vuelta,2013,5,5,174.3,3200.0,113.0,0.6483075157773952,Hills flat finish,Medium_Mountain,0.7011249999999998,38.97,Sprint of large group,Large group sprint,1128.0
+Vuelta,2013,6,6,175.0,1620.0,37.0,0.21142857142857144,Flat,Rolling,0.5656666666666665,44.82,Sprint of large group,Large group sprint,1128.0
+Vuelta,2013,7,7,205.9,1779.0,28.0,0.1359883438562409,Flat,Flat,0.6623477600830543,42.39,Sprint à deux,Sprint à deux,1128.0
+Vuelta,2013,8,8,166.6,2680.0,213.0,1.2785114045618249,Mountains uphill finish,Medium_Mountain,0.4151785173160174,40.02,0.6 km solo,Solo,1128.0
+Vuelta,2013,9,9,163.7,2677.0,123.0,0.7513744654856446,Hills uphill finish,Hilly_Difficult,0.45200770308123256,37.93,0.8 km solo,Solo,1128.0
+Vuelta,2013,10,10,178.0,3755.0,357.0,2.00561797752809,Mountains uphill finish,Medium_Mountain,0.4136691017316019,39.5,4.6 km solo,Solo,1128.0
+Vuelta,2013,12,12,164.2,1765.0,31.0,0.18879415347137637,Flat,Rolling,0.4284786485444378,40.42,Sprint of large group,Large group sprint,1128.0
+Vuelta,2013,13,13,169.0,2392.0,106.0,0.6272189349112426,Mountains flat finish,Hilly_Difficult,0.6525858766233764,42.21,1.5 km solo,Solo,1128.0
+Vuelta,2013,14,14,155.7,3340.0,273.0,1.7533718689788056,Mountains uphill finish,Mountain,0.4008194391392921,35.39,47 km solo,Solo,1128.0
+Vuelta,2013,15,15,224.9,5278.0,407.0,1.8096931969764338,Mountains uphill finish,Mountain,0.5264359459984458,35.49,24 km solo,Solo,1128.0
+Vuelta,2013,16,16,146.8,3220.0,211.0,1.4373297002724794,Mountains uphill finish,Medium_Mountain,0.3704135101010101,39.41,Sprint à deux,Sprint à deux,1128.0
+Vuelta,2013,17,17,189.0,2080.0,50.0,0.26455026455026454,Hills flat finish,Rolling,0.42262066624895556,39.86,0.8 km solo,Solo,1128.0
+Vuelta,2013,18,18,186.5,3879.0,326.0,1.7479892761394102,Mountains uphill finish,Mountain,0.6010111675497708,39.02,43 km solo,Solo,1128.0
+Vuelta,2013,19,19,181.0,3052.0,190.0,1.0497237569060773,Mountains uphill finish,Medium_Mountain,0.46282142857142866,42.39,1 km solo,Solo,1128.0
+Vuelta,2013,20,20,142.2,3728.0,439.0,3.087201125175809,Mountains uphill finish,Medium_Mountain,0.4009863365800866,36.21,6 km solo,Solo,1128.0
+Vuelta,2013,21,21,109.6,741.0,7.0,0.06386861313868614,Flat,Flat,0.9148670673259489,40.1,Sprint of large group,Large group sprint,1128.0
+Vuelta,2014,2,2,174.4,1308.0,17.0,0.09747706422018348,Flat,Flat,0.8110919844152238,43.33,Sprint of large group,Large group sprint,1175.0
+Vuelta,2014,3,3,197.8,2917.0,107.0,0.5409504550050556,Hills uphill finish,Hilly_Difficult,0.7417744678652963,38.01,Sprint of 17 riders,Small group sprint,1175.0
+Vuelta,2014,4,4,164.7,1474.0,81.0,0.49180327868852464,Flat,Hilly_Difficult,0.3774888914956444,40.68,Sprint of 60 riders,Small group sprint,1175.0
+Vuelta,2014,5,5,180.0,2149.0,72.0,0.4,Flat,Rolling,0.47788736899065853,38.33,Sprint of 58 riders,Small group sprint,1175.0
+Vuelta,2014,6,6,167.1,2977.0,175.0,1.0472770795930582,Hills uphill finish,Medium_Mountain,0.7492263708513708,36.4,Sprint of small group,Small group sprint,1175.0
+Vuelta,2014,7,7,169.0,2744.0,126.0,0.7455621301775148,Hills uphill finish,Hilly_Difficult,0.48493948412698407,41.92,13 km solo,Solo,1175.0
+Vuelta,2014,8,8,207.0,1663.0,14.0,0.06763285024154589,Flat,Flat,0.7549594323267894,46.17,Sprint of 55 riders,Small group sprint,1175.0
+Vuelta,2014,9,9,185.0,3080.0,203.0,1.0972972972972972,Mountains uphill finish,Medium_Mountain,0.46682142857142855,40.48,6.5 km solo,Solo,1175.0
+Vuelta,2014,11,11,153.4,2432.0,211.0,1.3754889178617993,Mountains uphill finish,Medium_Mountain,0.36568939393939376,41.64,1 km solo,Solo,1175.0
+Vuelta,2014,12,12,166.4,1070.0,11.0,0.06610576923076923,Flat,Flat,0.8034483663373951,39.73,Sprint of large group,Large group sprint,1175.0
+Vuelta,2014,13,13,188.7,3236.0,207.0,1.09697933227345,Hills flat finish,Medium_Mountain,0.5476329365079363,43.37,2 km solo,Solo,1175.0
+Vuelta,2014,14,14,200.8,4198.0,228.0,1.1354581673306772,Mountains uphill finish,Mountain,0.39314453908020097,37.87,1.8 km solo,Solo,1175.0
+Vuelta,2014,15,15,152.2,2976.0,287.0,1.885676741130092,Mountains uphill finish,Medium_Mountain,0.5428744137806637,36.36,5.3 km solo,Solo,1175.0
+Vuelta,2014,16,16,160.5,4908.0,434.0,2.70404984423676,Mountains uphill finish,Mountain,0.8647072385571051,32.8,1 km solo,Solo,1175.0
+Vuelta,2014,17,17,190.7,2761.0,94.0,0.49292081803880444,Flat,Hilly_Difficult,0.7511463781346915,43.0,Sprint of 42 riders,Small group sprint,1175.0
+Vuelta,2014,18,18,157.0,2384.0,172.0,1.0955414012738853,Hills uphill finish,Medium_Mountain,0.4362222222222223,41.45,Sprint à deux,Sprint à deux,1175.0
+Vuelta,2014,19,19,180.5,2319.0,122.0,0.6759002770083102,Hills flat finish,Hilly_Difficult,0.7431904761904762,41.34,5 km solo,Solo,1175.0
+Vuelta,2014,20,20,185.7,4447.0,395.0,2.1270866989768447,Mountains uphill finish,Mountain,0.5530601602237634,35.74,0.5 km solo,Solo,1175.0
+Vuelta,2015,2,2,158.7,2597.0,147.0,0.9262759924385634,Hills uphill finish,Medium_Mountain,0.43855185786435796,40.11,Sprint à deux,Sprint à deux,1115.0
+Vuelta,2015,3,3,158.4,2613.0,104.0,0.6565656565656566,Hills flat finish,Hilly_Difficult,0.4696298881394662,38.51,Sprint of large group,Large group sprint,1115.0
+Vuelta,2015,4,4,209.6,2141.0,83.0,0.39599236641221375,Hills uphill finish,Rolling,0.5506130018674136,40.9,Sprint of 26 riders,Small group sprint,1115.0
+Vuelta,2015,5,5,167.3,816.0,9.0,0.0537955768081291,Flat,Flat,0.8342505230192926,42.27,Sprint of large group,Large group sprint,1115.0
+Vuelta,2015,6,6,200.3,2908.0,112.0,0.5591612581128307,Hills uphill finish,Hilly_Difficult,0.7868464145589532,41.98,2 km solo,Solo,1115.0
+Vuelta,2015,7,7,191.1,3318.0,204.0,1.067503924646782,Mountains uphill finish,Medium_Mountain,0.6772829365079364,36.94,Sprint à deux,Sprint à deux,1115.0
+Vuelta,2015,8,8,182.5,1386.0,83.0,0.4547945205479452,Hills flat finish,Hilly,0.6629126984126985,44.5,Sprint of 49 riders,Small group sprint,1115.0
+Vuelta,2015,9,9,168.3,2044.0,139.0,0.8259061200237671,Hills uphill finish,Hilly_Difficult,0.5402266136641135,40.41,Sprint à deux,Sprint à deux,1115.0
+Vuelta,2015,10,10,146.6,1520.0,63.0,0.4297407912687585,Hills flat finish,Rolling,0.32882936507936505,45.64,Sprint of 59 riders,Small group sprint,1115.0
+Vuelta,2015,11,11,138.0,5421.0,515.0,3.7318840579710146,Mountains uphill finish,Mountain,0.648505350822806,30.12,8.8 km solo,Solo,1115.0
+Vuelta,2015,12,12,173.0,2174.0,62.0,0.3583815028901734,Hills flat finish,Rolling,0.4972003968253969,42.86,Sprint of large group,Large group sprint,1115.0
+Vuelta,2015,13,13,178.0,2673.0,78.0,0.43820224719101125,Hills flat finish,Hilly_Difficult,0.5473099016818648,42.04,29 km solo,Solo,1115.0
+Vuelta,2015,14,14,215.0,3941.0,243.0,1.130232558139535,Mountains uphill finish,Mountain,0.44053674103674084,37.59,0.9 km solo,Solo,1115.0
+Vuelta,2015,15,15,175.8,3740.0,309.0,1.757679180887372,Mountains uphill finish,Medium_Mountain,0.4139607683982686,38.56,0.9 km solo,Solo,1115.0
+Vuelta,2015,16,16,185.0,5207.0,484.0,2.616216216216216,Mountains uphill finish,High_Mountain,0.9074569847432447,31.72,3 km solo,Solo,1115.0
+Vuelta,2015,18,18,204.0,3218.0,142.0,0.696078431372549,Hills flat finish,Hilly_Difficult,0.6816183608058608,40.27,Sprint à deux,Sprint à deux,1115.0
+Vuelta,2015,19,19,185.8,2331.0,85.0,0.45748116254036597,Hills uphill finish,Hilly_Difficult,0.6781513357255844,42.99,26 km solo,Solo,1115.0
+Vuelta,2015,20,20,175.8,3812.0,187.0,1.0637087599544937,Mountains flat finish,Medium_Mountain,0.4856020021645022,38.07,114 km solo,Solo,1115.0
+Vuelta,2015,21,21,98.8,726.0,6.0,0.06072874493927126,Flat,Flat,0.9171712631301447,38.44,Sprint of large group,Large group sprint,1115.0
+Vuelta,2016,2,2,160.8,2168.0,69.0,0.42910447761194026,Hills flat finish,Hilly_Difficult,0.4712355562152395,37.59,Sprint of large group,Large group sprint,821.0
+Vuelta,2016,3,3,176.4,2983.0,177.0,1.0034013605442176,Hills uphill finish,Medium_Mountain,0.5377045454545454,39.4,1.2 km solo,Solo,821.0
+Vuelta,2016,4,4,163.5,3196.0,180.0,1.1009174311926606,Hills uphill finish,Medium_Mountain,0.5740406746031744,39.99,9 km solo,Solo,821.0
+Vuelta,2016,5,5,171.3,2467.0,73.0,0.4261529480443666,Hills flat finish,Hilly_Difficult,0.49016993785200297,40.04,Sprint of large group,Large group sprint,821.0
+Vuelta,2016,6,6,163.2,2824.0,159.0,0.974264705882353,Hills flat finish,Medium_Mountain,0.7993672438672441,39.97,3.7 km solo,Solo,821.0
+Vuelta,2016,7,7,158.5,2616.0,104.0,0.6561514195583596,Hills flat finish,Hilly_Difficult,0.4696298881394662,40.34,Sprint of large group,Large group sprint,821.0
+Vuelta,2016,8,8,181.5,1279.0,119.0,0.6556473829201102,Mountains uphill finish,Hilly_Difficult,0.3601553884711781,43.65,0.2 km solo,Solo,821.0
+Vuelta,2016,9,9,164.5,2780.0,193.0,1.1732522796352585,Hills uphill finish,Medium_Mountain,0.5842533730158731,43.3,0.7 km solo,Solo,821.0
+Vuelta,2016,10,10,188.7,3899.0,319.0,1.69051404345522,Mountains uphill finish,Mountain,0.6033861675497709,38.97,3.5 km solo,Solo,821.0
+Vuelta,2016,11,11,168.6,2351.0,160.0,0.9489916963226572,Mountains uphill finish,Hilly_Difficult,0.42301388888888897,45.0,Sprint à deux,Sprint à deux,821.0
+Vuelta,2016,12,12,193.2,2996.0,143.0,0.7401656314699794,Hills flat finish,Hilly_Difficult,0.7496319444444446,42.66,Sprint of 42 riders,Small group sprint,821.0
+Vuelta,2016,13,13,213.4,3716.0,160.0,0.7497656982193065,Hills flat finish,Medium_Mountain,0.8778315476190478,38.91,18.5 km solo,Solo,821.0
+Vuelta,2016,14,14,196.0,5575.0,419.0,2.1377551020408165,Mountains uphill finish,High_Mountain,0.9083432279579727,34.25,Sprint of small group,Small group sprint,821.0
+Vuelta,2016,15,15,118.5,3877.0,334.0,2.818565400843882,Mountains uphill finish,High_Mountain,0.6035657106836267,40.74,Sprint à deux,Sprint à deux,821.0
+Vuelta,2016,16,16,156.4,1514.0,24.0,0.1534526854219949,Hills flat finish,Rolling,0.37519976408395517,46.62,Sprint of large group,Large group sprint,821.0
+Vuelta,2016,17,17,177.5,3460.0,229.0,1.2901408450704226,Mountains uphill finish,Medium_Mountain,0.4914959956709957,38.78,2.7 km solo,Solo,821.0
+Vuelta,2016,18,18,200.6,2550.0,49.0,0.24426719840478564,Hills flat finish,Hilly_Difficult,0.38714469073929464,40.87,Sprint of large group,Large group sprint,821.0
+Vuelta,2016,20,20,193.2,5036.0,349.0,1.8064182194616978,Mountains uphill finish,Mountain,0.4773730205660355,36.26,Sprint à deux,Sprint à deux,821.0
+Vuelta,2016,21,21,104.1,847.0,10.0,0.09606147934678194,Flat,Flat,0.7053548222610725,36.99,Sprint of large group,Large group sprint,821.0
+Vuelta,2017,2,2,203.4,588.0,5.0,0.024582104228121928,Flat,Flat,0.8018527532516504,44.18,1 km solo,Solo,899.0
+Vuelta,2017,3,3,158.5,3623.0,244.0,1.5394321766561514,Mountains flat finish,Medium_Mountain,0.39179013347763364,39.4,Sprint of small group,Small group sprint,899.0
+Vuelta,2017,4,4,198.2,1835.0,36.0,0.18163471241170537,Hills flat finish,Hilly,0.41153300208563365,41.88,Sprint of large group,Large group sprint,899.0
+Vuelta,2017,5,5,157.7,2909.0,156.0,0.9892200380469246,Hills uphill finish,Medium_Mountain,0.7772422438672438,35.71,3 km solo,Solo,899.0
+Vuelta,2017,6,6,204.4,2704.0,106.0,0.5185909980430529,Hills flat finish,Hilly_Difficult,0.8005185294267188,42.73,Sprint of 18 riders,Small group sprint,899.0
+Vuelta,2017,7,7,207.0,3034.0,81.0,0.391304347826087,Hills flat finish,Hilly_Difficult,0.4036312587029339,43.8,9.6 km solo,Solo,899.0
+Vuelta,2017,8,8,199.5,2593.0,163.0,0.8170426065162907,Hills flat finish,Hilly_Difficult,0.7933519261891362,43.07,Sprint of small group,Small group sprint,899.0
+Vuelta,2017,9,9,174.0,2041.0,151.0,0.867816091954023,Hills uphill finish,Hilly_Difficult,0.5527881666944163,42.23,0.5 km solo,Solo,899.0
+Vuelta,2017,10,10,164.8,1568.0,106.0,0.6432038834951456,Hills flat finish,Hilly_Difficult,0.3951607142857142,46.0,Sprint à deux,Sprint à deux,899.0
+Vuelta,2017,11,11,187.5,3878.0,296.0,1.5786666666666667,Mountains uphill finish,Mountain,0.5955886921493543,36.87,1.3 km solo,Solo,899.0
+Vuelta,2017,12,12,160.1,2681.0,188.0,1.174266083697689,Hills flat finish,Medium_Mountain,0.5558181277056277,40.57,22 km solo,Solo,899.0
+Vuelta,2017,13,13,198.4,1938.0,39.0,0.19657258064516128,Hills flat finish,Hilly,0.38630864311127466,44.88,Sprint of 15 riders,Small group sprint,899.0
+Vuelta,2017,14,14,175.0,3723.0,285.0,1.6285714285714286,Mountains uphill finish,Medium_Mountain,0.4134607683982685,37.21,11 km solo,Solo,899.0
+Vuelta,2017,15,15,129.4,3549.0,367.0,2.836166924265842,Mountains uphill finish,Hilly_Difficult,0.4706556221556224,36.14,6 km solo,Solo,899.0
+Vuelta,2017,17,17,180.5,4022.0,328.0,1.817174515235457,Mountains flat finish,Mountain,0.5921379921140953,37.49,5.3 km solo,Solo,899.0
+Vuelta,2017,18,18,169.0,3476.0,213.0,1.2603550295857988,Hills uphill finish,Medium_Mountain,0.4624093073593074,40.62,0.7 km solo,Solo,899.0
+Vuelta,2017,19,19,149.7,2484.0,134.0,0.8951235804943221,Hills flat finish,Medium_Mountain,0.46263519119769114,41.63,Sprint of small group,Small group sprint,899.0
+Vuelta,2017,20,20,117.5,3817.0,504.0,4.2893617021276595,Mountains uphill finish,Hilly_Difficult,0.3936642801642802,33.33,5.5 km solo,Solo,899.0
+Vuelta,2017,21,21,117.6,913.0,9.0,0.07653061224489796,Flat,Flat,0.807763764378896,37.85,Sprint of large group,Large group sprint,899.0
+Vuelta,2018,2,2,163.5,2826.0,115.0,0.7033639143730887,Hills flat finish,Medium_Mountain,0.7896777597402597,38.77,Sprint à deux,Sprint à deux,1036.0
+Vuelta,2018,3,3,178.2,3160.0,114.0,0.6397306397306398,Mountains flat finish,Medium_Mountain,0.6509523809523808,37.1,Sprint of large group,Large group sprint,1036.0
+Vuelta,2018,4,4,161.4,3300.0,193.0,1.1957868649318464,Mountains uphill finish,Medium_Mountain,0.4682319264069265,35.45,Sprint à deux,Sprint à deux,1036.0
+Vuelta,2018,5,5,188.7,3178.0,116.0,0.6147323794382619,Mountains flat finish,Hilly_Difficult,0.5054107142857144,41.0,Sprint of 94 riders,Small group sprint,1036.0
+Vuelta,2018,6,6,155.7,1399.0,41.0,0.26332691072575465,Hills flat finish,Rolling,0.730580357142857,39.16,Sprint of large group,Large group sprint,1036.0
+Vuelta,2018,7,7,185.7,2535.0,117.0,0.630048465266559,Hills flat finish,Hilly_Difficult,0.8094674023409513,43.13,2.2 km solo,Solo,1036.0
+Vuelta,2018,8,8,195.1,2112.0,48.0,0.2460276781137878,Hills uphill finish,Rolling,0.4335261284338296,42.43,Sprint of large group,Large group sprint,1036.0
+Vuelta,2018,9,9,200.8,4399.0,276.0,1.3745019920318724,Mountains uphill finish,Mountain,0.6050583197439818,36.44,18 km solo,Solo,1036.0
+Vuelta,2018,10,10,177.0,1306.0,27.0,0.15254237288135594,Flat,Flat,0.45970136063411987,42.8,Sprint of large group,Large group sprint,1036.0
+Vuelta,2018,11,11,207.8,3755.0,174.0,0.8373435996150144,Hills flat finish,Medium_Mountain,0.7557392857142858,42.61,4.3 km solo,Solo,1036.0
+Vuelta,2018,12,12,181.1,3021.0,126.0,0.6957482054113749,Hills flat finish,Hilly_Difficult,0.5240823412698412,41.32,Sprint of 71 riders,Small group sprint,1036.0
+Vuelta,2018,13,13,174.8,3334.0,194.0,1.1098398169336383,Mountains uphill finish,Medium_Mountain,0.5265507936507937,40.8,1 km solo,Solo,1036.0
+Vuelta,2018,14,14,171.0,3314.0,286.0,1.672514619883041,Mountains flat finish,Medium_Mountain,0.4206417027417029,39.55,0.6 km solo,Solo,1036.0
+Vuelta,2018,15,15,178.2,4586.0,390.0,2.1885521885521886,Mountains uphill finish,Mountain,0.502836560906414,35.43,6 km solo,Solo,1036.0
+Vuelta,2018,17,17,157.0,3574.0,298.0,1.8980891719745223,Mountains uphill finish,Medium_Mountain,0.38969638347763363,37.71,0.5 km solo,Solo,1036.0
+Vuelta,2018,18,18,186.1,1040.0,12.0,0.06448146157979581,Flat,Flat,0.7960747601641568,47.1,Sprint à deux,Sprint à deux,1036.0
+Vuelta,2018,19,19,154.4,3183.0,239.0,1.5479274611398963,Mountains uphill finish,Medium_Mountain,0.4515037878787879,41.71,0.2 km solo,Solo,1036.0
+Vuelta,2018,20,20,97.3,3429.0,341.0,3.5046248715313464,Mountains uphill finish,Hilly_Difficult,0.406238455988456,32.52,Sprint à deux,Sprint à deux,1036.0
+Vuelta,2018,21,21,112.3,603.0,1.0,0.008904719501335707,Flat,Flat,0.9393969332933148,47.63,Sprint of large group,Large group sprint,1036.0
+Vuelta,2019,2,2,199.6,3238.0,113.0,0.5661322645290582,Mountains flat finish,Hilly_Difficult,0.48716666666666664,38.473,3 km solo,Solo,798.0
+Vuelta,2019,3,3,188.0,1730.0,65.0,0.34574468085106386,Hills flat finish,Rolling,0.5110386904761902,42.561,Sprint of large group,Large group sprint,798.0
+Vuelta,2019,4,4,175.5,1233.0,27.0,0.15384615384615385,Hills flat finish,Flat,0.3091199972950165,43.109,Sprint of large group,Large group sprint,798.0
+Vuelta,2019,5,5,170.7,3764.0,270.0,1.5817223198594026,Mountains uphill finish,Medium_Mountain,0.3969270382395384,34.31,0.5 km solo,Solo,798.0
+Vuelta,2019,6,6,198.9,3294.0,151.0,0.759175465057818,Hills uphill finish,Medium_Mountain,0.7170504120879122,42.033,0.4 km solo,Solo,798.0
+Vuelta,2019,7,7,183.2,2842.0,242.0,1.3209606986899565,Mountains uphill finish,Hilly_Difficult,0.3455987554112555,40.09,Sprint à deux,Sprint à deux,798.0
+Vuelta,2019,8,8,166.9,2291.0,95.0,0.5692031156381067,Hills flat finish,Hilly_Difficult,0.5276049783549781,43.388,Sprint of 13 riders,Small group sprint,798.0
+Vuelta,2019,9,9,94.4,3300.0,394.0,4.173728813559322,Mountains uphill finish,Hilly_Difficult,0.39987481962481974,31.793,3 km solo,Solo,798.0
+Vuelta,2019,11,11,180.0,3168.0,137.0,0.7611111111111111,Mountains flat finish,Medium_Mountain,0.6884523809523809,39.027,25 km solo,Solo,798.0
+Vuelta,2019,12,12,171.4,2072.0,160.0,0.9334889148191365,Hills flat finish,Hilly_Difficult,0.49430994699744685,45.046,9 km solo,Solo,798.0
+Vuelta,2019,13,13,166.4,4179.0,287.0,1.7247596153846154,Mountains uphill finish,Mountain,0.5726283196937225,37.194,Sprint à deux,Sprint à deux,798.0
+Vuelta,2019,14,14,188.0,2432.0,63.0,0.3351063829787234,Hills uphill finish,Rolling,0.4168563719493067,41.969,Sprint of large group,Large group sprint,798.0
+Vuelta,2019,15,15,154.4,4114.0,368.0,2.383419689119171,Mountains uphill finish,Mountain,0.6726934737733888,35.759,6.6 km solo,Solo,798.0
+Vuelta,2019,16,16,144.4,4114.0,326.0,2.257617728531856,Mountains uphill finish,High_Mountain,0.6084803606481237,35.896,4 km solo,Solo,798.0
+Vuelta,2019,17,17,219.6,2395.0,57.0,0.25956284153005466,Hills uphill finish,Rolling,0.4381369101530639,50.63,Sprint of small group,Small group sprint,798.0
+Vuelta,2019,18,18,178.2,3689.0,162.0,0.9090909090909092,Mountains uphill finish,Medium_Mountain,0.7374531926406928,39.143,53 km solo,Solo,798.0
+Vuelta,2019,19,19,165.2,1771.0,48.0,0.2905569007263923,Hills uphill finish,Rolling,0.5255293964076858,44.336,24 km solo,Solo,798.0
+Vuelta,2019,20,20,190.4,4559.0,242.0,1.2710084033613445,Mountains uphill finish,Mountain,0.38139172938989113,36.08,39 km solo,Solo,798.0
+Vuelta,2019,21,21,106.6,763.0,8.0,0.075046904315197,Flat,Flat,0.8974682578021396,37.996,Sprint of large group,Large group sprint,798.0
+Vuelta,2020,1,1,173.0,2975.0,209.0,1.2080924855491328,Hills flat finish,Medium_Mountain,0.626669318181818,39.53,1 km solo,Solo,692.0
+Vuelta,2020,2,2,151.6,2435.0,171.0,1.1279683377308707,Mountains flat finish,Medium_Mountain,0.4294466991341992,40.06,14 km solo,Solo,692.0
+Vuelta,2020,3,3,166.1,2779.0,117.0,0.7043949428055388,Mountains uphill finish,Medium_Mountain,0.6185597041847042,37.21,Sprint of small group,Small group sprint,692.0
+Vuelta,2020,4,4,191.7,1160.0,15.0,0.0782472613458529,Flat,Flat,0.735254124917051,49.26,Sprint of large group,Large group sprint,692.0
+Vuelta,2020,5,5,184.4,3407.0,185.0,1.0032537960954446,Hills uphill finish,Medium_Mountain,0.5840061507936508,42.65,Sprint à deux,Sprint à deux,692.0
+Vuelta,2020,6,6,146.4,3020.0,185.0,1.2636612021857923,Mountains uphill finish,Medium_Mountain,0.6202907106782107,39.75,3 km solo,Solo,692.0
+Vuelta,2020,7,7,159.7,2657.0,142.0,0.889167188478397,Hills flat finish,Medium_Mountain,0.4523157467532468,41.98,1 km solo,Solo,692.0
+Vuelta,2020,8,8,164.0,3021.0,249.0,1.5182926829268293,Mountains uphill finish,Medium_Mountain,0.555090007215007,39.82,0.8 km solo,Solo,692.0
+Vuelta,2020,9,9,157.7,1163.0,18.0,0.114140773620799,Flat,Flat,0.8142293873996661,43.03,Sprint of large group,Large group sprint,692.0
+Vuelta,2020,10,10,185.0,2302.0,84.0,0.4540540540540541,Hills uphill finish,Hilly_Difficult,0.6405067539185025,43.67,Sprint of small group,Small group sprint,692.0
+Vuelta,2020,11,11,170.0,5098.0,435.0,2.5588235294117645,Mountains uphill finish,High_Mountain,0.6931798519495677,34.67,0.5 km solo,Solo,692.0
+Vuelta,2020,12,12,109.4,3125.0,452.0,4.131627056672761,Mountains uphill finish,Hilly_Difficult,0.3150565961815962,34.79,1 km solo,Solo,692.0
+Vuelta,2020,14,14,204.7,3057.0,100.0,0.4885197850512946,Hills uphill finish,Hilly_Difficult,0.6898845381085326,44.33,0.3 km solo,Solo,692.0
+Vuelta,2020,15,15,230.8,4448.0,158.0,0.6845753899480069,Hills flat finish,Mountain,0.46095272089022066,36.54,Sprint of large group,Large group sprint,692.0
+Vuelta,2020,16,16,162.0,2762.0,122.0,0.7530864197530864,Hills flat finish,Medium_Mountain,0.6458027597402597,39.74,Sprint of large group,Large group sprint,692.0
+Vuelta,2020,17,17,178.2,4365.0,316.0,1.7732884399551068,Mountains uphill finish,Mountain,0.5673054149690181,36.3,4 km solo,Solo,692.0
+Vuelta,2020,18,18,139.6,1492.0,30.0,0.21489971346704873,Hills flat finish,Rolling,0.7221017268550163,40.23,Sprint of large group,Large group sprint,692.0
+Vuelta,2021,2,2,166.7,1049.0,10.0,0.0599880023995201,Flat,Flat,0.8091983663373951,41.858,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,3,3,202.8,2787.0,232.0,1.1439842209072977,Mountains uphill finish,Hilly_Difficult,0.3801312950937951,38.391,2.8 km solo,Solo,1023.0
+Vuelta,2021,4,4,163.9,1534.0,23.0,0.1403294691885296,Hills uphill finish,Flat,0.6840113377227349,44.076,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,5,5,184.4,640.0,2.0,0.010845986984815618,Flat,Flat,0.8113338693577664,41.801,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,6,6,158.3,902.0,50.0,0.31585596967782686,Hills uphill finish,Hilly,0.33767559523809537,45.039,0.77 km solo,Solo,1023.0
+Vuelta,2021,7,7,152.0,3744.0,272.0,1.7894736842105263,Mountains uphill finish,Medium_Mountain,0.38588911435786444,36.448,3.2 km solo,Solo,1023.0
+Vuelta,2021,8,8,173.7,923.0,23.0,0.13241220495106507,Flat,Flat,0.7519910815878308,44.145,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,9,9,188.0,4725.0,348.0,1.851063829787234,Mountains uphill finish,Mountain,0.4923938538993688,37.199,71.1 km solo,Solo,1023.0
+Vuelta,2021,10,10,189.0,2390.0,134.0,0.708994708994709,Hills flat finish,Hilly_Difficult,0.7476675685425686,45.478,19 km solo,Solo,1023.0
+Vuelta,2021,11,11,133.6,2647.0,155.0,1.160179640718563,Hills uphill finish,Medium_Mountain,0.6258905483405485,41.969,Sprint à deux,Sprint à deux,1023.0
+Vuelta,2021,12,12,175.0,2018.0,107.0,0.6114285714285714,Hills flat finish,Hilly_Difficult,0.6181818865011798,46.802,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,13,13,203.7,1645.0,22.0,0.10800196367206677,Flat,Flat,0.7598810211546282,40.961,Sprint of small group,Small group sprint,1023.0
+Vuelta,2021,14,14,165.7,3448.0,288.0,1.7380808690404346,Mountains uphill finish,Mountain,0.39244877548921664,38.15,6 km solo,Solo,1023.0
+Vuelta,2021,15,15,197.5,3860.0,167.0,0.8455696202531645,Mountains flat finish,Mountain,0.3816085195441813,40.638,87.3 km solo,Solo,1023.0
+Vuelta,2021,16,16,180.0,2279.0,81.0,0.45,Hills flat finish,Hilly_Difficult,0.5411720641517475,43.382,Sprint of large group,Large group sprint,1023.0
+Vuelta,2021,17,17,185.8,4519.0,366.0,1.9698600645855757,Mountains uphill finish,Mountain,0.5611851602237633,40.575,7.5 km solo,Solo,1023.0
+Vuelta,2021,18,18,162.6,4951.0,509.0,3.130381303813038,Mountains uphill finish,Mountain,0.8246485056233719,34.676,2.7 km solo,Solo,1023.0
+Vuelta,2021,19,19,191.2,3540.0,98.0,0.5125523012552301,Hills flat finish,Medium_Mountain,0.7457452380952383,43.307,Sprint of small group,Small group sprint,1023.0
+Vuelta,2021,20,20,202.2,4214.0,251.0,1.241345202769535,Hills uphill finish,Mountain,0.45671547896547887,37.697,1.7 km solo,Solo,1023.0
+Vuelta,2022,2,2,175.1,518.0,10.0,0.05711022272986865,Flat,Flat,0.789482142857143,45.764,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,3,3,193.2,255.0,0.0,0.0,Flat,Flat,0.9180700151564122,47.144,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,4,4,152.5,2319.0,133.0,0.8721311475409836,Hills uphill finish,Hilly_Difficult,0.4752767857142859,43.348,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,5,5,187.2,2978.0,162.0,0.8653846153846154,Hills flat finish,Hilly_Difficult,0.7409474206349206,43.981,15.4 km solo,Solo,968.0
+Vuelta,2022,6,6,181.2,4120.0,294.0,1.6225165562913908,Mountains uphill finish,Mountain,0.5646287562519183,39.108,6.5 km solo,Solo,968.0
+Vuelta,2022,7,7,190.0,3359.0,112.0,0.5894736842105263,Hills flat finish,Medium_Mountain,0.8682363095238098,42.072,Sprint of small group,Small group sprint,968.0
+Vuelta,2022,8,8,153.4,3741.0,335.0,2.1838331160365057,Mountains uphill finish,Medium_Mountain,0.3790805826118327,37.504,5.9 km solo,Solo,968.0
+Vuelta,2022,9,9,171.4,3675.0,242.0,1.411901983663944,Mountains uphill finish,Medium_Mountain,0.412482593795094,37.719,2.5 km solo,Solo,968.0
+Vuelta,2022,11,11,191.2,1592.0,38.0,0.198744769874477,Flat,Hilly,0.5055508592284909,37.832,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,12,12,192.7,3238.0,273.0,1.4167099117799689,Mountains uphill finish,Mountain,0.40924648268398267,41.525,1.9 km solo,Solo,968.0
+Vuelta,2022,13,13,168.4,1766.0,54.0,0.32066508313539194,Flat,Rolling,0.49686210317460305,44.705,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,14,14,160.3,3312.0,278.0,1.734248284466625,Mountains uphill finish,Mountain,0.4070634867583398,38.557,3.3 km solo,Solo,968.0
+Vuelta,2022,15,15,152.6,4033.0,407.0,2.667103538663172,Mountains uphill finish,Mountain,0.5956402566544746,35.587,6.5 km solo,Solo,968.0
+Vuelta,2022,16,16,189.4,1076.0,28.0,0.14783526927138332,Flat,Flat,0.43213546691526566,39.806,Sprint of small group,Small group sprint,968.0
+Vuelta,2022,17,17,162.3,2755.0,161.0,0.9919901417128774,Flat,Medium_Mountain,0.6543731962481961,43.773,Sprint of small group,Small group sprint,968.0
+Vuelta,2022,18,18,192.0,3680.0,214.0,1.1145833333333333,Mountains uphill finish,Medium_Mountain,0.5824525793650792,40.381,Sprint of small group,Small group sprint,968.0
+Vuelta,2022,19,19,138.3,2278.0,101.0,0.7302964569775849,Mountains flat finish,Hilly_Difficult,0.3694196428571429,41.66,Sprint of large group,Large group sprint,968.0
+Vuelta,2022,20,20,181.0,3977.0,216.0,1.1933701657458564,Mountains flat finish,Mountain,0.3934998643105261,38.57,7.2 km solo,Solo,968.0
+Vuelta,2022,21,21,96.7,773.0,10.0,0.10341261633919338,Flat,Flat,0.8278600847252161,39.577,Sprint of large group,Large group sprint,968.0
+Vuelta,2023,2,2,181.8,2754.0,80.0,0.44004400440044,Hills flat finish,Hilly_Difficult,0.5617315636799973,41.26,3.7 km solo,Solo,846.0
+Vuelta,2023,3,3,158.5,3472.0,263.0,1.6593059936908516,Mountains uphill finish,Mountain,0.40140277247262546,37.199,Sprint of 11 riders,Small group sprint,846.0
+Vuelta,2023,4,4,184.6,1822.0,57.0,0.3087757313109426,Hills flat finish,Rolling,0.5216458333333331,45.082,Sprint of large group,Large group sprint,846.0
+Vuelta,2023,5,5,186.2,2395.0,65.0,0.3490870032223416,Hills flat finish,Rolling,0.42508553861597337,42.364,Sprint of large group,Large group sprint,846.0
+Vuelta,2023,6,6,183.1,4013.0,273.0,1.490988530857455,Mountains uphill finish,Mountain,0.571156534029696,41.072,2.5 km solo,Solo,846.0
+Vuelta,2023,7,7,200.8,1144.0,12.0,0.0597609561752988,Flat,Flat,0.789099363012289,40.636,Sprint of large group,Large group sprint,846.0
+Vuelta,2023,8,8,165.0,3619.0,235.0,1.4242424242424243,Mountains flat finish,Mountain,0.39306547088532384,38.997,Sprint of 8 riders,Small group sprint,846.0
+Vuelta,2023,9,9,184.5,3041.0,162.0,0.8780487804878049,Mountains uphill finish,Hilly_Difficult,0.6423941197691196,41.155,5.5 km solo,Solo,846.0
+Vuelta,2023,11,11,163.2,2203.0,112.0,0.6862745098039216,Hills uphill finish,Hilly_Difficult,0.5804315476190474,46.788,0.15 km solo,Solo,846.0
+Vuelta,2023,12,12,150.6,865.0,11.0,0.07304116865869854,Flat,Flat,0.846062765418706,44.385,Sprint of large group,Large group sprint,846.0
+Vuelta,2023,13,13,134.7,4266.0,400.0,2.9695619896065333,Mountains uphill finish,High_Mountain,0.6772601853266309,34.962,7.7 km solo,Solo,846.0
+Vuelta,2023,14,14,156.2,4531.0,406.0,2.5992317541613317,Mountains uphill finish,Mountain,0.5714503490005827,36.951,3.9 km solo,Solo,846.0
+Vuelta,2023,15,15,158.3,2494.0,111.0,0.7012002526847757,Hills flat finish,Hilly_Difficult,0.497830357142857,45.028,Sprint of 3 riders,Small group sprint,846.0
+Vuelta,2023,16,16,120.1,2122.0,153.0,1.2739383846794339,Hills uphill finish,Medium_Mountain,0.2694422258297259,45.497,3.9 km solo,Solo,846.0
+Vuelta,2023,17,17,124.4,3269.0,464.0,3.729903536977492,Mountains uphill finish,Hilly_Difficult,0.5139896284271284,38.095,Other,Unknown type,846.0
+Vuelta,2023,18,18,178.9,4630.0,422.0,2.358859698155394,Mountains uphill finish,Mountain,0.4731523176578325,37.321,29 km solo,Solo,846.0
+Vuelta,2023,19,19,177.1,919.0,8.0,0.04517221908526257,Flat,Flat,0.8035236690983595,47.833,Sprint of large group,Large group sprint,846.0
+Vuelta,2023,20,20,207.8,4361.0,186.0,0.8950914340712223,Hills flat finish,Mountain,0.47177910977910964,41.632,Sprint of small group,Small group sprint,846.0
+Vuelta,2023,21,21,101.5,878.0,12.0,0.11822660098522167,Flat,Flat,0.6582402389277391,42.228,Sprint of small group,Small group sprint,846.0
+Giro,2010,2,2,209.0,684.0,3.0,0.014354066985645933,Flat,Flat,0.7832822175781736,42.255,Sprint of large group,Large group sprint,878.0
+Giro,2010,3,3,224.0,322.0,1.0,0.004464285714285714,Flat,Flat,0.8982366818230788,44.79,Sprint of large group,Large group sprint,878.0
+Giro,2010,5,5,168.0,1067.0,40.0,0.23809523809523808,Hills flat finish,Hilly,0.38611390692640696,44.61,Sprint of 127 riders,Small group sprint,878.0
+Giro,2010,6,6,172.0,2420.0,115.0,0.6686046511627907,Hills flat finish,Hilly_Difficult,0.6458095238095237,39.042,11 km solo,Solo,878.0
+Giro,2010,7,7,220.0,2373.0,141.0,0.6409090909090909,Hills flat finish,Hilly_Difficult,0.4973904652424008,42.09,Sprint of small group,Small group sprint,878.0
+Giro,2010,8,8,189.0,3424.0,246.0,1.3015873015873016,Mountains uphill finish,Medium_Mountain,0.5065843795093794,38.996,6 km solo,Solo,878.0
+Giro,2010,9,9,188.0,1018.0,8.0,0.0425531914893617,Hills uphill finish,Flat,0.7935747601641567,45.432,Sprint of large group,Large group sprint,878.0
+Giro,2010,10,10,220.0,2292.0,43.0,0.19545454545454546,Hills flat finish,Rolling,0.45145978286419464,37.797,Sprint of large group,Large group sprint,878.0
+Giro,2010,11,11,262.0,4024.0,135.0,0.5152671755725191,Hills uphill finish,Mountain,0.4739489330114328,40.465,0.8 km solo,Solo,878.0
+Giro,2010,12,12,206.0,1651.0,61.0,0.2961165048543689,Hills flat finish,Hilly,0.72652048992674,39.135,Sprint of 50 riders,Small group sprint,878.0
+Giro,2010,13,13,223.0,2036.0,97.0,0.4349775784753363,Hills flat finish,Hilly_Difficult,0.4057681585957901,40.892,Sprint of 57 riders,Small group sprint,878.0
+Giro,2010,14,14,205.0,2214.0,191.0,0.9317073170731708,Mountains flat finish,Hilly_Difficult,0.5207487373737372,41.296,30 km solo,Solo,878.0
+Giro,2010,15,15,218.0,3915.0,441.0,2.022935779816514,Mountains uphill finish,Mountain,0.7093774489399495,34.244,3.5 km solo,Solo,878.0
+Giro,2010,17,17,173.0,2871.0,167.0,0.9653179190751445,Mountains uphill finish,Medium_Mountain,0.45410335497835475,38.542,3 km solo,Solo,878.0
+Giro,2010,18,18,143.0,1047.0,22.0,0.15384615384615385,Hills flat finish,Rolling,0.409168693181174,44.004,Sprint of large group,Large group sprint,878.0
+Giro,2010,19,19,195.0,4641.0,388.0,1.9897435897435898,Mountains uphill finish,Mountain,0.5435460850424088,35.773,Sprint of small group,Small group sprint,878.0
+Giro,2010,20,20,178.0,4849.0,324.0,1.8202247191011236,Mountains uphill finish,High_Mountain,0.5898983205369619,40.032,26 km solo,Solo,878.0
+Giro,2011,2,2,244.0,944.0,26.0,0.10655737704918032,Flat,Flat,0.7450101289641731,42.353,Sprint of large group,Large group sprint,891.0
+Giro,2011,3,3,173.0,2009.0,89.0,0.5144508670520231,Hills flat finish,Hilly_Difficult,0.5389950883699735,43.681,Sprint of 109 riders,Small group sprint,891.0
+Giro,2011,4,4,216.0,2176.0,91.0,0.4212962962962963,Hills flat finish,Rolling,0.46527281248649205,,,,891.0
+Giro,2011,5,5,191.0,2723.0,121.0,0.6335078534031413,Hills uphill finish,Hilly_Difficult,0.722169045469065,38.872,4 km solo,Solo,891.0
+Giro,2011,6,6,216.0,3121.0,112.0,0.5185185185185185,Hills uphill finish,Hilly_Difficult,0.6004219227826819,41.058,Sprint of large group,Large group sprint,891.0
+Giro,2011,7,7,110.0,2333.0,173.0,1.5727272727272728,Mountains uphill finish,Hilly,0.3966801323676323,37.761,7.2 km solo,Solo,891.0
+Giro,2011,8,8,217.0,2082.0,45.0,0.2073732718894009,Hills uphill finish,Rolling,0.5471280647634547,43.436,Sprint à deux,Sprint à deux,891.0
+Giro,2011,9,9,169.0,4091.0,264.0,1.5621301775147929,Mountains uphill finish,Mountain,0.5927785578392197,34.474,1.6 km solo,Solo,891.0
+Giro,2011,10,10,159.0,1207.0,15.0,0.09433962264150944,Hills uphill finish,Flat,0.8447449551652341,39.615,Sprint of large group,Large group sprint,891.0
+Giro,2011,11,11,144.0,2612.0,140.0,0.9722222222222222,Hills uphill finish,Medium_Mountain,0.7971660353535353,40.528,Sprint of large group,Large group sprint,891.0
+Giro,2011,12,12,184.0,488.0,5.0,0.02717391304347826,Flat,Flat,0.7891257694511371,42.888,Sprint of large group,Large group sprint,891.0
+Giro,2011,13,13,167.0,4208.0,352.0,2.1077844311377247,Mountains uphill finish,Mountain,0.5410449863603891,35.047,Sprint à deux,Sprint à deux,891.0
+Giro,2011,14,14,172.0,4170.0,413.0,2.4011627906976742,Mountains uphill finish,Mountain,0.5918384652520684,33.9,5.2 km solo,Solo,891.0
+Giro,2011,15,15,229.0,6939.0,474.0,2.069868995633188,Mountains uphill finish,High_Mountain,0.8592180753328199,30.722,5.7 km solo,Solo,891.0
+Giro,2011,17,17,230.0,3852.0,158.0,0.6869565217391305,Hills flat finish,Medium_Mountain,0.7870994047619049,41.59,Sprint of 36 riders,Small group sprint,891.0
+Giro,2011,18,18,151.0,2094.0,129.0,0.8543046357615894,Hills flat finish,Hilly_Difficult,0.539064484126984,45.157,Sprint of 65 riders,Small group sprint,891.0
+Giro,2011,19,19,209.0,3018.0,213.0,1.0191387559808613,Mountains uphill finish,Hilly_Difficult,0.46327355072463755,38.413,Sprint à deux,Sprint à deux,891.0
+Giro,2011,20,20,242.0,3512.0,330.0,1.3636363636363635,Mountains uphill finish,Mountain,0.5123878274503277,38.509,41 km solo,Solo,891.0
+Giro,2012,2,2,206.0,671.0,1.0,0.0048543689320388345,Flat,Flat,0.7832822175781736,42.156,Sprint of large group,Large group sprint,886.0
+Giro,2012,3,3,190.0,1184.0,10.0,0.05263157894736842,Flat,Flat,0.8106878554022517,43.698,Sprint of large group,Large group sprint,886.0
+Giro,2012,5,5,209.0,842.0,35.0,0.1674641148325359,Flat,Rolling,0.3212173382173383,44.272,Sprint of large group,Large group sprint,886.0
+Giro,2012,6,6,210.0,3661.0,171.0,0.8142857142857143,Hills flat finish,Medium_Mountain,0.8163107142857146,37.223,34.8 km solo,Solo,886.0
+Giro,2012,7,7,205.0,3855.0,176.0,0.8585365853658536,Hills uphill finish,Medium_Mountain,0.670870238095238,35.038,Sprint à deux,Sprint à deux,886.0
+Giro,2012,8,8,229.0,4097.0,209.0,0.9126637554585153,Hills flat finish,Mountain,0.49197923604173566,37.532,6.8 km solo,Solo,886.0
+Giro,2012,9,9,166.0,1298.0,30.0,0.18072289156626506,Flat,Hilly,0.34099938986452133,45.428,Sprint of large group,Large group sprint,886.0
+Giro,2012,10,10,186.0,2424.0,87.0,0.46774193548387094,Hills uphill finish,Hilly_Difficult,0.760583669117167,42.1,Sprint of large group,Large group sprint,886.0
+Giro,2012,11,11,255.0,2167.0,58.0,0.22745098039215686,Hills flat finish,Rolling,0.5272192059372259,37.401,Sprint of large group,Large group sprint,886.0
+Giro,2012,12,12,155.0,2665.0,170.0,1.096774193548387,Hills flat finish,Medium_Mountain,0.6951084054834052,38.926,1.5 km solo,Solo,886.0
+Giro,2012,13,13,121.0,1740.0,65.0,0.5371900826446281,Flat,Rolling,0.5986807269119767,39.86,Sprint of large group,Large group sprint,886.0
+Giro,2012,14,14,206.0,3452.0,302.0,1.4660194174757282,Mountains uphill finish,Mountain,0.520337842712843,37.05,Sprint of small group,Small group sprint,886.0
+Giro,2012,15,15,169.0,4075.0,324.0,1.9171597633136095,Mountains uphill finish,Mountain,0.6002273541409573,32.139,Sprint à deux,Sprint à deux,886.0
+Giro,2012,16,16,173.0,2579.0,104.0,0.6011560693641619,Hills flat finish,Hilly_Difficult,0.6087420544453824,42.893,3.7 km solo,Solo,886.0
+Giro,2012,17,17,186.0,5317.0,389.0,2.0913978494623655,Mountains flat finish,High_Mountain,0.902384344521148,34.372,Sprint of small group,Small group sprint,886.0
+Giro,2012,18,18,149.0,1009.0,20.0,0.1342281879194631,Flat,Flat,0.8394992266290642,49.429,Sprint of large group,Large group sprint,886.0
+Giro,2012,19,19,198.0,5807.0,487.0,2.45959595959596,Mountains uphill finish,High_Mountain,0.9163522859289873,31.424,2.8 km solo,Solo,886.0
+Giro,2012,20,20,219.0,6068.0,463.0,2.1141552511415527,Mountains uphill finish,High_Mountain,0.6474290722607288,31.687,12.8 km solo,Solo,886.0
+Giro,2013,1,1,130.0,1114.0,15.0,0.11538461538461539,Flat,Flat,0.6290758110353699,43.66,Sprint of 127 riders,Small group sprint,930.0
+Giro,2013,3,3,222.0,3908.0,172.0,0.7747747747747747,Hills flat finish,Mountain,0.41370905483405485,38.74,6.6 km solo,Solo,930.0
+Giro,2013,4,4,246.0,3519.0,191.0,0.7764227642276422,Hills flat finish,Medium_Mountain,0.8461179625929626,39.43,Sprint of large group,Large group sprint,930.0
+Giro,2013,5,5,203.0,1490.0,71.0,0.3497536945812808,Hills flat finish,Hilly,0.6900026327838826,43.84,Sprint of large group,Large group sprint,930.0
+Giro,2013,6,6,169.0,550.0,0.0,0.0,Flat,Flat,0.8070703463203464,42.96,Sprint of large group,Large group sprint,930.0
+Giro,2013,7,7,177.0,3115.0,178.0,1.0056497175141244,Hills flat finish,Medium_Mountain,0.6636845238095238,38.5,20 km solo,Solo,930.0
+Giro,2013,9,9,170.0,3032.0,154.0,0.9058823529411765,Hills flat finish,Medium_Mountain,0.7752045454545455,37.57,64.5 km solo,Solo,930.0
+Giro,2013,10,10,167.0,3678.0,318.0,1.904191616766467,Mountains uphill finish,Medium_Mountain,0.3953714826839829,36.08,7.5 km solo,Solo,930.0
+Giro,2013,11,11,182.0,2824.0,150.0,0.8241758241758241,Hills uphill finish,Hilly_Difficult,0.7168501984126988,41.48,5.1 km solo,Solo,930.0
+Giro,2013,12,12,134.0,1064.0,27.0,0.20149253731343283,Flat,Rolling,0.32211378205128205,44.23,Sprint of large group,Large group sprint,930.0
+Giro,2013,13,13,254.0,1897.0,88.0,0.3464566929133858,Flat,Hilly,0.7268862634335035,41.2,Sprint of large group,Large group sprint,930.0
+Giro,2013,14,14,181.0,2952.0,256.0,1.4143646408839778,Mountains uphill finish,Mountain,0.3188272005772005,38.39,Sprint à deux,Sprint à deux,930.0
+Giro,2013,15,15,149.0,4069.0,348.0,2.335570469798658,Mountains uphill finish,Mountain,0.5883377298333762,31.84,23.8 km solo,Solo,930.0
+Giro,2013,16,16,238.0,2803.0,102.0,0.42857142857142855,Hills flat finish,Hilly,0.46707887447170265,40.48,Sprint of small group,Small group sprint,930.0
+Giro,2013,17,17,214.0,887.0,65.0,0.3037383177570093,Hills flat finish,Hilly,0.4356856684981686,40.69,17.2 km solo,Solo,930.0
+Giro,2013,19,19,160.0,4335.0,347.0,2.16875,Mountains uphill finish,Mountain,0.6761370057316267,,,,930.0
+Giro,2013,20,20,210.0,3663.0,272.0,1.2952380952380953,Mountains uphill finish,Medium_Mountain,0.43853567821067835,38.45,2.4 km solo,Solo,930.0
+Giro,2013,21,21,197.0,671.0,5.0,0.025380710659898477,Flat,Flat,0.7870322175781737,35.8,Sprint of large group,Large group sprint,930.0
+Giro,2014,2,2,219.0,1349.0,11.0,0.0502283105022831,Flat,Flat,0.7689968973127838,41.95,Sprint of large group,Large group sprint,892.0
+Giro,2014,3,3,187.0,1243.0,8.0,0.0427807486631016,Flat,Flat,0.8140211887355849,41.75,Sprint of large group,Large group sprint,892.0
+Giro,2014,4,4,112.0,309.0,1.0,0.008928571428571428,Flat,Flat,0.8164107142857142,47.29,Sprint of large group,Large group sprint,892.0
+Giro,2014,5,5,203.0,2413.0,103.0,0.5073891625615764,Hills uphill finish,Hilly_Difficult,0.8989501712916446,38.96,Sprint of large group,Large group sprint,892.0
+Giro,2014,6,6,257.0,1997.0,84.0,0.32684824902723736,Hills uphill finish,Hilly,0.74167793010017,38.84,Sprint of 23 riders,Small group sprint,892.0
+Giro,2014,7,7,211.0,2645.0,74.0,0.35071090047393366,Hills flat finish,Rolling,0.40549953042164316,40.05,Sprint of large group,Large group sprint,892.0
+Giro,2014,8,8,179.0,3515.0,282.0,1.5754189944134078,Mountains uphill finish,Medium_Mountain,0.4061704725829728,37.32,Sprint à deux,Sprint à deux,892.0
+Giro,2014,9,9,172.0,2409.0,199.0,1.1569767441860466,Mountains uphill finish,Medium_Mountain,0.36814821428571415,38.82,Sprint à deux,Sprint à deux,892.0
+Giro,2014,10,10,173.0,403.0,9.0,0.05202312138728324,Flat,Flat,0.8234107142857142,43.03,Sprint of large group,Large group sprint,892.0
+Giro,2014,11,11,249.0,3435.0,128.0,0.5140562248995983,Hills flat finish,Medium_Mountain,0.586953921078921,42.92,21.4 km solo,Solo,892.0
+Giro,2014,13,13,157.0,780.0,15.0,0.09554140127388536,Flat,Flat,0.8353670523233215,43.34,Sprint of 96 riders,Small group sprint,892.0
+Giro,2014,14,14,164.0,3691.0,284.0,1.7317073170731707,Mountains uphill finish,Mountain,0.3906170581869111,35.82,Sprint of small group,Small group sprint,892.0
+Giro,2014,15,15,225.0,2344.0,267.0,1.1866666666666668,Mountains uphill finish,Hilly,0.38044209482038416,40.53,2.2 km solo,Solo,892.0
+Giro,2014,16,16,139.0,4545.0,347.0,2.4964028776978417,Mountains uphill finish,High_Mountain,0.6763564917979374,29.51,5.3 km solo,Solo,892.0
+Giro,2014,17,17,208.0,1823.0,64.0,0.3076923076923077,Flat,Rolling,0.4126604225023341,44.86,Sprint of 19 riders,Small group sprint,892.0
+Giro,2014,18,18,171.0,4295.0,379.0,2.216374269005848,Mountains uphill finish,Mountain,0.5162760450333983,35.4,3.9 km solo,Solo,892.0
+Giro,2014,20,20,167.0,4150.0,480.0,2.874251497005988,Mountains uphill finish,Mountain,0.5692134646212588,35.54,2.8 km solo,Solo,892.0
+Giro,2014,21,21,172.0,1092.0,33.0,0.19186046511627908,Flat,Medium_Mountain,0.3515499522407415,39.1,Sprint of large group,Large group sprint,892.0
+Giro,2015,2,2,177.0,1868.0,58.0,0.327683615819209,Hills flat finish,Rolling,0.4445287698412697,41.93,Sprint of large group,Large group sprint,861.0
+Giro,2015,3,3,136.0,2797.0,117.0,0.8602941176470589,Mountains flat finish,Medium_Mountain,0.7540408549783553,38.15,Sprint of large group,Large group sprint,861.0
+Giro,2015,4,4,150.0,3050.0,163.0,1.0866666666666667,Hills flat finish,Medium_Mountain,0.623445256132756,39.48,14.1 km solo,Solo,861.0
+Giro,2015,5,5,152.0,3066.0,202.0,1.3289473684210527,Mountains uphill finish,Medium_Mountain,0.5261319805194805,36.58,10.7 km solo,Solo,861.0
+Giro,2015,6,6,183.0,1625.0,41.0,0.22404371584699453,Hills flat finish,Rolling,0.47254166666666636,42.28,Sprint of large group,Large group sprint,861.0
+Giro,2015,7,7,264.0,2873.0,112.0,0.42424242424242425,Hills uphill finish,Hilly,0.7182908842756243,35.81,Sprint of large group,Large group sprint,861.0
+Giro,2015,8,8,186.0,3842.0,253.0,1.3602150537634408,Mountains uphill finish,Mountain,0.3941961718836719,38.28,3.4 km solo,Solo,861.0
+Giro,2015,9,9,224.0,4264.0,170.0,0.7589285714285714,Mountains flat finish,Mountain,0.4564695859695859,38.34,4 km solo,Solo,861.0
+Giro,2015,10,10,200.0,841.0,10.0,0.05,Flat,Flat,0.8465512991910055,45.07,Sprint of 55 riders,Small group sprint,861.0
+Giro,2015,11,11,153.0,2949.0,136.0,0.8888888888888888,Hills flat finish,Medium_Mountain,0.7530408549783552,39.04,25 km solo,Solo,861.0
+Giro,2015,12,12,190.0,1288.0,111.0,0.5842105263157895,Hills uphill finish,Hilly_Difficult,0.3981732456140351,43.37,Sprint of large group,Large group sprint,861.0
+Giro,2015,13,13,147.0,131.0,0.0,0.0,Flat,Flat,0.9191279761904763,48.16,Sprint of large group,Large group sprint,861.0
+Giro,2015,15,15,165.0,4634.0,329.0,1.993939393939394,Mountains uphill finish,Mountain,0.7177533658721742,37.7,Sprint of small group,Small group sprint,861.0
+Giro,2015,16,16,177.0,4951.0,371.0,2.096045197740113,Mountains uphill finish,High_Mountain,0.590428082441724,35.07,4 km solo,Solo,861.0
+Giro,2015,17,17,134.0,1857.0,101.0,0.753731343283582,Hills flat finish,Hilly_Difficult,0.38135119047619065,42.8,Sprint of large group,Large group sprint,861.0
+Giro,2015,18,18,170.0,2195.0,172.0,1.011764705882353,Mountains flat finish,Hilly_Difficult,0.43275198412698423,41.76,19.3 km solo,Solo,861.0
+Giro,2015,19,19,236.0,5113.0,367.0,1.555084745762712,Mountains uphill finish,Mountain,0.547158168220668,36.85,6 km solo,Solo,861.0
+Giro,2015,20,20,196.0,3355.0,319.0,1.6275510204081634,Mountains uphill finish,Mountain,0.4857644300144303,37.64,1.6 km solo,Solo,861.0
+Giro,2015,21,21,185.0,142.0,0.0,0.0,Flat,Flat,0.9322418408797085,42.92,Sprint à deux,Sprint à deux,861.0
+Giro,2016,2,2,190.0,732.0,15.0,0.07894736842105263,Flat,Flat,0.7238517705741969,40.93,Sprint of large group,Large group sprint,933.0
+Giro,2016,3,3,190.0,691.0,6.0,0.031578947368421054,Flat,Flat,0.7871326147300411,43.22,Sprint of large group,Large group sprint,933.0
+Giro,2016,4,4,200.0,2418.0,121.0,0.605,Hills flat finish,Hilly_Difficult,0.9014718888954185,41.83,9 km solo,Solo,933.0
+Giro,2016,5,5,233.0,3459.0,105.0,0.45064377682403434,Hills uphill finish,Medium_Mountain,0.5548806166056165,41.05,Sprint of large group,Large group sprint,933.0
+Giro,2016,6,6,157.0,3749.0,233.0,1.484076433121019,Mountains uphill finish,Medium_Mountain,0.3858853715728717,33.63,15 km solo,Solo,933.0
+Giro,2016,7,7,211.0,2301.0,67.0,0.3175355450236967,Hills flat finish,Rolling,0.49725849065589445,42.04,Sprint of large group,Large group sprint,933.0
+Giro,2016,8,8,186.0,1985.0,112.0,0.6021505376344086,Hills uphill finish,Hilly_Difficult,0.5843360389610388,43.92,24.6 km solo,Solo,933.0
+Giro,2016,10,10,219.0,4618.0,261.0,1.1917808219178083,Mountains uphill finish,Mountain,0.4101780611137228,38.14,14.5 km solo,Solo,933.0
+Giro,2016,11,11,227.0,777.0,61.0,0.2687224669603524,Hills flat finish,Hilly,0.3487060662039111,45.93,Sprint of 27 riders,Small group sprint,933.0
+Giro,2016,12,12,182.0,122.0,0.0,0.0,Flat,Flat,0.933075174213042,42.66,Sprint of large group,Large group sprint,933.0
+Giro,2016,13,13,170.0,3669.0,250.0,1.4705882352941178,Mountains flat finish,Medium_Mountain,0.4066353715728717,37.53,33.4 km solo,Solo,933.0
+Giro,2016,14,14,210.0,6001.0,361.0,1.7190476190476192,Mountains flat finish,High_Mountain,0.8185153891301341,34.4,Sprint of small group,Small group sprint,933.0
+Giro,2016,16,16,132.0,2737.0,236.0,1.7878787878787878,Mountains flat finish,Medium_Mountain,0.5496548971861474,44.27,Sprint à deux,Sprint à deux,933.0
+Giro,2016,17,17,196.0,1567.0,35.0,0.17857142857142858,Hills flat finish,Hilly,0.6515761568475387,43.32,0.4 km solo,Solo,933.0
+Giro,2016,18,18,244.0,1637.0,139.0,0.569672131147541,Hills flat finish,Hilly,0.42015059349763284,44.97,Sprint of small group,Small group sprint,933.0
+Giro,2016,19,19,162.0,3905.0,315.0,1.9444444444444444,Mountains uphill finish,Mountain,0.7211193465439791,37.4,5.1 km solo,Solo,933.0
+Giro,2016,20,20,134.0,4500.0,344.0,2.5671641791044775,Mountains uphill finish,High_Mountain,0.48104962602009643,30.6,14.1 km solo,Solo,933.0
+Giro,2016,21,21,163.0,879.0,32.0,0.19631901840490798,Flat,Rolling,0.2985173992673992,42.84,Sprint of large group,Large group sprint,933.0
+Giro,2017,1,1,206.0,2176.0,51.0,0.24757281553398058,Hills flat finish,Rolling,0.44046002567693743,39.42,0.7 km solo,Solo,881.0
+Giro,2017,2,2,221.0,3518.0,91.0,0.4117647058823529,Hills flat finish,Medium_Mountain,0.42764232295482296,36.3,Sprint of large group,Large group sprint,881.0
+Giro,2017,3,3,148.0,1441.0,41.0,0.27702702702702703,Flat,Rolling,0.8199375000000001,42.99,Sprint of 47 riders,Small group sprint,881.0
+Giro,2017,4,4,181.0,4170.0,298.0,1.6464088397790055,Mountains uphill finish,Mountain,0.5610930419662039,36.69,16.6 km solo,Solo,881.0
+Giro,2017,5,5,159.0,1780.0,43.0,0.27044025157232704,Hills flat finish,Rolling,0.5767516186299081,43.33,Sprint of large group,Large group sprint,881.0
+Giro,2017,6,6,217.0,2247.0,72.0,0.3317972350230415,Hills flat finish,Rolling,0.6208811311415211,43.69,Sprint of 25 riders,Small group sprint,881.0
+Giro,2017,7,7,224.0,1340.0,27.0,0.12053571428571429,Hills flat finish,Flat,0.7306973184194548,40.08,Sprint of large group,Large group sprint,881.0
+Giro,2017,8,8,189.0,2127.0,110.0,0.582010582010582,Hills flat finish,Hilly_Difficult,0.6833943511198944,42.8,0.9 km solo,Solo,881.0
+Giro,2017,9,9,152.0,2921.0,308.0,2.026315789473684,Mountains uphill finish,Medium_Mountain,0.5430767947330446,40.56,4.6 km solo,Solo,881.0
+Giro,2017,11,11,161.0,3912.0,183.0,1.1366459627329193,Mountains flat finish,Mountain,0.5566988973036768,36.7,Sprint of 16 riders,Small group sprint,881.0
+Giro,2017,12,12,229.0,2407.0,50.0,0.2183406113537118,Hills flat finish,Rolling,0.5248896768098993,43.08,Sprint of large group,Large group sprint,881.0
+Giro,2017,13,13,167.0,399.0,0.0,0.0,Flat,Flat,0.8169334415584416,44.0,Sprint of large group,Large group sprint,881.0
+Giro,2017,14,14,131.0,1106.0,129.0,0.9847328244274809,Mountains uphill finish,Medium_Mountain,0.5167291666666667,43.05,Sprint à deux,Sprint à deux,881.0
+Giro,2017,15,15,199.0,2255.0,129.0,0.6482412060301508,Hills flat finish,Hilly_Difficult,0.7349895892151327,46.49,Sprint of 12 riders,Small group sprint,881.0
+Giro,2017,16,16,222.0,5845.0,329.0,1.481981981981982,Mountains flat finish,High_Mountain,0.42378525641025655,34.65,Sprint à deux,Sprint à deux,881.0
+Giro,2017,17,17,219.0,4576.0,166.0,0.7579908675799086,Mountains flat finish,Mountain,0.45611244311244303,38.32,7.8 km solo,Solo,881.0
+Giro,2017,18,18,137.0,3961.0,281.0,2.051094890510949,Mountains uphill finish,High_Mountain,0.6563622102119584,35.12,Sprint à deux,Sprint à deux,881.0
+Giro,2017,19,19,191.0,3551.0,250.0,1.3089005235602094,Mountains uphill finish,Medium_Mountain,0.513905808080808,39.11,10.8 km solo,Solo,881.0
+Giro,2017,20,20,190.0,3721.0,227.0,1.194736842105263,Mountains flat finish,Medium_Mountain,0.5674186147186145,38.26,Sprint of small group,Small group sprint,881.0
+Giro,2018,2,2,167.0,988.0,9.0,0.05389221556886228,Hills flat finish,Flat,0.8091983663373951,43.31,Sprint of large group,Large group sprint,838.0
+Giro,2018,3,3,229.0,1771.0,16.0,0.06986899563318777,Hills flat finish,Flat,0.7437283717207286,45.47,Sprint of large group,Large group sprint,838.0
+Giro,2018,4,4,202.0,3428.0,111.0,0.5495049504950495,Hills uphill finish,Medium_Mountain,0.8294773809523811,38.17,Sprint of large group,Large group sprint,838.0
+Giro,2018,5,5,153.0,2237.0,97.0,0.6339869281045751,Hills uphill finish,Hilly_Difficult,0.4798363095238094,37.23,Sprint of large group,Large group sprint,838.0
+Giro,2018,6,6,164.0,3307.0,241.0,1.4695121951219512,Mountains uphill finish,Mountain,0.40759126453611755,38.41,Sprint à deux,Sprint à deux,838.0
+Giro,2018,7,7,159.0,1023.0,29.0,0.18238993710691823,Flat,Rolling,0.35982875457875474,42.32,Sprint of large group,Large group sprint,838.0
+Giro,2018,8,8,209.0,3248.0,171.0,0.8181818181818182,Mountains uphill finish,Medium_Mountain,0.6306554625929625,40.25,2 km solo,Solo,838.0
+Giro,2018,9,9,225.0,4034.0,240.0,1.0666666666666667,Mountains uphill finish,Mountain,0.4334025419025416,38.11,Sprint of small group,Small group sprint,838.0
+Giro,2018,10,10,244.0,4133.0,118.0,0.48360655737704916,Hills flat finish,Mountain,0.4709943875568874,40.12,Sprint à deux,Sprint à deux,838.0
+Giro,2018,11,11,156.0,2027.0,95.0,0.6089743589743589,Hills uphill finish,Hilly_Difficult,0.5514404761904759,45.46,1.3 km solo,Solo,838.0
+Giro,2018,12,12,214.0,874.0,29.0,0.13551401869158877,Hills flat finish,Flat,0.819007608200623,44.34,Sprint of large group,Large group sprint,838.0
+Giro,2018,13,13,180.0,429.0,10.0,0.05555555555555555,Flat,Flat,0.824182348901099,45.68,Sprint of large group,Large group sprint,838.0
+Giro,2018,14,14,186.0,4477.0,473.0,2.543010752688172,Mountains uphill finish,Mountain,0.5551869718179662,34.28,4.2 km solo,Solo,838.0
+Giro,2018,15,15,176.0,4112.0,264.0,1.5,Mountains flat finish,Mountain,0.5728569308550928,37.99,17 km solo,Solo,838.0
+Giro,2018,17,17,155.0,2040.0,55.0,0.3548387096774194,Hills flat finish,Rolling,0.526343253968254,46.51,Sprint of large group,Large group sprint,838.0
+Giro,2018,18,18,196.0,2314.0,185.0,0.9438775510204082,Mountains uphill finish,Hilly_Difficult,0.5283823076792902,39.77,0.5 km solo,Solo,838.0
+Giro,2018,19,19,184.0,5216.0,313.0,1.701086956521739,Mountains uphill finish,High_Mountain,0.8946419827162864,35.34,80.2 km solo,Solo,838.0
+Giro,2018,20,20,214.0,4254.0,351.0,1.6401869158878504,Mountains uphill finish,Mountain,0.6688523074148077,37.35,32 km solo,Solo,838.0
+Giro,2018,21,21,115.0,897.0,20.0,0.17391304347826086,Flat,Rolling,0.46740270146520146,40.394,Sprint of large group,Large group sprint,838.0
+Giro,2019,2,2,205.0,2242.0,69.0,0.33658536585365856,Hills flat finish,Rolling,0.5559725570052583,43.201,Sprint of 95 riders,Small group sprint,896.0
+Giro,2019,3,3,220.0,1790.0,31.0,0.1409090909090909,Hills flat finish,Flat,0.677453820689115,40.827,Sprint of large group,Large group sprint,896.0
+Giro,2019,4,4,235.0,2995.0,80.0,0.3404255319148936,Hills uphill finish,Rolling,0.4523745597679983,39.354,0.5 km solo,Solo,896.0
+Giro,2019,5,5,140.0,2056.0,88.0,0.6285714285714286,Hills flat finish,Hilly_Difficult,0.4043839285714286,42.916,Sprint of large group,Large group sprint,896.0
+Giro,2019,6,6,238.0,2881.0,99.0,0.41596638655462187,Hills flat finish,Rolling,0.48434066252489044,41.389,Sprint à deux,Sprint à deux,896.0
+Giro,2019,7,7,185.0,2626.0,101.0,0.5459459459459459,Hills flat finish,Hilly_Difficult,0.8027661274419599,45.04,1.3 km solo,Solo,896.0
+Giro,2019,8,8,239.0,1998.0,75.0,0.3138075313807531,Hills flat finish,Rolling,0.6345465868896069,41.743,Sprint of large group,Large group sprint,896.0
+Giro,2019,10,10,145.0,160.0,1.0,0.006896551724137931,Flat,Flat,0.9166974206349207,40.256,Sprint of large group,Large group sprint,896.0
+Giro,2019,11,11,221.0,476.0,0.0,0.0,Flat,Flat,0.8463616818230788,41.773,Sprint of large group,Large group sprint,896.0
+Giro,2019,12,12,158.0,1918.0,131.0,0.8291139240506329,Mountains flat finish,Hilly_Difficult,0.4701770104895106,42.738,Sprint of small group,Small group sprint,896.0
+Giro,2019,13,13,196.0,5187.0,377.0,1.9234693877551021,Mountains uphill finish,High_Mountain,0.4470487221112222,35.139,5 km solo,Solo,896.0
+Giro,2019,14,14,131.0,4187.0,330.0,2.519083969465649,Mountains flat finish,High_Mountain,0.6673228412164929,32.428,28 km solo,Solo,896.0
+Giro,2019,15,15,232.0,3122.0,214.0,0.9224137931034483,Hills uphill finish,Hilly_Difficult,0.5378465357161756,39.971,Sprint à deux,Sprint à deux,896.0
+Giro,2019,16,16,194.0,5207.0,334.0,1.7216494845360826,Mountains flat finish,High_Mountain,0.47751995226995236,34.602,Sprint à deux,Sprint à deux,896.0
+Giro,2019,17,17,181.0,3482.0,221.0,1.2209944751381216,Mountains uphill finish,Medium_Mountain,0.49355551948051946,38.57,16 km solo,Solo,896.0
+Giro,2019,18,18,222.0,1478.0,20.0,0.09009009009009009,Hills flat finish,Flat,0.7007570513744084,44.99,Sprint of 56 riders,Small group sprint,896.0
+Giro,2019,19,19,151.0,3169.0,215.0,1.423841059602649,Mountains uphill finish,Medium_Mountain,0.4428222402597403,37.513,3 km solo,Solo,896.0
+Giro,2019,20,20,194.0,5754.0,371.0,1.9123711340206186,Mountains uphill finish,High_Mountain,0.9104196168468617,33.638,Sprint of small group,Small group sprint,896.0
+Giro,2020,2,2,149.0,2359.0,92.0,0.6174496644295302,Hills uphill finish,Hilly_Difficult,0.45731504329004324,43.62,Sprint of small group,Small group sprint,765.0
+Giro,2020,3,3,150.0,3516.0,293.0,1.9533333333333334,Mountains uphill finish,Mountain,0.3601207346574993,37.11,14 km solo,Solo,765.0
+Giro,2020,4,4,140.0,1791.0,45.0,0.32142857142857145,Mountains flat finish,Rolling,0.6016140873015874,41.54,Sprint of large group,Large group sprint,765.0
+Giro,2020,5,5,225.0,4705.0,264.0,1.1733333333333333,Mountains flat finish,Mountain,0.4072316325422943,37.57,17 km solo,Solo,765.0
+Giro,2020,6,6,188.0,2821.0,107.0,0.5691489361702128,Hills flat finish,Hilly_Difficult,0.7129009257211658,38.28,Sprint of large group,Large group sprint,765.0
+Giro,2020,7,7,143.0,450.0,5.0,0.03496503496503497,Flat,Flat,0.739785624098124,51.23,Sprint of large group,Large group sprint,765.0
+Giro,2020,8,8,200.0,2197.0,116.0,0.58,Hills flat finish,Hilly_Difficult,0.6896383987389422,41.36,18 km solo,Solo,765.0
+Giro,2020,9,9,208.0,4544.0,222.0,1.0673076923076923,Mountains uphill finish,Mountain,0.4151855505605505,36.56,0.1 km solo,Solo,765.0
+Giro,2020,10,10,177.0,2057.0,134.0,0.7570621468926554,Hills flat finish,Hilly_Difficult,0.6192791087234017,43.9,12 km solo,Solo,765.0
+Giro,2020,11,11,182.0,1197.0,50.0,0.27472527472527475,Hills flat finish,Hilly,0.5167686688311689,44.78,Sprint of large group,Large group sprint,765.0
+Giro,2020,12,12,204.0,3815.0,164.0,0.803921568627451,Hills flat finish,Medium_Mountain,0.7622511904761906,36.93,25 km solo,Solo,765.0
+Giro,2020,13,13,192.0,827.0,86.0,0.4479166666666667,Flat,Hilly,0.4273650793650795,43.92,Sprint of large group,Large group sprint,765.0
+Giro,2020,15,15,185.0,4515.0,347.0,1.8756756756756756,Mountains uphill finish,Mountain,0.5475831164342194,37.14,0.2 km solo,Solo,765.0
+Giro,2020,16,16,229.0,4056.0,238.0,1.039301310043668,Hills uphill finish,Mountain,0.45413567682317646,37.69,0.6 km solo,Solo,765.0
+Giro,2020,17,17,203.0,5650.0,316.0,1.5566502463054188,Mountains uphill finish,High_Mountain,0.6563846153846155,34.7,8 km solo,Solo,765.0
+Giro,2020,18,18,207.0,5848.0,400.0,1.932367149758454,Mountains flat finish,High_Mountain,0.8204090857113308,34.21,Sprint à deux,Sprint à deux,765.0
+Giro,2020,19,19,124.0,406.0,11.0,0.08870967741935484,Flat,Flat,0.6611914682539681,49.38,23 km solo,Solo,765.0
+Giro,2020,20,20,190.0,3716.0,262.0,1.3789473684210527,Mountains uphill finish,Medium_Mountain,0.4465514249639251,38.94,Sprint à deux,Sprint à deux,765.0
+Giro,2021,2,2,179.0,707.0,9.0,0.05027932960893855,Flat,Flat,0.8195541833574922,41.126,Sprint of large group,Large group sprint,885.0
+Giro,2021,3,3,190.0,1870.0,103.0,0.5421052631578948,Hills flat finish,Hilly_Difficult,0.556284181096681,43.597,8.6 km solo,Solo,885.0
+Giro,2021,4,4,187.0,3138.0,252.0,1.3475935828877006,Hills flat finish,Medium_Mountain,0.3726621031746033,37.571,2.5 km solo,Solo,885.0
+Giro,2021,5,5,177.0,363.0,0.0,0.0,Flat,Flat,0.8490781822344323,42.993,Sprint of large group,Large group sprint,885.0
+Giro,2021,6,6,160.0,3595.0,221.0,1.38125,Mountains uphill finish,Mountain,0.3919404708853238,37.229,3.3 km solo,Solo,885.0
+Giro,2021,7,7,181.0,1725.0,37.0,0.20441988950276244,Hills uphill finish,Rolling,0.5941725288600288,38.483,Sprint of large group,Large group sprint,885.0
+Giro,2021,8,8,170.0,3085.0,133.0,0.7823529411764706,Hills uphill finish,Medium_Mountain,0.8233541666666666,41.332,2.2 km solo,Solo,885.0
+Giro,2021,9,9,158.0,3503.0,196.0,1.240506329113924,Hills uphill finish,Medium_Mountain,0.4184222041847043,38.167,0.2 km solo,Solo,885.0
+Giro,2021,10,10,139.0,1460.0,60.0,0.4316546762589928,Hills flat finish,Rolling,0.36868055555555557,43.68,Sprint of large group,Large group sprint,885.0
+Giro,2021,11,11,162.0,2364.0,174.0,1.0740740740740742,Hills flat finish,Medium_Mountain,0.41716666666666674,40.179,Sprint à deux,Sprint à deux,885.0
+Giro,2021,12,12,212.0,4433.0,223.0,1.0518867924528301,Mountains flat finish,Mountain,0.42768555056055035,36.998,Sprint à deux,Sprint à deux,885.0
+Giro,2021,13,13,198.0,199.0,0.0,0.0,Flat,Flat,0.9311533484897455,42.08,Sprint of large group,Large group sprint,885.0
+Giro,2021,14,14,205.0,3580.0,341.0,1.6634146341463414,Mountains uphill finish,Mountain,0.5102922077922082,38.756,2.3 km solo,Solo,885.0
+Giro,2021,15,15,147.0,1682.0,106.0,0.7210884353741497,Hills flat finish,Medium_Mountain,0.44129761904761894,42.937,Sprint à deux,Sprint à deux,885.0
+Giro,2021,16,16,153.0,3942.0,295.0,1.9281045751633987,Mountains flat finish,Mountain,0.7138127989249315,34.947,21 km solo,Solo,885.0
+Giro,2021,17,17,193.0,3703.0,408.0,2.1139896373056994,Mountains uphill finish,Medium_Mountain,0.4424403138528139,39.303,10 km solo,Solo,885.0
+Giro,2021,18,18,231.0,1398.0,74.0,0.3203463203463203,Hills flat finish,Hilly,0.6113728705763605,44.04,6.5 km solo,Solo,885.0
+Giro,2021,19,19,166.0,2811.0,292.0,1.7590361445783131,Mountains uphill finish,Medium_Mountain,0.5194837662337661,41.002,5.5 km solo,Solo,885.0
+Giro,2021,20,20,164.0,3867.0,305.0,1.8597560975609757,Mountains uphill finish,Mountain,0.7053802592423919,36.732,2 km solo,Solo,885.0
+Giro,2022,1,1,195.0,1390.0,51.0,0.26153846153846155,Hills uphill finish,Hilly,0.7115495754245754,42.473,Sprint of large group,Large group sprint,817.0
+Giro,2022,3,3,201.0,1150.0,7.0,0.03482587064676617,Flat,Flat,0.789099363012289,40.654,Sprint of large group,Large group sprint,817.0
+Giro,2022,4,4,172.0,3626.0,251.0,1.4593023255813953,Mountains uphill finish,Medium_Mountain,0.4158020382395384,37.916,Sprint à deux,Sprint à deux,817.0
+Giro,2022,5,5,174.0,1968.0,31.0,0.1781609195402299,Hills flat finish,Rolling,0.35099650568729507,42.799,Sprint of large group,Large group sprint,817.0
+Giro,2022,6,6,192.0,1498.0,49.0,0.2552083333333333,Hills flat finish,Hilly,0.8242742778055278,38.076,Sprint of large group,Large group sprint,817.0
+Giro,2022,7,7,196.0,4730.0,246.0,1.2551020408163265,Mountains flat finish,Mountain,0.3860943909032144,37.632,Sprint of small group,Small group sprint,817.0
+Giro,2022,8,8,153.0,2243.0,123.0,0.803921568627451,Hills flat finish,Hilly_Difficult,0.4793710317460318,43.122,Sprint of small group,Small group sprint,817.0
+Giro,2022,9,9,191.0,5080.0,458.0,2.397905759162304,Mountains uphill finish,Mountain,0.4625396872327021,34.236,Sprint of small group,Small group sprint,817.0
+Giro,2022,10,10,196.0,1764.0,86.0,0.4387755102040816,Hills flat finish,Hilly_Difficult,0.5288663690476191,43.217,Sprint of small group,Small group sprint,817.0
+Giro,2022,11,11,203.0,369.0,0.0,0.0,Flat,Flat,0.8679033484897455,47.015,Sprint of large group,Large group sprint,817.0
+Giro,2022,12,12,204.0,2867.0,112.0,0.5490196078431373,Hills flat finish,Hilly_Difficult,0.7707851680569173,45.88,Sprint of small group,Small group sprint,817.0
+Giro,2022,13,13,150.0,1817.0,51.0,0.34,Hills flat finish,Rolling,0.5357591943874838,45.393,Sprint of large group,Large group sprint,817.0
+Giro,2022,14,14,147.0,3167.0,247.0,1.6802721088435375,Hills flat finish,Medium_Mountain,0.3961635101010102,39.422,4.6 km solo,Solo,817.0
+Giro,2022,15,15,177.0,4019.0,301.0,1.7005649717514124,Mountains uphill finish,Mountain,0.5915696160457192,38.245,18.8 km solo,Solo,817.0
+Giro,2022,16,16,202.0,5268.0,376.0,1.8613861386138615,Mountains flat finish,Mountain,0.4663943209568209,35.569,7.9 km solo,Solo,817.0
+Giro,2022,17,17,168.0,3950.0,347.0,2.0654761904761907,Mountains flat finish,Mountain,0.6055407504002708,37.656,8.2 km solo,Solo,817.0
+Giro,2022,18,18,156.0,1219.0,34.0,0.21794871794871795,Hills flat finish,Hilly,0.3274107142857142,46.486,Sprint of small group,Small group sprint,817.0
+Giro,2022,19,19,178.0,3489.0,262.0,1.4719101123595506,Mountains uphill finish,Medium_Mountain,0.4061704725829728,39.133,Sprint of small group,Small group sprint,817.0
+Giro,2022,20,20,168.0,4718.0,392.0,2.3333333333333335,Mountains uphill finish,High_Mountain,0.5016405624818936,35.175,53.7 km solo,Solo,817.0
+Giro,2023,2,2,202.0,1831.0,51.0,0.2524752475247525,Hills flat finish,Rolling,0.4091604225023341,41.059,Sprint of large group,Large group sprint,835.0
+Giro,2023,3,3,213.0,1777.0,92.0,0.431924882629108,Hills flat finish,Hilly_Difficult,0.5114576912853228,42.362,Sprint of large group,Large group sprint,835.0
+Giro,2023,4,4,175.0,3667.0,207.0,1.1828571428571428,Mountains flat finish,Medium_Mountain,0.4955469336219337,41.005,Sprint à deux,Sprint à deux,835.0
+Giro,2023,5,5,171.0,2529.0,77.0,0.4502923976608187,Hills flat finish,Hilly_Difficult,0.5307450896024264,37.955,Sprint of large group,Large group sprint,835.0
+Giro,2023,6,6,162.0,2581.0,92.0,0.5679012345679012,Hills flat finish,Hilly_Difficult,0.5133142947051227,43.248,Sprint of large group,Large group sprint,835.0
+Giro,2023,7,7,218.0,4143.0,253.0,1.1605504587155964,Mountains uphill finish,Mountain,0.47336428848928824,35.479,0.17 km solo,Solo,835.0
+Giro,2023,8,8,207.0,2790.0,180.0,0.8695652173913043,Hills flat finish,Hilly_Difficult,0.6586367528003397,43.671,50.2 km solo,Solo,835.0
+Giro,2023,10,10,196.0,3020.0,76.0,0.3877551020408163,Hills flat finish,Hilly_Difficult,0.40623270797829625,40.378,Sprint of 3 riders,Small group sprint,835.0
+Giro,2023,11,11,219.0,2430.0,60.0,0.273972602739726,Hills flat finish,Rolling,0.4380848268197306,42.52,Sprint of large group,Large group sprint,835.0
+Giro,2023,12,12,185.0,2348.0,112.0,0.6054054054054054,Hills flat finish,Hilly_Difficult,0.8180041666666669,42.993,Sprint of 3 riders,Small group sprint,835.0
+Giro,2023,13,13,74.6,2456.0,283.0,3.7935656836461127,Mountains uphill finish,Hilly,0.3746083846708846,32.827,0.2 km solo,Solo,835.0
+Giro,2023,14,14,194.0,2336.0,68.0,0.35051546391752575,Hills flat finish,Rolling,0.41110174780723974,41.946,Sprint of 6 riders,Small group sprint,835.0
+Giro,2023,15,15,195.0,4040.0,202.0,1.035897435897436,Mountains flat finish,Mountain,0.3890631898738517,37.303,Sprint of 3 riders,Small group sprint,835.0
+Giro,2023,16,16,203.0,5852.0,456.0,2.2463054187192117,Mountains uphill finish,High_Mountain,0.8354993634891084,34.46,Sprint à deux,Sprint à deux,835.0
+Giro,2023,17,17,197.0,523.0,5.0,0.025380710659898477,Flat,Flat,0.797828943727841,44.414,Sprint of large group,Large group sprint,835.0
+Giro,2023,18,18,161.0,4153.0,362.0,2.248447204968944,Mountains uphill finish,Mountain,0.7174473518397672,36.425,Sprint à deux,Sprint à deux,835.0
+Giro,2023,19,19,183.0,5423.0,478.0,2.612021857923497,Mountains uphill finish,High_Mountain,0.9184385864748463,33.464,1.5 km solo,Solo,835.0
+Giro,2023,21,21,126.0,692.0,21.0,0.16666666666666666,Flat,Rolling,0.5750613553113555,44.884,Sprint of large group,Large group sprint,835.0
+Giro,2024,1,1,140.0,1851.0,145.0,1.0357142857142858,Hills flat finish,Medium_Mountain,0.43205357142857137,43.214,Sprint of 3 riders,Small group sprint,721.0
+Giro,2024,2,2,161.0,2310.0,222.0,1.3788819875776397,Mountains uphill finish,Medium_Mountain,0.3755294011544009,41.223,4.3 km solo,Solo,721.0
+Giro,2024,3,3,166.3,865.0,35.0,0.21046301864101022,Flat,Hilly,0.2846793831168832,42.535,Sprint of large group,Large group sprint,721.0
+Giro,2024,4,4,190.0,2151.0,44.0,0.23157894736842105,Hills flat finish,Rolling,0.3858616474899368,44.523,Sprint of large group,Large group sprint,721.0
+Giro,2024,5,5,178.0,2197.0,59.0,0.33146067415730335,Hills flat finish,Rolling,0.523811142439432,44.503,Sprint of 3 riders,Small group sprint,721.0
+Giro,2024,6,6,180.0,2118.0,102.0,0.5666666666666667,Flat,Hilly_Difficult,0.7062473626916561,44.788,Sprint of 3 riders,Small group sprint,721.0
+Giro,2024,8,8,152.0,3658.0,265.0,1.743421052631579,Mountains uphill finish,Medium_Mountain,0.39511530483405494,37.644,Sprint of 7 riders,Small group sprint,721.0
+Giro,2024,9,9,214.0,1574.0,77.0,0.3598130841121495,Hills flat finish,Hilly,0.6971532738095237,45.153,Sprint of large group,Large group sprint,721.0
+Giro,2024,10,10,142.0,3029.0,267.0,1.880281690140845,Mountains uphill finish,Medium_Mountain,0.5219469246031746,38.064,2.5 km solo,Solo,721.0
+Giro,2024,11,11,207.0,1830.0,36.0,0.17391304347826086,Flat,Hilly,0.38675324018087165,47.171,Sprint of large group,Large group sprint,721.0
+Giro,2024,12,12,193.0,2162.0,95.0,0.49222797927461137,Hills flat finish,Hilly_Difficult,0.6972104842416011,46.744,11.5 km solo,Solo,721.0
+Giro,2024,13,13,179.0,202.0,0.0,0.0,Flat,Flat,0.9284740155677658,44.371,Sprint of large group,Large group sprint,721.0
+Giro,2024,15,15,222.0,5724.0,397.0,1.7882882882882882,Mountains uphill finish,Mountain,0.4383139638139638,35.834,1.9 km solo,Solo,721.0
+Giro,2024,16,16,118.4,2151.0,234.0,1.9763513513513513,Mountains uphill finish,Medium_Mountain,0.2521527326839828,41.88,0.65 km solo,Solo,721.0
+Giro,2024,17,17,159.0,4087.0,341.0,2.1446540880503147,Mountains uphill finish,Mountain,0.7174473518397672,35.484,34.3 km solo,Solo,721.0
+Giro,2024,18,18,178.0,873.0,18.0,0.10112359550561797,Flat,Flat,0.772648569417339,47.312,Sprint of large group,Large group sprint,721.0
+Giro,2024,19,19,157.0,3251.0,258.0,1.643312101910828,Hills flat finish,Mountain,0.4406001029199558,40.765,28 km solo,Solo,721.0
+Giro,2024,20,20,184.0,4540.0,316.0,1.7173913043478262,Mountains flat finish,Mountain,0.5507081164342195,36.999,34.1 km solo,Solo,721.0
+Giro,2024,21,21,125.0,676.0,13.0,0.104,Flat,Flat,0.7988438440214755,43.647,Sprint of large group,Large group sprint,721.0
+TdF,2024,1,1,206.0,3821.0,176.0,0.8543689320388349,Mountains flat finish,Medium_Mountain,0.6953761904761904,40.213,Other,Unknown type,1723.0
+TdF,2024,2,2,199.2,1859.0,109.0,0.5471887550200804,Hills flat finish,Hilly_Difficult,0.6238094270925153,42.129,14.3 km solo,Solo,1723.0
+TdF,2024,3,3,230.8,1190.0,16.0,0.06932409012131716,Flat,Flat,0.7931956833586092,42.375,Sprint of small group,Small group sprint,1723.0
+TdF,2024,4,4,139.6,3904.0,187.0,1.339541547277937,Mountains flat finish,Mountain,0.5163979819200408,36.958,19.3 km solo,Solo,1723.0
+TdF,2024,5,5,177.4,1126.0,25.0,0.14092446448703494,Flat,Flat,0.7890077493563371,42.787,Sprint of large group,Large group sprint,1723.0
+TdF,2024,6,6,163.5,881.0,7.0,0.04281345565749235,Flat,Flat,0.8201289284223688,46.292,Sprint of large group,Large group sprint,1723.0
+TdF,2024,8,8,183.4,2334.0,63.0,0.3435114503816794,Hills flat finish,Rolling,0.4510173567977916,44.945,Sprint of large group,Large group sprint,1723.0
+TdF,2024,9,9,199.0,2012.0,30.0,0.1507537688442211,Hills flat finish,Flat,0.34727426189007055,45.973,Sprint of 6 riders,Small group sprint,1723.0
+TdF,2024,10,10,187.3,888.0,6.0,0.03203416978109984,Flat,Flat,0.8195934017500389,43.206,Sprint of large group,Large group sprint,1723.0
+TdF,2024,11,11,211.0,4177.0,241.0,1.1421800947867298,Mountains uphill finish,Mountain,0.4675130980130978,42.483,Sprint à deux,Sprint à deux,1723.0
+TdF,2024,12,12,203.6,2253.0,53.0,0.26031434184675833,Flat,Rolling,0.5553058903385916,47.487,Sprint of large group,Large group sprint,1723.0
+TdF,2024,13,13,165.3,1884.0,53.0,0.32062915910465817,Flat,Rolling,0.4630016186299081,48.821,Sprint of 15 riders,Small group sprint,1723.0
+TdF,2024,14,14,151.9,4050.0,340.0,2.238314680710994,Mountains uphill finish,Mountain,0.5818769912363179,37.685,4.6 km solo,Solo,1723.0
+TdF,2024,15,15,197.7,5071.0,366.0,1.851289833080425,Mountains uphill finish,Mountain,0.4990019798420537,37.787,5.4 km solo,Solo,1723.0
+TdF,2024,16,16,188.6,1176.0,15.0,0.07953340402969247,Flat,Flat,0.7643426173070138,45.003,Sprint of large group,Large group sprint,1723.0
+TdF,2024,17,17,177.8,3091.0,177.0,0.9955005624296962,Hills uphill finish,Medium_Mountain,0.6318869047619046,43.328,13.3 km solo,Solo,1723.0
+TdF,2024,18,18,179.5,3123.0,101.0,0.5626740947075209,Hills flat finish,Medium_Mountain,0.6591755952380951,43.023,Sprint of 3 riders,Small group sprint,1723.0
+TdF,2024,19,19,144.6,4512.0,275.0,1.90179806362379,Mountains uphill finish,High_Mountain,0.6673914592459486,35.55,1.9 km solo,Solo,1723.0
+TdF,2024,20,20,132.8,4748.0,380.0,2.8614457831325297,Mountains uphill finish,Mountain,0.6258771456946008,32.607,0.15 km solo,Solo,1723.0
+Vuelta,2024,2,2,194.0,2678.0,86.0,0.44329896907216493,Hills flat finish,Hilly_Difficult,0.5733014896260842,37.198,Sprint of large group,Large group sprint,916.0
+Vuelta,2024,3,3,191.2,2620.0,58.0,0.3033472803347281,Hills flat finish,Hilly_Difficult,0.3763334379114179,40.869,Sprint of large group,Large group sprint,916.0
+Vuelta,2024,4,4,170.5,3519.0,238.0,1.3958944281524928,Mountains uphill finish,Medium_Mountain,0.3947821969696972,38.341,Sprint of 7 riders,Small group sprint,916.0
+Vuelta,2024,5,5,177.0,1691.0,32.0,0.1807909604519774,Flat,Rolling,0.4923054029304029,40.005,Sprint of large group,Large group sprint,916.0
+Vuelta,2024,6,6,185.5,3711.0,170.0,0.9164420485175202,Mountains uphill finish,Medium_Mountain,0.7732341450216453,41.499,27.6 km solo,Solo,916.0
+Vuelta,2024,7,7,180.5,1943.0,78.0,0.43213296398891965,Hills flat finish,Hilly_Difficult,0.44631032647422036,42.363,Sprint of 33 riders,Small group sprint,916.0
+Vuelta,2024,8,8,159.0,2641.0,145.0,0.9119496855345912,Hills uphill finish,Medium_Mountain,0.47889908008658,43.648,Sprint à deux,Sprint à deux,916.0
+Vuelta,2024,9,9,178.5,4486.0,305.0,1.7086834733893557,Mountains flat finish,Mountain,0.512663941858795,37.916,58.3 km solo,Solo,916.0
+Vuelta,2024,10,10,160.0,3074.0,178.0,1.1125,Mountains flat finish,Medium_Mountain,0.6305535714285713,41.597,Sprint à deux,Sprint à deux,916.0
+Vuelta,2024,11,11,164.2,2890.0,148.0,0.9013398294762486,Hills flat finish,Medium_Mountain,0.8158265692640694,43.813,0.6 km solo,Solo,916.0
+Vuelta,2024,12,12,137.5,3088.0,174.0,1.2654545454545454,Mountains uphill finish,Medium_Mountain,0.47246585497835497,38.159,10.1 km solo,Solo,916.0
+Vuelta,2024,13,13,176.0,3708.0,299.0,1.6988636363636365,Mountains uphill finish,Medium_Mountain,0.4134607683982685,40.639,4.7 km solo,Solo,916.0
+Vuelta,2024,14,14,200.5,2876.0,100.0,0.49875311720698257,Mountains flat finish,Hilly_Difficult,0.7849989568854902,45.992,Sprint of large group,Large group sprint,916.0
+Vuelta,2024,15,15,143.0,3804.0,372.0,2.6013986013986012,Mountains uphill finish,Medium_Mountain,0.3974446699134199,37.99,0.35 km solo,Solo,916.0
+Vuelta,2024,16,16,181.5,4085.0,347.0,1.9118457300275482,Mountains uphill finish,Mountain,0.5771241032252065,38.242,4.5 km solo,Solo,916.0
+Vuelta,2024,17,17,141.5,2498.0,107.0,0.7561837455830389,Hills flat finish,Medium_Mountain,0.6808207972582975,40.003,Sprint of large group,Large group sprint,916.0
+Vuelta,2024,18,18,179.5,2699.0,139.0,0.7743732590529248,Hills flat finish,Hilly_Difficult,0.6714045284780579,44.714,5.6 km solo,Solo,916.0
+Vuelta,2024,19,19,164.8,2601.0,217.0,1.3167475728155338,Mountains uphill finish,Medium_Mountain,0.38187683982683984,42.092,5.1 km solo,Solo,916.0
+Vuelta,2024,20,20,172.0,5077.0,340.0,1.9767441860465116,Mountains uphill finish,High_Mountain,0.7016627880955474,37.04,2.8 km solo,Solo,916.0
