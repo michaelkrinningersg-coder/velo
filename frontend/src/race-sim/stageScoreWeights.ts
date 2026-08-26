@@ -25,6 +25,12 @@ export type SkillWeights = Partial<Record<RiderSkillKey, number>>;
 export interface ProfileScoreWeights {
   /** Gewichte bei der leichtesten Auspraegung des Profils. */
   easy: SkillWeights;
+  /**
+   * Gewichte in der Mitte der Spanne. Nur die Bergprofile fuehren sie; ohne
+   * sie wird geradlinig von `easy` nach `hard` ueberblendet, mit ihr in zwei
+   * Abschnitten ueber sie hinweg.
+   */
+  middle?: SkillWeights;
   /** Gewichte bei der schwersten. */
   hard: SkillWeights;
   /**
@@ -44,34 +50,26 @@ export interface ProfileScoreWeights {
  * gleichmaessig auf die uebrigen verteilt.
  *
  * Fuer die fuenf Bergprofile stehen die Anteile von `hill`, `mediumMountain`
- * und `mountain` seit der Vorgabe fest, und zwar an zwei Stuetzstellen — am
- * Anfang der Spanne und in ihrer Mitte:
+ * und `mountain` seit der Vorgabe fest, und zwar an drei Stuetzstellen: am
+ * unteren Ende der Spanne, in ihrer Mitte und am oberen Ende. Oben gilt
+ * dabei die Verteilung, mit der das *naechste* Terrain unten anfaengt — so
+ * geht die Leiter ohne Sprung ineinander ueber:
  *
- *   Terrain            Anfang            Mitte
- *   Hilly              100 /  0 /  0     75 / 25 /  0
- *   Hilly_Difficult     65 / 35 /  0     45 / 45 / 10
- *   Medium_Mountain     25 / 60 / 15     25 / 50 / 25
- *   Mountain             5 / 40 / 55      0 / 25 / 75
- *   High_Mountain        0 /  0 / 100     —
+ *   Terrain            unten            Mitte            oben
+ *   Hilly              100 /  0 /  0    75 / 25 /  0     65 / 35 /  0
+ *   Hilly_Difficult     65 / 35 /  0    45 / 45 / 10     25 / 60 / 15
+ *   Medium_Mountain     25 / 60 / 15    25 / 50 / 25      5 / 40 / 55
+ *   Mountain             5 / 40 / 55     0 / 25 / 75      0 /  0 / 100
+ *   High_Mountain        0 /  0 / 100    0 /  0 / 100     0 /  0 / 100
  *
- * `hard` ist so bestimmt, dass die *Mitte* die Vorgabe exakt trifft. Das ist
- * nicht dasselbe wie geradliniges Fortschreiben der Anteile: ueberblendet
- * werden die absoluten Gewichte, und weil Flach und Sprint an beiden Enden
- * verschieden gross sind, ist auch der Rest verschieden, aus dem sich die
- * Anteile berechnen. Aufgeloest nach `hard`:
- *
- *   s_hard = [ s_mitte · (R_anfang + R_hard) − R_anfang · s_anfang ] / R_hard
- *
- * mit `R` als dem, was nach Flach, Sprint, Antritt und Abfahrt uebrig ist.
- * Nur bei `Mountain` faellt dabei ein negativer Huegelanteil an; er wird auf
- * 0 gestutzt, wodurch die Mitte dort 2,5 statt 0 Prozent Huegel traegt. Fuer
- * das Hochgebirge nennt die Vorgabe nur einen Punkt, dort bleibt es ueber die
- * ganze Spanne dabei.
+ * Zwischen den Stuetzstellen wird geradlinig ueberblendet, in zwei
+ * Abschnitten ueber die Mitte hinweg. Oberhalb des Hochgebirges kommt kein
+ * Terrain mehr, dort steht oben dieselbe Verteilung wie unten.
  *
  * Alles andere am Score bleibt, wie es war: Flach, Sprint, Antritt und
- * Abfahrt behalten ihre Gewichte, und was nach ihnen uebrig ist, wird nach
- * den Anteilen oben verteilt. `Flat`, `Rolling` und die beiden
- * Pflasterprofile sind gar nicht betroffen.
+ * Abfahrt behalten ihre Gewichte und werden weiter mit ueberblendet; was
+ * nach ihnen uebrig ist, wird nach den Anteilen oben verteilt. `Flat`,
+ * `Rolling` und die beiden Pflasterprofile sind gar nicht betroffen.
  *
  * Die Spannen (`difficultyRange`) sind zugleich die Grenzen, nach denen die
  * Etappen der Rundfahrten eingestuft werden — Profil und Ueberblendung
@@ -93,28 +91,33 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
   Hilly: {
     difficultyRange: [0.30, 0.45],
     easy: { flat: 0.50, hill: 0.40, sprint: 0.06, acceleration: 0.04 },
-    hard: { flat: 0.28, hill: 0.38, mediumMountain: 0.26, sprint: 0.05, acceleration: 0.03 },
+    middle: { flat: 0.39, hill: 0.39, mediumMountain: 0.13, sprint: 0.055, acceleration: 0.035 },
+    hard: { flat: 0.28, hill: 0.416, mediumMountain: 0.224, sprint: 0.05, acceleration: 0.03 },
   },
   Hilly_Difficult: {
     difficultyRange: [0.45, 0.87],
-    easy: { flat: 0.29, hill: 0.422, mediumMountain: 0.228, sprint: 0.03, acceleration: 0.03 },
-    hard: { flat: 0.09, hill: 0.252, mediumMountain: 0.448, mountain: 0.15, sprint: 0.03, acceleration: 0.03 },
+    easy: { flat: 0.29, hill: 0.4225, mediumMountain: 0.2275, sprint: 0.03, acceleration: 0.03 },
+    middle: { flat: 0.19, hill: 0.3375, mediumMountain: 0.3375, mountain: 0.075, sprint: 0.03, acceleration: 0.03 },
+    hard: { flat: 0.09, hill: 0.2125, mediumMountain: 0.51, mountain: 0.1275, sprint: 0.03, acceleration: 0.03 },
   },
   Medium_Mountain: {
     difficultyRange: [0.87, 1.40],
-    easy: { hill: 0.242, mediumMountain: 0.583, mountain: 0.145, sprint: 0.02, acceleration: 0.01 },
-    hard: { hill: 0.245, mediumMountain: 0.393, mountain: 0.342, sprint: 0.01, acceleration: 0.01 },
+    easy: { hill: 0.2425, mediumMountain: 0.582, mountain: 0.1455, sprint: 0.02, acceleration: 0.01 },
+    middle: { hill: 0.2437, mediumMountain: 0.4876, mountain: 0.2437, sprint: 0.015, acceleration: 0.01 },
+    hard: { hill: 0.049, mediumMountain: 0.392, mountain: 0.539, sprint: 0.01, acceleration: 0.01 },
   },
   Mountain: {
     difficultyRange: [1.40, 1.95],
-    easy: { hill: 0.046, mediumMountain: 0.372, mountain: 0.512, downhill: 0.05, sprint: 0.02 },
-    hard: { mediumMountain: 0.093, mountain: 0.857, downhill: 0.04, sprint: 0.01 },
+    easy: { hill: 0.0465, mediumMountain: 0.372, mountain: 0.5115, downhill: 0.05, sprint: 0.02 },
+    middle: { mediumMountain: 0.235, mountain: 0.705, downhill: 0.045, sprint: 0.015 },
+    hard: { mountain: 0.95, downhill: 0.04, sprint: 0.01 },
   },
   High_Mountain: {
-    // Ohne Ueberblendung: die Vorgabe nennt fuer das Hochgebirge nur einen
-    // Punkt, dort zaehlt ueber die ganze Spanne allein der Bergwert.
+    // Oberhalb des Hochgebirges kommt kein Terrain mehr, deshalb steht am
+    // oberen Ende dieselbe Verteilung wie am unteren.
     difficultyRange: [1.95, 3.20],
     easy: { mountain: 0.95, downhill: 0.05 },
+    middle: { mountain: 0.955, downhill: 0.045 },
     hard: { mountain: 0.96, downhill: 0.04 },
   },
   // Pflaster: nur zwei Referenzetappen, deshalb keine Ueberblendung.
@@ -177,7 +180,8 @@ export const STAGE_RACE_SCORE_WEIGHTS: Partial<Record<StageProfile, ProfileScore
   Hilly_Difficult: {
     difficultyRange: [0.45, 0.87],
     easy: { hill: 0.598, mediumMountain: 0.322, sprint: 0.04, acceleration: 0.04 },
-    hard: { hill: 0.239, mediumMountain: 0.515, mountain: 0.186, sprint: 0.03, acceleration: 0.03 },
+    middle: { hill: 0.4185, mediumMountain: 0.4185, mountain: 0.093, sprint: 0.035, acceleration: 0.035 },
+    hard: { hill: 0.235, mediumMountain: 0.564, mountain: 0.141, sprint: 0.03, acceleration: 0.03 },
   },
 };
 
@@ -200,7 +204,27 @@ export function resolveDifficultyPosition(
   return Math.min(1, Math.max(0, (difficulty - low) / (high - low)));
 }
 
-/** Gewichte einer konkreten Etappe: zwischen leicht und schwer ueberblendet. */
+/** Zwei Gewichtssaetze geradlinig mischen. */
+function mische(links: SkillWeights, rechts: SkillWeights, anteil: number): SkillWeights {
+  const keys = new Set([...Object.keys(links), ...Object.keys(rechts)] as RiderSkillKey[]);
+  const weights: SkillWeights = {};
+  for (const key of keys) {
+    const value = ((links[key] ?? 0) * (1 - anteil)) + ((rechts[key] ?? 0) * anteil);
+    if (value > 0) {
+      weights[key] = value;
+    }
+  }
+  return weights;
+}
+
+/**
+ * Gewichte einer konkreten Etappe.
+ *
+ * Mit einer Mitte wird in zwei Abschnitten ueberblendet — von `easy` zur
+ * Mitte und von der Mitte nach `hard`. Damit sitzen alle drei Stuetzstellen
+ * exakt, statt dass die Gerade die Mitte ueberspringt. Ohne Mitte bleibt es
+ * bei der einen Geraden von `easy` nach `hard`.
+ */
 export function resolveStageScoreWeights(
   profile: StageProfile,
   stageScore: number | null,
@@ -209,13 +233,10 @@ export function resolveStageScoreWeights(
 ): SkillWeights {
   const entry = resolveProfileWeights(profile, isStageRace);
   const position = resolveDifficultyPosition(profile, stageScore, distanceKm);
-  const keys = new Set([...Object.keys(entry.easy), ...Object.keys(entry.hard)] as RiderSkillKey[]);
-  const weights: SkillWeights = {};
-  for (const key of keys) {
-    const value = ((entry.easy[key] ?? 0) * (1 - position)) + ((entry.hard[key] ?? 0) * position);
-    if (value > 0) {
-      weights[key] = value;
-    }
+  if (entry.middle == null) {
+    return mische(entry.easy, entry.hard, position);
   }
-  return weights;
+  return position <= 0.5
+    ? mische(entry.easy, entry.middle, position * 2)
+    : mische(entry.middle, entry.hard, (position - 0.5) * 2);
 }

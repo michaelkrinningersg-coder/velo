@@ -97,45 +97,67 @@ describe('Vorgegebene Anteile der Bergfaehigkeiten', () => {
     return [(w.hill ?? 0) / berg * 100, (w.mediumMountain ?? 0) / berg * 100, (w.mountain ?? 0) / berg * 100];
   }
 
-  it('trifft die Vorgabe am Anfang jeder Spanne', () => {
-    const vorgabe: Array<[StageProfile, [number, number, number]]> = [
-      ['Hilly', [100, 0, 0]],
-      ['Hilly_Difficult', [65, 35, 0]],
-      ['Medium_Mountain', [25, 60, 15]],
-      ['Mountain', [5, 40, 55]],
-      ['High_Mountain', [0, 0, 100]],
-    ];
-    for (const [profile, erwartet] of vorgabe) {
-      const ist = bergAnteile(profile, 0);
-      for (let index = 0; index < 3; index += 1) {
-        expect(ist[index]!).toBeCloseTo(erwartet[index]!, 0);
-      }
+  const LEITER: StageProfile[] = ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
+  const VORGABE: Record<string, { unten: [number, number, number]; mitte: [number, number, number] }> = {
+    Hilly: { unten: [100, 0, 0], mitte: [75, 25, 0] },
+    Hilly_Difficult: { unten: [65, 35, 0], mitte: [45, 45, 10] },
+    Medium_Mountain: { unten: [25, 60, 15], mitte: [25, 50, 25] },
+    Mountain: { unten: [5, 40, 55], mitte: [0, 25, 75] },
+    High_Mountain: { unten: [0, 0, 100], mitte: [0, 0, 100] },
+  };
+
+  const trifft = (ist: number[], soll: number[]): void => {
+    for (let index = 0; index < 3; index += 1) {
+      expect(Math.abs(ist[index]! - soll[index]!)).toBeLessThan(0.5);
+    }
+  };
+
+  it('trifft die Vorgabe am unteren Ende jeder Spanne', () => {
+    for (const profile of LEITER) {
+      trifft(bergAnteile(profile, 0), VORGABE[profile]!.unten);
     }
   });
 
   it('trifft die Vorgabe in der Mitte jeder Spanne', () => {
-    const vorgabe: Array<[StageProfile, [number, number, number]]> = [
-      ['Hilly', [75, 25, 0]],
-      ['Hilly_Difficult', [45, 45, 10]],
-      ['Medium_Mountain', [25, 50, 25]],
-      ['Mountain', [0, 25, 75]],
-      ['High_Mountain', [0, 0, 100]],
-    ];
-    for (const [profile, erwartet] of vorgabe) {
-      const ist = bergAnteile(profile, 0.5);
-      for (let index = 0; index < 3; index += 1) {
-        // Bei Mountain waere der Huegelanteil rechnerisch negativ und ist auf
-        // 0 gestutzt; dadurch bleiben dort 2,5 Prozent stehen.
-        expect(Math.abs(ist[index]! - erwartet[index]!)).toBeLessThan(profile === 'Mountain' ? 3 : 0.5);
+    for (const profile of LEITER) {
+      trifft(bergAnteile(profile, 0.5), VORGABE[profile]!.mitte);
+    }
+  });
+
+  it('geht am oberen Ende in den Anfang des naechsten Terrains ueber', () => {
+    // Das ist der Punkt der Leiter: eine Etappe an der Grenze bekommt
+    // dieselbe Gewichtung, egal welchem der beiden Terrains sie zufaellt.
+    for (let index = 0; index < LEITER.length - 1; index += 1) {
+      trifft(bergAnteile(LEITER[index]!, 1), VORGABE[LEITER[index + 1]!]!.unten);
+    }
+    // Oberhalb des Hochgebirges kommt nichts mehr.
+    trifft(bergAnteile('High_Mountain', 1), VORGABE.High_Mountain!.unten);
+  });
+
+  it('gilt auch fuer die Rundfahrtvariante von Hilly_Difficult', () => {
+    trifft(bergAnteile('Hilly_Difficult', 0, true), VORGABE.Hilly_Difficult!.unten);
+    trifft(bergAnteile('Hilly_Difficult', 0.5, true), VORGABE.Hilly_Difficult!.mitte);
+    trifft(bergAnteile('Hilly_Difficult', 1, true), VORGABE.Medium_Mountain!.unten);
+  });
+
+  it('verlaeuft zwischen den Stuetzstellen einformig', () => {
+    // Der Bergwert darf ueber die Spanne nie zurueckgehen.
+    for (const profile of LEITER) {
+      let vorher = -1;
+      for (let position = 0; position <= 1.0001; position += 0.05) {
+        const anteil = bergAnteile(profile, Math.min(1, position))[2]!;
+        expect(anteil).toBeGreaterThanOrEqual(vorher - 1e-9);
+        vorher = anteil;
       }
     }
   });
 
-  it('gilt auch fuer die Rundfahrtvariante von Hilly_Difficult', () => {
-    for (const [position, erwartet] of [[0, [65, 35, 0]], [0.5, [45, 45, 10]]] as Array<[number, number[]]>) {
-      const ist = bergAnteile('Hilly_Difficult', position, true);
-      for (let index = 0; index < 3; index += 1) {
-        expect(ist[index]!).toBeCloseTo(erwartet[index]!, 0);
+  it('laesst jeder Stuetzstelle die Summe 1', () => {
+    for (const profile of LEITER) {
+      for (const position of [0, 0.25, 0.5, 0.75, 1]) {
+        const [low, high] = PROFILE_SCORE_WEIGHTS[profile].difficultyRange;
+        const w = resolveStageScoreWeights(profile, (low + ((high - low) * position)) * 200, 200);
+        expect(summe(w)).toBeCloseTo(1, 6);
       }
     }
   });
@@ -146,16 +168,16 @@ describe('Vorgegebene Anteile der Bergfaehigkeiten', () => {
     expect(PROFILE_SCORE_WEIGHTS.Mountain.easy.downhill).toBe(0.05);
     expect(PROFILE_SCORE_WEIGHTS.High_Mountain.hard.downhill).toBe(0.04);
     for (const profile of ['Flat', 'Rolling', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      expect(PROFILE_SCORE_WEIGHTS[profile].middle).toBeUndefined();
       expect(summe(PROFILE_SCORE_WEIGHTS[profile].easy)).toBeCloseTo(1, 6);
       expect(PROFILE_SCORE_WEIGHTS[profile].easy.mountain).toBeUndefined();
     }
   });
 
   it('haelt die Spannen luecken- und ueberlappungsfrei aneinander', () => {
-    const leiter: StageProfile[] = ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
-    for (let index = 1; index < leiter.length; index += 1) {
-      expect(PROFILE_SCORE_WEIGHTS[leiter[index]!].difficultyRange[0])
-        .toBeCloseTo(PROFILE_SCORE_WEIGHTS[leiter[index - 1]!].difficultyRange[1], 6);
+    for (let index = 1; index < LEITER.length; index += 1) {
+      expect(PROFILE_SCORE_WEIGHTS[LEITER[index]!].difficultyRange[0])
+        .toBeCloseTo(PROFILE_SCORE_WEIGHTS[LEITER[index - 1]!].difficultyRange[1], 6);
     }
   });
 });
