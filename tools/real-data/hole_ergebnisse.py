@@ -8,9 +8,10 @@ der Remote-Umgebung blockt die Domain, deshalb ist das ein lokales Skript.
     python3 tools/real-data/hole_ergebnisse.py --alle          # alle 843 Strassenetappen
     python3 tools/real-data/hole_ergebnisse.py --pause 3       # laengere Pause zwischen Abrufen
 
-Schreibt je Etappe eine JSON-Datei nach tools/real-data/ergebnisse/. Bereits
-geholte Etappen werden uebersprungen, der Lauf ist also jederzeit
-abbrechbar und fortsetzbar.
+Schreibt je Etappe eine gepackte JSON-Datei nach tools/real-data/ergebnisse/.
+Bereits geholte Etappen werden uebersprungen, der Lauf ist also jederzeit
+abbrechbar und fortsetzbar. Alle 843 Etappen zusammen sind rund 2 MB — der
+Ordner kann also mit ins Repository.
 
 Gebraucht wird aus jeder Seite nur `results` (Rang, Zeit, Status je Fahrer)
 und die Etappenkopfdaten. Daraus lassen sich Zeitgruppen, Gruppengroessen,
@@ -23,6 +24,7 @@ fuer die 199 Bergetappen rund sieben Minuten Laufzeit. Nicht parallelisieren.
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 import time
@@ -40,6 +42,10 @@ BERGE = {'Mountain', 'High_Mountain'}
 KOPFFELDER = ['distance', 'vertical_meters', 'profile_score', 'profile_icon', 'stage_type',
               'won_how', 'avg_speed_winner', 'date', 'departure', 'arrival',
               'race_startlist_quality_score']
+# Je Fahrer ebenso: Punkte, Alter, Nationalitaet und URLs braucht die
+# Auswertung nicht. Vollstaendig abgelegt waeren die 843 Etappen 160 MB, so
+# sind es gzip-gepackt rund 2 MB — und das gehoert in ein Repository.
+FAHRERFELDER = ['rank', 'status', 'time', 'rider_name', 'team_name', 'breakaway_kms']
 
 
 def zeilen(nur_berge: bool) -> list[dict]:
@@ -66,7 +72,8 @@ def hole(slug: str, jahr: str, nummer: str) -> dict:
 
     seite = Stage(f'race/{slug}/{jahr}/stage-{nummer}')
     daten = {feld: getattr(seite, feld)() for feld in KOPFFELDER}
-    daten['results'] = seite.results()
+    daten['results'] = [{feld: eintrag.get(feld) for feld in FAHRERFELDER}
+                        for eintrag in seite.results()]
     return daten
 
 
@@ -86,9 +93,9 @@ def main() -> int:
     # Etappe — dann lieber abbrechen als eine halbe Stunde ins Leere laufen.
     ohne_erfolg = 0
     for nr, zeile in enumerate(aufgaben, start=1):
-        name = f"{zeile['rennen']}_{zeile['jahr']}_{zeile['stage_id']}.json"
-        datei = ZIEL / name
-        if datei.exists():
+        name = f"{zeile['rennen']}_{zeile['jahr']}_{zeile['stage_id']}"
+        datei = ZIEL / f'{name}.json.gz'
+        if datei.exists() or (ZIEL / f'{name}.json').exists():
             uebersprungen += 1
             continue
         try:
@@ -108,7 +115,7 @@ def main() -> int:
         daten['rennen'] = zeile['rennen']
         daten['jahr'] = int(zeile['jahr'])
         daten['etappe'] = zeile['stage_id']
-        datei.write_text(json.dumps(daten, ensure_ascii=False))
+        datei.write_bytes(gzip.compress(json.dumps(daten, ensure_ascii=False).encode('utf-8')))
         geholt += 1
         if geholt % 20 == 0:
             print(f'  [{nr}/{len(aufgaben)}] {geholt} geholt')

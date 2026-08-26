@@ -23,6 +23,7 @@ Aufruf:  python3 tools/real-data/werte_ergebnisse_aus.py
 """
 from __future__ import annotations
 
+import gzip
 import json
 import re
 import statistics
@@ -117,8 +118,10 @@ def main() -> int:
         return 1
     zeilen = []
     unbrauchbar = 0
-    for datei in sorted(QUELLE.glob('*.json')):
-        zeile = auswerten(json.loads(datei.read_text()))
+    dateien = sorted([*QUELLE.glob('*.json'), *QUELLE.glob('*.json.gz')])
+    for datei in dateien:
+        roh = gzip.decompress(datei.read_bytes()) if datei.suffix == '.gz' else datei.read_bytes()
+        zeile = auswerten(json.loads(roh))
         if zeile is None:
             unbrauchbar += 1
         else:

@@ -158,4 +158,35 @@ nur die jeweils laufende Austragung.
 
 Rund sieben Minuten fuer die 199 Bergetappen, 28 Minuten fuer alle 843.
 
+### In GitHub Codespaces
+
+Der schnellste Weg, weil dort schon alles liegt und der Ordner danach
+direkt commitet werden kann.
+
+1. Auf GitHub im Repository **Code → Codespaces → Create codespace on
+   `claude/game-review-suggestions-gqf6en`**. Der Devcontainer laeuft
+   automatisch hoch.
+2. Im Terminal des Codespace:
+
+       pip install procyclingstats
+       python3 tools/real-data/hole_ergebnisse.py --alle
+
+   Falls `pip` fehlt: `sudo apt-get update && sudo apt-get install -y python3-pip`.
+   Falls `pip` in eine andere Umgebung installiert als das Skript laeuft,
+   nennt die Fehlermeldung den passenden Aufruf.
+3. Danach:
+
+       git add tools/real-data/ergebnisse
+       git commit -m "Ergebnislisten der Grand Tours 2010-2024"
+       git push
+
+Die Dateien sind gepackt und auf das Noetige eingedampft — alle 843
+Etappen zusammen rund 2 MB.
+
+**Achtung:** procyclingstats steht hinter einer Cloudflare-Pruefung, und
+die schlaegt bei Rechenzentrums-Adressen oefter zu als bei einem
+Heimanschluss. Wenn der Codespace geblockt wird, bricht das Skript nach
+zehn Fehlschlaegen in Folge ab — dann bleibt der Lauf auf dem eigenen
+Rechner.
+
 Ebenfalls offen: 2025 und 2026, die in `cyclingdata` noch nicht stehen.
