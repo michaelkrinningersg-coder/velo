@@ -151,6 +151,13 @@ export interface QuickSimGroupDiagnostics {
    * Fahrers nicht aus seinen Faehigkeiten nachrechnen.
    */
   rankNoiseByRiderId: ReadonlyMap<number, number>;
+  /**
+   * Ordnungsscore je Fahrer, wie er hereingereicht wurde — also ohne
+   * Rangrauschen. Zusammen mit `rankNoiseByRiderId` und dem
+   * `photoFinishScore` der Ergebniszeile laesst sich damit jede Platzierung
+   * nachrechnen, ohne den Lauf zu wiederholen.
+   */
+  scoreByRiderId: ReadonlyMap<number, number>;
   /** Streuung, aus der das Rangrauschen gezogen wurde — inklusive Terrainfaktor. */
   rankNoiseSigma: number;
   /** Anteil des Rangrauschens, der auf den Tie-Break geht. */
@@ -433,6 +440,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       protectionStrength: 0,
       breakawayHeadSize: head.length,
       rankNoiseByRiderId: rankNoise,
+      scoreByRiderId: scores,
       rankNoiseSigma: parameters.rankNoise * resolveRankNoiseFactor(profile),
       tieBreakNoiseFactor: tieBreakFactor,
     };
@@ -481,6 +489,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       protectionStrength: PROTECTION_STRENGTH[profile] ?? 0,
       breakawayHeadSize: 0,
       rankNoiseByRiderId: rankNoise,
+      scoreByRiderId: scores,
       rankNoiseSigma: parameters.rankNoise * resolveRankNoiseFactor(profile),
       tieBreakNoiseFactor: tieBreakFactor,
     };
