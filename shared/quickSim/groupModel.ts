@@ -15,9 +15,9 @@ import {
   BUNCHED_SHARE_RELATIVE_SD,
   BUNCHED_SHARE_SLOPE,
   BUNCH_SLOPE,
-  SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
   FIRST_GROUP_MAX_SIZE,
+  FIRST_GROUP_SOFT_KNEE,
   MEASURED_GAP_SIGMA_CLAMP,
   MEASURED_STAGE_GAP_MODEL,
   TAIL_GROUP_SHAPE_END,
@@ -25,6 +25,7 @@ import {
   TAIL_GROUP_SHAPE_PEAK_FACTOR,
   TAIL_GROUP_SHAPE_PROFILES,
   TAIL_GROUP_SHAPE_START,
+  resolveSplitShareRelativeSd,
   resolveTailShape,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
@@ -166,9 +167,10 @@ export function drawFirstGroupShare(
   parameters: QuickSimProfileParameters,
   regime: FinishRegime,
   difficultyPerKm: number,
+  profile?: StageProfile,
 ): number {
   const mean = resolveFirstGroupShareMean(parameters, regime, difficultyPerKm);
-  const relativeSd = regime === 'bunched' ? BUNCHED_SHARE_RELATIVE_SD : SPLIT_SHARE_RELATIVE_SD;
+  const relativeSd = regime === 'bunched' ? BUNCHED_SHARE_RELATIVE_SD : resolveSplitShareRelativeSd(profile);
   const { alpha, beta } = resolveBetaParameters(mean, relativeSd);
   return drawBeta(random, alpha, beta);
 }
@@ -181,8 +183,17 @@ export function resolveFirstGroupSize(share: number, finisherCount: number, prof
   if (finisherCount <= 0) {
     return 0;
   }
-  const grenze = (profile != null ? FIRST_GROUP_MAX_SIZE[profile] : undefined) ?? finisherCount;
-  return Math.min(finisherCount, grenze, Math.max(1, Math.round(share * finisherCount)));
+  const roh = Math.max(1, Math.round(share * finisherCount));
+  const grenze = profile != null ? FIRST_GROUP_MAX_SIZE[profile] : undefined;
+  if (grenze == null) {
+    return Math.min(finisherCount, roh);
+  }
+  const knie = FIRST_GROUP_SOFT_KNEE[profile!] ?? grenze;
+  const breite = Math.max(1, grenze - knie);
+  const gedaempft = roh <= knie
+    ? roh
+    : grenze - (breite * Math.exp(-(roh - knie) / breite));
+  return Math.min(finisherCount, grenze, Math.max(1, Math.round(gedaempft)));
 }
 
 export interface FinishGroup {

@@ -124,6 +124,28 @@ export const BUNCHED_SHARE_RELATIVE_SD = 0.109;
 export const SPLIT_SHARE_RELATIVE_SD = 1.077;
 
 /**
+ * Abweichende Streuung der Ziehung im zerfallenen Regime, je Profil.
+ *
+ * Der gemessene Wert 1,077 ist groesser als 1 und macht die Beta-Ziehung
+ * damit zweigipfelig: sie wirft ueberwiegend sehr kleine Anteile aus und
+ * gelegentlich einen sehr grossen. Fuer die Bergprofile ist der lange
+ * Schwanz zu lang — dort soll die erste Zeitgruppe auch im oberen Zehntel
+ * noch eine Gruppe sein und nicht das halbe Feld.
+ *
+ * Profile ohne Eintrag behalten den gemessenen Wert.
+ */
+export const SPLIT_SHARE_RELATIVE_SD_BY_PROFILE: Partial<Record<StageProfile, number>> = {
+  Hilly_Difficult: 0.62,
+  Medium_Mountain: 0.62,
+  Mountain: 0.62,
+  High_Mountain: 0.62,
+};
+
+export function resolveSplitShareRelativeSd(profile?: StageProfile | null): number {
+  return (profile != null ? SPLIT_SHARE_RELATIVE_SD_BY_PROFILE[profile] : undefined) ?? SPLIT_SHARE_RELATIVE_SD;
+}
+
+/**
  * Form der Rueckstandskurve hinter der ersten Zeitgruppe.
  *
  *   rueckstand(v) = tailGapPerKm · km · TAIL_SHAPE_EPSILON · v^TAIL_SHAPE_EXPONENT
@@ -315,9 +337,35 @@ export const MEASURED_GAP_SIGMA_CLAMP = 2;
  */
 export const FIRST_GROUP_MAX_SIZE: Partial<Record<StageProfile, number>> = {
   Hilly_Difficult: 50,
-  Medium_Mountain: 20,
+  Medium_Mountain: 25,
   Mountain: 10,
   High_Mountain: 6,
+};
+
+/**
+ * Ab welcher Groesse die erste Zeitgruppe nur noch langsam waechst.
+ *
+ * Ein harter Deckel allein trifft die Vorgabe nicht: die Beta-Ziehung liefert
+ * zwischen oberem Zehntel und oberem Hundertstel den Faktor zwei, gewuenscht
+ * ist ein Viertel. Unterhalb des Knies bleibt die Ziehung deshalb, wie sie
+ * ist, darueber laeuft sie saettigend auf die Obergrenze zu:
+ *
+ *   f(x) = M - (M - k) · exp(-(x - k) / (M - k))
+ *
+ * Bei x = k ist das genau k *und* die Steigung genau 1, der Uebergang ist
+ * also knickfrei; fuer grosse x geht es gegen M, ohne es je zu erreichen.
+ *
+ * Die Saettigungsbreite ist bewusst an `M - k` gebunden und kein eigener
+ * Parameter: die Steigung am Knie ist `(M - k) / s`, eine kleinere Breite
+ * macht die Kurve dort also *steiler* statt flacher — die Gruppe wuerde
+ * oberhalb des Knies schneller wachsen als darunter. Wer frueher saettigen
+ * will, muss das Knie senken oder die Obergrenze, nicht die Breite.
+ */
+export const FIRST_GROUP_SOFT_KNEE: Partial<Record<StageProfile, number>> = {
+  Hilly_Difficult: 12,
+  Medium_Mountain: 12,
+  Mountain: 4,
+  High_Mountain: 4,
 };
 
 export const TAIL_GROUP_SHAPE_PROFILES: ReadonlySet<StageProfile> = new Set<StageProfile>([

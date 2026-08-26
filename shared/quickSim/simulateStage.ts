@@ -409,7 +409,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     }
     const headGroupCount = head.length > 0 ? 1 : 0;
 
-    const fieldShare = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
+    const fieldShare = drawFirstGroupShare(random, parameters, regime, difficultyPerKm, profile);
     const fieldGroups = buildFinishGroups({
       scoresDescending: field.map((rider) => scores.get(rider.riderId) as number),
       firstGroupSize: resolveFirstGroupSize(fieldShare, field.length, profile),
@@ -445,7 +445,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       tieBreakNoiseFactor: tieBreakFactor,
     };
   } else {
-    const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
+    const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm, profile);
     const firstGroupSize = resolveFirstGroupSize(share, sorted.length, profile);
     const drawnGroups = buildFinishGroups({
       scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),

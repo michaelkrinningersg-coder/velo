@@ -4,6 +4,7 @@ import { simulateQuickStage } from '../../../shared/quickSim/simulateStage';
 import {
   DEFAULT_QUICK_SIM_PROFILES,
   FIRST_GROUP_MAX_SIZE,
+  FIRST_GROUP_SOFT_KNEE,
 } from '../../../shared/quickSimProfiles';
 import {
   DOMESTIQUE_CLIMB_PENALTY,
@@ -34,11 +35,34 @@ describe('Obergrenze der ersten Zeitgruppe', () => {
       for (const share of [0.1, 0.3, 0.6, 0.98]) {
         expect(resolveFirstGroupSize(share, 170, profile)).toBeLessThanOrEqual(grenze);
       }
+      // Ein sehr grosser Anteil laeuft an die Grenze, ohne sie zu erreichen —
+      // die Saettigung naehert sich ihr nur.
+      expect(resolveFirstGroupSize(0.98, 400, profile)).toBe(grenze);
     }
-    expect(resolveFirstGroupSize(0.98, 170, 'High_Mountain')).toBe(6);
-    expect(resolveFirstGroupSize(0.98, 170, 'Mountain')).toBe(10);
-    expect(resolveFirstGroupSize(0.98, 170, 'Medium_Mountain')).toBe(20);
-    expect(resolveFirstGroupSize(0.98, 170, 'Hilly_Difficult')).toBe(50);
+  });
+
+  it('laesst die Ziehung unterhalb des Knies unangetastet', () => {
+    for (const profile of GEDECKELT) {
+      const knie = FIRST_GROUP_SOFT_KNEE[profile]!;
+      for (let roh = 1; roh <= knie; roh += 1) {
+        expect(resolveFirstGroupSize(roh / 170, 170, profile)).toBe(roh);
+      }
+    }
+  });
+
+  it('steigt oberhalb des Knies weiter, aber langsamer', () => {
+    for (const profile of GEDECKELT) {
+      const knie = FIRST_GROUP_SOFT_KNEE[profile]!;
+      const grenze = FIRST_GROUP_MAX_SIZE[profile]!;
+      let vorher = resolveFirstGroupSize(knie / 170, 170, profile);
+      for (let roh = knie + 1; roh <= 170; roh += 1) {
+        const wert = resolveFirstGroupSize(roh / 170, 170, profile);
+        expect(wert).toBeGreaterThanOrEqual(vorher);
+        expect(wert - vorher).toBeLessThanOrEqual(1);
+        expect(wert).toBeLessThanOrEqual(grenze);
+        vorher = wert;
+      }
+    }
   });
 
   it('laesst kleine Gruppen unangetastet und nie unter einem Fahrer', () => {
