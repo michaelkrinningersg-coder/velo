@@ -4,6 +4,7 @@ Muss dort laufen, wo procyclingstats.com erreichbar ist — der Egress-Proxy
 der Remote-Umgebung blockt die Domain, deshalb ist das ein lokales Skript.
 
     pip install procyclingstats
+    pip install cloudscraper      # falls "Cloudflare protection detected"
     python3 tools/real-data/hole_ergebnisse.py                 # nur Bergetappen (199)
     python3 tools/real-data/hole_ergebnisse.py --alle          # alle 843 Strassenetappen
     python3 tools/real-data/hole_ergebnisse.py --pause 3       # laengere Pause zwischen Abrufen
@@ -19,7 +20,10 @@ Gruppenanzahl und Rueckstaende je Rang ausrechnen — genau die Zielgroessen
 des Gruppenmodells.
 
 Bitte hoeflich bleiben: die Voreinstellung von zwei Sekunden Pause ergibt
-fuer die 199 Bergetappen rund sieben Minuten Laufzeit. Nicht parallelisieren.
+fuer die 199 Bergetappen rund sieben Minuten Laufzeit, fuer alle 843 rund
+28 Minuten. Nicht parallelisieren, die Pause nicht verkuerzen. Der Abruf
+laeuft einmal; danach liegen die Daten im Repository und muessen nie
+wieder geholt werden.
 """
 from __future__ import annotations
 

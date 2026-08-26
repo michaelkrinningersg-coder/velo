@@ -168,10 +168,13 @@ direkt commitet werden kann.
    automatisch hoch.
 2. Im Terminal des Codespace:
 
-       pip install procyclingstats
+       pip install procyclingstats cloudscraper
        python3 tools/real-data/hole_ergebnisse.py --alle
 
    Falls `pip` fehlt: `sudo apt-get update && sudo apt-get install -y python3-pip`.
+   `cloudscraper` fordert `procyclingstats` selbst an, sobald es auf die
+   Cloudflare-Pruefung trifft — bei Rechenzentrums-Adressen wie in
+   Codespaces ist das die Regel, am Heimanschluss die Ausnahme.
    Falls `pip` in eine andere Umgebung installiert als das Skript laeuft,
    nennt die Fehlermeldung den passenden Aufruf.
 3. Danach:
