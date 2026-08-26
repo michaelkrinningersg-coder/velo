@@ -41,7 +41,7 @@ import {
   type StageMarkerClassificationEntry,
   type StageProfile,
 } from '../../../shared/types';
-import { rankStageResultEntries } from '../../../shared/stageResultRules';
+import { isTimeTrialProfile, rankStageResultEntries } from '../../../shared/stageResultRules';
 import {
   drawTeamLeadoutRandoms,
   hasSprintFinish,
@@ -53,6 +53,7 @@ import { resolveLeadoutBonusFactor, resolveSeasonFormFactor } from '../../../sha
 import { buildDynamicCrashIncident, precalculateRaceIncidents } from './incidents';
 import { applyPreRaceRiderModifiers } from './preRaceModifiers';
 import { resolveQuickSimFatigueMalus, resolveSkillsWithMentorBoosts, sampleDailyForm } from './riderCondition';
+import { buildTeamStagingDeltas } from '../../../shared/quickSim/teamStaging';
 import { applySpecialFormStatesWithContext } from './specialFormStates';
 import { calculateStageFavorites, calculateStageFavoriteRiderRanking } from './stageFavorites';
 import { precalculateStageBreakaway } from './stageBreakaways';
@@ -135,6 +136,11 @@ export function runQuickSimulation(
 
   // Heimvorteil, Wetterprofil (samt Leutnant-Ausgleich) und Rivalendruck —
   // dieselben Zuschlaege wie in der vollen Simulation, aus demselben Modul.
+  // Heimvorteil und Wetter kommen hier als Score-Zuschlag statt als
+  // Faehigkeitsaufschlag: der Faehigkeitsanteil wird je Terrain gespreizt,
+  // und ein Zuschlag ueber die Faehigkeiten wuerde mitgespreizt. Der
+  // Rivalendruck bleibt auf dem Faehigkeitsweg — er trifft drei zufaellige
+  // Faehigkeiten und ist damit terrainabhaengig gemeint.
   const preRace = applyPreRaceRiderModifiers({
     riders: bootstrap.riders,
     race: bootstrap.race,
@@ -142,6 +148,7 @@ export function runQuickSimulation(
     lieutenants: bootstrap.lieutenants,
     rivalries: bootstrap.rivalries,
     random: createSeededRandom(deriveSeed(seed, 'pre-race')),
+    effectsAsScoreDelta: true,
   });
   // Mentorenbonus: die volle Simulation schlaegt ihn im Leistungsscore auf die
   // Faehigkeit auf. Hier gleich auf die Faehigkeiten, damit jede spaetere
@@ -163,6 +170,7 @@ export function runQuickSimulation(
     elevationGainMeters,
     dailyFormByRiderId,
     isStageRace: bootstrap.race.isStageRace,
+    scoreDeltaByRiderId: preRace.scoreDeltaByRiderId,
   };
 
   // Dieselben abgeleiteten Stroeme wie in SimulationEngine — gleicher Seed,
@@ -267,15 +275,44 @@ export function runQuickSimulation(
     - resolveQuickSimFatigueMalus(rider),
   ]));
 
-  const ranking = calculateStageFavoriteRiderRanking(
+  // Abstufung innerhalb der Mannschaft. Sie braucht die Reihenfolge im Team,
+  // also erst einen Lauf ohne sie — danach steht fest, wer der Kopf einer
+  // Mannschaft ist und wer fuer ihn faehrt.
+  //
+  // Zeitfahren bleiben aussen vor: dort verteilt eine Mannschaft keine
+  // Arbeit, jeder faehrt seine eigene Zeit, und im Teamzeitfahren kommen
+  // ohnehin alle gemeinsam an.
+  const ohneStufung = calculateStageFavoriteRiderRanking(
     ridersWithSpecialStates,
     bootstrap.teams,
     bootstrap.stage,
     {
-      distanceKm,
-      elevationGainMeters,
+      ...favoriteOptions,
       dailyFormByRiderId: effectiveDailyForm,
-      isStageRace: bootstrap.race.isStageRace,
+      scoreDeltaByRiderId: preRace.scoreDeltaByRiderId,
+    },
+  );
+  const stagingDeltas = isTimeTrialProfile(profile)
+    ? new Map<number, number>()
+    : buildTeamStagingDeltas(ohneStufung.map((candidate) => ({
+      riderId: candidate.rider.id,
+      teamId: candidate.rider.activeTeamId,
+      score: candidate.effectiveSkill,
+    })));
+
+  const scoreDeltaByRiderId = new Map(preRace.scoreDeltaByRiderId);
+  for (const [riderId, delta] of stagingDeltas) {
+    scoreDeltaByRiderId.set(riderId, (scoreDeltaByRiderId.get(riderId) ?? 0) + delta);
+  }
+
+  const ranking = stagingDeltas.size === 0 ? ohneStufung : calculateStageFavoriteRiderRanking(
+    ridersWithSpecialStates,
+    bootstrap.teams,
+    bootstrap.stage,
+    {
+      ...favoriteOptions,
+      dailyFormByRiderId: effectiveDailyForm,
+      scoreDeltaByRiderId,
     },
   );
 
@@ -289,7 +326,8 @@ export function runQuickSimulation(
   );
   const photoFinishByRiderId = new Map(ridersWithSpecialStates.map((rider) => [
     rider.id,
-    resolveWeightProfileValue(rider.skills, finishWeights, effectiveDailyForm.get(rider.id) ?? 0),
+    resolveWeightProfileValue(rider.skills, finishWeights, effectiveDailyForm.get(rider.id) ?? 0)
+    + (scoreDeltaByRiderId.get(rider.id) ?? 0),
   ]));
 
   const result = simulateQuickStage({

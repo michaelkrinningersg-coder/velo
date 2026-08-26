@@ -28,6 +28,15 @@ export interface StageFavoriteOptions {
    * Rundfahrtetappe gelten soll.
    */
   isStageRace?: boolean;
+  /**
+   * Zuschlag auf den Etappenscore je Fahrer, in Punkten.
+   *
+   * Fuer Groessen, die den Fahrer treffen und nicht sein Koennen: Heimvorteil,
+   * Wetter, die Abstufung innerhalb der Mannschaft. Sie werden bewusst *nach*
+   * dem Terrainfaktor addiert — das Heimpublikum ist im Hochgebirge nicht
+   * anderthalbmal so laut wie auf einer Flachetappe.
+   */
+  scoreDeltaByRiderId?: Map<number, number> | Record<number, number>;
 }
 
 interface TeamFavoriteCandidate {
@@ -39,6 +48,16 @@ export interface RiderFavoriteCandidate {
   rider: Rider;
   teamName: string;
   effectiveSkill: number;
+}
+
+function resolveLookup(riderId: number, input?: Map<number, number> | Record<number, number>): number {
+  if (!input) {
+    return 0;
+  }
+  if (input instanceof Map) {
+    return input.get(riderId) ?? 0;
+  }
+  return input[riderId] ?? 0;
 }
 
 function resolveDailyForm(riderId: number, input?: Map<number, number> | Record<number, number>): number {
@@ -101,10 +120,13 @@ function resolveDomestiquePenalty(rider: Rider, profile: StageProfile): number {
   return resolveClimbPenaltyForRole(rolle, profile);
 }
 
-function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile): number {
+function calculateIttScore(
+  rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile, scoreDelta: number,
+): number {
   return rider.skills.timeTrial
     + resolveFormContribution(rider, dailyForm, profile)
-    + (rider.skills.mountain * (elevationGainMeters / 500));
+    + (rider.skills.mountain * (elevationGainMeters / 500))
+    + scoreDelta;
 }
 
 /**
@@ -121,6 +143,7 @@ function calculateRoadScore(
   distanceKm: number,
   dailyForm: number,
   isStageRace: boolean,
+  scoreDelta: number,
 ): number {
   const weights = resolveStageScoreWeights(
     stage.profile,
@@ -144,7 +167,8 @@ function calculateRoadScore(
   const koennen = (weighted + resolveStaminaContribution(rider, distanceKm)) * faktor;
   return koennen
     + resolveFormContribution(rider, dailyForm, stage.profile)
-    - (resolveDomestiquePenalty(rider, stage.profile) * faktor);
+    - (resolveDomestiquePenalty(rider, stage.profile) * faktor)
+    + scoreDelta;
 }
 
 function calculateRiderScore(
@@ -154,11 +178,12 @@ function calculateRiderScore(
   elevationGainMeters: number,
   dailyForm: number,
   isStageRace: boolean,
+  scoreDelta: number,
 ): number {
   if (stage.profile === 'ITT' || stage.profile === 'TTT') {
-    return calculateIttScore(rider, dailyForm, elevationGainMeters, stage.profile);
+    return calculateIttScore(rider, dailyForm, elevationGainMeters, stage.profile, scoreDelta);
   }
-  return calculateRoadScore(rider, stage, distanceKm, dailyForm, isStageRace);
+  return calculateRoadScore(rider, stage, distanceKm, dailyForm, isStageRace, scoreDelta);
 }
 
 function toFavoriteItem(candidate: { rider: Rider; teamName: string; effectiveSkill: number }, rank: number): FavoriteItem {
@@ -195,7 +220,7 @@ export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: S
     const teamFavorites: TeamFavoriteCandidate[] = [...ridersByTeamId.entries()].map(([teamId, teamRiders]) => {
       const team = teamById.get(teamId);
       const scoredRiders = teamRiders
-        .map((rider) => calculateIttScore(rider, resolveDailyForm(rider.id, options?.dailyFormByRiderId), elevationGainMeters, stage.profile))
+        .map((rider) => calculateIttScore(rider, resolveDailyForm(rider.id, options?.dailyFormByRiderId), elevationGainMeters, stage.profile, resolveLookup(rider.id, options?.scoreDeltaByRiderId)))
         .sort((left, right) => right - left);
       const bestFive = scoredRiders.slice(0, 5);
       const availableCount = bestFive.length;
@@ -264,6 +289,7 @@ export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[
         elevationGainMeters,
         resolveDailyForm(rider.id, options?.dailyFormByRiderId),
         options?.isStageRace ?? false,
+        resolveLookup(rider.id, options?.scoreDeltaByRiderId),
       ),
     }))
     .sort((left, right) => right.effectiveSkill - left.effectiveSkill || left.rider.id - right.rider.id);

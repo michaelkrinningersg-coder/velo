@@ -62,18 +62,61 @@ export interface PreRaceModifierInput {
   lieutenants?: Array<{ leaderId: number; lieutenantId: number }> | null;
   rivalries?: Array<{ aId: number; bId: number }> | null;
   random: RandomSource;
+  /**
+   * Heimvorteil und Wetter nicht auf die Faehigkeiten rechnen, sondern als
+   * Zuschlag auf den Etappenscore melden.
+   *
+   * Fuer die Quick Simulation: dort wird der reine Faehigkeitsanteil je
+   * Terrain gespreizt (`SKILL_WEIGHT_FACTOR_BY_PROFILE`). Ein Zuschlag, der
+   * ueber die Faehigkeiten laeuft, wuerde mitgespreizt — im Hochgebirge
+   * anders wirken als auf einer Flachetappe, obwohl das Heimpublikum ueberall
+   * dasselbe ist. Als Score-Zuschlag steht er auf jedem Terrain gleich.
+   *
+   * Die volle Simulation kennt diesen Weg nicht: sie rechnet Schritt fuer
+   * Schritt mit den Faehigkeiten und hat keinen Etappenscore, auf den sich
+   * etwas aufschlagen liesse. Sie bleibt deshalb beim Faehigkeitsweg.
+   */
+  effectsAsScoreDelta?: boolean;
 }
 
 export interface PreRaceModifierResult {
   riders: Rider[];
   /** Rivalenpaare, bei denen beide starten — fuer die Konterattacken. */
   rivalByRiderId: Map<number, number>;
+  /**
+   * Zuschlag auf den Etappenscore je Fahrer, nur bei `effectsAsScoreDelta`.
+   * Sonst leer, weil die Zuschlaege dann in den Faehigkeiten stecken.
+   */
+  scoreDeltaByRiderId: Map<number, number>;
 }
+
+/**
+ * Score-Zuschlaege, wenn `effectsAsScoreDelta` gesetzt ist.
+ *
+ * Dieselben Groessen wie auf dem Faehigkeitsweg, nur einmal auf den Score
+ * statt verteilt auf fuenf beziehungsweise sechs Faehigkeiten.
+ */
+export const HOME_SCORE_DELTA = {
+  /** Heimdruck: das Publikum drueckt statt zu tragen. */
+  pressure: -0.5,
+  /** Normaler Heimvorteil. */
+  normal: 1,
+  /** Super-Heimvorteil. */
+  super: 3,
+} as const;
+
+/** Spanne des Wetterzuschlags. Passt das Wetter, nach oben; passt es nicht, nach unten. */
+export const WEATHER_SCORE_DELTA_RANGE = { min: 0.2, max: 1.0 } as const;
 
 export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRaceModifierResult {
   const { race, stage, lieutenants, rivalries, random } = input;
   let riders: Rider[] = [...input.riders];
   const rivalByRiderId = new Map<number, number>();
+
+  const scoreDeltaByRiderId = new Map<number, number>();
+  const addiere = (riderId: number, delta: number): void => {
+    scoreDeltaByRiderId.set(riderId, (scoreDeltaByRiderId.get(riderId) ?? 0) + delta);
+  };
 
   // Apply Home Advantage / Pressure modifications
   const raceCountryCode = race.country?.code3;
@@ -140,26 +183,40 @@ export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRace
         const shuffledSkills = shuffled(random, selectedSkills);
         clonedRider.homeEffectSkills = shuffledSkills;
 
+        // Die Ziehung laeuft in beiden Faellen gleich, damit derselbe Seed
+        // denselben Fahrer trifft — nur die Verbuchung unterscheidet sich.
         if (roll < 0.05) {
           // Heimdruck (5% chance): -0.5 on 5 random skills
           clonedRider.homeEffect = 'home_pressure';
-          for (const key of shuffledSkills) {
-            clonedRider.skills[key] = Math.max(0, clonedRider.skills[key] - 0.5);
+          if (input.effectsAsScoreDelta) {
+            addiere(clonedRider.id, HOME_SCORE_DELTA.pressure);
+          } else {
+            for (const key of shuffledSkills) {
+              clonedRider.skills[key] = Math.max(0, clonedRider.skills[key] - 0.5);
+            }
           }
         } else if (roll < 0.10) {
           // Super Heimvorteil (5% chance): +1 on 4 skills, +3 on 1 skill
           clonedRider.homeEffect = 'super_home';
-          const plus3Key = shuffledSkills[0];
-          clonedRider.skills[plus3Key] = Math.min(100, clonedRider.skills[plus3Key] + 3);
-          for (let i = 1; i < 5; i++) {
-            const key = shuffledSkills[i];
-            clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+          if (input.effectsAsScoreDelta) {
+            addiere(clonedRider.id, HOME_SCORE_DELTA.super);
+          } else {
+            const plus3Key = shuffledSkills[0];
+            clonedRider.skills[plus3Key] = Math.min(100, clonedRider.skills[plus3Key] + 3);
+            for (let i = 1; i < 5; i++) {
+              const key = shuffledSkills[i];
+              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+            }
           }
         } else {
           // Normal Heimvorteil (90% chance): +1 on 5 random skills
           clonedRider.homeEffect = 'normal_home';
-          for (const key of shuffledSkills) {
-            clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+          if (input.effectsAsScoreDelta) {
+            addiere(clonedRider.id, HOME_SCORE_DELTA.normal);
+          } else {
+            for (const key of shuffledSkills) {
+              clonedRider.skills[key] = Math.min(100, clonedRider.skills[key] + 1);
+            }
           }
         }
         return clonedRider;
@@ -186,9 +243,13 @@ export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRace
     const skillsToModify: RiderSkillKey[] = ['flat', 'mountain', 'stamina', 'bikeHandling', 'recuperation', 'downhill'];
 
     if (relation === 'pref') {
-      for (const skill of skillsToModify) {
-        const mod = randomBetween(random, 0.2, 1.0);
-        clonedRider.skills[skill] = Math.min(100, clonedRider.skills[skill] + mod);
+      if (input.effectsAsScoreDelta) {
+        addiere(clonedRider.id, randomBetween(random, WEATHER_SCORE_DELTA_RANGE.min, WEATHER_SCORE_DELTA_RANGE.max));
+      } else {
+        for (const skill of skillsToModify) {
+          const mod = randomBetween(random, 0.2, 1.0);
+          clonedRider.skills[skill] = Math.min(100, clonedRider.skills[skill] + mod);
+        }
       }
     } else if (relation === 'malus') {
       // Check if there is a lieutenant starting the race who has this weather as a preference
@@ -208,9 +269,17 @@ export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRace
         }
       }
 
-      for (const skill of skillsToModify) {
-        const mod = randomBetween(random, 0.2, 1.0) * (1 - reduction);
-        clonedRider.skills[skill] = Math.max(0, clonedRider.skills[skill] - mod);
+      if (input.effectsAsScoreDelta) {
+        // Der Leutnant-Ausgleich wirkt genauso wie auf dem Faehigkeitsweg.
+        addiere(
+          clonedRider.id,
+          -randomBetween(random, WEATHER_SCORE_DELTA_RANGE.min, WEATHER_SCORE_DELTA_RANGE.max) * (1 - reduction),
+        );
+      } else {
+        for (const skill of skillsToModify) {
+          const mod = randomBetween(random, 0.2, 1.0) * (1 - reduction);
+          clonedRider.skills[skill] = Math.max(0, clonedRider.skills[skill] - mod);
+        }
       }
     }
 
@@ -251,5 +320,5 @@ export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRace
     }
   }
 
-  return { riders, rivalByRiderId };
+  return { riders, rivalByRiderId, scoreDeltaByRiderId };
 }
