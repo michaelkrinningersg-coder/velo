@@ -15,6 +15,7 @@ eigenen Referenzlauf.
 | `klassifiziere_etappen.py` | laedt die echten Etappen und ordnet sie ein |
 | `hole_ergebnisse.py` | holt die Ergebnislisten (muss von aussen laufen, siehe unten) |
 | `werte_ergebnisse_aus.py` | rechnet daraus die Zielgroessen: Gruppengroessen, Gruppenanzahl, Rueckstaende je Kilometer |
+| `vergleiche_modell.ts` + `runVergleich.js` | simuliert dieselben Etappen und stellt echt gegen Modell |
 
 ## Quellen
 
@@ -116,6 +117,17 @@ Woche 1 19,4 %, Woche 2 28,3 %, Woche 3 32,9 % — was die Abhaengigkeit von
 der Etappennummer in `breakawaySurvival.ts` stuetzt. Unsere Tabelle liegt im
 Mittel bei 2,5 / 6,7 / 10,6 % und damit deutlich unter der Grenze; ob sie zu
 niedrig steht, entscheiden erst die Ergebnislisten.
+
+## Ablauf
+
+    python3 tools/real-data/hole_ergebnisse.py --alle   # einmalig, von aussen
+    python3 tools/real-data/werte_ergebnisse_aus.py     # -> ziele_real.csv
+    node    tools/real-data/runVergleich.js             # -> Delta-Tabelle
+
+Der Vergleich simuliert *dieselben* Etappen: gleiche Distanz, gleicher
+`stage_score`, gleiche Feldgroesse, gleiches Terrain, je 50 Laeufe. Damit
+faellt jeder Vergleichsfehler weg, der sonst daher kaeme, dass eine
+synthetische Testetappe anders lang oder anders schwer ist als die echte.
 
 ## Was nicht kalibriert wird
 

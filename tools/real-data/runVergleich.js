@@ -1,0 +1,10 @@
+const path = require('node:path');
+const Module = require('node:module');
+const wurzel = path.join(__dirname, '..', '..');
+process.env.NODE_PATH = path.join(wurzel, 'backend', 'node_modules');
+Module._initPaths();
+process.env.TS_NODE_PROJECT = path.join(wurzel, 'tools', 'quicksim-calibration', 'tsconfig.json');
+process.env.TS_NODE_TRANSPILE_ONLY = 'true';
+process.chdir(wurzel);
+require(path.join(wurzel, 'backend', 'node_modules', 'ts-node', 'register'));
+require(path.join(__dirname, 'vergleiche_modell.ts'));
