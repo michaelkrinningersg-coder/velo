@@ -16,11 +16,17 @@
  * Die Werte gelten fuer jedes Terrain gleich: die Arbeit, die eine Mannschaft
  * verteilt, haengt nicht am Profil.
  *
- * Zwei Ausnahmen gibt es doch. Kapitaene, Co-Kapitaene und Sprinter fallen nie
- * unter -1: sie fahren ihr eigenes Rennen, auch wenn sie an diesem Tag hinten
- * in ihrer Mannschaft stehen — die Abstufung bildet Helferdienste ab, und die
- * leisten sie nicht. Und der beste Etappenfahrer einer Mannschaft faellt in
- * einer Rundfahrt gar nicht ins Minus, weil er die Gesamtwertung faehrt.
+ * In Rundfahrten gibt es zwei Ausnahmen. Kapitaene, Co-Kapitaene und Sprinter
+ * fallen nie unter -1: sie fahren ueber drei Wochen ihr eigenes Rennen, auch
+ * an einem Tag, an dem sie hinten in ihrer Mannschaft stehen. Und der beste
+ * Etappenfahrer einer Mannschaft faellt gar nicht ins Minus, weil er die
+ * Gesamtwertung faehrt.
+ *
+ * In Eintagesrennen gilt keine der beiden. Dort entscheidet allein der Score
+ * des Tages, wer der Kopf seiner Mannschaft ist — und weil der Score genau
+ * dieses Rennen bewertet, ist das der Fahrer, dem dieses Rennen liegt, ganz
+ * gleich welche Rolle er im Kader traegt. Ein Kapitaen, dem das Profil nicht
+ * liegt, faehrt hier fuer den Klassikerfahrer und nicht umgekehrt.
  */
 
 /** Zuschlag je Platz innerhalb der Mannschaft, vom besten an. */
@@ -29,10 +35,12 @@ export const TEAM_STAGING_STEPS: readonly number[] = [1, 0, -0.5, -1, -1.5, -2, 
 /**
  * Untergrenze fuer Rollen, die ihr eigenes Rennen fahren duerfen.
  *
- * Ein Kapitaen, Co-Kapitaen oder Sprinter faehrt nicht fuer einen anderen.
- * Steht er an einem schwachen Tag trotzdem hinten in seiner Mannschaft, soll
- * ihn die Abstufung nicht zusaetzlich nach unten druecken — sie bildet
- * Helferdienste ab, und die leistet er nicht.
+ * Ein Kapitaen, Co-Kapitaen oder Sprinter faehrt in einer Rundfahrt nicht fuer
+ * einen anderen. Steht er an einem schwachen Tag trotzdem hinten in seiner
+ * Mannschaft, soll ihn die Abstufung nicht zusaetzlich nach unten druecken.
+ *
+ * Nur in Rundfahrten: in einem Eintagesrennen zaehlt die Rolle im Kader
+ * nichts, dort entscheidet der Score dieses Rennens.
  */
 export const TEAM_STAGING_ROLE_FLOOR = -1;
 
@@ -61,14 +69,21 @@ export function normalisiereRolle(roleName: string | null | undefined): string {
  * Hinter dem achten Fahrer bleibt es bei -3. Ein Kader von acht ist die Regel;
  * die wenigen groesseren Mannschaften sollen nicht immer tiefer fallen, nur
  * weil sie mehr Fahrer am Start haben.
+ *
+ * Die Rollenuntergrenze gilt nur in Rundfahrten — in einem Eintagesrennen
+ * traegt die volle Staffel, wer im Score dieses Rennens hinten steht.
  */
-export function resolveTeamStagingDelta(positionInTeam: number, roleName?: string | null): number {
+export function resolveTeamStagingDelta(
+  positionInTeam: number,
+  roleName?: string | null,
+  isStageRace = false,
+): number {
   if (positionInTeam < 0) {
     return 0;
   }
   const letzte = TEAM_STAGING_STEPS[TEAM_STAGING_STEPS.length - 1] as number;
   const roh = TEAM_STAGING_STEPS[positionInTeam] ?? letzte;
-  return TEAM_STAGING_FLOOR_ROLES.has(normalisiereRolle(roleName))
+  return isStageRace && TEAM_STAGING_FLOOR_ROLES.has(normalisiereRolle(roleName))
     ? Math.max(TEAM_STAGING_ROLE_FLOOR, roh)
     : roh;
 }
@@ -159,7 +174,7 @@ export function buildTeamStagingDeltas(
       (links, rechts) => rechts.score - links.score || links.riderId - rechts.riderId,
     );
     sortiert.forEach((rider, position) => {
-      const roh = resolveTeamStagingDelta(position, rider.roleName);
+      const roh = resolveTeamStagingDelta(position, rider.roleName, isStageRace);
       deltas.set(
         rider.riderId,
         rider.riderId === kapitaenDerRundfahrt ? Math.max(TEAM_STAGING_LEADER_FLOOR, roh) : roh,

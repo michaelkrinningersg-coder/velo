@@ -39,12 +39,12 @@ describe('Abstufung innerhalb der Mannschaft', () => {
     }
   });
 
-  it('laesst Kapitaene, Co-Kapitaene und Sprinter nie unter minus eins fallen', () => {
+  it('laesst Kapitaene, Co-Kapitaene und Sprinter in der Rundfahrt nie unter minus eins fallen', () => {
     expect(TEAM_STAGING_ROLE_FLOOR).toBe(-1);
     expect([...TEAM_STAGING_FLOOR_ROLES].sort()).toEqual(['co-kapitaen', 'kapitaen', 'sprinter']);
     for (const rolle of ['Kapitaen', 'Co-Kapitaen', 'Sprinter', 'Kapitän', 'Co-Kapitän']) {
       for (let position = 0; position < 15; position += 1) {
-        const wert = resolveTeamStagingDelta(position, rolle);
+        const wert = resolveTeamStagingDelta(position, rolle, true);
         expect(wert).toBeGreaterThanOrEqual(-1);
         // Oberhalb der Grenze bleibt die Staffel unveraendert.
         expect(wert).toBe(Math.max(-1, TEAM_STAGING_STEPS[position] ?? -3));
@@ -52,24 +52,51 @@ describe('Abstufung innerhalb der Mannschaft', () => {
     }
   });
 
+  it('kennt im Eintagesrennen keine Rollen', () => {
+    for (const rolle of ['Kapitaen', 'Co-Kapitaen', 'Sprinter', 'Edelhelfer', 'Wassertraeger', undefined]) {
+      for (let position = 0; position < 12; position += 1) {
+        expect(resolveTeamStagingDelta(position, rolle, false))
+          .toBe(TEAM_STAGING_STEPS[position] ?? -3);
+      }
+    }
+    // Ohne Angabe gilt dieselbe Vorgabe wie fuer ein Eintagesrennen.
+    expect(resolveTeamStagingDelta(7, 'Kapitaen')).toBe(-3);
+  });
+
   it('laesst Helferrollen die volle Staffel tragen', () => {
     for (const rolle of ['Edelhelfer', 'Starke Helfer', 'Wassertraeger', 'Wasserträger', '', undefined]) {
-      expect(resolveTeamStagingDelta(7, rolle)).toBe(-3);
-      expect(resolveTeamStagingDelta(4, rolle)).toBe(-1.5);
+      expect(resolveTeamStagingDelta(7, rolle, true)).toBe(-3);
+      expect(resolveTeamStagingDelta(4, rolle, true)).toBe(-1.5);
     }
   });
 
   it('greift die Untergrenze auch im ganzen Team', () => {
-    // Eine Mannschaft aus acht Kapitaenen: keiner faellt unter -1.
-    const deltas = buildTeamStagingDeltas(Array.from({ length: 8 }, (_, i) => ({
-      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Kapitaen',
-    })));
-    expect([...deltas.values()]).toEqual([1, 0, -0.5, -1, -1, -1, -1, -1]);
+    const mannschaft = (rolle: string) => Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: rolle,
+    }));
+    // Eine Rundfahrtmannschaft aus acht Kapitaenen: keiner faellt unter -1.
+    expect([...buildTeamStagingDeltas(mannschaft('Kapitaen'), true).values()])
+      .toEqual([1, 0, -0.5, -1, -1, -1, -1, -1]);
     // Dieselbe Mannschaft aus Wassertraegern traegt die volle Staffel.
-    const helfer = buildTeamStagingDeltas(Array.from({ length: 8 }, (_, i) => ({
-      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
-    })));
-    expect([...helfer.values()]).toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
+    expect([...buildTeamStagingDeltas(mannschaft('Wassertraeger'), true).values()])
+      .toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
+    // Im Eintagesrennen tragen beide dieselbe Staffel.
+    expect([...buildTeamStagingDeltas(mannschaft('Kapitaen'), false).values()])
+      .toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
+  });
+
+  it('begunstigt im Eintagesrennen den, dem das Rennen liegt', () => {
+    // Ein Klassikerfahrer ohne Kapitaensrolle hat auf diesem Profil den
+    // besseren Score als der Kapitaen seiner Mannschaft.
+    const deltas = buildTeamStagingDeltas([
+      { riderId: 1, teamId: 1, score: 70, roleName: 'Kapitaen', stageRacerValue: 95 },
+      { riderId: 2, teamId: 1, score: 92, roleName: 'Edelhelfer', stageRacerValue: 60 },
+      { riderId: 3, teamId: 1, score: 60, roleName: 'Sprinter', stageRacerValue: 55 },
+    ], false);
+    expect(deltas.get(2)).toBe(1);
+    expect(deltas.get(1)).toBe(0);
+    // Weder Kapitaensrolle noch Etappenfahrerwert schuetzen hier.
+    expect(deltas.get(3)).toBe(-0.5);
   });
 
   it('vergibt die Staffel nach dem Score, nicht nach der Eingabereihenfolge', () => {
@@ -300,10 +327,12 @@ describe('Bester Etappenfahrer einer Mannschaft', () => {
 
   it('greift im Eintagesrennen nicht', () => {
     const mannschaft = Array.from({ length: 8 }, (_, i) => ({
-      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Kapitaen',
       stageRacerValue: wert(60 + i, 60, 60),
     }));
-    expect(buildTeamStagingDeltas(mannschaft, false).get(8)).toBe(-3);
+    // Weder der Etappenfahrerwert noch die Kapitaensrolle helfen dort.
+    expect([...buildTeamStagingDeltas(mannschaft, false).values()])
+      .toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
     // Ohne Angabe gilt dieselbe Vorgabe wie fuer ein Eintagesrennen.
     expect(buildTeamStagingDeltas(mannschaft).get(8)).toBe(-3);
   });
