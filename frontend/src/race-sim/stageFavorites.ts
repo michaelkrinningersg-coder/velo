@@ -1,6 +1,6 @@
 import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
-import { resolveDomestiqueClimbPenalty, resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
+import { resolveClimbPenaltyForRole, resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
 
 export interface FavoriteItem {
   rank: number;
@@ -80,7 +80,8 @@ function resolveStaminaContribution(rider: Rider, distanceKm: number): number {
 }
 
 /**
- * Abzug fuer Wassertraeger am Berg. Siehe `DOMESTIQUE_CLIMB_PENALTY`.
+ * Abzug fuer Helferrollen am Berg. Siehe `DOMESTIQUE_CLIMB_PENALTY` und
+ * `CLIMB_PENALTY_BY_ROLE`.
  *
  * Der Rollenname kommt aus der Datenbank und steht dort als `Wassertraeger`,
  * kann aber auch `Wasserträger` geschrieben sein. Umlaute werden deshalb
@@ -93,7 +94,7 @@ function resolveDomestiquePenalty(rider: Rider, profile: StageProfile): number {
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  return rolle === 'wassertraeger' ? resolveDomestiqueClimbPenalty(profile) : 0;
+  return resolveClimbPenaltyForRole(rolle, profile);
 }
 
 function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile): number {

@@ -13,6 +13,10 @@
  */
 
 import type { QuickSimProfileParameters } from '../quickSimProfiles';
+import type { StageProfile } from '../types';
+import type { RandomSource } from '../rng';
+import { drawStandardNormal, drawTailGroupSize } from './groupModel';
+import { TIME_TIE_THRESHOLD_SECONDS } from '../stageResultRules';
 
 /** Woher der Sieger einer Zwischenwertung kommt. */
 export type MarkerSource = 'breakaway' | 'field';
@@ -155,4 +159,172 @@ export function resolveMarkerRanking(input: MarkerRankingInput): MarkerRanking {
   }
 
   return { source: 'breakaway', riderIds, breakawaySize };
+}
+
+/**
+ * Wie viel einer durchgekommenen Ausreissergruppe wirklich vorne ankommt.
+ *
+ * Eine Gruppe, die nicht gestellt wird, faehrt trotzdem nicht geschlossen ins
+ * Ziel. Am letzten Anstieg attackiert einer, zwei folgen, der Rest zerfaellt
+ * und wird vom Feld noch aufgesammelt. Bisher stand die komplette Gruppe
+ * zeitgleich auf den vordersten Plaetzen — auf einer Hochgebirgsetappe waren
+ * das acht Fahrer mit demselben Rueckstand vor dem Feld, was es so nicht gibt.
+ *
+ * Der Anteil, der durchkommt, ist terrainabhaengig: je haerter das Profil,
+ * desto weniger. Im Hochgebirge zerlegt der Anstieg die Gruppe, huegelig
+ * kommt sie oft komplett an. Unten liegt die Grenze ueberall bei zehn
+ * Prozent — mindestens der Etappensieger kommt durch, sonst waere die Gruppe
+ * gestellt worden.
+ *
+ * Durchkommen heisst: der Fahrer steht vor dem ersten Nicht-Ausreisser. Wer
+ * nicht durchkommt, wird eingeholt und reiht sich im Feld ein.
+ */
+export const BREAKAWAY_SURVIVOR_SHARE_MIN = 0.1;
+
+export const BREAKAWAY_SURVIVOR_SHARE_MAX: Partial<Record<StageProfile, number>> = {
+  Mountain: 0.5,
+  High_Mountain: 0.5,
+  Medium_Mountain: 0.75,
+  Hilly_Difficult: 0.75,
+  Hilly: 1,
+};
+
+export function resolveBreakawaySurvivorShareMax(profile: StageProfile | null | undefined): number {
+  return (profile ? BREAKAWAY_SURVIVOR_SHARE_MAX[profile] : undefined) ?? 1;
+}
+
+/**
+ * Zieht den durchkommenden Anteil.
+ *
+ * Normalverteilt zwischen Unter- und Obergrenze: Mittelwert in der Mitte,
+ * Streuung ein Viertel der Spanne, damit die Grenzen bei zwei Sigma liegen
+ * und die Ziehung nur selten abgeschnitten wird.
+ */
+export function drawBreakawaySurvivorShare(
+  random: RandomSource,
+  profile: StageProfile | null | undefined,
+): number {
+  const max = resolveBreakawaySurvivorShareMax(profile);
+  const min = Math.min(BREAKAWAY_SURVIVOR_SHARE_MIN, max);
+  const mitte = (min + max) / 2;
+  const sigma = (max - min) / 4;
+  return Math.min(max, Math.max(min, mitte + (drawStandardNormal(random) * sigma)));
+}
+
+/**
+ * Wie viele Ausreisser durchkommen. Immer mindestens einer: der Etappensieger.
+ */
+export function resolveBreakawaySurvivorCount(
+  random: RandomSource,
+  breakawaySize: number,
+  profile: StageProfile | null | undefined,
+): number {
+  if (breakawaySize <= 0) {
+    return 0;
+  }
+  const anteil = drawBreakawaySurvivorShare(random, profile);
+  return Math.min(breakawaySize, Math.max(1, Math.round(anteil * breakawaySize)));
+}
+
+/**
+ * Abzug auf den Score fuer einen eingeholten Ausreisser.
+ *
+ * Er hat den Tag vorne verbracht und kommt mit leeren Beinen zurueck: er
+ * reiht sich im Feld ein wie jeder andere, nur drei Punkte schwaecher.
+ */
+export const CAUGHT_BREAKAWAY_SCORE_MALUS = 3;
+
+/** Mittlere Groesse einer Gruppe innerhalb der durchgekommenen Ausreisser. */
+export const BREAKAWAY_FRAGMENT_MEAN_SIZE = 1.5;
+
+/**
+ * Anteil des Restvorsprungs, ueber den sich die durchgekommenen Ausreisser
+ * verteilen. Die Obergrenze liegt unter eins, damit auch der letzte von ihnen
+ * vor dem Feld bleibt — sonst waere er nicht durchgekommen.
+ */
+export const BREAKAWAY_FRAGMENT_SPREAD_RANGE = { min: 0.15, max: 0.8 };
+
+/**
+ * Wie sich die Abstaende ueber die Spanne verteilen. Ueber eins heisst:
+ * vorne dicht, hinten weit — der Etappensieger faehrt seinen Vorsprung
+ * heraus, das Ende der Gruppe verliert dahinter deutlich mehr.
+ */
+export const BREAKAWAY_FRAGMENT_GAP_EXPONENT = 1.5;
+
+/** Mindestabstand zweier Ausreissergruppen, damit sie getrennt bleiben. */
+const MIN_FRAGMENT_SPLIT_SECONDS = TIME_TIE_THRESHOLD_SECONDS + 1;
+
+export interface BreakawayFragment {
+  /** Wie viele Fahrer in dieser Gruppe stehen. */
+  size: number;
+  /** Rueckstand auf den Etappensieger in Sekunden. */
+  gapSeconds: number;
+}
+
+/**
+ * Teilt die durchgekommenen Ausreisser in Zeitgruppen auf.
+ *
+ * Die Reihenfolge steht schon fest — sie kommt aus dem Score. Hier faellt nur
+ * noch, wer mit wem zeitgleich ankommt und wie weit die Gruppen auseinander
+ * liegen. Die Gruppengroessen sind geometrisch verteilt um einen kleinen
+ * Mittelwert: meist faehrt der Sieger allein, dahinter kommen Einzelne und
+ * Paare.
+ *
+ * Die Abstaende werden als Positionen in der gezogenen Spanne gezogen und
+ * sortiert. Dadurch sind sie unregelmaessig — mal folgt der Zweite nach
+ * zwanzig Sekunden, mal nach zwei Minuten — ohne dass ein Fahrer den vor ihm
+ * liegenden ueberholen kann.
+ */
+export function buildBreakawayFragments(
+  random: RandomSource,
+  survivorCount: number,
+  leadSeconds: number,
+): BreakawayFragment[] {
+  if (survivorCount <= 0) {
+    return [];
+  }
+  // Mehr Gruppen, als der Restvorsprung hergibt, kann es nicht geben: die
+  // letzte muesste sonst hinter dem Feld liegen, und dann waere sie nicht
+  // durchgekommen.
+  const maxGruppen = Math.max(
+    1,
+    1 + Math.floor(Math.max(0, leadSeconds - 1) / MIN_FRAGMENT_SPLIT_SECONDS),
+  );
+  const groessen: number[] = [];
+  let rest = survivorCount;
+  while (rest > 0) {
+    const groesse = groessen.length + 1 >= maxGruppen
+      ? rest
+      : drawTailGroupSize(random, BREAKAWAY_FRAGMENT_MEAN_SIZE, rest);
+    groessen.push(groesse);
+    rest -= groesse;
+  }
+  if (groessen.length <= 1) {
+    return groessen.map((size) => ({ size, gapSeconds: 0 }));
+  }
+
+  const { min, max } = BREAKAWAY_FRAGMENT_SPREAD_RANGE;
+  const spanne = Math.max(0, leadSeconds) * (min + (random() * (max - min)));
+  const positionen = groessen.slice(1)
+    .map(() => Math.pow(random(), BREAKAWAY_FRAGMENT_GAP_EXPONENT))
+    .sort((links, rechts) => links - rechts);
+
+  // Jede Gruppe muss sichtbar hinter der vorigen liegen, sonst faellt sie
+  // durch die 1-Sekunden-Regel wieder mit ihr zusammen und die Aufteilung
+  // waere umsonst gewesen. Nach oben bleibt gleichzeitig Platz fuer alle
+  // Gruppen, die noch kommen — die letzte muss vor dem Feld bleiben.
+  const letzte = groessen.length - 1;
+  let vorher = 0;
+  return groessen.map((size, index) => {
+    if (index === 0) {
+      return { size, gapSeconds: 0 };
+    }
+    const obergrenze = leadSeconds - 1 - ((letzte - index) * MIN_FRAGMENT_SPLIT_SECONDS);
+    const gapSeconds = Math.min(
+      obergrenze,
+      Math.max(vorher + MIN_FRAGMENT_SPLIT_SECONDS, Math.round(spanne * (positionen[index - 1] as number))),
+    );
+    vorher = gapSeconds;
+    return { size, gapSeconds };
+  });
 }

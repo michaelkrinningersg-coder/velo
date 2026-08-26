@@ -94,8 +94,30 @@ export const DOMESTIQUE_CLIMB_PENALTY: Partial<Record<StageProfile, number>> = {
   High_Mountain: 6,
 };
 
+/**
+ * Anteil des Abzugs, den ein starker Helfer traegt.
+ *
+ * Er faehrt am Berg laenger vorne mit als der Wassertraeger, faehrt aber
+ * ebenfalls nicht sein eigenes Rennen — ein Drittel des vollen Abzugs.
+ */
+export const STRONG_HELPER_PENALTY_SHARE = 1 / 3;
+
+/** Rollen, die den Abzug tragen, mit ihrem Anteil daran. */
+export const CLIMB_PENALTY_BY_ROLE: Record<string, number> = {
+  wassertraeger: 1,
+  'starke helfer': STRONG_HELPER_PENALTY_SHARE,
+};
+
 export function resolveDomestiqueClimbPenalty(profile: StageProfile | null | undefined): number {
   return (profile ? DOMESTIQUE_CLIMB_PENALTY[profile] : undefined) ?? 0;
+}
+
+/** Abzug fuer eine Rolle auf diesem Terrain. Unbekannte Rollen tragen keinen. */
+export function resolveClimbPenaltyForRole(
+  roleName: string,
+  profile: StageProfile | null | undefined,
+): number {
+  return resolveDomestiqueClimbPenalty(profile) * (CLIMB_PENALTY_BY_ROLE[roleName] ?? 0);
 }
 
 export function resolveTieBreakNoiseFactor(profile: StageProfile | null | undefined): number {

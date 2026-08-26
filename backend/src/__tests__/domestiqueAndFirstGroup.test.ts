@@ -8,6 +8,8 @@ import {
 } from '../../../shared/quickSimProfiles';
 import {
   DOMESTIQUE_CLIMB_PENALTY,
+  STRONG_HELPER_PENALTY_SHARE,
+  resolveClimbPenaltyForRole,
   resolveDomestiqueClimbPenalty,
 } from '../../../shared/quickSim/terrainModifiers';
 import { calculateStageFavoriteRiderRanking } from '../../../frontend/src/race-sim/stageFavorites';
@@ -155,5 +157,44 @@ describe('Abzug fuer Wassertraeger am Berg', () => {
       teams, stage('High_Mountain'), { distanceKm: 165, isStageRace: true },
     );
     expect(rang[0]!.rider.id).toBe(1);
+  });
+});
+
+describe('Abzug fuer starke Helfer am Berg', () => {
+  const teams = [{ id: 1, name: 'Team' }] as unknown as Team[];
+  const stage = (profile: StageProfile) => ({ id: 1, stageNumber: 1, profile, profileScore: 165 * 1.6 } as never);
+
+  it('traegt genau ein Drittel des vollen Abzugs', () => {
+    expect(STRONG_HELPER_PENALTY_SHARE).toBeCloseTo(1 / 3, 12);
+    for (const [profile, voll] of Object.entries(DOMESTIQUE_CLIMB_PENALTY) as Array<[StageProfile, number]>) {
+      expect(resolveClimbPenaltyForRole('starke helfer', profile)).toBeCloseTo(voll / 3, 12);
+      expect(resolveClimbPenaltyForRole('wassertraeger', profile)).toBeCloseTo(voll, 12);
+    }
+  });
+
+  it('gibt Rollen ohne Eintrag keinen Abzug', () => {
+    for (const rolle of ['kapitaen', 'co-kapitaen', 'edelhelfer', 'sprinter', '']) {
+      expect(resolveClimbPenaltyForRole(rolle, 'High_Mountain')).toBe(0);
+    }
+  });
+
+  it('wirkt im Ranking mit einem Drittel', () => {
+    for (const [profile, voll] of Object.entries(DOMESTIQUE_CLIMB_PENALTY) as Array<[StageProfile, number]>) {
+      const rang = calculateStageFavoriteRiderRanking(
+        [baueFahrer(1, 'Kapitaen', 75), baueFahrer(2, 'Starke Helfer', 75), baueFahrer(3, 'Wassertraeger', 75)],
+        teams, stage(profile), { distanceKm: 165, isStageRace: true },
+      );
+      const wert = (id: number) => rang.find((r) => r.rider.id === id)!.effectiveSkill;
+      expect(wert(1) - wert(2)).toBeCloseTo(voll / 3, 6);
+      expect(wert(1) - wert(3)).toBeCloseTo(voll, 6);
+      // Der starke Helfer steht zwischen Kapitaen und Wassertraeger.
+      expect(rang.map((r) => r.rider.id)).toEqual([1, 2, 3]);
+    }
+  });
+
+  it('laesst den starken Helfer flach und huegelig unangetastet', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult'] as StageProfile[]) {
+      expect(resolveClimbPenaltyForRole('starke helfer', profile)).toBe(0);
+    }
   });
 });

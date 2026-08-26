@@ -29,7 +29,10 @@ import type { StageProfile } from '../types';
 import type { QuickSimProfileParameters } from '../quickSimProfiles';
 import type { RandomSource } from '../rng';
 import {
+  buildBreakawayFragments,
   resolveBreakawaySurvives,
+  resolveBreakawaySurvivorCount,
+  CAUGHT_BREAKAWAY_SCORE_MALUS,
   type QuickSimBreakawayPlan,
 } from './breakaway';
 import {
@@ -289,15 +292,51 @@ function applyScoreShiftToEntries(
   breakawaySurvived: boolean,
   rankNoise: ReadonlyMap<number, number>,
   tieBreakNoiseFactor: number,
+  extraShift: ReadonlyMap<number, number>,
 ): QuickSimRiderInput[] {
   const plan = input.breakaway;
   const shift = plan ? (breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0)) : 0;
   const affected = new Set(plan?.riderIds ?? []);
   return riders.map((rider) => {
     const delta = (affected.has(rider.riderId) ? shift : 0)
+      + (extraShift.get(rider.riderId) ?? 0)
       + ((rankNoise.get(rider.riderId) ?? 0) * tieBreakNoiseFactor);
     return delta === 0 ? rider : { ...rider, photoFinishScore: rider.photoFinishScore + delta };
   });
+}
+
+/**
+ * Wer von einer durchgekommenen Ausreissergruppe wirklich vorne ankommt.
+ *
+ * Die Auswahl faellt nach dem Score — mit Rangrauschen, damit nicht immer
+ * dieselben drei durchkommen. Wer nicht dabei ist, wird eingeholt: er verliert
+ * den Ueberlebensbonus und bekommt den Abzug fuer den Tag in der Flucht.
+ * Danach steht er im Feld wie jeder andere.
+ */
+function resolveBreakawaySplit(
+  random: RandomSource,
+  plan: QuickSimBreakawayPlan,
+  finishers: readonly QuickSimRiderInput[],
+  scores: Map<number, number>,
+  profile: StageProfile,
+): { survivors: Set<number>; caughtShift: Map<number, number> } {
+  const imZiel = new Set(finishers.map((rider) => rider.riderId));
+  const kandidaten = plan.riderIds
+    .filter((riderId) => imZiel.has(riderId))
+    .sort((links, rechts) => (scores.get(rechts) as number) - (scores.get(links) as number) || links - rechts);
+
+  const anzahl = resolveBreakawaySurvivorCount(random, kandidaten.length, profile);
+  const survivors = new Set(kandidaten.slice(0, anzahl));
+
+  const shift = -(plan.skillBonus ?? 0) - CAUGHT_BREAKAWAY_SCORE_MALUS;
+  const caughtShift = new Map<number, number>();
+  for (const riderId of kandidaten) {
+    if (!survivors.has(riderId)) {
+      scores.set(riderId, (scores.get(riderId) as number) + shift);
+      caughtShift.set(riderId, shift);
+    }
+  }
+  return { survivors, caughtShift };
 }
 
 /** Restvorsprung der ueberlebenden Ausreissergruppe im Ziel. */
@@ -385,7 +424,17 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     scores.set(riderId, (scores.get(riderId) as number) + delta);
   }
   const tieBreakFactor = resolveTieBreakNoiseFactor(profile);
-  const sorted = applyScoreShiftToEntries(finishers, input, breakawaySurvived, rankNoise, tieBreakFactor).sort(
+
+  // Wer von einer durchgekommenen Gruppe vorne ankommt, steht vor der
+  // Sortierung fest: die Eingeholten reihen sich mit ihrem Abzug ganz normal
+  // ins Feld ein, und das aendert die Reihenfolge.
+  const split = breakawaySurvived && input.breakaway
+    ? resolveBreakawaySplit(random, input.breakaway, finishers, scores, profile)
+    : null;
+
+  const sorted = applyScoreShiftToEntries(
+    finishers, input, breakawaySurvived, rankNoise, tieBreakFactor, split?.caughtShift ?? new Map(),
+  ).sort(
     (left, right) => (scores.get(right.riderId) as number) - (scores.get(left.riderId) as number)
       || left.riderId - right.riderId,
   );
@@ -394,20 +443,29 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
   const gapByRiderId = new Map<number, number>();
   const groupIndexByRiderId = new Map<number, number>();
   let diagnostics: QuickSimGroupDiagnostics | undefined;
-  if (breakawaySurvived && input.breakaway) {
-    // Die Ausreisser bilden Gruppe 1, das Feld beginnt bei Gruppe 2. Der
-    // Etappensieg faellt damit zwingend aus der Gruppe — nicht als Bonus, der
-    // sich gegen einen starken Sprinter auch mal nicht durchsetzt.
-    const breakawayIds = new Set(input.breakaway.riderIds);
-    const head = sorted.filter((rider) => breakawayIds.has(rider.riderId));
-    const field = sorted.filter((rider) => !breakawayIds.has(rider.riderId));
+  if (breakawaySurvived && input.breakaway && split) {
+    // Vorne stehen die Ausreisser, die durchgekommen sind — und nur die. Der
+    // Etappensieg faellt damit zwingend aus der Gruppe, nicht als Bonus, der
+    // sich gegen einen starken Sprinter auch mal nicht durchsetzt. Die
+    // Eingeholten sind laengst im Feld einsortiert.
+    const head = sorted.filter((rider) => split.survivors.has(rider.riderId));
+    const field = sorted.filter((rider) => !split.survivors.has(rider.riderId));
     const leadSeconds = resolveSurvivingBreakawayLeadSeconds(input.breakaway, distanceKm, random);
 
-    for (const rider of head) {
-      gapByRiderId.set(rider.riderId, 0);
-      groupIndexByRiderId.set(rider.riderId, 0);
-    }
-    const headGroupCount = head.length > 0 ? 1 : 0;
+    // Eine durchgekommene Gruppe faehrt nicht geschlossen ins Ziel: sie
+    // zerfaellt, und die Abstaende bleiben unter dem Restvorsprung, damit
+    // auch der Letzte von ihnen vor dem Feld bleibt.
+    const fragments = buildBreakawayFragments(random, head.length, leadSeconds);
+    let headIndex = 0;
+    fragments.forEach((fragment, index) => {
+      for (let offset = 0; offset < fragment.size; offset += 1) {
+        const rider = head[headIndex + offset] as QuickSimRiderInput;
+        gapByRiderId.set(rider.riderId, fragment.gapSeconds);
+        groupIndexByRiderId.set(rider.riderId, index);
+      }
+      headIndex += fragment.size;
+    });
+    const headGroupCount = fragments.length;
 
     const fieldShare = drawFirstGroupShare(random, parameters, regime, difficultyPerKm, profile);
     const fieldGroups = buildFinishGroups({
@@ -434,8 +492,14 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       drawnShare: fieldShare,
       finisherCount: sorted.length,
       firstGroupSize: resolveFirstGroupSize(fieldShare, field.length, profile),
-      drawnGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
-      protectedGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
+      drawnGroups: [
+        ...fragments.map((fragment) => ({ size: fragment.size, gapSeconds: fragment.gapSeconds })),
+        ...fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
+      ],
+      protectedGroups: [
+        ...fragments.map((fragment) => ({ size: fragment.size, gapSeconds: fragment.gapSeconds })),
+        ...fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
+      ],
       protectedPromotions: 0,
       protectionStrength: 0,
       breakawayHeadSize: head.length,
