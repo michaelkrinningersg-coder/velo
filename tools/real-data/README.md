@@ -87,11 +87,44 @@ eine andere Frage — dort haengt die Tabelle in `breakawaySurvival.ts` bewusst
 an der Etappennummer, und `win_type` misst, wer gewinnt, nicht wie gross die
 erste Gruppe war.
 
+## Ausreisser
+
+`won_how` und `win_type` sagen, *wie* eine Etappe gewonnen wurde, aber nicht,
+ob die Gruppe eine Ausreissergruppe war: ein Solosieg kann eine
+durchgekommene Gruppe sein oder ein Angriff aus dem Favoritenfeld heraus.
+
+Was sich sauber ableiten laesst, ist eine Obergrenze. Ein Massensprint
+schliesst eine durchgekommene Gruppe sicher aus, also gilt
+
+    Anteil Ausreisser  <=  1 - Anteil Massensprints
+
+| Terrain | n | Massensprint | Obergrenze |
+|---|---|---|---|
+| Flat | 157 | 85,4 % | 14,6 % |
+| Rolling | 109 | 68,8 % | 31,2 % |
+| Hilly | 46 | 52,2 % | 47,8 % |
+| Hilly_Difficult | 154 | 18,8 % | 81,2 % |
+| Medium_Mountain | 178 | 7,3 % | 92,7 % |
+| Mountain | 147 | 0,7 % | 99,3 % |
+| High_Mountain | 52 | 0,0 % | 100 % |
+
+Ab `Hilly_Difficult` ist die Grenze zu locker, um irgendetwas zu binden. Auf
+leichtem Terrain bindet sie, und dort steigt sie ueber das Rennen —
+Woche 1 19,4 %, Woche 2 28,3 %, Woche 3 32,9 % — was die Abhaengigkeit von
+der Etappennummer in `breakawaySurvival.ts` stuetzt. Unsere Tabelle liegt im
+Mittel bei 2,5 / 6,7 / 10,6 % und damit deutlich unter der Grenze; ob sie zu
+niedrig steht, entscheiden erst die Ergebnislisten.
+
 ## Was fehlt
 
 Ergebnislisten je Fahrer und Etappe. Ohne sie sind Gruppengroessen,
 Gruppenanzahl und Rueckstaende je Rang nicht messbar — und genau die sollen
-kalibriert werden. Die Quellen dafuer (PCS, FirstCycling) sind von hier aus
-nicht erreichbar; die Daten muessen von aussen hereingereicht werden.
+kalibriert werden. Auch der wahre Ausreisseranteil braucht sie: erst am
+Rueckstand des Feldes sieht man, ob eine Gruppe durchgekommen ist.
+
+`hole_ergebnisse.py` holt sie, muss aber dort laufen, wo
+procyclingstats.com erreichbar ist — von hier aus antwortet der
+Egress-Proxy mit 403, fuer firstcycling.com genauso. Rund sieben Minuten
+fuer die 199 Bergetappen, 28 Minuten fuer alle 843.
 
 Ebenfalls offen: 2025 und 2026, die in `cyclingdata` noch nicht stehen.
