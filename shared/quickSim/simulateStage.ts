@@ -412,7 +412,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     const fieldShare = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
     const fieldGroups = buildFinishGroups({
       scoresDescending: field.map((rider) => scores.get(rider.riderId) as number),
-      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length),
+      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length, profile),
       distanceKm,
       parameters,
       profile,
@@ -433,7 +433,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
       shareMean: resolveFirstGroupShareMean(parameters, regime, difficultyPerKm),
       drawnShare: fieldShare,
       finisherCount: sorted.length,
-      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length),
+      firstGroupSize: resolveFirstGroupSize(fieldShare, field.length, profile),
       drawnGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
       protectedGroups: fieldGroups.map((group) => ({ size: group.memberIndices.length, gapSeconds: leadSeconds + group.gapSeconds })),
       protectedPromotions: 0,
@@ -446,7 +446,7 @@ export function simulateQuickStage(input: QuickSimStageInput): QuickSimStageResu
     };
   } else {
     const share = drawFirstGroupShare(random, parameters, regime, difficultyPerKm);
-    const firstGroupSize = resolveFirstGroupSize(share, sorted.length);
+    const firstGroupSize = resolveFirstGroupSize(share, sorted.length, profile);
     const drawnGroups = buildFinishGroups({
       scoresDescending: sorted.map((rider) => scores.get(rider.riderId) as number),
       firstGroupSize,

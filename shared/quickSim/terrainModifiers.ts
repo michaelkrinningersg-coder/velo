@@ -73,6 +73,31 @@ export const TIE_BREAK_NOISE_FACTOR: Partial<Record<StageProfile, number>> = {
  */
 export const RANK_NOISE_FACTOR = 0.2;
 
+/**
+ * Abzug auf den Etappenscore fuer Wassertraeger am Berg.
+ *
+ * Ein Wassertraeger faehrt am Berg nicht sein eigenes Rennen: er zieht sein
+ * Feld an, holt Flaschen und faellt danach zurueck. Sein Bergwert sagt, was
+ * er koennte, nicht was er darf. Im Modell stand er dagegen mit dem vollen
+ * Wert im Feld — im Giro-Lauf wurde ein Wassertraeger mit Bergwert 75 damit
+ * Vierter der Gesamtwertung.
+ *
+ * Der Abzug wirkt auf den Ordnungsscore und damit auf die Zielposition. Er
+ * waechst mit dem Terrain: was auf einer Mittelgebirgsetappe noch zu
+ * verstecken ist, kostet im Hochgebirge Minuten. Auf allen anderen Profilen
+ * gibt es keinen Abzug — dort ist der Wassertraeger im Feld ganz normal
+ * dabei.
+ */
+export const DOMESTIQUE_CLIMB_PENALTY: Partial<Record<StageProfile, number>> = {
+  Medium_Mountain: 2,
+  Mountain: 4,
+  High_Mountain: 6,
+};
+
+export function resolveDomestiqueClimbPenalty(profile: StageProfile | null | undefined): number {
+  return (profile ? DOMESTIQUE_CLIMB_PENALTY[profile] : undefined) ?? 0;
+}
+
 export function resolveTieBreakNoiseFactor(profile: StageProfile | null | undefined): number {
   return (profile ? TIE_BREAK_NOISE_FACTOR[profile] : undefined) ?? 1;
 }

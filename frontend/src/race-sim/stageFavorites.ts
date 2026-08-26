@@ -1,6 +1,6 @@
 import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
-import { resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
+import { resolveDomestiqueClimbPenalty, resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
 
 export interface FavoriteItem {
   rank: number;
@@ -79,6 +79,23 @@ function resolveStaminaContribution(rider: Rider, distanceKm: number): number {
   return rider.skills.stamina * resolveStaminaWeight(distanceKm);
 }
 
+/**
+ * Abzug fuer Wassertraeger am Berg. Siehe `DOMESTIQUE_CLIMB_PENALTY`.
+ *
+ * Der Rollenname kommt aus der Datenbank und steht dort als `Wassertraeger`,
+ * kann aber auch `Wasserträger` geschrieben sein. Umlaute werden deshalb
+ * zuerst ausgeschrieben und erst danach die restlichen Betonungszeichen
+ * entfernt — `normalize('NFD')` allein macht aus dem Umlaut sonst ein
+ * blankes `a` und der Vergleich schlaegt fehl.
+ */
+function resolveDomestiquePenalty(rider: Rider, profile: StageProfile): number {
+  const rolle = (rider.role?.name ?? '')
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return rolle === 'wassertraeger' ? resolveDomestiqueClimbPenalty(profile) : 0;
+}
+
 function calculateIttScore(rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile): number {
   return rider.skills.timeTrial
     + resolveFormContribution(rider, dailyForm, profile)
@@ -110,7 +127,10 @@ function calculateRoadScore(
   for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
     weighted += rider.skills[key] * weight;
   }
-  return weighted + resolveFormContribution(rider, dailyForm, stage.profile) + resolveStaminaContribution(rider, distanceKm);
+  return weighted
+    + resolveFormContribution(rider, dailyForm, stage.profile)
+    + resolveStaminaContribution(rider, distanceKm)
+    - resolveDomestiquePenalty(rider, stage.profile);
 }
 
 function calculateRiderScore(

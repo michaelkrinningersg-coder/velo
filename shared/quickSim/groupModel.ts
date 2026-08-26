@@ -17,6 +17,7 @@ import {
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
+  FIRST_GROUP_MAX_SIZE,
   MEASURED_GAP_SIGMA_CLAMP,
   MEASURED_STAGE_GAP_MODEL,
   TAIL_GROUP_SHAPE_END,
@@ -172,12 +173,16 @@ export function drawFirstGroupShare(
   return drawBeta(random, alpha, beta);
 }
 
-/** Groesse der ersten Zeitgruppe. Mindestens ein Fahrer, hoechstens das Feld. */
-export function resolveFirstGroupSize(share: number, finisherCount: number): number {
+/**
+ * Groesse der ersten Zeitgruppe. Mindestens ein Fahrer, hoechstens das Feld —
+ * am Berg zusaetzlich gedeckelt, siehe `FIRST_GROUP_MAX_SIZE`.
+ */
+export function resolveFirstGroupSize(share: number, finisherCount: number, profile?: StageProfile): number {
   if (finisherCount <= 0) {
     return 0;
   }
-  return Math.min(finisherCount, Math.max(1, Math.round(share * finisherCount)));
+  const grenze = (profile != null ? FIRST_GROUP_MAX_SIZE[profile] : undefined) ?? finisherCount;
+  return Math.min(finisherCount, grenze, Math.max(1, Math.round(share * finisherCount)));
 }
 
 export interface FinishGroup {

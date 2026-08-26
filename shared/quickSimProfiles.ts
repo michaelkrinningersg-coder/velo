@@ -291,6 +291,33 @@ export const MEASURED_GAP_SIGMA_CLAMP = 2;
  * drei Stuetzstellen und geradliniger Ueberblendung dazwischen. `Hilly_Difficult`
  * steht bewusst nicht darin: dort sitzt die dicke Gruppe vorne, nicht hinten.
  */
+/**
+ * Obergrenze fuer die erste Zeitgruppe am Berg, in Fahrern.
+ *
+ * Die Ziehung im zerfallenen Regime hat einen langen Schwanz: `SPLIT_SHARE_RELATIVE_SD`
+ * liegt bei 1,077, und die Beta-Verteilung wirft damit gelegentlich einen
+ * Anteil aus, der zu keiner Bergetappe passt. Im Giro- und Tour-Lauf ergab
+ * das auf Hochgebirgsetappen erste Gruppen von 15, 22 und 31 Fahrern —
+ * ueber 52 echte Hochgebirgsetappen liegt das Groesste bei fuenf.
+ *
+ * Gemessen an echten Rennen:
+ *
+ *   Terrain            p50  p75  p90  p95  p99   groesste
+ *   Medium_Mountain      1    2    5   32  100        112
+ *   Mountain             1    1    2    5   36         92
+ *   High_Mountain        1    1    2    3    5          5
+ *
+ * Die Grenze fuer das Hochgebirge deckt sich damit genau; fuer Mountain und
+ * Medium_Mountain ist sie strenger als die Wirklichkeit und damit eine
+ * Spielentscheidung: eine Bergetappe, auf der 90 Fahrer zeitgleich ankommen,
+ * gibt es real, ist im Spiel aber ein verlorener Renntag.
+ */
+export const FIRST_GROUP_MAX_SIZE: Partial<Record<StageProfile, number>> = {
+  Medium_Mountain: 20,
+  Mountain: 10,
+  High_Mountain: 6,
+};
+
 export const TAIL_GROUP_SHAPE_PROFILES: ReadonlySet<StageProfile> = new Set<StageProfile>([
   'Medium_Mountain', 'Mountain', 'High_Mountain',
 ]);
