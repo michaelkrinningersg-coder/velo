@@ -1,6 +1,10 @@
 import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
-import { resolveClimbPenaltyForRole, resolveSeasonFormFactor } from '../../../shared/quickSim/terrainModifiers';
+import {
+  resolveClimbPenaltyForRole,
+  resolveSeasonFormFactor,
+  resolveSkillWeightFactor,
+} from '../../../shared/quickSim/terrainModifiers';
 
 export interface FavoriteItem {
   rank: number;
@@ -128,9 +132,13 @@ function calculateRoadScore(
   for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
     weighted += rider.skills[key] * weight;
   }
-  return weighted
+  // Der reine Koennensanteil wird je Terrain gespreizt, damit die Form auf den
+  // leichten Profilen nicht mehr Plaetze kostet als am Berg. Siehe
+  // `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
+  const koennen = (weighted + resolveStaminaContribution(rider, distanceKm))
+    * resolveSkillWeightFactor(stage.profile);
+  return koennen
     + resolveFormContribution(rider, dailyForm, stage.profile)
-    + resolveStaminaContribution(rider, distanceKm)
     - resolveDomestiquePenalty(rider, stage.profile);
 }
 
