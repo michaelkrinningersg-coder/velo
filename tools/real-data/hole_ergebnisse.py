@@ -48,8 +48,21 @@ def zeilen(nur_berge: bool) -> list[dict]:
     return [z for z in alle if not nur_berge or z['terrain'] in BERGE]
 
 
+def pruefe_paket() -> None:
+    """Einmal vorab pruefen statt 843-mal an derselben Stelle zu scheitern."""
+    try:
+        import procyclingstats  # noqa: F401
+    except ImportError:
+        print('Das Paket `procyclingstats` fehlt. Installieren mit:\n'
+              '    pip install procyclingstats\n'
+              'Falls pip in eine andere Umgebung installiert als die, die dieses Skript\n'
+              'ausfuehrt, hilft:\n'
+              f'    {sys.executable} -m pip install procyclingstats', file=sys.stderr)
+        raise SystemExit(2)
+
+
 def hole(slug: str, jahr: str, nummer: str) -> dict:
-    from procyclingstats import Stage  # erst hier, damit --help ohne Paket laeuft
+    from procyclingstats import Stage
 
     seite = Stage(f'race/{slug}/{jahr}/stage-{nummer}')
     daten = {feld: getattr(seite, feld)() for feld in KOPFFELDER}
@@ -63,11 +76,15 @@ def main() -> int:
     parser.add_argument('--pause', type=float, default=2.0, help='Sekunden zwischen zwei Abrufen (Vorgabe 2)')
     args = parser.parse_args()
 
+    pruefe_paket()
     ZIEL.mkdir(exist_ok=True)
     aufgaben = zeilen(nur_berge=not args.alle)
     print(f'{len(aufgaben)} Etappen, Pause {args.pause} s -> geschaetzt {len(aufgaben) * args.pause / 60:.0f} Minuten')
 
     geholt = uebersprungen = fehler = 0
+    # Wenn zehnmal hintereinander nichts kommt, liegt es nicht an der einzelnen
+    # Etappe — dann lieber abbrechen als eine halbe Stunde ins Leere laufen.
+    ohne_erfolg = 0
     for nr, zeile in enumerate(aufgaben, start=1):
         name = f"{zeile['rennen']}_{zeile['jahr']}_{zeile['stage_id']}.json"
         datei = ZIEL / name
@@ -79,8 +96,14 @@ def main() -> int:
         except Exception as fehlschlag:  # noqa: BLE001 — jede Ursache soll den Lauf ueberleben
             print(f'  [{nr}/{len(aufgaben)}] {name}: {type(fehlschlag).__name__}: {fehlschlag}', file=sys.stderr)
             fehler += 1
+            ohne_erfolg += 1
+            if ohne_erfolg >= 10:
+                print(f'Zehn Fehlschlaege hintereinander — abgebrochen nach {geholt} geholten Etappen.',
+                      file=sys.stderr)
+                break
             time.sleep(args.pause)
             continue
+        ohne_erfolg = 0
         daten['terrain'] = zeile['terrain']
         daten['rennen'] = zeile['rennen']
         daten['jahr'] = int(zeile['jahr'])
