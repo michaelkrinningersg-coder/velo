@@ -17,6 +17,8 @@ import {
   BUNCH_SLOPE,
   SPLIT_SHARE_RELATIVE_SD,
   SPLIT_SHARE_SLOPE,
+  MEASURED_GAP_SIGMA_CLAMP,
+  MEASURED_STAGE_GAP_MODEL,
   resolveTailShape,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
@@ -180,6 +182,56 @@ export interface FinishGroup {
   gapSeconds: number;
 }
 
+/**
+ * Lognormaler Streufaktor um 1, gestutzt auf `MEASURED_GAP_SIGMA_CLAMP` Sigma.
+ *
+ * Ohne die Stutzung zieht eine Standardnormalverteilung gelegentlich vier
+ * Sigma — bei sigma 0,6 waere das der Faktor 11, und eine Huegeletappe haette
+ * die Abstaende eines Hochgebirgstages.
+ */
+export function drawLogNormalFactor(random: RandomSource, sigma: number): number {
+  if (sigma <= 0) {
+    return 1;
+  }
+  const z = Math.min(MEASURED_GAP_SIGMA_CLAMP, Math.max(-MEASURED_GAP_SIGMA_CLAMP, drawStandardNormal(random)));
+  return Math.exp(sigma * z);
+}
+
+/**
+ * Rueckstand des letzten Fahrers je Kilometer.
+ *
+ * Fuer die fuenf an echten Rennen angepassten Profile aus Schwierigkeit und
+ * Ziehung, sonst der feste Profilwert. Siehe `MEASURED_STAGE_GAP_MODEL`.
+ */
+export function resolveTailGapPerKm(
+  parameters: QuickSimProfileParameters,
+  difficultyPerKm: number,
+  random: RandomSource,
+  profile?: StageProfile,
+): number {
+  const modell = profile != null ? MEASURED_STAGE_GAP_MODEL[profile] : undefined;
+  if (modell == null) {
+    return parameters.tailGapPerKm;
+  }
+  const basis = Math.exp((modell.gapSlope * difficultyPerKm) + modell.gapIntercept);
+  return basis * drawLogNormalFactor(random, modell.gapSigma);
+}
+
+/** Mittlere Groesse der Zeitgruppen hinter der Spitze — analog zum Rueckstand. */
+export function resolveTailGroupSize(
+  parameters: QuickSimProfileParameters,
+  difficultyPerKm: number,
+  random: RandomSource,
+  profile?: StageProfile,
+): number {
+  const modell = profile != null ? MEASURED_STAGE_GAP_MODEL[profile] : undefined;
+  if (modell == null) {
+    return parameters.tailGroupSize;
+  }
+  const basis = Math.exp((modell.groupSlope * difficultyPerKm) + modell.groupIntercept);
+  return Math.max(1, basis * drawLogNormalFactor(random, modell.groupSigma));
+}
+
 export interface BuildFinishGroupsInput {
   /**
    * Leistungsscores, absteigend sortiert. Nur die Laenge und die Reihenfolge
@@ -192,6 +244,12 @@ export interface BuildFinishGroupsInput {
   parameters: QuickSimProfileParameters;
   /** Entscheidet ueber die Form der Rueckstandskurve — siehe `resolveTailGapShare`. */
   profile?: StageProfile;
+  /**
+   * Schwierigkeit je Kilometer. Bestimmt bei den an echte Rennen angepassten
+   * Profilen Hoehe der Kurve und Gruppengroesse — siehe
+   * `MEASURED_STAGE_GAP_MODEL`. Ohne Angabe gelten die festen Profilwerte.
+   */
+  difficultyPerKm?: number;
   random: RandomSource;
 }
 
@@ -276,13 +334,17 @@ export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] 
   }
 
   const tailCount = riderCount - headSize;
-  const totalGapSeconds = parameters.tailGapPerKm * distanceKm;
+  const difficultyPerKm = input.difficultyPerKm ?? 0;
+  // Beide Ziehungen einmal je Etappe, vor der Schleife: sie beschreiben die
+  // Etappe als Ganzes, nicht die einzelne Gruppe.
+  const totalGapSeconds = resolveTailGapPerKm(parameters, difficultyPerKm, random, input.profile) * distanceKm;
+  const tailGroupSize = resolveTailGroupSize(parameters, difficultyPerKm, random, input.profile);
 
   let index = headSize;
   let cumulative = 0;
   let previousShare = 0;
   while (index < riderCount) {
-    const size = drawTailGroupSize(random, parameters.tailGroupSize, riderCount - index);
+    const size = drawTailGroupSize(random, tailGroupSize, riderCount - index);
     const lastIndex = index + size - 1;
     // Die Gruppe sitzt auf der Kurve an der Position ihres letzten Fahrers —
     // damit trifft der Letzte im Feld genau `tailGapPerKm`.
