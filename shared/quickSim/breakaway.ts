@@ -231,8 +231,44 @@ export function resolveBreakawaySurvivorCount(
  *
  * Er hat den Tag vorne verbracht und kommt mit leeren Beinen zurueck: er
  * reiht sich im Feld ein wie jeder andere, nur drei Punkte schwaecher.
+ *
+ * Gemeint ist der einzelne Fahrer, der aus einer durchgekommenen Gruppe
+ * herausfaellt — nicht die Gruppe, die als Ganzes gestellt wird. Fuer die
+ * gilt `BREAKAWAY_CAUGHT_MALUS_RANGE`.
  */
 export const CAUGHT_BREAKAWAY_SCORE_MALUS = 3;
+
+/**
+ * Anteil des Planmalus, der in der Quick Simulation wirkt.
+ *
+ * `precalculateStageBreakaway` zieht den Malus einer gestellten Gruppe als 5
+ * bis 8 Punkte, auf Flach- und Rollingetappen 6 bis 10. In der vollen
+ * Simulation ist das ein Formabzug fuer den Rest der Etappe; hier trifft er
+ * den Etappenscore und damit unmittelbar die Zielposition. Mal dem
+ * Terrainfaktor kam er dadurch auf bis zu 17,6 Punkte — ein gestellter
+ * Ausreisser landete damit weiter hinten, als ein Tag in der Flucht kostet.
+ *
+ * Ein Drittel davon, gedeckelt auf zwei bis fuenf Punkte. Die Reihenfolge der
+ * Terrains bleibt darin erhalten: huegelig kostet die vergebliche Flucht am
+ * meisten, im Hochgebirge am wenigsten, weil dort die Berge ohnehin
+ * entscheiden.
+ */
+export const BREAKAWAY_CAUGHT_MALUS_SHARE = 1 / 3;
+
+/** Unter- und Obergrenze des Malus einer gestellten Gruppe, in Punkten. */
+export const BREAKAWAY_CAUGHT_MALUS_RANGE = { min: 2, max: 5 } as const;
+
+/**
+ * Malus einer vollstaendig gestellten Ausreissergruppe, in Punkten.
+ * Der Rueckgabewert ist positiv; abgezogen wird er an der Aufrufstelle.
+ */
+export function resolveBreakawayCaughtMalus(planMalus: number, terrainFactor: number): number {
+  const { min, max } = BREAKAWAY_CAUGHT_MALUS_RANGE;
+  if (planMalus <= 0) {
+    return 0;
+  }
+  return Math.min(max, Math.max(min, planMalus * terrainFactor * BREAKAWAY_CAUGHT_MALUS_SHARE));
+}
 
 /** Mittlere Groesse einer Gruppe innerhalb der durchgekommenen Ausreisser. */
 export const BREAKAWAY_FRAGMENT_MEAN_SIZE = 1.5;

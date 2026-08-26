@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BREAKAWAY_SURVIVOR_SHARE_MAX,
   BREAKAWAY_SURVIVOR_SHARE_MIN,
+  BREAKAWAY_CAUGHT_MALUS_RANGE,
   CAUGHT_BREAKAWAY_SCORE_MALUS,
   buildBreakawayFragments,
+  resolveBreakawayCaughtMalus,
   drawBreakawaySurvivorShare,
   resolveBreakawaySurvivorCount,
   resolveBreakawaySurvivorShareMax,
@@ -228,15 +230,44 @@ describe('Terrainfaktor auf die Ausreisser-Verschiebungen', () => {
     random: createSeededRandom(21),
   });
 
-  it('spreizt den Malus einer gestellten Gruppe mit', () => {
+  it('stutzt den Malus einer gestellten Gruppe auf zwei bis fuenf Punkte', () => {
     for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
       const r = lauf(profile, 120_000);
       expect(r.breakawaySurvived).toBe(false);
       // Fahrer 50 ist Ausreisser, Fahrer 49 nicht — in der Grundlage liegen
       // sie 0,3 Punkte auseinander.
       const differenz = scoreVon(r, 49) - scoreVon(r, 50);
-      expect(differenz).toBeCloseTo(0.3 + (30 * resolveSkillWeightFactor(profile)), 6);
+      expect(differenz).toBeCloseTo(0.3 + resolveBreakawayCaughtMalus(30, resolveSkillWeightFactor(profile)), 6);
+      // Der Planmalus von 30 liegt weit ueber der Obergrenze.
+      expect(differenz - 0.3).toBeCloseTo(BREAKAWAY_CAUGHT_MALUS_RANGE.max, 10);
     }
+  });
+
+  it('haelt jeden Planmalus in der vorgegebenen Spanne', () => {
+    const { min, max } = BREAKAWAY_CAUGHT_MALUS_RANGE;
+    expect(min).toBe(2);
+    expect(max).toBe(5);
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      const faktor = resolveSkillWeightFactor(profile);
+      // Der Plan zieht 5 bis 8, auf Flat und Rolling 6 bis 10.
+      for (let planMalus = 1; planMalus <= 30; planMalus += 1) {
+        const wert = resolveBreakawayCaughtMalus(planMalus, faktor);
+        expect(wert).toBeGreaterThanOrEqual(min);
+        expect(wert).toBeLessThanOrEqual(max);
+      }
+      // Ein groesserer Planmalus wiegt nie leichter als ein kleinerer.
+      for (let planMalus = 2; planMalus <= 30; planMalus += 1) {
+        expect(resolveBreakawayCaughtMalus(planMalus, faktor))
+          .toBeGreaterThanOrEqual(resolveBreakawayCaughtMalus(planMalus - 1, faktor));
+      }
+    }
+    expect(resolveBreakawayCaughtMalus(0, 2.2)).toBe(0);
+  });
+
+  it('laesst huegelig teurer bleiben als im Hochgebirge', () => {
+    const huegel = resolveBreakawayCaughtMalus(7, resolveSkillWeightFactor('Hilly'));
+    const hoch = resolveBreakawayCaughtMalus(7, resolveSkillWeightFactor('High_Mountain'));
+    expect(huegel).toBeGreaterThan(hoch);
   });
 
   it('spreizt den Bonus einer durchgekommenen Gruppe mit', () => {

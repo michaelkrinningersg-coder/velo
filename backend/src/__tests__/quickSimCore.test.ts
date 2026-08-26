@@ -461,10 +461,12 @@ describe('simulateQuickStage', () => {
       riders: field(100), breakaway: plan, random: createSeededRandom(77),
     });
     expect(result.breakawaySurvived).toBe(false);
-    // Aus den drei staerksten Fahrern werden durch den Malus die drei schwaechsten.
+    // Der Malus ist auf fuenf Punkte gedeckelt; das Feld spannt hier knapp
+    // zehn Punkte ueber hundert Fahrer. Aus den drei staerksten werden damit
+    // Fahrer aus der zweiten Haelfte.
     const order = result.entries.map((entry) => entry.riderId);
     for (const riderId of plan.riderIds) {
-      expect(order.indexOf(riderId)).toBeGreaterThan(90);
+      expect(order.indexOf(riderId)).toBeGreaterThan(45);
     }
   });
 

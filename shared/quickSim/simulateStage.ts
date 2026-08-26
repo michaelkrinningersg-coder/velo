@@ -30,6 +30,7 @@ import type { QuickSimProfileParameters } from '../quickSimProfiles';
 import type { RandomSource } from '../rng';
 import {
   buildBreakawayFragments,
+  resolveBreakawayCaughtMalus,
   resolveBreakawaySurvives,
   resolveBreakawaySurvivorCount,
   CAUGHT_BREAKAWAY_SCORE_MALUS,
@@ -222,17 +223,24 @@ function resolveTimeGroupSizes(sortedTimesSeconds: readonly number[]): number[] 
  * Bonus und Malus aus dem Ausreisserplan sind in Punkten der
  * Faehigkeitsskala gedacht: der Bonus dafuer, dass die Gruppe den Tag vorne
  * verbracht hat, der Malus dafuer, dass sie gestellt wurde. Seit der
- * Faehigkeitsanteil je Terrain gespreizt wird, muessen sie mitgehen — sonst
- * schoebe derselbe Malus auf einer Huegeletappe einen Fahrer nur noch halb so
- * weit zurueck wie vorher. Siehe `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
+ * Faehigkeitsanteil je Terrain gespreizt wird, gehen sie mit — sonst schoebe
+ * derselbe Malus auf einer Huegeletappe einen Fahrer nur noch halb so weit
+ * zurueck wie vorher. Siehe `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
+ *
+ * Der Malus wird dabei auf ein Drittel gestutzt und auf zwei bis fuenf Punkte
+ * gedeckelt: gespreizt kam er sonst auf bis zu 17,6 Punkte, und ein gestellter
+ * Ausreisser landete weiter hinten, als ein Tag in der Flucht kostet. Siehe
+ * `resolveBreakawayCaughtMalus`.
  */
 function resolveBreakawayShift(input: QuickSimStageInput, breakawaySurvived: boolean): number {
   const plan = input.breakaway;
   if (!plan) {
     return 0;
   }
-  const roh = breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0);
-  return roh * resolveSkillWeightFactor(input.profile);
+  const faktor = resolveSkillWeightFactor(input.profile);
+  return breakawaySurvived
+    ? (plan.skillBonus ?? 0) * faktor
+    : -resolveBreakawayCaughtMalus(plan.malusValue ?? 0, faktor);
 }
 
 function buildScoreMap(input: QuickSimStageInput, breakawaySurvived: boolean): Map<number, number> {
