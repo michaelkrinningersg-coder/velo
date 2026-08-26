@@ -19,6 +19,11 @@ import {
   SPLIT_SHARE_SLOPE,
   MEASURED_GAP_SIGMA_CLAMP,
   MEASURED_STAGE_GAP_MODEL,
+  TAIL_GROUP_SHAPE_END,
+  TAIL_GROUP_SHAPE_PEAK,
+  TAIL_GROUP_SHAPE_PEAK_FACTOR,
+  TAIL_GROUP_SHAPE_PROFILES,
+  TAIL_GROUP_SHAPE_START,
   resolveTailShape,
   type QuickSimProfileParameters,
 } from '../quickSimProfiles';
@@ -232,6 +237,24 @@ export function resolveTailGroupSize(
   return Math.max(1, basis * drawLogNormalFactor(random, modell.groupSigma));
 }
 
+/**
+ * Formfaktor auf die Gruppengroesse an der Position `v` hinter der Spitze.
+ *
+ * Drei Stuetzstellen, geradlinig verbunden: klein am Anfang, am groessten bei
+ * `TAIL_GROUP_SHAPE_PEAK`, danach wieder kleiner. Profile ohne Eintrag
+ * bekommen ueberall 1 und behalten damit ihre gleichmaessige Verteilung.
+ */
+export function resolveTailGroupShape(position: number, profile?: StageProfile): number {
+  if (profile == null || !TAIL_GROUP_SHAPE_PROFILES.has(profile)) {
+    return 1;
+  }
+  const v = Math.min(1, Math.max(0, position));
+  return v <= TAIL_GROUP_SHAPE_PEAK
+    ? TAIL_GROUP_SHAPE_START + ((TAIL_GROUP_SHAPE_PEAK_FACTOR - TAIL_GROUP_SHAPE_START) * (v / TAIL_GROUP_SHAPE_PEAK))
+    : TAIL_GROUP_SHAPE_PEAK_FACTOR
+      + ((TAIL_GROUP_SHAPE_END - TAIL_GROUP_SHAPE_PEAK_FACTOR) * ((v - TAIL_GROUP_SHAPE_PEAK) / (1 - TAIL_GROUP_SHAPE_PEAK)));
+}
+
 export interface BuildFinishGroupsInput {
   /**
    * Leistungsscores, absteigend sortiert. Nur die Laenge und die Reihenfolge
@@ -344,7 +367,10 @@ export function buildFinishGroups(input: BuildFinishGroupsInput): FinishGroup[] 
   let cumulative = 0;
   let previousShare = 0;
   while (index < riderCount) {
-    const size = drawTailGroupSize(random, tailGroupSize, riderCount - index);
+    // Die Gruppengroesse haengt an der Position: vorne faehrt jeder fuer sich,
+    // in der zweiten Haelfte sammelt sich das Gruppetto.
+    const form = resolveTailGroupShape((index - headSize) / tailCount, input.profile);
+    const size = drawTailGroupSize(random, tailGroupSize * form, riderCount - index);
     const lastIndex = index + size - 1;
     // Die Gruppe sitzt auf der Kurve an der Position ihres letzten Fahrers —
     // damit trifft der Letzte im Feld genau `tailGapPerKm`.

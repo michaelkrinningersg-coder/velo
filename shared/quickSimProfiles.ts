@@ -268,12 +268,45 @@ export interface MeasuredStageGapModel {
 /** Auf wieviel Sigma die Ziehung gestutzt wird, damit kein Ausreisser entgleist. */
 export const MEASURED_GAP_SIGMA_CLAMP = 2;
 
+/**
+ * Wie sich die Zeitgruppen ueber das Feld verteilen.
+ *
+ * `tailGroupSize` war bisher eine Zahl je Etappe und galt damit von der
+ * Spitzengruppe bis zum letzten Fahrer gleich. So faehrt am Berg aber
+ * niemand. Gemessen an 826 echten Etappen, mittlere Gruppengroesse je
+ * Fuenftel des Feldes:
+ *
+ *   Terrain           0-20 %  20-40 %  40-60 %  60-80 %  80-100 %
+ *   High_Mountain       1,49     2,57     5,00     6,20      2,21
+ *   Mountain            1,75     2,33     4,54     6,80      2,33
+ *   Medium_Mountain     2,62     2,64     6,00     6,88      2,62
+ *   Hilly_Difficult     6,90     2,85     4,67     6,50      3,40
+ *
+ * Vorne faehrt jeder fuer sich, in der zweiten Haelfte sammelt sich das
+ * Gruppetto, und dahinter troepfeln die Abgehaengten wieder einzeln herein.
+ * Das Modell lieferte dagegen ueberall dieselbe Groesse — gemessen 2,29 bis
+ * 2,50 ueber alle fuenf Abschnitte einer Hochgebirgsetappe.
+ *
+ * Deshalb ein Formfaktor um 1 auf die Position hinter der Spitzengruppe, mit
+ * drei Stuetzstellen und geradliniger Ueberblendung dazwischen. `Hilly_Difficult`
+ * steht bewusst nicht darin: dort sitzt die dicke Gruppe vorne, nicht hinten.
+ */
+export const TAIL_GROUP_SHAPE_PROFILES: ReadonlySet<StageProfile> = new Set<StageProfile>([
+  'Medium_Mountain', 'Mountain', 'High_Mountain',
+]);
+/** Position, an der die Gruppen am groessten sind. */
+export const TAIL_GROUP_SHAPE_PEAK = 0.7;
+/** Faktor am Anfang, am Gipfel und beim letzten Fahrer. */
+export const TAIL_GROUP_SHAPE_START = 0.55;
+export const TAIL_GROUP_SHAPE_PEAK_FACTOR = 2.30;
+export const TAIL_GROUP_SHAPE_END = 0.85;
+
 export const MEASURED_STAGE_GAP_MODEL: Partial<Record<StageProfile, MeasuredStageGapModel>> = {
   Hilly: { gapSlope: 0.561, gapIntercept: 1.068, gapSigma: 0.473, groupSlope: -0.115, groupIntercept: 1.698, groupSigma: 0.558 },
   Hilly_Difficult: { gapSlope: 0.333, gapIntercept: 1.627, gapSigma: 0.520, groupSlope: -0.264, groupIntercept: 1.835, groupSigma: 0.605 },
-  Medium_Mountain: { gapSlope: 0.328, gapIntercept: 1.846, gapSigma: 0.264, groupSlope: -0.618, groupIntercept: 2.221, groupSigma: 0.522 },
-  Mountain: { gapSlope: 0.257, gapIntercept: 2.014, gapSigma: 0.318, groupSlope: -0.473, groupIntercept: 2.020, groupSigma: 0.440 },
-  High_Mountain: { gapSlope: 0.174, gapIntercept: 2.252, gapSigma: 0.175, groupSlope: -0.217, groupIntercept: 1.594, groupSigma: 0.404 },
+  Medium_Mountain: { gapSlope: 0.328, gapIntercept: 1.846, gapSigma: 0.264, groupSlope: -0.618, groupIntercept: 1.959, groupSigma: 0.522 },
+  Mountain: { gapSlope: 0.257, gapIntercept: 2.014, gapSigma: 0.318, groupSlope: -0.473, groupIntercept: 1.854, groupSigma: 0.440 },
+  High_Mountain: { gapSlope: 0.174, gapIntercept: 2.252, gapSigma: 0.175, groupSlope: -0.217, groupIntercept: 1.49, groupSigma: 0.404 },
 };
 
 export function resolveTailShape(profile?: StageProfile | null): TailShapeParameters {

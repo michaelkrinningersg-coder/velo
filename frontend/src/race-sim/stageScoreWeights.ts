@@ -56,10 +56,10 @@ export interface ProfileScoreWeights {
  * geht die Leiter ohne Sprung ineinander ueber:
  *
  *   Terrain            unten            Mitte            oben
- *   Hilly              100 /  0 /  0    75 / 25 /  0     65 / 35 /  0
- *   Hilly_Difficult     65 / 35 /  0    45 / 45 / 10     25 / 60 / 15
- *   Medium_Mountain     25 / 60 / 15    25 / 50 / 25      5 / 40 / 55
- *   Mountain             5 / 40 / 55     0 / 25 / 75      0 /  0 / 100
+ *   Hilly              100 /  0 /  0    75 / 25 /  0     60 / 35 /  5
+ *   Hilly_Difficult     60 / 35 /  5    40 / 45 / 15     15 / 60 / 25
+ *   Medium_Mountain     15 / 60 / 25    10 / 50 / 40      0 / 35 / 65
+ *   Mountain             0 / 35 / 65     0 / 25 / 75      0 /  0 / 100
  *   High_Mountain        0 /  0 / 100    0 /  0 / 100     0 /  0 / 100
  *
  * Zwischen den Stuetzstellen wird geradlinig ueberblendet, in zwei
@@ -92,23 +92,23 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
     difficultyRange: [0.30, 0.45],
     easy: { flat: 0.50, hill: 0.40, sprint: 0.06, acceleration: 0.04 },
     middle: { flat: 0.39, hill: 0.39, mediumMountain: 0.13, sprint: 0.055, acceleration: 0.035 },
-    hard: { flat: 0.28, hill: 0.416, mediumMountain: 0.224, sprint: 0.05, acceleration: 0.03 },
+    hard: { flat: 0.28, hill: 0.384, mediumMountain: 0.224, mountain: 0.032, sprint: 0.05, acceleration: 0.03 },
   },
   Hilly_Difficult: {
     difficultyRange: [0.45, 0.87],
-    easy: { flat: 0.29, hill: 0.4225, mediumMountain: 0.2275, sprint: 0.03, acceleration: 0.03 },
-    middle: { flat: 0.19, hill: 0.3375, mediumMountain: 0.3375, mountain: 0.075, sprint: 0.03, acceleration: 0.03 },
-    hard: { flat: 0.09, hill: 0.2125, mediumMountain: 0.51, mountain: 0.1275, sprint: 0.03, acceleration: 0.03 },
+    easy: { flat: 0.29, hill: 0.39, mediumMountain: 0.2275, mountain: 0.0325, sprint: 0.03, acceleration: 0.03 },
+    middle: { flat: 0.19, hill: 0.30, mediumMountain: 0.3375, mountain: 0.1125, sprint: 0.03, acceleration: 0.03 },
+    hard: { flat: 0.09, hill: 0.1275, mediumMountain: 0.51, mountain: 0.2125, sprint: 0.03, acceleration: 0.03 },
   },
   Medium_Mountain: {
     difficultyRange: [0.87, 1.40],
-    easy: { hill: 0.2425, mediumMountain: 0.582, mountain: 0.1455, sprint: 0.02, acceleration: 0.01 },
-    middle: { hill: 0.2437, mediumMountain: 0.4876, mountain: 0.2437, sprint: 0.015, acceleration: 0.01 },
-    hard: { hill: 0.049, mediumMountain: 0.392, mountain: 0.539, sprint: 0.01, acceleration: 0.01 },
+    easy: { hill: 0.1455, mediumMountain: 0.582, mountain: 0.2425, sprint: 0.02, acceleration: 0.01 },
+    middle: { hill: 0.0975, mediumMountain: 0.4875, mountain: 0.39, sprint: 0.015, acceleration: 0.01 },
+    hard: { mediumMountain: 0.343, mountain: 0.637, sprint: 0.01, acceleration: 0.01 },
   },
   Mountain: {
     difficultyRange: [1.40, 1.95],
-    easy: { hill: 0.0465, mediumMountain: 0.372, mountain: 0.5115, downhill: 0.05, sprint: 0.02 },
+    easy: { mediumMountain: 0.3255, mountain: 0.6045, downhill: 0.05, sprint: 0.02 },
     middle: { mediumMountain: 0.235, mountain: 0.705, downhill: 0.045, sprint: 0.015 },
     hard: { mountain: 0.95, downhill: 0.04, sprint: 0.01 },
   },
@@ -179,9 +179,9 @@ export function resolveStaminaWeight(distanceKm: number): number {
 export const STAGE_RACE_SCORE_WEIGHTS: Partial<Record<StageProfile, ProfileScoreWeights>> = {
   Hilly_Difficult: {
     difficultyRange: [0.45, 0.87],
-    easy: { hill: 0.598, mediumMountain: 0.322, sprint: 0.04, acceleration: 0.04 },
-    middle: { hill: 0.4185, mediumMountain: 0.4185, mountain: 0.093, sprint: 0.035, acceleration: 0.035 },
-    hard: { hill: 0.235, mediumMountain: 0.564, mountain: 0.141, sprint: 0.03, acceleration: 0.03 },
+    easy: { hill: 0.552, mediumMountain: 0.322, mountain: 0.046, sprint: 0.04, acceleration: 0.04 },
+    middle: { hill: 0.372, mediumMountain: 0.4185, mountain: 0.1395, sprint: 0.035, acceleration: 0.035 },
+    hard: { hill: 0.141, mediumMountain: 0.564, mountain: 0.235, sprint: 0.03, acceleration: 0.03 },
   },
 };
 

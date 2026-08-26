@@ -100,9 +100,9 @@ describe('Vorgegebene Anteile der Bergfaehigkeiten', () => {
   const LEITER: StageProfile[] = ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
   const VORGABE: Record<string, { unten: [number, number, number]; mitte: [number, number, number] }> = {
     Hilly: { unten: [100, 0, 0], mitte: [75, 25, 0] },
-    Hilly_Difficult: { unten: [65, 35, 0], mitte: [45, 45, 10] },
-    Medium_Mountain: { unten: [25, 60, 15], mitte: [25, 50, 25] },
-    Mountain: { unten: [5, 40, 55], mitte: [0, 25, 75] },
+    Hilly_Difficult: { unten: [60, 35, 5], mitte: [40, 45, 15] },
+    Medium_Mountain: { unten: [15, 60, 25], mitte: [10, 50, 40] },
+    Mountain: { unten: [0, 35, 65], mitte: [0, 25, 75] },
     High_Mountain: { unten: [0, 0, 100], mitte: [0, 0, 100] },
   };
 

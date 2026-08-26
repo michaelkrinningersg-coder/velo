@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   drawLogNormalFactor,
   resolveTailGapPerKm,
+  resolveTailGroupShape,
   resolveTailGroupSize,
 } from '../../../shared/quickSim/groupModel';
 import {
   DEFAULT_QUICK_SIM_PROFILES,
   MEASURED_GAP_SIGMA_CLAMP,
   MEASURED_STAGE_GAP_MODEL,
+  TAIL_GROUP_SHAPE_END,
+  TAIL_GROUP_SHAPE_PEAK,
+  TAIL_GROUP_SHAPE_PEAK_FACTOR,
+  TAIL_GROUP_SHAPE_PROFILES,
+  TAIL_GROUP_SHAPE_START,
 } from '../../../shared/quickSimProfiles';
 import { createSeededRandom } from '../../../shared/rng';
 import type { StageProfile } from '../../../shared/types';
@@ -139,6 +145,71 @@ describe('resolveTailGroupSize', () => {
       const wert = median(ziehungen((random) => resolveTailGroupSize(parameters, difficulty, random, profile)));
       expect(wert).toBeGreaterThan(ziel * 0.8);
       expect(wert).toBeLessThan(ziel * 1.2);
+    }
+  });
+});
+
+describe('resolveTailGroupShape', () => {
+  it('laesst Profile ohne Eintrag ueberall bei 1', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Cobble'] as StageProfile[]) {
+      expect(TAIL_GROUP_SHAPE_PROFILES.has(profile)).toBe(false);
+      for (const position of [0, 0.25, 0.5, 0.75, 1]) {
+        expect(resolveTailGroupShape(position, profile)).toBe(1);
+      }
+    }
+    expect(resolveTailGroupShape(0.5)).toBe(1);
+  });
+
+  it('trifft die drei Stuetzstellen', () => {
+    for (const profile of ['Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      expect(resolveTailGroupShape(0, profile)).toBeCloseTo(TAIL_GROUP_SHAPE_START, 10);
+      expect(resolveTailGroupShape(TAIL_GROUP_SHAPE_PEAK, profile)).toBeCloseTo(TAIL_GROUP_SHAPE_PEAK_FACTOR, 10);
+      expect(resolveTailGroupShape(1, profile)).toBeCloseTo(TAIL_GROUP_SHAPE_END, 10);
+    }
+  });
+
+  it('steigt bis zum Gipfel und faellt danach', () => {
+    const profile: StageProfile = 'High_Mountain';
+    let vorher = -1;
+    for (let position = 0; position <= TAIL_GROUP_SHAPE_PEAK + 1e-9; position += 0.05) {
+      const wert = resolveTailGroupShape(position, profile);
+      expect(wert).toBeGreaterThan(vorher);
+      vorher = wert;
+    }
+    for (let position = TAIL_GROUP_SHAPE_PEAK; position <= 1.0001; position += 0.05) {
+      const wert = resolveTailGroupShape(Math.min(1, position), profile);
+      expect(wert).toBeLessThanOrEqual(vorher + 1e-9);
+      vorher = wert;
+    }
+  });
+
+  it('duennt die erste Feldhaelfte aus und verdichtet die zweite', () => {
+    const profile: StageProfile = 'High_Mountain';
+    const mittel = (von: number, bis: number): number => {
+      let summe = 0;
+      let anzahl = 0;
+      for (let position = von; position < bis; position += 0.01) {
+        summe += resolveTailGroupShape(position, profile);
+        anzahl += 1;
+      }
+      return summe / anzahl;
+    };
+    const vorne = mittel(0, 0.5);
+    const hinten = mittel(0.5, 1);
+    // Direkt hinter der Spitzengruppe faehrt jeder fuer sich.
+    expect(resolveTailGroupShape(0, profile)).toBeLessThan(0.6);
+    expect(hinten).toBeGreaterThan(vorne * 1.4);
+    // Gemessen an 826 echten Etappen liegt das Verhaeltnis der hinteren zur
+    // vorderen Feldhaelfte bei etwa 2; im ersten Fuenftel schrumpft die
+    // Gruppengroesse dadurch um rund ein Drittel — das war die Vorgabe.
+    expect(mittel(0, 0.2) / mittel(0.6, 0.8)).toBeLessThan(0.5);
+  });
+
+  it('bleibt ueberall positiv', () => {
+    for (const profile of ['Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      for (let position = 0; position <= 1.0001; position += 0.02) {
+        expect(resolveTailGroupShape(Math.min(1, position), profile)).toBeGreaterThan(0);
+      }
     }
   });
 });
