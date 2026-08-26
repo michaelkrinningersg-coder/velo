@@ -13,8 +13,8 @@ import { calculateStageFavoriteRiderRanking } from '../../../frontend/src/race-s
 import { createSeededRandom } from '../../../shared/rng';
 import type { Rider, StageProfile, Team } from '../../../shared/types';
 
-const GEDECKELT: StageProfile[] = ['Medium_Mountain', 'Mountain', 'High_Mountain'];
-const UNGEDECKELT: StageProfile[] = ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Cobble', 'Cobble_Hill'];
+const GEDECKELT: StageProfile[] = ['Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
+const UNGEDECKELT: StageProfile[] = ['Flat', 'Rolling', 'Hilly', 'Cobble', 'Cobble_Hill'];
 
 describe('Obergrenze der ersten Zeitgruppe', () => {
   it('deckelt nur am Berg', () => {
@@ -38,6 +38,7 @@ describe('Obergrenze der ersten Zeitgruppe', () => {
     expect(resolveFirstGroupSize(0.98, 170, 'High_Mountain')).toBe(6);
     expect(resolveFirstGroupSize(0.98, 170, 'Mountain')).toBe(10);
     expect(resolveFirstGroupSize(0.98, 170, 'Medium_Mountain')).toBe(20);
+    expect(resolveFirstGroupSize(0.98, 170, 'Hilly_Difficult')).toBe(50);
   });
 
   it('laesst kleine Gruppen unangetastet und nie unter einem Fahrer', () => {
@@ -58,7 +59,9 @@ describe('Obergrenze der ersten Zeitgruppe', () => {
       }));
       for (let seed = 0; seed < 400; seed += 1) {
         const ergebnis = simulateQuickStage({
-          profile, distanceKm: 165, stageScore: 165 * 1.6,
+          profile,
+          distanceKm: 165,
+          stageScore: 165 * (profile === 'Hilly_Difficult' ? 0.7 : 1.6),
           parameters: DEFAULT_QUICK_SIM_PROFILES[profile], riders, random: createSeededRandom(seed),
         });
         expect(ergebnis.firstGroupSize).toBeLessThanOrEqual(grenze);

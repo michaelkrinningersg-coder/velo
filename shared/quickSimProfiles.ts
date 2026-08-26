@@ -303,16 +303,18 @@ export const MEASURED_GAP_SIGMA_CLAMP = 2;
  * Gemessen an echten Rennen:
  *
  *   Terrain            p50  p75  p90  p95  p99   groesste
+ *   Hilly_Difficult      2   12   79  117  171        173
  *   Medium_Mountain      1    2    5   32  100        112
  *   Mountain             1    1    2    5   36         92
  *   High_Mountain        1    1    2    3    5          5
  *
- * Die Grenze fuer das Hochgebirge deckt sich damit genau; fuer Mountain und
- * Medium_Mountain ist sie strenger als die Wirklichkeit und damit eine
- * Spielentscheidung: eine Bergetappe, auf der 90 Fahrer zeitgleich ankommen,
- * gibt es real, ist im Spiel aber ein verlorener Renntag.
+ * Die Grenze fuer das Hochgebirge deckt sich damit genau. Die uebrigen drei
+ * sind strenger als die Wirklichkeit und damit Spielentscheidungen: eine
+ * schwere Huegeletappe, auf der 170 Fahrer zeitgleich ankommen, gibt es
+ * real, ist im Spiel aber ein verlorener Renntag.
  */
 export const FIRST_GROUP_MAX_SIZE: Partial<Record<StageProfile, number>> = {
+  Hilly_Difficult: 50,
   Medium_Mountain: 20,
   Mountain: 10,
   High_Mountain: 6,
