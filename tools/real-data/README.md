@@ -13,6 +13,8 @@ eigenen Referenzlauf.
 | `eigene_etappen.json` | Distanz, Hoehenmeter und `stage_score` unserer 359 eigenen Etappen — die Lerngrundlage der Zuordnung |
 | `sammle_eigene_etappen.ts` + `run.js` | erzeugt `eigene_etappen.json` |
 | `klassifiziere_etappen.py` | laedt die echten Etappen und ordnet sie ein |
+| `hole_ergebnisse.py` | holt die Ergebnislisten (muss von aussen laufen, siehe unten) |
+| `werte_ergebnisse_aus.py` | rechnet daraus die Zielgroessen: Gruppengroessen, Gruppenanzahl, Rueckstaende je Kilometer |
 
 ## Quellen
 
@@ -122,9 +124,19 @@ Gruppenanzahl und Rueckstaende je Rang nicht messbar — und genau die sollen
 kalibriert werden. Auch der wahre Ausreisseranteil braucht sie: erst am
 Rueckstand des Feldes sieht man, ob eine Gruppe durchgekommen ist.
 
-`hole_ergebnisse.py` holt sie, muss aber dort laufen, wo
-procyclingstats.com erreichbar ist — von hier aus antwortet der
-Egress-Proxy mit 403, fuer firstcycling.com genauso. Rund sieben Minuten
-fuer die 199 Bergetappen, 28 Minuten fuer alle 843.
+`hole_ergebnisse.py` holt sie, `werte_ergebnisse_aus.py` rechnet daraus die
+Zielgroessen. Das Abholen muss von aussen laufen: beide Datenbanken
+verbieten automatisierten Zugriff ausdruecklich.
+
+    procyclingstats.com/robots.txt   User-agent: ClaudeBot  Disallow: /
+    firstcycling.com/robots.txt      User-agent: ClaudeBot  Disallow: /
+                                     User-agent: *          Disallow: /
+
+Dazu steht vor beiden eine Cloudflare-Pruefung, die auf jede Etappenseite
+mit 403 antwortet. Die offiziellen Veranstalterseiten (letour.fr,
+lavuelta.es, giroditalia.it) erlauben den Zugriff, veroeffentlichen aber
+nur die jeweils laufende Austragung.
+
+Rund sieben Minuten fuer die 199 Bergetappen, 28 Minuten fuer alle 843.
 
 Ebenfalls offen: 2025 und 2026, die in `cyclingdata` noch nicht stehen.
