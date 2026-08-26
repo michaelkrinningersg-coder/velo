@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -49,7 +50,62 @@ KOPFFELDER = ['distance', 'vertical_meters', 'profile_score', 'profile_icon', 's
 # Je Fahrer ebenso: Punkte, Alter, Nationalitaet und URLs braucht die
 # Auswertung nicht. Vollstaendig abgelegt waeren die 843 Etappen 160 MB, so
 # sind es gzip-gepackt rund 2 MB — und das gehoert in ein Repository.
-FAHRERFELDER = ['rank', 'status', 'time', 'rider_name', 'team_name', 'breakaway_kms']
+#
+# `breakaway_kms` steht bewusst nicht darin: das Feld wird mit `float()`
+# gelesen und wirft auf Etappen, wo dort ein Strich steht. Gebraucht wird es
+# fuer die Kalibrierung des Gruppenmodells ohnehin nicht.
+FAHRERFELDER = ['rank', 'status', 'time', 'rider_name', 'team_name']
+
+
+def repariere_zeitparser() -> None:
+    """Zwei Loecher im Zeitparser von `procyclingstats` schliessen.
+
+    `format_time('-')` liefert `'0-'`, und `_make_times_absolute` reicht das
+    ungeprueft an `time_to_timedelta` weiter — das wirft. Betroffen sind
+    Etappen, auf denen ein Fahrer statt einer Zeit einen Strich stehen hat,
+    und das sind ueberproportional Bergetappen: von 21 Fehlschlaegen ueber
+    843 Grand-Tour-Etappen waren 16 Berg- oder Mittelgebirgsetappen.
+
+    Zweitens setzt das Original den *zweiten* Fahrer auf `0:00:00`, wenn
+    dessen Rueckstand nicht lesbar ist — also auf eine absolute Zeit vor der
+    des Siegers. Hier bekommt er stattdessen die Siegerzeit, denn ein
+    fehlender Rueckstand heisst zeitgleich.
+
+    Der Rest bleibt wie im Original: Zeile 0 traegt die absolute Siegerzeit,
+    alle weiteren einen Rueckstand darauf, und wer keinen lesbaren Rueckstand
+    hat, uebernimmt den des Vordermanns.
+    """
+    from procyclingstats.table_parser import TableParser
+    from procyclingstats.utils import add_times
+
+    zeitmuster = re.compile(r'\d+(:\d{1,2}){1,2}')
+
+    def als_zeit(wert: object) -> str:
+        if not isinstance(wert, str):
+            return ''
+        wert = wert.strip()
+        # Manche Tabellen schreiben den Rueckstand als `M.SS` statt `M:SS`.
+        if '.' in wert and ':' not in wert:
+            teile = wert.split('.')
+            if len(teile) == 2 and teile[0].isdigit() and teile[1][:2].isdigit():
+                wert = f'{teile[0]}:{teile[1][:2]}'
+        return wert if zeitmuster.fullmatch(wert) else ''
+
+    def _make_times_absolute(self, time_field: str = 'time') -> None:  # type: ignore[no-untyped-def]
+        for zeile in self.table:
+            zeile[time_field] = als_zeit(zeile.get(time_field))
+        if not self.table:
+            return
+        siegerzeit = self.table[0][time_field]
+        if not siegerzeit:
+            # Ohne lesbare Siegerzeit sind keine absoluten Zeiten zu bilden.
+            return
+        vorheriger = siegerzeit
+        for zeile in self.table[1:]:
+            zeile[time_field] = add_times(siegerzeit, zeile[time_field]) if zeile[time_field] else vorheriger
+            vorheriger = zeile[time_field]
+
+    TableParser._make_times_absolute = _make_times_absolute  # type: ignore[method-assign]
 
 
 def zeilen(nur_berge: bool) -> list[dict]:
@@ -77,7 +133,7 @@ def hole(slug: str, jahr: str, nummer: str) -> dict:
     seite = Stage(f'race/{slug}/{jahr}/stage-{nummer}')
     daten = {feld: getattr(seite, feld)() for feld in KOPFFELDER}
     daten['results'] = [{feld: eintrag.get(feld) for feld in FAHRERFELDER}
-                        for eintrag in seite.results()]
+                        for eintrag in seite.results(*FAHRERFELDER)]
     return daten
 
 
@@ -88,6 +144,7 @@ def main() -> int:
     args = parser.parse_args()
 
     pruefe_paket()
+    repariere_zeitparser()
     ZIEL.mkdir(exist_ok=True)
     aufgaben = zeilen(nur_berge=not args.alle)
     print(f'{len(aufgaben)} Etappen, Pause {args.pause} s -> geschaetzt {len(aufgaben) * args.pause / 60:.0f} Minuten')

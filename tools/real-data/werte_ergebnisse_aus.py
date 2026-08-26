@@ -78,12 +78,21 @@ def auswerten(daten: dict) -> dict | None:
     if not km:
         return None
     ergebnisse = [e for e in daten.get('results', []) if e.get('status') == 'DF']
+    # Nach Rang lesen, nicht nach Zeit: nur so faellt auf, wenn eine Zeit
+    # nicht zum Rang passt. `procyclingstats` hat in aelteren Fassungen einen
+    # Fahrer ohne lesbaren Rueckstand auf 0:00:00 gesetzt — der stuende dann
+    # vor dem Sieger, und nach Zeit sortiert waere er es sogar.
+    nach_rang = sorted((e for e in ergebnisse if isinstance(e.get('rank'), int)),
+                       key=lambda e: e['rank'])
     zeiten = []
-    for eintrag in ergebnisse:
+    for eintrag in nach_rang:
         wert = sekunden(eintrag.get('time', ''))
         if wert is not None:
             zeiten.append(wert)
     if len(zeiten) < 20:
+        return None
+    if zeiten[0] != min(zeiten):
+        # Die Etappe ist kaputt geparst — lieber verwerfen als verrechnen.
         return None
     zeiten.sort()
     sieger = zeiten[0]
@@ -135,7 +144,8 @@ def main() -> int:
         schreiber = csv.DictWriter(datei, fieldnames=list(zeilen[0].keys()))
         schreiber.writeheader()
         schreiber.writerows(zeilen)
-    print(f'{len(zeilen)} Etappen ausgewertet ({unbrauchbar} ohne brauchbare Zeiten) -> {ZIEL.name}', file=sys.stderr)
+    print(f'{len(zeilen)} Etappen ausgewertet ({unbrauchbar} verworfen: zu wenige oder '
+          f'unstimmige Zeiten) -> {ZIEL.name}', file=sys.stderr)
 
     print('\nGemessene Korridore je Terrain (Median, in Klammern p10 und p90)')
     print('  Terrain            n   erste Gruppe    Zeitgruppen   Gruppe hinten   Rueckstand des Letzten je km')
