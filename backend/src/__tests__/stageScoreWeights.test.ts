@@ -85,3 +85,77 @@ describe('Gewichte in Etappenrennen', () => {
     expect(schwer.hill!).toBeLessThan(leicht.hill!);
   });
 });
+
+describe('Vorgegebene Anteile der Bergfaehigkeiten', () => {
+  /** Anteil von hill, mediumMountain und mountain am Gesamtgewicht, auf 100 normiert. */
+  function bergAnteile(profile: StageProfile, position: number, isStageRace = false): [number, number, number] {
+    const [low, high] = (isStageRace ? STAGE_RACE_SCORE_WEIGHTS[profile] : undefined)?.difficultyRange
+      ?? PROFILE_SCORE_WEIGHTS[profile].difficultyRange;
+    const stageScore = (low + ((high - low) * position)) * 200;
+    const w = resolveStageScoreWeights(profile, stageScore, 200, isStageRace);
+    const berg = (w.hill ?? 0) + (w.mediumMountain ?? 0) + (w.mountain ?? 0);
+    return [(w.hill ?? 0) / berg * 100, (w.mediumMountain ?? 0) / berg * 100, (w.mountain ?? 0) / berg * 100];
+  }
+
+  it('trifft die Vorgabe am Anfang jeder Spanne', () => {
+    const vorgabe: Array<[StageProfile, [number, number, number]]> = [
+      ['Hilly', [100, 0, 0]],
+      ['Hilly_Difficult', [65, 35, 0]],
+      ['Medium_Mountain', [25, 60, 15]],
+      ['Mountain', [5, 40, 55]],
+      ['High_Mountain', [0, 0, 100]],
+    ];
+    for (const [profile, erwartet] of vorgabe) {
+      const ist = bergAnteile(profile, 0);
+      for (let index = 0; index < 3; index += 1) {
+        expect(ist[index]!).toBeCloseTo(erwartet[index]!, 0);
+      }
+    }
+  });
+
+  it('trifft die Vorgabe in der Mitte jeder Spanne', () => {
+    const vorgabe: Array<[StageProfile, [number, number, number]]> = [
+      ['Hilly', [75, 25, 0]],
+      ['Hilly_Difficult', [45, 45, 10]],
+      ['Medium_Mountain', [25, 50, 25]],
+      ['Mountain', [0, 25, 75]],
+      ['High_Mountain', [0, 0, 100]],
+    ];
+    for (const [profile, erwartet] of vorgabe) {
+      const ist = bergAnteile(profile, 0.5);
+      for (let index = 0; index < 3; index += 1) {
+        // Bei Mountain waere der Huegelanteil rechnerisch negativ und ist auf
+        // 0 gestutzt; dadurch bleiben dort 2,5 Prozent stehen.
+        expect(Math.abs(ist[index]! - erwartet[index]!)).toBeLessThan(profile === 'Mountain' ? 3 : 0.5);
+      }
+    }
+  });
+
+  it('gilt auch fuer die Rundfahrtvariante von Hilly_Difficult', () => {
+    for (const [position, erwartet] of [[0, [65, 35, 0]], [0.5, [45, 45, 10]]] as Array<[number, number[]]>) {
+      const ist = bergAnteile('Hilly_Difficult', position, true);
+      for (let index = 0; index < 3; index += 1) {
+        expect(ist[index]!).toBeCloseTo(erwartet[index]!, 0);
+      }
+    }
+  });
+
+  it('laesst Flach, Sprint, Antritt und Abfahrt unangetastet', () => {
+    expect(PROFILE_SCORE_WEIGHTS.Hilly.easy.flat).toBe(0.50);
+    expect(PROFILE_SCORE_WEIGHTS.Hilly.hard.flat).toBe(0.28);
+    expect(PROFILE_SCORE_WEIGHTS.Mountain.easy.downhill).toBe(0.05);
+    expect(PROFILE_SCORE_WEIGHTS.High_Mountain.hard.downhill).toBe(0.04);
+    for (const profile of ['Flat', 'Rolling', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      expect(summe(PROFILE_SCORE_WEIGHTS[profile].easy)).toBeCloseTo(1, 6);
+      expect(PROFILE_SCORE_WEIGHTS[profile].easy.mountain).toBeUndefined();
+    }
+  });
+
+  it('haelt die Spannen luecken- und ueberlappungsfrei aneinander', () => {
+    const leiter: StageProfile[] = ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
+    for (let index = 1; index < leiter.length; index += 1) {
+      expect(PROFILE_SCORE_WEIGHTS[leiter[index]!].difficultyRange[0])
+        .toBeCloseTo(PROFILE_SCORE_WEIGHTS[leiter[index - 1]!].difficultyRange[1], 6);
+    }
+  });
+});

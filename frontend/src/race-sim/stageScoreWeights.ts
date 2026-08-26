@@ -42,6 +42,42 @@ export interface ProfileScoreWeights {
  * Der Sprint steht ueberall klein: er entscheidet den Zielsprint, nicht die
  * Etappe. Auf Pflaster ist er auf 0,10 gedeckelt, das freigewordene Gewicht
  * gleichmaessig auf die uebrigen verteilt.
+ *
+ * Fuer die fuenf Bergprofile stehen die Anteile von `hill`, `mediumMountain`
+ * und `mountain` seit der Vorgabe fest, und zwar an zwei Stuetzstellen — am
+ * Anfang der Spanne und in ihrer Mitte:
+ *
+ *   Terrain            Anfang            Mitte
+ *   Hilly              100 /  0 /  0     75 / 25 /  0
+ *   Hilly_Difficult     65 / 35 /  0     45 / 45 / 10
+ *   Medium_Mountain     25 / 60 / 15     25 / 50 / 25
+ *   Mountain             5 / 40 / 55      0 / 25 / 75
+ *   High_Mountain        0 /  0 / 100     —
+ *
+ * `hard` ist so bestimmt, dass die *Mitte* die Vorgabe exakt trifft. Das ist
+ * nicht dasselbe wie geradliniges Fortschreiben der Anteile: ueberblendet
+ * werden die absoluten Gewichte, und weil Flach und Sprint an beiden Enden
+ * verschieden gross sind, ist auch der Rest verschieden, aus dem sich die
+ * Anteile berechnen. Aufgeloest nach `hard`:
+ *
+ *   s_hard = [ s_mitte · (R_anfang + R_hard) − R_anfang · s_anfang ] / R_hard
+ *
+ * mit `R` als dem, was nach Flach, Sprint, Antritt und Abfahrt uebrig ist.
+ * Nur bei `Mountain` faellt dabei ein negativer Huegelanteil an; er wird auf
+ * 0 gestutzt, wodurch die Mitte dort 2,5 statt 0 Prozent Huegel traegt. Fuer
+ * das Hochgebirge nennt die Vorgabe nur einen Punkt, dort bleibt es ueber die
+ * ganze Spanne dabei.
+ *
+ * Alles andere am Score bleibt, wie es war: Flach, Sprint, Antritt und
+ * Abfahrt behalten ihre Gewichte, und was nach ihnen uebrig ist, wird nach
+ * den Anteilen oben verteilt. `Flat`, `Rolling` und die beiden
+ * Pflasterprofile sind gar nicht betroffen.
+ *
+ * Die Spannen (`difficultyRange`) sind zugleich die Grenzen, nach denen die
+ * Etappen der Rundfahrten eingestuft werden — Profil und Ueberblendung
+ * benutzen damit dieselbe Leiter. Die Grenzen stammen aus 826 echten
+ * Grand-Tour-Etappen: jeweils die Mitte zwischen dem oberen Quartil des
+ * einen und dem unteren Quartil des naechsten Terrains.
  */
 export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = {
   Flat: {
@@ -55,29 +91,31 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
     hard: { flat: 0.52, hill: 0.30, sprint: 0.15, acceleration: 0.03 },
   },
   Hilly: {
-    difficultyRange: [0.20, 1.00],
+    difficultyRange: [0.30, 0.45],
     easy: { flat: 0.50, hill: 0.40, sprint: 0.06, acceleration: 0.04 },
-    hard: { flat: 0.28, hill: 0.60, mediumMountain: 0.04, sprint: 0.05, acceleration: 0.03 },
+    hard: { flat: 0.28, hill: 0.38, mediumMountain: 0.26, sprint: 0.05, acceleration: 0.03 },
   },
   Hilly_Difficult: {
-    difficultyRange: [0.45, 1.10],
-    easy: { flat: 0.29, hill: 0.58, mediumMountain: 0.07, sprint: 0.03, acceleration: 0.03 },
-    hard: { flat: 0.09, hill: 0.58, mediumMountain: 0.27, sprint: 0.03, acceleration: 0.03 },
+    difficultyRange: [0.45, 0.87],
+    easy: { flat: 0.29, hill: 0.422, mediumMountain: 0.228, sprint: 0.03, acceleration: 0.03 },
+    hard: { flat: 0.09, hill: 0.252, mediumMountain: 0.448, mountain: 0.15, sprint: 0.03, acceleration: 0.03 },
   },
   Medium_Mountain: {
-    difficultyRange: [0.65, 1.10],
-    easy: { flat: 0.10, hill: 0.22, mediumMountain: 0.55, mountain: 0.10, sprint: 0.02, acceleration: 0.01 },
-    hard: { flat: 0.04, hill: 0.12, mediumMountain: 0.56, mountain: 0.26, sprint: 0.01, acceleration: 0.01 },
+    difficultyRange: [0.87, 1.40],
+    easy: { hill: 0.242, mediumMountain: 0.583, mountain: 0.145, sprint: 0.02, acceleration: 0.01 },
+    hard: { hill: 0.245, mediumMountain: 0.393, mountain: 0.342, sprint: 0.01, acceleration: 0.01 },
   },
   Mountain: {
-    difficultyRange: [0.90, 2.60],
-    easy: { hill: 0.10, mediumMountain: 0.25, mountain: 0.58, downhill: 0.05, sprint: 0.02 },
-    hard: { hill: 0.04, mediumMountain: 0.16, mountain: 0.75, downhill: 0.04, sprint: 0.01 },
+    difficultyRange: [1.40, 1.95],
+    easy: { hill: 0.046, mediumMountain: 0.372, mountain: 0.512, downhill: 0.05, sprint: 0.02 },
+    hard: { mediumMountain: 0.093, mountain: 0.857, downhill: 0.04, sprint: 0.01 },
   },
   High_Mountain: {
-    difficultyRange: [1.15, 2.30],
-    easy: { hill: 0.05, mediumMountain: 0.16, mountain: 0.74, downhill: 0.05 },
-    hard: { hill: 0.02, mediumMountain: 0.10, mountain: 0.84, downhill: 0.04 },
+    // Ohne Ueberblendung: die Vorgabe nennt fuer das Hochgebirge nur einen
+    // Punkt, dort zaehlt ueber die ganze Spanne allein der Bergwert.
+    difficultyRange: [1.95, 3.20],
+    easy: { mountain: 0.95, downhill: 0.05 },
+    hard: { mountain: 0.96, downhill: 0.04 },
   },
   // Pflaster: nur zwei Referenzetappen, deshalb keine Ueberblendung.
   Cobble: {
@@ -137,9 +175,9 @@ export function resolveStaminaWeight(distanceKm: number): number {
  */
 export const STAGE_RACE_SCORE_WEIGHTS: Partial<Record<StageProfile, ProfileScoreWeights>> = {
   Hilly_Difficult: {
-    difficultyRange: [0.45, 1.10],
-    easy: { hill: 0.82, mediumMountain: 0.10, sprint: 0.04, acceleration: 0.04 },
-    hard: { hill: 0.64, mediumMountain: 0.30, sprint: 0.03, acceleration: 0.03 },
+    difficultyRange: [0.45, 0.87],
+    easy: { hill: 0.598, mediumMountain: 0.322, sprint: 0.04, acceleration: 0.04 },
+    hard: { hill: 0.239, mediumMountain: 0.515, mountain: 0.186, sprint: 0.03, acceleration: 0.03 },
   },
 };
 
