@@ -298,6 +298,7 @@ export function runQuickSimulation(
       riderId: candidate.rider.id,
       teamId: candidate.rider.activeTeamId,
       score: candidate.effectiveSkill,
+      roleName: candidate.rider.role?.name,
     })));
 
   const scoreDeltaByRiderId = new Map(preRace.scoreDeltaByRiderId);

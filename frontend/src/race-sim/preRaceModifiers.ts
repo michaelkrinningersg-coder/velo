@@ -105,8 +105,12 @@ export const HOME_SCORE_DELTA = {
   super: 3,
 } as const;
 
-/** Spanne des Wetterzuschlags. Passt das Wetter, nach oben; passt es nicht, nach unten. */
-export const WEATHER_SCORE_DELTA_RANGE = { min: 0.2, max: 1.0 } as const;
+/**
+ * Spanne des Wetterzuschlags. Passt das Wetter, nach oben; passt es nicht,
+ * nach unten. Bewusst groesser als der Heimvorteil: an einem Regentag trennt
+ * das Wetter die Fahrer staerker als das Publikum am Strassenrand.
+ */
+export const WEATHER_SCORE_DELTA_RANGE = { min: 0.2, max: 1.5 } as const;
 
 export function applyPreRaceRiderModifiers(input: PreRaceModifierInput): PreRaceModifierResult {
   const { race, stage, lieutenants, rivalries, random } = input;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TEAM_STAGING_FLOOR_ROLES,
+  TEAM_STAGING_ROLE_FLOOR,
   TEAM_STAGING_STEPS,
-  TEAM_STAGING_STEP_BEYOND,
   buildTeamStagingDeltas,
   resolveTeamStagingDelta,
 } from '../../../shared/quickSim/teamStaging';
@@ -25,12 +26,47 @@ describe('Abstufung innerhalb der Mannschaft', () => {
     });
   });
 
-  it('fuehrt die Staffel hinter dem achten Fahrer weiter', () => {
-    expect(resolveTeamStagingDelta(8)).toBeCloseTo(-3 + TEAM_STAGING_STEP_BEYOND, 10);
-    expect(resolveTeamStagingDelta(9)).toBeCloseTo(-4, 10);
-    for (let position = 2; position < 15; position += 1) {
+  it('bleibt hinter dem achten Fahrer konstant', () => {
+    for (let position = 8; position < 20; position += 1) {
+      expect(resolveTeamStagingDelta(position)).toBe(-3);
+    }
+    // Bis dahin faellt sie in jedem Schritt.
+    for (let position = 1; position < 8; position += 1) {
       expect(resolveTeamStagingDelta(position)).toBeLessThan(resolveTeamStagingDelta(position - 1));
     }
+  });
+
+  it('laesst Kapitaene, Co-Kapitaene und Sprinter nie unter minus eins fallen', () => {
+    expect(TEAM_STAGING_ROLE_FLOOR).toBe(-1);
+    expect([...TEAM_STAGING_FLOOR_ROLES].sort()).toEqual(['co-kapitaen', 'kapitaen', 'sprinter']);
+    for (const rolle of ['Kapitaen', 'Co-Kapitaen', 'Sprinter', 'Kapitän', 'Co-Kapitän']) {
+      for (let position = 0; position < 15; position += 1) {
+        const wert = resolveTeamStagingDelta(position, rolle);
+        expect(wert).toBeGreaterThanOrEqual(-1);
+        // Oberhalb der Grenze bleibt die Staffel unveraendert.
+        expect(wert).toBe(Math.max(-1, TEAM_STAGING_STEPS[position] ?? -3));
+      }
+    }
+  });
+
+  it('laesst Helferrollen die volle Staffel tragen', () => {
+    for (const rolle of ['Edelhelfer', 'Starke Helfer', 'Wassertraeger', 'Wasserträger', '', undefined]) {
+      expect(resolveTeamStagingDelta(7, rolle)).toBe(-3);
+      expect(resolveTeamStagingDelta(4, rolle)).toBe(-1.5);
+    }
+  });
+
+  it('greift die Untergrenze auch im ganzen Team', () => {
+    // Eine Mannschaft aus acht Kapitaenen: keiner faellt unter -1.
+    const deltas = buildTeamStagingDeltas(Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Kapitaen',
+    })));
+    expect([...deltas.values()]).toEqual([1, 0, -0.5, -1, -1, -1, -1, -1]);
+    // Dieselbe Mannschaft aus Wassertraegern traegt die volle Staffel.
+    const helfer = buildTeamStagingDeltas(Array.from({ length: 8 }, (_, i) => ({
+      riderId: i + 1, teamId: 1, score: 90 - i, roleName: 'Wassertraeger',
+    })));
+    expect([...helfer.values()]).toEqual([1, 0, -0.5, -1, -1.5, -2, -2.5, -3]);
   });
 
   it('vergibt die Staffel nach dem Score, nicht nach der Eingabereihenfolge', () => {
@@ -147,6 +183,8 @@ describe('Heimvorteil und Wetter als Score-Zuschlag', () => {
 
   it('haelt den Wetterzuschlag in seiner Spanne, in beide Richtungen', () => {
     const { min, max } = WEATHER_SCORE_DELTA_RANGE;
+    expect(min).toBeCloseTo(0.2, 10);
+    expect(max).toBeCloseTo(1.5, 10);
     for (const [profileId, weatherId, richtung] of [[1, 1, 'pref'], [1, 4, 'malus']] as Array<[number, number, string]>) {
       expect(getWeatherRelation(profileId, weatherId)).toBe(richtung);
       for (let seed = 0; seed < 300; seed += 1) {

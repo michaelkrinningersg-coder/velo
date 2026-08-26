@@ -15,37 +15,69 @@
  *
  * Die Werte gelten fuer jedes Terrain gleich: die Arbeit, die eine Mannschaft
  * verteilt, haengt nicht am Profil.
+ *
+ * Eine Ausnahme gibt es doch: Kapitaene, Co-Kapitaene und Sprinter fallen nie
+ * unter -1. Sie fahren ihr eigenes Rennen, auch wenn sie an diesem Tag hinten
+ * in ihrer Mannschaft stehen — die Abstufung bildet Helferdienste ab, und die
+ * leisten sie nicht.
  */
 
 /** Zuschlag je Platz innerhalb der Mannschaft, vom besten an. */
 export const TEAM_STAGING_STEPS: readonly number[] = [1, 0, -0.5, -1, -1.5, -2, -2.5, -3];
 
 /**
- * Wie es hinter dem achten Fahrer weitergeht.
+ * Untergrenze fuer Rollen, die ihr eigenes Rennen fahren duerfen.
  *
- * Ein Kader von acht ist die Regel; groessere Mannschaften gibt es nur in
- * Ausnahmefaellen. Fuer sie laeuft dieselbe Stufung weiter, statt auf -3
- * stehenzubleiben — sonst waeren der achte und der zehnte Fahrer gleich
- * gestellt, obwohl zwei weitere vor ihnen liegen.
+ * Ein Kapitaen, Co-Kapitaen oder Sprinter faehrt nicht fuer einen anderen.
+ * Steht er an einem schwachen Tag trotzdem hinten in seiner Mannschaft, soll
+ * ihn die Abstufung nicht zusaetzlich nach unten druecken — sie bildet
+ * Helferdienste ab, und die leistet er nicht.
  */
-export const TEAM_STAGING_STEP_BEYOND = -0.5;
+export const TEAM_STAGING_ROLE_FLOOR = -1;
 
-export function resolveTeamStagingDelta(positionInTeam: number): number {
+/** Rollen, fuer die die Untergrenze gilt. Namen ohne Umlaute und klein. */
+export const TEAM_STAGING_FLOOR_ROLES = new Set<string>(['kapitaen', 'co-kapitaen', 'sprinter']);
+
+/**
+ * Rollennamen vergleichbar machen.
+ *
+ * Aus der Datenbank kommt `Kapitaen`, aus aelteren Staenden auch `Kapitän`.
+ * Umlaute werden deshalb zuerst ausgeschrieben und erst danach die restlichen
+ * Betonungszeichen entfernt — `normalize('NFD')` allein macht aus dem Umlaut
+ * ein blankes `a`, und der Vergleich schlaegt fehl.
+ */
+export function normalisiereRolle(roleName: string | null | undefined): string {
+  return (roleName ?? '')
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Zuschlag fuer eine Position innerhalb der Mannschaft.
+ *
+ * Hinter dem achten Fahrer bleibt es bei -3. Ein Kader von acht ist die Regel;
+ * die wenigen groesseren Mannschaften sollen nicht immer tiefer fallen, nur
+ * weil sie mehr Fahrer am Start haben.
+ */
+export function resolveTeamStagingDelta(positionInTeam: number, roleName?: string | null): number {
   if (positionInTeam < 0) {
     return 0;
   }
-  const bekannt = TEAM_STAGING_STEPS[positionInTeam];
-  if (bekannt != null) {
-    return bekannt;
-  }
   const letzte = TEAM_STAGING_STEPS[TEAM_STAGING_STEPS.length - 1] as number;
-  return letzte + ((positionInTeam - TEAM_STAGING_STEPS.length + 1) * TEAM_STAGING_STEP_BEYOND);
+  const roh = TEAM_STAGING_STEPS[positionInTeam] ?? letzte;
+  return TEAM_STAGING_FLOOR_ROLES.has(normalisiereRolle(roleName))
+    ? Math.max(TEAM_STAGING_ROLE_FLOOR, roh)
+    : roh;
 }
 
 export interface TeamStagingRider {
   riderId: number;
   teamId?: number | null;
   score: number;
+  /** Rollenname aus der Datenbank. Entscheidet ueber die Untergrenze. */
+  roleName?: string | null;
 }
 
 /**
@@ -71,7 +103,7 @@ export function buildTeamStagingDeltas(riders: readonly TeamStagingRider[]): Map
       (links, rechts) => rechts.score - links.score || links.riderId - rechts.riderId,
     );
     sortiert.forEach((rider, position) => {
-      deltas.set(rider.riderId, resolveTeamStagingDelta(position));
+      deltas.set(rider.riderId, resolveTeamStagingDelta(position, rider.roleName));
     });
   }
   return deltas;
