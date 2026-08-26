@@ -135,11 +135,16 @@ function calculateRoadScore(
   // Der reine Koennensanteil wird je Terrain gespreizt, damit die Form auf den
   // leichten Profilen nicht mehr Plaetze kostet als am Berg. Siehe
   // `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
-  const koennen = (weighted + resolveStaminaContribution(rider, distanceKm))
-    * resolveSkillWeightFactor(stage.profile);
+  //
+  // Der Rollenabzug geht mit: er ist in Punkten der Faehigkeitsskala gedacht
+  // ("was der Wassertraeger am Berg nicht fahren darf"), nicht in Punkten der
+  // Form. Bliebe er absolut stehen, verloere er auf jedem Terrain genau so
+  // viel Wirkung, wie der Faktor die Faehigkeiten spreizt.
+  const faktor = resolveSkillWeightFactor(stage.profile);
+  const koennen = (weighted + resolveStaminaContribution(rider, distanceKm)) * faktor;
   return koennen
     + resolveFormContribution(rider, dailyForm, stage.profile)
-    - resolveDomestiquePenalty(rider, stage.profile);
+    - (resolveDomestiquePenalty(rider, stage.profile) * faktor);
 }
 
 function calculateRiderScore(

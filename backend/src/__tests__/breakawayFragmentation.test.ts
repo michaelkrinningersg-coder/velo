@@ -11,6 +11,7 @@ import {
 import { simulateQuickStage } from '../../../shared/quickSim/simulateStage';
 import { DEFAULT_QUICK_SIM_PROFILES } from '../../../shared/quickSimProfiles';
 import { createSeededRandom } from '../../../shared/rng';
+import { resolveSkillWeightFactor } from '../../../shared/quickSim/terrainModifiers';
 import type { StageProfile } from '../../../shared/types';
 
 const PROFILE: StageProfile[] = ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'];
@@ -209,6 +210,62 @@ describe('Ausreissergruppe im Etappenergebnis', () => {
           expect(entry.gapSeconds as number).toBeLessThan(ersterImFeld.gapSeconds as number);
         }
       }
+    }
+  });
+});
+
+describe('Terrainfaktor auf die Ausreisser-Verschiebungen', () => {
+  const scoreVon = (result: ReturnType<typeof simulateQuickStage>, riderId: number): number =>
+    (result.groupDiagnostics!.scoreByRiderId.get(riderId) as number)
+    - (result.groupDiagnostics!.rankNoiseByRiderId.get(riderId) ?? 0);
+
+  const lauf = (profile: StageProfile, phaseEnd: number) => simulateQuickStage({
+    profile, distanceKm: 180, stageScore: 180 * 0.7,
+    // Ohne Rangrauschen, damit die Verschiebung allein steht.
+    parameters: { ...DEFAULT_QUICK_SIM_PROFILES[profile], rankNoise: 0 },
+    riders: feld(150),
+    breakaway: { riderIds: [50, 51, 52], phaseEndDistanceMeters: phaseEnd, triggerDistanceMeters: 6000, skillBonus: 8, malusValue: 30 },
+    random: createSeededRandom(21),
+  });
+
+  it('spreizt den Malus einer gestellten Gruppe mit', () => {
+    for (const profile of ['Flat', 'Rolling', 'Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      const r = lauf(profile, 120_000);
+      expect(r.breakawaySurvived).toBe(false);
+      // Fahrer 50 ist Ausreisser, Fahrer 49 nicht — in der Grundlage liegen
+      // sie 0,3 Punkte auseinander.
+      const differenz = scoreVon(r, 49) - scoreVon(r, 50);
+      expect(differenz).toBeCloseTo(0.3 + (30 * resolveSkillWeightFactor(profile)), 6);
+    }
+  });
+
+  it('spreizt den Bonus einer durchgekommenen Gruppe mit', () => {
+    for (const profile of ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      const r = lauf(profile, 260_000);
+      expect(r.breakawaySurvived).toBe(true);
+      const survivors = r.entries.filter((e) => !e.isAbandon).slice(0, r.groupDiagnostics!.breakawayHeadSize);
+      const durch = survivors[0]!.riderId;
+      // Fahrer 49 ist der Nachbar unmittelbar vor der Gruppe und traegt keinen
+      // Bonus; je Platz Abstand liegen 0,3 Punkte dazwischen.
+      const differenz = scoreVon(r, durch) - scoreVon(r, 49);
+      expect(differenz).toBeCloseTo((8 * resolveSkillWeightFactor(profile)) - (0.3 * (durch - 49)), 6);
+    }
+  });
+
+  it('spreizt den Abzug fuer eingeholte Ausreisser mit', () => {
+    for (const profile of ['Hilly', 'Hilly_Difficult', 'Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      const r = lauf(profile, 260_000);
+      const survivors = new Set(r.entries.filter((e) => !e.isAbandon)
+        .slice(0, r.groupDiagnostics!.breakawayHeadSize).map((e) => e.riderId));
+      const eingeholt = [50, 51, 52].filter((id) => !survivors.has(id));
+      if (eingeholt.length === 0) continue;
+      const id = eingeholt[0]!;
+      // Der Eingeholte verliert den Ueberlebensbonus wieder und bekommt den
+      // Abzug obendrauf; gegen einen Fahrer aus dem Feld bleiben davon genau
+      // die drei Punkte stehen — gespreizt mit dem Terrainfaktor.
+      const faktor = resolveSkillWeightFactor(profile);
+      const erwartet = (0.3 * (id - 49)) + (CAUGHT_BREAKAWAY_SCORE_MALUS * faktor);
+      expect(scoreVon(r, 49) - scoreVon(r, id)).toBeCloseTo(erwartet, 6);
     }
   });
 });

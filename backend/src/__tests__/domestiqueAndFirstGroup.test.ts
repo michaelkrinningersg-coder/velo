@@ -11,6 +11,7 @@ import {
   STRONG_HELPER_PENALTY_SHARE,
   resolveClimbPenaltyForRole,
   resolveDomestiqueClimbPenalty,
+  resolveSkillWeightFactor,
 } from '../../../shared/quickSim/terrainModifiers';
 import { calculateStageFavoriteRiderRanking } from '../../../frontend/src/race-sim/stageFavorites';
 import { createSeededRandom } from '../../../shared/rng';
@@ -119,14 +120,16 @@ describe('Abzug fuer Wassertraeger am Berg', () => {
     expect(resolveDomestiqueClimbPenalty(null)).toBe(0);
   });
 
-  it('zieht dem Wassertraeger genau den vorgegebenen Wert ab', () => {
+  it('zieht dem Wassertraeger den vorgegebenen Wert ab, mit dem Terrainfaktor', () => {
     for (const [profile, abzug] of Object.entries(DOMESTIQUE_CLIMB_PENALTY) as Array<[StageProfile, number]>) {
       const kapitaen = baueFahrer(1, 'Kapitaen', 75);
       const wasser = baueFahrer(2, 'Wassertraeger', 75);
       const rang = calculateStageFavoriteRiderRanking([kapitaen, wasser], teams, stage(profile), { distanceKm: 165, isStageRace: true });
       const kap = rang.find((r) => r.rider.id === 1)!.effectiveSkill;
       const was = rang.find((r) => r.rider.id === 2)!.effectiveSkill;
-      expect(kap - was).toBeCloseTo(abzug, 6);
+      // Der Abzug steht in Punkten der Faehigkeitsskala und wird deshalb
+      // genauso gespreizt wie sie. Siehe `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
+      expect(kap - was).toBeCloseTo(abzug * resolveSkillWeightFactor(profile), 6);
     }
   });
 
@@ -146,7 +149,7 @@ describe('Abzug fuer Wassertraeger am Berg', () => {
       teams, stage('High_Mountain'), { distanceKm: 165, isStageRace: true },
     );
     expect(rang.find((r) => r.rider.id === 1)!.effectiveSkill - rang.find((r) => r.rider.id === 2)!.effectiveSkill)
-      .toBeCloseTo(6, 6);
+      .toBeCloseTo(6 * resolveSkillWeightFactor('High_Mountain'), 6);
   });
 
   it('dreht die Reihenfolge, wo der Abzug den Unterschied ausmacht', () => {
@@ -185,8 +188,9 @@ describe('Abzug fuer starke Helfer am Berg', () => {
         teams, stage(profile), { distanceKm: 165, isStageRace: true },
       );
       const wert = (id: number) => rang.find((r) => r.rider.id === id)!.effectiveSkill;
-      expect(wert(1) - wert(2)).toBeCloseTo(voll / 3, 6);
-      expect(wert(1) - wert(3)).toBeCloseTo(voll, 6);
+      const faktor = resolveSkillWeightFactor(profile);
+      expect(wert(1) - wert(2)).toBeCloseTo((voll / 3) * faktor, 6);
+      expect(wert(1) - wert(3)).toBeCloseTo(voll * faktor, 6);
       // Der starke Helfer steht zwischen Kapitaen und Wassertraeger.
       expect(rang.map((r) => r.rider.id)).toEqual([1, 2, 3]);
     }

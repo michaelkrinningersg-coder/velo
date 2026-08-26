@@ -116,14 +116,32 @@ describe('Wirkung im Etappenscore', () => {
     }
   });
 
-  it('laesst den Rollenabzug am Berg absolut wirken', () => {
+  it('spreizt den Rollenabzug am Berg mit', () => {
+    // Der Abzug ist in Punkten der Faehigkeitsskala gedacht und muss deshalb
+    // denselben Faktor tragen — sonst verloere er genau so viel Wirkung, wie
+    // der Faktor die Faehigkeiten spreizt.
     for (const [profile, abzug] of Object.entries(DOMESTIQUE_CLIMB_PENALTY) as Array<[StageProfile, number]>) {
       const wasser = baueFahrer(2, 75);
       (wasser as { role: { id: number; name: string } }).role = { id: 5, name: 'Wassertraeger' };
       const rang = calculateStageFavoriteRiderRanking(
         [baueFahrer(1, 75), wasser], teams, stage(profile, 203), { distanceKm: 180, isStageRace: true },
       );
-      expect(wert(rang, 1) - wert(rang, 2)).toBeCloseTo(abzug, 6);
+      expect(wert(rang, 1) - wert(rang, 2)).toBeCloseTo(abzug * resolveSkillWeightFactor(profile), 6);
+    }
+  });
+
+  it('haelt den Rollenabzug im selben Verhaeltnis zu den Faehigkeiten', () => {
+    // Zehn Punkte Bergwert wiegen den Abzug auf einem Terrain genauso auf wie
+    // vor dem Faktor — beide werden gleich gespreizt.
+    for (const profile of ['Medium_Mountain', 'Mountain', 'High_Mountain'] as StageProfile[]) {
+      const wasser = baueFahrer(2, 85);
+      (wasser as { role: { id: number; name: string } }).role = { id: 5, name: 'Wassertraeger' };
+      const rang = calculateStageFavoriteRiderRanking(
+        [baueFahrer(1, 75), wasser], teams, stage(profile, 203), { distanceKm: 180, isStageRace: true },
+      );
+      const faktor = resolveSkillWeightFactor(profile);
+      const vorsprung = 10 * (1 + resolveStaminaWeight(180)) - DOMESTIQUE_CLIMB_PENALTY[profile]!;
+      expect(wert(rang, 2) - wert(rang, 1)).toBeCloseTo(vorsprung * faktor, 6);
     }
   });
 

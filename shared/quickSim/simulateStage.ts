@@ -48,7 +48,11 @@ import {
   type FinishRegime,
 } from './groupModel';
 import { applyGroupProtection, PROTECTION_STRENGTH } from './groupProtection';
-import { resolveRankNoiseFactor, resolveTieBreakNoiseFactor } from './terrainModifiers';
+import {
+  resolveRankNoiseFactor,
+  resolveSkillWeightFactor,
+  resolveTieBreakNoiseFactor,
+} from './terrainModifiers';
 import {
   resolveIncidentOutcomes,
   type QuickSimIncident,
@@ -212,6 +216,25 @@ function resolveTimeGroupSizes(sortedTimesSeconds: readonly number[]): number[] 
  * ueberlebt die Gruppe, hebt der Bonus sie nach vorne; wird sie gestellt,
  * schiebt der Malus sie nach hinten. Genau so macht es die volle Simulation.
  */
+/**
+ * Score-Verschiebung der Ausreisser, mit dem Terrainfaktor.
+ *
+ * Bonus und Malus aus dem Ausreisserplan sind in Punkten der
+ * Faehigkeitsskala gedacht: der Bonus dafuer, dass die Gruppe den Tag vorne
+ * verbracht hat, der Malus dafuer, dass sie gestellt wurde. Seit der
+ * Faehigkeitsanteil je Terrain gespreizt wird, muessen sie mitgehen — sonst
+ * schoebe derselbe Malus auf einer Huegeletappe einen Fahrer nur noch halb so
+ * weit zurueck wie vorher. Siehe `SKILL_WEIGHT_FACTOR_BY_PROFILE`.
+ */
+function resolveBreakawayShift(input: QuickSimStageInput, breakawaySurvived: boolean): number {
+  const plan = input.breakaway;
+  if (!plan) {
+    return 0;
+  }
+  const roh = breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0);
+  return roh * resolveSkillWeightFactor(input.profile);
+}
+
 function buildScoreMap(input: QuickSimStageInput, breakawaySurvived: boolean): Map<number, number> {
   const scores = new Map<number, number>();
   for (const rider of input.riders) {
@@ -223,7 +246,7 @@ function buildScoreMap(input: QuickSimStageInput, breakawaySurvived: boolean): M
     return scores;
   }
 
-  const shift = breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0);
+  const shift = resolveBreakawayShift(input, breakawaySurvived);
   if (shift === 0) {
     return scores;
   }
@@ -295,7 +318,7 @@ function applyScoreShiftToEntries(
   extraShift: ReadonlyMap<number, number>,
 ): QuickSimRiderInput[] {
   const plan = input.breakaway;
-  const shift = plan ? (breakawaySurvived ? (plan.skillBonus ?? 0) : -(plan.malusValue ?? 0)) : 0;
+  const shift = plan ? resolveBreakawayShift(input, breakawaySurvived) : 0;
   const affected = new Set(plan?.riderIds ?? []);
   return riders.map((rider) => {
     const delta = (affected.has(rider.riderId) ? shift : 0)
@@ -328,7 +351,7 @@ function resolveBreakawaySplit(
   const anzahl = resolveBreakawaySurvivorCount(random, kandidaten.length, profile);
   const survivors = new Set(kandidaten.slice(0, anzahl));
 
-  const shift = -(plan.skillBonus ?? 0) - CAUGHT_BREAKAWAY_SCORE_MALUS;
+  const shift = (-(plan.skillBonus ?? 0) - CAUGHT_BREAKAWAY_SCORE_MALUS) * resolveSkillWeightFactor(profile);
   const caughtShift = new Map<number, number>();
   for (const riderId of kandidaten) {
     if (!survivors.has(riderId)) {
