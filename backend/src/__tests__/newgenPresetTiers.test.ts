@@ -28,8 +28,9 @@ describe('Stufen der Newgen-Presets', () => {
   });
 
   it('ordnet jede Gesamtwertung genau einer Stufe zu', () => {
-    expect(resolveNewgenPresetTier(80).key).toBe('S');
-    expect(resolveNewgenPresetTier(74.5).key).toBe('S');
+    expect(resolveNewgenPresetTier(80).key).toBe('S+');
+    expect(resolveNewgenPresetTier(76).key).toBe('S+');
+    expect(resolveNewgenPresetTier(75.99).key).toBe('S');
     expect(resolveNewgenPresetTier(74.49).key).toBe('A');
     expect(resolveNewgenPresetTier(50).key).toBe('E');
   });

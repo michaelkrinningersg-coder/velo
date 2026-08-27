@@ -7,9 +7,9 @@
  * aehnliche Fahrer. Bei einem Wassertraeger merkt das niemand, bei einem
  * Rundfahrtsieger schon. Die Spitze bekommt deshalb einen Deckel — hoechstens
  * drei aktive Fahrer je Preset — und dafuer so viele Presets, dass der Deckel
- * nicht beisst: in 25 Jahren entstehen rund 3900 Newgens, davon sollen 0,7 %
- * aus Stufe S kommen, also rund 27 Fahrer. Bei 36 Presets in dieser Stufe wird
- * jedes im Schnitt einmal gebraucht — der Deckel von 3 laesst dreifache Luft.
+ * nicht beisst: in 25 Jahren entstehen rund 3900 Newgens, davon 7 % aus Stufe
+ * S+, also rund 273 Fahrer. Bei 264 Presets in dieser Stufe wird jedes im
+ * Schnitt einmal gebraucht — der Deckel von drei laesst dreifache Luft.
  *
  * Eingestuft wird ueber die Gesamtwertung aus der MITTE der Preset-Spanne. Sie
  * ist ungefaehr die Medianstaerke der Fahrer, die das Preset erzeugt; die
@@ -34,14 +34,23 @@ export interface NewgenPresetTier {
   readonly deckel: number | null;
 }
 
-/** Absteigend nach Staerke. Die letzte Stufe faengt alles Uebrige auf. */
+/**
+ * Absteigend nach Staerke. Die letzte Stufe faengt alles Uebrige auf.
+ *
+ * Die Anteile sind nicht geraten, sondern gegen das eingelesene Feld geeicht:
+ * mit ihnen treffen die Newgens dessen Potenzialverteilung (Median 71,7,
+ * 20,6 % ab 74, 5,9 % ab 76). Ohne diese Eichung sinkt die Welt ab — ein
+ * 30-Jahres-Lauf mit einer flacheren Verteilung endete bei Median 64,0 und
+ * gerade noch zwei Fahrern ab Gesamtwertung 75, wo es am Anfang 32 waren.
+ */
 export const NEWGEN_PRESET_TIERS: readonly NewgenPresetTier[] = [
-  { key: 'S', abMidOverall: 74.5, zielanteil: 0.007, deckel: 3 },
-  { key: 'A', abMidOverall: 72.5, zielanteil: 0.020, deckel: 3 },
-  { key: 'B', abMidOverall: 71.0, zielanteil: 0.080, deckel: null },
-  { key: 'C', abMidOverall: 69.5, zielanteil: 0.260, deckel: null },
-  { key: 'D', abMidOverall: 68.0, zielanteil: 0.340, deckel: null },
-  { key: 'E', abMidOverall: -Infinity, zielanteil: 0.293, deckel: null },
+  { key: 'S+', abMidOverall: 76.0, zielanteil: 0.070, deckel: 3 },
+  { key: 'S', abMidOverall: 74.5, zielanteil: 0.045, deckel: null },
+  { key: 'A', abMidOverall: 72.5, zielanteil: 0.170, deckel: null },
+  { key: 'B', abMidOverall: 71.0, zielanteil: 0.200, deckel: null },
+  { key: 'C', abMidOverall: 69.5, zielanteil: 0.280, deckel: null },
+  { key: 'D', abMidOverall: 68.0, zielanteil: 0.135, deckel: null },
+  { key: 'E', abMidOverall: -Infinity, zielanteil: 0.100, deckel: null },
 ];
 
 /**
@@ -49,10 +58,11 @@ export const NEWGEN_PRESET_TIERS: readonly NewgenPresetTier[] = [
  *
  * Die Gewichtsspalte ist ganzzahlig. Bei einem kleinen Massstab bekaeme jedes
  * Preset der Spitzenstufen das Mindestgewicht 1 und die Stufe traefe ihren
- * Anteil nicht mehr — 10000 laesst genug Spielraum, damit auch 0,7 % auf 36
- * Presets noch sauber aufgehen.
+ * Anteil nicht mehr. Bei 10000 kam Stufe S+ auf Gewicht 3 statt der noetigen
+ * 2,5 und lag damit 1,3 Punkte ueber ihrem Zielanteil; 40000 loest fein genug
+ * auf, dass alle sieben Stufen ihren Anteil auf ein Zehntel genau treffen.
  */
-export const NEWGEN_PRESET_WEIGHT_SCALE = 10000;
+export const NEWGEN_PRESET_WEIGHT_SCALE = 40000;
 
 const SKILL_KEYS = [
   'flat', 'mountain', 'medium_mountain', 'hill', 'time_trial',
