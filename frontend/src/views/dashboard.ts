@@ -153,6 +153,8 @@ export function renderGameState(): void {
     hint.classList.remove('hidden');
     advanceButton.disabled = true;
     void import('./contractRenewal').then((m) => m.openContractRenewalModal());
+  } else {
+    void import('./contractRenewal').then((m) => m.cancelRenewalAutoSelect());
   }
 }
 
@@ -755,6 +757,15 @@ export function initDashboardListeners(): void {
 }
 
 export async function executeDayAdvance(light = false): Promise<boolean> {
+  // Am 10.01. blockiert das Auswahlfenster fuer Vertragsverlaengerungen den
+  // Tageswechsel. Frueher lief der Aufruf trotzdem los, das Backend warf, und
+  // der Spieler bekam einen Fehlerdialog auf dasselbe Fenster, das gerade
+  // aufging. Jetzt wird das Fenster geoeffnet statt der Server gefragt.
+  if (state.gameState?.renewalSelectionPending) {
+    stopAutoProgress();
+    void import('./contractRenewal').then((m) => m.openContractRenewalModal());
+    return false;
+  }
   showLoading('Tag wird fortgeschrieben...');
   const oldSeason = state.gameState?.season;
   try {
@@ -838,6 +849,14 @@ async function runAutoProgressLoop(): Promise<void> {
     const currentDate = state.gameState?.currentDate;
     if (state.autoProgressTargetDate && currentDate && currentDate >= state.autoProgressTargetDate) {
       stopAutoProgress();
+      break;
+    }
+
+    // Ein blockierendes Auswahlfenster beendet den Lauf, statt in einen
+    // Serverfehler zu laufen.
+    if (state.gameState?.renewalSelectionPending) {
+      stopAutoProgress();
+      void import('./contractRenewal').then((m) => m.openContractRenewalModal());
       break;
     }
 

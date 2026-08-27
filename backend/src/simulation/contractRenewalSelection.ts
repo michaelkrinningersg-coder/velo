@@ -22,6 +22,8 @@ export interface RenewalCandidate {
   age: number;
   endSeason: number;
   maxExtensionYears: number;
+  /** Erste Spezialisierung, als type_key. Fuer die Anzeige in der Auswahl. */
+  specialization1: string | null;
 }
 
 export interface RenewalSelectionPayload {
@@ -51,15 +53,18 @@ export function getEligibleRenewalCandidates(db: Database.Database, season: numb
     SELECT c.rider_id AS riderId, r.first_name AS firstName, r.last_name AS lastName,
            r.birth_year AS birthYear, r.retirement_age AS retirementAge,
            r.overall_rating AS overallRating, r.pot_overall AS potential,
-           country.code_3 AS countryCode, c.end_season AS endSeason
+           country.code_3 AS countryCode, c.end_season AS endSeason,
+           spec1.type_key AS specialization1
     FROM contracts c
     JOIN riders r ON r.id = c.rider_id
     JOIN sta_country country ON country.id = r.country_id
+    LEFT JOIN type_rider spec1 ON spec1.id = r.specialization_1_id
     WHERE c.team_id = ? AND c.end_season = ? AND c.status = 'active' AND r.is_retired = 0
     ORDER BY r.overall_rating DESC, r.last_name ASC
   `).all(teamId, season) as Array<{
     riderId: number; firstName: string; lastName: string; birthYear: number;
-    retirementAge: number; overallRating: number; potential: number; countryCode: string | null; endSeason: number;
+    retirementAge: number; overallRating: number; potential: number; countryCode: string | null;
+    endSeason: number; specialization1: string | null;
   }>;
 
   const candidates: RenewalCandidate[] = [];
@@ -71,6 +76,7 @@ export function getEligibleRenewalCandidates(db: Database.Database, season: numb
       riderId: r.riderId, firstName: r.firstName, lastName: r.lastName,
       countryCode: r.countryCode, overallRating: r.overallRating, potential: r.potential,
       age: season - r.birthYear, endSeason: r.endSeason, maxExtensionYears,
+      specialization1: r.specialization1 ?? null,
     });
   }
   return candidates;
