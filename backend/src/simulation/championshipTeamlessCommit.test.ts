@@ -93,3 +93,71 @@ describe('commitRealtimeStage – teamlose U23-Meisterschaftsfahrer', () => {
     expect(result[0].team_id).toBe(NATIONAL_SELECTION_TEAM_ID);
   });
 });
+
+/**
+ * Regression: dasselbe bei den nationalen Meisterschaften. `applyChampionshipEntries`
+ * laesst teamlose Fahrer eines Landes starten, wenn kein Fahrer mit Team
+ * startberechtigt ist — der Commit kannte diese Ausnahme aber nicht und brach mit
+ * „Team … konnte nicht aufgelöst werden" ab. Das Rennen blieb offen und der
+ * Tageswechsel damit blockiert. Beide Seiten fragen jetzt dieselbe Funktion.
+ */
+describe('commitRealtimeStage – teamlose Fahrer bei nationalen Meisterschaften', () => {
+  let db: Database.Database;
+  const SEASON = 2026;
+  const DATE = '2026-06-25';
+  const RACE_ID = 710;
+  const STAGE_ID = 710;
+  const CATEGORY_NATIONAL_ITT = 15;
+  let teamlessRiderId: number;
+
+  beforeEach(() => {
+    db = createTestDb();
+    seedReferenceData(db);
+    seedTeams(db, { count: 1, playerTeamId: 1 });
+    seedGameState(db, { date: DATE, season: SEASON });
+    new GameStateService(db).ensureState();
+
+    db.prepare(`
+      INSERT INTO teams (id, name, abbreviation, division_id, is_player_team, country_id,
+        color_primary, color_secondary, ai_focus_1, ai_focus_2, ai_focus_3)
+      VALUES (?, 'Nationalauswahl', 'NAT', 1, 0, 1, '#334155', '#e2e8f0', 1, 2, 3)
+    `).run(NATIONAL_SELECTION_TEAM_ID);
+
+    db.prepare(`
+      INSERT INTO races (id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige)
+      VALUES (?, 'Nationale Meisterschaft ITT', 1, ?, 0, 1, ?, ?, 60)
+    `).run(RACE_ID, CATEGORY_NATIONAL_ITT, DATE, DATE);
+    db.prepare(`
+      INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
+      VALUES (?, ?, 1, ?, 'ITT', 0, 'DDV.csv')
+    `).run(STAGE_ID, RACE_ID, DATE);
+
+    // Einziger Fahrer des Landes — ohne Team. Genau die Lage, in der der
+    // Fallback in buildNationalChampionshipRoster greift.
+    teamlessRiderId = seedRider(db, {
+      birthYear: 1998,
+      activeTeamId: null,
+      countryId: 1,
+      overallRating: 74,
+      roleId: 1,
+    });
+  });
+
+  afterEach(() => db.close());
+
+  it('schließt das Rennen ab und verbucht den teamlosen Meister unter dem Pseudo-Team', () => {
+    const service = new StageResultCommitService(db);
+
+    expect(() => service.commitRealtimeStage(STAGE_ID, [
+      { riderId: teamlessRiderId, finishStatus: 'finished', finishTimeSeconds: 1800, photoFinishScore: 900, isBreakaway: false },
+    ])).not.toThrow();
+
+    const result = db
+      .prepare('SELECT rider_id, team_id, rank FROM all_results WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
+      .all(STAGE_ID) as Array<{ rider_id: number; team_id: number; rank: number }>;
+    expect(result.length).toBe(1);
+    expect(result[0].rider_id).toBe(teamlessRiderId);
+    expect(result[0].rank).toBe(1);
+    expect(result[0].team_id).toBe(NATIONAL_SELECTION_TEAM_ID);
+  });
+});

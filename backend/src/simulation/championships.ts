@@ -81,6 +81,25 @@ export function championshipAllowsTeamless(ageClass: ChampionshipAgeClass): bool
   return ageClass === 'U23' || ageClass === 'JUNIOR';
 }
 
+/**
+ * Darf dieses Rennen teamlose Fahrer starten lassen?
+ *
+ * Zwei Faelle: die Altersklassen-Rennen der kontinentalen und Weltmeisterschaften
+ * (U23, Junioren) und die nationalen Meisterschaften. Bei letzteren startet ein
+ * teamloser Fahrer seines Landes, damit ein Land nicht ohne Starter dasteht.
+ *
+ * Diese Regel stand frueher zweimal im Code — einmal beim Aufbau der Startliste
+ * und einmal beim Verbuchen des Ergebnisses — und die beiden Fassungen waren
+ * nicht gleich: der Aufbau liess teamlose Fahrer bei nationalen Meisterschaften
+ * zu, das Verbuchen nicht. Ein teamloser Landesmeister im Zeitfahren brachte
+ * damit den Commit zum Abbruch, das Rennen blieb offen und der Tageswechsel
+ * blockiert. Deshalb steht die Regel jetzt an genau einer Stelle.
+ */
+export function categoryAllowsTeamlessRiders(categoryId: number | null | undefined): boolean {
+  const def = getChampionshipCategoryDef(categoryId);
+  return def ? championshipAllowsTeamless(def.ageClass) : isNationalChampionshipCategory(categoryId);
+}
+
 // ---------------------------------------------------------------------------
 // Kategorien + UCI-Punkte
 // ---------------------------------------------------------------------------

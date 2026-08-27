@@ -9,6 +9,7 @@ import { Race, RaceRosterEditorPayload, Rider, Stage, Team } from '../../../shar
 import { isWinterBreak, tableExists } from '../db/mappers';
 import {
   championshipAgeBounds,
+  categoryAllowsTeamlessRiders,
   championshipAllowsTeamless,
   CHAMPIONSHIP_FATIGUE_THRESHOLD,
   championshipContinents,
@@ -1469,12 +1470,9 @@ function applyChampionshipEntries(
   }
 
   const selected = rosterBuilder(db, repo, race, stage);
-  const champDef = getChampionshipCategoryDef(race.categoryId);
-  // Nationale Meisterschaften duerfen ebenfalls teamlose Fahrer des Landes
-  // starten lassen (Fallback, wenn keine startberechtigten Team-Fahrer da sind).
-  const allowTeamless = champDef
-    ? championshipAllowsTeamless(champDef.ageClass)
-    : isNationalChampionshipCategory(race.categoryId);
+  // Dieselbe Regel wie beim Verbuchen des Ergebnisses — siehe
+  // `categoryAllowsTeamlessRiders`.
+  const allowTeamless = categoryAllowsTeamlessRiders(race.categoryId);
   const deleteStageEntries = db.prepare('DELETE FROM stage_entries WHERE race_id = ?');
   const deleteRaceEntries = db.prepare('DELETE FROM active_race_entries WHERE race_id = ?');
   const insertEntry = db.prepare(

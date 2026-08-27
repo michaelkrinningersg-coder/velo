@@ -33,7 +33,7 @@ import {
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
 import {
-  championshipAllowsTeamless,
+  categoryAllowsTeamlessRiders,
   championshipTitleColumn,
   getChampionshipCategoryDef,
   getNationalChampionshipCategoryDef,
@@ -599,8 +599,14 @@ export class StageResultCommitService {
     // und getTeams blendet das Pseudo-Team aus. Ohne Auflösung würde der Commit
     // hier abbrechen und das Rennen ließe sich nicht abschließen. Wir mappen die
     // teamlosen Starter daher auf das Pseudo-Team und stellen es in teamsById bereit.
-    const champDef = getChampionshipCategoryDef(race.categoryId);
-    const allowsTeamless = champDef ? championshipAllowsTeamless(champDef.ageClass) : false;
+    //
+    // Nationale Meisterschaften gehören dazu: `applyChampionshipEntries` setzt
+    // teamlose Fahrer eines Landes auch dort auf das Pseudo-Team, damit ein
+    // Land nicht ohne Starter dasteht. Diese Stelle sah nur die kontinentalen
+    // und Weltmeisterschaften und liess den Fahrer sonst durchfallen — der
+    // Commit brach ab und das Rennen blieb offen, der Tageswechsel damit
+    // blockiert. Die Regel muss dieselbe sein wie beim Aufbau der Startliste.
+    const allowsTeamless = categoryAllowsTeamlessRiders(race.categoryId);
     if (allowsTeamless && riders.some((rider: any) => rider.activeTeamId == null)) {
       if (!teamsById.has(NATIONAL_SELECTION_TEAM_ID)) {
         const nationalTeam = this.repo.getTeamById(NATIONAL_SELECTION_TEAM_ID);
