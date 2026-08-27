@@ -152,7 +152,7 @@ function render(): void {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:2px 2px 10px;">
         <div style="color:#94a3b8;font-size:12px;line-height:1.5;">
           Wähle beliebig viele — bis zu <strong style="color:#e2e8f0;">alle ${candidates.length}</strong> deiner Fahrer mit auslaufendem Vertrag. Am 01.08. verlängern davon zufällig 50–80%. Fahrer, die ihr Karriereende erreichen würden, sind nicht wählbar.
-          <br><span style="color:#6a7a95;">Ohne Bestätigung wählt das Spiel nach Ablauf der Uhr selbst: keine Fahrer ab ${AUTO_SELECT_MAX_AGE}, von den übrigen die besten ${Math.round(AUTO_SELECT_SHARE * 100)}%.</span>
+          <br><span style="color:#6a7a95;">Ohne Bestätigung wählt das Spiel nach Ablauf der Uhr selbst: keine Fahrer ab ${AUTO_SELECT_MAX_AGE}, von den übrigen die ${Math.round(AUTO_SELECT_SHARE * 100)}% mit dem höchsten Potenzial.</span>
         </div>
         <span id="contract-renewal-clock" title="Bis zur automatischen Auswahl" style="${MONO};flex:none;font-size:13px;font-weight:800;color:#8b9ab4;border:1px solid #1e2c49;border-radius:8px;padding:4px 9px;background:#0b1120;">5:00</span>
       </div>

@@ -6,7 +6,7 @@ import {
   resolveAutoSelection,
 } from '../../../shared/contractRenewalAutoSelect';
 
-const kandidat = (riderId: number, age: number, overallRating: number) => ({ riderId, age, overallRating });
+const kandidat = (riderId: number, age: number, potential: number) => ({ riderId, age, potential });
 
 describe('Automatische Auswahl der Verlaengerungsziele', () => {
   it('haelt die vorgegebenen Groessen', () => {
@@ -26,12 +26,23 @@ describe('Automatische Auswahl der Verlaengerungsziele', () => {
     expect(raus.sort()).toEqual([1, 4]);
   });
 
-  it('nimmt von den uebrigen die besten drei Viertel', () => {
+  it('nimmt von den uebrigen drei Viertel, nach Potenzial', () => {
     const liste = Array.from({ length: 12 }, (_, i) => kandidat(i + 1, 25, 90 - i));
     const raus = resolveAutoSelection(liste);
     expect(raus).toHaveLength(9);
-    // Die neun besten, in absteigender Wertung.
+    // Die neun mit dem hoechsten Potenzial, absteigend.
     expect(raus).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it('entscheidet nach dem Potenzial, nicht nach der Gesamtwertung', () => {
+    // Der Junge faehrt heute schwaecher, hat aber die groessere Zukunft.
+    const liste = [
+      { riderId: 1, age: 30, potential: 74 },
+      { riderId: 2, age: 22, potential: 82 },
+      { riderId: 3, age: 29, potential: 73 },
+      { riderId: 4, age: 24, potential: 79 },
+    ];
+    expect(resolveAutoSelection(liste)).toEqual([2, 4, 1]);
   });
 
   it('entscheidet Gleichstand nach der Fahrer-Id und haengt nicht an der Eingabereihenfolge', () => {

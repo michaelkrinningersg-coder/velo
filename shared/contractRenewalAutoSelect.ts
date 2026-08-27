@@ -7,8 +7,13 @@
  *
  * Die Regel ist bewusst schlicht: wer das Alterslimit erreicht hat, bekommt
  * keinen neuen Vertrag — bei ihm lohnt die Verlaengerung nicht mehr. Von den
- * uebrigen werden die besten drei Viertel gewaehlt; das letzte Viertel ist
- * der Teil des Kaders, den man ohnehin austauschen wuerde.
+ * uebrigen werden drei Viertel gewaehlt; das letzte Viertel ist der Teil des
+ * Kaders, den man ohnehin austauschen wuerde.
+ *
+ * Entschieden wird nach dem Potenzial, nicht nach der Gesamtwertung: eine
+ * Vertragsverlaengerung laeuft in die Zukunft, und ein Zweiundzwanzigjaehriger
+ * mit Luft nach oben ist dort mehr wert als ein Dreissigjaehriger, der heute
+ * besser faehrt, aber am Ende seiner Entwicklung steht.
  *
  * Liegt in `shared/`, weil es eine Spielregel ist und nicht Bedienung — und
  * weil es sich hier ohne Browser testen laesst.
@@ -24,17 +29,17 @@ export const AUTO_SELECT_SHARE = 0.75;
 export interface AutoSelectCandidate {
   riderId: number;
   age: number;
-  overallRating: number;
+  potential: number;
 }
 
 /**
- * Auswahl der Automatik, nach Gesamtwertung absteigend. Bei Gleichstand
+ * Auswahl der Automatik, nach Potenzial absteigend. Bei Gleichstand
  * entscheidet die Fahrer-Id, damit dieselbe Liste immer dieselbe Auswahl
  * ergibt.
  */
 export function resolveAutoSelection(liste: ReadonlyArray<AutoSelectCandidate>): number[] {
   const jung = [...liste]
     .filter((kandidat) => kandidat.age < AUTO_SELECT_MAX_AGE)
-    .sort((links, rechts) => rechts.overallRating - links.overallRating || links.riderId - rechts.riderId);
+    .sort((links, rechts) => rechts.potential - links.potential || links.riderId - rechts.riderId);
   return jung.slice(0, Math.round(jung.length * AUTO_SELECT_SHARE)).map((kandidat) => kandidat.riderId);
 }
