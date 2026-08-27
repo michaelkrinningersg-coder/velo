@@ -253,3 +253,53 @@ describe('Zuschlaege auf den Entwicklungswert', () => {
     expect(MENTOR_BONUS).toBe(3);
   });
 });
+
+describe('Zusammenspiel ueber eine ganze Laufbahn', () => {
+  const basis = { peakAge: 26, declineAge: 29, retirementAge: 35 };
+
+  it('fuehrt Sprint frueher hinauf und laesst ihn trotzdem erst normal fallen', () => {
+    const opts = { ...basis, skill: 62, potential: 80, developmentValue: 10 };
+    const sprint = (alter: number) => wertMit(alter, { ...opts, skillKey: 'sprint' });
+    const berg = (alter: number) => wertMit(alter, { ...opts, skillKey: 'mountain' });
+    // Sprint ist mit 24 oben, der Bergwert erst mit 26.
+    expect(sprint(24)).toBeCloseTo(80, 6);
+    expect(berg(24)).toBeLessThan(80);
+    expect(berg(26)).toBeCloseTo(80, 6);
+    // Beide fangen mit 29 an zu fallen — der Sprint nicht frueher.
+    expect(sprint(29)).toBeCloseTo(80, 6);
+    expect(sprint(30)).toBeLessThan(80);
+    expect(berg(30)).toBeLessThan(80);
+  });
+
+  it('fuehrt Ausdauer spaeter hinauf und laesst sie spaeter fallen', () => {
+    const opts = { ...basis, skill: 62, potential: 80, developmentValue: 10 };
+    const ausdauer = (alter: number) => wertMit(alter, { ...opts, skillKey: 'stamina' });
+    expect(ausdauer(26)).toBeLessThan(80);
+    expect(ausdauer(28)).toBeCloseTo(80, 6);
+    // Abbaubeginn 29 + 2 = 31.
+    expect(ausdauer(31)).toBeCloseTo(80, 6);
+    expect(ausdauer(32)).toBeLessThan(80);
+    // Und mit 43 steht sie trotzdem auf demselben Sockel.
+    expect(ausdauer(43)).toBeCloseTo(resolveSkillFloor(80), 6);
+  });
+
+  it('haelt die Rangfolge zweier Fahrer bis zum Ende durch', () => {
+    const stark = { ...basis, skill: 65, potential: 85, developmentValue: 10 };
+    const schwach = { ...basis, skill: 60, potential: 70, developmentValue: 10 };
+    for (const alter of [26, 30, 35, 40, 43]) {
+      expect(wertMit(alter, stark)).toBeGreaterThan(wertMit(alter, schwach));
+    }
+    // Mit einem festen Sockel von 50 waeren am Ende beide gleich gewesen.
+    expect(wertMit(43, stark)).toBeCloseTo(65, 6);
+    expect(wertMit(43, schwach)).toBeCloseTo(50, 6);
+  });
+
+  it('nimmt einen Fahrer aus einem alten Spielstand dort auf, wo er steht', () => {
+    // Weit unter Potenzial mit 24 — er holt bis zum Peak trotzdem auf.
+    expect(wertMit(26, { ...basis, startAge: 24, skill: 55, potential: 80, developmentValue: 10 }))
+      .toBeCloseTo(80, 6);
+    // Ueber dem Potenzial: kein Wachstum, aber auch kein Abbau vor der Zeit.
+    expect(wertMit(28, { ...basis, startAge: 24, skill: 82, potential: 80, developmentValue: 10 }))
+      .toBeCloseTo(82, 6);
+  });
+});

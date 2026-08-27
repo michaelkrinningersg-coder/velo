@@ -2536,7 +2536,6 @@ export class StageResultCommitService {
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason(), stage.id);
 
-    this.evaluateU23Breakthroughs(race, stage, stageRows, gcRows, pointsRows, mountainRows, youthRows, ridersById);
     this.evaluateRacePreferences(race, stage, stageRows, gcRows, dnfEntries, ridersById);
 
     return {
@@ -2806,86 +2805,6 @@ export class StageResultCommitService {
         rider.nonFavoriteRaces = nonFavs;
         updateRiderPrefs.run(favs.join(','), nonFavs.join(','), riderId);
       }
-    }
-  }
-
-  private evaluateU23Breakthroughs(
-    race: Race,
-    stage: Stage,
-    stageRows: any[],
-    gcRows: any[],
-    pointsRows: any[],
-    mountainRows: any[],
-    youthRows: any[],
-    ridersById: Map<number, Rider>
-  ): void {
-    const isCategory1Or2 = race.categoryId === 1 || race.categoryId === 2 || race.categoryId === 3;
-    const isFinalStage = !race.isStageRace || stage.stageNumber === race.numberOfStages;
-    const currentSeason = this.repo.getCurrentSeason();
-    const breakthroughRiderIds = new Set<number>();
-
-    for (const row of stageRows) {
-      if (row.rank === 1 && row.riderId) breakthroughRiderIds.add(row.riderId);
-    }
-
-    if (isCategory1Or2) {
-      for (const row of stageRows) {
-        if (row.rank <= 3 && row.riderId) breakthroughRiderIds.add(row.riderId);
-      }
-    }
-
-    if (race.isStageRace && isFinalStage) {
-      for (const row of gcRows) {
-        if (row.rank <= 5 && row.riderId) breakthroughRiderIds.add(row.riderId);
-      }
-      for (const row of pointsRows) {
-        if (row.rank === 1 && row.riderId) breakthroughRiderIds.add(row.riderId);
-      }
-      for (const row of mountainRows) {
-        if (row.rank === 1 && row.riderId) breakthroughRiderIds.add(row.riderId);
-      }
-      for (const row of youthRows) {
-        if (row.rank === 1 && row.riderId) breakthroughRiderIds.add(row.riderId);
-      }
-    }
-
-    if (breakthroughRiderIds.size === 0) return;
-
-    const validU23RiderIds = Array.from(breakthroughRiderIds).filter((riderId: any) => {
-      const rider = ridersById.get(riderId);
-      return rider && (currentSeason - rider.birthYear) <= 22;
-    });
-
-    if (validU23RiderIds.length === 0) return;
-
-    const potColumns = [
-      'pot_flat', 'pot_mountain', 'pot_medium_mountain', 'pot_hill', 'pot_time_trial',
-      'pot_prologue', 'pot_cobble', 'pot_sprint', 'pot_acceleration', 'pot_downhill',
-      'pot_attack', 'pot_stamina', 'pot_resistance', 'pot_recuperation', 'pot_bike_handling'
-    ];
-
-    const getRiderPotentialsStmt = this.db.prepare(`
-      SELECT pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
-             pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
-             pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
-      FROM riders WHERE id = ?
-    `);
-
-    for (const riderId of validU23RiderIds) {
-      const riderPotentials = getRiderPotentialsStmt.get(riderId) as Record<string, number> | undefined;
-
-      if (!riderPotentials) continue;
-
-      const validColumns = potColumns.filter((col: any) => riderPotentials[col] < 85);
-      if (validColumns.length === 0) continue;
-
-      const selectedColumn = validColumns[Math.floor(Math.random() * validColumns.length)];
-      // Potenziale sind REAL (Nachkommastellen); ein Wert wie 84.5 erfuellt zwar
-      // den < 85-Filter, wuerde nach +1 aber die CHECK(... BETWEEN 0 AND 85)-
-      // Constraint verletzen. Deshalb hart auf 85 deckeln.
-      this.db.prepare(`
-        UPDATE riders SET ${selectedColumn} = MIN(85, ${selectedColumn} + 1) WHERE id = ?
-      `).run(riderId);
     }
   }
 }

@@ -1,10 +1,13 @@
 import Database from 'better-sqlite3';
 import type { RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../../shared/types';
 import { RiderTagService } from './RiderTagService';
+import {
+  MENTOR_BONUS_MAX_AGE,
+  advanceSkill,
+  resolveEffectiveDevelopmentValue,
+} from '../../../shared/riderProgression';
 
 const RIDER_STAT_MAX = 85;
-const DAILY_GROWTH_CAP = 0.018;
-const DAILY_DECLINE_CAP = 0.012;
 
 const RIDER_SKILL_COLUMNS = [
   ['flat', 'flat'],
@@ -86,19 +89,6 @@ interface DailyDevelopmentRow extends RiderDevelopmentRow {
   team_tier?: number | null;
 }
 
-type DevelopmentBlockedReason = 'healthy' | 'retired' | 'ill' | 'injured' | 'unavailable' | 'in_race' | 'form_decline' | 'offseason' | 'peak_age_reached' | 'no_headroom';
-
-export interface DailyDevelopmentBlock {
-  canGrow: boolean;
-  canDecline: boolean;
-  reason: DevelopmentBlockedReason;
-}
-
-function isNovember(currentDate: string): boolean {
-  // Nur 11-01 bis 11-30 (User-Klärung G1)
-  return currentDate.slice(5, 10) >= '11-01' && currentDate.slice(5, 10) <= '11-30';
-}
-
 function tableExists(db: Database.Database, tableName: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
   return row != null;
@@ -129,7 +119,7 @@ function calcBikeHandling(skills: Pick<RiderSkills, 'downhill' | 'sprint' | 'att
   return clamp(skills.downhill * 0.7 + skills.sprint * 0.15 + skills.attack * 0.05 + skills.resistance * 0.1);
 }
 
-function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation' | 'acceleration'>): number {
+export function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation' | 'acceleration'>): number {
   const includedSkills = [
     ['mountain', skills.mountain, 1.8],
     ['hill', skills.hill, 1],
@@ -261,6 +251,15 @@ function buildCurrentSkillsFromDailyRow(row: DailyDevelopmentRow): RiderSkills {
   };
 }
 
+/** Potenziale aus einer Zeile, die die pot_-Spalten mitgelesen hat. */
+function buildPotentialsFromRow(row: Record<string, number>): RiderPotentials {
+  const raus = {} as RiderPotentials;
+  for (const [key, column] of RIDER_SKILL_COLUMNS) {
+    raus[key] = Number(row[`pot_${column}`] ?? 0);
+  }
+  return raus;
+}
+
 function buildPotentialsFromDailyRow(row: DailyDevelopmentRow): RiderPotentials {
   return {
     flat: row.pot_flat,
@@ -281,99 +280,6 @@ function buildPotentialsFromDailyRow(row: DailyDevelopmentRow): RiderPotentials 
   };
 }
 
-function isOffseasonDevelopmentBlocked(currentDate: string): boolean {
-  return isNovember(currentDate);
-}
-
-function resolveDevelopmentBlockReason(row: DailyDevelopmentRow, context: RiderDevelopmentDailyContext | undefined, currentDate: string, age: number): DailyDevelopmentBlock {
-  if (row.is_retired === 1) return { canGrow: false, canDecline: false, reason: 'retired' };
-
-  let canGrow = true;
-  let canDecline = true;
-  let reason: DevelopmentBlockedReason = 'healthy';
-
-  if (context?.healthStatus === 'ill' || context?.healthStatus === 'injured') {
-    canGrow = false;
-    reason = context.healthStatus;
-  }
-  if ((context?.unavailableDaysRemaining ?? 0) > 0) {
-    canGrow = false;
-    reason = 'unavailable';
-  }
-  if (context?.isInRaceToday) {
-    if (age > 22) {
-      canGrow = false;
-      reason = 'in_race';
-    }
-  }
-  if (context?.formPhase === 'decline') {
-    canGrow = false;
-    reason = 'form_decline';
-  }
-  if (isOffseasonDevelopmentBlocked(currentDate)) {
-    canGrow = false;
-    reason = 'offseason';
-  }
-  if (age >= row.peak_age) {
-    canGrow = false;
-    if (reason === 'healthy') reason = 'peak_age_reached';
-  }
-
-  return { canGrow, canDecline, reason };
-}
-
-function resolveAgeGrowthFactor(age: number, peakAge: number): number {
-  if (age >= peakAge) return 0;
-  const yearsUntilPeak = Math.max(0, peakAge - age);
-  let factor = Math.max(0.18, Math.min(1.0, yearsUntilPeak / 7));
-  if (age < 20) {
-    factor *= 0.9;
-  }
-  return factor;
-}
-
-function resolveSkillDevelopmentFactor(skillDevelopment: number): number {
-  return 0.65 + (Math.max(1, Math.min(20, skillDevelopment)) / 20) * 0.7;
-}
-
-function resolveSkillFocusFactor(riderType: RiderSpecialization, skillKey: RiderSkillKey): number {
-  const factors: Record<RiderSpecialization, Partial<Record<RiderSkillKey, number>>> = {
-    Berg: { mountain: 1.35, mediumMountain: 1.2, stamina: 1.15, attack: 1.12, downhill: 1.05 },
-    Hill: { hill: 1.35, acceleration: 1.2, mediumMountain: 1.12, attack: 1.12, bikeHandling: 1.05 },
-    Sprint: { sprint: 1.35, acceleration: 1.25, flat: 1.15, resistance: 1.05 },
-    Timetrial: { timeTrial: 1.35, prologue: 1.25, flat: 1.1, resistance: 1.1 },
-    Cobble: { cobble: 1.35, flat: 1.15, resistance: 1.15, hill: 1.05, bikeHandling: 1.08 },
-    Attacker: { attack: 1.35, acceleration: 1.15, hill: 1.12, mediumMountain: 1.1, resistance: 1.1 },
-    Flat: { flat: 1.35, stamina: 1.2, bikeHandling: 1.12, resistance: 1.1, timeTrial: 1.05 },
-  };
-  return factors[riderType][skillKey] ?? 0.78;
-}
-
-function resolveSkillDeclineFactor(skillKey: RiderSkillKey): number {
-  const factors: Record<RiderSkillKey, number> = {
-    flat: 0.55,
-    mountain: 0.85,
-    mediumMountain: 0.8,
-    hill: 0.9,
-    timeTrial: 0.65,
-    prologue: 1.15,
-    cobble: 0.85,
-    sprint: 1.35,
-    acceleration: 1.45,
-    downhill: 0.75,
-    attack: 0.95,
-    stamina: 0.55,
-    resistance: 0.6,
-    recuperation: 0.65,
-    bikeHandling: 0.7,
-  };
-  return factors[skillKey];
-}
-
-function randomNoise(min: number, max: number): number {
-  return randomBetween(min, max);
-}
-
 function buildUpdatedSpecializationIds(skills: RiderSkills, typeIdByKey: Map<RiderSpecialization, number>): { riderTypeId: number; specialization1Id: number; specialization2Id: number | null; specialization3Id: number | null } | null {
   const specializations = getSpecializationScores(skills).slice(0, 3).map(entry => entry.specialization);
   const riderTypeId = typeIdByKey.get(specializations[0]);
@@ -391,12 +297,20 @@ export class RiderDevelopmentService {
     this.db = db;
   }
 
-  public advanceDailyDevelopment(currentDate: string, season: number, contexts: RiderDevelopmentDailyContext[], dayMultiplier = 1): void {
+  /**
+   * Ein Entwicklungsschritt fuer alle Fahrer.
+   *
+   * `contexts` wird nicht mehr ausgewertet: Krankheit, Verletzung, Sperre,
+   * Rennteilnahme, Formphase und Winterpause hielten die Entwicklung frueher an
+   * oder beschleunigten sie. Im neuen Modell laeuft sie durchgehend und haengt
+   * allein am Alter, am Potenzial und am Entwicklungswert. Der Parameter bleibt
+   * stehen, damit die Aufrufstelle unveraendert bleibt.
+   */
+  public advanceDailyDevelopment(currentDate: string, season: number, _contexts: RiderDevelopmentDailyContext[], dayMultiplier = 1): void {
     if (!tableExists(this.db, 'riders') || !tableExists(this.db, 'type_rider')) return;
 
     const boundedDayMultiplier = Math.max(1, Math.min(31, Math.floor(dayMultiplier)));
 
-    const contextByRiderId = new Map(contexts.map((context) => [context.riderId, context] as const));
     const rows = this.db.prepare(`
       SELECT riders.id, riders.birth_year, riders.skill_development, riders.peak_age, riders.decline_age, riders.retirement_age,
              riders.is_retired, type_rider.type_key AS rider_type, riders.active_team_id, riders.specialization_1_id, riders.specialization_2_id, riders.specialization_3_id, riders.overall_rating,
@@ -420,6 +334,18 @@ export class RiderDevelopmentService {
       -- ausgewertet, und Teamkollegen teilen die Division, also den Tier.
       WHERE ? = 1 OR (riders.active_team_id IS NOT NULL AND dt.tier = 1)
     `).all(currentDate.endsWith('-01') ? 1 : 0) as DailyDevelopmentRow[];
+
+    // Renntage der Vorsaison je Fahrer — Grundlage des Rennbonus. Es zaehlen
+    // alle Renntage gleich, ohne Gewichtung nach Rennkategorie.
+    const raceDaysByRiderId = new Map<number, number>();
+    if (tableExists(this.db, 'rider_daily_state')) {
+      const raceDayRows = this.db.prepare(
+        'SELECT rider_id, season_race_days_total AS tage FROM rider_daily_state WHERE season = ?',
+      ).all(season - 1) as Array<{ rider_id: number; tage: number | null }>;
+      for (const raceDayRow of raceDayRows) {
+        raceDaysByRiderId.set(raceDayRow.rider_id, Number(raceDayRow.tage ?? 0));
+      }
+    }
 
     const mentorsByTeam = new Map<number, Array<{ spec1: number }>>();
     for (const row of rows) {
@@ -451,11 +377,6 @@ export class RiderDevelopmentService {
       WHERE id = ?
     `);
 
-    const insertPeakAward = this.db.prepare(`
-      INSERT OR IGNORE INTO rider_peak_awards (rider_id, season, peak_date)
-      VALUES (?, ?, ?)
-    `);
-
     const isFirstOfMonth = currentDate.endsWith('-01');
     for (const row of rows) {
       const isTier1 = row.active_team_id != null && row.team_tier === 1;
@@ -464,96 +385,64 @@ export class RiderDevelopmentService {
         continue;
       }
 
-      const activeDayMultiplier = isTier1 ? boundedDayMultiplier : 30;
+      // Fahrer der ersten Liga werden taeglich gerechnet, alle anderen einmal
+      // im Monat mit dreissig Tagen auf einmal. Beim neuen Modell ist das keine
+      // Naeherung mehr: `advanceSkill` rechnet den Aufbau geschlossen und teilt
+      // an jeder Phasengrenze, ein Monatsschritt kommt deshalb auf denselben
+      // Wert wie dreissig Tagesschritte.
+      const days = isTier1 ? boundedDayMultiplier : 30;
 
-      const age = season - row.birth_year;
-      const context = contextByRiderId.get(row.id);
-      const currentSkills = buildCurrentSkillsFromDailyRow(row);
-      const potentialSkills = buildPotentialsFromDailyRow(row);
-      const block = resolveDevelopmentBlockReason(row, context, currentDate, age);
-      const deltas: Partial<Record<RiderSkillKey, number>> = {};
-      let growthTotal = 0;
-      let declineTotal = 0;
-
-      if (block.canGrow) {
-        const ageFactor = resolveAgeGrowthFactor(age, row.peak_age);
-        let mentorBoost = 0;
-        if (age <= 23 && row.active_team_id != null) {
-          const teamMentors = mentorsByTeam.get(row.active_team_id) ?? [];
-          const top3Specs = [row.specialization_1_id, row.specialization_2_id, row.specialization_3_id].filter(Boolean);
-          if (teamMentors.some(m => top3Specs.includes(m.spec1))) {
-            mentorBoost = 3;
-          }
-        }
-        const developmentFactor = resolveSkillDevelopmentFactor(Math.min(20, row.skill_development + mentorBoost));
-        const u23RaceMultiplier = (age <= 22 && context?.isInRaceToday) ? 1.5 : 1;
-        
-        let peakBoostMultiplier = 0;
-        if (age <= 22 && context?.isInRaceToday && context?.isPeakStartDay && context?.peakDate) {
-          const info = insertPeakAward.run(row.id, season, context.peakDate);
-          if (info.changes > 0) {
-            peakBoostMultiplier = 30;
-          }
-        }
-        
-        const localDayMultiplier = activeDayMultiplier + peakBoostMultiplier;
-
-        for (const [skillKey] of RIDER_SKILL_COLUMNS) {
-          if (skillKey === 'bikeHandling') continue;
-          const headroom = Math.max(0, potentialSkills[skillKey] - currentSkills[skillKey]);
-          if (headroom <= 0.01) continue;
-          const dailyGrowth = Math.min(
-            DAILY_GROWTH_CAP * localDayMultiplier * (age <= 22 ? 1.5 : 1),
-            headroom * 0.0023 * ageFactor * developmentFactor * resolveSkillFocusFactor(row.rider_type, skillKey) * localDayMultiplier * randomNoise(0.75, 1.25) * u23RaceMultiplier,
-          );
-          if (dailyGrowth <= 0) continue;
-          const applied = clamp(Math.min(potentialSkills[skillKey], currentSkills[skillKey] + dailyGrowth)) - currentSkills[skillKey];
-          if (applied > 0) {
-            deltas[skillKey] = round2(applied);
-            growthTotal += applied;
-          }
-        }
-      }
-
-      if (block.canDecline && row.is_retired !== 1 && age >= row.decline_age) {
-        const yearsAfterDecline = Math.max(0, age - row.decline_age + 1);
-        const ageDeclineFactor = Math.min(2.4, 0.35 + yearsAfterDecline * 0.22);
-
-        let declineMultiplier = 1.0;
-        if (context?.isInRaceToday) {
-          declineMultiplier *= 0.5;
-        }
-        if (context?.formPhase === 'build') {
-          declineMultiplier *= 0.5;
-        } else if (context?.formPhase === 'decline') {
-          declineMultiplier *= 3.0;
-        }
-
-        for (const [skillKey] of RIDER_SKILL_COLUMNS) {
-          if (skillKey === 'bikeHandling') continue;
-          const dailyDecline = Math.min(
-            DAILY_DECLINE_CAP * activeDayMultiplier,
-            0.00135 * ageDeclineFactor * resolveSkillDeclineFactor(skillKey) * activeDayMultiplier * randomNoise(0.75, 1.25) * declineMultiplier,
-          );
-          if (dailyDecline <= 0) continue;
-          const applied = currentSkills[skillKey] - clamp(currentSkills[skillKey] - dailyDecline);
-          if (applied > 0) {
-            deltas[skillKey] = round2((deltas[skillKey] ?? 0) - applied);
-            declineTotal += applied;
-          }
-        }
-      }
-
-      const hasDelta = growthTotal > 0 || declineTotal > 0;
-      if (!hasDelta) {
+      if (row.is_retired === 1) {
         continue;
       }
 
+      const age = season - row.birth_year;
+      const currentSkills = buildCurrentSkillsFromDailyRow(row);
+      const potentialSkills = buildPotentialsFromDailyRow(row);
+
+      // Der wirksame Entwicklungswert: Grundwert plus die beiden Zuschlaege,
+      // die der Spieler beeinflussen kann. Beide wirken nur, solange der Fahrer
+      // sein Potenzial noch nicht erreicht hat.
+      const hasMentor = age <= MENTOR_BONUS_MAX_AGE
+        && row.active_team_id != null
+        && (() => {
+          const teamMentors = mentorsByTeam.get(row.active_team_id as number) ?? [];
+          const top3Specs = [row.specialization_1_id, row.specialization_2_id, row.specialization_3_id].filter(Boolean);
+          return teamMentors.some((mentor) => top3Specs.includes(mentor.spec1));
+        })();
+      const developmentValue = resolveEffectiveDevelopmentValue(
+        row.skill_development,
+        raceDaysByRiderId.get(row.id) ?? 0,
+        hasMentor,
+      );
+
       const updatedSkills = { ...currentSkills };
-      for (const [skillKey, delta] of Object.entries(deltas) as Array<[RiderSkillKey, number]>) {
+      let veraendert = false;
+      for (const [skillKey] of RIDER_SKILL_COLUMNS) {
         if (skillKey === 'bikeHandling') continue;
-        updatedSkills[skillKey] = clamp(updatedSkills[skillKey] + delta);
+        const potential = potentialSkills[skillKey];
+        if (!Number.isFinite(potential) || potential <= 0) continue;
+        const naechster = advanceSkill({
+          skillKey,
+          skill: currentSkills[skillKey],
+          potential,
+          age,
+          days,
+          peakAge: row.peak_age,
+          declineAge: row.decline_age,
+          retirementAge: row.retirement_age,
+          developmentValue,
+        });
+        if (Math.abs(naechster - currentSkills[skillKey]) > 1e-9) {
+          updatedSkills[skillKey] = clamp(naechster);
+          veraendert = true;
+        }
       }
+
+      if (!veraendert) {
+        continue;
+      }
+
       updatedSkills.bikeHandling = calcBikeHandling(updatedSkills);
 
       update.run(
@@ -657,13 +546,21 @@ export class RiderDevelopmentService {
     const typeRows = this.db.prepare('SELECT id, type_key FROM type_rider').all() as Array<{ id: number; type_key: RiderSpecialization }>;
     for (const row of typeRows) typeIdByKey.set(row.type_key, row.id);
 
+    // Die Potenziale werden mitgelesen, weil sie nicht mehr blind ueberschrieben
+    // werden duerfen: ein frisch erzeugter Newgen bringt seine Potenziale aus den
+    // Presets mit und hat nur noch kein Altersprofil. Frueher hat diese Methode
+    // beides zusammen neu gezogen und die Preset-Ziehung damit wirkungslos
+    // gemacht.
     const rows = this.db.prepare(`
       SELECT id, birth_year, skill_development, peak_age, decline_age, retirement_age,
              skill_flat, skill_mountain, skill_medium_mountain, skill_hill, skill_time_trial,
              skill_prologue, skill_cobble, skill_sprint, skill_acceleration, skill_downhill,
-             skill_attack, skill_stamina, skill_resistance, skill_recuperation
+             skill_attack, skill_stamina, skill_resistance, skill_recuperation,
+             pot_flat, pot_mountain, pot_medium_mountain, pot_hill, pot_time_trial,
+             pot_prologue, pot_cobble, pot_sprint, pot_acceleration, pot_downhill,
+             pot_attack, pot_stamina, pot_resistance, pot_recuperation, pot_bike_handling
       FROM riders
-    `).all() as RiderDevelopmentRow[];
+    `).all() as Array<RiderDevelopmentRow & Record<string, number>>;
 
     const update = this.db.prepare(`
       UPDATE riders
@@ -707,9 +604,21 @@ export class RiderDevelopmentService {
 
         const age = currentSeason - row.birth_year;
         const currentSkills = buildCurrentSkills(row);
-        const skillDevelopment = rand(1, 20);
-        const ageProfile = buildAgeProfile();
-        const potentials = buildPotentials(currentSkills, age, skillDevelopment, ageProfile.peakAge);
+
+        // Nur ergaenzen, was tatsaechlich fehlt. Ein Newgen hat seinen
+        // Entwicklungswert und seine Potenziale schon; ihm fehlt allein das
+        // Altersprofil.
+        const skillDevelopment = (force || row.skill_development <= 0)
+          ? rand(1, 20)
+          : row.skill_development;
+        const ageProfile = (force || row.peak_age <= 0 || row.decline_age <= 0 || row.retirement_age <= 0)
+          ? buildAgeProfile()
+          : { peakAge: row.peak_age, declineAge: row.decline_age, retirementAge: row.retirement_age };
+        const vorhandenePotenziale = buildPotentialsFromRow(row);
+        const hatPotenziale = RIDER_SKILL_COLUMNS.some(([key]) => vorhandenePotenziale[key] > 0);
+        const potentials = (force || !hatPotenziale)
+          ? buildPotentials(currentSkills, age, skillDevelopment, ageProfile.peakAge)
+          : vorhandenePotenziale;
         const hybridSkills = buildHybridSkills(currentSkills, potentials);
         const specializations = getSpecializationScores(hybridSkills).slice(0, 3).map(entry => entry.specialization);
         const riderTypeId = typeIdByKey.get(specializations[0]);

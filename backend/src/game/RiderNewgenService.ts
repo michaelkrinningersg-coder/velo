@@ -1,4 +1,5 @@
 import { Database } from 'better-sqlite3';
+import { calcOverall as calcRiderOverall } from './RiderDevelopmentService';
 
 export class RiderNewgenService {
   constructor(private db: Database) {}
@@ -88,10 +89,16 @@ export class RiderNewgenService {
             startValues[key] = this.getRandomInt(startPreset[`min_${key}`], startPreset[`max_${key}`]);
           }
 
-          // Potenzial-Presets filtern, die logisch zu den Startwerten passen
-          let validPotPresets = potPresets.filter(p => {
-            return skillKeys.every(key => p[`max_${key}`] >= startValues[key]);
-          });
+          // Potenzial-Presets filtern, die logisch zu den Startwerten passen.
+          //
+          // Der Filter hiess frueher `max_${key}` — so heissen die Spalten der
+          // Startwert-Presets, nicht die der Potenzial-Presets. Der Vergleich
+          // war damit immer `undefined >= x`, also falsch; die Liste blieb leer
+          // und der Backoff darunter griff jedes Mal. Faktisch wurde
+          // gleichverteilt aus allen Presets gezogen und das Gewicht ignoriert.
+          const validPotPresets = potPresets.filter((preset) => (
+            skillKeys.every((key) => Number(preset[`max_pot_${key}`] ?? 0) >= startValues[key])
+          ));
 
           let potPreset: any;
           if (validPotPresets.length === 0) {
@@ -133,13 +140,22 @@ export class RiderNewgenService {
           const birthYear = season - 16;
           const skillDev = this.getRandomInt(1, 20);
 
-          const calcOverall = (vals: Record<string, number>) => {
-            const sum = (vals['flat'] || 50) + (vals['mountain'] || 50) + (vals['medium_mountain'] || 50) +
-                        (vals['hill'] || 50) + (vals['time_trial'] || 50) + (vals['cobble'] || 50) +
-                        ((vals['sprint'] || 50) * 1.2) + (vals['stamina'] || 50) + (vals['resistance'] || 50) +
-                        (vals['recuperation'] || 50) + (vals['acceleration'] || 50);
-            return sum / 11.2;
-          };
+          // Dieselbe Formel wie im RiderDevelopmentService. Sie standen frueher
+          // zweimal im Code und rechneten verschieden — die Gesamtwertung eines
+          // Newgens sprang deshalb beim ersten Entwicklungsschritt.
+          const calcOverall = (vals: Record<string, number>) => calcRiderOverall({
+            flat: vals['flat'] ?? 50,
+            mountain: vals['mountain'] ?? 50,
+            mediumMountain: vals['medium_mountain'] ?? 50,
+            hill: vals['hill'] ?? 50,
+            timeTrial: vals['time_trial'] ?? 50,
+            cobble: vals['cobble'] ?? 50,
+            sprint: vals['sprint'] ?? 50,
+            stamina: vals['stamina'] ?? 50,
+            resistance: vals['resistance'] ?? 50,
+            recuperation: vals['recuperation'] ?? 50,
+            acceleration: vals['acceleration'] ?? 50,
+          });
 
           const overallRating = calcOverall(startValues);
           const potOverall = calcOverall(potValues);

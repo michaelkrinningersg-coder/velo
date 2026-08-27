@@ -2384,12 +2384,10 @@ export class GameStateService {
       new RiderNewgenService(this.db).createYearStartNewgens(season);
       new RiderDevelopmentService(this.db).initializeRiders(season);
 
-      // Skill-Development aller aktiven Fahrer neu auswürfeln (±3, max 20, min 1)
-      this.db.prepare(`
-        UPDATE riders
-        SET skill_development = MAX(1, MIN(20, skill_development + CAST((ABS(RANDOM()) % 7) - 3 AS INTEGER)))
-        WHERE is_retired = 0 AND skill_development > 0
-      `).run();
+      // Der Entwicklungswert wird nicht mehr jaehrlich neu ausgewuerfelt. Er
+      // wird einmal bei der Erzeugung gezogen und bleibt; was der Spieler
+      // beeinflussen kann, sind die beiden Zuschlaege aus Renntagen und
+      // Mentoren (siehe shared/riderProgression.ts).
 
       // Snapshot der Fahrer-Werte als Baseline für die Saison in der UI abspeichern
       this.snapshotYearlyBaselineSkills();
