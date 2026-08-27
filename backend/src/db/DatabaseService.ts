@@ -4,7 +4,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_SKILL_WEIGHT_RULES } from '../../../shared/skillWeights';
 import { SavegameMeta } from '../../../shared/types';
-import { bootstrap, readStageScoreSegments, seedQuickSimProfiles } from '../bootstrapper';
+import {
+  bootstrap,
+  readStageScoreSegments,
+  seedNewgenPotentialPresets,
+  seedNewgenStartPresets,
+  seedQuickSimProfiles,
+} from '../bootstrapper';
 import { forgetTableExistence, resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
 import { installStatementCache } from './statementCache';
@@ -3349,6 +3355,46 @@ export class DatabaseService {
     `);
   }
 
+  /**
+   * Aus welchem Potenzial-Preset ein Fahrer stammt.
+   *
+   * Braucht der Newgen-Service, um den Deckel je Spitzen-Preset zu ziehen —
+   * ohne die Spalte laesst sich nicht zaehlen, wie viele aktive Fahrer aus
+   * einem Preset kommen. Bestandsfahrer bleiben NULL und zaehlen nie mit.
+   */
+  private ensurePotPresetColumn(db: Database.Database): void {
+    if (!tableExists(db, 'riders')) return;
+    if (!columnExists(db, 'riders', 'pot_preset_id')) {
+      db.prepare('ALTER TABLE riders ADD COLUMN pot_preset_id INTEGER').run();
+    }
+  }
+
+  /**
+   * Laedt die Newgen-Presets bei jedem Oeffnen neu aus der CSV.
+   *
+   * Sie sind reine Stammdaten ohne Spielerzustand. Bisher kamen sie nur beim
+   * Anlegen eines Spielstands hinein; ein laufendes Spiel behielt damit auf
+   * Dauer die alten Presets, auch nachdem sie im Repository korrigiert worden
+   * waren. Genau wie bei den Quick-Sim-Profilen wird deshalb geloescht und neu
+   * befuellt — und wie dort still uebersprungen, wenn die CSV im gepackten
+   * Betrieb fehlt.
+   */
+  private ensureNewgenPresetData(db: Database.Database): void {
+    if (!tableExists(db, 'newgen_potential_presets') || !tableExists(db, 'newgen_start_presets')) {
+      return;
+    }
+    try {
+      db.transaction(() => {
+        db.prepare('DELETE FROM newgen_start_presets').run();
+        seedNewgenStartPresets(db);
+        db.prepare('DELETE FROM newgen_potential_presets').run();
+        seedNewgenPotentialPresets(db);
+      })();
+    } catch (error) {
+      console.warn('Newgen-Presets konnten nicht geladen werden:', (error as Error).message);
+    }
+  }
+
   // Retiree-Kohorte je Saison (fuer die Saison-Wrapped): in welcher Saison ein
   // Fahrer zuletzt fuhr, bevor er in Rente ging. Von ContractService gesetzt.
   private ensureRetiredSeasonColumn(db: Database.Database): void {
@@ -3501,6 +3547,8 @@ export class DatabaseService {
     this.ensureRiderBadgesSchema(db);
     this.ensureRivalriesSchema(db);
     this.ensureRetiredSeasonColumn(db);
+    this.ensurePotPresetColumn(db);
+    this.ensureNewgenPresetData(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);

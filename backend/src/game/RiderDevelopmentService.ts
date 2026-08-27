@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import type { RiderPotentials, RiderSkillKey, RiderSkills, RiderSpecialization } from '../../../shared/types';
 import { RiderTagService } from './RiderTagService';
+import { calcRiderOverall } from '../../../shared/riderOverall';
 import {
   MENTOR_BONUS_MAX_AGE,
   advanceSkill,
@@ -119,41 +120,12 @@ function calcBikeHandling(skills: Pick<RiderSkills, 'downhill' | 'sprint' | 'att
   return clamp(skills.downhill * 0.7 + skills.sprint * 0.15 + skills.attack * 0.05 + skills.resistance * 0.1);
 }
 
-export function calcOverall(skills: Pick<RiderSkills, 'flat' | 'mountain' | 'mediumMountain' | 'hill' | 'timeTrial' | 'cobble' | 'sprint' | 'stamina' | 'resistance' | 'recuperation' | 'acceleration'>): number {
-  const includedSkills = [
-    ['mountain', skills.mountain, 1.8],
-    ['hill', skills.hill, 1],
-    ['sprint', skills.sprint, 1.2],
-    ['timeTrial', skills.timeTrial, 2 / 3],
-    ['cobble', skills.cobble, 4 / 5],
-    ['mediumMountain', skills.mediumMountain, 0.2],
-    ['stamina', skills.stamina, 0.1],
-    ['resistance', skills.resistance, 0.1],
-    ['recuperation', skills.recuperation, 0.1],
-    ['flat', skills.flat, 0.15],
-    ['acceleration', skills.acceleration, 0.8],
-  ] as const;
-
-  const weightedTotal = includedSkills.reduce((sum, [, value, weight]) => sum + value * weight, 0);
-  let topSkillValue = -Infinity;
-  let secondSkillValue = -Infinity;
-
-  for (const [, value] of includedSkills) {
-    if (value > topSkillValue) {
-      secondSkillValue = topSkillValue;
-      topSkillValue = value;
-      continue;
-    }
-
-    if (value > secondSkillValue) {
-      secondSkillValue = value;
-    }
-  }
-
-  const bonusTotal = topSkillValue * 1.5 + secondSkillValue * 1.25;
-  const totalWeight = 1.8 + 1 + 1.2 + (2 / 3) + (4 / 5) + 0.2 + 0.1 + 0.1 + 0.1 + 0.15 + 0.8 + 1.5 + 1.25;
-  return clamp((weightedTotal + bonusTotal) / totalWeight);
-}
+/**
+ * Die Gesamtwertung liegt in shared/riderOverall.ts. Sie wird auch vom
+ * Werkzeug gebraucht, das die Newgen-Presets einstuft; hier steht nur noch der
+ * Wiederausgang, damit die Aufrufstellen im Backend unveraendert bleiben.
+ */
+export { calcRiderOverall as calcOverall };
 
 function scoreProfile(skills: RiderSkills, weights: Array<[RiderSkillKey, number]>): number {
   return weights.reduce((sum, [key, weight]) => sum + skills[key] * weight, 0);
@@ -446,7 +418,7 @@ export class RiderDevelopmentService {
       updatedSkills.bikeHandling = calcBikeHandling(updatedSkills);
 
       update.run(
-        calcOverall(updatedSkills),
+        calcRiderOverall(updatedSkills),
         updatedSkills.flat,
         updatedSkills.mountain,
         updatedSkills.mediumMountain,
@@ -511,7 +483,7 @@ export class RiderDevelopmentService {
         }
 
         update.run(
-          calcOverall(currentSkills),
+          calcRiderOverall(currentSkills),
           currentSkills.bikeHandling,
           specializationIds.riderTypeId,
           specializationIds.specialization1Id,
@@ -634,8 +606,8 @@ export class RiderDevelopmentService {
           ageProfile.declineAge,
           ageProfile.retirementAge,
           skillDevelopment,
-          calcOverall(currentSkills),
-          calcOverall(potentials),
+          calcRiderOverall(currentSkills),
+          calcRiderOverall(potentials),
           currentSkills.bikeHandling,
           potentials.flat,
           potentials.mountain,

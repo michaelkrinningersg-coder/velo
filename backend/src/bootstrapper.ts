@@ -1217,7 +1217,7 @@ function newgenInsertColumns(prefix: string, suffix: string): string {
     .join(', ');
 }
 
-function seedNewgenStartPresets(db: Database.Database): void {
+export function seedNewgenStartPresets(db: Database.Database): void {
   const rows = readCsv('newgen_start_presets.csv');
   const insertColumns = [
     'preset_id',
@@ -1256,7 +1256,7 @@ function seedNewgenStartPresets(db: Database.Database): void {
   console.log(`  ${rows.length} Newgen-Startwert-Presets eingefuegt.`);
 }
 
-function seedNewgenPotentialPresets(db: Database.Database): void {
+export function seedNewgenPotentialPresets(db: Database.Database): void {
   const rows = readCsv('newgen_potential_presets.csv');
   const insertColumns = [
     'preset_id',

@@ -53,12 +53,18 @@ export function createTestDb(): Database.Database {
 // ---------------------------------------------------------------------------
 
 export function seedReferenceData(db: Database.Database): void {
+  // Schluessel und Reihenfolge wie in data/csv/type_rider.csv. Die Fixture
+  // trug frueher eigene Schluessel ('climber', 'puncher', ...) und nur fuenf
+  // Typen; sobald ein Test wirklich Newgens erzeugt, findet die
+  // Spezialisierung dazu keinen Typ und die Initialisierung bricht ab.
   db.prepare(`INSERT OR IGNORE INTO type_rider (id, type_key, display_name, is_stage_focus, is_one_day_focus) VALUES
-    (1, 'climber', 'Bergfahrer', 1, 0),
-    (2, 'puncher', 'Huegelspezialist', 0, 1),
-    (3, 'sprinter', 'Sprinter', 0, 1),
-    (4, 'timetrialist', 'Zeitfahrer', 1, 0),
-    (5, 'classic', 'Cobble', 0, 1)
+    (1, 'Berg', 'Bergfahrer', 1, 0),
+    (2, 'Hill', 'Huegelspezialist', 0, 1),
+    (3, 'Sprint', 'Sprinter', 1, 1),
+    (4, 'Timetrial', 'Zeitfahrer', 1, 0),
+    (5, 'Cobble', 'Pflasterspezialist', 0, 1),
+    (6, 'Attacker', 'Angreifer', 1, 1),
+    (7, 'Flat', 'Flachlandspezialist', 1, 0)
   `).run();
 
   db.prepare(`INSERT OR IGNORE INTO sta_role (id, name, weighting) VALUES

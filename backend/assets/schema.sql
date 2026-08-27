@@ -144,6 +144,10 @@ CREATE TABLE IF NOT EXISTS riders (
   active_contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
   is_retired        INTEGER NOT NULL DEFAULT 0 CHECK(is_retired IN (0, 1)),
   weather_profile_id INTEGER NOT NULL DEFAULT 1 CHECK(weather_profile_id BETWEEN 1 AND 7),
+  -- Aus welchem Newgen-Potenzial-Preset der Fahrer stammt. NULL fuer alle
+  -- eingelesenen Fahrer; nur Newgens tragen es. Der Newgen-Service zaehlt
+  -- darueber, wie oft ein Spitzen-Preset schon in Gebrauch ist.
+  pot_preset_id INTEGER,
   yearly_baseline_skills TEXT DEFAULT NULL
 );
 

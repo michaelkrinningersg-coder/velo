@@ -1,5 +1,9 @@
 import { Database } from 'better-sqlite3';
-import { calcOverall as calcRiderOverall } from './RiderDevelopmentService';
+import {
+  resolveNewgenPresetTier,
+  resolvePresetMidOverall,
+} from '../../../shared/newgenPresetTiers';
+import { calcRiderOverall } from '../../../shared/riderOverall';
 
 export class RiderNewgenService {
   constructor(private db: Database) {}
@@ -31,6 +35,30 @@ export class RiderNewgenService {
       // Gesamte Start-Gewichtung vorberechnen
       const totalStartWeight = startPresets.reduce((sum, p) => sum + (p.weight || 1), 0);
 
+      // Deckel je Spitzen-Preset: aus einem starken Preset duerfen hoechstens
+      // so viele Fahrer gleichzeitig aktiv sein, wie seine Stufe erlaubt.
+      // Fahrer in Rente zaehlen nicht mit, ihr Platz wird wieder frei.
+      const deckelJePreset = new Map<number, number>();
+      for (const preset of potPresets) {
+        const deckel = resolveNewgenPresetTier(resolvePresetMidOverall(preset)).deckel;
+        if (deckel !== null) deckelJePreset.set(Number(preset.preset_id), deckel);
+      }
+      const bestandJePreset = new Map<number, number>();
+      if (deckelJePreset.size > 0 && this.columnExists('riders', 'pot_preset_id')) {
+        const rows = this.db.prepare(`
+          SELECT pot_preset_id AS presetId, COUNT(*) AS anzahl
+          FROM riders
+          WHERE is_retired = 0 AND pot_preset_id IS NOT NULL
+          GROUP BY pot_preset_id
+        `).all() as Array<{ presetId: number; anzahl: number }>;
+        for (const row of rows) bestandJePreset.set(Number(row.presetId), Number(row.anzahl));
+      }
+      const istVoll = (preset: any): boolean => {
+        const deckel = deckelJePreset.get(Number(preset.preset_id));
+        if (deckel === undefined) return false;
+        return (bestandJePreset.get(Number(preset.preset_id)) ?? 0) >= deckel;
+      };
+
       const typeRows = this.db.prepare(`SELECT id, type_key FROM type_rider`).all() as any[];
         const typeMap = new Map<string, number>();
         for (const t of typeRows) typeMap.set(t.type_key, t.id);
@@ -47,14 +75,14 @@ export class RiderNewgenService {
           first_name, last_name, country_id, birth_year,
           is_retired, skill_development, rider_type_id,
           overall_rating, pot_overall,
-          weather_profile_id,
+          weather_profile_id, pot_preset_id,
           ${skillColumns},
           ${potColumns}
         ) VALUES (
           ?, ?, ?, ?,
           0, ?, ?,
           ?, ?,
-          ?,
+          ?, ?,
           ${valuePlaceholders},
           ${valuePlaceholders}
         )
@@ -100,14 +128,22 @@ export class RiderNewgenService {
             skillKeys.every((key) => Number(preset[`max_pot_${key}`] ?? 0) >= startValues[key])
           ));
 
+          // Presets, deren Deckel erreicht ist, fallen fuer diesen Zug weg.
+          // Bleibt dadurch nichts uebrig, gilt der Deckel fuer diesen einen Zug
+          // nicht: ein Newgen-Jahrgang darf nie ausfallen, weil der Pool klemmt.
+          const freiePotPresets = validPotPresets.filter((preset) => !istVoll(preset));
+          const auswahl = freiePotPresets.length > 0 ? freiePotPresets : validPotPresets;
+
           let potPreset: any;
-          if (validPotPresets.length === 0) {
+          if (auswahl.length === 0) {
             // Backoff: Notfall-Preset nehmen, wenn keines perfekt passt
             potPreset = potPresets[Math.floor(Math.random() * potPresets.length)];
           } else {
-            const totalPotWeight = validPotPresets.reduce((sum, p) => sum + (p.weight || 1), 0);
-            potPreset = this.pickWeighted(validPotPresets, totalPotWeight);
+            const totalPotWeight = auswahl.reduce((sum, p) => sum + (p.weight || 1), 0);
+            potPreset = this.pickWeighted(auswahl, totalPotWeight);
           }
+          const potPresetId = Number(potPreset.preset_id);
+          bestandJePreset.set(potPresetId, (bestandJePreset.get(potPresetId) ?? 0) + 1);
 
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {
@@ -170,7 +206,8 @@ export class RiderNewgenService {
             typeMap.get(startPreset.type_key) || 1,
             overallRating,
             potOverall,
-            weatherProfileId
+            weatherProfileId,
+            potPresetId
           ];
 
           for (const key of skillKeys) insertParams.push(startValues[key]);
@@ -183,6 +220,11 @@ export class RiderNewgenService {
 
       console.log(`[RiderNewgenService] ${newgenCount} neue Newgen-Fahrer fÃ¼r Saison ${season} generiert.`);
     })();
+  }
+
+  private columnExists(table: string, column: string): boolean {
+    const rows = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    return rows.some((row) => row.name === column);
   }
 
   private getRandomInt(min: number, max: number): number {
