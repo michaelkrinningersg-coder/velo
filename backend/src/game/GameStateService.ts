@@ -18,6 +18,7 @@ import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
 import { RiderRoleService } from './RiderRoleService';
+import { TeamPrestigeService } from './TeamPrestigeService';
 import { RiderDraftService } from './RiderDraftService';
 import { RiderNewgenService } from './RiderNewgenService';
 import { BadgeMaterializationService } from './BadgeMaterializationService';
@@ -494,6 +495,10 @@ export class GameStateService {
         // Falls dabei etwas gefehlt hat (Rennen, die es in der Vorsaison nicht
         // gab), einmal hier auffuellen statt spaeter bei jedem API-Aufruf.
         this.buildMissingRaceProgramRaces();
+
+        // Prestige vor dem Draft neu rechnen: es steuert die Top-Fahrer-Kappe
+        // und die anbietbare Vertragslaenge.
+        new TeamPrestigeService(this.db).recalculatePrestige(currentRow.season);
 
         new ContractService(this.db).checkContractStatuses(nextSeason, true);
         const draftService = new RiderDraftService(this.db);

@@ -66,7 +66,11 @@ CREATE TABLE IF NOT EXISTS teams (
   color_secondary TEXT    NOT NULL,
   ai_focus_1      INTEGER NOT NULL REFERENCES type_rider(id),
   ai_focus_2      INTEGER NOT NULL REFERENCES type_rider(id),
-  ai_focus_3      INTEGER NOT NULL REFERENCES type_rider(id)
+  ai_focus_3      INTEGER NOT NULL REFERENCES type_rider(id),
+  -- Langsame Achse der Teamidentitaet: gleitender Mittelwert der
+  -- Platzierung ueber drei Saisons, 1 bis 5. Steuert die Top-Fahrer-Kappe im
+  -- Draft und die anbietbare Vertragslaenge. Siehe TeamPrestigeService.
+  prestige INTEGER NOT NULL DEFAULT 3 CHECK(prestige BETWEEN 1 AND 5)
 );
 
 -- ---- Rider-Typen -------------------------------------------
@@ -792,6 +796,10 @@ CREATE TABLE IF NOT EXISTS team_preferences (
   team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   country_id INTEGER NOT NULL REFERENCES sta_country(id) ON DELETE CASCADE,
   weight INTEGER NOT NULL,
+  -- Art der Bindung: 'home' (Heimatnation des Teams), 'neighbour' (klassisches
+  -- Rekrutierungsland) oder 'scouting' (Land der zweiten Reihe, das dieses
+  -- Team gezielt beobachtet). Bestimmt den Faktor im Draft.
+  pref_kind TEXT NOT NULL DEFAULT 'neighbour',
   UNIQUE(team_id, country_id)
 );
 

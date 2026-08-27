@@ -10,6 +10,7 @@ import {
   seedNewgenPotentialPresets,
   seedNewgenStartPresets,
   seedQuickSimProfiles,
+  seedTeamPreferences,
 } from '../bootstrapper';
 import { forgetTableExistence, resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
@@ -3049,41 +3050,26 @@ export class DatabaseService {
     `).run();
   }
 
+  /**
+   * Laedt die Teampraeferenzen bei jedem Oeffnen aus der CSV.
+   *
+   * Sie sind reine Stammdaten: welche Nationen ein Team bevorzugt und mit
+   * welcher Bindungsart. Frueher kamen sie aus der Vorlagendatenbank; ein
+   * laufender Spielstand haette die erweiterte Tabelle (Heimatnation,
+   * Scoutinglaender) damit nie gesehen. Faellt die CSV im gepackten Betrieb
+   * weg, bleibt die vorhandene Tabelle stehen.
+   */
   private ensureTeamPreferencesData(db: Database.Database): void {
-    if (!tableExists(db, 'team_preferences')) {
-      return;
-    }
-
-    if (!fs.existsSync(this.masterDbPath)) {
-      return;
-    }
-
-    const masterDb = new Database(this.masterDbPath, { readonly: true });
+    if (!tableExists(db, 'team_preferences')) return;
     try {
-      if (!tableExists(masterDb, 'team_preferences')) {
-        return;
-      }
-
-      const rows = masterDb.prepare(`
-        SELECT id_pref, team_id, country_id, weight
-        FROM team_preferences
-      `).all() as Array<{ id_pref: number; team_id: number; country_id: number; weight: number }>;
-
       db.transaction(() => {
         db.prepare('DELETE FROM team_preferences').run();
-        const insert = db.prepare(`
-          INSERT OR REPLACE INTO team_preferences (id_pref, team_id, country_id, weight)
-          VALUES (?, ?, ?, ?)
-        `);
-        for (const row of rows) {
-          insert.run(row.id_pref, row.team_id, row.country_id, row.weight);
-        }
+        seedTeamPreferences(db);
       })();
-    } finally {
-      masterDb.close();
+    } catch (error) {
+      console.warn('Team-Praeferenzen konnten nicht geladen werden:', (error as Error).message);
     }
   }
-
 
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
@@ -3356,6 +3342,29 @@ export class DatabaseService {
   }
 
   /**
+   * Prestige eines Teams (1 bis 5), die langsame Achse der Teamidentitaet.
+   * Siehe TeamPrestigeService. Bestandsspielstaende starten in der Mitte.
+   */
+  private ensureTeamPrestigeColumn(db: Database.Database): void {
+    if (!tableExists(db, 'teams')) return;
+    if (!columnExists(db, 'teams', 'prestige')) {
+      db.prepare('ALTER TABLE teams ADD COLUMN prestige INTEGER NOT NULL DEFAULT 3').run();
+    }
+  }
+
+  /**
+   * Art der Nationenbindung einer Teampraeferenz: `home`, `neighbour` oder
+   * `scouting`. Ohne die Spalte laesst sich der Faktor im Draft nicht
+   * bestimmen; Bestandszeilen gelten als `neighbour`.
+   */
+  private ensurePreferenceKindColumn(db: Database.Database): void {
+    if (!tableExists(db, 'team_preferences')) return;
+    if (!columnExists(db, 'team_preferences', 'pref_kind')) {
+      db.prepare("ALTER TABLE team_preferences ADD COLUMN pref_kind TEXT NOT NULL DEFAULT 'neighbour'").run();
+    }
+  }
+
+  /**
    * Aus welchem Potenzial-Preset ein Fahrer stammt.
    *
    * Braucht der Newgen-Service, um den Deckel je Spitzen-Preset zu ziehen —
@@ -3548,6 +3557,8 @@ export class DatabaseService {
     this.ensureRivalriesSchema(db);
     this.ensureRetiredSeasonColumn(db);
     this.ensurePotPresetColumn(db);
+    this.ensureTeamPrestigeColumn(db);
+    this.ensurePreferenceKindColumn(db);
     this.ensureNewgenPresetData(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);

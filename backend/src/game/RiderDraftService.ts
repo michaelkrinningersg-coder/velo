@@ -1,4 +1,14 @@
 import Database from 'better-sqlite3';
+import {
+  DRAFT_VALUE_FALLOFF,
+  STRONG_RIDER_OVERALL,
+  resolveDraftWeight,
+  type DraftRiderInput,
+  type DraftTeamInput,
+  type NationPreferenceKind,
+} from '../../../shared/draftWeights';
+import { resolveContractYears } from '../../../shared/contractTerms';
+import { TeamPrestigeService, resolveTopRiderCaps } from './TeamPrestigeService';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -20,19 +30,39 @@ function hasMetQuota(specId: number, counts: { spec1: number; spec23: number }):
 
 // --- Top-Fahrer-Kappe im Draft ------------------------------------------------
 // Verhindert die Akkumulation sehr starker Fahrer bei einzelnen Teams.
-// Zwei Baender (strikt groesser): >77 (Basiskappe 4) und >74 (Basiskappe 10).
-// "Weiche Rampe + hartes Deckel-Limit": je naeher ein Team an der Kappe, desto
-// staerker die Gewichts-Strafe; bei Erreichen der (ggf. eskalierten) Kappe ist
-// der Fahrer fuer dieses Team hart gesperrt. Eskalation paritaetsgesteuert:
-// erst wenn JEDES Team die aktuelle Kappe erreicht hat, steigt sie um 1
-// (4->5->6 …, 10->11->12 …), damit der Draft nie blockiert.
-const TOP_CAP_77_BASE = 4;
-const TOP_CAP_74_BASE = 10;
+// Zwei Baender (strikt groesser): >77 und >74. Die Kappen sind seit dem
+// Prestige-System nicht mehr fuer alle Teams gleich, sondern kommen aus
+// `TOP_RIDER_CAPS_BY_PRESTIGE` — ein Spitzenteam darf 6 Fahrer ueber 77
+// halten, ein Ausbildungsteam 2. Prestige 3 traegt die alten Werte (4 und 10).
+//
+// "Weiche Rampe + hartes Deckel-Limit": je naeher ein Team an seiner Kappe,
+// desto kleiner der Gewichtsfaktor; bei Erreichen der (ggf. eskalierten) Kappe
+// ist der Fahrer fuer dieses Team hart gesperrt. Eskalation paritaetsgesteuert:
+// erst wenn JEDES Team seine Kappe erreicht hat, steigen alle um 1, damit der
+// Draft nie blockiert.
+/** Wie viele Free Agents je Pick nach reiner Qualitaet zur Auswahl stehen. */
+export const DRAFT_POOL_SIZE = 60;
+/**
+ * Wie viele zusaetzliche Fahrer je bevorzugter Nation und je
+ * Fokusspezialisierung in den Pool kommen.
+ *
+ * Ohne diese Erweiterung koennen Nationenbindung und Teamfokus gar nicht
+ * wirken: der Pool waren die 60 global besten Vertragslosen, und darin sind
+ * von 121 Deutschen unter 3164 Fahrern rechnerisch zwei. Ein Faktor von 2,5
+ * auf zwei Kandidaten aendert nichts. Gemessen blieb der Anteil der Fahrer aus
+ * einer bevorzugten Nation deshalb bei 26 %, obwohl die Bindung schon stand.
+ *
+ * Der Pool ist damit nicht mehr "die 60 besten", sondern "wen dieses Team
+ * ueberhaupt auf dem Zettel hat" — und das ist auch die ehrlichere Metapher.
+ */
+export const DRAFT_POOL_PER_NATION = 12;
+export const DRAFT_POOL_PER_FOCUS = 8;
+
 const TOP_THRESHOLD_77 = 77; // strikt groesser
 const TOP_THRESHOLD_74 = 74; // strikt groesser
-const TOP77_RAMP = 3.0;      // Strafe je bereits vorhandenem >77-Fahrer
+const TOP77_RAMP = 0.5;      // Daempfung je bereits vorhandenem >77-Fahrer
 const TOP74_SOFT_START = 7;  // ab so vielen >74-Fahrern beginnt die weiche Rampe
-const TOP74_RAMP = 1.5;      // Strafe je >74-Fahrer oberhalb TOP74_SOFT_START
+const TOP74_RAMP = 0.25;     // Daempfung je >74-Fahrer oberhalb TOP74_SOFT_START
 
 // Draft-Muster (zyklisch wiederholt). Rang 0 = bestes Team der Vorsaison.
 // Pro 6-Runden-Zyklus: Ränge 0-9 dreimal, 10-19 zweimal, 20-24 einmal —
@@ -243,232 +273,9 @@ export class RiderDraftService {
   }
 
   public executeSingleDraftPick(season: number, teamId: number, draftRound: number, pickNumber: number, selectedRiderId?: number): void {
-    const rankedTeamIds = this.getRankedTeamIds(season);
-    const i = rankedTeamIds.indexOf(teamId);
-
-    // AI Focus Details
-    const teamRow = this.db.prepare('SELECT ai_focus_1, ai_focus_2, ai_focus_3 FROM teams WHERE id = ?').get(teamId) as {
-      ai_focus_1: number | null;
-      ai_focus_2: number | null;
-      ai_focus_3: number | null;
-    } | undefined;
-    const aiFocus1 = teamRow?.ai_focus_1 ?? null;
-    const aiFocus2 = teamRow?.ai_focus_2 ?? null;
-    const aiFocus3 = teamRow?.ai_focus_3 ?? null;
-
-    // Load undrafted free agents
-    const freeAgentsRaw = this.db.prepare(`
-      SELECT 
-        r.id, 
-        r.first_name, 
-        r.last_name, 
-        r.birth_year,
-        r.overall_rating, 
-        r.pot_overall,
-        r.specialization_1_id,
-        r.specialization_2_id,
-        r.specialization_3_id,
-        r.country_id,
-        (
-          SELECT c.team_id 
-          FROM contracts c 
-          WHERE c.rider_id = r.id AND c.end_season = ? 
-          ORDER BY c.end_season DESC LIMIT 1
-        ) AS old_team_id
-      FROM riders r
-      WHERE r.is_retired = 0
-        AND (? - r.birth_year) < CASE WHEN r.retirement_age > 0 THEN r.retirement_age ELSE 36 END
-        AND r.id NOT IN (
-          SELECT rider_id FROM contracts WHERE status IN ('active', 'future')
-        )
-    `).all(season - 1, season) as Array<{
-      id: number;
-      first_name: string;
-      last_name: string;
-      birth_year: number;
-      overall_rating: number;
-      pot_overall: number;
-      specialization_1_id: number | null;
-      specialization_2_id: number | null;
-      specialization_3_id: number | null;
-      country_id: number | null;
-      old_team_id: number | null;
-    }>;
-
-    if (freeAgentsRaw.length === 0) return;
-
-    // Calculate draft value and sort
-    const freeAgents = freeAgentsRaw.map((r: any) => {
-      const age = season - r.birth_year;
-      let draftValue = r.overall_rating;
-      if (age < 25) {
-        draftValue = (r.overall_rating * 0.85) + (r.pot_overall * 0.15);
-      }
-      return { ...r, draftValue };
-    }).sort((a: any, b: any) => b.draftValue - a.draftValue);
-
-    const poolSize = Math.min(30, freeAgents.length);
-    const pool = freeAgents.slice(0, poolSize);
-    const top1RiderId = freeAgents[0].id;
-
-    // Calculate top1PassedOverCount dynamically
-    const history = this.db.prepare('SELECT rider_id FROM draft_history WHERE season = ? ORDER BY pick_number ASC').all(season) as Array<{ rider_id: number }>;
-    const freeAgentsForTop1 = [...freeAgents];
-    let top1PassedOverCount = 0;
-    for (const pick of history) {
-      const currentTop1Id = freeAgentsForTop1[0]?.id;
-      if (pick.rider_id === currentTop1Id) {
-        top1PassedOverCount = 0;
-      } else {
-        top1PassedOverCount++;
-      }
-      const idx = freeAgentsForTop1.findIndex(f => f.id === pick.rider_id);
-      if (idx !== -1) {
-        freeAgentsForTop1.splice(idx, 1);
-      }
-    }
-
-    // Team preferences
-    const preferences = this.db.prepare(`
-      SELECT country_id, weight
-      FROM team_preferences
-      WHERE team_id = ?
-    `).all(teamId) as Array<{ country_id: number; weight: number }>;
-
-    // Spec counts for quotas
-    const teamMap = this.getTeamSpecCounts(season, teamId);
-
-    // Top-Fahrer-Kappe: aktuelle (eskalierte) Kappen + Zaehlung dieses Teams.
-    const { cap77, cap74, countsByTeam } = this.computeTopRiderCaps(season);
-    const teamTop = countsByTeam.get(teamId) ?? { c77: 0, c74: 0 };
-
-    // Count active strong riders (OVR >= 75) in each specialization for this team
-    const strongRiders = this.db.prepare(`
-      SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
-      FROM contracts c
-      JOIN riders r ON c.rider_id = r.id
-      WHERE c.team_id = ? AND c.status IN ('active', 'future') AND r.overall_rating >= 75
-      GROUP BY r.specialization_1_id
-    `).all(teamId) as Array<{ spec1Id: number | null; count: number }>;
-
-    const strongSpecsCount = new Map<number, number>();
-    for (const row of strongRiders) {
-      if (row.spec1Id !== null) {
-        strongSpecsCount.set(row.spec1Id, row.count);
-      }
-    }
-
-    // Compute weights
-    const poolDetails = pool.map((rider) => {
-      let weight = 1.0;
-      const factors: string[] = [];
-
-      const age = season - rider.birth_year;
-      const isRank21to25 = (i >= 20 && i <= 24);
-
-      if (isRank21to25) {
-        let baseVal = (rider.overall_rating * 0.65) + (rider.pot_overall * 0.35);
-        if (age < 25) {
-          baseVal *= 4.0;
-          factors.push(`U25 Bias (x4)`);
-        }
-        weight = baseVal / 70.0;
-        factors.push(`Base Quality (65% Skill, 35% Pot): ${weight.toFixed(2)}`);
-      }
-
-      // AI Focus weights
-      if (rider.specialization_1_id !== null) {
-        if (rider.specialization_1_id === aiFocus1) {
-          weight += 4.0;
-          factors.push(`AI Focus 1 (+4)`);
-        } else if (rider.specialization_1_id === aiFocus2) {
-          weight += 2.0;
-          factors.push(`AI Focus 2 (+2)`);
-        } else if (rider.specialization_1_id === aiFocus3) {
-          weight += 1.0;
-          factors.push(`AI Focus 3 (+1)`);
-        }
-      }
-
-      // Nationality weights
-      if (rider.country_id !== null) {
-        const pref = preferences.find(p => p.country_id === rider.country_id);
-        if (pref) {
-          weight += pref.weight;
-          factors.push(`Nation Pref (+${pref.weight})`);
-        }
-      }
-
-      // Loyalty weight
-      if (rider.old_team_id === teamId) {
-        weight += 9.0;
-        factors.push(`Loyalty (+9)`);
-      }
-
-      // Top 1 Protection
-      if (rider.id === top1RiderId) {
-        if (top1PassedOverCount > 0) {
-          const bonus = top1PassedOverCount * 0.05;
-          weight += bonus;
-          factors.push(`Top1 Protect (+${bonus.toFixed(2)})`);
-        }
-      }
-
-      // Quota spec checks
-      for (let sId = 1; sId <= 5; sId++) {
-        const counts = teamMap.get(sId)!;
-        const quotaMet = hasMetQuota(sId, counts);
-        if (!quotaMet) {
-          let helps = false;
-          if (sId === 4 || sId === 5) {
-            helps = (rider.specialization_1_id === sId || rider.specialization_2_id === sId || rider.specialization_3_id === sId);
-          } else {
-            helps = (rider.specialization_1_id === sId);
-          }
-
-          if (helps) {
-            weight += 15.0;
-            const specLabel = sId === 1 ? 'Berg' : sId === 2 ? 'Hügel' : sId === 3 ? 'Sprint' : sId === 4 ? 'ZF' : 'Cobble';
-            factors.push(`${specLabel} Quota (+15)`);
-          }
-        }
-      }
-
-      // Concept 1 & 2: Diversification of strong riders (OVR >= 75)
-      const isStrong = rider.overall_rating >= 75;
-      const isRenewal = rider.old_team_id === teamId;
-
-      if (isStrong && !isRenewal && rider.specialization_1_id !== null) {
-        const existingStrongCount = strongSpecsCount.get(rider.specialization_1_id) ?? 0;
-        if (existingStrongCount >= 2) {
-          const penalty = 15.0;
-          weight -= penalty;
-          const specLabel = rider.specialization_1_id === 1 ? 'Berg' : rider.specialization_1_id === 2 ? 'Hügel' : rider.specialization_1_id === 3 ? 'Sprint' : rider.specialization_1_id === 4 ? 'ZF' : 'Cobble';
-          factors.push(`Spitzen-Diversifizierung: Bereits ${existingStrongCount} starke ${specLabel}fahrer (-${penalty})`);
-        }
-      }
-
-      // Top-Fahrer-Kappe: weiche Rampe unterhalb der Kappe, harte Sperre bei
-      // Erreichen der (eskalierten) Kappe. Renewals des eigenen Fahrers sind
-      // ausgenommen (der Fahrer zaehlt bereits fuer das Team).
-      const capOut = this.topCapOutcome(rider.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74);
-      let blocked = false;
-      if (rider.old_team_id !== teamId) {
-        if (capOut.blocked) {
-          blocked = true;
-          if (capOut.factor) factors.push(capOut.factor);
-        } else if (capOut.penalty > 0) {
-          weight -= capOut.penalty;
-          if (capOut.factor) factors.push(capOut.factor);
-        }
-      }
-
-      if (weight < 0.01) {
-        weight = 0.01;
-      }
-
-      return { rider, weight, factors, blocked };
-    });
+    const aufbau = this.buildWeightedPool(season, teamId);
+    if (!aufbau) return;
+    const { poolDetails, freeAgents, top1RiderId, teamTop, caps } = aufbau;
 
     const weights = poolDetails.map(p => p.weight);
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
@@ -509,7 +316,7 @@ export class RiderDraftService {
         selectedOverride = (() => {
           const alt = freeAgents.find((r: any) =>
             r.old_team_id === teamId ||
-            !this.topCapOutcome(r.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74).blocked);
+            !this.topCapOutcome(r.overall_rating, teamTop.c77, teamTop.c74, caps.cap77, caps.cap74).blocked);
           return alt ? { rider: alt, weight: 0.01, factors: ['Ausweich: Team am Top-Limit'] } : null;
         })();
         if (!selectedOverride) selectedIdx = 0;
@@ -519,22 +326,26 @@ export class RiderDraftService {
     const selected = selectedOverride ?? poolDetails[selectedIdx];
     const draftedRider = selected.rider;
 
-    // Logging
+    // Logging fuer drei Beispielteams — zeigt die Faktoren des Picks.
     if ([25, 7, 2].includes(teamId)) {
-      const teamName = teamId === 25 ? 'Falke - Scott' : teamId === 7 ? 'Philips - Santander' : 'Decathlon - Renault';
-      console.log(`[DRAFT DEBUG] ${teamName} (ID ${teamId}) picks in Round ${draftRound}, Pick #${pickNumber}:`);
-      console.log(`  Team AI Focus: 1=${aiFocus1}, 2=${aiFocus2}, 3=${aiFocus3}`);
-      console.log(`  Team National Prefs: ${preferences.map(p => `${p.country_id}(+${p.weight})`).join(', ') || 'None'}`);
-      console.log(`  Candidate Pool (Pool Size: ${pool.length}, Top 1 ID: ${top1RiderId}):`);
-      poolDetails.forEach((p, idx) => {
-        const isSelected = idx === selectedIdx ? '==>' : '   ';
+      console.log(`[DRAFT DEBUG] Team ${teamId} pickt in Runde ${draftRound}, Pick #${pickNumber}, Poolgroesse ${poolDetails.length}, Top-1 ${top1RiderId}:`);
+      poolDetails.slice(0, 12).forEach((p, idx) => {
+        const marke = p === selected ? '==>' : '   ';
         const prob = totalWeight > 0 ? (p.weight / totalWeight * 100) : 0;
-        console.log(`    ${isSelected} [#${idx + 1}] Rider ID ${p.rider.id}: ${p.rider.first_name} ${p.rider.last_name} (OVR: ${p.rider.overall_rating.toFixed(1)}, Spec: ${p.rider.specialization_1_id}, Nation: ${p.rider.country_id}) - DraftValue: ${p.rider.draftValue.toFixed(1)} - Weight: ${p.weight.toFixed(2)} [${p.factors.join(', ') || 'None'}] - Prob: ${prob.toFixed(1)}%`);
+        console.log(`    ${marke} ${p.rider.first_name} ${p.rider.last_name} (OVR ${p.rider.overall_rating.toFixed(1)}, Spez ${p.rider.specialization_1_id}, Nation ${p.rider.country_id}) Gewicht ${p.weight.toFixed(3)} [${p.factors.join(', ')}] ${prob.toFixed(1)} %`);
       });
     }
 
-    // contract years 1 to 3
-    const contractLength = Math.floor(Math.random() * 3) + 1;
+    // Vertragslaenge nach Alter, Potenzial und Prestige des Teams statt
+    // gleichverteilt 1 bis 3. Siehe shared/contractTerms.ts — das ist die
+    // Stellschraube, die die Kaderfluktuation von 15 auf 6 bis 10 senkt.
+    const prestige = new TeamPrestigeService(this.db).loadPrestigeByTeamId().get(teamId) ?? 3;
+    const contractLength = resolveContractYears({
+      age: season - draftedRider.birth_year,
+      potential: draftedRider.pot_overall,
+      retirementAge: draftedRider.retirement_age ?? 0,
+      teamPrestige: prestige,
+    }, Math.random);
     const endSeason = season + contractLength - 1;
 
     const extendContract = this.db.prepare(`
@@ -584,8 +395,185 @@ export class RiderDraftService {
 
   // Aktuelle >77/>74-Zaehlung je Draft-Team (aktive + zukuenftige Vertraege) plus
   // die daraus abgeleiteten, paritaetsgesteuert eskalierten Kappen.
+  /**
+   * Stellt den Kandidatenpool eines Picks zusammen und gewichtet ihn.
+   *
+   * Stand frueher zweimal im Dienst — einmal fuer den echten Pick, einmal fuer
+   * die Kandidatenanzeige. Die beiden Kopien waren schon auseinandergelaufen
+   * (unterschiedliche Herleitung von `top1RiderId`).
+   *
+   * Der Pool sind die 60 global besten Free Agents PLUS alle eigenen
+   * auslaufenden Fahrer. Das zweite ist neu und behebt einen Fehler: der
+   * Loyalitaetsbonus konnte einen Fahrer bisher gar nicht erreichen, wenn er
+   * nicht zufaellig zu den besten von rund 2000 Vertragslosen gehoerte.
+   * Gemessen waren deshalb nur 23 von 400 Picks Verlaengerungen.
+   */
+  private buildWeightedPool(season: number, teamId: number): {
+    poolDetails: Array<{ rider: any; weight: number; factors: string[]; blocked: boolean }>;
+    freeAgents: any[];
+    top1RiderId: number;
+    teamTop: { c77: number; c74: number };
+    caps: { cap77: number; cap74: number };
+  } | null {
+    const rankedTeamIds = this.getRankedTeamIds(season);
+    const rankIndex = rankedTeamIds.indexOf(teamId);
+
+    const teamRow = this.db.prepare(
+      'SELECT ai_focus_1, ai_focus_2, ai_focus_3, country_id FROM teams WHERE id = ?',
+    ).get(teamId) as {
+      ai_focus_1: number | null; ai_focus_2: number | null; ai_focus_3: number | null; country_id: number | null;
+    } | undefined;
+    const focusSpecIds = [teamRow?.ai_focus_1 ?? null, teamRow?.ai_focus_2 ?? null, teamRow?.ai_focus_3 ?? null];
+
+    const freeAgentsRaw = this.db.prepare(`
+      SELECT
+        r.id, r.first_name, r.last_name, r.birth_year,
+        r.overall_rating, r.pot_overall, r.decline_age, r.retirement_age,
+        r.specialization_1_id, r.specialization_2_id, r.specialization_3_id,
+        r.country_id,
+        (
+          SELECT c.team_id FROM contracts c
+          WHERE c.rider_id = r.id AND c.end_season = ?
+          ORDER BY c.end_season DESC LIMIT 1
+        ) AS old_team_id
+      FROM riders r
+      WHERE r.is_retired = 0
+        AND (? - r.birth_year) < CASE WHEN r.retirement_age > 0 THEN r.retirement_age ELSE 36 END
+        AND r.id NOT IN (SELECT rider_id FROM contracts WHERE status IN ('active', 'future'))
+    `).all(season - 1, season) as any[];
+    if (freeAgentsRaw.length === 0) return null;
+
+    const freeAgents = freeAgentsRaw.map((r: any) => {
+      const age = season - r.birth_year;
+      const draftValue = age < 25 ? (r.overall_rating * 0.85) + (r.pot_overall * 0.15) : r.overall_rating;
+      return { ...r, draftValue };
+    }).sort((a: any, b: any) => b.draftValue - a.draftValue);
+
+    const preferences = this.db.prepare(
+      "SELECT country_id, weight, COALESCE(pref_kind, 'neighbour') AS kind FROM team_preferences WHERE team_id = ?",
+    ).all(teamId) as Array<{ country_id: number; weight: number; kind: string }>;
+    const nationKindByCountryId = new Map<number, NationPreferenceKind>();
+    for (const pref of preferences) {
+      const art = (pref.kind === 'home' || pref.kind === 'scouting') ? pref.kind : 'neighbour';
+      nationKindByCountryId.set(pref.country_id, art as NationPreferenceKind);
+    }
+    // Die Heimatnation gilt immer, auch wenn sie nicht in der Tabelle steht.
+    // Gemessen hatten sechs Teams keinen einzigen Landsmann im Kader.
+    if (teamRow?.country_id != null) nationKindByCountryId.set(teamRow.country_id, 'home');
+
+    // Pool: global beste 60, die eigenen auslaufenden Fahrer, dazu die besten
+    // je bevorzugter Nation und je Fokusspezialisierung. Siehe die Konstanten
+    // oben — ohne die beiden letzten Gruppen haetten Nation und Fokus nichts,
+    // worauf sie wirken koennten.
+    const pool = freeAgents.slice(0, Math.min(DRAFT_POOL_SIZE, freeAgents.length));
+    const imPool = new Set(pool.map((r: any) => r.id));
+    const dazu = (r: any) => { if (!imPool.has(r.id)) { pool.push(r); imPool.add(r.id); } };
+    for (const r of freeAgents) {
+      if (r.old_team_id === teamId) dazu(r);
+    }
+    const proNation = new Map<number, number>();
+    const proFokus = new Map<number, number>();
+    for (const r of freeAgents) {
+      if (r.country_id != null && nationKindByCountryId.has(r.country_id)) {
+        const n = proNation.get(r.country_id) ?? 0;
+        if (n < DRAFT_POOL_PER_NATION) { proNation.set(r.country_id, n + 1); dazu(r); }
+      }
+      if (r.specialization_1_id != null && focusSpecIds.includes(r.specialization_1_id)) {
+        const n = proFokus.get(r.specialization_1_id) ?? 0;
+        if (n < DRAFT_POOL_PER_FOCUS) { proFokus.set(r.specialization_1_id, n + 1); dazu(r); }
+      }
+    }
+    const top1RiderId = freeAgents[0].id;
+    const bestDraftValue = freeAgents[0].draftValue as number;
+
+    // Zugehoerigkeit der eigenen Fahrer, fuer die abgestufte Loyalitaet.
+    const tenure = new Map<number, number>();
+    for (const row of this.db.prepare(`
+      SELECT rider_id AS riderId, MIN(start_season) AS ersteSaison
+      FROM contracts WHERE team_id = ? GROUP BY rider_id
+    `).all(teamId) as Array<{ riderId: number; ersteSaison: number }>) {
+      tenure.set(row.riderId, Math.max(0, season - row.ersteSaison));
+    }
+
+
+    const specCounts = this.getTeamSpecCounts(season, teamId);
+    const openQuotaSpecIds = new Set<number>();
+    for (const [specId, counts] of specCounts) {
+      if (!hasMetQuota(specId, counts)) openQuotaSpecIds.add(specId);
+    }
+
+    const kader = this.db.prepare(`
+      SELECT r.specialization_1_id AS specId, r.overall_rating AS overall
+      FROM contracts c JOIN riders r ON r.id = c.rider_id
+      WHERE c.team_id = ? AND c.status IN ('active', 'future')
+    `).all(teamId) as Array<{ specId: number | null; overall: number }>;
+    const strongCountBySpecId = new Map<number, number>();
+    let imFokus = 0;
+    for (const r of kader) {
+      if (r.specId == null) continue;
+      if (focusSpecIds.includes(r.specId)) imFokus += 1;
+      if (r.overall >= STRONG_RIDER_OVERALL) strongCountBySpecId.set(r.specId, (strongCountBySpecId.get(r.specId) ?? 0) + 1);
+    }
+    const focusShare = kader.length > 0 ? imFokus / kader.length : 0;
+
+    // Zielwert starker Fahrer je Spezialisierung aus der tatsaechlichen
+    // Knappheit: bei 10 starken Pflasterfahrern und 25 Teams ist er 1.
+    const teamCount = Math.max(1, rankedTeamIds.length);
+    const strongTargetBySpecId = new Map<number, number>();
+    for (const row of this.db.prepare(`
+      SELECT specialization_1_id AS specId, COUNT(*) AS anzahl
+      FROM riders WHERE is_retired = 0 AND overall_rating >= ${STRONG_RIDER_OVERALL} AND specialization_1_id IS NOT NULL
+      GROUP BY specialization_1_id
+    `).all() as Array<{ specId: number; anzahl: number }>) {
+      strongTargetBySpecId.set(row.specId, Math.max(1, Math.ceil(row.anzahl / teamCount)));
+    }
+
+    const { capsByTeam, countsByTeam } = this.computeTopRiderCaps(season);
+    const teamTop = countsByTeam.get(teamId) ?? { c77: 0, c74: 0 };
+    const caps = capsByTeam.get(teamId) ?? resolveTopRiderCaps(3);
+
+    const team: DraftTeamInput = {
+      teamId,
+      focusSpecIds,
+      nationKindByCountryId,
+      openQuotaSpecIds,
+      quotaSpecIdsCountingSecondary: new Set<number>([4, 5]),
+      strongCountBySpecId,
+      strongTargetBySpecId,
+      focusShare,
+      rankIndex,
+    };
+
+    const poolDetails = pool.map((rider: any) => {
+      const age = season - rider.birth_year;
+      const eingabe: DraftRiderInput = {
+        riderId: rider.id,
+        overall: rider.overall_rating,
+        potential: rider.pot_overall,
+        age,
+        draftValue: rider.draftValue,
+        specialization1Id: rider.specialization_1_id,
+        specialization2Id: rider.specialization_2_id,
+        specialization3Id: rider.specialization_3_id,
+        countryId: rider.country_id,
+        oldTeamId: rider.old_team_id,
+        tenureSeasons: tenure.get(rider.id) ?? 0,
+        isDeclining: rider.decline_age > 0 && age >= rider.decline_age,
+      };
+      // Der eigene Fahrer zaehlt schon fuer das Team — die Kappe gilt fuer ihn nicht.
+      const kappe = rider.old_team_id === teamId
+        ? { blocked: false, factor: 1, label: null }
+        : this.topCapOutcome(rider.overall_rating, teamTop.c77, teamTop.c74, caps.cap77, caps.cap74);
+      const ergebnis = resolveDraftWeight(eingabe, team, bestDraftValue, kappe);
+      return { rider, weight: ergebnis.weight, factors: ergebnis.factors, blocked: ergebnis.blocked };
+    });
+
+    return { poolDetails, freeAgents, top1RiderId, teamTop, caps };
+  }
+
   private computeTopRiderCaps(season: number): {
-    cap77: number; cap74: number; countsByTeam: Map<number, { c77: number; c74: number }>;
+    capsByTeam: Map<number, { cap77: number; cap74: number }>;
+    countsByTeam: Map<number, { c77: number; c74: number }>;
   } {
     const teamIds = this.getRankedTeamIds(season);
     const countsByTeam = new Map<number, { c77: number; c74: number }>();
@@ -615,41 +603,56 @@ export class RiderDraftService {
     const hasSpace = new Map<number, boolean>();
     for (const r of rosterRows) hasSpace.set(r.teamId, r.rosterSize < r.maxSize);
 
-    let min77 = Infinity, min74 = Infinity;
-    for (const [id, v] of countsByTeam.entries()) {
-      if (hasSpace.get(id) === false) continue; // volle Teams ausklammern
-      min77 = Math.min(min77, v.c77); min74 = Math.min(min74, v.c74);
-    }
-    if (!isFinite(min77)) { min77 = 0; min74 = 0; }
+    // Die Grundkappe haengt jetzt am Prestige des Teams.
+    const prestige = new TeamPrestigeService(this.db).loadPrestigeByTeamId();
+    const basis = new Map<number, { cap77: number; cap74: number }>();
+    for (const id of teamIds) basis.set(id, resolveTopRiderCaps(prestige.get(id) ?? 3));
 
-    // Kappe steigt erst, wenn ALLE noch pickenden Teams die aktuelle Kappe erreicht haben.
-    const cap77 = Math.max(TOP_CAP_77_BASE, min77 + 1);
-    const cap74 = Math.max(TOP_CAP_74_BASE, min74 + 1);
-    return { cap77, cap74, countsByTeam };
+    // Eskalation: erst wenn ALLE noch pickenden Teams ihre eigene Kappe
+    // ausgereizt haben, steigt sie fuer alle. Massstab ist deshalb das Team
+    // mit der GROESSTEN verbleibenden Luft — solange irgendwo noch Platz ist,
+    // bleibt die Kappe stehen. Und wenn niemand mehr Platz hat, steigt sie um
+    // so viel, dass wieder jeder greifen kann: kein Team soll leer ausgehen,
+    // nur weil die Top-Fahrer uebrig sind.
+    //
+    // Gemessen wird der Abstand zur EIGENEN Kappe, nicht die absolute Zahl —
+    // sonst haette ein Prestige-1-Team mit Kappe 2 die Eskalation ausgeloest,
+    // waehrend Spitzenteams noch vier Plaetze frei hatten.
+    let luft77 = -Infinity, luft74 = -Infinity;
+    for (const [id, v] of countsByTeam.entries()) {
+      if (hasSpace.get(id) === false) continue;
+      const b = basis.get(id) ?? resolveTopRiderCaps(3);
+      luft77 = Math.max(luft77, b.cap77 - v.c77);
+      luft74 = Math.max(luft74, b.cap74 - v.c74);
+    }
+    const stufe77 = isFinite(luft77) ? Math.max(0, 1 - luft77) : 0;
+    const stufe74 = isFinite(luft74) ? Math.max(0, 1 - luft74) : 0;
+
+    const capsByTeam = new Map<number, { cap77: number; cap74: number }>();
+    for (const [id, b] of basis) capsByTeam.set(id, { cap77: b.cap77 + stufe77, cap74: b.cap74 + stufe74 });
+    return { capsByTeam, countsByTeam };
   }
 
   // Wirkung der Top-Kappe auf einen Kandidaten fuer ein Team: harte Sperre bei
   // Erreichen der Kappe, sonst weiche Gewichts-Strafe (Rampe).
   private topCapOutcome(
     overall: number, c77: number, c74: number, cap77: number, cap74: number,
-  ): { blocked: boolean; penalty: number; factor: string | null } {
+  ): { blocked: boolean; factor: number; label: string | null } {
     const is77 = overall > TOP_THRESHOLD_77;
     const is74 = overall > TOP_THRESHOLD_74;
-    if (is77 && c77 >= cap77) return { blocked: true, penalty: 0, factor: `Sperre: ${cap77} Fahrer >${TOP_THRESHOLD_77} erreicht` };
-    if (is74 && c74 >= cap74) return { blocked: true, penalty: 0, factor: `Sperre: ${cap74} Fahrer >${TOP_THRESHOLD_74} erreicht` };
-    let penalty = 0;
+    if (is77 && c77 >= cap77) return { blocked: true, factor: 0, label: `Sperre: ${cap77} Fahrer >${TOP_THRESHOLD_77} erreicht` };
+    if (is74 && c74 >= cap74) return { blocked: true, factor: 0, label: `Sperre: ${cap74} Fahrer >${TOP_THRESHOLD_74} erreicht` };
+    let factor = 1;
     const parts: string[] = [];
     if (is77 && c77 > 0) {
-      const p = TOP77_RAMP * c77;
-      penalty += p;
-      parts.push(`>${TOP_THRESHOLD_77}-Stacking (-${p.toFixed(1)})`);
+      factor /= 1 + (TOP77_RAMP * c77);
+      parts.push(`>${TOP_THRESHOLD_77}-Stacking`);
     }
     if (is74 && c74 >= TOP74_SOFT_START) {
-      const p = TOP74_RAMP * (c74 - TOP74_SOFT_START + 1);
-      penalty += p;
-      parts.push(`>${TOP_THRESHOLD_74}-Stacking (-${p.toFixed(1)})`);
+      factor /= 1 + (TOP74_RAMP * (c74 - TOP74_SOFT_START + 1));
+      parts.push(`>${TOP_THRESHOLD_74}-Stacking`);
     }
-    return { blocked: false, penalty, factor: parts.length ? parts.join(', ') : null };
+    return { blocked: false, factor, label: parts.length ? parts.join(', ') : null };
   }
 
   private getTeamSpecCounts(season: number, teamId: number): Map<number, { spec1: number; spec23: number }> {
@@ -706,219 +709,9 @@ export class RiderDraftService {
     const aiFocus2 = teamRow?.ai_focus_2 ?? null;
     const aiFocus3 = teamRow?.ai_focus_3 ?? null;
 
-    // Load undrafted free agents
-    const freeAgentsRaw = this.db.prepare(`
-      SELECT 
-        r.id, 
-        r.first_name, 
-        r.last_name, 
-        r.birth_year,
-        r.overall_rating, 
-        r.pot_overall,
-        r.specialization_1_id,
-        r.specialization_2_id,
-        r.specialization_3_id,
-        r.country_id,
-        (
-          SELECT c.team_id 
-          FROM contracts c 
-          WHERE c.rider_id = r.id AND c.end_season = ? 
-          ORDER BY c.end_season DESC LIMIT 1
-        ) AS old_team_id
-      FROM riders r
-      WHERE r.is_retired = 0
-        AND (? - r.birth_year) < CASE WHEN r.retirement_age > 0 THEN r.retirement_age ELSE 36 END
-        AND r.id NOT IN (
-          SELECT rider_id FROM contracts WHERE status IN ('active', 'future')
-        )
-    `).all(season - 1, season) as Array<{
-      id: number;
-      first_name: string;
-      last_name: string;
-      birth_year: number;
-      overall_rating: number;
-      pot_overall: number;
-      specialization_1_id: number | null;
-      specialization_2_id: number | null;
-      specialization_3_id: number | null;
-      country_id: number | null;
-      old_team_id: number | null;
-    }>;
-
-    if (freeAgentsRaw.length === 0) return [];
-
-    // Calculate draft value and sort
-    const freeAgents = freeAgentsRaw.map((r: any) => {
-      const age = season - r.birth_year;
-      let draftValue = r.overall_rating;
-      if (age < 25) {
-        draftValue = (r.overall_rating * 0.85) + (r.pot_overall * 0.15);
-      }
-      return { ...r, draftValue };
-    }).sort((a: any, b: any) => b.draftValue - a.draftValue);
-
-    const poolSize = Math.min(30, freeAgents.length);
-    const pool = freeAgents.slice(0, poolSize);
-    const top1RiderId = pool[0].id;
-
-    // Calculate top1PassedOverCount dynamically
-    const history = this.db.prepare('SELECT rider_id FROM draft_history WHERE season = ? ORDER BY pick_number ASC').all(season) as Array<{ rider_id: number }>;
-    const freeAgentsForTop1 = [...freeAgents];
-    let top1PassedOverCount = 0;
-    for (const pick of history) {
-      const currentTop1Id = freeAgentsForTop1[0]?.id;
-      if (pick.rider_id === currentTop1Id) {
-        top1PassedOverCount = 0;
-      } else {
-        top1PassedOverCount++;
-      }
-      const idx = freeAgentsForTop1.findIndex(f => f.id === pick.rider_id);
-      if (idx !== -1) {
-        freeAgentsForTop1.splice(idx, 1);
-      }
-    }
-
-    // Team preferences
-    const preferences = this.db.prepare(`
-      SELECT country_id, weight
-      FROM team_preferences
-      WHERE team_id = ?
-    `).all(teamId) as Array<{ country_id: number; weight: number }>;
-
-    // Spec counts for quotas
-    const teamMap = this.getTeamSpecCounts(season, teamId);
-
-    // Top-Fahrer-Kappe: aktuelle (eskalierte) Kappen + Zaehlung dieses Teams.
-    const { cap77, cap74, countsByTeam } = this.computeTopRiderCaps(season);
-    const teamTop = countsByTeam.get(teamId) ?? { c77: 0, c74: 0 };
-
-    // Count active strong riders (OVR >= 75) in each specialization for this team
-    const strongRiders = this.db.prepare(`
-      SELECT r.specialization_1_id AS spec1Id, COUNT(*) AS count
-      FROM contracts c
-      JOIN riders r ON c.rider_id = r.id
-      WHERE c.team_id = ? AND c.status IN ('active', 'future') AND r.overall_rating >= 75
-      GROUP BY r.specialization_1_id
-    `).all(teamId) as Array<{ spec1Id: number | null; count: number }>;
-
-    const strongSpecsCount = new Map<number, number>();
-    for (const row of strongRiders) {
-      if (row.spec1Id !== null) {
-        strongSpecsCount.set(row.spec1Id, row.count);
-      }
-    }
-
-    // Compute weights
-    const poolDetails = pool.map((rider) => {
-      let weight = 1.0;
-      const factors: string[] = [];
-
-      const age = season - rider.birth_year;
-      const isRank21to25 = (i >= 20 && i <= 24);
-
-      if (isRank21to25) {
-        let baseVal = (rider.overall_rating * 0.65) + (rider.pot_overall * 0.35);
-        if (age < 25) {
-          baseVal *= 4.0;
-          factors.push(`U25 Bias (x4)`);
-        }
-        weight = baseVal / 70.0;
-        factors.push(`Base Quality (65% Skill, 35% Pot): ${weight.toFixed(2)}`);
-      }
-
-      // AI Focus weights
-      if (rider.specialization_1_id !== null) {
-        if (rider.specialization_1_id === aiFocus1) {
-          weight += 4.0;
-          factors.push(`AI Focus 1 (+4)`);
-        } else if (rider.specialization_1_id === aiFocus2) {
-          weight += 2.0;
-          factors.push(`AI Focus 2 (+2)`);
-        } else if (rider.specialization_1_id === aiFocus3) {
-          weight += 1.0;
-          factors.push(`AI Focus 3 (+1)`);
-        }
-      }
-
-      // Nationality weights
-      if (rider.country_id !== null) {
-        const pref = preferences.find(p => p.country_id === rider.country_id);
-        if (pref) {
-          weight += pref.weight;
-          factors.push(`Nation Pref (+${pref.weight})`);
-        }
-      }
-
-      // Loyalty weight
-      if (rider.old_team_id === teamId) {
-        weight += 9.0;
-        factors.push(`Loyalty (+9)`);
-      }
-
-      // Top 1 Protection
-      if (rider.id === top1RiderId) {
-        if (top1PassedOverCount > 0) {
-          const bonus = top1PassedOverCount * 0.05;
-          weight += bonus;
-          factors.push(`Top1 Protect (+${bonus.toFixed(2)})`);
-        }
-      }
-
-      // Quota spec checks
-      for (let sId = 1; sId <= 5; sId++) {
-        const counts = teamMap.get(sId)!;
-        const quotaMet = hasMetQuota(sId, counts);
-        if (!quotaMet) {
-          let helps = false;
-          if (sId === 4 || sId === 5) {
-            helps = (rider.specialization_1_id === sId || rider.specialization_2_id === sId || rider.specialization_3_id === sId);
-          } else {
-            helps = (rider.specialization_1_id === sId);
-          }
-
-          if (helps) {
-            weight += 15.0;
-            const specLabel = sId === 1 ? 'Berg' : sId === 2 ? 'Hügel' : sId === 3 ? 'Sprint' : sId === 4 ? 'ZF' : 'Cobble';
-            factors.push(`${specLabel} Quota (+15)`);
-          }
-        }
-      }
-
-      // Concept 1 & 2: Diversification of strong riders (OVR >= 75)
-      const isStrong = rider.overall_rating >= 75;
-      const isRenewal = rider.old_team_id === teamId;
-
-      if (isStrong && !isRenewal && rider.specialization_1_id !== null) {
-        const existingStrongCount = strongSpecsCount.get(rider.specialization_1_id) ?? 0;
-        if (existingStrongCount >= 2) {
-          const penalty = 15.0;
-          weight -= penalty;
-          const specLabel = rider.specialization_1_id === 1 ? 'Berg' : rider.specialization_1_id === 2 ? 'Hügel' : rider.specialization_1_id === 3 ? 'Sprint' : rider.specialization_1_id === 4 ? 'ZF' : 'Cobble';
-          factors.push(`Spitzen-Diversifizierung: Bereits ${existingStrongCount} starke ${specLabel}fahrer (-${penalty})`);
-        }
-      }
-
-      // Top-Fahrer-Kappe: weiche Rampe unterhalb der Kappe, harte Sperre bei
-      // Erreichen der (eskalierten) Kappe. Renewals des eigenen Fahrers sind
-      // ausgenommen (der Fahrer zaehlt bereits fuer das Team).
-      const capOut = this.topCapOutcome(rider.overall_rating, teamTop.c77, teamTop.c74, cap77, cap74);
-      let blocked = false;
-      if (rider.old_team_id !== teamId) {
-        if (capOut.blocked) {
-          blocked = true;
-          if (capOut.factor) factors.push(capOut.factor);
-        } else if (capOut.penalty > 0) {
-          weight -= capOut.penalty;
-          if (capOut.factor) factors.push(capOut.factor);
-        }
-      }
-
-      if (weight < 0.01) {
-        weight = 0.01;
-      }
-
-      return { rider, weight, factors, blocked };
-    });
+    const aufbau = this.buildWeightedPool(season, teamId);
+    if (!aufbau) return [];
+    const { poolDetails } = aufbau;
 
     const totalWeight = poolDetails.map(p => p.weight).reduce((sum, w) => sum + w, 0);
 
@@ -987,8 +780,8 @@ export class RiderDraftService {
         blocked: (p as any).blocked === true,
         blockReason: (p as any).blocked
           ? (p.rider.overall_rating > TOP_THRESHOLD_77
-            ? `Team-Limit erreicht: ${cap77} Fahrer >${TOP_THRESHOLD_77}`
-            : `Team-Limit erreicht: ${cap74} Fahrer >${TOP_THRESHOLD_74}`)
+            ? `Team-Limit erreicht: ${aufbau.caps.cap77} Fahrer >${TOP_THRESHOLD_77}`
+            : `Team-Limit erreicht: ${aufbau.caps.cap74} Fahrer >${TOP_THRESHOLD_74}`)
           : null,
       };
     });

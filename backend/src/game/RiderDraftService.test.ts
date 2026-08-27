@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type Database from 'better-sqlite3';
-import { RiderDraftService } from './RiderDraftService';
+import { DRAFT_POOL_SIZE, RiderDraftService } from './RiderDraftService';
 import { GameStateService } from './GameStateService';
 import {
   createTestDb,
@@ -61,7 +61,7 @@ describe('RiderDraftService — interactive draft flow', () => {
     expect(nextPickState.isPlayerTeam).toBe(true);
   });
 
-  it('surfaces a 30-candidate pool with correct renewal-team mapping', () => {
+  it('surfaces the full candidate pool with correct renewal-team mapping', () => {
     draftService.prepareDraft(2027);
     draftService.executeNextPicksUntilPlayer(2027, false);
 
@@ -73,7 +73,11 @@ describe('RiderDraftService — interactive draft flow', () => {
     db.prepare(`UPDATE riders SET overall_rating = 85, pot_overall = 85 WHERE id = 10`).run();
 
     const candidates = draftService.getDraftCandidatesForNextPick(2027);
-    expect(candidates).toHaveLength(30);
+    // Der Pool sind die besten DRAFT_POOL_SIZE Free Agents plus die eigenen
+    // auslaufenden Fahrer des pickenden Teams — hier gibt es nur 150 Fahrer,
+    // von denen ein Teil schon gedraftet ist.
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates.length).toBeLessThanOrEqual(DRAFT_POOL_SIZE + 40);
 
     const cand10 = candidates.find((c) => c.riderId === 10);
     expect(cand10).toBeDefined();

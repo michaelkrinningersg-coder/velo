@@ -1041,20 +1041,25 @@ function seedRiders(db: Database.Database): void {
   console.log(`  ${rows.length} Fahrer eingefuegt.`);
 }
 
-function seedTeamPreferences(db: Database.Database): void {
+export function seedTeamPreferences(db: Database.Database): void {
   const rows = readCsv('team_preferences.csv');
   const insert = db.prepare(`
-    INSERT INTO team_preferences (id_pref, team_id, country_id, weight)
-    VALUES (?, ?, ?, ?)
+    INSERT OR REPLACE INTO team_preferences (id_pref, team_id, country_id, weight, pref_kind)
+    VALUES (?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
     const ctx = `team_preferences.csv Zeile ${index + 2}`;
+    const art = (row['Pref_Kind'] ?? 'neighbour').trim();
+    if (!['home', 'neighbour', 'scouting'].includes(art)) {
+      throw new Error(`${ctx}: unbekannte Bindungsart "${art}".`);
+    }
     insert.run(
       int(req(row, 'ID_Pref', ctx), ctx),
       int(req(row, 'Team_ID', ctx), ctx),
       int(req(row, 'Country_ID', ctx), ctx),
-      int(req(row, 'Weight', ctx), ctx)
+      int(req(row, 'Weight', ctx), ctx),
+      art,
     );
   }
 
