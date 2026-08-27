@@ -1348,6 +1348,7 @@ export class SimulationEngine {
     this.stageFavorites = calculateStageFavorites(bootstrap.riders, bootstrap.teams, bootstrap.stage, {
       distanceKm: bootstrap.stageSummary.distanceKm,
       elevationGainMeters: bootstrap.stageSummary.elevationGainMeters,
+      segments: bootstrap.stageSummary.segments,
       dailyFormByRiderId: preStartDailyFormByRiderId,
       isStageRace: bootstrap.race.isStageRace,
     });

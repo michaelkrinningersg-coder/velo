@@ -142,9 +142,11 @@ export function resolveClimbPenaltyForRole(
  * liegen alle Strassenprofile zwischen 3,54 und 4,92 statt zwischen 2,13 und
  * 4,69, und derselbe Fahrer verliert auf Hilly noch 76 statt 139 Plaetze.
  *
- * Zeitfahren sind nicht dabei: dort geht der Zeitfahrwert direkt in die Zeit,
- * nicht ueber die Etappengewichte. Pflasterprofile bleiben vorerst bei 1,0 —
- * sie sind bisher nicht gemessen.
+ * Das Einzelzeitfahren ist seit der Umstellung auf die Terraingewichte mit
+ * dabei — auch dort summieren sich die Gewichte jetzt auf 1 und die Form
+ * bekaeme sonst zu viel Gewicht. Das Mannschaftszeitfahren bleibt aussen vor:
+ * dort zaehlt ohnehin nur das Mittel der besten fuenf einer Mannschaft.
+ * Pflasterprofile bleiben vorerst bei 1,0 — sie sind bisher nicht gemessen.
  */
 export const SKILL_WEIGHT_FACTOR_BY_PROFILE: Partial<Record<StageProfile, number>> = {
   Flat: 1.4,
@@ -154,6 +156,13 @@ export const SKILL_WEIGHT_FACTOR_BY_PROFILE: Partial<Record<StageProfile, number
   Medium_Mountain: 1.15,
   Mountain: 1.1,
   High_Mountain: 1.05,
+  // Zeitfahren: die Gewichte aus `ittScoreWeights.ts` summieren sich auf 1 und
+  // druecken die Streuung des Koennens damit auf 2,4 Punkte — unter die der
+  // Form. Vorher stand hier nichts, weil der alte Score den Bergwert
+  // obendraufaddierte und dadurch kuenstlich breit war. Gemessen liegen die
+  // Strassenprofile nach ihren Faktoren bei 2,9 bis 4,9; 1,7 bringt das
+  // Zeitfahren in dieselbe Gegend.
+  ITT: 1.7,
 };
 
 export function resolveSkillWeightFactor(profile: StageProfile | null | undefined): number {

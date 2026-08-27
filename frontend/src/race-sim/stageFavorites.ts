@@ -1,5 +1,10 @@
-import type { Rider, RiderSkillKey, Stage, StageProfile, Team } from '../../../shared/types';
+import type { Rider, RiderSkillKey, Stage, StageProfile, StageTerrain, Team } from '../../../shared/types';
 import { resolveStageScoreWeights, resolveStaminaWeight } from './stageScoreWeights';
+import {
+  resolveIttScoreWeights,
+  resolveTerrainShares,
+  type TerrainShares,
+} from '../../../shared/quickSim/ittScoreWeights';
 import {
   resolveClimbPenaltyForRole,
   resolveSeasonFormFactor,
@@ -19,6 +24,11 @@ export interface FavoriteItem {
 
 export interface StageFavoriteOptions {
   distanceKm?: number;
+  /**
+   * Nur noch historisch: der Zeitfahrscore rechnet ueber `terrainShares`, die
+   * Strassenetappen ueber Profil und Distanz. Das Feld bleibt, weil mehrere
+   * Aufrufer es setzen, und wird nicht mehr gelesen.
+   */
   elevationGainMeters?: number;
   dailyFormByRiderId?: Map<number, number> | Record<number, number>;
   /**
@@ -37,6 +47,15 @@ export interface StageFavoriteOptions {
    * anderthalbmal so laut wie auf einer Flachetappe.
    */
   scoreDeltaByRiderId?: Map<number, number> | Record<number, number>;
+  /**
+   * Kilometeranteile der Terrains der Strecke. Nur Zeitfahren brauchen sie —
+   * dort ersetzen sie die frueheren Hoehenmeter als Grundlage der Gewichtung.
+   * Fehlen sie, koennen sie aus `segments` abgeleitet werden; ohne beides
+   * gilt die Strecke als flach.
+   */
+  terrainShares?: TerrainShares;
+  /** Streckensegmente, falls die Anteile daraus abgeleitet werden sollen. */
+  segments?: ReadonlyArray<{ terrain: StageTerrain; length_km: number }>;
 }
 
 interface TeamFavoriteCandidate {
@@ -79,10 +98,12 @@ function resolveDistanceKm(stage: Stage, options?: StageFavoriteOptions): number
   return options?.distanceKm ?? stageWithDistance.distanceKm ?? 0;
 }
 
-function resolveElevationGainMeters(stage: Stage, options?: StageFavoriteOptions): number {
-  const stageWithElevation = stage as Stage & { elevationGainMeters?: number };
-  return options?.elevationGainMeters ?? stageWithElevation.elevationGainMeters ?? 0;
+function resolveTerrainSharesFromOptions(options?: StageFavoriteOptions): TerrainShares | null {
+  if (options?.terrainShares && options.terrainShares.size > 0) return options.terrainShares;
+  if (options?.segments && options.segments.length > 0) return resolveTerrainShares(options.segments);
+  return null;
 }
+
 
 /**
  * Formanteil am Etappenscore.
@@ -120,12 +141,39 @@ function resolveDomestiquePenalty(rider: Rider, profile: StageProfile): number {
   return resolveClimbPenaltyForRole(rolle, profile);
 }
 
+/**
+ * Etappenscore eines Zeitfahrens.
+ *
+ * Frueher stand hier `Zeitfahrwert + Form + Bergwert x (Hoehenmeter / 500)`.
+ * Das war in zwei Richtungen falsch: der Bergwert bekam Gewicht, wo die volle
+ * Simulation ihm keines gibt (kein Zeitfahren des Kalenders hat Bergterrain),
+ * und der Massstab des Scores wuchs mit den Hoehenmetern — auf dem WM-Kurs
+ * mit 671 Hm zaehlte der Bergwert 1,34, mehr als der Zeitfahrwert selbst, und
+ * das Feld wurde dreimal zu weit gespreizt.
+ *
+ * Jetzt dieselbe Gewichtung wie in der Engine: je Terrain eine Zeile, nach den
+ * Kilometeranteilen der Strecke gemittelt, Summe 1. Siehe
+ * `ittScoreWeights.ts` — dort steht auch, warum der Bergwert auf Huegelterrain
+ * bewusst einen kleinen Anteil bekommt.
+ *
+ * Der Faehigkeitsanteil wird wie auf den Strassenprofilen gespreizt: die
+ * Gewichte summieren sich auf 1 und druecken die Streuung des Koennens damit
+ * unter die der Form. `SKILL_WEIGHT_FACTOR_BY_PROFILE` holt das zurueck.
+ */
 function calculateIttScore(
-  rider: Rider, dailyForm: number, elevationGainMeters: number, profile: StageProfile, scoreDelta: number,
+  rider: Rider,
+  dailyForm: number,
+  profile: StageProfile,
+  terrainShares: TerrainShares | null | undefined,
+  scoreDelta: number,
 ): number {
-  return rider.skills.timeTrial
+  const weights = resolveIttScoreWeights(terrainShares);
+  let weighted = 0;
+  for (const [key, weight] of Object.entries(weights) as Array<[RiderSkillKey, number]>) {
+    weighted += rider.skills[key] * weight;
+  }
+  return (weighted * resolveSkillWeightFactor(profile))
     + resolveFormContribution(rider, dailyForm, profile)
-    + (rider.skills.mountain * (elevationGainMeters / 500))
     + scoreDelta;
 }
 
@@ -175,13 +223,13 @@ function calculateRiderScore(
   rider: Rider,
   stage: Stage,
   distanceKm: number,
-  elevationGainMeters: number,
+  terrainShares: TerrainShares | null | undefined,
   dailyForm: number,
   isStageRace: boolean,
   scoreDelta: number,
 ): number {
   if (stage.profile === 'ITT' || stage.profile === 'TTT') {
-    return calculateIttScore(rider, dailyForm, elevationGainMeters, stage.profile, scoreDelta);
+    return calculateIttScore(rider, dailyForm, stage.profile, terrainShares, scoreDelta);
   }
   return calculateRoadScore(rider, stage, distanceKm, dailyForm, isStageRace, scoreDelta);
 }
@@ -203,7 +251,7 @@ export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: S
 export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: Stage, options: StageFavoriteOptions): FavoriteItem[];
 export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: Stage, options?: StageFavoriteOptions): FavoriteItem[] {
   const distanceKm = resolveDistanceKm(stage, options);
-  const elevationGainMeters = resolveElevationGainMeters(stage, options);
+  const terrainShares = resolveTerrainSharesFromOptions(options);
   const teamById = new Map(teams.map((team) => [team.id, team]));
 
   if (stage.profile === 'TTT') {
@@ -220,7 +268,13 @@ export function calculateStageFavorites(riders: Rider[], teams: Team[], stage: S
     const teamFavorites: TeamFavoriteCandidate[] = [...ridersByTeamId.entries()].map(([teamId, teamRiders]) => {
       const team = teamById.get(teamId);
       const scoredRiders = teamRiders
-        .map((rider) => calculateIttScore(rider, resolveDailyForm(rider.id, options?.dailyFormByRiderId), elevationGainMeters, stage.profile, resolveLookup(rider.id, options?.scoreDeltaByRiderId)))
+        .map((rider) => calculateIttScore(
+          rider,
+          resolveDailyForm(rider.id, options?.dailyFormByRiderId),
+          stage.profile,
+          terrainShares,
+          resolveLookup(rider.id, options?.scoreDeltaByRiderId),
+        ))
         .sort((left, right) => right - left);
       const bestFive = scoredRiders.slice(0, 5);
       const availableCount = bestFive.length;
@@ -275,7 +329,7 @@ export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[
 export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[], stage: Stage, options: StageFavoriteOptions): RiderFavoriteCandidate[];
 export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[], stage: Stage, options?: StageFavoriteOptions): RiderFavoriteCandidate[] {
   const distanceKm = resolveDistanceKm(stage, options);
-  const elevationGainMeters = resolveElevationGainMeters(stage, options);
+  const terrainShares = resolveTerrainSharesFromOptions(options);
   const teamById = new Map(teams.map((team) => [team.id, team]));
 
   return riders
@@ -286,7 +340,7 @@ export function calculateStageFavoriteRiderRanking(riders: Rider[], teams: Team[
         rider,
         stage,
         distanceKm,
-        elevationGainMeters,
+        terrainShares,
         resolveDailyForm(rider.id, options?.dailyFormByRiderId),
         options?.isStageRace ?? false,
         resolveLookup(rider.id, options?.scoreDeltaByRiderId),

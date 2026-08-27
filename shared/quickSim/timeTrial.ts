@@ -10,8 +10,21 @@
  * Strassenmodell:
  *
  *   ITT  jeder faehrt allein. Der Rueckstand waechst linear mit dem
- *        Score-Abstand zum Besten, dazu die Tagesform als Streuung.
- *        Gemessen: 0,0042 Siegerzeit je Score-Punkt, Reststreuung 1,9 %.
+ *        Score-Abstand zum Besten, dazu eine Reststreuung.
+ *
+ *        Gemessen an vier echten Zeitfahren, je 5 Laeufe der vollen
+ *        Simulation gegen 120 Laeufe der Quick Simulation: die Steigung
+ *        liegt bei 0,0048 der Siegerzeit je Score-Punkt, die Reststreuung
+ *        bei 2,35 %. In der CSV steht trotzdem 0,0044 und 1,5 % — und das
+ *        mit Absicht.
+ *
+ *        Der Grund: die Regression misst gegen einen Score OHNE Tagesform,
+ *        der Etappenscore der Quick Simulation traegt sie aber schon in
+ *        sich. Wer die gemessene Reststreuung obendrauf legt, zaehlt die
+ *        Tagesform zweimal. Nachgemessen am fertigen Lauf ueber alle vier
+ *        Etappen: mit 2,35 % liegt die Rangkorrelation bei 0,645 und die
+ *        Rueckstaende 19 % zu hoch, mit 1,5 % bei 0,740 und 3 % zu hoch.
+ *        Die volle Simulation liegt bei 0,704.
  *
  *   TTT  die Mannschaft *ist* die Gruppe. Eine Sonde ueber zwei Etappen
  *        zeigt: die Spanne innerhalb eines Teams ist exakt 0,0 Sekunden, bei
@@ -29,6 +42,17 @@
 import type { QuickSimProfileParameters } from '../quickSimProfiles';
 import type { RandomSource } from '../rng';
 import { drawStandardNormal } from './groupModel';
+
+/**
+ * Grenze fuer die Tagesstreuung eines Zeitfahrens, in Standardabweichungen.
+ *
+ * Die Reststreuung der vollen Simulation hat duennere Enden als eine
+ * Normalverteilung: mit ungestutztem Zufall blieben die Rueckstaende auch bei
+ * richtig eingestellter Steigung rund ein Zehntel zu gross, weil einzelne
+ * Ausreisser das Feld auseinanderziehen. Dieselbe Stutzung benutzt das
+ * Strassenmodell fuer seine Streufaktoren.
+ */
+export const TIME_TRIAL_SIGMA_CLAMP = 2;
 
 /** Wie viele Fahrer in die Teamwertung eingehen. Wie in der Instant-Simulation. */
 export const TEAM_TIME_TRIAL_COUNTING_RIDERS = 5;
@@ -76,8 +100,12 @@ function buildRelativeOffsets(
   const bestScore = Math.max(...scoresById.values());
   let smallest = Number.POSITIVE_INFINITY;
   for (const [id, score] of scoresById) {
+    const z = Math.min(
+      TIME_TRIAL_SIGMA_CLAMP,
+      Math.max(-TIME_TRIAL_SIGMA_CLAMP, drawStandardNormal(random)),
+    );
     const offset = (parameters.timeTrialSlope * (bestScore - score))
-      + (drawStandardNormal(random) * parameters.timeTrialNoise);
+      + (z * parameters.timeTrialNoise);
     offsets.set(id, offset);
     smallest = Math.min(smallest, offset);
   }

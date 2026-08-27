@@ -41,10 +41,16 @@ describe('Faktor auf den Faehigkeitsanteil', () => {
     }
   });
 
-  it('laesst Zeitfahren und Pflaster unangetastet', () => {
-    for (const profile of ['ITT', 'TTT', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
+  it('laesst Mannschaftszeitfahren und Pflaster unangetastet', () => {
+    // Das Einzelzeitfahren hat seit der Umstellung auf die Terraingewichte
+    // einen eigenen Faktor — dort summieren sich die Gewichte auf 1 und die
+    // Form bekaeme sonst zu viel Gewicht. Im Mannschaftszeitfahren zaehlt nur
+    // das Mittel der besten fuenf, dort aendert ein Faktor nichts an der
+    // Reihenfolge.
+    for (const profile of ['TTT', 'Cobble', 'Cobble_Hill'] as StageProfile[]) {
       expect(resolveSkillWeightFactor(profile)).toBe(1);
     }
+    expect(resolveSkillWeightFactor('ITT')).toBeGreaterThan(1);
     expect(resolveSkillWeightFactor(null)).toBe(1);
     expect(resolveSkillWeightFactor(undefined)).toBe(1);
   });

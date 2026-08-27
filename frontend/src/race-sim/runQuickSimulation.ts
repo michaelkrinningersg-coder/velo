@@ -168,6 +168,9 @@ export function runQuickSimulation(
   const favoriteOptions = {
     distanceKm,
     elevationGainMeters,
+    // Zeitfahren gewichten ueber die Terrainanteile der Strecke, nicht ueber
+    // die Hoehenmeter. Siehe shared/quickSim/ittScoreWeights.ts.
+    segments: bootstrap.stageSummary.segments,
     dailyFormByRiderId,
     isStageRace: bootstrap.race.isStageRace,
     scoreDeltaByRiderId: preRace.scoreDeltaByRiderId,
