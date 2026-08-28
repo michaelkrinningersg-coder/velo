@@ -158,6 +158,13 @@ export class ResultRepository {
     return { raceId, isStageRace, seasons, participation, records: this.getRaceRecords(raceId, raceName, isStageRace) };
   }
 
+  /**
+   * Etappensiege werden bis Platz 50 geliefert; die Oberflaeche blaettert sie
+   * in Zehnerschritten. Bei Rundfahrten mit langer Historie sammeln deutlich
+   * mehr als zehn Fahrer Etappensiege — eine Top 10 zeigt davon zu wenig.
+   */
+  private static readonly STAGE_WINS_LIMIT = 50;
+
   private leereRekorde(raceId: number): RaceRecordsPayload {
     return {
       editions: 0,
@@ -288,7 +295,7 @@ export class ResultRepository {
       editions: editionen,
       stageCount: this.zaehleEtappen(raceId),
       profiles: this.profilVerteilung(raceId),
-      stageWins: isStageRace ? sammle(wertungsSieg('stage_result'), 10) : [],
+      stageWins: isStageRace ? sammle(wertungsSieg('stage_result'), ResultRepository.STAGE_WINS_LIMIT) : [],
       overallWins: sammle(podiumRang, 10),
       mountainWins: sammle(wertungsSieg('mountain_final'), 5),
       youthWins: sammle(wertungsSieg('youth_final'), 5),

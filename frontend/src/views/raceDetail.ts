@@ -46,6 +46,8 @@ export async function openRaceDetail(raceId: number): Promise<void> {
   if (!race) return;
   state.selectedRaceDetailRaceId = raceId;
   state.raceDetailTab = 'detail';
+  etappensiegeSeite = 0;
+  gesamtsiegeAusgeklappt = false;
   state.selectedRaceDetailStageId = sortedStages(race)[0]?.id ?? null;
   renderRaceDetailHeader(race);
   $('race-detail-body').innerHTML = renderRaceDetailBody();
@@ -291,6 +293,9 @@ function renderPalmaresTab(race: Race, palmares: RacePalmaresPayload): string {
 // ============================================================================
 // Die Gesamtsieg-Liste zeigt zunaechst 5 Fahrer; der Server liefert 10.
 let gesamtsiegeAusgeklappt = false;
+// Etappensiege kommen bis Platz 50 und werden zu zehnt geblaettert.
+const ETAPPENSIEGE_JE_SEITE = 10;
+let etappensiegeSeite = 0;
 
 function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean): string {
   const saisons = zeile.seasons.slice(0, 6).join(', ')
@@ -310,17 +315,38 @@ function bestenlisteKarte(
   titel: string,
   hinweis: string,
   zeilen: PalmaresWinRow[],
-  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean } = {},
+  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean; blaettern?: boolean } = {},
 ): string {
   if (zeilen.length === 0) return '';
-  const sichtbar = optionen.ausklappbar && !gesamtsiegeAusgeklappt ? zeilen.slice(0, 5) : zeilen;
-  const knopf = optionen.ausklappbar && zeilen.length > 5
-    ? `<button type="button" class="rd-best-more" data-race-detail-toggle="gesamtsiege">${gesamtsiegeAusgeklappt ? 'Weniger anzeigen' : `Top ${zeilen.length} anzeigen`}</button>`
-    : '';
+
+  let sichtbar = zeilen;
+  let ersterRang = 1;
+  let steuerung = '';
+
+  if (optionen.blaettern) {
+    const seiten = Math.max(1, Math.ceil(zeilen.length / ETAPPENSIEGE_JE_SEITE));
+    // Die Seite kann nach einem Rennwechsel hinter dem Ende liegen.
+    const seite = Math.min(etappensiegeSeite, seiten - 1);
+    ersterRang = seite * ETAPPENSIEGE_JE_SEITE + 1;
+    sichtbar = zeilen.slice(seite * ETAPPENSIEGE_JE_SEITE, (seite + 1) * ETAPPENSIEGE_JE_SEITE);
+    if (seiten > 1) {
+      steuerung = `<div class="rd-best-pager">
+        <button type="button" class="rd-best-page-btn" data-race-detail-page="prev" ${seite === 0 ? 'disabled' : ''}>‹</button>
+        <span class="rd-best-page-label">${ersterRang}–${ersterRang + sichtbar.length - 1} von ${zeilen.length}</span>
+        <button type="button" class="rd-best-page-btn" data-race-detail-page="next" ${seite >= seiten - 1 ? 'disabled' : ''}>›</button>
+      </div>`;
+    }
+  } else if (optionen.ausklappbar) {
+    sichtbar = gesamtsiegeAusgeklappt ? zeilen : zeilen.slice(0, 5);
+    if (zeilen.length > 5) {
+      steuerung = `<button type="button" class="rd-best-more" data-race-detail-toggle="gesamtsiege">${gesamtsiegeAusgeklappt ? 'Weniger anzeigen' : `Top ${zeilen.length} anzeigen`}</button>`;
+    }
+  }
+
   return `<div class="rd-analysis-card">
     <div class="rd-analysis-title">${esc(titel)} <span class="rd-analysis-hint">· ${esc(hinweis)}</span></div>
-    <div class="rd-best-list">${sichtbar.map((z, i) => winsRow(z, i + 1, optionen.mitPlaetzen === true)).join('')}</div>
-    ${knopf}
+    <div class="rd-best-list">${sichtbar.map((z, i) => winsRow(z, ersterRang + i, optionen.mitPlaetzen === true)).join('')}</div>
+    ${steuerung}
   </div>`;
 }
 
@@ -328,7 +354,7 @@ function renderBestenlistenTab(palmares: RacePalmaresPayload): string {
   const r = palmares.records;
   const karten = [
     bestenlisteKarte('Gesamtsiege', 'mit zweiten und dritten Plätzen', r.overallWins, { mitPlaetzen: true, ausklappbar: true }),
-    bestenlisteKarte('Etappensiege', 'Top 10', r.stageWins),
+    bestenlisteKarte('Etappensiege', `Top ${r.stageWins.length}`, r.stageWins, { blaettern: true }),
     bestenlisteKarte('Bergtrikot', 'Top 5', r.mountainWins),
     bestenlisteKarte('Weißes Trikot', 'Top 5', r.youthWins),
     bestenlisteKarte('Punktetrikot', 'Top 5', r.pointsWins),
@@ -495,6 +521,14 @@ export function initRaceDetailListeners(): void {
       state.raceDetailTab = tabBtn.dataset['raceDetailTab'] as typeof state.raceDetailTab;
       body.innerHTML = renderRaceDetailBody();
       if (state.raceDetailTab !== 'detail') void ensurePalmaresLoaded(raceId);
+      return;
+    }
+
+    const seitenBtn = target.closest<HTMLButtonElement>('button[data-race-detail-page]');
+    if (seitenBtn && !seitenBtn.disabled) {
+      const richtung = seitenBtn.dataset['raceDetailPage'] === 'next' ? 1 : -1;
+      etappensiegeSeite = Math.max(0, etappensiegeSeite + richtung);
+      body.innerHTML = renderRaceDetailBody();
       return;
     }
 

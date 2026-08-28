@@ -6924,6 +6924,11 @@ tr.calendar-highlight {
 .rd-best-count { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; color: #fbbf24; text-align: right; }
 .rd-best-more { margin-top: 10px; width: 100%; background: #0c1526; border: 1px solid #1c2b48; color: #8494ad; border-radius: 8px; padding: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .rd-best-more:hover { border-color: #2a3d63; color: #cbd5e1; }
+.rd-best-pager { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rd-best-page-btn { background: #0c1526; border: 1px solid #1c2b48; color: #8494ad; border-radius: 8px; padding: 5px 12px; font-size: 14px; line-height: 1; cursor: pointer; }
+.rd-best-page-btn:hover:not(:disabled) { border-color: #2a3d63; color: #cbd5e1; }
+.rd-best-page-btn:disabled { opacity: .35; cursor: default; }
+.rd-best-page-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .08em; color: #6a7a95; }
 
 /* Qualitaet der Startliste: ein Balken je Saison */
 .rd-slq-chart { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 6px; overflow-x: auto; }

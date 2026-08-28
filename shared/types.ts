@@ -601,7 +601,7 @@ export interface RaceRecordsPayload {
   stageCount: number;
   /** Profilverteilung der aktuellen Edition. */
   profiles: PalmaresProfileRow[];
-  /** Etappensiege, Top 10. Bei Eintagesrennen leer. */
+  /** Etappensiege, Top 50 (die Oberflaeche blaettert sie zu zehnt). Bei Eintagesrennen leer. */
   stageWins: PalmaresWinRow[];
   /** Gesamtsiege, Top 10 (die Oberflaeche zeigt zunaechst 5). */
   overallWins: PalmaresWinRow[];

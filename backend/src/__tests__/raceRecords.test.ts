@@ -92,6 +92,17 @@ describe('Bestenlisten der Rennkarte', () => {
     expect(rekorde.stageWins[0]?.rider.riderId).toBe(1);
   });
 
+  it('liefert Etappensieger weit ueber die ersten zehn hinaus', () => {
+    // Die Oberflaeche blaettert zu zehnt — die Liste muss dafuer tiefer reichen.
+    legeRennen(10, 'Tour', 2026, { etappen: 12 });
+    for (let i = 1; i <= 12; i++) {
+      seedRider(db, { id: 100 + i, lastName: `Sieger${i}` });
+      punkte(10, 2026, 'stage_result', 1, 100 + i, 1, { etappe: i });
+    }
+    const r = new ResultRepository(db).getRacePalmares(10).records;
+    expect(r.stageWins).toHaveLength(12);
+  });
+
   it('zaehlt zweite und dritte Plaetze beim Gesamtsieger mit', () => {
     legeRennen(10, 'Tour', 2026, { etappen: 1 });
     legeRennen(11, 'Tour', 2027, { etappen: 1 });
