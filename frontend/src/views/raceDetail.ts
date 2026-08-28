@@ -302,7 +302,7 @@ let etappensiegeSeite = 0;
  * rechte Spalte traegt bei den Gesamtsiegen die zweiten und dritten Plaetze
  * (nur dort erfasst das Spiel Plaetze ausser dem Sieg).
  */
-function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean): string {
+function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean, einheit = '×'): string {
   const saisons = [...zeile.seasons].sort((a, b) => a - b);
   // Viele Jahre wuerden die Zeile sprengen — der Rest wird gezaehlt.
   const sichtbareSaisons = saisons.slice(0, 8).join(', ')
@@ -320,7 +320,7 @@ function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean): str
       ${jahre}
     </span>
     ${plaetze}
-    <span class="rd-best-count">${zeile.wins}×</span>
+    <span class="rd-best-count">${zeile.wins}${esc(einheit)}</span>
   </div>`;
 }
 
@@ -328,7 +328,7 @@ function bestenlisteKarte(
   titel: string,
   hinweis: string,
   zeilen: PalmaresWinRow[],
-  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean; blaettern?: boolean } = {},
+  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean; blaettern?: boolean; einheit?: string } = {},
 ): string {
   if (zeilen.length === 0) return '';
 
@@ -358,7 +358,7 @@ function bestenlisteKarte(
 
   return `<div class="rd-analysis-card">
     <div class="rd-analysis-title">${esc(titel)} <span class="rd-analysis-hint">· ${esc(hinweis)}</span></div>
-    <div class="rd-best-list">${sichtbar.map((z, i) => winsRow(z, ersterRang + i, optionen.mitPlaetzen === true)).join('')}</div>
+    <div class="rd-best-list">${sichtbar.map((z, i) => winsRow(z, ersterRang + i, optionen.mitPlaetzen === true, optionen.einheit)).join('')}</div>
     ${steuerung}
   </div>`;
 }
@@ -371,6 +371,7 @@ function renderBestenlistenTab(palmares: RacePalmaresPayload): string {
     bestenlisteKarte('Bergtrikot', 'Top 5', r.mountainWins),
     bestenlisteKarte('Weißes Trikot', 'Top 5', r.youthWins),
     bestenlisteKarte('Punktetrikot', 'Top 5', r.pointsWins),
+    bestenlisteKarte('Tage im Gelben Trikot', 'Top 10 · Gesamtführung', r.leaderDays, { einheit: ' T' }),
   ].filter(Boolean).join('');
 
   if (!karten) {

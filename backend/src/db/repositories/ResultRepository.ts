@@ -170,7 +170,7 @@ export class ResultRepository {
       editions: 0,
       stageCount: this.zaehleEtappen(raceId),
       profiles: this.profilVerteilung(raceId),
-      stageWins: [], overallWins: [], mountainWins: [], youthWins: [], pointsWins: [],
+      stageWins: [], overallWins: [], mountainWins: [], youthWins: [], pointsWins: [], leaderDays: [],
       nations: [], teams: [], startlistQuality: [],
     };
   }
@@ -210,7 +210,7 @@ export class ResultRepository {
       WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?)
         AND (
           (spe.award_type = ? AND spe.rank <= 3)
-          OR (spe.award_type IN ('stage_result', 'points_final', 'mountain_final', 'youth_final') AND spe.rank = 1)
+          OR (spe.award_type IN ('stage_result', 'points_final', 'mountain_final', 'youth_final', 'gc_leader_day') AND spe.rank = 1)
         )
       ORDER BY spe.season DESC
     `).all(raceName, podiumAward) as Array<{
@@ -243,7 +243,11 @@ export class ResultRepository {
           };
           map.set(r.rider_id, eintrag);
         }
-        if (art === 'sieg') { eintrag.wins += 1; eintrag.seasons.push(r.season); }
+        if (art === 'sieg') {
+          eintrag.wins += 1;
+          // Mehrere Erfolge derselben Austragung nennen das Jahr nur einmal.
+          if (eintrag.seasons.at(-1) !== r.season) eintrag.seasons.push(r.season);
+        }
         else if (art === 'zweiter') eintrag.seconds += 1;
         else eintrag.thirds += 1;
       }
@@ -300,6 +304,8 @@ export class ResultRepository {
       mountainWins: sammle(wertungsSieg('mountain_final'), 5),
       youthWins: sammle(wertungsSieg('youth_final'), 5),
       pointsWins: sammle(wertungsSieg('points_final'), 5),
+      // Fuehrungstage nur bei Rundfahrten — ein Eintagesrennen kennt keine.
+      leaderDays: isStageRace ? sammle(wertungsSieg('gc_leader_day'), 10) : [],
       nations: [...nationen.values()].sort(nachBilanz),
       teams: [...teamsBilanz.values()].sort(nachBilanz),
       startlistQuality: this.startlistenQualitaet(raceName),

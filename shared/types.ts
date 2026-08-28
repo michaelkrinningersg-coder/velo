@@ -629,6 +629,11 @@ export interface RaceRecordsPayload {
   youthWins: PalmaresWinRow[];
   /** Punktetrikot, Top 5. */
   pointsWins: PalmaresWinRow[];
+  /**
+   * Tage im Gelben Trikot, Top 10. `wins` ist hier die Zahl der Tage, nicht
+   * der Siege. Bei Eintagesrennen leer.
+   */
+  leaderDays: PalmaresWinRow[];
   nations: PalmaresNationRow[];
   teams: PalmaresTeamRow[];
   /** Qualitaet der Startliste je Saison, aelteste zuerst. */

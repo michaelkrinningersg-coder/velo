@@ -115,6 +115,40 @@ describe('Bestenlisten der Rennkarte', () => {
     expect(zeile).toMatchObject({ wins: 1, seconds: 1, thirds: 1 });
   });
 
+  it('zaehlt die Tage im Gelben Trikot ueber alle Austragungen', () => {
+    legeRennen(10, 'Tour', 2026, { etappen: 3 });
+    legeRennen(11, 'Tour', 2027, { etappen: 3 });
+    // 2026: Fahrer 1 fuehrt zwei Tage, Fahrer 2 einen.
+    punkte(10, 2026, 'gc_leader_day', 1, 1, 1, { etappe: 1 });
+    punkte(10, 2026, 'gc_leader_day', 1, 1, 1, { etappe: 2 });
+    punkte(10, 2026, 'gc_leader_day', 1, 2, 2, { etappe: 3 });
+    // 2027: Fahrer 1 noch einen Tag.
+    punkte(11, 2027, 'gc_leader_day', 1, 1, 1, { etappe: 1 });
+
+    const r = new ResultRepository(db).getRacePalmares(11).records;
+    expect(r.leaderDays[0]).toMatchObject({ wins: 3 });
+    expect(r.leaderDays[0]?.rider.riderId).toBe(1);
+    // Zwei Tage derselben Austragung nennen das Jahr nur einmal.
+    expect(r.leaderDays[0]?.seasons).toEqual([2027, 2026]);
+    expect(r.leaderDays[1]).toMatchObject({ wins: 1 });
+  });
+
+  it('kennt bei Eintagesrennen keine Fuehrungstage', () => {
+    legeRennen(20, 'Klassiker', 2026, { etappen: 1, rundfahrt: false });
+    punkte(20, 2026, 'one_day_result', 1, 1, 1);
+    expect(new ResultRepository(db).getRacePalmares(20).records.leaderDays).toEqual([]);
+  });
+
+  it('nennt das Jahr eines Mehrfachsiegers nur einmal', () => {
+    legeRennen(10, 'Tour', 2026, { etappen: 4 });
+    for (let etappe = 1; etappe <= 4; etappe++) {
+      punkte(10, 2026, 'stage_result', 1, 1, 1, { etappe });
+    }
+    const zeile = new ResultRepository(db).getRacePalmares(10).records.stageWins[0];
+    expect(zeile).toMatchObject({ wins: 4 });
+    expect(zeile?.seasons).toEqual([2026]);
+  });
+
   it('fuehrt Berg-, Nachwuchs- und Punktetrikot getrennt', () => {
     legeRennen(10, 'Tour', 2026, { etappen: 1 });
     punkte(10, 2026, 'gc_final', 1, 1, 1);
