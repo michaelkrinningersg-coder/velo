@@ -23,6 +23,19 @@
 
 import { calcRiderOverall } from './riderOverall';
 
+/**
+ * Die Skill-Spalten der Potenzial-Presets, in der Schreibweise der Tabelle
+ * (`min_pot_<spalte>` / `max_pot_<spalte>` und `riders.pot_<spalte>`).
+ *
+ * Steht hier, weil sowohl die Ziehung als auch die Pruefung eines gespeicherten
+ * Preset-Verweises dieselbe Liste braucht.
+ */
+export const POT_PRESET_SKILL_COLUMNS = [
+  'flat', 'mountain', 'medium_mountain', 'hill', 'time_trial', 'prologue',
+  'cobble', 'sprint', 'acceleration', 'downhill', 'attack', 'stamina',
+  'resistance', 'recuperation', 'bike_handling',
+] as const;
+
 export interface NewgenPresetTier {
   /** Kurzzeichen der Stufe. */
   readonly key: string;

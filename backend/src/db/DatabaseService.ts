@@ -40,6 +40,7 @@ import {
 } from '../simulation/StageScoreCalculator';
 import { isFullMoonDate } from '../util/moonPhase';
 import { StartlistQualityService } from '../game/StartlistQualityService';
+import { POT_PRESET_SKILL_COLUMNS } from '../../../shared/newgenPresetTiers';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -3423,6 +3424,48 @@ export class DatabaseService {
     if (!tableExists(db, 'riders')) return;
     if (!columnExists(db, 'riders', 'pot_preset_id')) {
       db.prepare('ALTER TABLE riders ADD COLUMN pot_preset_id INTEGER').run();
+    }
+    if (!columnExists(db, 'riders', 'pot_preset_key')) {
+      db.prepare('ALTER TABLE riders ADD COLUMN pot_preset_key TEXT').run();
+      this.migrierePotPresetSchluessel(db);
+    }
+  }
+
+  /**
+   * Traegt den Preset-Namen fuer Bestands-Newgens nach — aber nur dort, wo die
+   * gespeicherte Zeilen-ID nachweislich noch stimmt.
+   *
+   * Die Preset-Tabelle wird bei jedem Laden aus der CSV neu befuellt. Wurde die
+   * CSV zwischenzeitlich umgebaut, zeigt eine alte `pot_preset_id` auf eine
+   * voellig andere Zeile — gemessen an einem Spielstand passte danach genau
+   * einer von 156 Newgens noch in sein vermerktes Preset. Ein blindes
+   * Uebersetzen der IDs wuerde diesen Fehler festschreiben, deshalb wird jede
+   * Zuordnung geprueft: nur wenn alle Potenziale des Fahrers noch in den
+   * Grenzen dieses Presets liegen, gilt sie als echt. Alles andere bleibt NULL
+   * und zaehlt beim Deckel nicht mit — lieber nichts wissen als das Falsche.
+   */
+  private migrierePotPresetSchluessel(db: Database.Database): void {
+    if (!tableExists(db, 'newgen_potential_presets')) return;
+    try {
+      const skills = POT_PRESET_SKILL_COLUMNS;
+      const bedingung = skills
+        .map((s) => `r.pot_${s} BETWEEN p.min_pot_${s} - 0.000001 AND p.max_pot_${s} + 0.000001`)
+        .join(' AND ');
+      const ergebnis = db.prepare(`
+        UPDATE riders AS r SET pot_preset_key = (
+          SELECT p.display_name FROM newgen_potential_presets p
+          WHERE p.preset_id = r.pot_preset_id AND ${bedingung}
+        )
+        WHERE r.pot_preset_id IS NOT NULL
+      `).run();
+      const uebernommen = (db.prepare(
+        'SELECT COUNT(*) AS n FROM riders WHERE pot_preset_key IS NOT NULL',
+      ).get() as { n: number }).n;
+      if (ergebnis.changes > 0) {
+        console.log(`  Preset-Schluessel gesetzt: ${uebernommen} von ${ergebnis.changes} Newgens bestaetigt.`);
+      }
+    } catch (error) {
+      console.warn('Preset-Schluessel konnten nicht nachgetragen werden:', (error as Error).message);
     }
   }
 

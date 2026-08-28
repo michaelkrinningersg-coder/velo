@@ -1295,6 +1295,19 @@ export function seedNewgenPotentialPresets(db: Database.Database): void {
   const placeholders = new Array(insertColumns.split(',').length).fill('?').join(', ');
   const insert = db.prepare(`INSERT INTO newgen_potential_presets (${insertColumns}) VALUES (${placeholders})`);
 
+  // Der Name ist die Referenz, an der riders.pot_preset_key haengt — die
+  // preset_id wechselt bei jeder Neubefuellung. Zwei gleiche Namen wuerden
+  // zwei Presets zu einem Topf verschmelzen und den Deckel je Spitzen-Preset
+  // aushebeln, also lieber hier abbrechen als still danebenzaehlen.
+  const gesehen = new Set<string>();
+  for (const [index, row] of rows.entries()) {
+    const name = req(row, 'display_name', `newgen_potential_presets.csv Zeile ${index + 2}`);
+    if (gesehen.has(name)) {
+      throw new Error(`newgen_potential_presets.csv Zeile ${index + 2}: display_name "${name}" kommt mehrfach vor.`);
+    }
+    gesehen.add(name);
+  }
+
   for (const [index, row] of rows.entries()) {
     const ctx = `newgen_potential_presets.csv Zeile ${index + 2}`;
     const minValues = NEWGEN_SKILL_FIELDS.map((field) =>

@@ -38,25 +38,30 @@ export class RiderNewgenService {
       // Deckel je Spitzen-Preset: aus einem starken Preset duerfen hoechstens
       // so viele Fahrer gleichzeitig aktiv sein, wie seine Stufe erlaubt.
       // Fahrer in Rente zaehlen nicht mit, ihr Platz wird wieder frei.
-      const deckelJePreset = new Map<number, number>();
+      //
+      // Gezaehlt wird ueber den Preset-NAMEN, nicht ueber die Zeilen-ID: die
+      // Preset-Tabelle wird bei jedem Laden aus der CSV neu befuellt, eine
+      // gespeicherte ID zeigt nach einem Umbau der CSV auf eine andere Zeile.
+      // Der Deckel haette dann auf die falschen Toepfe gezaehlt.
+      const deckelJePreset = new Map<string, number>();
       for (const preset of potPresets) {
         const deckel = resolveNewgenPresetTier(resolvePresetMidOverall(preset)).deckel;
-        if (deckel !== null) deckelJePreset.set(Number(preset.preset_id), deckel);
+        if (deckel !== null) deckelJePreset.set(String(preset.display_name), deckel);
       }
-      const bestandJePreset = new Map<number, number>();
-      if (deckelJePreset.size > 0 && this.columnExists('riders', 'pot_preset_id')) {
+      const bestandJePreset = new Map<string, number>();
+      if (deckelJePreset.size > 0 && this.columnExists('riders', 'pot_preset_key')) {
         const rows = this.db.prepare(`
-          SELECT pot_preset_id AS presetId, COUNT(*) AS anzahl
+          SELECT pot_preset_key AS presetKey, COUNT(*) AS anzahl
           FROM riders
-          WHERE is_retired = 0 AND pot_preset_id IS NOT NULL
-          GROUP BY pot_preset_id
-        `).all() as Array<{ presetId: number; anzahl: number }>;
-        for (const row of rows) bestandJePreset.set(Number(row.presetId), Number(row.anzahl));
+          WHERE is_retired = 0 AND pot_preset_key IS NOT NULL
+          GROUP BY pot_preset_key
+        `).all() as Array<{ presetKey: string; anzahl: number }>;
+        for (const row of rows) bestandJePreset.set(String(row.presetKey), Number(row.anzahl));
       }
       const istVoll = (preset: any): boolean => {
-        const deckel = deckelJePreset.get(Number(preset.preset_id));
+        const deckel = deckelJePreset.get(String(preset.display_name));
         if (deckel === undefined) return false;
-        return (bestandJePreset.get(Number(preset.preset_id)) ?? 0) >= deckel;
+        return (bestandJePreset.get(String(preset.display_name)) ?? 0) >= deckel;
       };
 
       const typeRows = this.db.prepare(`SELECT id, type_key FROM type_rider`).all() as any[];
@@ -75,14 +80,14 @@ export class RiderNewgenService {
           first_name, last_name, country_id, birth_year,
           is_retired, skill_development, rider_type_id,
           overall_rating, pot_overall,
-          weather_profile_id, pot_preset_id,
+          weather_profile_id, pot_preset_id, pot_preset_key,
           ${skillColumns},
           ${potColumns}
         ) VALUES (
           ?, ?, ?, ?,
           0, ?, ?,
           ?, ?,
-          ?, ?,
+          ?, ?, ?,
           ${valuePlaceholders},
           ${valuePlaceholders}
         )
@@ -143,7 +148,8 @@ export class RiderNewgenService {
             potPreset = this.pickWeighted(auswahl, totalPotWeight);
           }
           const potPresetId = Number(potPreset.preset_id);
-          bestandJePreset.set(potPresetId, (bestandJePreset.get(potPresetId) ?? 0) + 1);
+          const potPresetKey = String(potPreset.display_name);
+          bestandJePreset.set(potPresetKey, (bestandJePreset.get(potPresetKey) ?? 0) + 1);
 
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {
@@ -207,7 +213,9 @@ export class RiderNewgenService {
             overallRating,
             potOverall,
             weatherProfileId,
-            potPresetId
+            // Die ID bleibt als Spur der Erzeugung stehen, massgeblich ist der Name.
+            potPresetId,
+            potPresetKey
           ];
 
           for (const key of skillKeys) insertParams.push(startValues[key]);

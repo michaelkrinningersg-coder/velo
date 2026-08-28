@@ -151,7 +151,14 @@ CREATE TABLE IF NOT EXISTS riders (
   -- Aus welchem Newgen-Potenzial-Preset der Fahrer stammt. NULL fuer alle
   -- eingelesenen Fahrer; nur Newgens tragen es. Der Newgen-Service zaehlt
   -- darueber, wie oft ein Spitzen-Preset schon in Gebrauch ist.
+  -- Zeilen-ID des Potenzial-Presets zum Zeitpunkt der Erzeugung. NICHT als
+  -- Referenz benutzen: die Preset-Tabelle wird bei jedem Laden aus der CSV neu
+  -- befuellt, die IDs sind damit nur innerhalb einer CSV-Generation gueltig.
+  -- Massgeblich ist pot_preset_key.
   pot_preset_id INTEGER,
+  -- display_name des Potenzial-Presets. Stabil ueber Neubefuellungen hinweg und
+  -- damit die Referenz, an der der Deckel je Spitzen-Preset haengt.
+  pot_preset_key TEXT,
   yearly_baseline_skills TEXT DEFAULT NULL
 );
 
@@ -584,7 +591,9 @@ CREATE INDEX IF NOT EXISTS idx_newgen_start_presets_type
 -- peak_age.
 CREATE TABLE IF NOT EXISTS newgen_potential_presets (
   preset_id              INTEGER PRIMARY KEY,
-  display_name           TEXT    NOT NULL,
+  -- Eindeutig, weil riders.pot_preset_key darauf verweist: die preset_id
+  -- wechselt bei jeder Neubefuellung aus der CSV, der Name nicht.
+  display_name           TEXT    NOT NULL UNIQUE,
   weight                 INTEGER NOT NULL CHECK(weight > 0),
   min_pot_flat               REAL    NOT NULL CHECK(min_pot_flat BETWEEN 0 AND 85),
   max_pot_flat               REAL    NOT NULL CHECK(max_pot_flat BETWEEN min_pot_flat AND 85),
