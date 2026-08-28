@@ -791,6 +791,17 @@ CREATE TABLE IF NOT EXISTS draft_history (
   draft_value REAL NOT NULL
 );
 
+-- Zielverteilung der Spezialisierungen je Team. Loest die drei festen
+-- Fokusplaetze (teams.ai_focus_1..3) als Steuergroesse des Drafts ab: jedes
+-- Team strebt fuer jede Spezialisierung einen Kaderanteil an, der Schwerpunkt
+-- steckt in der Hoehe des Anteils. Siehe shared/teamSpecTargets.ts.
+CREATE TABLE IF NOT EXISTS team_spec_targets (
+  team_id      INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  spec_id      INTEGER NOT NULL REFERENCES type_rider(id) ON DELETE CASCADE,
+  target_share INTEGER NOT NULL CHECK(target_share BETWEEN 0 AND 100),
+  PRIMARY KEY (team_id, spec_id)
+);
+
 CREATE TABLE IF NOT EXISTS team_preferences (
   id_pref INTEGER PRIMARY KEY AUTOINCREMENT,
   team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,

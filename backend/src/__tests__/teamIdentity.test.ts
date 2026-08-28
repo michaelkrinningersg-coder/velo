@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRAFT_VALUE_FALLOFF,
-  FOCUS_FACTORS,
   NATION_BLIND_OVERALL,
   NATION_FACTORS,
   STRONG_MISSING_FACTOR,
   resolveDraftWeight,
   resolveFocusFactor,
+  resolveQualityFactor,
   resolveLoyaltyFactor,
   resolveNationFactor,
   resolveStrongSpreadFactor,
@@ -21,6 +21,23 @@ import {
   resolveContractYears,
 } from '../../../shared/contractTerms';
 import { resolvePrestigeByRank, resolveTopRiderCaps } from '../game/TeamPrestigeService';
+import {
+  SHARE_DEFICIT_FACTOR_MAX,
+  SPEC_QUALITY_THRESHOLD,
+  QUALITY_GOAL_FACTOR,
+  QUALITY_GOAL_FACTOR_SECONDARY,
+  resolveGoalSpecIds,
+  type TeamSpecState,
+} from '../../../shared/teamSpecTargets';
+
+/** Schwerpunkt Berg 28, Huegel 23, Sprint 19, Rest je 10. */
+const zielAnteile = new Map<number, number>([[1, 28], [2, 23], [3, 19], [4, 10], [5, 10], [7, 10]]);
+const specZustand = (teil: Partial<TeamSpecState> = {}): TeamSpecState => ({
+  targetShares: zielAnteile,
+  actualShares: new Map<number, number>(),
+  coveredSpecIds: new Set<number>(),
+  ...teil,
+});
 
 const fahrer = (teil: Partial<DraftRiderInput> = {}): DraftRiderInput => ({
   riderId: 1, overall: 70, potential: 72, age: 26, draftValue: 70,
@@ -33,7 +50,7 @@ const team = (teil: Partial<DraftTeamInput> = {}): DraftTeamInput => ({
   nationKindByCountryId: new Map<number, NationPreferenceKind>([[7, 'home'], [3, 'neighbour'], [11, 'scouting']]),
   openQuotaSpecIds: new Set<number>(), quotaSpecIdsCountingSecondary: new Set<number>([4, 5]),
   strongCountBySpecId: new Map(), strongTargetBySpecId: new Map(),
-  focusShare: 0, rankIndex: 0, ...teil,
+  focusShare: 0, specState: specZustand(), rankIndex: 0, ...teil,
 });
 
 const keineKappe = { factor: 1, blocked: false, label: null };
@@ -54,20 +71,66 @@ describe('Nationenbindung im Draft', () => {
   });
 });
 
-describe('Teamfokus', () => {
+describe('Zielverteilung der Spezialisierungen', () => {
   it('wirkt voll bei leerem Kader und verschwindet am Zielanteil', () => {
-    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), team({ focusShare: 0 })))
-      .toBeCloseTo(FOCUS_FACTORS[0], 6);
-    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), team({ focusShare: 0.9 }))).toBe(1);
+    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), team()))
+      .toBeCloseTo(SHARE_DEFICIT_FACTOR_MAX, 6);
+    const erfuellt = team({ specState: specZustand({ actualShares: new Map([[1, 28]]) }) });
+    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), erfuellt)).toBe(1);
+    // Ueber dem Ziel bleibt es bei 1, es gibt keinen Abschlag.
+    const ueber = team({ specState: specZustand({ actualShares: new Map([[1, 40]]) }) });
+    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), ueber)).toBe(1);
   });
 
-  it('stuft die drei Fokusplaetze ab', () => {
-    const t = team({ focusShare: 0 });
-    expect(resolveFocusFactor(fahrer({ specialization1Id: 1 }), t)).toBeGreaterThan(
-      resolveFocusFactor(fahrer({ specialization1Id: 2 }), t));
-    expect(resolveFocusFactor(fahrer({ specialization1Id: 2 }), t)).toBeGreaterThan(
-      resolveFocusFactor(fahrer({ specialization1Id: 3 }), t));
-    expect(resolveFocusFactor(fahrer({ specialization1Id: 4 }), t)).toBe(1);
+  it('stuft nach der Hoehe des Zielanteils ab, laesst aber keine Spezialisierung aussen vor', () => {
+    const t = team();
+    const berg = resolveFocusFactor(fahrer({ specialization1Id: 1 }), t);
+    const sprint = resolveFocusFactor(fahrer({ specialization1Id: 3 }), t);
+    const pflaster = resolveFocusFactor(fahrer({ specialization1Id: 5 }), t);
+    // Bei leerem Kader ist die relative Luecke ueberall 100 Prozent - der
+    // Unterschied entsteht erst, wenn der Kader sich fuellt.
+    expect(berg).toBeCloseTo(sprint, 6);
+    expect(pflaster).toBeGreaterThan(1);
+
+    // Mit halb gefuelltem Schwerpunkt zieht die schwaecher besetzte Spec staerker.
+    const teilweise = team({ specState: specZustand({ actualShares: new Map([[1, 25], [5, 2]]) }) });
+    expect(resolveFocusFactor(fahrer({ specialization1Id: 5 }), teilweise))
+      .toBeGreaterThan(resolveFocusFactor(fahrer({ specialization1Id: 1 }), teilweise));
+  });
+
+  it('kennt keine Spezialisierung ausserhalb der Zielverteilung', () => {
+    // Der Angreifer (6) ist bewusst nicht Teil der Verteilung.
+    expect(resolveFocusFactor(fahrer({ specialization1Id: 6 }), team())).toBe(1);
+  });
+});
+
+describe('Qualitaetsziel je Spezialisierung', () => {
+  it('bevorzugt den Fahrer, der eine offene Spezialisierung ueber die Schwelle hebt', () => {
+    const stark = fahrer({ specialization1Id: 1, overall: SPEC_QUALITY_THRESHOLD + 1 });
+    expect(resolveQualityFactor(stark, team())).toBe(QUALITY_GOAL_FACTOR);
+  });
+
+  it('faellt weg, sobald die Spezialisierung bedient ist', () => {
+    const t = team({ specState: specZustand({ coveredSpecIds: new Set([1]) }) });
+    expect(resolveQualityFactor(fahrer({ specialization1Id: 1, overall: 80 }), t)).toBe(1);
+  });
+
+  it('greift nicht unterhalb der Schwelle', () => {
+    expect(resolveQualityFactor(fahrer({ specialization1Id: 1, overall: SPEC_QUALITY_THRESHOLD }), team())).toBe(1);
+  });
+
+  it('wirkt ausserhalb der angestrebten Spezialisierungen schwaecher', () => {
+    // Zeitfahren (4) liegt bei 10 Prozent und ist damit kein Ziel.
+    const zf = fahrer({ specialization1Id: 4, overall: SPEC_QUALITY_THRESHOLD + 1 });
+    expect(resolveQualityFactor(zf, team())).toBe(QUALITY_GOAL_FACTOR_SECONDARY);
+  });
+
+  it('zaehlt Pflaster immer zu den Zielen, auch bei niedrigem Anteil', () => {
+    const ziele = resolveGoalSpecIds(zielAnteile);
+    expect(ziele.has(5)).toBe(true);
+    expect([...ziele].sort()).toEqual([1, 2, 3, 5]);
+    const pf = fahrer({ specialization1Id: 5, overall: SPEC_QUALITY_THRESHOLD + 1 });
+    expect(resolveQualityFactor(pf, team())).toBe(QUALITY_GOAL_FACTOR);
   });
 });
 

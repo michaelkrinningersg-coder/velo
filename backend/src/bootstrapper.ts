@@ -1066,6 +1066,28 @@ export function seedTeamPreferences(db: Database.Database): void {
   console.log(`  ${rows.length} Team-Praeferenzen eingefuegt.`);
 }
 
+export function seedTeamSpecTargets(db: Database.Database): void {
+  const rows = readCsv('team_spec_targets.csv');
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO team_spec_targets (team_id, spec_id, target_share)
+    VALUES (?, ?, ?)
+  `);
+  const summeJeTeam = new Map<number, number>();
+  for (const [index, row] of rows.entries()) {
+    const ctx = `team_spec_targets.csv Zeile ${index + 2}`;
+    const teamId = int(req(row, 'team_id', ctx), ctx);
+    const anteil = int(req(row, 'target_share', ctx), ctx);
+    insert.run(teamId, int(req(row, 'spec_id', ctx), ctx), anteil);
+    summeJeTeam.set(teamId, (summeJeTeam.get(teamId) ?? 0) + anteil);
+  }
+  for (const [teamId, summe] of summeJeTeam) {
+    if (summe !== 100) {
+      throw new Error(`team_spec_targets.csv: Team ${teamId} hat Zielanteile von ${summe} statt 100 Prozent.`);
+    }
+  }
+  console.log(`  ${rows.length} Spezialisierungs-Zielanteile eingefuegt.`);
+}
+
 function seedContracts(db: Database.Database): void {
   const currentSeason = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
   if (!currentSeason) {
@@ -1389,6 +1411,7 @@ export function bootstrap(force = false): void {
     seedStages(db);
     seedRiders(db);
     seedTeamPreferences(db);
+    seedTeamSpecTargets(db);
     const currentSeason = seedGameState(db);
 
     new RiderNewgenService(db).createYearStartNewgens(currentSeason);

@@ -11,6 +11,7 @@ import {
   seedNewgenStartPresets,
   seedQuickSimProfiles,
   seedTeamPreferences,
+  seedTeamSpecTargets,
 } from '../bootstrapper';
 import { forgetTableExistence, resolveDataCsvDir } from './mappers';
 import { ContractService } from '../game/ContractService';
@@ -3071,6 +3072,25 @@ export class DatabaseService {
     }
   }
 
+  private ensureTeamSpecTargets(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS team_spec_targets (
+        team_id      INTEGER NOT NULL,
+        spec_id      INTEGER NOT NULL,
+        target_share INTEGER NOT NULL,
+        PRIMARY KEY (team_id, spec_id)
+      );
+    `);
+    try {
+      db.transaction(() => {
+        db.prepare('DELETE FROM team_spec_targets').run();
+        seedTeamSpecTargets(db);
+      })();
+    } catch (error) {
+      console.warn('Spezialisierungs-Zielanteile konnten nicht geladen werden:', (error as Error).message);
+    }
+  }
+
   private ensureRaceProgramSchema(db: Database.Database): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS race_programs (
@@ -3571,6 +3591,7 @@ export class DatabaseService {
     this.ensureResultsFlatSchema(db);
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
+    this.ensureTeamSpecTargets(db);
     this.ensureReferenceData(db);
     this.ensureNationalSelectionTeam(db);
     this.ensureDayChangeIndexes(db);

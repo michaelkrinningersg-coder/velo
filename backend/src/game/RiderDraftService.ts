@@ -9,6 +9,14 @@ import {
 } from '../../../shared/draftWeights';
 import { resolveContractYears } from '../../../shared/contractTerms';
 import { NATIONAL_SELECTION_TEAM_ID } from '../simulation/championships';
+import {
+  TARGET_SPEC_IDS,
+  SPEC_QUALITY_THRESHOLD,
+  resolveActualShares,
+  resolveCoveredSpecIds,
+  resolveGoalSpecIds,
+  type TeamSpecState,
+} from '../../../shared/teamSpecTargets';
 import { TeamPrestigeService, resolveTopRiderCaps } from './TeamPrestigeService';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
@@ -466,6 +474,24 @@ export class RiderDraftService {
     // Gemessen hatten sechs Teams keinen einzigen Landsmann im Kader.
     if (teamRow?.country_id != null) nationKindByCountryId.set(teamRow.country_id, 'home');
 
+    // Zielverteilung der Spezialisierungen. Fehlt sie (alter Spielstand ohne
+    // Tabelle), tragen die drei Fokusplaetze die alten Anteile nach.
+    const targetShares = new Map<number, number>();
+    for (const row of this.db.prepare(
+      'SELECT spec_id, target_share FROM team_spec_targets WHERE team_id = ?',
+    ).all(teamId) as Array<{ spec_id: number; target_share: number }>) {
+      targetShares.set(row.spec_id, row.target_share);
+    }
+    if (targetShares.size === 0) {
+      for (const specId of TARGET_SPEC_IDS) targetShares.set(specId, 10);
+      const bonus = [18, 13, 9];
+      focusSpecIds.forEach((specId, i) => {
+        if (specId != null && targetShares.has(specId)) {
+          targetShares.set(specId, (targetShares.get(specId) ?? 10) + bonus[i]);
+        }
+      });
+    }
+
     // Pool: global beste 60, die eigenen auslaufenden Fahrer, dazu die besten
     // je bevorzugter Nation und je Fokusspezialisierung. Siehe die Konstanten
     // oben — ohne die beiden letzten Gruppen haetten Nation und Fokus nichts,
@@ -476,6 +502,8 @@ export class RiderDraftService {
     for (const r of freeAgents) {
       if (r.old_team_id === teamId) dazu(r);
     }
+    const zielSpecs = resolveGoalSpecIds(targetShares);
+    for (const specId of focusSpecIds) if (specId != null) zielSpecs.add(specId);
     const proNation = new Map<number, number>();
     const proFokus = new Map<number, number>();
     for (const r of freeAgents) {
@@ -483,7 +511,10 @@ export class RiderDraftService {
         const n = proNation.get(r.country_id) ?? 0;
         if (n < DRAFT_POOL_PER_NATION) { proNation.set(r.country_id, n + 1); dazu(r); }
       }
-      if (r.specialization_1_id != null && focusSpecIds.includes(r.specialization_1_id)) {
+      // Nicht nur die Fokusspezialisierungen: der Pool muss fuer *jede*
+      // angestrebte Spezialisierung Kandidaten enthalten, sonst hat der
+      // Zielanteil nichts, worauf er wirken koennte.
+      if (r.specialization_1_id != null && zielSpecs.has(r.specialization_1_id)) {
         const n = proFokus.get(r.specialization_1_id) ?? 0;
         if (n < DRAFT_POOL_PER_FOCUS) { proFokus.set(r.specialization_1_id, n + 1); dazu(r); }
       }
@@ -521,6 +552,12 @@ export class RiderDraftService {
     }
     const focusShare = kader.length > 0 ? imFokus / kader.length : 0;
 
+    const specState: TeamSpecState = {
+      targetShares,
+      actualShares: resolveActualShares(kader.map((r) => ({ specId: r.specId }))),
+      coveredSpecIds: resolveCoveredSpecIds(kader.map((r) => ({ specId: r.specId, overall: r.overall }))),
+    };
+
     // Zielwert starker Fahrer je Spezialisierung aus der tatsaechlichen
     // Knappheit: bei 10 starken Pflasterfahrern und 25 Teams ist er 1.
     const teamCount = Math.max(1, rankedTeamIds.length);
@@ -546,6 +583,7 @@ export class RiderDraftService {
       strongCountBySpecId,
       strongTargetBySpecId,
       focusShare,
+      specState,
       rankIndex,
     };
 

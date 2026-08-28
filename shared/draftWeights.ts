@@ -23,6 +23,13 @@
  */
 
 /** Punkte Draftwert, um die das Gewicht auf 1/e faellt. */
+import {
+  resolveShareDeficitFactor,
+  resolveQualityGoalFactor,
+  resolveGoalSpecIds,
+  type TeamSpecState,
+} from './teamSpecTargets';
+
 export const DRAFT_VALUE_FALLOFF = 4.0;
 
 /** Faktoren der Nationenbindung. Siehe `NationPreferenceKind`. */
@@ -115,6 +122,12 @@ export interface DraftTeamInput {
   strongTargetBySpecId: ReadonlyMap<number, number>;
   /** Anteil des Kaders in den drei Fokusspezialisierungen. */
   focusShare: number;
+  /**
+   * Ziel- und Ist-Anteile je Spezialisierung sowie die bereits ueber der
+   * Qualitaetsschwelle besetzten. Ersetzt die drei festen Fokusplaetze:
+   * jedes Team strebt fuer jede Spezialisierung einen Anteil an.
+   */
+  specState: TeamSpecState;
   /** Rang des Teams in der Draft-Reihenfolge, 0 ist das beste Team. */
   rankIndex: number;
 }
@@ -137,14 +150,26 @@ export function resolveNationFactor(rider: DraftRiderInput, team: DraftTeamInput
 }
 
 /**
- * Faktor des Teamfokus. Er schrumpft, je naeher der Kader am Zielanteil ist —
- * ein Team, das seine 45 % beisammen hat, nimmt wieder den besten Fahrer.
+ * Faktor aus der Zielverteilung: wie weit liegt der Kaderanteil dieser
+ * Spezialisierung unter ihrem Ziel. Ersetzt den alten Fokusfaktor, der nur
+ * drei Spezialisierungen kannte und alle uebrigen ignorierte.
  */
 export function resolveFocusFactor(rider: DraftRiderInput, team: DraftTeamInput): number {
-  const rang = team.focusSpecIds.findIndex((specId) => specId != null && specId === rider.specialization1Id);
-  if (rang < 0 || rang >= FOCUS_FACTORS.length) return 1;
-  const luecke = Math.max(0, Math.min(1, (FOCUS_TARGET_SHARE - team.focusShare) / FOCUS_TARGET_SHARE));
-  return 1 + ((FOCUS_FACTORS[rang] as number) - 1) * luecke;
+  return resolveShareDeficitFactor(rider.specialization1Id, team.specState);
+}
+
+/**
+ * Faktor des Qualitaetsziels: ein Fahrer, der eine noch unbesetzte
+ * Spezialisierung ueber die Schwelle hebt, wird deutlich bevorzugt - bei den
+ * angestrebten Spezialisierungen staerker als bei den uebrigen.
+ */
+export function resolveQualityFactor(rider: DraftRiderInput, team: DraftTeamInput): number {
+  return resolveQualityGoalFactor(
+    rider.specialization1Id,
+    rider.overall,
+    team.specState,
+    resolveGoalSpecIds(team.specState.targetShares),
+  );
 }
 
 /** Faktor der Loyalitaet gegenueber einem eigenen auslaufenden Fahrer. */
@@ -210,7 +235,8 @@ export function resolveDraftWeight(
   };
 
   anwenden(resolveNationFactor(rider, team), 'Nation');
-  anwenden(resolveFocusFactor(rider, team), 'Teamfokus');
+  anwenden(resolveFocusFactor(rider, team), 'Zielanteil');
+  anwenden(resolveQualityFactor(rider, team), 'Qualitaetsziel');
   anwenden(resolveLoyaltyFactor(rider, team), 'Loyalitaet');
   anwenden(resolveQuotaFactor(rider, team), 'Quote');
   anwenden(resolveStrongSpreadFactor(rider, team), 'Spitzenverteilung');
