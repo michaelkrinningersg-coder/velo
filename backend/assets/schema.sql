@@ -795,6 +795,20 @@ CREATE TABLE IF NOT EXISTS draft_history (
 -- Fokusplaetze (teams.ai_focus_1..3) als Steuergroesse des Drafts ab: jedes
 -- Team strebt fuer jede Spezialisierung einen Kaderanteil an, der Schwerpunkt
 -- steckt in der Hoehe des Anteils. Siehe shared/teamSpecTargets.ts.
+-- Qualitaet der Startliste je Rennen und Saison, einmal beim Rennstart
+-- berechnet und danach unveraendert. Sie laesst sich nicht nachrechnen: die
+-- Startliste einer vergangenen Saison bleibt nirgends erhalten. Siehe
+-- shared/startlistQuality.ts.
+CREATE TABLE IF NOT EXISTS race_startlist_quality (
+  race_id    INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  season     INTEGER NOT NULL,
+  score      REAL,             -- 0 bis 100, NULL solange niemand Punkte hat
+  raw_points INTEGER NOT NULL, -- Summe der Karrierepunkte der Starter
+  max_points INTEGER NOT NULL, -- staerkstmoegliches Feld gleicher Groesse
+  starters   INTEGER NOT NULL,
+  PRIMARY KEY (race_id, season)
+);
+
 CREATE TABLE IF NOT EXISTS team_spec_targets (
   team_id      INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   spec_id      INTEGER NOT NULL REFERENCES type_rider(id) ON DELETE CASCADE,

@@ -3072,6 +3072,20 @@ export class DatabaseService {
     }
   }
 
+  private ensureStartlistQualityTable(db: Database.Database): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS race_startlist_quality (
+        race_id    INTEGER NOT NULL,
+        season     INTEGER NOT NULL,
+        score      REAL,
+        raw_points INTEGER NOT NULL,
+        max_points INTEGER NOT NULL,
+        starters   INTEGER NOT NULL,
+        PRIMARY KEY (race_id, season)
+      );
+    `);
+  }
+
   private ensureTeamSpecTargets(db: Database.Database): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS team_spec_targets (
@@ -3592,6 +3606,7 @@ export class DatabaseService {
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureTeamSpecTargets(db);
+    this.ensureStartlistQualityTable(db);
     this.ensureReferenceData(db);
     this.ensureNationalSelectionTeam(db);
     this.ensureDayChangeIndexes(db);

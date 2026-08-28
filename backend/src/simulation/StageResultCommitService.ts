@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { StartlistQualityService } from '../game/StartlistQualityService';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -330,6 +331,22 @@ export class StageResultCommitService {
     superTeamId?: number,
   ): StageResultCommitResponse {
     const { race, stage, riders, teamsById } = this.loadStageContext(stageId);
+
+    // Startlisten-Qualitaet festschreiben, solange die Startliste noch steht.
+    // Nachtraeglich geht es nicht: `active_race_entries` haelt immer nur die
+    // laufende Saison. Der Aufruf ist idempotent und schreibt je Rennen und
+    // Saison genau einmal.
+    if (stage.stageNumber === 1) {
+      try {
+        const saison = Number(String(stage.date).slice(0, 4));
+        if (Number.isFinite(saison)) {
+          new StartlistQualityService(this.db).erfasseRennstart(race.id, saison);
+        }
+      } catch (error) {
+        // Eine fehlende Kennzahl darf keine Etappe scheitern lassen.
+        console.warn('Startlisten-Qualitaet konnte nicht erfasst werden:', (error as Error).message);
+      }
+    }
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
     const mappedEntries = [...entries]
       .filter((entry: any) => Number.isFinite(entry.riderId))
