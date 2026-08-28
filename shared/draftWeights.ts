@@ -22,7 +22,14 @@
  * Free Agent.
  */
 
-/** Punkte Draftwert, um die das Gewicht auf 1/e faellt. */
+/**
+ * Punkte Draftwert, um die das Gewicht auf 1/e faellt.
+ *
+ * Bei 4,0 lag ein um zehn Punkte schwaecherer Fahrer noch bei 8 Prozent des
+ * Spitzengewichts — einzeln wenig, in der Masse des Pools zu viel. Zusammen mit
+ * dem Lostopf (RiderDraftService) geht ein Fahrer ueber 74 damit im Schnitt beim
+ * 41. statt beim 81. Pick weg.
+ */
 import {
   resolveShareDeficitFactor,
   resolveQualityGoalFactor,
@@ -30,7 +37,7 @@ import {
   type TeamSpecState,
 } from './teamSpecTargets';
 
-export const DRAFT_VALUE_FALLOFF = 4.0;
+export const DRAFT_VALUE_FALLOFF = 3.0;
 
 /** Faktoren der Nationenbindung. Siehe `NationPreferenceKind`. */
 export const NATION_FACTORS = { home: 3.0, neighbour: 2.1, scouting: 1.7, none: 1 } as const;

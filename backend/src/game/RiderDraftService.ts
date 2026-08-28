@@ -52,6 +52,18 @@ function hasMetQuota(specId: number, counts: { spec1: number; spec23: number }):
 /** Wie viele Free Agents je Pick nach reiner Qualitaet zur Auswahl stehen. */
 export const DRAFT_POOL_SIZE = 100;
 /**
+ * Aus so vielen Kandidaten zieht die KI tatsaechlich — den nach Gewicht besten
+ * des Pools. Die Liste, die der Spieler sieht, bleibt vollstaendig.
+ *
+ * Ohne diese Grenze verteilt sich die Wahrscheinlichkeit ueber den ganzen Pool.
+ * Ein einzelner schwacher Kandidat hat wenig Gewicht, achtzig davon zusammen
+ * aber mehr als die Spitze — gemessen ging ein Fahrer ueber 74 im Schnitt erst
+ * beim 81. Pick weg, der letzte erst beim 258. Die Faktoren fuer Nation,
+ * Zielanteil und Loyalitaet bleiben unangetastet: sie entscheiden, wer in
+ * diesen Lostopf kommt, und wirken damit sogar staerker als vorher.
+ */
+export const DRAFT_LOTTERY_SIZE = 20;
+/**
  * Wie viele zusaetzliche Fahrer je bevorzugter Nation und je
  * Fokusspezialisierung in den Pool kommen.
  *
@@ -306,7 +318,11 @@ export class RiderDraftService {
     let selectedOverride: { rider: any; weight: number; factors: string[] } | null = null;
     if (selectedIdx === -1) {
       // Automatische KI-Auswahl unter den nicht-gesperrten Pool-Kandidaten.
-      const eligibleIdx = poolDetails.map((p, idx) => (p.blocked ? -1 : idx)).filter(idx => idx >= 0);
+      const waehlbar = poolDetails.map((p, idx) => (p.blocked ? -1 : idx)).filter(idx => idx >= 0);
+      // Nur die schwersten Kandidaten kommen in den Topf, siehe DRAFT_LOTTERY_SIZE.
+      const eligibleIdx = waehlbar.length > DRAFT_LOTTERY_SIZE
+        ? [...waehlbar].sort((a, b) => weights[b] - weights[a]).slice(0, DRAFT_LOTTERY_SIZE)
+        : waehlbar;
       if (eligibleIdx.length > 0) {
         const candTotal = eligibleIdx.reduce((sum, idx) => sum + weights[idx], 0);
         selectedIdx = eligibleIdx[0];
