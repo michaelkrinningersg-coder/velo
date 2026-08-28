@@ -852,7 +852,14 @@ export function triggerDraftSchedule(): void {
   
   const speed = state.draftSpeedMultiplier;
   const index = state.draftOverlayCurrentIndex;
-  
+  const picks = state.draftOverlayPicks;
+
+  // Nach dem letzten Pick steht der Index bewusst eins hinter dem Ende (Spieler
+  // ist am Zug bzw. Praesentation neu geladen). Dann gibt es nichts aufzudecken
+  // und nichts weiterzuschalten - ohne diese Pruefung lief der Timer in einen
+  // undefinierten Pick.
+  if (!picks || index < 0 || index >= picks.length) return;
+
   if (!(state as any).draftRevealShown) {
     const delay = 2000 / speed;
     setWorkerTimeout(() => {
@@ -880,7 +887,8 @@ export function triggerDraftSchedule(): void {
 
 export function revealCurrentPick(): void {
   const index = state.draftOverlayCurrentIndex;
-  const pick = state.draftOverlayPicks![index];
+  const pick = state.draftOverlayPicks?.[index];
+  if (!pick) return;
   (state as any).draftRevealShown = true;
   
   // 1. Roster counts update including new drafted rider
