@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DAYS_PER_YEAR,
   MENTOR_BONUS,
+  PROGRESSION_DECLINE_DEPTH,
   PROGRESSION_FLOOR_AGE,
+  PROGRESSION_MIN_FLOOR,
   RACE_DAY_BONUS_MAX,
   SKILL_PEAK_OFFSET,
   advanceSkill,
@@ -167,14 +169,18 @@ describe('Aufbau', () => {
 });
 
 describe('Sockel und Abbau', () => {
-  it('setzt den Sockel zwanzig Punkte unter das Potenzial, nie unter fuenfzig', () => {
-    expect(resolveSkillFloor(85)).toBe(65);
-    expect(resolveSkillFloor(80)).toBe(60);
-    expect(resolveSkillFloor(70)).toBe(50);
-    expect(resolveSkillFloor(65)).toBe(50);
-    expect(resolveSkillFloor(50)).toBe(50);
+  it('setzt den Sockel um die Abbautiefe unter das Potenzial, nie unter fuenfzig', () => {
+    // An den Konstanten gemessen, nicht an festen Zahlen: die Aussage ist die
+    // Konstruktion, nicht der gerade eingestellte Wert.
+    expect(resolveSkillFloor(85)).toBe(85 - PROGRESSION_DECLINE_DEPTH);
+    expect(resolveSkillFloor(80)).toBe(80 - PROGRESSION_DECLINE_DEPTH);
+    // Unterhalb dieser Grenze bindet der Mindestsockel.
+    const grenze = PROGRESSION_MIN_FLOOR + PROGRESSION_DECLINE_DEPTH;
+    expect(resolveSkillFloor(grenze)).toBe(PROGRESSION_MIN_FLOOR);
+    expect(resolveSkillFloor(grenze - 5)).toBe(PROGRESSION_MIN_FLOOR);
+    expect(resolveSkillFloor(PROGRESSION_MIN_FLOOR)).toBe(PROGRESSION_MIN_FLOOR);
     for (let pot = 50; pot <= 85; pot += 1) {
-      expect(resolveSkillFloor(pot)).toBeGreaterThanOrEqual(50);
+      expect(resolveSkillFloor(pot)).toBeGreaterThanOrEqual(PROGRESSION_MIN_FLOOR);
       expect(resolveSkillFloor(pot)).toBeLessThanOrEqual(pot);
     }
   });
@@ -290,9 +296,10 @@ describe('Zusammenspiel ueber eine ganze Laufbahn', () => {
     for (const alter of [26, 30, 35, 40, PROGRESSION_FLOOR_AGE]) {
       expect(wertMit(alter, stark)).toBeGreaterThan(wertMit(alter, schwach));
     }
-    // Mit einem festen Sockel von 50 waeren am Ende beide gleich gewesen.
-    expect(wertMit(PROGRESSION_FLOOR_AGE, stark)).toBeCloseTo(65, 6);
-    expect(wertMit(PROGRESSION_FLOOR_AGE, schwach)).toBeCloseTo(50, 6);
+    // Mit einem fuer alle gleichen Sockel waeren am Ende beide gleich gewesen.
+    expect(wertMit(PROGRESSION_FLOOR_AGE, stark)).toBeCloseTo(resolveSkillFloor(85), 6);
+    expect(wertMit(PROGRESSION_FLOOR_AGE, schwach)).toBeCloseTo(resolveSkillFloor(70), 6);
+    expect(resolveSkillFloor(85)).toBeGreaterThan(resolveSkillFloor(70));
   });
 
   it('nimmt einen Fahrer aus einem alten Spielstand dort auf, wo er steht', () => {

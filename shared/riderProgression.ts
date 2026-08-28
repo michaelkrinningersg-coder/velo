@@ -52,8 +52,16 @@ export const PROGRESSION_FLOOR_AGE = 55;
 /** Tiefster Sockel — darunter faellt kein Skill, egal wie klein sein Potenzial ist. */
 export const PROGRESSION_MIN_FLOOR = 50;
 
-/** Wie weit ein Skill unter sein Potenzial faellt, solange der Sockel nicht greift. */
-export const PROGRESSION_DECLINE_DEPTH = 20;
+/**
+ * Wie weit ein Skill unter sein Potenzial faellt, solange die Untergrenze nicht
+ * greift.
+ *
+ * Von 20 auf 18 gesenkt, zusammen mit dem hoeheren Sockelalter. Anders als
+ * dieses verlangsamt die Tiefe den Abbau nicht nur, sie hebt auch sein Ziel:
+ * ein Potenzial von 85 endet bei 67 statt bei 65. Fahrer unter einem Potenzial
+ * von 68 merken davon nichts — dort bindet `PROGRESSION_MIN_FLOOR`.
+ */
+export const PROGRESSION_DECLINE_DEPTH = 18;
 
 /** Um so viel ist der Abbau vor dem Karriereende schneller als danach. */
 export const DECLINE_ACCELERATION_BEFORE_RETIREMENT = 3;
@@ -141,10 +149,10 @@ export function resolveTargetAge(peakAge: number, developmentValue: number): num
 /**
  * Der Sockel eines Skills — der Wert, auf dem er mit 43 steht.
  *
- * Zwanzig Punkte unter seinem Potenzial, aber nie unter fuenfzig. Damit bleibt
- * die Rangfolge der Fahrer bis zum Karriereende erhalten: wer ein Potenzial von
- * 85 hatte, steht am Ende bei 65, wer 68 hatte, bei 50. Mit einem fuer alle
- * gleichen Sockel waeren am Ende alle gleich.
+ * `PROGRESSION_DECLINE_DEPTH` Punkte unter seinem Potenzial, aber nie unter
+ * fuenfzig. Damit bleibt die Rangfolge der Fahrer bis zum Karriereende
+ * erhalten: wer ein Potenzial von 85 hatte, steht am Ende bei 67, wer 68 hatte,
+ * bei 50. Mit einem fuer alle gleichen Sockel waeren am Ende alle gleich.
  */
 export function resolveSkillFloor(potential: number): number {
   return Math.max(PROGRESSION_MIN_FLOOR, potential - PROGRESSION_DECLINE_DEPTH);
