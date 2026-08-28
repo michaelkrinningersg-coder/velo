@@ -8,6 +8,7 @@ import {
   type NationPreferenceKind,
 } from '../../../shared/draftWeights';
 import { resolveContractYears } from '../../../shared/contractTerms';
+import { NATIONAL_SELECTION_TEAM_ID } from '../simulation/championships';
 import { TeamPrestigeService, resolveTopRiderCaps } from './TeamPrestigeService';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
@@ -112,7 +113,7 @@ export class RiderDraftService {
     const resultRepo = new ResultRepository(this.db);
     const standings = resultRepo.getSeasonStandings(season - 1);
     let rankedTeamIds = standings.teamStandings.map((t: any) => t.teamId).filter((id: any): id is number => id !== null);
-    
+
     // Falls keine Teams da sind, Fallback auf alle Division-1 Teams (WorldTour)
     if (rankedTeamIds.length === 0) {
       const wtTeams = this.db.prepare('SELECT id FROM teams WHERE division_id = 1 ORDER BY id ASC').all() as Array<{ id: number }>;
@@ -123,7 +124,10 @@ export class RiderDraftService {
         rankedTeamIds = allTeams.map(t => t.id);
       }
     }
-    return rankedTeamIds;
+    // Die Nationalauswahl ist ein Pseudo-Team fuer die Landesmeisterschaften.
+    // Sie steht ab der ersten Meisterschaft in der Saisonwertung und rutscht
+    // damit in die Draft-Reihenfolge - mit leerem Kader und 40 freien Plaetzen.
+    return rankedTeamIds.filter((id) => id !== NATIONAL_SELECTION_TEAM_ID);
   }
 
   public getNextPickState(season: number): { nextTeamId: number | null; isPlayerTeam: boolean; currentRound: number; currentPickNumber: number; finished: boolean } {
@@ -186,6 +190,7 @@ export class RiderDraftService {
     let nextTeamId: number | null = null;
     let historyIndex = 0;
     let allTeamsFull = false;
+    let leerlaufAbschnitte = 0;
 
     while (true) {
       const currentChunk = draftSequenceChunks[sequenceIndex % draftSequenceChunks.length];
@@ -223,18 +228,18 @@ export class RiderDraftService {
       }
 
       if (!anyTeamCanPick) {
-        let totalFreeSlots = 0;
-        for (const teamId of rankedTeamIds) {
-          const count = teamCountsMap.get(teamId) || 0;
-          const maxRosterSize = teamLimitsMap.get(teamId) ?? 30;
-          if (count < maxRosterSize) {
-            totalFreeSlots += (maxRosterSize - count);
-          }
-        }
-        if (totalFreeSlots === 0) {
+        // Ein vollstaendiger Umlauf durch die Reihenfolge, ohne dass irgendein
+        // Team ziehen konnte: der Draft ist zu Ende. Frueher wurde stattdessen
+        // die Summe der freien Plaetze ueber *alle* Teams geprueft - freie
+        // Plaetze bei einem Team, das die Reihenfolge gar nicht adressiert,
+        // liessen die Schleife dann ewig laufen.
+        leerlaufAbschnitte++;
+        if (leerlaufAbschnitte >= draftSequenceChunks.length) {
           allTeamsFull = true;
           break;
         }
+      } else {
+        leerlaufAbschnitte = 0;
       }
 
       sequenceIndex++;
