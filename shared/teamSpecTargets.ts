@@ -33,6 +33,18 @@ export type TargetSpecId = (typeof TARGET_SPEC_IDS)[number];
 export const SPEC_QUALITY_THRESHOLD = 72;
 
 /**
+ * Ein Talent zaehlt genauso, wenn es die Schwelle absehbar erreicht: sein
+ * Potential liegt um diesen Abstand ueber der Schwelle, es ist volljaehrig und
+ * noch mindestens zwei Jahre von seinem Zenit entfernt.
+ *
+ * Das gibt Teams einen zweiten Weg zur Abdeckung — wichtig bei Pflaster und
+ * Flach, wo es kaum fertige Fahrer ueber der Schwelle gibt.
+ */
+export const SPEC_TALENT_POTENTIAL_MARGIN = 3;
+export const SPEC_TALENT_MIN_AGE = 18;
+export const SPEC_TALENT_PEAK_MARGIN = 2;
+
+/**
  * So viele Spezialisierungen soll ein Team mit mindestens einem Fahrer ueber
  * der Schwelle besetzen. Welche, ergibt sich aus den hoechsten Zielanteilen —
  * so jagt nicht jedes Team dieselben drei.
@@ -58,6 +70,27 @@ export const SHARE_DEFICIT_FACTOR_MAX = 2.4;
 export const QUALITY_GOAL_FACTOR = 3.0;
 /** Abgeschwaechter Zuschlag ausserhalb der angestrebten Spezialisierungen. */
 export const QUALITY_GOAL_FACTOR_SECONDARY = 1.6;
+
+/** Fahrerdaten, die fuer die Abdeckung einer Spezialisierung zaehlen. */
+export interface SpecCoverageRider {
+  specId: number | null;
+  overall: number;
+  potential: number;
+  age: number;
+  peakAge: number | null;
+}
+
+/**
+ * Deckt dieser Fahrer eine Spezialisierung ab — entweder heute schon ueber der
+ * Schwelle, oder als Talent, das sie absehbar erreicht?
+ */
+export function decktSpecAb(fahrer: SpecCoverageRider): boolean {
+  if (fahrer.overall > SPEC_QUALITY_THRESHOLD) return true;
+  if (fahrer.peakAge == null) return false;
+  return fahrer.potential >= SPEC_QUALITY_THRESHOLD + SPEC_TALENT_POTENTIAL_MARGIN
+    && fahrer.age >= SPEC_TALENT_MIN_AGE
+    && fahrer.age <= fahrer.peakAge - SPEC_TALENT_PEAK_MARGIN;
+}
 
 export interface SpecTarget {
   specId: number;
@@ -106,15 +139,14 @@ export function resolveShareDeficitFactor(specId: number | null, zustand: TeamSp
  * unbesetzte Spezialisierung ueber die Schwelle hebt.
  */
 export function resolveQualityGoalFactor(
-  specId: number | null,
-  overall: number,
+  fahrer: SpecCoverageRider,
   zustand: TeamSpecState,
   goalSpecIds: Set<number>,
 ): number {
-  if (specId == null) return 1;
-  if (overall <= SPEC_QUALITY_THRESHOLD) return 1;
-  if (zustand.coveredSpecIds.has(specId)) return 1;
-  return goalSpecIds.has(specId) ? QUALITY_GOAL_FACTOR : QUALITY_GOAL_FACTOR_SECONDARY;
+  if (fahrer.specId == null) return 1;
+  if (!decktSpecAb(fahrer)) return 1;
+  if (zustand.coveredSpecIds.has(fahrer.specId)) return 1;
+  return goalSpecIds.has(fahrer.specId) ? QUALITY_GOAL_FACTOR : QUALITY_GOAL_FACTOR_SECONDARY;
 }
 
 /** Kaderanteile je Spezialisierung in Prozent. */
@@ -132,13 +164,14 @@ export function resolveActualShares(kader: Array<{ specId: number | null }>): Ma
   return anteile;
 }
 
-/** Spezialisierungen, in denen das Team schon einen Fahrer ueber der Schwelle hat. */
-export function resolveCoveredSpecIds(
-  kader: Array<{ specId: number | null; overall: number }>,
-): Set<number> {
+/**
+ * Spezialisierungen, die das Team schon abgedeckt hat — durch einen Fahrer
+ * ueber der Schwelle oder durch ein Talent, das sie absehbar erreicht.
+ */
+export function resolveCoveredSpecIds(kader: SpecCoverageRider[]): Set<number> {
   const gedeckt = new Set<number>();
   for (const fahrer of kader) {
-    if (fahrer.specId != null && fahrer.overall > SPEC_QUALITY_THRESHOLD) gedeckt.add(fahrer.specId);
+    if (fahrer.specId != null && decktSpecAb(fahrer)) gedeckt.add(fahrer.specId);
   }
   return gedeckt;
 }

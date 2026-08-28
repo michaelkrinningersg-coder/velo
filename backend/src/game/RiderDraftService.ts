@@ -441,7 +441,7 @@ export class RiderDraftService {
     const freeAgentsRaw = this.db.prepare(`
       SELECT
         r.id, r.first_name, r.last_name, r.birth_year,
-        r.overall_rating, r.pot_overall, r.decline_age, r.retirement_age,
+        r.overall_rating, r.pot_overall, r.peak_age, r.decline_age, r.retirement_age,
         r.specialization_1_id, r.specialization_2_id, r.specialization_3_id,
         r.country_id,
         (
@@ -539,10 +539,11 @@ export class RiderDraftService {
     }
 
     const kader = this.db.prepare(`
-      SELECT r.specialization_1_id AS specId, r.overall_rating AS overall
+      SELECT r.specialization_1_id AS specId, r.overall_rating AS overall,
+             r.pot_overall AS potential, r.birth_year AS birthYear, r.peak_age AS peakAge
       FROM contracts c JOIN riders r ON r.id = c.rider_id
       WHERE c.team_id = ? AND c.status IN ('active', 'future')
-    `).all(teamId) as Array<{ specId: number | null; overall: number }>;
+    `).all(teamId) as Array<{ specId: number | null; overall: number; potential: number; birthYear: number; peakAge: number | null }>;
     const strongCountBySpecId = new Map<number, number>();
     let imFokus = 0;
     for (const r of kader) {
@@ -555,7 +556,13 @@ export class RiderDraftService {
     const specState: TeamSpecState = {
       targetShares,
       actualShares: resolveActualShares(kader.map((r) => ({ specId: r.specId }))),
-      coveredSpecIds: resolveCoveredSpecIds(kader.map((r) => ({ specId: r.specId, overall: r.overall }))),
+      coveredSpecIds: resolveCoveredSpecIds(kader.map((r) => ({
+        specId: r.specId,
+        overall: r.overall,
+        potential: r.potential,
+        age: season - r.birthYear,
+        peakAge: r.peakAge,
+      }))),
     };
 
     // Zielwert starker Fahrer je Spezialisierung aus der tatsaechlichen
@@ -602,6 +609,7 @@ export class RiderDraftService {
         oldTeamId: rider.old_team_id,
         tenureSeasons: tenure.get(rider.id) ?? 0,
         isDeclining: rider.decline_age > 0 && age >= rider.decline_age,
+        peakAge: rider.peak_age ?? null,
       };
       // Der eigene Fahrer zaehlt schon fuer das Team — die Kappe gilt fuer ihn nicht.
       const kappe = rider.old_team_id === teamId

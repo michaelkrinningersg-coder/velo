@@ -26,6 +26,9 @@ import {
   SPEC_QUALITY_THRESHOLD,
   QUALITY_GOAL_FACTOR,
   QUALITY_GOAL_FACTOR_SECONDARY,
+  SPEC_TALENT_MIN_AGE,
+  SPEC_TALENT_POTENTIAL_MARGIN,
+  decktSpecAb,
   resolveGoalSpecIds,
   type TeamSpecState,
 } from '../../../shared/teamSpecTargets';
@@ -42,7 +45,7 @@ const specZustand = (teil: Partial<TeamSpecState> = {}): TeamSpecState => ({
 const fahrer = (teil: Partial<DraftRiderInput> = {}): DraftRiderInput => ({
   riderId: 1, overall: 70, potential: 72, age: 26, draftValue: 70,
   specialization1Id: 1, specialization2Id: null, specialization3Id: null,
-  countryId: 7, oldTeamId: null, tenureSeasons: 0, isDeclining: false, ...teil,
+  countryId: 7, oldTeamId: null, tenureSeasons: 0, isDeclining: false, peakAge: 26, ...teil,
 });
 
 const team = (teil: Partial<DraftTeamInput> = {}): DraftTeamInput => ({
@@ -123,6 +126,36 @@ describe('Qualitaetsziel je Spezialisierung', () => {
     // Zeitfahren (4) liegt bei 10 Prozent und ist damit kein Ziel.
     const zf = fahrer({ specialization1Id: 4, overall: SPEC_QUALITY_THRESHOLD + 1 });
     expect(resolveQualityFactor(zf, team())).toBe(QUALITY_GOAL_FACTOR_SECONDARY);
+  });
+
+  it('erkennt ein Talent als Abdeckung, auch unterhalb der Schwelle', () => {
+    // Potential 75, 20 Jahre alt, Zenit mit 26 - zaehlt.
+    const talent = fahrer({
+      specialization1Id: 1,
+      overall: 64,
+      potential: SPEC_QUALITY_THRESHOLD + SPEC_TALENT_POTENTIAL_MARGIN,
+      age: 20,
+      peakAge: 26,
+    });
+    expect(decktSpecAb({ specId: 1, overall: 64, potential: 75, age: 20, peakAge: 26 })).toBe(true);
+    expect(resolveQualityFactor(talent, team())).toBe(QUALITY_GOAL_FACTOR);
+  });
+
+  it('laesst ein Talent nicht zaehlen, wenn Potential, Alter oder Zenit nicht passen', () => {
+    const basis = { specId: 1, overall: 64, potential: 75, age: 20, peakAge: 26 };
+    // Potential zu niedrig
+    expect(decktSpecAb({ ...basis, potential: 74 })).toBe(false);
+    // Zu jung
+    expect(decktSpecAb({ ...basis, age: SPEC_TALENT_MIN_AGE - 1 })).toBe(false);
+    // Zu nah am Zenit: mit 25 bei Zenit 26 bleibt nur ein Jahr
+    expect(decktSpecAb({ ...basis, age: 25 })).toBe(false);
+    expect(decktSpecAb({ ...basis, age: 24 })).toBe(true);
+    // Ohne Zenitangabe kein Talentweg
+    expect(decktSpecAb({ ...basis, peakAge: null })).toBe(false);
+  });
+
+  it('zaehlt einen fertigen Fahrer weiterhin unabhaengig vom Alter', () => {
+    expect(decktSpecAb({ specId: 1, overall: 80, potential: 80, age: 34, peakAge: 27 })).toBe(true);
   });
 
   it('zaehlt Pflaster immer zu den Zielen, auch bei niedrigem Anteil', () => {

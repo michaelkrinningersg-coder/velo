@@ -105,6 +105,8 @@ export interface DraftRiderInput {
   tenureSeasons: number;
   /** Hat der Fahrer sein Decline Age erreicht? */
   isDeclining: boolean;
+  /** Alter des Leistungszenits. Ein Talent zaehlt bis zwei Jahre davor. */
+  peakAge: number | null;
 }
 
 export interface DraftTeamInput {
@@ -165,8 +167,13 @@ export function resolveFocusFactor(rider: DraftRiderInput, team: DraftTeamInput)
  */
 export function resolveQualityFactor(rider: DraftRiderInput, team: DraftTeamInput): number {
   return resolveQualityGoalFactor(
-    rider.specialization1Id,
-    rider.overall,
+    {
+      specId: rider.specialization1Id,
+      overall: rider.overall,
+      potential: rider.potential,
+      age: rider.age,
+      peakAge: rider.peakAge,
+    },
     team.specState,
     resolveGoalSpecIds(team.specState.targetShares),
   );
