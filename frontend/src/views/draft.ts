@@ -703,7 +703,8 @@ function createDraftOverlayElement(season: number): HTMLElement {
     <div style="display: flex; flex: 1; gap: 2rem; overflow: hidden; min-height: 0;">
       <!-- Linke Spalte: Kandidaten (3-Spalten) -->
       <div style="flex: 2.3; display: flex; flex-direction: column; min-height: 0;">
-        <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Kandidaten-Pool</h3>
+        <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Kandidaten-Pool</h3>
+        <div id="draft-overlay-candidates-controls"></div>
         <div id="draft-overlay-candidates-list" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem 0.6rem; overflow-y: auto; flex: 1; padding-right: 0.5rem;"></div>
       </div>
       
@@ -780,6 +781,18 @@ function createDraftOverlayElement(season: number): HTMLElement {
       return;
     }
     
+    if (target.id === 'draft-sort-dir') {
+      draftListSteuerung.absteigend = !draftListSteuerung.absteigend;
+      aktualisiereKandidatenListe();
+      return;
+    }
+
+    if (target.id === 'draft-filter-reset') {
+      Object.assign(draftListSteuerung, draftListSteuerungStandard());
+      aktualisiereKandidatenListe(true);
+      return;
+    }
+
     if (target.id === 'draft-overlay-prev-btn' || target.closest('#draft-overlay-prev-btn')) {
       if (state.draftOverlayCurrentIndex > 0) {
         const autoCheckbox = document.getElementById('draft-overlay-auto-checkbox') as HTMLInputElement;
@@ -829,6 +842,19 @@ function createDraftOverlayElement(season: number): HTMLElement {
       } else {
         clearDraftTimeouts();
       }
+      return;
+    }
+    if (uebernimmDraftListSteuerung(target)) {
+      aktualisiereKandidatenListe();
+    }
+  });
+
+  // Zahlenfelder sollen schon beim Tippen wirken, nicht erst beim Verlassen.
+  overlay.addEventListener('input', (event) => {
+    const target = event.target as HTMLInputElement;
+    if (target.tagName !== 'INPUT' || target.type !== 'number') return;
+    if (uebernimmDraftListSteuerung(target)) {
+      aktualisiereKandidatenListe();
     }
   });
   
@@ -970,6 +996,107 @@ export function revealCurrentPick(): void {
   triggerDraftSchedule();
 }
 
+import {
+  DRAFT_SORT_LABELS,
+  applyDraftListSteuerung as filtereKandidaten,
+  draftAlter as berechneDraftAlter,
+  draftListSteuerungStandard,
+  type DraftListSteuerung,
+  type DraftSortKey,
+} from './draftListFilter';
+
+/**
+ * Einstellung der Kandidatenliste. Sie haengt am Modul, nicht am DOM: die
+ * Liste wird waehrend eines Zuges mehrfach neu gezeichnet, und die Auswahl
+ * des Spielers soll das ueberleben.
+ */
+const draftListSteuerung: DraftListSteuerung = draftListSteuerungStandard();
+
+function draftSaison(): number {
+  return state.draftSelectedSeason ?? state.currentSave?.currentSeason ?? 2026;
+}
+
+function draftAlter(c: any): number {
+  return berechneDraftAlter(c, draftSaison());
+}
+
+function applyDraftListSteuerung(kandidaten: any[]): any[] {
+  return filtereKandidaten(kandidaten, draftListSteuerung, draftSaison());
+}
+
+/**
+ * Uebernimmt eine Aenderung aus der Steuerleiste. Gibt zurueck, ob die Liste
+ * daraufhin neu gezeichnet werden muss.
+ */
+function uebernimmDraftListSteuerung(ziel: HTMLInputElement | HTMLSelectElement): boolean {
+  const zahl = (wert: string): number | null => {
+    const n = Number.parseInt(wert, 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  switch (ziel.id) {
+    case 'draft-sort-key':        draftListSteuerung.sortKey = ziel.value as DraftSortKey; return true;
+    case 'draft-filter-team':     draftListSteuerung.team = ziel.value; return true;
+    case 'draft-filter-land':     draftListSteuerung.land = ziel.value; return true;
+    case 'draft-filter-spez':     draftListSteuerung.spez = ziel.value; return true;
+    case 'draft-filter-ovr':      draftListSteuerung.minOverall = zahl(ziel.value); return true;
+    case 'draft-filter-pot':      draftListSteuerung.minPotential = zahl(ziel.value); return true;
+    case 'draft-filter-alter':    draftListSteuerung.maxAlter = zahl(ziel.value); return true;
+    case 'draft-filter-siege':    draftListSteuerung.minSiege = zahl(ziel.value); return true;
+    case 'draft-filter-uci':      draftListSteuerung.maxUci = zahl(ziel.value); return true;
+    case 'draft-filter-waehlbar': draftListSteuerung.nurWaehlbare = (ziel as HTMLInputElement).checked; return true;
+    default: return false;
+  }
+}
+
+function draftOption(wert: string, label: string, aktiv: string): string {
+  return `<option value="${esc(wert)}"${wert === aktiv ? ' selected' : ''}>${esc(label)}</option>`;
+}
+
+function draftZahlfeld(id: string, platzhalter: string, wert: number | null): string {
+  return `<input id="${id}" type="number" placeholder="${esc(platzhalter)}" value="${wert ?? ''}"
+    style="width: 5.4rem; padding: 0.2rem 0.35rem; font-size: 0.72rem; background: rgba(255,255,255,0.04);
+           border: 1px solid rgba(255,255,255,0.12); border-radius: 5px; color: #e2e8f0;">`;
+}
+
+/** Steuerleiste ueber der Kandidatenliste. */
+function renderDraftListControls(alle: any[], sichtbar: number): string {
+  const f = draftListSteuerung;
+  const teams = [...new Set(alle.map((c: any) => c.oldTeamName).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'de'));
+  const laender = [...new Set(alle.map((c: any) => c.countryCode).filter(Boolean))].sort();
+  const spez = [...new Set(alle.flatMap((c: any) => [c.specialization1, c.specialization2, c.specialization3]).filter(Boolean))].sort();
+  const sel = 'padding: 0.2rem 0.35rem; font-size: 0.72rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 5px; color: #e2e8f0;';
+  return `
+    <div id="draft-list-controls" style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin-bottom: 0.6rem; flex-shrink: 0;">
+      <label style="font-size: 0.7rem; color: #94a3b8;">Sortieren</label>
+      <select id="draft-sort-key" style="${sel}">
+        ${DRAFT_SORT_LABELS.map(([k, l]) => draftOption(k, l, f.sortKey)).join('')}
+      </select>
+      <button id="draft-sort-dir" title="Richtung umkehren" style="${sel} cursor: pointer; min-width: 2rem;">${f.absteigend ? '\u25bc' : '\u25b2'}</button>
+
+      <select id="draft-filter-team" style="${sel}">
+        ${draftOption('', 'Team: alle', f.team)}${teams.map((t: any) => draftOption(String(t), String(t), f.team)).join('')}
+      </select>
+      <select id="draft-filter-land" style="${sel}">
+        ${draftOption('', 'Land: alle', f.land)}${laender.map((l: any) => draftOption(String(l), String(l), f.land)).join('')}
+      </select>
+      <select id="draft-filter-spez" style="${sel}">
+        ${draftOption('', 'Typ: alle', f.spez)}${spez.map((sp: any) => draftOption(String(sp), formatSpecName(sp) || String(sp), f.spez)).join('')}
+      </select>
+
+      ${draftZahlfeld('draft-filter-ovr', 'Faeh. ab', f.minOverall)}
+      ${draftZahlfeld('draft-filter-pot', 'Pot. ab', f.minPotential)}
+      ${draftZahlfeld('draft-filter-alter', 'Alter bis', f.maxAlter)}
+      ${draftZahlfeld('draft-filter-siege', 'Siege ab', f.minSiege)}
+      ${draftZahlfeld('draft-filter-uci', 'UCI bis', f.maxUci)}
+
+      <label style="font-size: 0.7rem; color: #94a3b8; display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
+        <input id="draft-filter-waehlbar" type="checkbox"${f.nurWaehlbare ? ' checked' : ''}> nur waehlbare
+      </label>
+      <button id="draft-filter-reset" style="${sel} cursor: pointer;">Zuruecksetzen</button>
+      <span id="draft-list-count" style="font-size: 0.7rem; color: #64748b; margin-left: auto;">${sichtbar} von ${alle.length}</span>
+    </div>`;
+}
+
 function interleaveCandidates(arr: any[]): any[] {
   const sorted = [...arr].sort((a: any, b: any) => b.overallRating - a.overallRating);
   const n = sorted.length;
@@ -988,6 +1115,49 @@ function interleaveCandidates(arr: any[]): any[] {
     }
   }
   return result;
+}
+
+/**
+ * Zeichnet Steuerleiste und Kandidatenliste. Wird waehrend eines Spielerzugs
+ * mehrfach gerufen (Auswahl wechselt), deshalb an einer Stelle gebuendelt.
+ */
+function zeichneKandidatenListe(
+  kandidaten: any[],
+  teamId: number,
+  selectedId: number | null,
+  steuerungNeu = true,
+): void {
+  const steuerung = document.getElementById('draft-overlay-candidates-controls');
+  const liste = document.getElementById('draft-overlay-candidates-list');
+  if (!liste) return;
+  const gefiltert = applyDraftListSteuerung(kandidaten);
+  // Die Leiste nur neu bauen, wenn sich die Kandidaten geaendert haben - sonst
+  // verloere ein Zahlenfeld beim Tippen den Fokus.
+  if (steuerung && steuerungNeu) {
+    steuerung.innerHTML = renderDraftListControls(kandidaten, gefiltert.length);
+  } else {
+    const zaehler = document.getElementById('draft-list-count');
+    if (zaehler) zaehler.textContent = `${gefiltert.length} von ${kandidaten.length}`;
+  }
+  if (gefiltert.length === 0) {
+    liste.innerHTML = `<div style="grid-column: 1 / -1; color: #64748b; font-style: italic; padding: 1rem;">Kein Fahrer passt zu den Filtern.</div>`;
+    return;
+  }
+  liste.innerHTML = interleaveCandidates(gefiltert)
+    .map((c: any) => renderDraftCandidateBox(c, c.riderId === selectedId, teamId, true))
+    .join('');
+}
+
+/** Liste neu zeichnen, ohne den uebrigen Zug anzufassen. */
+function aktualisiereKandidatenListe(steuerungNeu = false): void {
+  const draftState = (state as any).draftLetzterZustand;
+  if (!draftState || !draftState.candidates) return;
+  zeichneKandidatenListe(
+    draftState.candidates,
+    draftState.nextTeamId,
+    (state as any).selectedDraftRiderId ?? null,
+    steuerungNeu,
+  );
 }
 
 export function showDraftPick(index: number): void {
@@ -1150,6 +1320,7 @@ async function renderActivePlayerTurn(): Promise<void> {
   }
 
   const draftState = res.data;
+  (state as any).draftLetzterZustand = draftState;
   if (draftState.finished) {
     if (displayWrap) {
       displayWrap.innerHTML = `
@@ -1203,12 +1374,10 @@ async function renderActivePlayerTurn(): Promise<void> {
   const candList = document.getElementById('draft-overlay-candidates-list');
   if (candList) {
     if (draftState.isPlayerTeam && draftState.candidates && draftState.candidates.length > 0) {
-      const interleaved = interleaveCandidates(draftState.candidates);
-      candList.innerHTML = interleaved.map((c: any) => {
-        const isSelected = c.riderId === (state as any).selectedDraftRiderId;
-        return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
-      }).join('');
+      zeichneKandidatenListe(draftState.candidates, draftState.nextTeamId, (state as any).selectedDraftRiderId ?? null);
     } else {
+      const steuerung = document.getElementById('draft-overlay-candidates-controls');
+      if (steuerung) steuerung.innerHTML = '';
       candList.innerHTML = `<div style="color: #64748b; font-style: italic; padding: 1rem;">Warte auf den Zug der KI für ${esc(draftState.nextTeamName || 'Team')}...</div>`;
     }
   }
@@ -1231,11 +1400,7 @@ async function renderActivePlayerTurn(): Promise<void> {
       
       // Update candidate list to highlight the auto-selected/newly selected candidate
       if (candList && draftState.candidates) {
-        const interleaved = interleaveCandidates(draftState.candidates);
-        candList.innerHTML = interleaved.map((c: any) => {
-          const isSelected = c.riderId === selectedId;
-          return renderDraftCandidateBox(c, isSelected, draftState.nextTeamId, true);
-        }).join('');
+        zeichneKandidatenListe(draftState.candidates, draftState.nextTeamId, selectedId);
       }
 
       const selectedRider = draftState.candidates?.find((c: any) => c.riderId === selectedId);
