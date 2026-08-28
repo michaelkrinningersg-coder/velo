@@ -50,7 +50,7 @@ function hasMetQuota(specId: number, counts: { spec1: number; spec23: number }):
 // erst wenn JEDES Team seine Kappe erreicht hat, steigen alle um 1, damit der
 // Draft nie blockiert.
 /** Wie viele Free Agents je Pick nach reiner Qualitaet zur Auswahl stehen. */
-export const DRAFT_POOL_SIZE = 60;
+export const DRAFT_POOL_SIZE = 100;
 /**
  * Wie viele zusaetzliche Fahrer je bevorzugter Nation und je
  * Fokusspezialisierung in den Pool kommen.

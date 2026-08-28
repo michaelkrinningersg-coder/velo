@@ -504,23 +504,12 @@ function renderDraftCandidateBox(c: any, isSelected: boolean, currentTeamId: num
     ? `<span>·</span><span style="color: #4ade80;">${c.wins === 1 ? '1 Sieg' : c.wins + ' Siege'}</span>`
     : '';
   
-  let jerseyHtml = '';
-  if (c.oldTeamId && c.oldTeamId > 0) {
-    // Show actual team jersey (solves renewal placeholder bug)
-    jerseyHtml = getDraftRiderJerseyHtml(c.oldTeamId, c.oldTeamName, 26);
-  } else {
-    // free agent / others: hide jersey icon
-    jerseyHtml = '';
-  }
-  
+  // Die Kandidatenliste zeigt bis zu 100 Fahrer und kommt bewusst ohne Trikot
+  // aus - 100 Trikotbilder kosten beim Aufbau mehr, als das Trikot hier
+  // beitraegt. Alle uebrigen Stellen der Draft-Ansicht behalten ihres.
   return `
     <div class="${clickClass}" data-rider-id="${c.riderId}" ${blocked ? `title="${esc(c.blockReason ?? 'Im Draft gesperrt')}"` : ''} style="display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0.4rem; border-radius: 6px; transition: all 0.2s; ${borderStyle} ${cursorStyle}">
       <div style="display: flex; align-items: center; gap: 0.45rem;">
-        ${jerseyHtml ? `
-        <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-          ${jerseyHtml}
-        </div>
-        ` : ''}
         <div>
           <div style="display: flex; align-items: center; gap: 0.25rem;">
             ${renderFlag(c.countryCode)}
