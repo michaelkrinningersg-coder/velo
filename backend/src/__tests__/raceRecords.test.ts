@@ -85,7 +85,7 @@ describe('Bestenlisten der Rennkarte', () => {
     expect(rekorde.editions).toBe(2);
     expect(rekorde.overallWins[0]?.rider.riderId).toBe(1);
     expect(rekorde.overallWins[0]?.wins).toBe(2);
-    expect(rekorde.overallWins[0]?.seasons).toEqual([2027, 2026]);
+    expect(rekorde.overallWins[0]?.seasons).toEqual([{ season: 2027, wins: 1 }, { season: 2026, wins: 1 }]);
     // Zweite und dritte Plaetze zaehlen mit, machen aber keinen Sieger.
     expect(rekorde.overallWins.find((z) => z.rider.riderId === 2)).toBeUndefined();
     expect(rekorde.stageWins[0]).toMatchObject({ wins: 2 });
@@ -128,8 +128,8 @@ describe('Bestenlisten der Rennkarte', () => {
     const r = new ResultRepository(db).getRacePalmares(11).records;
     expect(r.leaderDays[0]).toMatchObject({ wins: 3 });
     expect(r.leaderDays[0]?.rider.riderId).toBe(1);
-    // Zwei Tage derselben Austragung nennen das Jahr nur einmal.
-    expect(r.leaderDays[0]?.seasons).toEqual([2027, 2026]);
+    // Zwei Tage derselben Austragung stehen als ein Jahr mit Anzahl.
+    expect(r.leaderDays[0]?.seasons).toEqual([{ season: 2027, wins: 1 }, { season: 2026, wins: 2 }]);
     expect(r.leaderDays[1]).toMatchObject({ wins: 1 });
   });
 
@@ -139,14 +139,14 @@ describe('Bestenlisten der Rennkarte', () => {
     expect(new ResultRepository(db).getRacePalmares(20).records.leaderDays).toEqual([]);
   });
 
-  it('nennt das Jahr eines Mehrfachsiegers nur einmal', () => {
+  it('nennt das Jahr eines Mehrfachsiegers einmal, mit der Anzahl', () => {
     legeRennen(10, 'Tour', 2026, { etappen: 4 });
     for (let etappe = 1; etappe <= 4; etappe++) {
       punkte(10, 2026, 'stage_result', 1, 1, 1, { etappe });
     }
     const zeile = new ResultRepository(db).getRacePalmares(10).records.stageWins[0];
     expect(zeile).toMatchObject({ wins: 4 });
-    expect(zeile?.seasons).toEqual([2026]);
+    expect(zeile?.seasons).toEqual([{ season: 2026, wins: 4 }]);
   });
 
   it('fuehrt Berg-, Nachwuchs- und Punktetrikot getrennt', () => {

@@ -46,7 +46,7 @@ export async function openRaceDetail(raceId: number): Promise<void> {
   if (!race) return;
   state.selectedRaceDetailRaceId = raceId;
   state.raceDetailTab = 'detail';
-  etappensiegeSeite = 0;
+  bestenlistenSeite.clear();
   gesamtsiegeAusgeklappt = false;
   state.selectedRaceDetailStageId = sortedStages(race)[0]?.id ?? null;
   renderRaceDetailHeader(race);
@@ -293,9 +293,10 @@ function renderPalmaresTab(race: Race, palmares: RacePalmaresPayload): string {
 // ============================================================================
 // Die Gesamtsieg-Liste zeigt zunaechst 5 Fahrer; der Server liefert 10.
 let gesamtsiegeAusgeklappt = false;
-// Etappensiege kommen bis Platz 50 und werden zu zehnt geblaettert.
-const ETAPPENSIEGE_JE_SEITE = 10;
-let etappensiegeSeite = 0;
+// Etappensiege und Fuehrungstage kommen bis Platz 50 und werden zu zehnt
+// geblaettert. Jede Karte fuehrt ihre eigene Seite.
+const BESTENLISTE_JE_SEITE = 10;
+const bestenlistenSeite = new Map<string, number>();
 
 /**
  * Eine Zeile einer Bestenliste. Die Siegjahre stehen unter dem Namen; die
@@ -303,10 +304,12 @@ let etappensiegeSeite = 0;
  * (nur dort erfasst das Spiel Plaetze ausser dem Sieg).
  */
 function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean, einheit = '×'): string {
-  const saisons = [...zeile.seasons].sort((a, b) => a - b);
+  const saisons = [...zeile.seasons].sort((a, b) => a.season - b.season);
+  // Mehrere Erfolge eines Jahres stehen in Klammern dahinter: "2026 (5)".
+  const beschriftet = saisons.map((s) => (s.wins > 1 ? `${s.season} (${s.wins})` : String(s.season)));
   // Viele Jahre wuerden die Zeile sprengen — der Rest wird gezaehlt.
-  const sichtbareSaisons = saisons.slice(0, 8).join(', ')
-    + (saisons.length > 8 ? ` +${saisons.length - 8}` : '');
+  const sichtbareSaisons = beschriftet.slice(0, 8).join(', ')
+    + (beschriftet.length > 8 ? ` +${beschriftet.length - 8}` : '');
   const jahre = saisons.length > 0
     ? `<span class="rd-best-years">${esc(sichtbareSaisons)}</span>`
     : '';
@@ -328,7 +331,7 @@ function bestenlisteKarte(
   titel: string,
   hinweis: string,
   zeilen: PalmaresWinRow[],
-  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean; blaettern?: boolean; einheit?: string } = {},
+  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean; blaettern?: string; einheit?: string } = {},
 ): string {
   if (zeilen.length === 0) return '';
 
@@ -337,16 +340,19 @@ function bestenlisteKarte(
   let steuerung = '';
 
   if (optionen.blaettern) {
-    const seiten = Math.max(1, Math.ceil(zeilen.length / ETAPPENSIEGE_JE_SEITE));
+    const schluessel = optionen.blaettern;
+    const seiten = Math.max(1, Math.ceil(zeilen.length / BESTENLISTE_JE_SEITE));
     // Die Seite kann nach einem Rennwechsel hinter dem Ende liegen.
-    const seite = Math.min(etappensiegeSeite, seiten - 1);
-    ersterRang = seite * ETAPPENSIEGE_JE_SEITE + 1;
-    sichtbar = zeilen.slice(seite * ETAPPENSIEGE_JE_SEITE, (seite + 1) * ETAPPENSIEGE_JE_SEITE);
+    const seite = Math.min(bestenlistenSeite.get(schluessel) ?? 0, seiten - 1);
+    ersterRang = seite * BESTENLISTE_JE_SEITE + 1;
+    sichtbar = zeilen.slice(seite * BESTENLISTE_JE_SEITE, (seite + 1) * BESTENLISTE_JE_SEITE);
     if (seiten > 1) {
+      const knopf = (richtung: 'prev' | 'next', zeichen: string, aus: boolean) =>
+        `<button type="button" class="rd-best-page-btn" data-race-detail-page="${richtung}" data-race-detail-list="${esc(schluessel)}" ${aus ? 'disabled' : ''}>${zeichen}</button>`;
       steuerung = `<div class="rd-best-pager">
-        <button type="button" class="rd-best-page-btn" data-race-detail-page="prev" ${seite === 0 ? 'disabled' : ''}>‹</button>
+        ${knopf('prev', '‹', seite === 0)}
         <span class="rd-best-page-label">${ersterRang}–${ersterRang + sichtbar.length - 1} von ${zeilen.length}</span>
-        <button type="button" class="rd-best-page-btn" data-race-detail-page="next" ${seite >= seiten - 1 ? 'disabled' : ''}>›</button>
+        ${knopf('next', '›', seite >= seiten - 1)}
       </div>`;
     }
   } else if (optionen.ausklappbar) {
@@ -367,11 +373,11 @@ function renderBestenlistenTab(palmares: RacePalmaresPayload): string {
   const r = palmares.records;
   const karten = [
     bestenlisteKarte('Gesamtsiege', 'mit zweiten und dritten Plätzen', r.overallWins, { mitPlaetzen: true, ausklappbar: true }),
-    bestenlisteKarte('Etappensiege', `Top ${r.stageWins.length}`, r.stageWins, { blaettern: true }),
+    bestenlisteKarte('Etappensiege', `Top ${r.stageWins.length}`, r.stageWins, { blaettern: 'etappensiege' }),
     bestenlisteKarte('Bergtrikot', 'Top 5', r.mountainWins),
     bestenlisteKarte('Weißes Trikot', 'Top 5', r.youthWins),
     bestenlisteKarte('Punktetrikot', 'Top 5', r.pointsWins),
-    bestenlisteKarte('Tage im Gelben Trikot', 'Top 10 · Gesamtführung', r.leaderDays, { einheit: ' T' }),
+    bestenlisteKarte('Tage im Gelben Trikot', `Top ${r.leaderDays.length} · Gesamtführung`, r.leaderDays, { blaettern: 'fuehrungstage', einheit: ' T' }),
   ].filter(Boolean).join('');
 
   if (!karten) {
@@ -540,8 +546,9 @@ export function initRaceDetailListeners(): void {
 
     const seitenBtn = target.closest<HTMLButtonElement>('button[data-race-detail-page]');
     if (seitenBtn && !seitenBtn.disabled) {
+      const schluessel = seitenBtn.dataset['raceDetailList'] ?? '';
       const richtung = seitenBtn.dataset['raceDetailPage'] === 'next' ? 1 : -1;
-      etappensiegeSeite = Math.max(0, etappensiegeSeite + richtung);
+      bestenlistenSeite.set(schluessel, Math.max(0, (bestenlistenSeite.get(schluessel) ?? 0) + richtung));
       body.innerHTML = renderRaceDetailBody();
       return;
     }

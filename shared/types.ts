@@ -554,8 +554,12 @@ export interface PalmaresWinRow {
   wins: number;
   seconds: number;
   thirds: number;
-  /** Saisons der Siege, neueste zuerst. */
-  seasons: number[];
+  /**
+   * Saisons der Erfolge, neueste zuerst, mit der Zahl je Saison. Bei
+   * Etappensiegen und Fuehrungstagen faellt dieselbe Saison mehrfach an, bei
+   * Gesamt- und Trikotsiegen hoechstens einmal.
+   */
+  seasons: Array<{ season: number; wins: number }>;
 }
 
 /** Verteilung der Etappenprofile einer Edition. */
@@ -630,8 +634,8 @@ export interface RaceRecordsPayload {
   /** Punktetrikot, Top 5. */
   pointsWins: PalmaresWinRow[];
   /**
-   * Tage im Gelben Trikot, Top 10. `wins` ist hier die Zahl der Tage, nicht
-   * der Siege. Bei Eintagesrennen leer.
+   * Tage im Gelben Trikot, Top 50 (die Oberflaeche blaettert sie zu zehnt).
+   * `wins` ist hier die Zahl der Tage, nicht der Siege. Bei Eintagesrennen leer.
    */
   leaderDays: PalmaresWinRow[];
   nations: PalmaresNationRow[];

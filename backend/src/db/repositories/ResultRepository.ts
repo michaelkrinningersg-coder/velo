@@ -159,9 +159,10 @@ export class ResultRepository {
   }
 
   /**
-   * Etappensiege werden bis Platz 50 geliefert; die Oberflaeche blaettert sie
-   * in Zehnerschritten. Bei Rundfahrten mit langer Historie sammeln deutlich
-   * mehr als zehn Fahrer Etappensiege — eine Top 10 zeigt davon zu wenig.
+   * Etappensiege und Fuehrungstage werden bis Platz 50 geliefert; die
+   * Oberflaeche blaettert sie in Zehnerschritten. Bei Rundfahrten mit langer
+   * Historie sammeln deutlich mehr als zehn Fahrer beides — eine Top 10 zeigt
+   * davon zu wenig.
    */
   private static readonly STAGE_WINS_LIMIT = 50;
 
@@ -245,8 +246,11 @@ export class ResultRepository {
         }
         if (art === 'sieg') {
           eintrag.wins += 1;
-          // Mehrere Erfolge derselben Austragung nennen das Jahr nur einmal.
-          if (eintrag.seasons.at(-1) !== r.season) eintrag.seasons.push(r.season);
+          // Die Zeilen kommen nach Saison sortiert — mehrere Erfolge derselben
+          // Austragung zaehlen deshalb auf den letzten Eintrag auf.
+          const letzte = eintrag.seasons.at(-1);
+          if (letzte?.season === r.season) letzte.wins += 1;
+          else eintrag.seasons.push({ season: r.season, wins: 1 });
         }
         else if (art === 'zweiter') eintrag.seconds += 1;
         else eintrag.thirds += 1;
@@ -305,7 +309,7 @@ export class ResultRepository {
       youthWins: sammle(wertungsSieg('youth_final'), 5),
       pointsWins: sammle(wertungsSieg('points_final'), 5),
       // Fuehrungstage nur bei Rundfahrten — ein Eintagesrennen kennt keine.
-      leaderDays: isStageRace ? sammle(wertungsSieg('gc_leader_day'), 10) : [],
+      leaderDays: isStageRace ? sammle(wertungsSieg('gc_leader_day'), ResultRepository.STAGE_WINS_LIMIT) : [],
       nations: [...nationen.values()].sort(nachBilanz),
       teams: [...teamsBilanz.values()].sort(nachBilanz),
       startlistQuality: this.startlistenQualitaet(raceName),
