@@ -23,6 +23,7 @@ import {
   setRealtimeStageLoadInFlightId,
   realtimeStageLoadInFlightId,
   activateView,
+  renderRaceNameLink,
 } from '../state';
 import type {
   RealtimeSimulationBootstrap,
@@ -209,9 +210,10 @@ export function renderRosterEditor(): void {
   }
 
   title.textContent = 'Starterfeld bearbeiten';
-  meta.textContent = payload.race.isStageRace
-    ? `${payload.race.name} · Etappe ${payload.stage.stageNumber} · ${payload.stage.profile}`
-    : `${payload.race.name} · ${payload.stage.profile}`;
+  const rennLink = renderRaceNameLink(payload.race.name, payload.race.id);
+  meta.innerHTML = payload.race.isStageRace
+    ? `${rennLink} · Etappe ${payload.stage.stageNumber} · ${esc(payload.stage.profile)}`
+    : `${rennLink} · ${esc(payload.stage.profile)}`;
 
   const selectedIds = new Set(state.rosterEditorSelectedRiderIds);
   body.innerHTML = payload.teams.map((teamEntry) => {

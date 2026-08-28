@@ -23,6 +23,7 @@ import {
   hideLoading,
   getRiderSpecializationLabel,
   getRidersByTeam,
+  renderRaceNameLink,
 } from '../state';
 import type { Team, Rider } from '../../../shared/types';
 import type { TeamDetailPage, TeamTableSortKey, TeamTableColumn } from '../state';
@@ -450,7 +451,7 @@ export function renderRacePrefs(raceIds: number[]): string {
   if (raceIds.length === 0) return '–';
   return raceIds.map(raceId => {
     const race = state.races.find(entry => entry.id === raceId);
-    return race ? esc(race.name) : `Rennen ${raceId}`;
+    return race ? renderRaceNameLink(race.name, race.id) : `Rennen ${raceId}`;
   }).join(', ');
 }
 

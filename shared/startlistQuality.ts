@@ -16,10 +16,13 @@
  * Die Bezugsgroesse ist die tatsaechliche Starterzahl, nicht eine feste Zahl:
  * sonst misst der Wert vor allem die Feldgroesse statt die Qualitaet.
  *
- * Der Wert wird einmal beim Rennstart berechnet und gespeichert. Er laesst sich
- * spaeter nicht nachrechnen, weil die Startliste einer vergangenen Saison
- * nirgends erhalten bleibt (`active_race_entries` haelt immer nur die
- * laufende).
+ * Der Wert wird einmal beim Rennstart berechnet und gespeichert und beim Abruf
+ * nur gelesen. Fehlende Werte lassen sich einmalig nachtragen: die Startlisten
+ * vergangener Saisons bleiben archiviert erhalten (Sicht `race_entries`).
+ *
+ * In der ersten Saison sind die Werte naturgemaess niedrig — Karrierepunkte
+ * entstehen erst im Laufe des Jahres. Ab der zweiten Saison traegt der
+ * Punktestand der Vorjahre, die Reihe wird dann aussagekraeftig.
  */
 
 /** Eingabe der Berechnung: Karrierepunkte, absteigend sortiert oder nicht. */

@@ -53,6 +53,21 @@ export async function openRaceDetail(raceId: number): Promise<void> {
   await ensureSelectedStageSummary(raceId);
 }
 
+/**
+ * Oeffnet die Rennkarte aus einem Renn-Link heraus.
+ *
+ * Die ID einer vergangenen Austragung steht nicht mehr im geladenen Kalender —
+ * Renn-IDs werden je Saison neu vergeben. Der Name findet dann die aktuelle
+ * Austragung; Siegerliste, Bestenlisten und Analyse aggregieren ohnehin ueber
+ * alle Jahre, es geht also nichts verloren.
+ */
+export async function openRaceDetailByRef(raceId: number | null, raceName: string | null): Promise<void> {
+  const gefunden = (raceId != null ? findRaceById(raceId) : null)
+    ?? (raceName ? state.races.find((r) => r.name === raceName) ?? null : null);
+  if (!gefunden) return;
+  await openRaceDetail(gefunden.id);
+}
+
 function raceDetailOpenFor(raceId: number): boolean {
   return state.selectedRaceDetailRaceId === raceId && !$('modal-raceDetail').classList.contains('hidden');
 }

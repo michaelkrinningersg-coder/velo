@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { esc, renderFlag, renderMiniJersey } from '../state';
+import { esc, renderFlag, renderMiniJersey, renderRaceNameLink } from '../state';
 import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type {
   SeasonWrappedPayload, PalmaresRiderRef, RaceWinnerEntry, WrappedCareerResult,
@@ -58,7 +58,7 @@ function winnersSections(winners: RaceWinnerEntry[]): string {
       <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#cd7c3b;text-transform:uppercase;">3. Platz</span>
     </div>`;
     const rows = races.map((w) => `<div style="display:grid;${COLS}padding:10px 14px;border-top:1px solid #14203a;align-items:center;">
-      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.raceName)}</span>
+      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.raceName, w.raceId)}</span>
       ${winnerCell(w.winner, '#facc15')}
       ${winnerCell(w.second, '#cbd5e1')}
       ${winnerCell(w.third, '#cd7c3b')}
@@ -113,7 +113,7 @@ function resultsList(results: WrappedCareerResult[]): string {
   return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;">${results.map((b) => `
     <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;">
       <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
-      <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.raceName)}</span>
+      <span style="flex:1;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${renderRaceNameLink(b.raceName, null)}</span>
       <span style="color:#5f6f8a;">${esc(b.type)} · <span style="color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span></span>
     </div>`).join('')}</div>`;
 }
@@ -140,7 +140,7 @@ function groupedResultsList(results: WrappedCareerResult[]): string {
     </div>`;
   return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">${groups.map((g) => `
     <div style="display:flex;flex-direction:column;gap:3px;">
-      <div style="${MONO};font-size:10px;font-weight:800;letter-spacing:.04em;color:#cbd5e1;border-left:2px solid #22d3ee;padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(g.raceName)}</div>
+      <div style="${MONO};font-size:10px;font-weight:800;letter-spacing:.04em;color:#cbd5e1;border-left:2px solid #22d3ee;padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(g.raceName, null)}</div>
       ${g.rows.map(resultRow).join('')}
     </div>`).join('')}</div>`;
 }
@@ -161,18 +161,19 @@ function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, re
 }
 
 // Highlight-Zeile (Label · Fahrer/Team · Wert) fuer Ueberraschung/Rekorde.
-function highlightRow(label: string, entity: string, detail: string, value: string): string {
+// `detailHtml` ist fertiges Markup (Renn-Link oder mit esc() gesetzter Text).
+function highlightRow(label: string, entity: string, detailHtml: string, value: string): string {
   return `<div style="display:grid;grid-template-columns:minmax(140px,200px) 1fr auto;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #14203a;">
     <span style="${MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8b9ab4;">${esc(label)}</span>
-    <span style="min-width:0;display:flex;align-items:center;gap:9px;flex-wrap:wrap;">${entity}${detail ? `<span style="${MONO};font-size:10px;color:#6a7a95;">${esc(detail)}</span>` : ''}</span>
+    <span style="min-width:0;display:flex;align-items:center;gap:9px;flex-wrap:wrap;">${entity}${detailHtml ? `<span style="${MONO};font-size:10px;color:#6a7a95;">${detailHtml}</span>` : ''}</span>
     <span style="${MONO};font-size:15px;font-weight:800;color:#fbbf24;">${esc(value)}</span>
   </div>`;
 }
 
 function surpriseSection(s: SeasonWrappedPayload['surprise']): string {
   const rows: string[] = [];
-  if (s.lowestOvrWinner) rows.push(highlightRow('Underdog-Sieg', riderChip(s.lowestOvrWinner.rider), s.lowestOvrWinner.raceName, `OVR ${s.lowestOvrWinner.value}`));
-  if (s.youngestMonumentWinner) rows.push(highlightRow('Jüngster Monument-Sieger', riderChip(s.youngestMonumentWinner.rider), s.youngestMonumentWinner.raceName, `${s.youngestMonumentWinner.value} J`));
+  if (s.lowestOvrWinner) rows.push(highlightRow('Underdog-Sieg', riderChip(s.lowestOvrWinner.rider), renderRaceNameLink(s.lowestOvrWinner.raceName, null), `OVR ${s.lowestOvrWinner.value}`));
+  if (s.youngestMonumentWinner) rows.push(highlightRow('Jüngster Monument-Sieger', riderChip(s.youngestMonumentWinner.rider), renderRaceNameLink(s.youngestMonumentWinner.raceName, null), `${s.youngestMonumentWinner.value} J`));
   if (rows.length === 0) return '';
   return wrappedSection('#f97316', 'Überraschung des Jahres', '', rows.join(''));
 }
@@ -180,8 +181,8 @@ function surpriseSection(s: SeasonWrappedPayload['surprise']): string {
 function recordsSection(r: SeasonWrappedPayload['records']): string {
   const rows: string[] = [];
   if (r.mostWins) rows.push(highlightRow('Meiste Siege', riderChip(r.mostWins.rider), '', `${r.mostWins.wins} Siege`));
-  if (r.teamDominance) rows.push(highlightRow('Dominantestes Team', teamChip(r.teamDominance.team), 'Punktevorsprung', `+${r.teamDominance.lead.toLocaleString('de-DE')}`));
-  if (r.longestStreak) rows.push(highlightRow('Längste Siegesserie', riderChip(r.longestStreak.rider), 'Renntags-Siege in Folge', `${r.longestStreak.streak}×`));
+  if (r.teamDominance) rows.push(highlightRow('Dominantestes Team', teamChip(r.teamDominance.team), esc('Punktevorsprung'), `+${r.teamDominance.lead.toLocaleString('de-DE')}`));
+  if (r.longestStreak) rows.push(highlightRow('Längste Siegesserie', riderChip(r.longestStreak.rider), esc('Renntags-Siege in Folge'), `${r.longestStreak.streak}×`));
   if (rows.length === 0) return '';
   return wrappedSection('#22d3ee', 'Rekorde der Saison', '', rows.join(''));
 }

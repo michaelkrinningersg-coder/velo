@@ -1,6 +1,7 @@
 import { api } from './api';
 import {
   buildRaceCategoryBadgeCssVariables,
+  renderRaceNameLink,
   renderRiderNameLink,
   renderTeamNameLink,
   resolveRaceCategoryBadgeStyle,
@@ -8,6 +9,7 @@ import {
 
 export {
   buildRaceCategoryBadgeCssVariables,
+  renderRaceNameLink,
   renderRiderNameLink,
   renderTeamNameLink,
   resolveRaceCategoryBadgeStyle,

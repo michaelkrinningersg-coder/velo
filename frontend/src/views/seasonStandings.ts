@@ -15,6 +15,7 @@ import {
   findStageById,
   renderResultsParticipant,
   isActiveView,
+  renderRaceNameLink,
 } from '../state';
 import { renderRiderNameLink, renderTeamNameLink } from '../state';
 import {
@@ -436,7 +437,7 @@ function renderWinnerTierSections(
       <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:#cd7c3b;text-transform:uppercase;">3. Platz</span>
     </div>`;
     const rows = races.map((w) => `<div style="display:grid;${COLS}padding:10px 14px;border-top:1px solid #14203a;align-items:center;">
-      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.raceName)}</span>
+      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.raceName, w.raceId)}</span>
       ${renderWinnerCell(w.winner, '#facc15')}
       ${renderWinnerCell(w.second, '#cbd5e1')}
       ${renderWinnerCell(w.third, '#cd7c3b')}

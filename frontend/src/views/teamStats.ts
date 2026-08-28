@@ -10,6 +10,7 @@ import {
   findRiderById,
   resolveRaceCategoryBadgeStyle,
   buildRaceCategoryBadgeCssVariables,
+  renderRaceNameLink,
   renderRiderNameLink,
   formatDate,
   FLAG_CODE_BY_CODE3,
@@ -531,9 +532,11 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
     ? `<div style="padding:22px 16px; text-align:center; color:#6a7a95; ${MONOF} font-size:11px;">Keine Ergebnisse für diese Filterkombination.</div>`
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
-        const raceStageLabel = isFinalRow
-          ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
-          : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
+        // Nur der Rennname wird verlinkt, der Zusatz bleibt Text.
+        const raceStageZusatz = isFinalRow
+          ? ` · ${getRiderStatsRowTypeLabel(row.rowType)}`
+          : (row.stageNumber && row.isStageRace ? ` · Etappe ${row.stageNumber}` : '');
+        const raceStageLabel = `${renderRaceNameLink(row.raceName, row.raceId)}${esc(raceStageZusatz)}`;
 
         let placeHtml = '<span style="justify-self:center; color:#5f6f8a;">–</span>';
         if (row.finishStatus === 'otl') {
@@ -575,7 +578,7 @@ export function renderTeamStatsTopResultsTab(payload: TeamStatsPayload): string 
             <span style="${MONOF} font-size:11px; color:#8494ad;">${row.season}</span>
             ${placeHtml}
             <span style="display:flex; align-items:center; min-width:0; overflow:hidden;">${flagHtml}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nameLink}</span></span>
-            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${esc(raceStageLabel)}</span>
+            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${raceStageLabel}</span>
             <span style="min-width:0; overflow:hidden;">${categoryChip}</span>
             ${profileCell}
             ${scoreCell}

@@ -347,6 +347,7 @@ export class StageResultCommitService {
         console.warn('Startlisten-Qualitaet konnte nicht erfasst werden:', (error as Error).message);
       }
     }
+
     const rosterById = new Map(riders.map((rider: any) => [rider.id, rider]));
     const mappedEntries = [...entries]
       .filter((entry: any) => Number.isFinite(entry.riderId))

@@ -5,6 +5,7 @@ import {
   renderFlag,
   renderMiniJersey,
   isActiveView,
+  renderRaceNameLink,
 } from '../state';
 import { openRiderStats, getHofBadgeCatalog } from './riderStats';
 import { openTeamStats } from './teamStats';
@@ -649,10 +650,13 @@ export async function renderLeaderboard(): Promise<void> {
     } else if (showRaceDetail) {
       // Eintagesrennen haben keine sinnvolle Etappennummer -> nur Rennen + Jahr.
       const isOnedaySpeed = activeMetricKey === 'fastest_avg_speed_oneday' || activeMetricKey === 'slowest_avg_speed_oneday';
-      const parts = isSpeed && isOnedaySpeed
-        ? [row.raceName ?? '–', String(row.season ?? '–')]
-        : [row.raceName ?? '–', row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–', String(row.season ?? '–')];
-      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${parts.map((p) => esc(String(p))).join(' · ')}</span>`;
+      // Ohne Renn-ID: der Name findet die aktuelle Austragung.
+      const rennTeil = row.raceName ? renderRaceNameLink(row.raceName, null) : '–';
+      const rest = isSpeed && isOnedaySpeed
+        ? [String(row.season ?? '–')]
+        : [row.stageNumber != null ? `Etappe ${row.stageNumber}` : '–', String(row.season ?? '–')];
+      const parts = [rennTeil, ...rest.map((p) => esc(String(p)))];
+      leadoutCell = `<span style="color:#9fb0c9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${parts.join(' · ')}</span>`;
     }
 
     let lieutenantCell = '';

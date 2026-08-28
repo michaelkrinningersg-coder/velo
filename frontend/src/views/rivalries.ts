@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { $, esc, renderFlag, renderMiniJersey } from '../state';
+import { $, esc, renderFlag, renderMiniJersey, renderRaceNameLink } from '../state';
 import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type { RivalryOverviewItem, RivalryDetailPayload, RivalryRiderRef } from '../../../shared/types';
 
@@ -129,7 +129,7 @@ function duelRow(d: RivalryDetailPayload['duels'][number]): string {
     <div style="display:grid;grid-template-columns:64px 1fr 150px 34px 150px;align-items:center;gap:10px;padding:9px 11px;border:1px solid #1e2c49;border-radius:9px;background:#0b1120;margin-bottom:6px;">
       <span style="${MONO};font-size:10px;color:#5f6f8a;">${esc(d.date)}</span>
       <div style="min-width:0;">
-        <div style="font-size:12.5px;font-weight:700;color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.raceName)}</div>
+        <div style="font-size:12.5px;font-weight:700;color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(d.raceName, null)}</div>
         <div style="display:flex;align-items:center;gap:7px;margin-top:3px;">${catBadge(d.categoryName)}<span style="${MONO};font-size:8.5px;color:#8b9ab4;">${d.type}</span></div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;min-width:0;">

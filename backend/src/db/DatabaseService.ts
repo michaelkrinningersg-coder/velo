@@ -39,6 +39,7 @@ import {
   calculateStageScore,
 } from '../simulation/StageScoreCalculator';
 import { isFullMoonDate } from '../util/moonPhase';
+import { StartlistQualityService } from '../game/StartlistQualityService';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -3084,6 +3085,19 @@ export class DatabaseService {
         PRIMARY KEY (race_id, season)
       );
     `);
+
+    // Werte fuer bereits gefahrene Rennen einmalig nachtragen. Die Startlisten
+    // vergangener Saisons stehen in race_entries_compact, die Historie laesst
+    // sich damit rekonstruieren. Nach dem ersten Lauf findet die Abfrage nichts
+    // mehr und kostet praktisch nichts.
+    try {
+      const geschrieben = new StartlistQualityService(db).nachtragen();
+      if (geschrieben > 0) {
+        console.log(`  ${geschrieben} Startlisten-Qualitaeten nachgetragen.`);
+      }
+    } catch (error) {
+      console.warn('Startlisten-Qualitaet konnte nicht nachgetragen werden:', (error as Error).message);
+    }
   }
 
   private ensureTeamSpecTargets(db: Database.Database): void {

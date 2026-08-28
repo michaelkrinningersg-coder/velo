@@ -1,17 +1,19 @@
 import type Database from 'better-sqlite3';
 import { CHAMPIONSHIP_CATEGORY_IDS } from '../../../shared/types';
 import { computeStartlistQuality } from '../../../shared/startlistQuality';
+import { tableExists } from '../db/mappers';
 
 /**
- * Schreibt die Qualitaet der Startliste eines Rennens - einmal, beim Start.
+ * Schreibt die Qualitaet der Startliste eines Rennens fest.
  *
- * Die Berechnung kann nicht nachgeholt werden: `active_race_entries` haelt
- * immer nur die laufende Saison, die Startliste einer vergangenen ist weg.
- * Deshalb wird der Wert festgeschrieben und beim Abruf nie neu gerechnet.
+ * Der Wert wird beim Start des Rennens erfasst und danach nur noch gelesen —
+ * nie beim Abruf neu gerechnet. Die Startlisten vergangener Saisons bleiben in
+ * `race_entries_compact` erhalten (Sicht `race_entries`), fehlende Werte lassen
+ * sich deshalb einmalig nachtragen.
  *
  * Landesmeisterschaften und die uebrigen Meisterschaften bekommen keinen Wert:
  * dort ist das Feld nach Nationen zerlegt, der Anteil am staerkstmoeglichen
- * Feld waere systematisch niedrig und mit Rundfahrten nicht vergleichbar.
+ * Feld waere systematisch niedrig und mit anderen Rennen nicht vergleichbar.
  */
 export class StartlistQualityService {
   private readonly db: Database.Database;
@@ -22,48 +24,34 @@ export class StartlistQualityService {
 
   /**
    * Erfasst das Rennen, falls fuer diese Saison noch kein Wert steht.
-   * Idempotent - mehrfacher Aufruf schreibt nichts nach.
+   * Idempotent — mehrfacher Aufruf schreibt nichts nach.
+   *
+   * @returns true, wenn eine Zeile geschrieben wurde.
    */
-  public erfasseRennstart(raceId: number, season: number): void {
+  public erfasseRennstart(raceId: number, season: number, punkteMapVorgabe?: Map<number, number>): boolean {
+    if (!tableExists(this.db, 'race_startlist_quality')) return false;
+
     const vorhanden = this.db.prepare(
       'SELECT 1 FROM race_startlist_quality WHERE race_id = ? AND season = ?',
     ).get(raceId, season);
-    if (vorhanden) return;
+    if (vorhanden) return false;
 
     const rennen = this.db.prepare(
       'SELECT category_id AS categoryId, start_date AS startDate FROM races WHERE id = ?',
     ).get(raceId) as { categoryId: number | null; startDate: string } | undefined;
-    if (!rennen) return;
-    if (rennen.categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(rennen.categoryId)) return;
+    if (!rennen) return false;
+    if (rennen.categoryId != null && CHAMPIONSHIP_CATEGORY_IDS.includes(rennen.categoryId)) return false;
 
-    // Karrierepunkte zum Startdatum: alles, was vor dem Rennen vergeben wurde.
-    // Meisterschaften zaehlen auch hier nicht mit - sonst haette ein Fahrer mit
-    // vielen Landestiteln eine Karrierewertung, die kein Rennen widerspiegelt.
-    const meisterschaften = CHAMPIONSHIP_CATEGORY_IDS.join(',');
-    const punkteJeFahrer = this.db.prepare(`
-      SELECT rider_id AS riderId, SUM(points_awarded) AS punkte
-      FROM season_point_events
-      WHERE awarded_on < ?
-        AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${meisterschaften}))
-      GROUP BY rider_id
-    `).all(rennen.startDate) as Array<{ riderId: number; punkte: number }>;
+    const starter = this.starterIds(raceId);
+    if (starter.length === 0) return false;
 
-    const punkteMap = new Map(punkteJeFahrer.map((zeile) => [zeile.riderId, zeile.punkte]));
-
-    const starter = this.db.prepare(
-      'SELECT rider_id AS riderId FROM active_race_entries WHERE race_id = ?',
-    ).all(raceId) as Array<{ riderId: number }>;
-    if (starter.length === 0) return;
-
-    // Das staerkstmoegliche Feld: alle aktiven Fahrer, aus denen die besten so
-    // viele genommen werden, wie das Rennen Starter hat.
-    const feld = this.db.prepare(
-      'SELECT id FROM riders WHERE is_retired = 0',
-    ).all() as Array<{ id: number }>;
+    const punkteMap = punkteMapVorgabe ?? this.karrierepunkteVor(rennen.startDate);
+    const feld = this.feldDerSaison(season);
+    if (feld.length === 0) return false;
 
     const ergebnis = computeStartlistQuality({
-      starterPoints: starter.map((zeile) => punkteMap.get(zeile.riderId) ?? 0),
-      fieldPoints: feld.map((zeile) => punkteMap.get(zeile.id) ?? 0),
+      starterPoints: starter.map((id) => punkteMap.get(id) ?? 0),
+      fieldPoints: feld.map((id) => punkteMap.get(id) ?? 0),
     });
 
     this.db.prepare(`
@@ -71,5 +59,115 @@ export class StartlistQualityService {
         (race_id, season, score, raw_points, max_points, starters)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(raceId, season, ergebnis.score, ergebnis.rawPoints, ergebnis.maxPoints, ergebnis.starters);
+    return true;
+  }
+
+  /**
+   * Traegt fehlende Werte fuer bereits gefahrene Rennen nach — einmalig beim
+   * Laden eines Spielstands, der die Kennzahl noch nicht kannte. Rennen mit
+   * bereits gespeichertem Wert werden uebersprungen, der Lauf ist damit
+   * idempotent und nach dem ersten Mal praktisch kostenlos.
+   *
+   * @returns Anzahl neu geschriebener Zeilen.
+   */
+  public nachtragen(): number {
+    if (!tableExists(this.db, 'race_startlist_quality')) return 0;
+
+    const meisterschaften = CHAMPIONSHIP_CATEGORY_IDS.join(',');
+    const offen = this.db.prepare(`
+      SELECT r.id AS raceId, r.start_date AS startDate,
+             CAST(substr(r.start_date, 1, 4) AS INTEGER) AS season
+      FROM races r
+      WHERE r.category_id NOT IN (${meisterschaften})
+        AND NOT EXISTS (SELECT 1 FROM race_startlist_quality q WHERE q.race_id = r.id)
+        AND EXISTS (SELECT 1 FROM season_point_events e WHERE e.race_id = r.id)
+      ORDER BY r.start_date ASC
+    `).all() as Array<{ raceId: number; startDate: string; season: number }>;
+    if (offen.length === 0) return 0;
+
+    // Die Karrierepunkte einmal je Rennen zu aggregieren waere ein voller Scan
+    // pro Rennen. Stattdessen laufen die Ereignisse nach Datum sortiert einmal
+    // durch und der Punktestand waechst mit — die Rennen sind ebenso sortiert.
+    const ereignisse = this.db.prepare(`
+      SELECT rider_id AS riderId, points_awarded AS punkte, awarded_on AS tag
+      FROM season_point_events
+      WHERE race_id NOT IN (SELECT id FROM races WHERE category_id IN (${meisterschaften}))
+      ORDER BY awarded_on ASC
+    `).all() as Array<{ riderId: number; punkte: number; tag: string }>;
+
+    const stand = new Map<number, number>();
+    let gelesen = 0;
+    let geschrieben = 0;
+
+    const lauf = this.db.transaction(() => {
+      for (const zeile of offen) {
+        while (gelesen < ereignisse.length && ereignisse[gelesen]!.tag < zeile.startDate) {
+          const e = ereignisse[gelesen]!;
+          stand.set(e.riderId, (stand.get(e.riderId) ?? 0) + e.punkte);
+          gelesen += 1;
+        }
+        if (this.erfasseRennstart(zeile.raceId, zeile.season, stand)) geschrieben += 1;
+      }
+    });
+    lauf();
+    return geschrieben;
+  }
+
+  /**
+   * Startliste des Rennens. Die Sicht `race_entries` deckt laufende und
+   * archivierte Rennen ab; ohne sie bleibt nur die laufende Saison.
+   */
+  private starterIds(raceId: number): number[] {
+    const quelle = tableExists(this.db, 'race_entries') ? 'race_entries' : 'active_race_entries';
+    const zeilen = this.db.prepare(
+      `SELECT DISTINCT rider_id AS riderId FROM ${quelle} WHERE race_id = ?`,
+    ).all(raceId) as Array<{ riderId: number }>;
+    return zeilen.map((z) => z.riderId);
+  }
+
+  /**
+   * Das staerkstmoegliche Feld einer Saison: alle Fahrer, die in ihr unter
+   * Vertrag standen. `riders.is_retired` taugt dafuer nicht — es beschreibt das
+   * Heute, ein spaeter zurueckgetretener Fahrer fiele rueckwirkend aus dem Feld
+   * und der Wert der alten Saison stiege ohne Grund.
+   */
+  private readonly feldCache = new Map<number, number[]>();
+
+  private feldDerSaison(season: number): number[] {
+    const gecacht = this.feldCache.get(season);
+    if (gecacht) return gecacht;
+    const zeilen = this.db.prepare(`
+      SELECT DISTINCT rider_id AS riderId FROM contracts
+      WHERE start_season <= ? AND end_season >= ?
+    `).all(season, season) as Array<{ riderId: number }>;
+    if (zeilen.length > 0) {
+      const feld = zeilen.map((z) => z.riderId);
+      this.feldCache.set(season, feld);
+      return feld;
+    }
+
+    // Spielstaende ganz am Anfang haben noch keine Vertraege — dann bleibt nur
+    // das heutige aktive Feld.
+    const ersatz = this.db.prepare('SELECT id FROM riders WHERE is_retired = 0').all() as Array<{ id: number }>;
+    const feld = ersatz.map((z) => z.id);
+    this.feldCache.set(season, feld);
+    return feld;
+  }
+
+  /**
+   * Karrierepunkte je Fahrer bis zum Stichtag (ausschliesslich). Meisterschaften
+   * zaehlen nicht mit: ein Fahrer mit vielen Landestiteln haette sonst eine
+   * Karrierewertung, die seine Staerke im Renngeschehen nicht widerspiegelt.
+   */
+  private karrierepunkteVor(stichtag: string): Map<number, number> {
+    const meisterschaften = CHAMPIONSHIP_CATEGORY_IDS.join(',');
+    const zeilen = this.db.prepare(`
+      SELECT rider_id AS riderId, SUM(points_awarded) AS punkte
+      FROM season_point_events
+      WHERE awarded_on < ?
+        AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${meisterschaften}))
+      GROUP BY rider_id
+    `).all(stichtag) as Array<{ riderId: number; punkte: number }>;
+    return new Map(zeilen.map((z) => [z.riderId, z.punkte]));
   }
 }

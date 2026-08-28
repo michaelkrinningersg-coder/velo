@@ -10,7 +10,7 @@
  * Siegliste der Fokus-Karte wird per api.getRiderStats lazy nachgeladen.
  */
 import { api } from '../api';
-import { state, resolveRaceCategoryBadgeStyle } from '../state';
+import { state, resolveRaceCategoryBadgeStyle, renderRaceNameLink } from '../state';
 import { renderMiniStageProfileMarkup } from '../race-sim/renderProfile';
 import type { Race, Rider, Team, RiderStatsPayload, StageProfile } from '../../../shared/types';
 
@@ -19,7 +19,7 @@ const MONTHS = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', '
 
 // ---- Fokus-Fahrer (1 zufaelliger Sieger, stabil) + Siegliste-Cache ---------
 let spotlightRiderId: number | null = null;
-interface SpotlightWin { race: string; detail: string; color: string; isGc: boolean; }
+interface SpotlightWin { race: string; raceId: number | null; detail: string; color: string; isGc: boolean; }
 const spotlightWinsCache = new Map<number, SpotlightWin[]>();
 const spotlightWinsInFlight = new Set<number>();
 
@@ -222,14 +222,14 @@ function renderLiveSpotlight(): string {
       <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid #1c2b47;">
         <div style="display:flex;align-items:center;gap:10px;min-width:0;">
           <span style="font-size:12px;font-weight:700;color:${catStyle.color};background:${catStyle.background};border:1px solid ${catStyle.border};padding:3px 9px;border-radius:6px;text-transform:uppercase;white-space:nowrap;">${race.category?.name?.replace(/^world\s*tour\s*-\s*/i, '') ?? 'Rennen'}</span>
-          <span style="font-size:15px;font-weight:800;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${race.name}</span>
+          <span style="font-size:15px;font-weight:800;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(race.name, race.id)}</span>
         </div>
         <span style="${MONO};font-size:11px;color:#7c8aa3;flex:0 0 auto;">${stageInfo}</span>
       </div>
       <div style="padding:14px 16px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
           <div style="min-width:0;">
-            <div style="font-size:16px;font-weight:800;color:#e8edf5;">${race.name}</div>
+            <div style="font-size:16px;font-weight:800;color:#e8edf5;">${renderRaceNameLink(race.name, race.id)}</div>
             <div style="${MONO};font-size:12px;color:#8494ad;margin-top:3px;">${km ? km.toFixed(0) + ' km' : ''}${hm ? ' · ' + Math.round(hm).toLocaleString('de-DE') + ' hm' : ''}</div>
           </div>
           ${profileLabel ? `<span style="font-size:11px;font-weight:700;color:#c4b5fd;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.34);padding:4px 10px;border-radius:6px;flex:0 0 auto;">${profileLabel}</span>` : ''}
@@ -319,7 +319,7 @@ function renderRiderSpotlight(): string {
   // simulierten Etappe ist (bei TTT: bester Fahrer des Siegerteams).
   const lastWinner = state.gameStatus?.lastStageWinner ?? null;
   const lastWinnerLabel = lastWinner != null && lastWinner.riderId === rider.id
-    ? `${lastWinner.isTeamTimeTrial ? 'TTT-Sieg' : 'Sieger'} · ${lastWinner.raceName}${lastWinner.stageNumber != null ? ` · E${lastWinner.stageNumber}` : ''}`
+    ? `${lastWinner.isTeamTimeTrial ? 'TTT-Sieg' : 'Sieger'} · ${renderRaceNameLink(lastWinner.raceName, lastWinner.raceId)}${lastWinner.stageNumber != null ? ` · E${lastWinner.stageNumber}` : ''}`
     : null;
 
   const cachedWins = spotlightWinsCache.get(rider.id);
@@ -333,7 +333,7 @@ function renderRiderSpotlight(): string {
       <div style="display:flex;align-items:stretch;background:#0c1729;border:1px solid #1c2b47;border-radius:8px;overflow:hidden;">
         ${w.isGc ? '<span style="width:3px;background:#fbbf24;flex:0 0 auto;"></span>' : ''}
         <span style="width:4px;background:${w.color};flex:0 0 auto;"></span>
-        <div style="flex:1;min-width:0;padding:8px 11px;"><div style="font-size:13px;font-weight:700;color:#e8edf5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${w.race}</div><div style="${MONO};font-size:10px;color:#8494ad;">${w.detail}</div></div>
+        <div style="flex:1;min-width:0;padding:8px 11px;"><div style="font-size:13px;font-weight:700;color:#e8edf5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.race, w.raceId)}</div><div style="${MONO};font-size:10px;color:#8494ad;">${w.detail}</div></div>
       </div>`).join('');
   }
 
@@ -462,9 +462,9 @@ function extractSeasonWins(payload: RiderStatsPayload, season: number | null): S
       const detail = isGcWin
         ? 'Gesamtwertung'
         : (row.isStageRace ? (row.stageNumber != null ? `Etappe ${row.stageNumber}` : 'Etappe') : 'Eintagesrennen');
-      wins.push({ race: row.raceName, detail, color, isGc: isGcWin, points: row.seasonPoints ?? 0 });
+      wins.push({ race: row.raceName, raceId: row.raceId, detail, color, isGc: isGcWin, points: row.seasonPoints ?? 0 });
     }
   }
   wins.sort((a, b) => b.points - a.points);
-  return wins.slice(0, 4).map(({ race, detail, color, isGc }) => ({ race, detail, color, isGc }));
+  return wins.slice(0, 4).map(({ race, raceId, detail, color, isGc }) => ({ race, raceId, detail, color, isGc }));
 }

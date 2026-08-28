@@ -4,6 +4,7 @@ import {
   esc,
   state,
   formatDate,
+  renderRaceNameLink,
 } from '../state';
 import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 
@@ -1733,7 +1734,7 @@ function renderTabRiderRole(payload: any): string {
 
     // 4. Popover details logic for Stage Races
     let popupHtml = '';
-    let nameColumnContent = `<strong>${esc(race.name)}</strong>`;
+    let nameColumnContent = renderRaceNameLink(race.name, race.id, { strong: true });
     
     if (race.is_stage_race === 1) {
       const isPopupActive = activePopupRaceId === race.id;
@@ -1741,7 +1742,7 @@ function renderTabRiderRole(payload: any): string {
 
       popupHtml = `
         <div class="race-stages-popover-card ${isPopupActive ? '' : 'hidden'}">
-          <div class="popover-head"><strong>${esc(race.name)}</strong> - Etappen</div>
+          <div class="popover-head">${renderRaceNameLink(race.name, race.id, { strong: true })} - Etappen</div>
           <div class="popover-stages-list">${stagesListHtml}</div>
           <div class="popover-separator"></div>
           <div class="popover-head">Profile Zusammenfassung</div>

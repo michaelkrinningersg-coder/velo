@@ -12,6 +12,7 @@ import {
   showLoading,
   hideLoading,
   downloadTextFile,
+  renderRaceNameLink,
 } from '../state';
 import type {
   StageEditorStagesSortKey,
@@ -1358,7 +1359,7 @@ export function renderStageEditorStagesOverview(): void {
     <tr>
       <td>${row.stageId}</td>
       <td>${renderFlag(row.countryCode || '')}</td>
-      <td><strong>${esc(row.raceName)}</strong></td>
+      <td>${renderRaceNameLink(row.raceName, row.raceId, { strong: true })}</td>
       <td><strong>${esc(getStageDisplayName({ stageNumber: row.stageNumber } as any))}</strong></td>
       <td>${renderStageEditorScoreControl(row.profileScore, 0, 100, row.stageId, renderStageEditorStageScorePopover(row), buildDashboardStageProfileLabel({ name: row.raceName } as any, { stageNumber: row.stageNumber, profile: row.profile } as any))}</td>
       <td>${renderStageProfileBadge(row.profile)}</td>
@@ -1409,7 +1410,7 @@ export function renderStageEditorClimbsOverview(): void {
       <td>${renderStageEditorCategoryBadge(row.category)}</td>
       <td>${renderStageEditorScoreControl(row.climbScore, 0, 350, row.stageId, renderStageEditorClimbScorePopover(row), buildDashboardStageProfileLabel({ name: row.raceName } as any, { stageNumber: row.stageNumber, profile: 'Mountain' as any } as any), row.id, renderClimbScoreBadge(row.climbScore))}</td>
       <td>${renderFlag(row.countryCode || '')}</td>
-      <td><strong>${esc(row.raceName)}</strong></td>
+      <td>${renderRaceNameLink(row.raceName, row.raceId, { strong: true })}</td>
       <td><strong>${esc(getStageDisplayName({ stageNumber: row.stageNumber } as any))}</strong></td>
       <td>${formatElevationGain(row.gainMeters)}</td>
       <td>${Math.round(row.elevationAtTop).toLocaleString('de-DE')} m</td>

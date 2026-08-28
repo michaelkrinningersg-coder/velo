@@ -32,6 +32,7 @@ import {
   hideLoading,
   getRiderSpecializationLabel,
   getRidersByTeam,
+  renderRaceNameLink,
 } from '../state';
 import type {
   StageResultsPayload,
@@ -869,7 +870,8 @@ export function renderResultsView(): void {
     ?? state.resultsRoster?.raceName
     ?? selectedRace?.name
     ?? null;
-  raceTitleEl.textContent = headerRaceName ?? 'Results';
+  const headerRaceId = state.stageResults?.raceId ?? state.resultsRoster?.raceId ?? selectedRace?.id ?? null;
+  raceTitleEl.innerHTML = headerRaceName ? renderRaceNameLink(headerRaceName, headerRaceId) : 'Results';
   const headerCategory = selectedRace?.category?.name ?? null;
   if (headerCategory) {
     categoryPillEl.textContent = headerCategory.replace(/^world\s*tour\s*-\s*/i, '');

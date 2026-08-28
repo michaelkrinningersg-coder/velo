@@ -195,6 +195,54 @@ describe('Startlisten-Qualitaet', () => {
     expect(zeile.score).toBe(20);
   });
 
+  it('misst gegen das Feld der Saison, nicht gegen die heute aktiven Fahrer', () => {
+    legeRennen(9, 'Vorjahr', 2026, { etappen: 1 });
+    legeRennen(10, 'Tour', 2027, { etappen: 1 });
+    punkte(9, 2026, 'gc_final', 1, 1, 1, { punkte: 500, tag: '2026-07-01' });
+    punkte(9, 2026, 'gc_final', 2, 2, 2, { punkte: 300, tag: '2026-07-01' });
+    // Fahrer 2 ist inzwischen zurueckgetreten — er stand 2027 aber unter
+    // Vertrag und gehoert damit ins Feld dieser Saison.
+    db.prepare('UPDATE riders SET is_retired = 1 WHERE id = 2').run();
+    for (const id of [1, 2, 3]) {
+      db.prepare(`INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
+        VALUES (?, 1, 2027, 2027, 'active')`).run(id);
+    }
+    starte(10, [1]);
+
+    new StartlistQualityService(db).erfasseRennstart(10, 2027);
+    const zeile = db.prepare('SELECT * FROM race_startlist_quality WHERE race_id = 10').get() as any;
+    // Bester des Feldes ist Fahrer 1 mit 500 — er startet, also 100.
+    expect(zeile.max_points).toBe(500);
+    expect(zeile.score).toBe(100);
+  });
+
+  it('traegt fehlende Werte aus archivierten Startlisten nach', () => {
+    legeRennen(9, 'Vorjahr', 2026, { etappen: 1 });
+    legeRennen(10, 'Tour', 2027, { etappen: 1 });
+    punkte(9, 2026, 'gc_final', 1, 1, 1, { punkte: 500, tag: '2026-07-01' });
+    punkte(9, 2026, 'gc_final', 2, 2, 2, { punkte: 100, tag: '2026-07-01' });
+    punkte(10, 2027, 'gc_final', 1, 2, 2, { tag: '2027-07-01' });
+    // Die laufende Startliste ist weg, das Archiv haelt sie: [team, fahrer].
+    db.prepare("INSERT INTO race_entries_compact (race_id, season, payload) VALUES (10, 2027, '[[2,2]]')").run();
+
+    const dienst = new StartlistQualityService(db);
+    expect(dienst.nachtragen()).toBe(1);
+    const zeile = db.prepare('SELECT * FROM race_startlist_quality WHERE race_id = 10').get() as any;
+    expect(zeile.starters).toBe(1);
+    expect(zeile.raw_points).toBe(100);   // Fahrer 2 hatte 100 vor dem Start
+    expect(zeile.max_points).toBe(500);   // bester des Feldes: Fahrer 1
+    expect(zeile.score).toBe(20);
+    // Zweiter Lauf findet nichts mehr.
+    expect(dienst.nachtragen()).toBe(0);
+  });
+
+  it('traegt fuer Meisterschaften nichts nach', () => {
+    legeRennen(30, 'Meisterschaft', 2027, { etappen: 1, kategorie: KAT_LANDESMEISTERSCHAFT });
+    punkte(30, 2027, 'one_day_result', 1, 1, 1);
+    db.prepare("INSERT INTO race_entries_compact (race_id, season, payload) VALUES (30, 2027, '[[1,1]]')").run();
+    expect(new StartlistQualityService(db).nachtragen()).toBe(0);
+  });
+
   it('erfasst Landesmeisterschaften nicht', () => {
     legeRennen(30, 'Meisterschaft', 2027, { etappen: 1, kategorie: KAT_LANDESMEISTERSCHAFT });
     starte(30, [1, 2]);

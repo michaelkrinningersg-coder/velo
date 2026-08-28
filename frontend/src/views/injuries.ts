@@ -7,6 +7,7 @@ import {
   renderMiniJersey,
   isActiveView,
   formatDate,
+  renderRaceNameLink,
 } from '../state';
 import { renderRiderStatsCategoryBadge, renderRiderOverallRatingBadge, openRiderStats } from './riderStats';
 import type { InjuryRow } from '../../../shared/types';
@@ -106,7 +107,7 @@ export function renderInjuriesView(): void {
                 <div class="injury-missed-race">
                   <span style="min-width: 65px; color: var(--text-400);">${formatDate(r.startDate)}</span>
                   ${renderFlag(r.countryCode)}
-                  <strong style="color: #fff; flex: 1; margin-right: 0.5rem;">${esc(r.name)}</strong>
+                  <span style="color: #fff; flex: 1; margin-right: 0.5rem;">${renderRaceNameLink(r.name, r.id, { strong: true })}</span>
                   ${renderRiderStatsCategoryBadge(r.categoryName)}
                 </div>
               `;

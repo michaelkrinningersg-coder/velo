@@ -22,6 +22,7 @@ import {
   renderSeasonFormPhaseIndicator,
   resolveRaceCategoryBadgeStyle,
   buildRaceCategoryBadgeCssVariables,
+  renderRaceNameLink,
   renderRiderNameLink,
   getRiderSpecializationLabel,
   autoProgressActive,
@@ -120,7 +121,7 @@ export function renderGameState(): void {
       return `
         <div class="pending-stage-item">
           <div class="pending-stage-meta">
-            <div class="pending-stage-title">${esc(pendingStage.raceName)}</div>
+            <div class="pending-stage-title">${renderRaceNameLink(pendingStage.raceName, pendingStage.raceId)}</div>
             <div class="pending-stage-subtitle">${esc(subtitle)}</div>
           </div>
           <div class="pending-stage-actions">
@@ -406,7 +407,7 @@ export function renderProgramRaceRows(payload: RiderProgramRaceSummary): string 
             <tr>
               <td>${formatRaceDateRange(race)}</td>
               <td><span class="dashboard-race-country">${race.country?.code3 ? renderFlag(race.country.code3) : ''}<span>${esc(race.country?.name ?? `Land ${race.countryId}`)}</span></span></td>
-              <td><strong>${esc(race.name)}</strong></td>
+              <td>${renderRaceNameLink(race.name, race.id, { strong: true })}</td>
               <td>${raceCategoryNameBadge(race)}</td>
               <td>${raceCategoryBadge(race)}</td>
             </tr>
@@ -606,7 +607,7 @@ export async function openDashboardStageProfile(stageId: number, selectedClimb: 
 
   state.selectedDashboardProfileStageId = stageId;
   const catBadge = location.race.category?.name ? raceCategoryNameBadge(location.race) : '';
-  $('stage-profile-title').innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">${catBadge}${renderStageProfileBadge(location.stage.profile)}<span>${esc(location.race.name)} · ${esc(getStageDisplayName(location.stage))}</span></span>`;
+  $('stage-profile-title').innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">${catBadge}${renderStageProfileBadge(location.stage.profile)}<span>${renderRaceNameLink(location.race.name, location.race.id)} · ${esc(getStageDisplayName(location.stage))}</span></span>`;
   const climbMeta = selectedClimb != null
     ? ` · Anstieg ${selectedClimb.climbIndex}: ${selectedClimb.name}${selectedClimb.category != null ? ` · Kat. ${selectedClimb.category}` : ''} · ${selectedClimb.startKm.toFixed(1).replace('.', ',')}-${selectedClimb.endKm.toFixed(1).replace('.', ',')} km · Climb Score ${selectedClimb.climbScore}`
     : '';

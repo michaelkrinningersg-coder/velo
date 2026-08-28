@@ -67,7 +67,7 @@ import {
   openTeamStats,
   initTeamStatsListeners,
 } from './views/teamStats';
-import { initRaceDetailListeners } from './views/raceDetail';
+import { initRaceDetailListeners, openRaceDetailByRef } from './views/raceDetail';
 import { initContractRenewalView } from './views/contractRenewal';
 import {
   initLeaderboardsView,
@@ -226,6 +226,18 @@ function initAppListeners(): void {
     }
 
     openTeamStats(teamId);
+  });
+
+  // Globaler Renn-Link: oeffnet ueberall, wo ein Rennname steht, die Rennkarte.
+  document.body.addEventListener('click', (event) => {
+    const raceButton = (event.target as Element).closest<HTMLButtonElement>('button.app-race-link');
+    if (!raceButton) {
+      return;
+    }
+
+    const rawId = raceButton.dataset['raceId'];
+    const raceId = rawId != null && Number.isFinite(Number(rawId)) ? Number(rawId) : null;
+    void openRaceDetailByRef(raceId, raceButton.dataset['raceName'] ?? null);
   });
 
   // Global modals closes events registration

@@ -121,6 +121,26 @@ export function renderRiderNameLink(name: string, options: RiderLinkRenderOption
   return `<button ${attributes.join(' ')}>${label}</button>${marker}`;
 }
 
+/**
+ * Rennname als Link auf die Rennkarte.
+ *
+ * Neben der ID wird der Name mitgegeben: Renn-IDs werden je Saison neu
+ * vergeben, die ID einer alten Austragung (etwa aus einer Ergebnisliste) steckt
+ * damit nicht mehr im geladenen Kalender. Der Name findet dann die aktuelle
+ * Austragung — die Rennkarte aggregiert ohnehin ueber alle Jahre.
+ */
+export function renderRaceNameLink(
+  name: string,
+  raceId: number | null | undefined,
+  options: { strong?: boolean; extraClass?: string } = {},
+): string {
+  const labelTag = options.strong ? 'strong' : 'span';
+  const label = `<${labelTag} class="app-race-link-label">${esc(name)}</${labelTag}>`;
+  if (!name) return label;
+  const idAttr = raceId != null ? ` data-race-id="${raceId}"` : '';
+  return `<button type="button" class="${joinClassNames('app-race-link', options.extraClass)}"${idAttr} data-race-name="${esc(name)}">${label}</button>`;
+}
+
 export function renderTeamNameLink(name: string, teamId: number | null | undefined, strong = true, extraClass = ''): string {
   const labelTag = strong === false ? 'span' : 'strong';
   const label = `<${labelTag} class="app-team-link-label">${esc(name)}</${labelTag}>`;

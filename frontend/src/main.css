@@ -786,7 +786,8 @@ html, body {
 }
 
 .app-rider-link,
-.app-team-link {
+.app-team-link,
+.app-race-link {
   display: inline-flex;
   align-items: center;
   gap: .25rem;
@@ -803,20 +804,24 @@ html, body {
 .app-rider-link:hover,
 .app-rider-link:focus-visible,
 .app-team-link:hover,
-.app-team-link:focus-visible {
+.app-team-link:focus-visible,
+.app-race-link:hover,
+.app-race-link:focus-visible {
   color: inherit;
   text-decoration: none;
 }
 
 .app-rider-link:focus-visible,
-.app-team-link:focus-visible {
+.app-team-link:focus-visible,
+.app-race-link:focus-visible {
   outline: 1px solid rgba(96, 165, 250, .7);
   outline-offset: 2px;
   border-radius: .25rem;
 }
 
 .app-rider-link-label,
-.app-team-link-label {
+.app-team-link-label,
+.app-race-link-label {
   min-width: 0;
 }
 

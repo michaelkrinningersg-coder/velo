@@ -3,6 +3,7 @@ import {
   $,
   esc,
   state,
+  renderRaceNameLink,
   renderRiderNameLink,
   renderTeamNameLink,
   formatDate,
@@ -1074,10 +1075,11 @@ export function renderRiderStatsFatigueTab(rider: Rider | null, payload: RiderSt
     historyRowsHtml = fatigueHistory.map((entry) => {
       const formattedDate = formatDate(entry.date);
       let eventLabel = '';
+      // Ohne Renn-ID: der Name findet die aktuelle Austragung.
       if (entry.type === 'race') {
-        eventLabel = `${esc(entry.raceName)}${entry.stageNumber != null ? ` - Etappe ${entry.stageNumber}` : ''}`;
+        eventLabel = `${renderRaceNameLink(entry.raceName ?? '', null)}${entry.stageNumber != null ? ` - Etappe ${entry.stageNumber}` : ''}`;
       } else {
-        eventLabel = entry.raceName ? esc(entry.raceName) : 'Regeneration';
+        eventLabel = entry.raceName ? renderRaceNameLink(entry.raceName, null) : 'Regeneration';
       }
 
       const stageScoreHtml = entry.type === 'race' && entry.stageScore != null
@@ -2055,7 +2057,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
           <span style="width:5px; background:${barColor}; flex:0 0 auto;"></span>
           <div style="flex:1; min-width:0; display:flex; justify-content:space-between; align-items:center; padding:12px 16px; gap:12px;">
             <div style="min-width:0; overflow:hidden;">
-              <div style="font-size:15px; font-weight:800; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(block.raceName)}</div>
+              <div style="font-size:15px; font-weight:800; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${renderRaceNameLink(block.raceName, block.raceId)}</div>
               <div style="${MONOF}; font-size:11px; color:#8494ad; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(formatRiderStatsRaceBlockMeta(block))}</div>
             </div>
             <div style="display:flex; align-items:center; gap:12px; flex:0 0 auto;">
@@ -2601,9 +2603,11 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
     ? '<div style="padding:20px;text-align:center;color:#6a7a95;font-size:13px;">Keine Ergebnisse für diese Filterkombination.</div>'
     : paginatedRows.map(row => {
         const isFinalRow = row.rowType !== 'stage_result';
-        const label = isFinalRow
-          ? `${row.raceName} · ${getRiderStatsRowTypeLabel(row.rowType)}`
-          : (row.stageNumber && row.isStageRace ? `${row.raceName} · Etappe ${row.stageNumber}` : row.raceName);
+        // Nur der Rennname wird verlinkt, der Zusatz bleibt Text.
+        const labelZusatz = isFinalRow
+          ? ` · ${getRiderStatsRowTypeLabel(row.rowType)}`
+          : (row.stageNumber && row.isStageRace ? ` · Etappe ${row.stageNumber}` : '');
+        const label = `${renderRaceNameLink(row.raceName, row.raceId)}${esc(labelZusatz)}`;
 
         let placeCell = '<span style="justify-self:center;color:#5f6f8a;">–</span>';
         if (row.finishStatus === 'otl') {
@@ -2630,7 +2634,7 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
           <div style="display:grid; ${TR_COLS} gap:9px; align-items:center; padding:9px 14px; border-top:1px solid #14203a;${isFinalRow ? 'background:rgba(34,211,238,.06);' : ''}">
             <span style="${MONOF}; font-size:11px; color:#8494ad;">${row.season}</span>
             ${placeCell}
-            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${esc(label)}</span>
+            <span style="font-size:12.5px; font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${label}</span>
             <span style="min-width:0; overflow:hidden;">${categoryChip}</span>
             ${profileCell}
             ${scoreCell}
