@@ -121,15 +121,20 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
     hard: { mountain: 0.96, downhill: 0.04 },
   },
   // Pflaster: nur zwei Referenzetappen, deshalb keine Ueberblendung.
+  //
+  // Der Sprint steht in beiden Tabellen nicht mehr. Eine Pflasteretappe
+  // entscheidet sich am Sektor, nicht im Zielsprint; wo zwei Fahrer gleichauf
+  // ankommen, entscheidet weiterhin der Tie-Break. Sein frueheres Gewicht ist
+  // auf das Pflaster gegangen, zusammen mit 0,10 vom Flach-Anteil.
   Cobble: {
     difficultyRange: [0.20, 0.35],
-    easy: { cobble: 0.60, flat: 0.30, sprint: 0.10 },
-    hard: { cobble: 0.60, flat: 0.30, sprint: 0.10 },
+    easy: { cobble: 0.75, flat: 0.15, stamina: 0.10 },
+    hard: { cobble: 0.75, flat: 0.15, stamina: 0.10 },
   },
   Cobble_Hill: {
     difficultyRange: [0.40, 0.95],
-    easy: { cobble: 0.37, flat: 0.30, hill: 0.23, sprint: 0.10 },
-    hard: { cobble: 0.37, flat: 0.20, hill: 0.33, sprint: 0.10 },
+    easy: { cobble: 0.57, flat: 0.20, hill: 0.23 },
+    hard: { cobble: 0.57, flat: 0.10, hill: 0.33 },
   },
   // Zeitfahren haben ihre eigene Formel; die Tabelle ist nur der Vollstaendigkeit halber besetzt.
   ITT: {

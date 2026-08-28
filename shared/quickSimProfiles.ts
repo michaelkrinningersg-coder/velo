@@ -136,6 +136,11 @@ export const SPLIT_SHARE_RELATIVE_SD = 1.077;
  */
 export const SPLIT_SHARE_RELATIVE_SD_BY_PROFILE: Partial<Record<StageProfile, number>> = {
   Hilly_Difficult: 0.85,
+  // Pflaster folgt der schweren Huegeletappe: selektiv, aber das Feld faehrt
+  // geschlossen an. Ohne Eintrag galt der gemessene Wert 1,077, der die
+  // Ziehung zweigipfelig macht.
+  Cobble: 0.85,
+  Cobble_Hill: 0.85,
   Medium_Mountain: 0.85,
   Mountain: 0.45,
   High_Mountain: 0.80,
@@ -233,6 +238,9 @@ export const TAIL_SHAPE_BY_PROFILE: Partial<Record<StageProfile, TailShapeParame
   // 0,014 bis 0,023, bei Hilly 0,070.
   Hilly: { kind: 'sform', exponent: 0.644, weight: 2.939 },
   Hilly_Difficult: { kind: 'sform', exponent: 1.243, weight: 0.894 },
+  // Pflaster uebernimmt die Kurve der schweren Huegeletappe.
+  Cobble: { kind: 'sform', exponent: 1.243, weight: 0.894 },
+  Cobble_Hill: { kind: 'sform', exponent: 1.243, weight: 0.894 },
   Medium_Mountain: { kind: 'sform', exponent: 1.274, weight: 0.648 },
   Mountain: { kind: 'sform', exponent: 1.434, weight: 0.399 },
   High_Mountain: { kind: 'sform', exponent: 1.513, weight: 0.239 },
@@ -411,8 +419,8 @@ export const DEFAULT_QUICK_SIM_PROFILES: Record<StageProfile, QuickSimProfilePar
   Rolling:          { baseSpeedKmh: 42.49, bunchIntercept: 2.38, bunchedShareIntercept: 0.7527, splitShareIntercept: 0.2947, tailGapPerKm: 5.35, tailGroupSize: 4.18, noiseSigma: 0.18, incidentLossMultiplier: 1.40, severeDnfChance: 0.25, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.41 },
   Hilly:            { baseSpeedKmh: 42.83, bunchIntercept: -0.50, bunchedShareIntercept: 0.7860, splitShareIntercept: 0.0700, tailGapPerKm: 6.12, tailGroupSize: 4.15, noiseSigma: 0.20, incidentLossMultiplier: 1.70, severeDnfChance: 0.28, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.29 },
   Hilly_Difficult:  { baseSpeedKmh: 41.41, bunchIntercept: -5.00, bunchedShareIntercept: 0.6951, splitShareIntercept: 0.0100, tailGapPerKm: 9.93, tailGroupSize: 3.96, noiseSigma: 0.22, incidentLossMultiplier: 2.00, severeDnfChance: 0.30, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 1.02 },
-  Cobble:           { baseSpeedKmh: 46.08, bunchIntercept: -3.03, bunchedShareIntercept: 0.5725, splitShareIntercept: -0.0112, tailGapPerKm: 13.08, tailGroupSize: 5.42, noiseSigma: 0.30, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.40, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.38 },
-  Cobble_Hill:      { baseSpeedKmh: 46.85, bunchIntercept: 1.16, bunchedShareIntercept: 0.6661, splitShareIntercept: 0.1715, tailGapPerKm: 8.35, tailGroupSize: 5.25, noiseSigma: 0.30, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.40, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.84 },
+  Cobble:           { baseSpeedKmh: 46.08, bunchIntercept: -5.00, bunchedShareIntercept: 0.6951, splitShareIntercept: 0.0100, tailGapPerKm: 9.93, tailGroupSize: 3.96, noiseSigma: 0.22, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.38 },
+  Cobble_Hill:      { baseSpeedKmh: 46.85, bunchIntercept: -5.00, bunchedShareIntercept: 0.6951, splitShareIntercept: 0.0100, tailGapPerKm: 9.93, tailGroupSize: 3.96, noiseSigma: 0.22, incidentLossMultiplier: 2.40, severeDnfChance: 0.35, breakawayShrinkExponent: 1.50, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.84 },
   Medium_Mountain:  { baseSpeedKmh: 39.83, bunchIntercept: -2.00, bunchedShareIntercept: 0.5717, splitShareIntercept: 0.0100, tailGapPerKm: 6.76, tailGroupSize: 4.38, noiseSigma: 0.22, incidentLossMultiplier: 2.20, severeDnfChance: 0.30, breakawayShrinkExponent: 1.60, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.79 },
   Mountain:         { baseSpeedKmh: 36.91, bunchIntercept: -1.00, bunchedShareIntercept: 0.7000, splitShareIntercept: 0.0060, tailGapPerKm: 23.25, tailGroupSize: 1.85, noiseSigma: 0.24, incidentLossMultiplier: 2.60, severeDnfChance: 0.30, breakawayShrinkExponent: 1.70, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.51 },
   High_Mountain:    { baseSpeedKmh: 35.85, bunchIntercept: -1.00, bunchedShareIntercept: 0.7000, splitShareIntercept: 0.0320, tailGapPerKm: 36.82, tailGroupSize: 2.25, noiseSigma: 0.26, incidentLossMultiplier: 3.00, severeDnfChance: 0.32, breakawayShrinkExponent: 1.80, timeTrialSlope: 0.00000, timeTrialNoise: 0.0000, massCrashInvolvement: 0.35, rankNoise: 0.26 },

@@ -422,10 +422,20 @@ describe('An echte Rennen angepasste Rueckstandskurve', () => {
   });
 
   it('laesst die Profile ohne eigenen Eintrag auf der gemessenen Kurve', () => {
-    for (const profile of ['Cobble', 'Cobble_Hill', 'ITT', 'TTT'] as StageProfile[]) {
+    for (const profile of ['ITT', 'TTT'] as StageProfile[]) {
       expect(TAIL_SHAPE_BY_PROFILE[profile]).toBeUndefined();
       for (const position of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
         expect(resolveTailGapShare(position, profile)).toBeCloseTo(resolveTailGapShare(position), 10);
+      }
+    }
+  });
+
+  it('fuehrt Pflaster auf der Kurve der schweren Huegeletappe', () => {
+    for (const profile of ['Cobble', 'Cobble_Hill'] as StageProfile[]) {
+      expect(TAIL_SHAPE_BY_PROFILE[profile]).toEqual(TAIL_SHAPE_BY_PROFILE.Hilly_Difficult);
+      for (const position of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
+        expect(resolveTailGapShare(position, profile))
+          .toBeCloseTo(resolveTailGapShare(position, 'Hilly_Difficult'), 10);
       }
     }
   });
