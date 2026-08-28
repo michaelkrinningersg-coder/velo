@@ -94,7 +94,7 @@ export const state: {
   selectedRaceParticipantsRaceId: number | null;
   selectedDashboardProfileStageId: number | null;
   selectedRaceDetailRaceId: number | null;
-  raceDetailTab: 'detail' | 'palmares' | 'analysis' | 'record';
+  raceDetailTab: 'detail' | 'palmares' | 'bestenlisten' | 'analysis' | 'record';
   selectedRaceDetailStageId: number | null;
   stageSummariesByStageId: Record<number, ParsedStageSummary | undefined>;
   stageSummaryErrorsByStageId: Record<number, string | undefined>;

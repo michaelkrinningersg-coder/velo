@@ -72,22 +72,4 @@ export class StartlistQualityService {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(raceId, season, ergebnis.score, ergebnis.rawPoints, ergebnis.maxPoints, ergebnis.starters);
   }
-
-  /** Gespeicherte Werte eines Rennens, aelteste Saison zuerst. */
-  public verlauf(raceId: number): Array<{
-    season: number;
-    score: number | null;
-    rawPoints: number;
-    maxPoints: number;
-    starters: number;
-  }> {
-    return this.db.prepare(`
-      SELECT season, score, raw_points AS rawPoints, max_points AS maxPoints, starters
-      FROM race_startlist_quality
-      WHERE race_id = ?
-      ORDER BY season ASC
-    `).all(raceId) as Array<{
-      season: number; score: number | null; rawPoints: number; maxPoints: number; starters: number;
-    }>;
-  }
 }

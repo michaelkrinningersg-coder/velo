@@ -4,7 +4,8 @@
  *
  * Tab 1 "Renndetails" (Phase 1): linke Etappenliste + grosses Profil (aus Live-Race,
  * skaliert) mit Prev/Next + Etappen-Dropdown, darunter Details (Wertungen, Hoehenmeter, Laenge).
- * Tabs 2–4 (Siegerliste / Analyse / Rekordteilnahme) folgen in Phase 2 (hier deaktiviert).
+ * Tabs 2-5: Siegerliste (Podium je Saison), Bestenlisten (Rekordsieger je Wertung),
+ * Analyse (Startlisten-Qualitaet, Profil-, Nationen- und Teambilanz) und Rekordteilnahme.
  */
 import { state, $, esc, showModal, findRaceById, formatDate, formatKm, formatElevationGain, renderFlag, renderMiniJersey } from '../state';
 import { api } from '../api';
@@ -17,7 +18,7 @@ import {
   ensureStageSummaryLoaded,
 } from './dashboard';
 import { renderStaticStageProfileMarkup, extractStageFeatures } from '../race-sim/renderProfile';
-import type { Race, Stage, ParsedStageSummary, RacePalmaresPayload, PalmaresRiderRef } from '../../../shared/types';
+import type { Race, Stage, ParsedStageSummary, RacePalmaresPayload, PalmaresRiderRef, PalmaresWinRow, RaceRecordsPayload } from '../../../shared/types';
 
 // Palmarès-Cache je Rennen (lazy geladen beim ersten Tab-Wechsel).
 const palmaresCache = new Map<number, RacePalmaresPayload>();
@@ -104,6 +105,7 @@ function renderTabs(): string {
   return `<div class="team-detail-page-tabs race-detail-tabs" role="tablist" aria-label="Renndetails Tabs">
     ${tab('detail', 'Renndetails', true)}
     ${tab('palmares', 'Siegerliste', true)}
+    ${tab('bestenlisten', 'Bestenlisten', true)}
     ${tab('analysis', 'Analyse', true)}
     ${tab('record', 'Rekordteilnahme', true)}
   </div>`;
@@ -117,6 +119,7 @@ function renderTabContent(race: Race): string {
     return '<div class="race-detail-profile-loading" style="height:180px;">DATEN WERDEN GELADEN…</div>';
   }
   if (state.raceDetailTab === 'palmares') return renderPalmaresTab(race, palmares);
+  if (state.raceDetailTab === 'bestenlisten') return renderBestenlistenTab(palmares);
   if (state.raceDetailTab === 'analysis') return renderAnalysisTab(palmares);
   if (state.raceDetailTab === 'record') return renderRecordTab(palmares);
   return '';
@@ -269,6 +272,61 @@ function renderPalmaresTab(race: Race, palmares: RacePalmaresPayload): string {
 }
 
 // ============================================================================
+// Tab 3: Bestenlisten (Rekordsieger je Wertung)
+// ============================================================================
+// Die Gesamtsieg-Liste zeigt zunaechst 5 Fahrer; der Server liefert 10.
+let gesamtsiegeAusgeklappt = false;
+
+function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean): string {
+  const saisons = zeile.seasons.slice(0, 6).join(', ')
+    + (zeile.seasons.length > 6 ? ` +${zeile.seasons.length - 6}` : '');
+  const plaetze = mitPlaetzen
+    ? `<span class="rd-best-sub">${zeile.seconds}× 2. · ${zeile.thirds}× 3.</span>`
+    : `<span class="rd-best-sub">${esc(saisons)}</span>`;
+  return `<div class="rd-best-row">
+    <span class="rd-best-rank">${rang}</span>
+    <span class="rd-pal-rider">${renderFlag(zeile.rider.countryCode ?? '')}${riderLinkButton(zeile.rider.riderId, `${esc(zeile.rider.firstName)} ${esc(zeile.rider.lastName)}`)}</span>
+    ${plaetze}
+    <span class="rd-best-count">${zeile.wins}×</span>
+  </div>`;
+}
+
+function bestenlisteKarte(
+  titel: string,
+  hinweis: string,
+  zeilen: PalmaresWinRow[],
+  optionen: { mitPlaetzen?: boolean; ausklappbar?: boolean } = {},
+): string {
+  if (zeilen.length === 0) return '';
+  const sichtbar = optionen.ausklappbar && !gesamtsiegeAusgeklappt ? zeilen.slice(0, 5) : zeilen;
+  const knopf = optionen.ausklappbar && zeilen.length > 5
+    ? `<button type="button" class="rd-best-more" data-race-detail-toggle="gesamtsiege">${gesamtsiegeAusgeklappt ? 'Weniger anzeigen' : `Top ${zeilen.length} anzeigen`}</button>`
+    : '';
+  return `<div class="rd-analysis-card">
+    <div class="rd-analysis-title">${esc(titel)} <span class="rd-analysis-hint">· ${esc(hinweis)}</span></div>
+    <div class="rd-best-list">${sichtbar.map((z, i) => winsRow(z, i + 1, optionen.mitPlaetzen === true)).join('')}</div>
+    ${knopf}
+  </div>`;
+}
+
+function renderBestenlistenTab(palmares: RacePalmaresPayload): string {
+  const r = palmares.records;
+  const karten = [
+    bestenlisteKarte('Gesamtsiege', 'mit zweiten und dritten Plätzen', r.overallWins, { mitPlaetzen: true, ausklappbar: true }),
+    bestenlisteKarte('Etappensiege', 'Top 10', r.stageWins),
+    bestenlisteKarte('Bergtrikot', 'Top 5', r.mountainWins),
+    bestenlisteKarte('Weißes Trikot', 'Top 5', r.youthWins),
+    bestenlisteKarte('Punktetrikot', 'Top 5', r.pointsWins),
+  ].filter(Boolean).join('');
+
+  if (!karten) {
+    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Noch keine Ergebnisse für Bestenlisten vorhanden.</div>';
+  }
+  const kopf = `<div class="rd-best-head">${r.editions} ${r.editions === 1 ? 'Austragung' : 'Austragungen'} ausgewertet</div>`;
+  return `${kopf}<div class="rd-analysis">${karten}</div>`;
+}
+
+// ============================================================================
 // Tab 3: Analyse (Spec 1 + Nationalität der Sieger)
 // ============================================================================
 const DONUT_PALETTE = ['#22d3ee', '#fbbf24', '#a855f7', '#4ade80', '#f97316', '#ef4444', '#60a5fa', '#f472b6', '#a3e635', '#2dd4bf', '#c084fc', '#fb7185'];
@@ -297,33 +355,96 @@ function renderDistributionDonut(items: Array<{ key: string; count: number }>, c
   </div>`;
 }
 
-function renderAnalysisTab(palmares: RacePalmaresPayload): string {
-  const winners = palmares.seasons.map((s) => s.winner).filter((w): w is PalmaresRiderRef => w != null);
-  if (winners.length === 0) {
-    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Noch keine Sieger für eine Analyse vorhanden.</div>';
+/**
+ * Balken der Startlisten-Qualitaet je Saison. Der Wert ist der Anteil an der
+ * staerkstmoeglichen Startliste derselben Saison (100 = die besten Fahrer des
+ * Spiels sind alle am Start), berechnet und gespeichert beim Rennstart.
+ */
+function renderStartlistQuality(records: RaceRecordsPayload): string {
+  const werte = records.startlistQuality.filter((q) => q.score != null);
+  if (werte.length === 0) {
+    return `<div class="rd-analysis-card">
+      <div class="rd-analysis-title">Qualität der Startliste</div>
+      <div class="rd-analysis-empty">Noch kein Wert erfasst. Er wird beim Start eines Rennens einmalig festgeschrieben.</div>
+    </div>`;
   }
-  const specCounts = countBy(winners, (w) => w.specialization1 ?? 'Unbekannt');
-  const comboCounts = countBy(winners, (w) => `${w.specialization1 ?? '?'} + ${w.specialization2 ?? '?'}`);
-  const natCounts = countBy(winners, (w) => w.countryCode ?? '—');
+  const max = Math.max(...werte.map((q) => q.score ?? 0), 1);
+  const balken = werte.map((q) => {
+    const score = q.score ?? 0;
+    // Feste Pixelhoehe statt Prozent: Wert- und Jahreslabel teilen sich die
+    // Spalte mit dem Balken, eine Prozenthoehe liefe darueber hinaus.
+    const hoehe = Math.max(2, Math.round((score / max) * 108));
+    const farbe = score >= 75 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f97316';
+    return `<div class="rd-slq-col" title="${q.season}: ${score.toLocaleString('de-DE')} von 100 · ${q.starters} Starter">
+      <span class="rd-slq-value">${score.toLocaleString('de-DE')}</span>
+      <span class="rd-slq-bar" style="height:${hoehe}px; background:${farbe};"></span>
+      <span class="rd-slq-year">${q.season}</span>
+    </div>`;
+  }).join('');
+  const schnitt = werte.reduce((sum, q) => sum + (q.score ?? 0), 0) / werte.length;
+  return `<div class="rd-analysis-card">
+    <div class="rd-analysis-title">Qualität der Startliste <span class="rd-analysis-hint">· Anteil am stärkstmöglichen Feld der Saison</span></div>
+    <div class="rd-slq-chart">${balken}</div>
+    <div class="rd-analysis-sub">Ø ${schnitt.toFixed(1).replace('.', ',')} · ${werte.length} ${werte.length === 1 ? 'Saison' : 'Saisons'}</div>
+  </div>`;
+}
 
-  const comboList = comboCounts.map((c) => `<div class="rd-listrow"><span class="rd-listrow-label">${esc(c.key)}</span><span class="rd-listrow-count">${c.count}×</span></div>`).join('');
-  const natFlags = (code: string) => code === '—' ? '' : renderFlag(code);
-  const natList = natCounts.map((c) => `<div class="rd-listrow"><span class="rd-listrow-label">${natFlags(c.key)} ${esc(c.key)}</span><span class="rd-listrow-count">${c.count}×</span></div>`).join('');
+function bilanzListe(zeilen: Array<{ label: string; flagge: string; wins: number; podiums: number }>): string {
+  return zeilen.map((z) => `<div class="rd-listrow">
+    <span class="rd-listrow-label">${z.flagge} ${esc(z.label)}</span>
+    <span class="rd-listrow-count">${z.wins}× Sieg · ${z.podiums}× Podium</span>
+  </div>`).join('');
+}
 
-  return `<div class="rd-analysis">
-    <div class="rd-analysis-card">
+function renderAnalysisTab(palmares: RacePalmaresPayload): string {
+  const records = palmares.records;
+  const winners = palmares.seasons.map((s) => s.winner).filter((w): w is PalmaresRiderRef => w != null);
+
+  const profilKarte = records.profiles.length > 0
+    ? `<div class="rd-analysis-card">
+        <div class="rd-analysis-title">Profil der Etappen <span class="rd-analysis-hint">· aktuelle Austragung</span></div>
+        ${renderDistributionDonut(records.profiles.map((p) => ({ key: p.profile, count: p.stages })), String(records.stageCount), records.stageCount === 1 ? 'ETAPPE' : 'ETAPPEN')}
+      </div>`
+    : '';
+
+  const nationenKarte = records.nations.length > 0
+    ? `<div class="rd-analysis-card">
+        <div class="rd-analysis-title">Nationenbilanz <span class="rd-analysis-hint">· Podestplätze aller Austragungen</span></div>
+        ${renderDistributionDonut(records.nations.map((n) => ({ key: n.countryCode ?? '—', count: n.wins })).filter((n) => n.count > 0), String(records.editions), 'SIEGE')}
+        <div class="rd-analysis-sub">Nach Land</div>
+        <div class="rd-list">${bilanzListe(records.nations.map((n) => ({
+          label: n.countryName ?? n.countryCode ?? '—',
+          flagge: n.countryCode ? renderFlag(n.countryCode) : '',
+          wins: n.wins, podiums: n.podiums,
+        })))}</div>
+      </div>`
+    : '';
+
+  const teamKarte = records.teams.length > 0
+    ? `<div class="rd-analysis-card">
+        <div class="rd-analysis-title">Teambilanz <span class="rd-analysis-hint">· Team zum Zeitpunkt des Erfolgs</span></div>
+        <div class="rd-list">${bilanzListe(records.teams.map((t) => ({
+          label: t.teamName ?? 'Unbekannt',
+          flagge: renderMiniJersey(t.teamId, t.teamName),
+          wins: t.wins, podiums: t.podiums,
+        })))}</div>
+      </div>`
+    : '';
+
+  const siegerKarten = winners.length === 0 ? '' : (() => {
+    const specCounts = countBy(winners, (w) => w.specialization1 ?? 'Unbekannt');
+    const comboCounts = countBy(winners, (w) => `${w.specialization1 ?? '?'} + ${w.specialization2 ?? '?'}`);
+    const comboList = comboCounts.map((c) => `<div class="rd-listrow"><span class="rd-listrow-label">${esc(c.key)}</span><span class="rd-listrow-count">${c.count}×</span></div>`).join('');
+    return `<div class="rd-analysis-card">
       <div class="rd-analysis-title">Spec 1 der Sieger <span class="rd-analysis-hint">· aktuelle Spezialisierung</span></div>
       ${renderDistributionDonut(specCounts, String(winners.length), 'SIEGE')}
       <div class="rd-analysis-sub">Spec 1 + 2 Kombinationen</div>
       <div class="rd-list">${comboList}</div>
-    </div>
-    <div class="rd-analysis-card">
-      <div class="rd-analysis-title">Nationalität der Sieger</div>
-      ${renderDistributionDonut(natCounts, String(winners.length), 'SIEGE')}
-      <div class="rd-analysis-sub">Nach Land</div>
-      <div class="rd-list">${natList}</div>
-    </div>
-  </div>`;
+    </div>`;
+  })();
+
+  const karten = `${renderStartlistQuality(records)}${profilKarte}${siegerKarten}${nationenKarte}${teamKarte}`;
+  return `<div class="rd-analysis">${karten}</div>`;
 }
 
 // ============================================================================
@@ -359,6 +480,13 @@ export function initRaceDetailListeners(): void {
       state.raceDetailTab = tabBtn.dataset['raceDetailTab'] as typeof state.raceDetailTab;
       body.innerHTML = renderRaceDetailBody();
       if (state.raceDetailTab !== 'detail') void ensurePalmaresLoaded(raceId);
+      return;
+    }
+
+    const toggle = target.closest<HTMLButtonElement>('button[data-race-detail-toggle]');
+    if (toggle) {
+      gesamtsiegeAusgeklappt = !gesamtsiegeAusgeklappt;
+      body.innerHTML = renderRaceDetailBody();
       return;
     }
 

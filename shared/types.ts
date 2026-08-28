@@ -544,11 +544,85 @@ export interface PalmaresParticipationRow {
   totalPoints: number;
 }
 
+/**
+ * Eine Zeile einer Bestenliste: wie oft ein Fahrer diese Wertung gewonnen hat.
+ * Zweite und dritte Plaetze werden nur beim Gesamtsieg mitgezaehlt (bei den
+ * Trikotwertungen speichert das Spiel keine Plaetze ausser dem Sieg).
+ */
+export interface PalmaresWinRow {
+  rider: PalmaresRiderRef;
+  wins: number;
+  seconds: number;
+  thirds: number;
+  /** Saisons der Siege, neueste zuerst. */
+  seasons: number[];
+}
+
+/** Verteilung der Etappenprofile einer Edition. */
+export interface PalmaresProfileRow {
+  profile: StageProfile;
+  stages: number;
+}
+
+/** Nationenbilanz ueber alle Editionen: Siege und Podestplaetze je Land. */
+export interface PalmaresNationRow {
+  countryCode: string | null;
+  countryName: string | null;
+  wins: number;
+  podiums: number;
+}
+
+/** Teambilanz ueber alle Editionen. Das Team ist das zum Zeitpunkt des Sieges. */
+export interface PalmaresTeamRow {
+  teamId: number | null;
+  teamName: string | null;
+  wins: number;
+  podiums: number;
+}
+
+/** Ein gespeicherter Startlisten-Qualitaetswert. */
+export interface StartlistQualitySeasonRow {
+  season: number;
+  /** 0-100, oder null wenn in der Saison noch niemand Karrierepunkte hatte. */
+  score: number | null;
+  rawPoints: number;
+  maxPoints: number;
+  starters: number;
+}
+
+/**
+ * Bestenlisten und Bilanzen ueber alle Editionen eines Rennens.
+ * Aggregiert aus season_point_events - keine eigene Tabelle noetig.
+ */
+export interface RaceRecordsPayload {
+  /** Anzahl der Saisons, aus denen Ergebnisse vorliegen. */
+  editions: number;
+  /** Etappen der aktuellen Edition. */
+  stageCount: number;
+  /** Profilverteilung der aktuellen Edition. */
+  profiles: PalmaresProfileRow[];
+  /** Etappensiege, Top 10. Bei Eintagesrennen leer. */
+  stageWins: PalmaresWinRow[];
+  /** Gesamtsiege, Top 10 (die Oberflaeche zeigt zunaechst 5). */
+  overallWins: PalmaresWinRow[];
+  /** Bergtrikot, Top 5. */
+  mountainWins: PalmaresWinRow[];
+  /** Weisses Trikot, Top 5. */
+  youthWins: PalmaresWinRow[];
+  /** Punktetrikot, Top 5. */
+  pointsWins: PalmaresWinRow[];
+  nations: PalmaresNationRow[];
+  teams: PalmaresTeamRow[];
+  /** Qualitaet der Startliste je Saison, aelteste zuerst. */
+  startlistQuality: StartlistQualitySeasonRow[];
+}
+
 export interface RacePalmaresPayload {
   raceId: number;
   isStageRace: boolean;
   seasons: PalmaresSeasonEntry[];
   participation: PalmaresParticipationRow[];
+  records: RaceRecordsPayload;
 }
 
 /** Sieger + Podium eines Rennens (fuer die Season-Standings-Jahresuebersicht). */
