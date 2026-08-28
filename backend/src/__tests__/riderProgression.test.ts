@@ -179,9 +179,9 @@ describe('Sockel und Abbau', () => {
     }
   });
 
-  it('bringt den Skill mit 43 genau auf seinen Sockel', () => {
+  it('bringt den Skill mit dem Sockelalter genau auf seinen Sockel', () => {
     for (const [pot, decline, retire] of [[85, 30, 36], [80, 28, 34], [72, 31, 37], [68, 29, 35], [60, 30, 36]] as Array<[number, number, number]>) {
-      const wert = wertMit(43, { skill: pot, potential: pot, startAge: 26, peakAge: 26, declineAge: decline, retirementAge: retire, developmentValue: 10 });
+      const wert = wertMit(PROGRESSION_FLOOR_AGE, { skill: pot, potential: pot, startAge: 26, peakAge: 26, declineAge: decline, retirementAge: retire, developmentValue: 10 });
       expect(wert).toBeCloseTo(resolveSkillFloor(pot), 6);
     }
   });
@@ -198,8 +198,8 @@ describe('Sockel und Abbau', () => {
     expect(resolveDeclinePerDay({ skill: 60, floor: 60, age: 35, declineAge: 30, retirementAge: 36 })).toBe(0);
     expect(resolveDeclinePerDay({ skill: 55, floor: 60, age: 35, declineAge: 30, retirementAge: 36 })).toBe(0);
     expect(resolveDeclinePerDay({ skill: 80, floor: 60, age: 29, declineAge: 30, retirementAge: 36 })).toBe(0);
-    expect(resolveDeclinePerDay({ skill: 80, floor: 60, age: 44, declineAge: 30, retirementAge: 36 })).toBe(0);
-    const spur = laufbahn({ alter: [30, 32, 34, 36, 38, 40, 43], skill: 80, potential: 80, startAge: 26, peakAge: 26, declineAge: 30, retirementAge: 36, developmentValue: 10 });
+    expect(resolveDeclinePerDay({ skill: 80, floor: 60, age: PROGRESSION_FLOOR_AGE + 1, declineAge: 30, retirementAge: 36 })).toBe(0);
+    const spur = laufbahn({ alter: [30, 32, 34, 36, 38, 40, PROGRESSION_FLOOR_AGE], skill: 80, potential: 80, startAge: 26, peakAge: 26, declineAge: 30, retirementAge: 36, developmentValue: 10 });
     for (const [, wert] of spur) expect(wert).toBeGreaterThanOrEqual(60 - 1e-6);
   });
 
@@ -214,7 +214,7 @@ describe('Buendelung von Tagen', () => {
   it('liefert im Monatsschritt dasselbe wie taeglich', () => {
     for (const dev of [0, 10, 20]) {
       const basis = { skill: 58, potential: 82, peakAge: 27, declineAge: 30, retirementAge: 36, developmentValue: dev };
-      for (const alter of [20, 24, 27, 30, 34, 36, 38, 43]) {
+      for (const alter of [20, 24, 27, 30, 34, 36, 38, PROGRESSION_FLOOR_AGE]) {
         expect(wertMit(alter, { ...basis, step: 30 }))
           .toBeCloseTo(wertMit(alter, { ...basis, step: 1 }), 6);
       }
@@ -279,19 +279,20 @@ describe('Zusammenspiel ueber eine ganze Laufbahn', () => {
     // Abbaubeginn 29 + 2 = 31.
     expect(ausdauer(31)).toBeCloseTo(80, 6);
     expect(ausdauer(32)).toBeLessThan(80);
-    // Und mit 43 steht sie trotzdem auf demselben Sockel.
-    expect(ausdauer(43)).toBeCloseTo(resolveSkillFloor(80), 6);
+    // Und mit dem Sockelalter steht sie trotzdem auf demselben Sockel: der
+    // Versatz verschiebt den Beginn des Abbaus, nicht sein Ende.
+    expect(ausdauer(PROGRESSION_FLOOR_AGE)).toBeCloseTo(resolveSkillFloor(80), 6);
   });
 
   it('haelt die Rangfolge zweier Fahrer bis zum Ende durch', () => {
     const stark = { ...basis, skill: 65, potential: 85, developmentValue: 10 };
     const schwach = { ...basis, skill: 60, potential: 70, developmentValue: 10 };
-    for (const alter of [26, 30, 35, 40, 43]) {
+    for (const alter of [26, 30, 35, 40, PROGRESSION_FLOOR_AGE]) {
       expect(wertMit(alter, stark)).toBeGreaterThan(wertMit(alter, schwach));
     }
     // Mit einem festen Sockel von 50 waeren am Ende beide gleich gewesen.
-    expect(wertMit(43, stark)).toBeCloseTo(65, 6);
-    expect(wertMit(43, schwach)).toBeCloseTo(50, 6);
+    expect(wertMit(PROGRESSION_FLOOR_AGE, stark)).toBeCloseTo(65, 6);
+    expect(wertMit(PROGRESSION_FLOOR_AGE, schwach)).toBeCloseTo(50, 6);
   });
 
   it('nimmt einen Fahrer aus einem alten Spielstand dort auf, wo er steht', () => {

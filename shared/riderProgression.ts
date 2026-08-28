@@ -6,8 +6,8 @@
  *   Aufbau     bis zum Zielalter waechst jeder Skill mit einer festen Rate auf
  *              sein Potenzial zu
  *   Plateau    zwischen Zielalter und Abbaubeginn steht er still
- *   Abbau      ab dem Abbaubeginn faellt er auf seinen Sockel, den er mit 43
- *              erreicht
+ *   Abbau      ab dem Abbaubeginn faellt er auf seinen Sockel, den er mit
+ *              `PROGRESSION_FLOOR_AGE` erreicht
  *
  * Die Rate ist in beiden Richtungen dieselbe Konstruktion: verbleibender Weg
  * geteilt durch verbleibende Zeit. Das hat zwei Eigenschaften, auf denen das
@@ -34,8 +34,20 @@ import type { RiderSkillKey } from './types';
 /** Ab diesem Alter beginnt die Laufbahn im Modell. */
 export const PROGRESSION_START_AGE = 16;
 
-/** Alter, mit dem jeder Skill seinen Sockel erreicht hat. */
-export const PROGRESSION_FLOOR_AGE = 43;
+/**
+ * Alter, mit dem jeder Skill seinen Sockel erreicht hat.
+ *
+ * Der Wert ist die Stellschraube fuer das Tempo des Abbaus: er streckt den Weg
+ * zum Sockel, ohne den Sockel selbst oder die Form der Kurve zu veraendern.
+ * Erreicht wird er nie — der spaeteste Ruhestand liegt bei 38.
+ *
+ * Von 43 auf 55 erhoeht, um den Abbau nach dem Abbaubeginn um rund ein Drittel
+ * zu verlangsamen. An 200 Fahrern gemessen: fuenf Jahre nach dem Abbaubeginn
+ * 6,90 statt 10,66 Punkte Verlust (65 Prozent), acht Jahre danach 9,62 statt
+ * 14,88 (ebenfalls 65 Prozent) — die Kurve wird gleichmaessig flacher. Die
+ * Kehrseite ist der hoehere Wert am Karriereende: 67,4 statt 63,4.
+ */
+export const PROGRESSION_FLOOR_AGE = 55;
 
 /** Tiefster Sockel — darunter faellt kein Skill, egal wie klein sein Potenzial ist. */
 export const PROGRESSION_MIN_FLOOR = 50;
@@ -187,16 +199,16 @@ export interface DeclineInput {
  * schon unterschritten ist.
  *
  * Bis zum Karriereende faellt der Skill dreimal so schnell wie danach, und
- * beides zusammen bringt ihn mit 43 genau auf seinen Sockel. Daraus folgt die
- * Rate:
+ * beides zusammen bringt ihn mit `PROGRESSION_FLOOR_AGE` (F) genau auf seinen
+ * Sockel. Daraus folgt die Rate:
  *
- *     3r * (Karriereende - Abbaubeginn) + r * (43 - Karriereende) = Weg
- *     r = Weg / (2 * Karriereende - 3 * Abbaubeginn + 43)
+ *     3r * (Karriereende - Abbaubeginn) + r * (F - Karriereende) = Weg
+ *     r = Weg / (2 * Karriereende - 3 * Abbaubeginn + F)
  *
- * Die woertliche Alternative — Basisrate aus dem vollen Weg bis 43, davon das
- * Dreifache — geht nicht auf: der Sockel waere nach (43 - Abbaubeginn)/3 Jahren
- * erreicht, also zwei bis drei Jahre vor dem Karriereende, und danach stuende
- * der Fahrer still.
+ * Die woertliche Alternative — Basisrate aus dem vollen Weg bis F, davon das
+ * Dreifache — geht nicht auf: der Sockel waere nach (F - Abbaubeginn)/3 Jahren
+ * erreicht, unter Umstaenden noch vor dem Karriereende, und danach stuende der
+ * Fahrer still.
  */
 export function resolveDeclinePerDay(input: DeclineInput): number {
   const { skill, floor, age, declineAge, retirementAge } = input;
