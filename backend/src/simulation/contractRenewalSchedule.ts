@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { resolveContractYears } from '../../../shared/contractTerms';
+import { selectRenewalCandidates, type RenewalCandidate } from '../../../shared/contractRenewal';
 import { tableExists } from '../db/mappers';
 
 export const CONTRACT_RENEWAL_MONTH_DAY = '08-01';
@@ -15,20 +16,46 @@ function shuffle<T>(arr: T[]): void {
   }
 }
 
-interface RenewalRow {
-  id: number;
+/** Rollen, deren Traeger ein Team nicht aus Versehen ziehen laesst. */
+const CAPTAIN_ROLE_NAMES = new Set(['Kapitaen', 'Co-Kapitaen']);
+
+interface RenewalRow extends RenewalCandidate {
   maxExtensionYears: number;
-  age: number;
-  potential: number;
   retirementAge: number;
   teamId: number;
 }
 
+interface RenewalSourceRow {
+  id: number;
+  teamId: number;
+  birthYear: number;
+  retirementAge: number;
+  potential: number;
+  overall: number;
+  declineAge: number;
+  roleName: string | null;
+  riderId: number;
+}
+
+/** Gruppiert Vertraege nach Team — die Auswahl laeuft je Kader, nicht global. */
+function groupByTeam(rows: readonly RenewalRow[]): Map<number, RenewalRow[]> {
+  const nachTeam = new Map<number, RenewalRow[]>();
+  for (const row of rows) {
+    const eimer = nachTeam.get(row.teamId) ?? [];
+    eimer.push(row);
+    nachTeam.set(row.teamId, eimer);
+  }
+  return nachTeam;
+}
+
 // Am 01.08. jeder Saison werden auslaufende Vertraege verlaengert:
-//   * KI-Teams: 35% der verlaengerbaren Vertraege (Retirement-Filter vor der
-//     Ziehung), zufaellig 1-3 Jahre.
+//   * KI-Teams: 35 % der verlaengerbaren Vertraege JE TEAM. Wer davon, das
+//     entscheidet seit dem Umbau nicht mehr das Mischen, sondern eine
+//     gewichtete Ziehung nach dem Verlaengerungswert — siehe
+//     shared/contractRenewal.ts. Frueher waren es 35 % ueber ALLE Teams
+//     zusammen, ein Team konnte also zufaellig leer ausgehen.
 //   * Spieler-Team: NUR die am 10.01. ausgewaehlten Ziele (contract_renewal_
-//     selection); davon verlaengern zufaellig 35-65%.
+//     selection); davon verlaengern zufaellig 50-80%.
 // Verlaengerte Vertraege bleiben 'active' mit Zukunfts-End-Saison und scheiden
 // so aus dem Free-Agent-Pool des Jahresend-Drafts aus. Silent, idempotent ueber
 // contract_renewal_runs (eine Zeile je bereits gelaufener Saison).
@@ -53,47 +80,57 @@ export function ensureContractRenewals(db: Database.Database): void {
       .map((t) => [t.id, t.prestige]),
   );
 
-  const toRenewalRow = (c: {
-    id: number; birthYear: number; retirementAge: number; potential: number; teamId: number;
-  }): RenewalRow => {
+  const toRenewalRow = (c: RenewalSourceRow): RenewalRow => {
     const effRetAge = c.retirementAge > 0 ? c.retirementAge : 36;
     return {
-      id: c.id,
+      contractId: c.id,
+      riderId: c.riderId,
       maxExtensionYears: c.birthYear + effRetAge - 1 - gameState.season,
       age: gameState.season - c.birthYear,
+      overall: c.overall,
       potential: c.potential,
+      declineAge: c.declineAge,
+      isCaptain: c.roleName != null && CAPTAIN_ROLE_NAMES.has(c.roleName),
       retirementAge: c.retirementAge,
       teamId: c.teamId,
     };
   };
 
+  const AUSWAHLFELDER = `
+    c.id AS id, c.team_id AS teamId, c.rider_id AS riderId,
+    r.birth_year AS birthYear, r.retirement_age AS retirementAge,
+    r.pot_overall AS potential, r.overall_rating AS overall,
+    r.decline_age AS declineAge, ro.name AS roleName
+  `;
+
   // --- KI-Teams: 35% der verlaengerbaren, auslaufenden Vertraege ---
   const aiCandidates = db.prepare(`
-    SELECT c.id AS id, c.team_id AS teamId, r.birth_year AS birthYear,
-           r.retirement_age AS retirementAge, r.pot_overall AS potential
+    SELECT ${AUSWAHLFELDER}
     FROM contracts c
     JOIN riders r ON r.id = c.rider_id
+    LEFT JOIN sta_role ro ON ro.id = r.role_id
     WHERE c.end_season = ? AND c.status = 'active' AND r.is_retired = 0
       ${playerTeamId != null ? 'AND c.team_id != ?' : ''}
-  `).all(...(playerTeamId != null ? [gameState.season, playerTeamId] : [gameState.season])) as
-    Array<{ id: number; teamId: number; birthYear: number; retirementAge: number; potential: number }>;
+  `).all(...(playerTeamId != null ? [gameState.season, playerTeamId] : [gameState.season])) as RenewalSourceRow[];
 
   const aiEligible = aiCandidates.map(toRenewalRow).filter((c) => c.maxExtensionYears >= CONTRACT_RENEWAL_MIN_YEARS);
-  shuffle(aiEligible);
-  const aiSelected = aiEligible.slice(0, Math.round(aiEligible.length * CONTRACT_RENEWAL_SHARE));
+  const aiSelected: RenewalRow[] = [];
+  for (const kader of groupByTeam(aiEligible).values()) {
+    const anzahl = Math.round(kader.length * CONTRACT_RENEWAL_SHARE);
+    aiSelected.push(...(selectRenewalCandidates(kader, anzahl, Math.random) as RenewalRow[]));
+  }
 
   // --- Spieler-Team: 35-65% der am 10.01. ausgewaehlten Ziele ---
   let playerSelected: RenewalRow[] = [];
   if (playerTeamId != null && tableExists(db, 'contract_renewal_selection')) {
     const chosen = db.prepare(`
-      SELECT c.id AS id, c.team_id AS teamId, r.birth_year AS birthYear,
-             r.retirement_age AS retirementAge, r.pot_overall AS potential
+      SELECT ${AUSWAHLFELDER}
       FROM contract_renewal_selection s
       JOIN contracts c ON c.rider_id = s.rider_id AND c.team_id = ? AND c.end_season = ? AND c.status = 'active'
       JOIN riders r ON r.id = c.rider_id
+      LEFT JOIN sta_role ro ON ro.id = r.role_id
       WHERE s.season = ? AND r.is_retired = 0
-    `).all(playerTeamId, gameState.season, gameState.season) as
-      Array<{ id: number; teamId: number; birthYear: number; retirementAge: number; potential: number }>;
+    `).all(playerTeamId, gameState.season, gameState.season) as RenewalSourceRow[];
     const eligible = chosen.map(toRenewalRow).filter((c) => c.maxExtensionYears >= CONTRACT_RENEWAL_MIN_YEARS);
     shuffle(eligible);
     const share = PLAYER_RENEWAL_MIN_SHARE + Math.random() * (PLAYER_RENEWAL_MAX_SHARE - PLAYER_RENEWAL_MIN_SHARE);
@@ -113,7 +150,7 @@ export function ensureContractRenewals(db: Database.Database): void {
         teamPrestige: prestigeByTeamId.get(c.teamId) ?? 3,
       }, Math.random);
       const extensionYears = Math.max(CONTRACT_RENEWAL_MIN_YEARS, Math.min(gewuenscht, c.maxExtensionYears));
-      updateStmt.run(extensionYears, c.id);
+      updateStmt.run(extensionYears, c.contractId);
     }
     markRunStmt.run(gameState.season);
   })();
