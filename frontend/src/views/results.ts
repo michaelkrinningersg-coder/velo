@@ -64,8 +64,13 @@ export function renderRankCell(rank: number): string {
 }
 
 export function isMountainClassificationMarkerType(markerType: string, markerCategory: string | null | undefined): boolean {
-  if (markerType === 'climb_top' || markerType === 'finish_hill' || markerType === 'finish_mountain') {
-    return true;
+  if (markerType === 'climb_top') return true;
+  // Ein Zielanstieg ist nur dann eine Bergwertung, wenn er eine Kategorie
+  // traegt - gleiche Regel wie in stageSummary.isMountainClassificationMarker
+  // und im Etappeneditor. Ohne die Pruefung galte jedes Huegelziel als
+  // Bergwertung.
+  if (markerType === 'finish_hill' || markerType === 'finish_mountain') {
+    return markerCategory != null && markerCategory !== 'Sprint';
   }
   return false;
 }
