@@ -46,8 +46,8 @@ export interface ProfileScoreWeights {
  * auf 1, damit der Score die Groessenordnung einer Faehigkeit behaelt.
  *
  * Der Sprint steht ueberall klein: er entscheidet den Zielsprint, nicht die
- * Etappe. Auf Pflaster ist er auf 0,10 gedeckelt, das freigewordene Gewicht
- * gleichmaessig auf die uebrigen verteilt.
+ * Etappe. Auf den beiden Pflasterprofilen steht er gar nicht mehr — dort
+ * entscheidet der Sektor, und bei Gleichstand der Tie-Break.
  *
  * Fuer die fuenf Bergprofile stehen die Anteile von `hill`, `mediumMountain`
  * und `mountain` seit der Vorgabe fest, und zwar an drei Stuetzstellen: am
@@ -124,17 +124,21 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
   //
   // Der Sprint steht in beiden Tabellen nicht mehr. Eine Pflasteretappe
   // entscheidet sich am Sektor, nicht im Zielsprint; wo zwei Fahrer gleichauf
-  // ankommen, entscheidet weiterhin der Tie-Break. Sein frueheres Gewicht ist
-  // auf das Pflaster gegangen, zusammen mit 0,10 vom Flach-Anteil.
+  // ankommen, entscheidet weiterhin der Tie-Break.
+  //
+  // `Cobble` traegt die Ausdauer nicht in der Tabelle: sie kaeme sonst zweimal,
+  // weil sie ueberall zusaetzlich aus der Distanz kommt. Fuer dieses Profil ist
+  // stattdessen der Distanzanteil abgeschaltet, siehe
+  // `PROFILES_OHNE_DISTANZ_AUSDAUER`.
   Cobble: {
     difficultyRange: [0.20, 0.35],
-    easy: { cobble: 0.75, flat: 0.15, stamina: 0.10 },
-    hard: { cobble: 0.75, flat: 0.15, stamina: 0.10 },
+    easy: { cobble: 0.85, flat: 0.15 },
+    hard: { cobble: 0.85, flat: 0.15 },
   },
   Cobble_Hill: {
     difficultyRange: [0.40, 0.95],
-    easy: { cobble: 0.57, flat: 0.20, hill: 0.23 },
-    hard: { cobble: 0.57, flat: 0.10, hill: 0.33 },
+    easy: { cobble: 0.52, flat: 0.10, hill: 0.38 },
+    hard: { cobble: 0.47, flat: 0.10, hill: 0.43 },
   },
   // Zeitfahren haben ihre eigene Formel; die Tabelle ist nur der Vollstaendigkeit halber besetzt.
   ITT: {
@@ -150,6 +154,16 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
 };
 
 /**
+ * Profile, bei denen die Ausdauer *nicht* zusaetzlich aus der Distanz kommt.
+ *
+ * Ueberall sonst wird sie oben auf die Gewichtstabelle addiert. Auf Pflaster
+ * stuende sie damit neben einer Tabelle, die die Faehigkeiten schon vollstaendig
+ * verteilt — die Ausdauer waere dort die zweitwichtigste Faehigkeit geworden,
+ * obwohl eine Pflasteretappe sich am Sektor entscheidet und nicht an der Laenge.
+ */
+const PROFILES_OHNE_DISTANZ_AUSDAUER: ReadonlySet<StageProfile> = new Set<StageProfile>(['Cobble']);
+
+/**
  * Gewicht der Ausdauer, als Vielfaches einer Faehigkeit.
  *
  * Vorher `km / 300`: bei 190 Kilometern 0,63 — mehr als Antritt und Flach
@@ -162,8 +176,11 @@ export const PROFILE_SCORE_WEIGHTS: Record<StageProfile, ProfileScoreWeights> = 
  * damit die zweitwichtigste Faehigkeit am Berg und schob Helfer mit gutem
  * Ausdauerwert nach vorne. Dieselbe Schwelle, halbe Steigung: bei 190
  * Kilometern 0,15, bei 300 Kilometern 0,375.
+ *
+ * `profile` ist optional: ohne Angabe gilt die reine Distanzformel.
  */
-export function resolveStaminaWeight(distanceKm: number): number {
+export function resolveStaminaWeight(distanceKm: number, profile?: StageProfile | null): number {
+  if (profile != null && PROFILES_OHNE_DISTANZ_AUSDAUER.has(profile)) return 0;
   return Math.max(0, (distanceKm - 120) / 480);
 }
 

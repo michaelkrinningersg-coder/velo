@@ -119,8 +119,8 @@ function resolveFormContribution(rider: Rider, dailyForm: number, profile: Stage
   return dailyForm + (((rider.formBonus ?? 0) + (rider.raceFormBonus ?? 0)) * factor);
 }
 
-function resolveStaminaContribution(rider: Rider, distanceKm: number): number {
-  return rider.skills.stamina * resolveStaminaWeight(distanceKm);
+function resolveStaminaContribution(rider: Rider, distanceKm: number, profile: StageProfile): number {
+  return rider.skills.stamina * resolveStaminaWeight(distanceKm, profile);
 }
 
 /**
@@ -212,7 +212,7 @@ function calculateRoadScore(
   // Form. Bliebe er absolut stehen, verloere er auf jedem Terrain genau so
   // viel Wirkung, wie der Faktor die Faehigkeiten spreizt.
   const faktor = resolveSkillWeightFactor(stage.profile);
-  const koennen = (weighted + resolveStaminaContribution(rider, distanceKm)) * faktor;
+  const koennen = (weighted + resolveStaminaContribution(rider, distanceKm, stage.profile)) * faktor;
   return koennen
     + resolveFormContribution(rider, dailyForm, stage.profile)
     - (resolveDomestiquePenalty(rider, stage.profile) * faktor)
