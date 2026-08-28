@@ -35,6 +35,7 @@ import type {
   InjuryRow,
   RaceRosterPayload,
   RacePalmaresPayload,
+  StartlistQualityRankingRow,
   TeamStatsPayload,
 } from '../../shared/types';
 
@@ -129,6 +130,8 @@ export const api = {
   quickCompleteDraft:  (season: number) => call<any>('POST', `/api/draft/${season}/quick-complete`),
   getLeaderboards:     (scope: 'riders' | 'teams', metricKey: string, period: 'season' | 'alltime' | 'live') =>
     call<any[]>('GET', `/api/leaderboards?scope=${scope}&metricKey=${encodeURIComponent(metricKey)}&period=${period}`),
+  getStartlistQualityRanking: (season?: number) =>
+    call<StartlistQualityRankingRow[]>('GET', `/api/leaderboards/startlist-quality${season != null ? `?season=${season}` : ''}`),
   getRaceProgramsEditor: () => call<any>('GET', '/api/race-programs-editor'),
   saveRaceProgramsEditor: (payload: any) => call<void>('POST', '/api/race-programs-editor/save', payload),
 };

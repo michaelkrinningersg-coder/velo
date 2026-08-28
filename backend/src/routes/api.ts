@@ -57,6 +57,7 @@ import {
   StageResultsPayload,
   RaceRosterPayload,
   RacePalmaresPayload,
+  StartlistQualityRankingRow,
 } from '../../../shared/types';
 
 function ok<T>(res: Response, data: T): void {
@@ -776,6 +777,22 @@ export function createRouter(dbService: DatabaseService): Router {
       const includeAll = req.query['all'] === '1' || req.query['all'] === 'true';
       const data = new LeaderboardRepository(db).getLeaderboard(scope, metricKey, period, currentSeason, includeAll);
       ok(res, data);
+    } catch (e) {
+      fail(res, 400, (e as Error).message);
+    }
+  });
+
+  // Rangliste der Startlisten-Qualitaet: ohne season ueber alle Saisons,
+  // mit season nur diese. Die Werte stehen fest, hier wird nur gelesen.
+  router.get('/leaderboards/startlist-quality', (req: Request, res: Response) => {
+    try {
+      const db = dbService.getActiveConnection();
+      const roh = req.query['season'];
+      const season = roh != null && roh !== '' ? Number(roh) : undefined;
+      if (season != null && !Number.isFinite(season)) {
+        return fail(res, 400, 'Ungueltige Saison.');
+      }
+      ok<StartlistQualityRankingRow[]>(res, new ResultRepository(db).getStartlistQualityRanking(season));
     } catch (e) {
       fail(res, 400, (e as Error).message);
     }

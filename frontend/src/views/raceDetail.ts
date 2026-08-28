@@ -297,15 +297,28 @@ let gesamtsiegeAusgeklappt = false;
 const ETAPPENSIEGE_JE_SEITE = 10;
 let etappensiegeSeite = 0;
 
+/**
+ * Eine Zeile einer Bestenliste. Die Siegjahre stehen unter dem Namen; die
+ * rechte Spalte traegt bei den Gesamtsiegen die zweiten und dritten Plaetze
+ * (nur dort erfasst das Spiel Plaetze ausser dem Sieg).
+ */
 function winsRow(zeile: PalmaresWinRow, rang: number, mitPlaetzen: boolean): string {
-  const saisons = zeile.seasons.slice(0, 6).join(', ')
-    + (zeile.seasons.length > 6 ? ` +${zeile.seasons.length - 6}` : '');
+  const saisons = [...zeile.seasons].sort((a, b) => a - b);
+  // Viele Jahre wuerden die Zeile sprengen — der Rest wird gezaehlt.
+  const sichtbareSaisons = saisons.slice(0, 8).join(', ')
+    + (saisons.length > 8 ? ` +${saisons.length - 8}` : '');
+  const jahre = saisons.length > 0
+    ? `<span class="rd-best-years">${esc(sichtbareSaisons)}</span>`
+    : '';
   const plaetze = mitPlaetzen
     ? `<span class="rd-best-sub">${zeile.seconds}× 2. · ${zeile.thirds}× 3.</span>`
-    : `<span class="rd-best-sub">${esc(saisons)}</span>`;
+    : '<span class="rd-best-sub"></span>';
   return `<div class="rd-best-row">
     <span class="rd-best-rank">${rang}</span>
-    <span class="rd-pal-rider">${renderFlag(zeile.rider.countryCode ?? '')}${riderLinkButton(zeile.rider.riderId, `${esc(zeile.rider.firstName)} ${esc(zeile.rider.lastName)}`)}</span>
+    <span class="rd-best-rider">
+      <span class="rd-pal-rider">${renderFlag(zeile.rider.countryCode ?? '')}${riderLinkButton(zeile.rider.riderId, `${esc(zeile.rider.firstName)} ${esc(zeile.rider.lastName)}`)}</span>
+      ${jahre}
+    </span>
     ${plaetze}
     <span class="rd-best-count">${zeile.wins}×</span>
   </div>`;

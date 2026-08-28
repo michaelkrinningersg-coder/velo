@@ -6,11 +6,13 @@ import {
   renderMiniJersey,
   isActiveView,
   renderRaceNameLink,
+  state,
 } from '../state';
 import { openRiderStats, getHofBadgeCatalog } from './riderStats';
 import { openTeamStats } from './teamStats';
 
-let activeScope: 'riders' | 'teams' | 'badge' = 'riders';
+type LeaderboardScope = 'riders' | 'teams' | 'badge' | 'startlist';
+let activeScope: LeaderboardScope = 'riders';
 let activePeriod: 'season' | 'alltime' | 'live' = 'season';
 let savedUserPeriod: 'season' | 'alltime' = 'season'; // to restore period when unlocking
 let activeMetricKey = '';
@@ -142,7 +144,7 @@ export function initLeaderboardsView(): void {
       btn.addEventListener('click', () => {
         buttons.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        const scope = btn.getAttribute('data-scope') as 'riders' | 'teams' | 'badge';
+        const scope = btn.getAttribute('data-scope') as LeaderboardScope;
         setScope(scope);
       });
     });
@@ -317,14 +319,15 @@ function initBadgeControls(): void {
   }
 }
 
-function setScope(scope: 'riders' | 'teams' | 'badge'): void {
+function setScope(scope: LeaderboardScope): void {
   activeScope = scope;
 
   // Panels je Scope umschalten
   const physisGroup = $('leaderboard-group-physis');
   if (physisGroup) physisGroup.style.display = scope === 'riders' ? 'block' : 'none';
   const metricToolbar = $('leaderboard-metric-toolbar');
-  if (metricToolbar) metricToolbar.style.display = scope === 'badge' ? 'none' : 'flex';
+  // Die Startlisten-Rangliste hat nur eine Kennzahl — kein Metrik-Dropdown.
+  if (metricToolbar) metricToolbar.style.display = (scope === 'badge' || scope === 'startlist') ? 'none' : 'flex';
   const badgePanel = $('leaderboard-badge-panel');
   if (badgePanel) badgePanel.style.display = scope === 'badge' ? 'flex' : 'none';
   const periodTabs = $('leaderboards-period-tabs');
@@ -460,6 +463,82 @@ function updatePeriodTabsUI(): void {
   }
 }
 
+/**
+ * Rangliste der Startlisten-Qualitaet.
+ *
+ * "Aktuelle Saison" zeigt die Rennen dieser Saison, "All-Time" alle erfassten
+ * mit Jahr. Der Wert ist der Anteil an der staerkstmoeglichen Startliste
+ * derselben Saison — er wird beim Rennstart festgeschrieben und hier nur
+ * gelesen.
+ */
+async function renderStartlistQualityRanking(): Promise<void> {
+  const emptyEl = $('leaderboard-empty');
+  const tableEl = $('leaderboard-table');
+  const theadEl = $('leaderboard-thead');
+  const tbodyEl = $('leaderboard-tbody');
+  if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
+
+  const filterContainer = $('leaderboard-filter-container');
+  if (filterContainer) filterContainer.style.display = 'none';
+  const pager = $('leaderboard-pagination');
+  if (pager) { pager.style.display = 'none'; pager.innerHTML = ''; }
+
+  const allTime = activePeriod !== 'season';
+  const saison = allTime ? undefined : state.gameState?.season ?? undefined;
+
+  emptyEl.textContent = 'Lade Daten...';
+  emptyEl.classList.remove('hidden');
+  tableEl.classList.add('hidden');
+
+  const res = await api.getStartlistQualityRanking(saison);
+  if (!isActiveView('leaderboards') || activeScope !== 'startlist') return;
+
+  if (!res.success || !res.data || res.data.length === 0) {
+    emptyEl.textContent = allTime
+      ? 'Noch keine Startlisten-Qualität erfasst. Der Wert entsteht beim Start eines Rennens.'
+      : 'Für diese Saison ist noch kein Rennen gestartet.';
+    emptyEl.classList.remove('hidden');
+    tableEl.classList.add('hidden');
+    return;
+  }
+
+  emptyEl.classList.add('hidden');
+  tableEl.classList.remove('hidden');
+
+  const MONO = "font-family:'JetBrains Mono',monospace;";
+  const cardTitle = $('leaderboard-card-title');
+  const cardCount = $('leaderboard-card-count');
+  if (cardTitle) cardTitle.textContent = allTime ? 'Startlisten-Qualität · All-Time' : `Startlisten-Qualität ${saison ?? ''}`.trim();
+  if (cardCount) cardCount.textContent = `${res.data.length} Rennen`;
+
+  const cols = ['52px', '44px', ...(allTime ? ['64px'] : []), 'minmax(180px,1.6fr)', 'minmax(120px,.9fr)', '96px', '130px'].join(' ');
+  theadEl.style.gridTemplateColumns = cols;
+  theadEl.innerHTML = `<span>PLATZ</span><span style="justify-self:center;">LAND</span>${allTime ? '<span>JAHR</span>' : ''}<span>RENNEN</span><span>KATEGORIE</span><span style="justify-self:end;">STARTER</span><span style="justify-self:end;">WERT</span>`;
+
+  const rankColor = (r: number): string => r === 1 ? '#fbbf24' : r === 2 ? '#cbd5e1' : r === 3 ? '#d08b5b' : '#9fb0c9';
+  const podium = (r: number): string => r === 1
+    ? 'box-shadow:inset 3px 0 0 #fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.08),transparent 55%);'
+    : r === 2 ? 'box-shadow:inset 3px 0 0 #cbd5e1;background:linear-gradient(90deg,rgba(203,213,225,.07),transparent 55%);'
+    : r === 3 ? 'box-shadow:inset 3px 0 0 #d08b5b;background:linear-gradient(90deg,rgba(208,139,91,.07),transparent 55%);'
+    : '';
+  // Dieselbe Ampel wie in der Rennkarte, damit beide Ansichten gleich lesen.
+  const wertFarbe = (score: number): string => score >= 75 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f97316';
+
+  let rang = 1;
+  tbodyEl.innerHTML = res.data.map((zeile) => {
+    const platz = rang++;
+    return `<div style="display:grid;grid-template-columns:${cols};gap:9px;align-items:center;padding:9px 16px;border-top:1px solid #14203a;${podium(platz)}">
+      <span style="text-align:center;${MONO}font-size:15px;font-weight:800;color:${rankColor(platz)};">${platz}</span>
+      <span style="justify-self:center;">${renderFlag(zeile.countryCode ?? '')}</span>
+      ${allTime ? `<span style="${MONO}font-size:12px;color:#8494ad;">${zeile.season}</span>` : ''}
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#e2e8f0;">${renderRaceNameLink(zeile.raceName, zeile.raceId)}</span>
+      <span style="${MONO}font-size:11px;color:#8494ad;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(zeile.categoryName ?? '–')}</span>
+      <span style="${MONO}font-size:12px;color:#7c8aa3;justify-self:end;">${zeile.starters}</span>
+      <span style="${MONO}text-align:right;justify-self:end;font-weight:800;color:${wertFarbe(zeile.score)};">${zeile.score.toLocaleString('de-DE')}</span>
+    </div>`;
+  }).join('');
+}
+
 export async function renderLeaderboard(): Promise<void> {
   const emptyEl = $('leaderboard-empty');
   const tableEl = $('leaderboard-table');
@@ -467,6 +546,11 @@ export async function renderLeaderboard(): Promise<void> {
   const tbodyEl = $('leaderboard-tbody');
 
   if (!emptyEl || !tableEl || !theadEl || !tbodyEl) return;
+
+  if (activeScope === 'startlist') {
+    await renderStartlistQualityRanking();
+    return;
+  }
 
   // Bespoke-Badge (ohne Metrik): eigener Renderpfad mit Tier-Gruppierung.
   if (activeScope === 'badge' && badgeBespokeKey) {

@@ -1,7 +1,7 @@
 import { summarizeStageProfile } from '../../simulation/StageParser';
 import { CHAMPIONSHIP_CATEGORY_IDS } from '../../simulation/championships';
 import Database from 'better-sqlite3';
-import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RacePalmaresPayload, PalmaresRiderRef, PalmaresSeasonEntry, PalmaresParticipationRow, PalmaresWinRow, PalmaresProfileRow, PalmaresNationRow, PalmaresTeamRow, RaceRecordsPayload, StartlistQualitySeasonRow, StageProfile, RaceWinnerEntry, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
+import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RacePalmaresPayload, PalmaresRiderRef, PalmaresSeasonEntry, PalmaresParticipationRow, PalmaresWinRow, PalmaresProfileRow, PalmaresNationRow, PalmaresTeamRow, RaceRecordsPayload, StartlistQualitySeasonRow, StartlistQualityRankingRow, StageProfile, RaceWinnerEntry, RaceProgram, RaceProgramParticipant, RaceRosterEntry, RaceRosterPayload, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, SeasonNationalChampionGroup, SeasonReigningTitle, SeasonChampionHolder, ChampionTitleType, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team, RaceSimMessage } from '../../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../../shared/skillWeights';
 import { RESULT_TYPE_IDS, RACE_FORM_BUILD_SOURCE_AMOUNT, isMountainClassificationType, resolveMarkerResultsSortPriority, SEASON_POINT_AWARD_TYPES, RIDER_SKILL_COLUMNS, SEASON_FORM_RISE_DAYS, SEASON_FORM_FALL_DAYS, SEASON_FORM_MAX_RAW, SEASON_FORM_RISE_STEP_RAW, DIVISION_BY_TIER, RiderRow, RiderSeasonRaceStats, CareerRaceDaysSeasonRow, RaceProgramRow, RiderSeasonProgramRow, TeamRow, RaceRow, StageRow, StageResultsMetaRow, RuleRow, SkillWeightRow, StageEntryStatus, ResultTypeRow, StageResultDbRow, StageNonFinisherDbRow, StageMarkerResultDbRow, StageSeasonPointDbRow, StageTeamSeasonPointDbRow, SeasonPointStageRow, SeasonPointResultRow, RiderSeasonStandingDbRow, TeamSeasonStandingDbRow, CountrySeasonStandingDbRow, RiderStatsStageDbRow, RiderStatsFinalDbRow, emptyRiderStatsPointsByTerrain, emptyRiderStatsPointsByRaceFormat, resolveRiderStatsTerrainBucket, resolveDataCsvDir, parseCsvLine, parseRaceList, parseRankedValues, parsePeakDates, usesMountainStagePoints, resolveStageResultPointValues, isoDateToDayNumber, randomBetween, roundToTwoDecimals, addDaysIso, resolveStageRaceBaseFatigue, resolveStageRaceFatigueMalus, resolveEffectiveRecuperationSkill, resolvePeakPhase, resolveDeclineValue, resolveEffectiveSeasonForm, resolveProjectionPoint, resolveRiderSeasonFormPhase, tableExists, columnExists, mapSkillObject, mapCountry, mapRole, mapRider, mapTeam, mapRaceCategoryBonus, mapRaceCategory, mapSkillWeightRule, mapStage, loadFallbackStages, mapRace, buildRaceSelect, mapRaceProgram, mapRaceWithSummary } from '../mappers';
 import { GameStateRepository } from './GameStateRepository';
@@ -304,6 +304,42 @@ export class ResultRepository {
       teams: [...teamsBilanz.values()].sort(nachBilanz),
       startlistQuality: this.startlistenQualitaet(raceName),
     };
+  }
+
+  /**
+   * Rangliste der Startlisten-Qualitaet fuer Statistiken & Rekorde.
+   *
+   * Ohne `season` ueber alle Saisons (All-Time), mit `season` nur diese.
+   * Zeilen ohne Wert bleiben aussen vor: in einer Saison, in der noch niemand
+   * Karrierepunkte hatte, gibt es nichts zu vergleichen.
+   */
+  public getStartlistQualityRanking(season?: number, limit = 200): StartlistQualityRankingRow[] {
+    if (!tableExists(this.db, 'race_startlist_quality')) return [];
+    const saisonFilter = season != null ? 'AND q.season = ?' : '';
+    const parameter: unknown[] = season != null ? [season, limit] : [limit];
+    return this.db.prepare(`
+      SELECT
+        q.race_id AS raceId, races.name AS raceName, q.season AS season,
+        q.score AS score, q.starters AS starters,
+        q.raw_points AS rawPoints, q.max_points AS maxPoints,
+        country.code_3 AS countryCode, race_categories.name AS categoryName,
+        races.is_stage_race AS isStageRaceRaw
+      FROM race_startlist_quality q
+      JOIN races ON races.id = q.race_id
+      LEFT JOIN sta_country country ON country.id = races.country_id
+      LEFT JOIN race_categories ON race_categories.id = races.category_id
+      WHERE q.score IS NOT NULL ${saisonFilter}
+      ORDER BY q.score DESC, q.season DESC, races.name ASC
+      LIMIT ?
+    `).all(...parameter as any[]).map((zeile) => {
+      const r = zeile as Omit<StartlistQualityRankingRow, 'isStageRace'> & { isStageRaceRaw: number };
+      return {
+        raceId: r.raceId, raceName: r.raceName, season: r.season, score: r.score,
+        starters: r.starters, rawPoints: r.rawPoints, maxPoints: r.maxPoints,
+        countryCode: r.countryCode, categoryName: r.categoryName,
+        isStageRace: r.isStageRaceRaw === 1,
+      };
+    });
   }
 
   /**

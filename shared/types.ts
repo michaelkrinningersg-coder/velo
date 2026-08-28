@@ -591,6 +591,24 @@ export interface StartlistQualitySeasonRow {
 }
 
 /**
+ * Eine Zeile der Startlisten-Rangliste in Statistiken & Rekorde.
+ * Anders als StartlistQualitySeasonRow traegt sie das Rennen mit.
+ */
+export interface StartlistQualityRankingRow {
+  raceId: number;
+  raceName: string;
+  season: number;
+  /** 0-100. Zeilen ohne Wert liefert die Rangliste nicht aus. */
+  score: number;
+  starters: number;
+  rawPoints: number;
+  maxPoints: number;
+  countryCode: string | null;
+  categoryName: string | null;
+  isStageRace: boolean;
+}
+
+/**
  * Bestenlisten und Bilanzen ueber alle Editionen eines Rennens.
  * Aggregiert aus season_point_events - keine eigene Tabelle noetig.
  */

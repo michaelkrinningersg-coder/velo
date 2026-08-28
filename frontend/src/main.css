@@ -6919,6 +6919,8 @@ tr.calendar-highlight {
 .rd-best-head { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6a7a95; margin-bottom: 14px; }
 .rd-best-list { display: flex; flex-direction: column; gap: 4px; }
 .rd-best-row { display: grid; grid-template-columns: 26px 1fr auto 44px; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; background: #0c1526; border: 1px solid #14203a; }
+.rd-best-rider { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rd-best-years { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6a7a95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rd-best-rank { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; color: #6a7a95; text-align: center; }
 .rd-best-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6a7a95; white-space: nowrap; }
 .rd-best-count { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; color: #fbbf24; text-align: right; }

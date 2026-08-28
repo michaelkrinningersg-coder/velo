@@ -261,6 +261,28 @@ describe('Startlisten-Qualitaet', () => {
     expect((db.prepare('SELECT COUNT(*) n FROM race_startlist_quality').get() as any).n).toBe(0);
   });
 
+  it('rankt die Startlisten fuer Statistiken & Rekorde', () => {
+    legeRennen(10, 'Tour', 2026, { etappen: 1 });
+    legeRennen(11, 'Tour', 2027, { etappen: 1 });
+    legeRennen(20, 'Klassiker', 2027, { etappen: 1, rundfahrt: false });
+    db.prepare(`INSERT INTO race_startlist_quality (race_id, season, score, raw_points, max_points, starters)
+      VALUES (10, 2026, 44.0, 440, 1000, 150),
+             (11, 2027, 61.5, 615, 1000, 150),
+             (20, 2027, NULL, 0, 0, 150)`).run();
+
+    const repo = new ResultRepository(db);
+
+    // All-Time: bester Wert zuerst, Zeilen ohne Wert bleiben draussen.
+    const alltime = repo.getStartlistQualityRanking();
+    expect(alltime.map((z) => [z.raceName, z.season, z.score]))
+      .toEqual([['Tour', 2027, 61.5], ['Tour', 2026, 44.0]]);
+    expect(alltime[0]).toMatchObject({ raceId: 11, starters: 150, isStageRace: true });
+
+    // Nach Saison gefiltert.
+    expect(repo.getStartlistQualityRanking(2026).map((z) => z.raceId)).toEqual([10]);
+    expect(repo.getStartlistQualityRanking(2027).map((z) => z.raceId)).toEqual([11]);
+  });
+
   it('liefert die gespeicherte Reihe ueber alle Austragungen des Rennens', () => {
     legeRennen(10, 'Tour', 2026, { etappen: 1 });
     legeRennen(11, 'Tour', 2027, { etappen: 1 });
