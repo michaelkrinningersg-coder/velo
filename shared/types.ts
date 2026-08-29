@@ -1724,6 +1724,9 @@ export interface WrappedCareerResult {
   count: number;
   /** Renn-Prestige (fuer die Gruppierung/Sortierung nach Rennen). */
   prestige: number;
+  /** Rennkategorie — die Siege werden danach gruppiert. */
+  categoryId: number | null;
+  categoryName: string | null;
   /** true = Wertung (GC/Punkte/Berg/Nachwuchs), false = Etappe/Eintagesergebnis. */
   isClassification: boolean;
 }

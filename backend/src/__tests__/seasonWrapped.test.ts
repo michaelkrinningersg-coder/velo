@@ -125,6 +125,26 @@ describe('Karriereergebnisse', () => {
     expect(gruppe?.count).toBe(3);
     expect(gruppe?.seasons).toEqual([2028, 2029, 2031]);
   });
+
+  it('traegt die Rennkategorie mit, nach der die Siege gruppiert werden', () => {
+    // Die Testdatenbank traegt nur die Meisterschaftskategorien; die
+    // World-Tour-Stufen kommen sonst aus der CSV.
+    db.prepare(`INSERT INTO race_categories
+      (id, name, tier, number_of_teams, number_of_riders, bonus_system_id, home_selection_probability)
+      VALUES (2, 'World Tour - Grand Tour', 1, 25, 8, 1, 0.02)`).run();
+    legeRennen(60, 'Grosse Rundfahrt', 2031, { etappen: 2, kategorie: 2 });
+    punkte(60, 2031, 'gc_final', 1, 1, 1, { etappe: 1 });
+    punkte(60, 2031, 'stage_result', 1, 1, 1, { etappe: 2 });
+    db.prepare('UPDATE riders SET retired_season = 2031 WHERE id = 1').run();
+
+    const ergebnisse = new WrappedService(db).getWrapped(2031).retirees[0]?.bestResults ?? [];
+    const rundfahrt = ergebnisse.filter((r) => r.raceName === 'Grosse Rundfahrt');
+    expect(rundfahrt.length).toBeGreaterThan(0);
+    for (const eintrag of rundfahrt) {
+      expect(eintrag.categoryId).toBe(2);
+      expect(eintrag.categoryName).toBe('World Tour - Grand Tour');
+    }
+  });
 });
 
 describe('Eigenes Team', () => {

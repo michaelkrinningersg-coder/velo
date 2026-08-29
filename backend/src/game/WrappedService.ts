@@ -159,13 +159,18 @@ export class WrappedService {
       : `AND spe.award_type NOT LIKE '%\\_leader\\_day' ESCAPE '\\'`;
     const rows = this.db.prepare(`
       SELECT r.name AS raceName, r.prestige AS prestige, spe.season AS season,
-             spe.points_awarded AS points, spe.rank AS rank, spe.award_type AS award
+             spe.points_awarded AS points, spe.rank AS rank, spe.award_type AS award,
+             r.category_id AS categoryId, kategorie.name AS categoryName
       FROM season_point_events spe
       JOIN races r ON r.id = spe.race_id
+      LEFT JOIN race_categories kategorie ON kategorie.id = r.category_id
       WHERE spe.rider_id = ? AND spe.points_awarded > 0
         ${filterClause}
         ${seasonClause}
-    `).all(...params) as Array<{ raceName: string; prestige: number; season: number; points: number; rank: number; award: string }>;
+    `).all(...params) as Array<{
+      raceName: string; prestige: number; season: number; points: number;
+      rank: number; award: string; categoryId: number | null; categoryName: string | null;
+    }>;
 
     const groups = new Map<string, WrappedCareerResult & { order: number }>();
     for (const row of rows) {
@@ -181,6 +186,7 @@ export class WrappedService {
         groups.set(key, {
           raceName: row.raceName, season: row.season, seasons: [row.season], points: row.points,
           rank: row.rank, type, count: 1, prestige: row.prestige ?? 0,
+          categoryId: row.categoryId ?? null, categoryName: row.categoryName ?? null,
           isClassification: row.award.endsWith('_final'),
           order: awardOrder(row.award),
         });

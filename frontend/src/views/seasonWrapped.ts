@@ -171,29 +171,112 @@ function istEchterSieg(r: WrappedCareerResult): boolean {
   return !r.isClassification || r.type === 'GC';
 }
 
+// Farbe nach Art des Ergebnisses: Siege gold und durchgezogen, Wertungen in der
+// Farbe ihres Trikots und gestrichelt. Die Ebene "Sieg oder Wertung" traegt also
+// die Farbfamilie, die genaue Art steht zusaetzlich als Text im Chip — sonst
+// laegen GC und Etappe in zwei kaum unterscheidbaren Goldtoenen nebeneinander.
+const SIEG_FARBE = '#fbbf24';
+const WERTUNG_FARBE: Record<string, string> = {
+  Punkte: '#4ade80',
+  Berg: '#f87171',
+  Nachwuchs: '#e2e8f0',
+};
+
+function typFarbe(r: WrappedCareerResult): string {
+  return istEchterSieg(r) ? SIEG_FARBE : (WERTUNG_FARBE[r.type] ?? '#d8b4fe');
+}
+
+// Innerhalb eines Rennens: der Gesamtsieg zuerst, dann die uebrigen Siege, dann
+// die Nebenwertungen. Nach Anzahl zu sortieren stellte fuenf Etappensiege vor
+// den Toursieg.
+const TYP_REIHENFOLGE = ['GC', 'Eintages', 'Etappe', 'Punkte', 'Berg', 'Nachwuchs'];
+function typRang(r: WrappedCareerResult): number {
+  const index = TYP_REIHENFOLGE.indexOf(r.type);
+  return index < 0 ? TYP_REIHENFOLGE.length : index;
+}
+
+// "World Tour - Grand Tour" ist als Ueberschrift zu lang; der Teil vor dem
+// Bindestrich ist die Ebene, dahinter steht, worum es geht.
+function kategorieKurz(name: string | null): string {
+  if (!name) return 'Sonstige';
+  const teile = name.split(' - ');
+  return (teile.length > 1 ? teile.slice(1).join(' - ') : name).trim();
+}
+
+interface SiegKategorie {
+  name: string | null;
+  prestige: number;
+  rennen: Array<{ raceName: string; anzahl: number; teile: WrappedCareerResult[] }>;
+}
+
+// Siege nach Kategorie gruppiert, darin je Rennen eine Zeile mit der Gesamtzahl
+// und den einzelnen Arten. Reihenfolge nach Prestige, wie sie das Backend
+// liefert.
+function siegeNachKategorie(gewonnen: WrappedCareerResult[]): SiegKategorie[] {
+  const kategorien = new Map<string, SiegKategorie>();
+  for (const eintrag of gewonnen) {
+    const schluessel = eintrag.categoryName ?? '—';
+    let kategorie = kategorien.get(schluessel);
+    if (!kategorie) {
+      kategorie = { name: eintrag.categoryName, prestige: eintrag.prestige, rennen: [] };
+      kategorien.set(schluessel, kategorie);
+    }
+    kategorie.prestige = Math.max(kategorie.prestige, eintrag.prestige);
+    let rennen = kategorie.rennen.find((eintragRennen) => eintragRennen.raceName === eintrag.raceName);
+    if (!rennen) {
+      rennen = { raceName: eintrag.raceName, anzahl: 0, teile: [] };
+      kategorie.rennen.push(rennen);
+    }
+    rennen.anzahl += eintrag.count;
+    rennen.teile.push(eintrag);
+  }
+  for (const kategorie of kategorien.values()) {
+    kategorie.rennen.sort((a, b) => b.anzahl - a.anzahl || a.raceName.localeCompare(b.raceName));
+    for (const rennen of kategorie.rennen) {
+      rennen.teile.sort((a, b) => typRang(a) - typRang(b) || b.count - a.count);
+    }
+  }
+  return [...kategorien.values()].sort((a, b) => b.prestige - a.prestige);
+}
+
 function winsBlock(results: WrappedCareerResult[]): string {
   const gewonnen = results.filter((r) => r.rank === 1);
-  const siege = gewonnen.filter(istEchterSieg);
-  const wertungen = gewonnen.filter((r) => !istEchterSieg(r));
-  if (siege.length === 0 && wertungen.length === 0) return '';
+  if (gewonnen.length === 0) return '';
   const zaehle = (liste: WrappedCareerResult[]) => liste.reduce((summe, r) => summe + r.count, 0);
-  const anzahlSiege = zaehle(siege);
-  const anzahlWertungen = zaehle(wertungen);
+  const anzahlSiege = zaehle(gewonnen.filter(istEchterSieg));
+  const anzahlWertungen = zaehle(gewonnen.filter((r) => !istEchterSieg(r)));
 
-  const chip = (r: WrappedCareerResult, gold: boolean): string => `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${gold ? 'rgba(251,191,36,.42)' : 'rgba(168,85,247,.42)'};background:${gold ? 'rgba(251,191,36,.12)' : 'rgba(168,85,247,.12)'};border-radius:7px;padding:4px 9px;max-width:100%;">
-    ${r.count > 1 ? `<span style="${MONO};font-size:10px;font-weight:800;color:${gold ? '#fbbf24' : '#d8b4fe'};">${r.count}×</span>` : ''}
-    <span style="font-size:12px;font-weight:700;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(r.raceName, null)}</span>
-    <span style="${MONO};font-size:9.5px;color:#7d8ca6;">${esc(r.type)} · ${esc(seasonsText(r))}</span>
-  </span>`;
+  const teilChip = (teil: WrappedCareerResult): string => {
+    const farbe = typFarbe(teil);
+    const sieg = istEchterSieg(teil);
+    return `<span title="${esc(seasonsText(teil))}" style="display:inline-flex;align-items:center;gap:4px;${MONO};font-size:9.5px;font-weight:700;color:${farbe};border:1px solid ${farbe}44;background:${farbe}14;border-radius:5px;padding:2px 6px;${sieg ? '' : 'border-style:dashed;'}">
+      ${esc(teil.type)}${teil.count > 1 ? ` <span style="opacity:.75;">${teil.count}×</span>` : ''}
+    </span>`;
+  };
 
-  return `<div style="margin-top:11px;border:1px solid rgba(251,191,36,.28);border-radius:10px;background:rgba(251,191,36,.05);padding:10px 12px;">
-    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px;">
+  const kategorien = siegeNachKategorie(gewonnen).map((kategorie) => {
+    const stil = resolveRaceCategoryBadgeStyle(kategorie.name);
+    const zeilen = kategorie.rennen.map((rennen) => `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0;">
+      <span style="font-size:12.5px;font-weight:700;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${renderRaceNameLink(rennen.raceName, null)}</span>
+      <span style="${MONO};font-size:11px;font-weight:800;color:#fbbf24;">(${rennen.anzahl})</span>
+      <span style="display:inline-flex;gap:4px;flex-wrap:wrap;">${rennen.teile.map(teilChip).join('')}</span>
+      <span style="${MONO};font-size:9.5px;color:#5f6f8a;">${esc([...new Set(rennen.teile.flatMap((teil) => teil.seasons ?? [teil.season]))].sort((a, b) => a - b).join(', '))}</span>
+    </div>`).join('');
+    return `<div style="min-width:0;">
+      <div style="display:inline-flex;align-items:center;${MONO};font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:${stil.color};background:${stil.background};border:1px solid ${stil.border};border-radius:6px;padding:2px 8px;margin-bottom:5px;">${esc(kategorieKurz(kategorie.name))}</div>
+      <div style="border-left:2px solid ${stil.border};padding-left:10px;">${zeilen}</div>
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-top:11px;border:1px solid rgba(251,191,36,.28);border-radius:10px;background:rgba(251,191,36,.05);padding:11px 13px;">
+    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:10px;flex-wrap:wrap;">
       <span style="font-size:19px;font-weight:800;color:#fbbf24;letter-spacing:-.02em;">${anzahlSiege}</span>
       <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Siege</span>
       ${anzahlWertungen > 0 ? `<span style="font-size:19px;font-weight:800;color:#d8b4fe;letter-spacing:-.02em;margin-left:6px;">${anzahlWertungen}</span>
-      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Wertungen</span>` : ''}
+      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Wertungen</span>
+      <span style="${MONO};font-size:9px;color:#5f6f8a;margin-left:auto;">durchgezogen = Sieg · gestrichelt = Wertung</span>` : ''}
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">${siege.map((r) => chip(r, true)).join('')}${wertungen.map((r) => chip(r, false)).join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:11px;">${kategorien}</div>
   </div>`;
 }
 
