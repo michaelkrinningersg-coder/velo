@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Country, FormDebugPoint, Nationality, PrecalculatedRaceIncident, Race, RaceCategory, RaceCategoryBonus, RaceClassificationRow, RaceProgram, RaceProgramParticipant, RaceStageSummary, RealtimeClassificationLeaders, RealtimeClassificationStanding, RealtimeGcStanding, ResultType, Rider, RiderFormSnapshot, RiderHealthStatus, RiderLoadWarningLevel, RiderPotentials, RiderProgramRaceSummary, RiderRaceFormSource, RiderSeasonFormPhase, RiderSkillKey, RiderSkills, RiderStatsPayload, RiderStatsPointsByRaceFormat, RiderStatsPointsByTerrain, RiderStatsRaceBlock, RiderStatsRow, RiderStatsRowType, RiderStatsSeason, Role, SeasonPointAwardType, SeasonStandingCountryRow, SeasonStandingCountryRiderRow, SeasonStandingRow, SeasonStandingsPayload, Stage, StageClassification, StageMarkerCategory, StageMarkerClassification, StageNonFinisherRow, StageResultsPayload, StageScoringRule, Team } from '../../../shared/types';
 import { SKILL_WEIGHT_RIDER_COLUMNS, SkillWeightRule } from '../../../shared/skillWeights';
 import { summarizeStageProfile } from '../simulation/StageParser';
+import { resolveEffectivePeakAge, resolveVisiblePotential } from '../../../shared/riderProgression';
 
 export const RESULT_TYPE_IDS = {
   stage: 1,
@@ -902,6 +903,31 @@ export interface MapRiderOptions {
   lean?: boolean;
 }
 
+/** Ein einzelner Potenzialwert, gedeckelt sobald der Fahrer ausgewachsen ist. */
+function sichtbaresPotenzial(
+  row: RiderRow, potenzial: number, koennen: number, currentYear: number, skillKey?: RiderSkillKey,
+): number {
+  return resolveVisiblePotential({
+    potential: potenzial,
+    ability: koennen,
+    age: currentYear - row.birth_year,
+    // Je Skill zaehlt sein eigener Versatz; ohne Skill der ganze Fahrer.
+    peakAge: skillKey ? resolveEffectivePeakAge(row.peak_age, skillKey) : row.peak_age,
+    developmentValue: row.skill_development,
+  });
+}
+
+/** Dieselbe Deckelung fuer jeden einzelnen Skill. */
+function sichtbarePotenziale(row: RiderRow, currentYear: number): RiderPotentials {
+  const potenziale = mapSkillObject<RiderPotentials>(row, 'pot_');
+  const koennen = mapSkillObject<RiderSkills>(row, 'skill_');
+  const raus = {} as RiderPotentials;
+  for (const [key] of RIDER_SKILL_COLUMNS) {
+    raus[key] = sichtbaresPotenzial(row, potenziale[key], koennen[key], currentYear, key);
+  }
+  return raus;
+}
+
 export function mapRider(
   row: RiderRow,
   currentYear: number,
@@ -948,10 +974,15 @@ export function mapRider(
     roleId: row.role_id,
     role,
     age: currentYear - row.birth_year,
-    potential: row.pot_overall,
+    // Nach dem Ende der Entwicklung ist das Potenzial das heutige Koennen —
+    // der gespeicherte Wert bleibt als Zenit stehen, weil der Abbau ihn als
+    // Bezug braucht, taugt aber nicht mehr als Auskunft ueber den Fahrer.
+    potential: sichtbaresPotenzial(row, row.pot_overall, row.overall_rating, currentYear),
     overallRating: row.overall_rating,
     skills: mapSkillObject<RiderSkills>(row, 'skill_'),
-    potentials: options.lean ? undefined as unknown as RiderPotentials : mapSkillObject<RiderPotentials>(row, 'pot_'),
+    potentials: options.lean
+      ? undefined as unknown as RiderPotentials
+      : sichtbarePotenziale(row, currentYear),
     riderType: row.rider_type,
     specialization1: row.specialization_1,
     specialization2: row.specialization_2,

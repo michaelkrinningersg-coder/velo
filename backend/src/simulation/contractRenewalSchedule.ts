@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { resolveContractYears } from '../../../shared/contractTerms';
+import { resolveVisiblePotential } from '../../../shared/riderProgression';
 import { selectRenewalCandidates, type RenewalCandidate } from '../../../shared/contractRenewal';
 import { tableExists } from '../db/mappers';
 
@@ -23,6 +24,9 @@ interface RenewalRow extends RenewalCandidate {
   maxExtensionYears: number;
   retirementAge: number;
   teamId: number;
+  /** Beide nur fuer die Deckelung des Potenzials bei ausgewachsenen Fahrern. */
+  peakAge: number;
+  developmentValue: number;
 }
 
 interface RenewalSourceRow {
@@ -32,6 +36,8 @@ interface RenewalSourceRow {
   retirementAge: number;
   potential: number;
   overall: number;
+  peakAge: number;
+  developmentValue: number;
   declineAge: number;
   roleName: string | null;
   riderId: number;
@@ -89,6 +95,8 @@ export function ensureContractRenewals(db: Database.Database): void {
       age: gameState.season - c.birthYear,
       overall: c.overall,
       potential: c.potential,
+      peakAge: c.peakAge,
+      developmentValue: c.developmentValue,
       declineAge: c.declineAge,
       isCaptain: c.roleName != null && CAPTAIN_ROLE_NAMES.has(c.roleName),
       retirementAge: c.retirementAge,
@@ -100,6 +108,7 @@ export function ensureContractRenewals(db: Database.Database): void {
     c.id AS id, c.team_id AS teamId, c.rider_id AS riderId,
     r.birth_year AS birthYear, r.retirement_age AS retirementAge,
     r.pot_overall AS potential, r.overall_rating AS overall,
+    r.peak_age AS peakAge, r.skill_development AS developmentValue,
     r.decline_age AS declineAge, ro.name AS roleName
   `;
 
@@ -146,7 +155,14 @@ export function ensureContractRenewals(db: Database.Database): void {
       // Draft, damit ein Vertrag nicht davon abhaengt, auf welchem Weg er
       // zustande kommt.
       const gewuenscht = resolveContractYears({
-        age: c.age, potential: c.potential, retirementAge: c.retirementAge,
+        age: c.age,
+        // Bei einem ausgewachsenen Fahrer zaehlt sein Koennen, nicht der Zenit,
+        // den er einmal hatte — dieselbe Regel wie im Draft.
+        potential: resolveVisiblePotential({
+          potential: c.potential, ability: c.overall, age: c.age,
+          peakAge: c.peakAge, developmentValue: c.developmentValue,
+        }),
+        retirementAge: c.retirementAge,
         teamPrestige: prestigeByTeamId.get(c.teamId) ?? 3,
       }, Math.random);
       const extensionYears = Math.max(CONTRACT_RENEWAL_MIN_YEARS, Math.min(gewuenscht, c.maxExtensionYears));

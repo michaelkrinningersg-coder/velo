@@ -160,6 +160,44 @@ export function resolveSkillFloor(potential: number): number {
   return Math.max(PROGRESSION_MIN_FLOOR, potential - PROGRESSION_DECLINE_DEPTH);
 }
 
+/**
+ * Das Alter, ab dem an einem Fahrer nichts mehr waechst.
+ *
+ * Nicht das Zielalter selbst: die Ausdauergruppe hat einen Versatz von zwei
+ * Jahren nach hinten und steigt noch, wenn der Rest schon steht. Erst danach
+ * ist die Entwicklung abgeschlossen.
+ */
+export function resolveGrowthEndAge(peakAge: number, developmentValue: number): number {
+  const groessterVersatz = Math.max(0, ...Object.values(SKILL_PEAK_OFFSET).map((v) => v ?? 0));
+  return resolveTargetAge(peakAge + groessterVersatz, developmentValue);
+}
+
+/**
+ * Das Potenzial, wie es einem Fahrer noch offensteht.
+ *
+ * Der gespeicherte Wert ist der Zenit seiner Laufbahn — die Rechnung des Abbaus
+ * braucht ihn als Bezug, denn der Sockel liegt eine feste Tiefe darunter. Als
+ * Auskunft ueber einen Fahrer taugt er nach dem Zenit aber nicht mehr: ein
+ * 33-Jaehriger, der seit drei Jahren abbaut, erreicht seine 78 nie wieder.
+ *
+ * Ab dem Ende der Entwicklung ist das gezeigte Potenzial deshalb das heutige
+ * Koennen. Draft und Vertragsverlaengerung rechnen mit demselben Wert — sonst
+ * boete ein Team einem Fahrer einen langen Vertrag fuer eine Entwicklung an,
+ * die nicht mehr kommt.
+ */
+export function resolveVisiblePotential(input: {
+  potential: number;
+  /** Heutiges Koennen — Gesamtwertung oder ein einzelner Skill. */
+  ability: number;
+  age: number;
+  peakAge: number;
+  developmentValue: number;
+}): number {
+  if (!(input.peakAge > 0)) return input.potential;
+  if (input.age < resolveGrowthEndAge(input.peakAge, input.developmentValue)) return input.potential;
+  return Math.min(input.potential, input.ability);
+}
+
 export interface GrowthInput {
   skill: number;
   potential: number;

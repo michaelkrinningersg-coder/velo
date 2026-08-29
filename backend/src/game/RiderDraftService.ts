@@ -23,6 +23,7 @@ import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
+import { resolveVisiblePotential } from '../../../shared/riderProgression';
 
 function hasMetQuota(specId: number, counts: { spec1: number; spec23: number }): boolean {
   const s1 = counts.spec1;
@@ -458,6 +459,7 @@ export class RiderDraftService {
       SELECT
         r.id, r.first_name, r.last_name, r.birth_year,
         r.overall_rating, r.pot_overall, r.peak_age, r.decline_age, r.retirement_age,
+        r.skill_development,
         r.specialization_1_id, r.specialization_2_id, r.specialization_3_id,
         r.country_id,
         (
@@ -474,8 +476,15 @@ export class RiderDraftService {
 
     const freeAgents = freeAgentsRaw.map((r: any) => {
       const age = season - r.birth_year;
-      const draftValue = age < 25 ? (r.overall_rating * 0.85) + (r.pot_overall * 0.15) : r.overall_rating;
-      return { ...r, draftValue };
+      // Wer ausgewachsen ist, hat kein Potenzial mehr, sondern nur noch sein
+      // Koennen. Sonst boete ein Team einem 30-Jaehrigen einen langen Vertrag
+      // fuer eine Entwicklung an, die nicht mehr kommt.
+      const potenzial = resolveVisiblePotential({
+        potential: r.pot_overall, ability: r.overall_rating,
+        age, peakAge: r.peak_age, developmentValue: r.skill_development,
+      });
+      const draftValue = age < 25 ? (r.overall_rating * 0.85) + (potenzial * 0.15) : r.overall_rating;
+      return { ...r, pot_overall: potenzial, draftValue };
     }).sort((a: any, b: any) => b.draftValue - a.draftValue);
 
     const preferences = this.db.prepare(
