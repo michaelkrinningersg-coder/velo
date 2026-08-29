@@ -8,6 +8,7 @@ import {
   ziehePotenziale,
   type PresetSpanne,
 } from '../../../shared/potentialAssignment';
+import { calcRiderOverall } from '../../../shared/riderOverall';
 import { PotentialAssignmentService } from '../game/PotentialAssignmentService';
 
 /**
@@ -21,8 +22,15 @@ import { PotentialAssignmentService } from '../game/PotentialAssignmentService';
 const SP = [...POT_PRESET_SKILL_COLUMNS];
 
 function spanne(name: string, min: number, max: number, weight = 1): PresetSpanne {
+  const mitte = (min + max) / 2;
   return {
     displayName: name, weight,
+    // Alle Skills gleich, also ist die Gesamtwertung genau die Mitte.
+    midOverall: calcRiderOverall(Object.fromEntries(
+      ['flat','mountain','mediumMountain','hill','timeTrial','prologue','cobble','sprint',
+       'acceleration','downhill','attack','stamina','resistance','recuperation','bikeHandling']
+        .map((k) => [k, mitte]),
+    ) as never),
     min: Object.fromEntries(SP.map((s) => [s, min])),
     max: Object.fromEntries(SP.map((s) => [s, max])),
   };
@@ -80,6 +88,43 @@ function legeFahrer(db: Database.Database, id: number, skill: number, geboren: n
     .run(id, 'Test', `Fahrer${id}`, 1, geboren, 0, 1, skill, skill + 9, peak,
       ...SP.map(() => skill), ...SP.map(() => skill + 9));
 }
+
+describe('Daempfung fuer Fahrer ohne Vertrag', () => {
+  it('zieht die Auswahl zu Presets nahe dem heutigen Koennen', () => {
+    const nah = spanne('nah', 60, 70);      // Mitte 65
+    const fern = spanne('fern', 78, 84);    // Mitte 81
+    // Ohne Naehe entscheidet allein das Gewicht — beide sind gleich schwer,
+    // die Ziehung bei 0,9 landet auf dem zweiten.
+    expect(waehlePreset([nah, fern], () => 0.9)?.displayName).toBe('fern');
+    // Mit Naehe zu einem Koennen von 65 faellt das ferne Preset stark ab.
+    expect(waehlePreset([nah, fern], () => 0.9, 65)?.displayName).toBe('nah');
+  });
+
+  it('bevorzugt kein Preset unterhalb des Koennens', () => {
+    // Ein Fahrer, der schon ueber der Mitte beider Presets liegt, soll nicht
+    // kuenstlich klein gehalten werden: beide werden gleich behandelt.
+    const a = spanne('a', 60, 70);
+    const b = spanne('b', 62, 72);
+    const ohne = waehlePreset([a, b], () => 0.9)?.displayName;
+    expect(waehlePreset([a, b], () => 0.9, 85)?.displayName).toBe(ohne);
+  });
+
+  it('neigt die Ziehung zum unteren Rand, ohne die Spanne zu verlassen', () => {
+    const preset = spanne('p', 60, 80);
+    const skills = skillsMit(60);
+    let gleich = 0;
+    let geneigt = 0;
+    for (let i = 1; i <= 200; i++) {
+      const wuerfel = () => i / 201;
+      gleich += ziehePotenziale(preset, skills, SP, wuerfel)['flat']!;
+      const wert = ziehePotenziale(preset, skills, SP, wuerfel, 1.5)['flat']!;
+      geneigt += wert;
+      expect(wert).toBeGreaterThanOrEqual(60);
+      expect(wert).toBeLessThanOrEqual(80);
+    }
+    expect(geneigt).toBeLessThan(gleich);
+  });
+});
 
 describe('Einmaliger Lauf am Bestand', () => {
   it('setzt am Zielalter das Potenzial auf das Koennen und vergibt kein Preset', () => {

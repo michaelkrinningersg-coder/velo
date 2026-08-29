@@ -5,6 +5,7 @@ import {
   resolvePresetMidOverall,
 } from '../../../shared/newgenPresetTiers';
 import {
+  OHNE_VERTRAG_NEIGUNG,
   istPresetVertraeglich,
   waehlePreset,
   ziehePotenziale,
@@ -65,6 +66,7 @@ export class PotentialAssignmentService {
     const presets: PresetSpanne[] = presetZeilen.map((zeile) => ({
       displayName: String(zeile['display_name']),
       weight: Number(zeile['weight'] ?? 1),
+      midOverall: resolvePresetMidOverall(zeile),
       min: Object.fromEntries(spalten.map((s) => [s, Number(zeile[`min_pot_${s}`] ?? 0)])),
       max: Object.fromEntries(spalten.map((s) => [s, Number(zeile[`max_pot_${s}`] ?? 0)])),
     }));
@@ -87,9 +89,15 @@ export class PotentialAssignmentService {
     };
 
     const fahrer = this.db.prepare(`
-      SELECT id, birth_year, peak_age, ${spalten.map((s) => `skill_${s}`).join(', ')}
-      FROM riders
-      WHERE is_retired = 0 AND pot_preset_key IS NULL
+      SELECT r.id, r.birth_year, r.peak_age, r.overall_rating,
+             EXISTS (
+               SELECT 1 FROM contracts c
+               WHERE c.rider_id = r.id AND c.status IN ('active', 'future')
+                 AND c.end_season >= ${currentSeason}
+             ) AS imTeam,
+             ${spalten.map((s) => `r.skill_${s}`).join(', ')}
+      FROM riders r
+      WHERE r.is_retired = 0 AND r.pot_preset_key IS NULL
     `).all() as Array<Record<string, number>>;
 
     const setzePotenziale = this.db.prepare(`
@@ -117,14 +125,23 @@ export class PotentialAssignmentService {
         }
 
         const kandidaten = presets.filter((p) => istPresetVertraeglich(p, skills, spalten) && istFrei(p));
-        const preset = waehlePreset(kandidaten, zufall);
+        // Ein Fahrer ohne Vertrag ist der, den kein Team wollte. Seine Auswahl
+        // zieht zu Presets nahe seinem heutigen Koennen, und innerhalb der
+        // Spanne zum unteren Rand — statt gleichverteilt ueber den halben
+        // Katalog samt Spitze.
+        const imTeam = zeile['imTeam'] === 1;
+        const preset = waehlePreset(
+          kandidaten, zufall, imTeam ? undefined : Number(zeile['overall_rating'] ?? 0),
+        );
         if (preset == null) {
           // Kein freies, vertraegliches Preset — der Fahrer behaelt, was er hat.
           bericht.ohnePreset += 1;
           continue;
         }
 
-        const potenziale = ziehePotenziale(preset, skills, spalten, zufall);
+        const potenziale = ziehePotenziale(
+          preset, skills, spalten, zufall, imTeam ? 1 : OHNE_VERTRAG_NEIGUNG,
+        );
         setzePotenziale.run(
           this.gesamt(potenziale), preset.displayName,
           ...spalten.map((s) => potenziale[s]!), zeile['id'],
