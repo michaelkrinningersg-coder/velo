@@ -53,6 +53,10 @@ interface Jahreszeile {
   ueber77: number;
   ueber80: number;
   mittel: number;
+  /** Dieselben Zahlen fuer das Potenzial — was das Feld noch werden kann. */
+  potMittel: number;
+  potUeber74: number;
+  potUeber77: number;
   medianAlter: number;
   newgens: number;
   ruhestand: number;
@@ -60,17 +64,48 @@ interface Jahreszeile {
 
 function zaehle(db: Database.Database, saison: number): Omit<Jahreszeile, 'saison' | 'newgens' | 'ruhestand'> {
   const zeilen = db.prepare(
-    'SELECT overall_rating AS ovr, birth_year FROM riders WHERE is_retired = 0',
-  ).all() as Array<{ ovr: number; birth_year: number }>;
+    'SELECT overall_rating AS ovr, pot_overall AS pot, birth_year FROM riders WHERE is_retired = 0',
+  ).all() as Array<{ ovr: number; pot: number; birth_year: number }>;
   const alter = zeilen.map((z) => saison - z.birth_year).sort((a, b) => a - b);
+  const n = Math.max(1, zeilen.length);
   return {
     feld: zeilen.length,
     ueber74: zeilen.filter((z) => z.ovr > 74).length,
     ueber77: zeilen.filter((z) => z.ovr > 77).length,
     ueber80: zeilen.filter((z) => z.ovr > 80).length,
-    mittel: zeilen.reduce((s, z) => s + z.ovr, 0) / Math.max(1, zeilen.length),
+    mittel: zeilen.reduce((s, z) => s + z.ovr, 0) / n,
+    potMittel: zeilen.reduce((s, z) => s + z.pot, 0) / n,
+    potUeber74: zeilen.filter((z) => z.pot > 74).length,
+    potUeber77: zeilen.filter((z) => z.pot > 77).length,
     medianAlter: alter[Math.floor(alter.length / 2)] ?? 0,
   };
+}
+
+/** Die staerksten Fahrer am Ende des Laufs. */
+function zeigeSpitze(db: Database.Database, saison: number, anzahl: number): void {
+  const zeilen = db.prepare(`
+    SELECT r.first_name AS vorname, r.last_name AS nachname, ${saison} - r.birth_year AS alt,
+           r.overall_rating AS ovr, r.pot_overall AS pot, r.pot_preset_key AS preset,
+           land.code_3 AS land, tr.display_name AS spez
+    FROM riders r
+    LEFT JOIN sta_country land ON land.id = r.country_id
+    LEFT JOIN type_rider tr ON tr.id = r.specialization_1_id
+    WHERE r.is_retired = 0
+    ORDER BY r.overall_rating DESC LIMIT ?
+  `).all(anzahl) as Array<Record<string, string | number>>;
+
+  console.log(`\nDie ${anzahl} staerksten Fahrer in ${saison}`);
+  console.log('  # | Fahrer | Land | Alter | OVR | Potenzial | Spez | Preset');
+  zeilen.forEach((z, i) => {
+    console.log(
+      String(i + 1).padStart(3) + ' | ' + `${z['vorname']} ${z['nachname']}`.padEnd(28)
+      + ' | ' + String(z['land'] ?? '???') + ' | ' + String(z['alt']).padStart(2)
+      + ' | ' + Number(z['ovr']).toFixed(1).padStart(4)
+      + ' | ' + Number(z['pot']).toFixed(1).padStart(4)
+      + ' | ' + String(z['spez'] ?? '?').padEnd(19)
+      + ' | ' + String(z['preset'] ?? '— (Import)'),
+    );
+  });
 }
 
 function main(): void {
@@ -119,14 +154,17 @@ function main(): void {
     });
   }
 
-  console.log('\nSaison | Feld | >74 | >77 | >80 |   Ø   | Median-Alter | Newgens | Ruhestand');
+  console.log('\n       |      |  Gesamtwertung        |     Potenzial      |        |         |');
+  console.log('Saison | Feld | >74 | >77 | >80 |  Ø   | >74  | >77 |  Ø   | Alter | Newgens | Rente');
   for (const z of reihe) {
     console.log(
       String(z.saison).padStart(6) + ' | ' + String(z.feld).padStart(4)
       + ' | ' + String(z.ueber74).padStart(3) + ' | ' + String(z.ueber77).padStart(3)
-      + ' | ' + String(z.ueber80).padStart(3) + ' | ' + z.mittel.toFixed(2).padStart(5)
-      + ' | ' + String(z.medianAlter).padStart(12) + ' | ' + String(z.newgens).padStart(7)
-      + ' | ' + String(z.ruhestand).padStart(9),
+      + ' | ' + String(z.ueber80).padStart(3) + ' | ' + z.mittel.toFixed(1).padStart(4)
+      + ' | ' + String(z.potUeber74).padStart(4) + ' | ' + String(z.potUeber77).padStart(3)
+      + ' | ' + z.potMittel.toFixed(1).padStart(4)
+      + ' | ' + String(z.medianAlter).padStart(5) + ' | ' + String(z.newgens).padStart(7)
+      + ' | ' + String(z.ruhestand).padStart(5),
     );
   }
   const erste = reihe[0]!;
@@ -134,7 +172,8 @@ function main(): void {
   console.log(`\nUeber ${jahre} Jahre: Feld ${erste.feld} -> ${letzte.feld}, `
     + `>74 ${erste.ueber74} -> ${letzte.ueber74}, >77 ${erste.ueber77} -> ${letzte.ueber77}, `
     + `>80 ${erste.ueber80} -> ${letzte.ueber80}`);
-  console.log(`Kopie: ${kopie}`);
+  zeigeSpitze(db, start + jahre, Number(process.env['SPITZE'] ?? 50));
+  console.log(`\nKopie: ${kopie}`);
   db.close();
 }
 
