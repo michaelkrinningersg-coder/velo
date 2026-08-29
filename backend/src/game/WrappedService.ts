@@ -12,9 +12,36 @@ import type {
   WrappedCareerResult,
   WrappedSurprise,
   WrappedRecords,
+  WrappedPlayerTeam,
+  WrappedProgression,
+  WrappedProgressionSeries,
+  WrappedRivalry,
+  WrappedJerseyGroup,
+  WrappedJerseyKey,
+  WrappedGrandTourClassifications,
+  WrappedGrind,
+  WrappedGrindEntry,
+  WrappedStrongestField,
   PalmaresRiderRef,
   RaceWinnerEntry,
 } from '../../../shared/types';
+
+// Zweite Plaetze, mit demselben Zuschnitt wie WIN_FILTER.
+const SECOND_FILTER = `
+  spe.rank = 2 AND (
+    (r.is_stage_race = 1 AND spe.award_type IN ('stage_result','gc_final'))
+    OR (r.is_stage_race = 0 AND spe.award_type = 'one_day_result'))`;
+
+// Die vier Fuehrungstrikots, in der Reihenfolge, in der sie angezeigt werden.
+const JERSEYS: Array<{ key: WrappedJerseyKey; award: string; label: string }> = [
+  { key: 'gc', award: 'gc_leader_day', label: 'Gesamtwertung' },
+  { key: 'points', award: 'points_leader_day', label: 'Punktewertung' },
+  { key: 'mountain', award: 'mountain_leader_day', label: 'Bergwertung' },
+  { key: 'youth', award: 'youth_leader_day', label: 'Nachwuchswertung' },
+];
+
+// Tour de France und die uebrigen Grand Tours.
+const GRAND_TOUR_CATEGORIES = [1, 2];
 
 // Nur echte Renn-Siege zaehlen (Etappe/Eintages/GC), keine Wertungstrikots.
 const WIN_FILTER = `
@@ -148,15 +175,18 @@ export class WrappedService {
       if (existing) {
         existing.count += 1;
         existing.season = Math.max(existing.season, row.season);
+        // Die Jahre gehoeren zur Gruppe: "3x Etappe" allein sagt nicht, wann.
+        if (!existing.seasons.includes(row.season)) existing.seasons.push(row.season);
       } else {
         groups.set(key, {
-          raceName: row.raceName, season: row.season, points: row.points,
+          raceName: row.raceName, season: row.season, seasons: [row.season], points: row.points,
           rank: row.rank, type, count: 1, prestige: row.prestige ?? 0,
           isClassification: row.award.endsWith('_final'),
           order: awardOrder(row.award),
         });
       }
     }
+    for (const gruppe of groups.values()) gruppe.seasons.sort((a, b) => a - b);
     const list = [...groups.values()];
     if (groupByRace) {
       // Nach Rennen (Prestige absteigend) gruppiert; innerhalb eines Rennens nach
@@ -174,25 +204,38 @@ export class WrappedService {
     return list.slice(0, limit).map(({ order: _o, ...rest }) => rest);
   }
 
-  private topRidersByWins(season: number, limit = 3): WrappedWinsEntry[] {
-    const rows = this.db.prepare(`
+  // Vollstaendige Rangliste einer Saison. Ohne LIMIT, weil daraus auch der
+  // Vorjahresplatz fuer den Auf-/Abstiegspfeil kommt — mit LIMIT waere jeder
+  // Fahrer ausserhalb der Top 10 faelschlich "neu".
+  private winsRanking(season: number, filter = WIN_FILTER): Array<{ riderId: number; wins: number }> {
+    return this.db.prepare(`
       SELECT spe.rider_id AS riderId, COUNT(*) AS wins
       FROM season_point_events spe
       JOIN races r ON r.id = spe.race_id
-      WHERE spe.season = ? AND ${WIN_FILTER}
+      WHERE spe.season = ? AND ${filter}
       GROUP BY spe.rider_id
       ORDER BY wins DESC, spe.rider_id ASC
-      LIMIT ?
-    `).all(season, limit) as Array<{ riderId: number; wins: number }>;
+    `).all(season) as Array<{ riderId: number; wins: number }>;
+  }
+
+  private static rankMap<T extends { riderId?: number; teamId?: number }>(
+    rows: T[], key: (row: T) => number,
+  ): Map<number, number> {
+    return new Map(rows.map((row, index) => [key(row), index + 1]));
+  }
+
+  private topRidersByWins(season: number, limit = 10, filter = WIN_FILTER): WrappedWinsEntry[] {
+    const vorjahr = WrappedService.rankMap(this.winsRanking(season - 1, filter), (r) => r.riderId);
     const out: WrappedWinsEntry[] = [];
-    for (const row of rows) {
+    for (const row of this.winsRanking(season, filter).slice(0, limit)) {
       const rider = this.riderRef(row.riderId);
-      if (rider) out.push({ rider, wins: row.wins });
+      if (rider) out.push({ rider, wins: row.wins, previousRank: vorjahr.get(row.riderId) ?? null });
     }
     return out;
   }
 
-  private topRidersByPoints(season: number, limit = 3): WrappedRiderPoints[] {
+  private topRidersByPoints(season: number, limit = 10): WrappedRiderPoints[] {
+    const vorjahr = this.seasonRankMap(season - 1);
     const rows = this.db.prepare(`
       SELECT rider_id AS riderId, SUM(points_awarded) AS points
       FROM season_point_events
@@ -204,7 +247,7 @@ export class WrappedService {
     const out: WrappedRiderPoints[] = [];
     for (const row of rows) {
       const rider = this.riderRef(row.riderId);
-      if (rider) out.push({ rider, points: row.points });
+      if (rider) out.push({ rider, points: row.points, previousRank: vorjahr.get(row.riderId) ?? null });
     }
     return out;
   }
@@ -218,7 +261,7 @@ export class WrappedService {
     return row?.wins ?? 0;
   }
 
-  private topTeamsByWins(season: number, limit = 3): WrappedTeamStat[] {
+  private teamWinsRanking(season: number): WrappedTeamStat[] {
     return this.db.prepare(`
       SELECT spe.team_id AS teamId, t.name AS teamName, COUNT(*) AS value
       FROM season_point_events spe
@@ -227,8 +270,13 @@ export class WrappedService {
       WHERE spe.season = ? AND ${WIN_FILTER}
       GROUP BY spe.team_id
       ORDER BY value DESC, t.name ASC
-      LIMIT ?
-    `).all(season, limit) as WrappedTeamStat[];
+    `).all(season) as WrappedTeamStat[];
+  }
+
+  private topTeamsByWins(season: number, limit = 10): WrappedTeamStat[] {
+    const vorjahr = WrappedService.rankMap(this.teamWinsRanking(season - 1), (t) => t.teamId);
+    return this.teamWinsRanking(season).slice(0, limit)
+      .map((team) => ({ ...team, previousRank: vorjahr.get(team.teamId) ?? null }));
   }
 
   private bestNewcomers(season: number, seasonRank: Map<number, number>, limit = 3): WrappedNewcomer[] {
@@ -444,6 +492,258 @@ export class WrappedService {
     return { from: span?.f ?? null, to: span?.t ?? null, gt, monument };
   }
 
+  // ---- Eigenes Team ----------------------------------------------------
+  private playerTeam(season: number, resultRepo: ResultRepository): WrappedPlayerTeam | null {
+    const team = this.db.prepare(
+      'SELECT id, name FROM teams WHERE is_player_team = 1 LIMIT 1',
+    ).get() as { id: number; name: string } | undefined;
+    if (!team) return null;
+
+    const platz = (jahr: number): { rank: number | null; points: number } => {
+      const stand = resultRepo.getSeasonStandings(jahr).teamStandings;
+      const index = stand.findIndex((row) => row.teamId === team.id);
+      return index < 0
+        ? { rank: null, points: 0 }
+        : { rank: index + 1, points: stand[index]!.points };
+    };
+    const jetzt = platz(season);
+    const vorher = platz(season - 1);
+
+    const siege = (jahr: number): number => (this.db.prepare(`
+      SELECT COUNT(*) AS n FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.season = ? AND spe.team_id = ? AND ${WIN_FILTER}
+    `).get(jahr, team.id) as { n: number }).n;
+
+    const besterRow = this.db.prepare(`
+      SELECT rider_id AS riderId, SUM(points_awarded) AS points
+      FROM season_point_events
+      WHERE season = ? AND team_id = ?
+      GROUP BY rider_id
+      ORDER BY points DESC, rider_id ASC
+      LIMIT 1
+    `).get(season, team.id) as { riderId: number; points: number } | undefined;
+    const besterRef = besterRow ? this.riderRef(besterRow.riderId) : null;
+    const seasonRank = this.seasonRankMap(season);
+
+    const groessterRow = this.db.prepare(`
+      SELECT spe.rider_id AS riderId, r.name AS raceName,
+             spe.points_awarded AS points, spe.award_type AS award
+      FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.season = ? AND spe.team_id = ? AND ${WIN_FILTER}
+      ORDER BY spe.points_awarded DESC
+      LIMIT 1
+    `).get(season, team.id) as { riderId: number; raceName: string; points: number; award: string } | undefined;
+    const groessterRef = groessterRow ? this.riderRef(groessterRow.riderId) : null;
+
+    const mitSieg = (this.db.prepare(`
+      SELECT COUNT(DISTINCT spe.rider_id) AS n FROM season_point_events spe
+      JOIN races r ON r.id = spe.race_id
+      WHERE spe.season = ? AND spe.team_id = ? AND ${WIN_FILTER}
+    `).get(season, team.id) as { n: number }).n;
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      rank: jetzt.rank,
+      previousRank: vorher.rank,
+      points: jetzt.points,
+      previousPoints: vorher.points,
+      wins: siege(season),
+      previousWins: siege(season - 1),
+      bestRider: besterRow && besterRef
+        ? { rider: besterRef, points: besterRow.points, seasonRank: seasonRank.get(besterRow.riderId) ?? null }
+        : null,
+      biggestWin: groessterRow && groessterRef
+        ? {
+          rider: groessterRef, raceName: groessterRow.raceName,
+          points: groessterRow.points, type: awardLabel(groessterRow.award),
+        }
+        : null,
+      ridersWithWin: mitSieg,
+    };
+  }
+
+  // ---- Punkteverlauf ---------------------------------------------------
+  private progression(season: number, top: WrappedRiderPoints[]): WrappedProgression | null {
+    const drei = top.slice(0, 3);
+    if (drei.length === 0) return null;
+
+    const series: WrappedProgressionSeries[] = [];
+    for (const eintrag of drei) {
+      const rows = this.db.prepare(`
+        SELECT awarded_on AS date, SUM(points_awarded) AS points
+        FROM season_point_events
+        WHERE season = ? AND rider_id = ? AND awarded_on IS NOT NULL
+        GROUP BY awarded_on
+        ORDER BY awarded_on ASC
+      `).all(season, eintrag.rider.riderId) as Array<{ date: string; points: number }>;
+      let summe = 0;
+      const punkte = rows.map((row) => { summe += row.points; return { date: row.date, total: summe }; });
+      series.push({ rider: eintrag.rider, points: punkte, total: summe });
+    }
+    if (series.every((reihe) => reihe.points.length === 0)) return null;
+
+    // `races` hat keine Saisonspalte — die Rennen einer Saison haengen am Datum.
+    const markers = (this.db.prepare(`
+      SELECT name, start_date AS date
+      FROM races
+      WHERE category_id IN (${GRAND_TOUR_CATEGORIES.join(',')})
+        AND start_date LIKE ?
+      ORDER BY start_date ASC
+    `).all(`${season}%`) as Array<{ name: string; date: string }>)
+      .map((row) => ({ date: row.date, label: row.name }));
+
+    const alleDaten = series.flatMap((reihe) => reihe.points.map((punkt) => punkt.date));
+    return {
+      series,
+      markers,
+      fromDate: `${season}-01-01`,
+      toDate: alleDaten.length > 0 ? alleDaten.reduce((a, b) => (a > b ? a : b)) : `${season}-12-31`,
+      maxPoints: Math.max(...series.map((reihe) => reihe.total), 1),
+    };
+  }
+
+  // ---- Duell des Jahres ------------------------------------------------
+  private rivalry(season: number): WrappedRivalry | null {
+    if (!tableExists(this.db, 'rivalries')) return null;
+    const row = this.db.prepare(`
+      SELECT rider_a_id, rider_b_id, intensity, encounters,
+             win_a, win_b, season_win_a, season_win_b, top_category_id, discipline
+      FROM rivalries WHERE season = ? ORDER BY rank ASC LIMIT 1
+    `).get(season) as any;
+    if (!row) return null;
+    const riderA = this.riderRef(row.rider_a_id);
+    const riderB = this.riderRef(row.rider_b_id);
+    if (!riderA || !riderB) return null;
+    return {
+      riderA, riderB,
+      encounters: row.encounters ?? 0,
+      seasonWinA: row.season_win_a ?? 0,
+      seasonWinB: row.season_win_b ?? 0,
+      careerWinA: row.win_a ?? 0,
+      careerWinB: row.win_b ?? 0,
+      intensity: row.intensity ?? 0,
+      discipline: row.discipline ?? null,
+      topCategoryId: row.top_category_id ?? null,
+    };
+  }
+
+  // ---- Trikottage ------------------------------------------------------
+  // Die `*_leader_day`-Ereignisse werden ueberall sonst herausgefiltert; hier
+  // sind sie der Punkt: wer trug am laengsten ein Fuehrungstrikot.
+  private jerseyDays(season: number, limit = 3): WrappedJerseyGroup[] {
+    const abfrage = this.db.prepare(`
+      SELECT rider_id AS riderId, COUNT(*) AS days
+      FROM season_point_events
+      WHERE season = ? AND award_type = ?
+      GROUP BY rider_id
+      ORDER BY days DESC, rider_id ASC
+      LIMIT ?
+    `);
+    const gruppen: WrappedJerseyGroup[] = [];
+    for (const trikot of JERSEYS) {
+      const rows = abfrage.all(season, trikot.award, limit) as Array<{ riderId: number; days: number }>;
+      const holders: WrappedJerseyGroup['holders'] = [];
+      for (const row of rows) {
+        const rider = this.riderRef(row.riderId);
+        if (rider) holders.push({ rider, days: row.days });
+      }
+      if (holders.length > 0) gruppen.push({ key: trikot.key, label: trikot.label, holders });
+    }
+    return gruppen;
+  }
+
+  // ---- Wertungstrikots der Grand Tours ---------------------------------
+  private grandTourClassifications(season: number): WrappedGrandTourClassifications[] {
+    const rennen = this.db.prepare(`
+      SELECT id, name, category_id AS categoryId
+      FROM races
+      WHERE category_id IN (${GRAND_TOUR_CATEGORIES.join(',')})
+        AND start_date LIKE ?
+      ORDER BY start_date ASC
+    `).all(`${season}%`) as Array<{ id: number; name: string; categoryId: number }>;
+
+    const sieger = this.db.prepare(`
+      SELECT rider_id AS riderId FROM season_point_events
+      WHERE season = ? AND race_id = ? AND award_type = ? AND rank = 1
+      LIMIT 1
+    `);
+    const hole = (raceId: number, award: string): PalmaresRiderRef | null => {
+      const row = sieger.get(season, raceId, award) as { riderId: number } | undefined;
+      return row ? this.riderRef(row.riderId) : null;
+    };
+
+    const out: WrappedGrandTourClassifications[] = [];
+    for (const rennenZeile of rennen) {
+      const eintrag: WrappedGrandTourClassifications = {
+        raceId: rennenZeile.id,
+        raceName: rennenZeile.name,
+        categoryId: rennenZeile.categoryId,
+        points: hole(rennenZeile.id, 'points_final'),
+        mountain: hole(rennenZeile.id, 'mountain_final'),
+        youth: hole(rennenZeile.id, 'youth_final'),
+      };
+      if (eintrag.points || eintrag.mountain || eintrag.youth) out.push(eintrag);
+    }
+    return out;
+  }
+
+  // ---- Pech und Schinderei ---------------------------------------------
+  private grind(season: number, limit = 5): WrappedGrind {
+    if (!tableExists(this.db, 'rider_season_stats')) return { unluckiest: [], workhorses: [] };
+    const bauen = (rows: Array<{
+      riderId: number; value: number; injuryDays: number; illnessDays: number; raceDays: number;
+    }>): WrappedGrindEntry[] => {
+      const out: WrappedGrindEntry[] = [];
+      for (const row of rows) {
+        const rider = this.riderRef(row.riderId);
+        if (rider) out.push({
+          rider, value: row.value,
+          injuryDays: row.injuryDays, illnessDays: row.illnessDays, raceDays: row.raceDays,
+        });
+      }
+      return out;
+    };
+    const spalten = `
+      rider_id AS riderId,
+      COALESCE(injury_days, 0) AS injuryDays,
+      COALESCE(illness_days, 0) AS illnessDays,
+      COALESCE(race_days, 0) AS raceDays`;
+    const unluckiest = bauen(this.db.prepare(`
+      SELECT ${spalten}, COALESCE(injury_days, 0) + COALESCE(illness_days, 0) AS value
+      FROM rider_season_stats
+      WHERE season = ?
+      ORDER BY value DESC, rider_id ASC
+      LIMIT ?
+    `).all(season, limit) as any[]);
+    const workhorses = bauen(this.db.prepare(`
+      SELECT ${spalten}, COALESCE(race_days, 0) AS value
+      FROM rider_season_stats
+      WHERE season = ?
+      ORDER BY value DESC, rider_id ASC
+      LIMIT ?
+    `).all(season, limit) as any[]);
+    return {
+      unluckiest: unluckiest.filter((eintrag) => eintrag.value > 0),
+      workhorses: workhorses.filter((eintrag) => eintrag.value > 0),
+    };
+  }
+
+  // ---- Staerkste Felder ------------------------------------------------
+  private strongestFields(season: number, limit = 10): WrappedStrongestField[] {
+    if (!tableExists(this.db, 'race_startlist_quality')) return [];
+    return this.db.prepare(`
+      SELECT q.race_id AS raceId, r.name AS raceName, q.score AS score, q.starters AS starters
+      FROM race_startlist_quality q
+      JOIN races r ON r.id = q.race_id
+      WHERE q.season = ?
+      ORDER BY q.score DESC, r.name ASC
+      LIMIT ?
+    `).all(season, limit) as WrappedStrongestField[];
+  }
+
   public getWrapped(season: number): SeasonWrappedPayload {
     const resultRepo = new ResultRepository(this.db);
     const hasEvents = tableExists(this.db, 'season_point_events');
@@ -452,10 +752,18 @@ export class WrappedService {
     const standings = resultRepo.getSeasonStandings(season);
     const raceWinners = standings.raceWinners ?? [];
     const teamStandings = standings.teamStandings;
+    // Vorjahresplatz fuer den Auf-/Abstiegspfeil aus derselben Quelle.
+    const teamStandingsVorjahr = resultRepo.getSeasonStandings(season - 1).teamStandings;
+    const teamRangVorjahr = new Map(teamStandingsVorjahr
+      .filter((t) => t.teamId != null)
+      .map((t, index) => [t.teamId as number, index + 1]));
     const topTeamsByPoints: WrappedTeamStat[] = teamStandings
       .filter((t) => t.teamId != null)
-      .slice(0, 3)
-      .map((t) => ({ teamId: t.teamId as number, teamName: t.teamName, value: t.points }));
+      .slice(0, 10)
+      .map((t) => ({
+        teamId: t.teamId as number, teamName: t.teamName, value: t.points,
+        previousRank: teamRangVorjahr.get(t.teamId as number) ?? null,
+      }));
 
     // Kumulative All-Time-Ranglisten (bis Saison bzw. Vorsaison) einmal berechnen
     // und an Legenden + Herausgefallene weiterreichen.
@@ -465,15 +773,24 @@ export class WrappedService {
     const seasonRank = hasEvents ? this.seasonRankMap(season) : new Map<number, number>();
     const { list: retirees, ids: retireeIds } = this.retirees(season, allTimeRank);
     const topRidersByWins = this.topRidersByWins(season);
+    const topRidersByPoints = this.topRidersByPoints(season);
 
     return {
       season,
       raceWinners,
       topRidersByWins,
-      topRidersByPoints: this.topRidersByPoints(season),
+      topRidersBySecond: this.topRidersByWins(season, 5, SECOND_FILTER),
+      topRidersByPoints,
       topTeamsByWins: this.topTeamsByWins(season),
       topTeamsByPoints,
       bestNewcomers: this.bestNewcomers(season, seasonRank),
+      playerTeam: this.playerTeam(season, resultRepo),
+      progression: hasEvents ? this.progression(season, topRidersByPoints) : null,
+      rivalry: this.rivalry(season),
+      jerseyDays: hasEvents ? this.jerseyDays(season) : [],
+      grandTourClassifications: hasEvents ? this.grandTourClassifications(season) : [],
+      grind: this.grind(season),
+      strongestFields: this.strongestFields(season),
       retirees,
       legends: hasEvents ? this.legends(season, retireeIds, cumNow, cumPrev) : [],
       fallenLegends: hasEvents ? this.fallenLegends(season, retireeIds, cumNow, cumPrev) : [],

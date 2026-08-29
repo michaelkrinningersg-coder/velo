@@ -1595,17 +1595,110 @@ export interface RiderTopRival {
 export interface WrappedWinsEntry {
   rider: PalmaresRiderRef;
   wins: number;
+  /** Platz in derselben Rangliste der Vorsaison; null = war nicht darin. */
+  previousRank?: number | null;
 }
 
 export interface WrappedRiderPoints {
   rider: PalmaresRiderRef;
   points: number;
+  previousRank?: number | null;
 }
 
 export interface WrappedTeamStat {
   teamId: number;
   teamName: string | null;
   value: number; // Siege oder Punkte
+  previousRank?: number | null;
+}
+
+// ---- Eigenes Team -------------------------------------------------------
+export interface WrappedPlayerTeam {
+  teamId: number;
+  teamName: string;
+  /** Platz in der Teamwertung der Saison und der Vorsaison. */
+  rank: number | null;
+  previousRank: number | null;
+  points: number;
+  previousPoints: number;
+  wins: number;
+  previousWins: number;
+  /** Bester eigener Fahrer nach UCI-Punkten der Saison. */
+  bestRider: { rider: PalmaresRiderRef; points: number; seasonRank: number | null } | null;
+  /** Der hoechstdotierte Sieg der Saison. */
+  biggestWin: { rider: PalmaresRiderRef; raceName: string; points: number; type: string } | null;
+  /** Wie viele Fahrer des Kaders mindestens einmal gewonnen haben. */
+  ridersWithWin: number;
+}
+
+// ---- Punkteverlauf ------------------------------------------------------
+export interface WrappedProgressionSeries {
+  rider: PalmaresRiderRef;
+  /** Kumulierte Punkte an den Tagen, an denen der Fahrer gepunktet hat. */
+  points: Array<{ date: string; total: number }>;
+  total: number;
+}
+export interface WrappedProgression {
+  series: WrappedProgressionSeries[];
+  /** Grand Tours als senkrechte Markierungen. */
+  markers: Array<{ date: string; label: string }>;
+  fromDate: string;
+  toDate: string;
+  maxPoints: number;
+}
+
+// ---- Duell des Jahres ---------------------------------------------------
+export interface WrappedRivalry {
+  riderA: PalmaresRiderRef;
+  riderB: PalmaresRiderRef;
+  encounters: number;
+  seasonWinA: number;
+  seasonWinB: number;
+  careerWinA: number;
+  careerWinB: number;
+  intensity: number;
+  discipline: string | null;
+  topCategoryId: number | null;
+}
+
+// ---- Trikottage ---------------------------------------------------------
+export type WrappedJerseyKey = 'gc' | 'points' | 'mountain' | 'youth';
+export interface WrappedJerseyGroup {
+  key: WrappedJerseyKey;
+  label: string;
+  holders: Array<{ rider: PalmaresRiderRef; days: number }>;
+}
+
+// ---- Wertungstrikots der Grand Tours ------------------------------------
+export interface WrappedGrandTourClassifications {
+  raceId: number;
+  raceName: string;
+  categoryId: number;
+  points: PalmaresRiderRef | null;
+  mountain: PalmaresRiderRef | null;
+  youth: PalmaresRiderRef | null;
+}
+
+// ---- Pech und Schinderei ------------------------------------------------
+export interface WrappedGrindEntry {
+  rider: PalmaresRiderRef;
+  /** Ausfalltage (Pechvogel) bzw. Renntage (Dauerlaeufer). */
+  value: number;
+  injuryDays: number;
+  illnessDays: number;
+  raceDays: number;
+}
+export interface WrappedGrind {
+  unluckiest: WrappedGrindEntry[];
+  workhorses: WrappedGrindEntry[];
+}
+
+// ---- Staerkste Felder ---------------------------------------------------
+export interface WrappedStrongestField {
+  raceId: number;
+  raceName: string;
+  score: number;
+  starters: number;
 }
 
 export interface WrappedNewcomer {
@@ -1620,7 +1713,10 @@ export interface WrappedNewcomer {
 
 export interface WrappedCareerResult {
   raceName: string;
+  /** Juengste Saison der Gruppe. Fuer die Anzeige zaehlt `seasons`. */
   season: number;
+  /** Alle Saisons, in denen dieses Ergebnis erzielt wurde, aufsteigend. */
+  seasons: number[];
   points: number;
   rank: number;
   type: string; // GC / Etappe / Eintages / Wertung
@@ -1699,10 +1795,19 @@ export interface SeasonWrappedPayload {
   season: number;
   raceWinners: RaceWinnerEntry[];
   topRidersByWins: WrappedWinsEntry[];
+  /** Meiste zweite Plaetze der Saison — derselbe Ergebnisfilter wie die Siege. */
+  topRidersBySecond: WrappedWinsEntry[];
   topRidersByPoints: WrappedRiderPoints[];
   topTeamsByWins: WrappedTeamStat[];
   topTeamsByPoints: WrappedTeamStat[];
   bestNewcomers: WrappedNewcomer[];
+  playerTeam: WrappedPlayerTeam | null;
+  progression: WrappedProgression | null;
+  rivalry: WrappedRivalry | null;
+  jerseyDays: WrappedJerseyGroup[];
+  grandTourClassifications: WrappedGrandTourClassifications[];
+  grind: WrappedGrind;
+  strongestFields: WrappedStrongestField[];
   retirees: WrappedRetiree[];
   legends: WrappedLegend[];
   /** Fahrer, die diese Saison aus den Top 25 All-Time herausgefallen sind. */

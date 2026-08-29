@@ -4,7 +4,9 @@ import { resolveRaceCategoryBadgeStyle } from '../riderStatsUi';
 import type {
   SeasonWrappedPayload, PalmaresRiderRef, RaceWinnerEntry, WrappedCareerResult,
   WrappedWinsEntry, WrappedTeamStat, WrappedNewcomer, WrappedRetiree, WrappedLegend,
-  WrappedFallenLegend,
+  WrappedFallenLegend, WrappedPlayerTeam, WrappedProgression, WrappedRivalry,
+  WrappedJerseyGroup, WrappedGrandTourClassifications, WrappedGrind,
+  WrappedStrongestField,
 } from '../../../shared/types';
 
 // Saison-Rückblick ("Wrapped") als Vollbild-Overlay, gezeigt beim Jahreswechsel
@@ -46,7 +48,13 @@ function winnerCell(ref: PalmaresRiderRef | null, medalColor: string): string {
   return `<span style="display:inline-flex;align-items:center;gap:7px;min-width:0;border-left:2px solid ${medalColor};padding-left:8px;">${renderFlag(ref.countryCode ?? '')}${name}${renderMiniJersey(ref.teamId, ref.teamName)}</span>`;
 }
 
-function winnersSections(winners: RaceWinnerEntry[]): string {
+function winnersSections(
+  winners: RaceWinnerEntry[],
+  classifications: WrappedGrandTourClassifications[] = [],
+): string {
+  // Die Wertungstrikots gehoeren zum Rennen, nicht in eine eigene Liste: bei
+  // einer Grand Tour sind Gruen, Berg und Nachwuchs eigene Titel.
+  const wertungJeRennen = new Map(classifications.map((c) => [c.raceId, c]));
   const COLS = 'grid-template-columns:minmax(150px,1.25fr) 1fr 1fr 1fr;gap:14px;';
   const sections = WINNER_TIERS.map((tier) => {
     const races = winners.filter((w) => tier.ids.includes(w.categoryId));
@@ -57,11 +65,14 @@ function winnersSections(winners: RaceWinnerEntry[]): string {
       <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#cbd5e1;text-transform:uppercase;">2. Platz</span>
       <span style="${MONO};font-size:9px;letter-spacing:.12em;color:#cd7c3b;text-transform:uppercase;">3. Platz</span>
     </div>`;
-    const rows = races.map((w) => `<div style="display:grid;${COLS}padding:10px 14px;border-top:1px solid #14203a;align-items:center;">
-      <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.raceName, w.raceId)}</span>
-      ${winnerCell(w.winner, '#facc15')}
-      ${winnerCell(w.second, '#cbd5e1')}
-      ${winnerCell(w.third, '#cd7c3b')}
+    const rows = races.map((w) => `<div style="border-top:1px solid #14203a;">
+      <div style="display:grid;${COLS}padding:10px 14px;align-items:center;">
+        <span style="font-weight:800;font-size:13px;color:#e8eef7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.raceName, w.raceId)}</span>
+        ${winnerCell(w.winner, '#facc15')}
+        ${winnerCell(w.second, '#cbd5e1')}
+        ${winnerCell(w.third, '#cd7c3b')}
+      </div>
+      ${classificationRow(wertungJeRennen.get(w.raceId))}
     </div>`).join('');
     return `<section style="border:1px solid #1e2c49;border-radius:12px;background:#0c1526;overflow:hidden;margin-bottom:14px;">
       <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid #1c2b47;background:linear-gradient(90deg,${tier.color}22,transparent 60%);">
@@ -85,14 +96,38 @@ function wrappedSection(color: string, label: string, meta: string, inner: strin
 }
 
 // Podium-Zeilen (Rang · Fahrer/Team · Wert) im Tabellen-Stil einer Sektion.
-function statRows(entries: Array<{ label: string; sub: string }>): string {
+function statRows(entries: Array<{ label: string; sub: string; delta?: string }>): string {
   if (entries.length === 0) return `<div style="padding:14px;color:#6a7a95;font-size:13px;">–</div>`;
-  return entries.map((e, i) => `<div style="display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #14203a;">
-    <span style="${MONO};font-size:16px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};text-align:center;">${i + 1}</span>
+  const mitDelta = entries.some((e) => e.delta);
+  const spalten = mitDelta ? '30px 1fr auto 44px' : '34px 1fr auto';
+  return entries.map((e, i) => `<div style="display:grid;grid-template-columns:${spalten};align-items:center;gap:12px;padding:${i < 3 ? 10 : 7}px 14px;border-top:1px solid #14203a;">
+    <span style="${MONO};font-size:${i < 3 ? 16 : 13}px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};text-align:center;">${i + 1}</span>
     <span style="min-width:0;">${e.label}</span>
-    <span style="${MONO};font-size:15px;font-weight:800;color:#fbbf24;">${e.sub}</span>
+    <span style="${MONO};font-size:${i < 3 ? 15 : 13}px;font-weight:800;color:#fbbf24;">${e.sub}</span>
+    ${mitDelta ? `<span style="text-align:right;">${e.delta ?? ''}</span>` : ''}
   </div>`).join('');
 }
+
+// Auf-/Abstieg gegenueber demselben Rang der Vorsaison. `previousRank` ist die
+// Platzierung in der VOLLEN Rangliste des Vorjahres, nicht nur in deren Top 10 —
+// sonst waere jeder ausserhalb faelschlich "neu".
+function rankDelta(index: number, previousRank: number | null | undefined): string {
+  const jetzt = index + 1;
+  if (previousRank == null) {
+    return `<span style="${MONO};font-size:9px;font-weight:800;letter-spacing:.08em;color:#4ade80;">NEU</span>`;
+  }
+  const diff = previousRank - jetzt;
+  if (diff === 0) return `<span style="${MONO};font-size:10px;color:#4a5a75;">–</span>`;
+  const hoch = diff > 0;
+  return `<span style="${MONO};font-size:10px;font-weight:700;color:${hoch ? '#4ade80' : '#f87171'};">${hoch ? '▲' : '▼'}${Math.abs(diff)}</span>`;
+}
+
+const JERSEY_ICON: Record<string, { icon: string; color: string }> = {
+  gc: { icon: '🟡', color: '#facc15' },
+  points: { icon: '🟢', color: '#4ade80' },
+  mountain: { icon: '🔴', color: '#f87171' },
+  youth: { icon: '⚪', color: '#e2e8f0' },
+};
 
 function teamChip(t: WrappedTeamStat): string {
   return `<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">${renderMiniJersey(t.teamId, t.teamName)}<span style="font-weight:700;color:#e6ecf6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.teamName ?? '—')}</span></span>`;
@@ -118,31 +153,109 @@ function resultsList(results: WrappedCareerResult[]): string {
     </div>`).join('')}</div>`;
 }
 
+// Jahre einer Ergebnisgruppe: "2029, 2031 (2x)". Ohne das sagt "3x Etappe"
+// nicht, wann — und die Zeitachse ist bei einer Karriere die halbe Geschichte.
+function seasonsText(r: WrappedCareerResult): string {
+  const jahre = r.seasons?.length ? r.seasons : [r.season];
+  const text = jahre.join(', ');
+  return jahre.length > 1 ? `${text} (${jahre.length}×)` : text;
+}
+
+// Siege zuerst, als eigener Block ueber der Liste. Wer eine Karriere aufruft,
+// will in zwei Sekunden sehen, was der Fahrer gewonnen hat — nicht, wo er
+// Zwoelfter wurde. Rennen nach Prestige, wie sie das Backend liefert.
+// Ein Gesamtsieg ist ein Sieg, keine Nebenwertung. `isClassification` sagt nur,
+// dass das Ergebnis auf `_final` endet — und das tut `gc_final` auch. Ohne diese
+// Unterscheidung stuende der Toursieg als Nebenzeile neben dem Bergtrikot.
+function istEchterSieg(r: WrappedCareerResult): boolean {
+  return !r.isClassification || r.type === 'GC';
+}
+
+function winsBlock(results: WrappedCareerResult[]): string {
+  const gewonnen = results.filter((r) => r.rank === 1);
+  const siege = gewonnen.filter(istEchterSieg);
+  const wertungen = gewonnen.filter((r) => !istEchterSieg(r));
+  if (siege.length === 0 && wertungen.length === 0) return '';
+  const zaehle = (liste: WrappedCareerResult[]) => liste.reduce((summe, r) => summe + r.count, 0);
+  const anzahlSiege = zaehle(siege);
+  const anzahlWertungen = zaehle(wertungen);
+
+  const chip = (r: WrappedCareerResult, gold: boolean): string => `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${gold ? 'rgba(251,191,36,.42)' : 'rgba(168,85,247,.42)'};background:${gold ? 'rgba(251,191,36,.12)' : 'rgba(168,85,247,.12)'};border-radius:7px;padding:4px 9px;max-width:100%;">
+    ${r.count > 1 ? `<span style="${MONO};font-size:10px;font-weight:800;color:${gold ? '#fbbf24' : '#d8b4fe'};">${r.count}×</span>` : ''}
+    <span style="font-size:12px;font-weight:700;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(r.raceName, null)}</span>
+    <span style="${MONO};font-size:9.5px;color:#7d8ca6;">${esc(r.type)} · ${esc(seasonsText(r))}</span>
+  </span>`;
+
+  return `<div style="margin-top:11px;border:1px solid rgba(251,191,36,.28);border-radius:10px;background:rgba(251,191,36,.05);padding:10px 12px;">
+    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px;">
+      <span style="font-size:19px;font-weight:800;color:#fbbf24;letter-spacing:-.02em;">${anzahlSiege}</span>
+      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Siege</span>
+      ${anzahlWertungen > 0 ? `<span style="font-size:19px;font-weight:800;color:#d8b4fe;letter-spacing:-.02em;margin-left:6px;">${anzahlWertungen}</span>
+      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Wertungen</span>` : ''}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${siege.map((r) => chip(r, true)).join('')}${wertungen.map((r) => chip(r, false)).join('')}</div>
+  </div>`;
+}
+
 // Ergebnisliste nach RENNEN gruppiert (Rennen nach Prestige absteigend, innerhalb
 // eines Rennens zuerst die Wertungen, dann die Etappen/Eintagesergebnisse — die
 // Reihenfolge liefert das Backend). Ein Rennen-Kopf je Gruppe, darunter die
-// Ergebniszeilen ohne wiederholten Rennnamen. Fuer Legenden/Retirees/
-// Herausgefallene (bis zu 100 Ergebnisse).
-function groupedResultsList(results: WrappedCareerResult[]): string {
-  if (!results.length) return '';
+// Ergebniszeilen ohne wiederholten Rennnamen.
+//
+// Zwei Stufen: sichtbar sind die Hoehepunkte (Siege, Podien, Wertungen), der
+// Rest steckt hinter einem <details>. Bei einer Fuenfzehn-Jahres-Karriere sind
+// hundert Ergebniszeilen sonst eine Wand.
+const HIGHLIGHT_RACE_LIMIT = 12;
+
+function isHighlight(r: WrappedCareerResult): boolean {
+  return r.rank <= 3 || r.isClassification;
+}
+
+function raceGroups(results: WrappedCareerResult[]): Array<{ raceName: string; rows: WrappedCareerResult[] }> {
   const groups: Array<{ raceName: string; rows: WrappedCareerResult[] }> = [];
   for (const r of results) {
     const last = groups[groups.length - 1];
     if (last && last.raceName === r.raceName) last.rows.push(r);
     else groups.push({ raceName: r.raceName, rows: [r] });
   }
-  // Spalten: Punkte | Position (P{Platz}, nach Platzierung eingefaerbt) | Anzahl + Typ.
-  const resultRow = (b: WrappedCareerResult): string => `
-    <div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;padding-left:10px;">
-      <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
-      <span style="width:38px;color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span>
-      <span style="flex:1;color:${b.isClassification ? '#e9d5ff' : '#cbd5e1'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.type)}</span>
-    </div>`;
-  return `<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">${groups.map((g) => `
-    <div style="display:flex;flex-direction:column;gap:3px;">
-      <div style="${MONO};font-size:10px;font-weight:800;letter-spacing:.04em;color:#cbd5e1;border-left:2px solid #22d3ee;padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(g.raceName, null)}</div>
-      ${g.rows.map(resultRow).join('')}
-    </div>`).join('')}</div>`;
+  return groups;
+}
+
+// Spalten: Punkte | Position (P{Platz}, nach Platzierung eingefaerbt) | Anzahl + Typ | Jahre.
+function resultRow(b: WrappedCareerResult): string {
+  return `<div style="display:flex;align-items:center;gap:9px;${MONO};font-size:10.5px;color:#8b9ab4;padding-left:10px;">
+    <span style="color:#22d3ee;font-weight:800;width:52px;">${b.points} P</span>
+    <span style="width:38px;color:${rankColor(b.rank)};font-weight:${b.rank <= 3 ? 800 : 700};">P${b.rank}</span>
+    <span style="flex:1;color:${b.isClassification ? '#e9d5ff' : '#cbd5e1'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.count > 1 ? `<span style="color:#fbbf24;font-weight:800;">${b.count}×</span> ` : ''}${esc(b.type)}</span>
+    <span style="color:#5f6f8a;white-space:nowrap;">${esc(seasonsText(b))}</span>
+  </div>`;
+}
+
+function groupBlock(g: { raceName: string; rows: WrappedCareerResult[] }): string {
+  return `<div style="display:flex;flex-direction:column;gap:3px;">
+    <div style="${MONO};font-size:10px;font-weight:800;letter-spacing:.04em;color:#cbd5e1;border-left:2px solid #22d3ee;padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(g.raceName, null)}</div>
+    ${g.rows.map(resultRow).join('')}
+  </div>`;
+}
+
+function groupedResultsList(results: WrappedCareerResult[]): string {
+  if (!results.length) return '';
+  const hoehepunkte = raceGroups(results.filter(isHighlight)).slice(0, HIGHLIGHT_RACE_LIMIT);
+  // (Die Reihenfolge der Rennen liefert das Backend nach Prestige.)
+  const gezeigt = new Set(hoehepunkte.map((g) => g.raceName));
+  const rest = raceGroups(results).filter((g) => !gezeigt.has(g.raceName));
+  const restAnzahl = rest.reduce((summe, g) => summe + g.rows.length, 0);
+
+  const liste = (gruppen: typeof hoehepunkte) =>
+    `<div style="display:flex;flex-direction:column;gap:7px;">${gruppen.map(groupBlock).join('')}</div>`;
+
+  return `<div style="margin-top:10px;">
+    ${hoehepunkte.length > 0 ? liste(hoehepunkte) : ''}
+    ${restAnzahl > 0 ? `<details style="margin-top:8px;">
+      <summary style="${MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6a7a95;cursor:pointer;padding:5px 0;">Alle weiteren ${restAnzahl} Ergebnisse</summary>
+      <div style="margin-top:7px;">${liste(rest)}</div>
+    </details>` : ''}
+  </div>`;
 }
 
 // Fahrer-Zeile mit verschachtelter Ergebnisliste, als Tabellenzeile einer Sektion.
@@ -156,7 +269,7 @@ function detailRow(badge: string, rider: PalmaresRiderRef, statsLine: string, re
       <span style="${MONO};font-size:11px;color:#8b9ab4;">${statsLine}</span>
     </div>
     ${subLine ? `<div style="${MONO};font-size:10px;color:#6a7a95;margin-top:5px;">${subLine}</div>` : ''}
-    ${grouped ? groupedResultsList(results) : resultsList(results)}
+    ${grouped ? winsBlock(results) + groupedResultsList(results) : resultsList(results)}
   </div>`;
 }
 
@@ -185,6 +298,270 @@ function recordsSection(r: SeasonWrappedPayload['records']): string {
   if (r.longestStreak) rows.push(highlightRow('Längste Siegesserie', riderChip(r.longestStreak.rider), esc('Renntags-Siege in Folge'), `${r.longestStreak.streak}×`));
   if (rows.length === 0) return '';
   return wrappedSection('#22d3ee', 'Rekorde der Saison', '', rows.join(''));
+}
+
+// ---- Punkteverlauf ------------------------------------------------------
+//
+// Die Serienfarben sind nicht die hellen Akzente der Oberflaeche, sondern eine
+// Stufe darunter: geprueft gegen die dunkle Flaeche auf Helligkeitsband,
+// Buntheit, Farbfehlsichtigkeit (schlechtestes Nachbarpaar dE 15,3 deutan) und
+// Kontrast. Beschriftungen bleiben in Textfarben, die Farbe traegt allein die
+// Marke daneben.
+const SERIES_COLORS = ['#0e9bb8', '#9333ea', '#d97706'];
+
+function tagNummer(iso: string): number {
+  return Date.parse(iso + 'T00:00:00Z') / 86400000;
+}
+
+// Achse auf einen runden Schritt bringen: 6434 Punkte ergeben sonst die
+// Beschriftungen 1.609 / 3.217 / 4.826, die niemand liest.
+function niceAxisMax(max: number, stufen: number): number {
+  const roh = Math.max(1, max) / stufen;
+  const groesse = Math.pow(10, Math.floor(Math.log10(roh)));
+  const schritt = [1, 2, 2.5, 5, 10].map((f) => f * groesse).find((f) => f >= roh) ?? groesse * 10;
+  return schritt * stufen;
+}
+
+function progressionChart(p: WrappedProgression): string {
+  const W = 940, H = 320;
+  const PAD = { top: 16, right: 138, bottom: 40, left: 56 };
+  const innenW = W - PAD.left - PAD.right;
+  const innenH = H - PAD.top - PAD.bottom;
+  const STUFEN = 4;
+  const achseMax = niceAxisMax(p.maxPoints, STUFEN);
+  const von = tagNummer(p.fromDate);
+  const bis = Math.max(tagNummer(p.toDate), von + 1);
+  const x = (iso: string) => PAD.left + ((tagNummer(iso) - von) / (bis - von)) * innenW;
+  const y = (wert: number) => PAD.top + innenH - (wert / achseMax) * innenH;
+
+  // Zurueckhaltendes Raster, beschriftet nur links.
+  const raster = Array.from({ length: STUFEN + 1 }, (_, i) => {
+    const wert = (achseMax / STUFEN) * i;
+    const yy = y(wert);
+    return `<line x1="${PAD.left}" y1="${yy}" x2="${PAD.left + innenW}" y2="${yy}" stroke="#16233c" stroke-width="1"/>
+      <text x="${PAD.left - 8}" y="${yy + 3.5}" text-anchor="end" fill="#5f6f8a" font-size="9" font-family="JetBrains Mono,monospace">${Math.round(wert).toLocaleString('de-DE')}</text>`;
+  }).join('');
+
+  // Grand Tours als senkrechte Marken — Zusammenhang, keine Daten. Die
+  // Beschriftung steht unten: oben laeuft sie in die Kurven der Fuehrenden.
+  const marken = p.markers.map((m) => {
+    const xx = x(m.date);
+    if (xx < PAD.left || xx > PAD.left + innenW) return '';
+    return `<line x1="${xx}" y1="${PAD.top}" x2="${xx}" y2="${PAD.top + innenH}" stroke="#243352" stroke-width="1" stroke-dasharray="3 4"/>
+      <text x="${xx + 4}" y="${PAD.top + innenH - 5}" fill="#4a5a75" font-size="8.5" font-family="JetBrains Mono,monospace">${esc(m.label)}</text>`;
+  }).join('');
+
+  const gezeichnet = p.series
+    .map((reihe, i) => ({ reihe, farbe: SERIES_COLORS[i] ?? SERIES_COLORS[SERIES_COLORS.length - 1]! }))
+    .filter((eintrag) => eintrag.reihe.points.length > 0);
+
+  const linien = gezeichnet.map(({ reihe, farbe }) => {
+    // Treppe: Punkte fallen an Renntagen an, dazwischen passiert nichts.
+    let d = `M ${x(reihe.points[0]!.date).toFixed(1)} ${y(0).toFixed(1)}`;
+    let letztesY = y(0);
+    for (const punkt of reihe.points) {
+      const px = x(punkt.date).toFixed(1);
+      d += ` L ${px} ${letztesY.toFixed(1)}`;
+      letztesY = y(punkt.total);
+      d += ` L ${px} ${letztesY.toFixed(1)}`;
+    }
+    const letzter = reihe.points[reihe.points.length - 1]!;
+    return `<path d="${d}" fill="none" stroke="${farbe}" stroke-width="2" stroke-linejoin="round"><title>${esc(reihe.rider.lastName)}: ${reihe.total.toLocaleString('de-DE')} Punkte</title></path>
+      <circle cx="${x(letzter.date).toFixed(1)}" cy="${y(letzter.total).toFixed(1)}" r="4" fill="${farbe}" stroke="#0c1526" stroke-width="2"/>`;
+  }).join('');
+
+  // Endbeschriftungen auseinanderziehen: liegen zwei Fahrer dicht beieinander,
+  // legt sich sonst die eine Zahl auf die Linie der anderen.
+  const LABEL_HOEHE = 26;
+  const marken2 = gezeichnet
+    .map(({ reihe }) => {
+      const letzter = reihe.points[reihe.points.length - 1]!;
+      return { reihe, yRoh: y(letzter.total), xEnde: x(letzter.date) };
+    })
+    .sort((a, b) => a.yRoh - b.yRoh);
+  let untergrenze = PAD.top;
+  for (const eintrag of marken2) {
+    (eintrag as any).yLabel = Math.max(eintrag.yRoh, untergrenze);
+    untergrenze = (eintrag as any).yLabel + LABEL_HOEHE;
+  }
+  const beschriftungen = marken2.map((eintrag) => {
+    const yLabel = (eintrag as any).yLabel as number;
+    const lx = PAD.left + innenW + 12;
+    // Fuehrungsstrich, wenn die Beschriftung vom Endpunkt weggerueckt ist.
+    const strich = `<path d="M ${(eintrag.xEnde + 5).toFixed(1)} ${eintrag.yRoh.toFixed(1)} L ${(lx - 4).toFixed(1)} ${yLabel.toFixed(1)}" fill="none" stroke="#243352" stroke-width="1"/>`;
+    return `${strich}
+      <text x="${lx}" y="${(yLabel - 2).toFixed(1)}" fill="#cbd5e1" font-size="11" font-weight="700" font-family="Archivo,system-ui,sans-serif">${esc(eintrag.reihe.rider.lastName)}</text>
+      <text x="${lx}" y="${(yLabel + 11).toFixed(1)}" fill="#8b9ab4" font-size="9.5" font-family="JetBrains Mono,monospace">${eintrag.reihe.total.toLocaleString('de-DE')} P</text>`;
+  }).join('');
+
+  // Legende: bei mehreren Reihen immer vorhanden, damit die Zuordnung nicht
+  // allein an der Farbe haengt.
+  const legende = gezeichnet.map(({ reihe, farbe }) => `<span style="display:inline-flex;align-items:center;gap:6px;">
+    <span style="width:14px;height:3px;border-radius:2px;background:${farbe};"></span>
+    <span style="font-size:11px;color:#cbd5e1;">${esc(reihe.rider.firstName)} ${esc(reihe.rider.lastName)}</span>
+  </span>`).join('');
+
+  return `<div style="padding:14px;">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;">${legende}</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" role="img" aria-label="Kumulierte UCI-Punkte der drei Besten ueber die Saison">
+      ${raster}${marken}${linien}${beschriftungen}
+      <line x1="${PAD.left}" y1="${PAD.top + innenH}" x2="${PAD.left + innenW}" y2="${PAD.top + innenH}" stroke="#243352" stroke-width="1"/>
+      <text x="${PAD.left}" y="${H - 12}" fill="#5f6f8a" font-size="9" font-family="JetBrains Mono,monospace">${esc(p.fromDate)}</text>
+      <text x="${PAD.left + innenW}" y="${H - 12}" text-anchor="end" fill="#5f6f8a" font-size="9" font-family="JetBrains Mono,monospace">${esc(p.toDate)}</text>
+    </svg>
+  </div>`;
+}
+
+function progressionSection(p: WrappedProgression | null): string {
+  if (!p || p.series.length === 0) return '';
+  return wrappedSection('#0e9bb8', 'Der Verlauf der Saison', 'kumulierte UCI-Punkte', progressionChart(p));
+}
+
+// ---- Eigenes Team -------------------------------------------------------
+function deltaText(jetzt: number, vorher: number, einheit = ''): string {
+  if (vorher === 0) return '';
+  const diff = jetzt - vorher;
+  if (diff === 0) return `<span style="${MONO};font-size:10px;color:#4a5a75;">gleich wie im Vorjahr</span>`;
+  const hoch = diff > 0;
+  return `<span style="${MONO};font-size:10px;font-weight:700;color:${hoch ? '#4ade80' : '#f87171'};">${hoch ? '▲ +' : '▼ '}${diff.toLocaleString('de-DE')}${einheit} ggü. Vorjahr</span>`;
+}
+
+function kachel(label: string, wert: string, unten: string): string {
+  return `<div style="border:1px solid #1e2c49;border-radius:10px;background:#0a1322;padding:13px 15px;min-width:0;">
+    <div style="${MONO};font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#6a7a95;">${esc(label)}</div>
+    <div style="font-size:26px;font-weight:800;color:#e8eef7;letter-spacing:-.02em;margin:3px 0 2px;">${wert}</div>
+    <div style="min-height:14px;">${unten}</div>
+  </div>`;
+}
+
+function playerTeamSection(t: WrappedPlayerTeam | null): string {
+  if (!t) return '';
+  const rangDelta = t.previousRank == null
+    ? `<span style="${MONO};font-size:10px;color:#4a5a75;">erste gewertete Saison</span>`
+    : deltaText(t.previousRank, t.rank ?? t.previousRank, '');
+  const kacheln = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;padding:14px;">
+    ${kachel('Platz Teamwertung', t.rank != null ? `#${t.rank}` : '—', rangDelta)}
+    ${kachel('UCI-Punkte', t.points.toLocaleString('de-DE'), deltaText(t.points, t.previousPoints))}
+    ${kachel('Siege', String(t.wins), deltaText(t.wins, t.previousWins))}
+    ${kachel('Fahrer mit Sieg', String(t.ridersWithWin), '')}
+  </div>`;
+  const zeilen: string[] = [];
+  if (t.bestRider) {
+    zeilen.push(highlightRow('Bester Fahrer', riderChip(t.bestRider.rider),
+      t.bestRider.seasonRank != null ? esc(`#${t.bestRider.seasonRank} der Saisonwertung`) : '',
+      `${t.bestRider.points.toLocaleString('de-DE')} P`));
+  }
+  if (t.biggestWin) {
+    zeilen.push(highlightRow('Größter Sieg', riderChip(t.biggestWin.rider),
+      `${renderRaceNameLink(t.biggestWin.raceName, null)} <span style="color:#4a5a75;">· ${esc(t.biggestWin.type)}</span>`,
+      `${t.biggestWin.points.toLocaleString('de-DE')} P`));
+  }
+  return wrappedSection('#4ade80', t.teamName, 'deine Saison', kacheln + zeilen.join(''));
+}
+
+// ---- Duell des Jahres ---------------------------------------------------
+function duelSide(rider: PalmaresRiderRef, siege: number, gesamt: number, rechts: boolean): string {
+  const anteil = gesamt > 0 ? Math.round((siege / gesamt) * 100) : 50;
+  return `<div style="min-width:0;text-align:${rechts ? 'right' : 'left'};">
+    <div style="display:flex;justify-content:${rechts ? 'flex-end' : 'flex-start'};">${riderChip(rider)}</div>
+    <div style="font-size:34px;font-weight:800;color:#e8eef7;letter-spacing:-.03em;margin-top:6px;">${siege}</div>
+    <div style="${MONO};font-size:10px;color:#6a7a95;">${anteil} % der Duelle</div>
+  </div>`;
+}
+
+function rivalrySection(r: WrappedRivalry | null): string {
+  if (!r) return '';
+  const gesamt = r.seasonWinA + r.seasonWinB;
+  const anteilA = gesamt > 0 ? (r.seasonWinA / gesamt) * 100 : 50;
+  const balken = `<div style="display:flex;height:8px;border-radius:99px;overflow:hidden;background:#14203a;margin:14px 0 6px;">
+    <span style="width:${anteilA}%;background:#0e9bb8;"></span>
+    <span style="width:${100 - anteilA}%;background:#d97706;"></span>
+  </div>`;
+  return wrappedSection('#f43f5e', 'Duell des Jahres', r.discipline ? `Schwerpunkt ${r.discipline}` : '', `
+    <div style="padding:16px;">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:start;">
+        ${duelSide(r.riderA, r.seasonWinA, gesamt, false)}
+        <div style="${MONO};font-size:11px;color:#6a7a95;text-align:center;padding-top:26px;">von<br><span style="font-size:20px;font-weight:800;color:#cbd5e1;">${r.encounters}</span><br>Duellen</div>
+        ${duelSide(r.riderB, r.seasonWinB, gesamt, true)}
+      </div>
+      ${balken}
+      <div style="${MONO};font-size:10px;color:#5f6f8a;text-align:center;">Über die gesamte Karriere: ${r.careerWinA} : ${r.careerWinB}</div>
+    </div>`);
+}
+
+// ---- Trikottage ---------------------------------------------------------
+function jerseySection(gruppen: WrappedJerseyGroup[]): string {
+  if (gruppen.length === 0) return '';
+  const spalten = gruppen.map((g) => {
+    const symbol = JERSEY_ICON[g.key] ?? { icon: '▪', color: '#8b9ab4' };
+    const zeilen = g.holders.map((h, i) => `<div style="display:grid;grid-template-columns:18px 1fr auto;gap:9px;align-items:center;padding:7px 0;border-top:1px solid #14203a;">
+      <span style="${MONO};font-size:11px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};">${i + 1}</span>
+      <span style="min-width:0;font-size:13px;">${riderChip(h.rider, i === 0)}</span>
+      <span style="${MONO};font-size:13px;font-weight:800;color:${symbol.color};">${h.days} T</span>
+    </div>`).join('');
+    return `<div style="min-width:0;">
+      <div style="display:flex;align-items:center;gap:7px;${MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8b9ab4;padding-bottom:4px;">
+        <span style="font-size:13px;">${symbol.icon}</span>${esc(g.label)}
+      </div>${zeilen}</div>`;
+  }).join('');
+  return wrappedSection('#facc15', 'Tage im Führungstrikot', 'wer die Wertungen am längsten anführte',
+    `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:16px;padding:14px;">${spalten}</div>`);
+}
+
+// ---- Pech und Schinderei ------------------------------------------------
+function grindSection(g: WrappedGrind): string {
+  if (g.unluckiest.length === 0 && g.workhorses.length === 0) return '';
+  const pech = statRows(g.unluckiest.map((e) => ({
+    label: riderChip(e.rider),
+    sub: `${e.value} T`,
+  })));
+  const dauer = statRows(g.workhorses.map((e) => ({
+    label: riderChip(e.rider),
+    sub: `${e.value}`,
+  })));
+  const pechDetail = g.unluckiest.length > 0
+    ? `<div style="${MONO};font-size:9.5px;color:#5f6f8a;padding:8px 14px 12px;">Verletzung + Krankheit · ${g.unluckiest.map((e) => `${esc(e.rider.lastName)} ${e.injuryDays}/${e.illnessDays}`).join(' · ')}</div>`
+    : '';
+  return overviewGrid(
+    wrappedSection('#f87171', 'Pechvogel des Jahres', 'Ausfalltage', pech + pechDetail),
+    wrappedSection('#38bdf8', 'Dauerläufer', 'Renntage', dauer),
+  );
+}
+
+// ---- Staerkste Felder ---------------------------------------------------
+function strongestFieldsSection(list: WrappedStrongestField[]): string {
+  if (list.length === 0) return '';
+  const zeilen = list.map((f, i) => {
+    const anteil = Math.max(2, Math.min(100, (f.score / Math.max(1, list[0]!.score)) * 100));
+    return `<div style="display:grid;grid-template-columns:30px 1fr 120px auto;gap:12px;align-items:center;padding:${i < 3 ? 9 : 7}px 14px;border-top:1px solid #14203a;">
+      <span style="${MONO};font-size:${i < 3 ? 15 : 12}px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};text-align:center;">${i + 1}</span>
+      <span style="min-width:0;font-weight:700;font-size:13px;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${renderRaceNameLink(f.raceName, f.raceId)}</span>
+      <span style="height:6px;border-radius:99px;background:#14203a;overflow:hidden;"><span style="display:block;height:100%;width:${anteil}%;background:#a855f7;"></span></span>
+      <span style="${MONO};font-size:13px;font-weight:800;color:#d8b4fe;">${f.score.toFixed(1)}</span>
+    </div>`;
+  }).join('');
+  return wrappedSection('#a855f7', 'Die stärksten Felder', 'Startlistenqualität', zeilen);
+}
+
+// ---- Wertungstrikots der Grand Tours ------------------------------------
+function classificationRow(c: WrappedGrandTourClassifications | undefined): string {
+  if (!c) return '';
+  const teile: string[] = [];
+  const zelle = (key: string, label: string, ref: PalmaresRiderRef | null) => {
+    if (!ref) return;
+    const symbol = JERSEY_ICON[key] ?? { icon: '▪', color: '#8b9ab4' };
+    teile.push(`<span style="display:inline-flex;align-items:center;gap:6px;min-width:0;">
+      <span style="font-size:11px;" title="${esc(label)}">${symbol.icon}</span>
+      <button type="button" class="app-rider-link" data-rider-id="${ref.riderId}" style="${LINK}font-weight:600;color:#b9c6db;font-size:12px;">${esc(ref.lastName)}</button>
+    </span>`);
+  };
+  zelle('points', 'Punktewertung', c.points);
+  zelle('mountain', 'Bergwertung', c.mountain);
+  zelle('youth', 'Nachwuchswertung', c.youth);
+  if (teile.length === 0) return '';
+  return `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:6px 14px 10px 14px;">
+    <span style="${MONO};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5f6f8a;">Wertungen</span>${teile.join('')}
+  </div>`;
 }
 
 function careerLine(r: WrappedRetiree): string {
@@ -273,15 +650,33 @@ interface WrappedSlide { body: string; }
 function buildSlides(w: SeasonWrappedPayload): WrappedSlide[] {
   const slides: WrappedSlide[] = [{ body: introBody(w) }];
   const push = (body: string) => { if (body) slides.push({ body }); };
-  push(winnersSections(w.raceWinners));
+  // Das eigene Team zuerst: alles Weitere ist der Zusammenhang dazu.
+  push(playerTeamSection(w.playerTeam));
+  push(winnersSections(w.raceWinners, w.grandTourClassifications));
+  push(progressionSection(w.progression));
   push(overviewGrid(
-    wrappedSection('#fbbf24', 'Meiste Siege · Fahrer', '', statRows(w.topRidersByWins.map((e) => ({ label: riderChip(e.rider), sub: `${e.wins}` })))),
-    wrappedSection('#fbbf24', 'Meiste Siege · Teams', '', statRows(w.topTeamsByWins.map((t) => ({ label: teamChip(t), sub: `${t.value}` })))),
+    wrappedSection('#fbbf24', 'Meiste Siege · Fahrer', 'Top 10', statRows(w.topRidersByWins.map((e, i) => ({
+      label: riderChip(e.rider), sub: `${e.wins}`, delta: rankDelta(i, e.previousRank),
+    })))),
+    wrappedSection('#fbbf24', 'Meiste Siege · Teams', 'Top 10', statRows(w.topTeamsByWins.map((t, i) => ({
+      label: teamChip(t), sub: `${t.value}`, delta: rankDelta(i, t.previousRank),
+    })))),
   ));
+  push(wrappedSection('#cbd5e1', 'Meiste zweite Plätze', 'so nah dran', statRows(w.topRidersBySecond.map((e) => ({
+    label: riderChip(e.rider), sub: `${e.wins}`,
+  })))));
   push(overviewGrid(
-    wrappedSection('#22d3ee', 'Meiste Punkte · Fahrer', '', statRows(w.topRidersByPoints.map((e) => ({ label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE') })))),
-    wrappedSection('#22d3ee', 'Meiste Punkte · Teams', '', statRows(w.topTeamsByPoints.map((t) => ({ label: teamChip(t), sub: t.value.toLocaleString('de-DE') })))),
+    wrappedSection('#22d3ee', 'Meiste Punkte · Fahrer', 'Top 10', statRows(w.topRidersByPoints.map((e, i) => ({
+      label: riderChip(e.rider), sub: e.points.toLocaleString('de-DE'), delta: rankDelta(i, e.previousRank),
+    })))),
+    wrappedSection('#22d3ee', 'Meiste Punkte · Teams', 'Top 10', statRows(w.topTeamsByPoints.map((t, i) => ({
+      label: teamChip(t), sub: t.value.toLocaleString('de-DE'), delta: rankDelta(i, t.previousRank),
+    })))),
   ));
+  push(rivalrySection(w.rivalry));
+  push(jerseySection(w.jerseyDays));
+  push(strongestFieldsSection(w.strongestFields));
+  push(grindSection(w.grind));
   push(surpriseSection(w.surprise));
   push(recordsSection(w.records));
   push(newcomersSection(w.bestNewcomers));
