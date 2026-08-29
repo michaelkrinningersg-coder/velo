@@ -93,8 +93,51 @@ export class RiderNewgenService {
         )
       `);
 
+      // Anzahl je Land vorab ziehen: der Jahrgang muss seine Groesse kennen,
+      // bevor die Stufenziele daraus folgen.
+      const anzahlJeLand = new Map<number, number>();
+      let jahrgangsgroesse = 0;
       for (const country of countries) {
-        const numToGenerate = this.getRandomInt(country.number_regen_min, country.number_regen_max);
+        const anzahl = this.getRandomInt(country.number_regen_min, country.number_regen_max);
+        anzahlJeLand.set(country.id, anzahl);
+        if (anzahl > 0) jahrgangsgroesse += anzahl;
+      }
+
+      // Quote je Stufe statt unabhaengiger Ziehung.
+      //
+      // Bisher zog jeder Newgen sein Preset einzeln nach Gewicht. Die
+      // Stufenanteile stimmten dann nur im Erwartungswert: bei 160 Newgens und
+      // 21 Prozent starken sind das 34 plus/minus 5 je Jahrgang. Fuer das
+      // Potenzial mittelt sich das ueber alle Jahrgaenge im Feld weg, fuer die
+      // Gesamtwertung nicht — ueber 74 kommt nur, wer gerade nahe seinem Zenit
+      // ist, also vier bis sechs Jahrgaenge gleichzeitig. Gemessen schwankte
+      // die Zahl der Fahrer ueber 74 dadurch um zwoelf Prozent.
+      //
+      // Jetzt fuehrt der Jahrgang Buch: das Gewicht einer Stufe faellt, sobald
+      // ihr Soll erreicht ist. Weich, nicht als harte Sperre — die
+      // vertraeglichen Presets eines Fahrers haengen an seinen Startwerten, ein
+      // starres Kontingent waere nicht immer erfuellbar.
+      const stufeJePreset = new Map<number, string>();
+      const sollJeStufe = new Map<string, number>();
+      const istJeStufe = new Map<string, number>();
+      for (const preset of potPresets) {
+        const stufe = resolveNewgenPresetTier(resolvePresetMidOverall(preset));
+        stufeJePreset.set(Number(preset.preset_id), stufe.key);
+        if (!sollJeStufe.has(stufe.key)) {
+          sollJeStufe.set(stufe.key, jahrgangsgroesse * stufe.zielanteil);
+          istJeStufe.set(stufe.key, 0);
+        }
+      }
+      const quotenFaktor = (preset: any): number => {
+        const stufe = stufeJePreset.get(Number(preset.preset_id));
+        if (stufe == null) return 1;
+        const soll = sollJeStufe.get(stufe) ?? 0;
+        const ist = istJeStufe.get(stufe) ?? 0;
+        return (Math.max(0, soll - ist) + 1) / (soll + 1);
+      };
+
+      for (const country of countries) {
+        const numToGenerate = anzahlJeLand.get(country.id) ?? 0;
         if (numToGenerate <= 0) continue;
 
         // Namen fÃ¼r das aktuelle Land abrufen
@@ -144,12 +187,19 @@ export class RiderNewgenService {
             // Backoff: Notfall-Preset nehmen, wenn keines perfekt passt
             potPreset = potPresets[Math.floor(Math.random() * potPresets.length)];
           } else {
-            const totalPotWeight = auswahl.reduce((sum, p) => sum + (p.weight || 1), 0);
-            potPreset = this.pickWeighted(auswahl, totalPotWeight);
+            const gewichtet = auswahl.map((p) => ({ ...p, weight: (p.weight || 1) * quotenFaktor(p) }));
+            const totalPotWeight = gewichtet.reduce((sum, p) => sum + p.weight, 0);
+            const gewaehlt = this.pickWeighted(gewichtet, totalPotWeight);
+            // pickWeighted liefert die Kopie — das Original tragen wir weiter.
+            potPreset = auswahl.find((p) => p.preset_id === gewaehlt.preset_id) ?? gewaehlt;
           }
           const potPresetId = Number(potPreset.preset_id);
           const potPresetKey = String(potPreset.display_name);
           bestandJePreset.set(potPresetKey, (bestandJePreset.get(potPresetKey) ?? 0) + 1);
+          const gezogeneStufe = stufeJePreset.get(potPresetId);
+          if (gezogeneStufe != null) {
+            istJeStufe.set(gezogeneStufe, (istJeStufe.get(gezogeneStufe) ?? 0) + 1);
+          }
 
           const potValues: Record<string, number> = {};
           for (const key of skillKeys) {

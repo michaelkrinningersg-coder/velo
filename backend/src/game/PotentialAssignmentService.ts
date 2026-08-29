@@ -71,12 +71,21 @@ export class PotentialAssignmentService {
       max: Object.fromEntries(spalten.map((s) => [s, Number(zeile[`max_pot_${s}`] ?? 0)])),
     }));
 
-    // Deckel je Spitzen-Preset — dieselbe Regel wie bei den Newgens. Ohne sie
-    // saessen nach diesem Lauf Dutzende Fahrer im selben Spitzen-Preset.
+    // Deckel je Spitzen-Preset — dieselbe Regel wie bei den Newgens, aber
+    // strenger: dieser Lauf darf hoechstens EINEN Fahrer je Spitzen-Preset
+    // setzen, nicht den vollen Deckel.
+    //
+    // Der Grund steckt im Zeitverlauf. Ein volles Preset ist fuer Newgens
+    // gesperrt. Mit dem vollen Deckel belegte dieser Lauf auf einen Schlag 86
+    // von 281 gedeckelten Presets vollstaendig (465 Fahrer) — und sperrte
+    // damit den Nachwuchs an der Spitze fuer Jahrzehnte aus, bis diese Kohorte
+    // ausgelaufen war. Im 45-Jahres-Lauf gemessen stieg die Zahl der Fahrer mit
+    // einem Potenzial ueber 77 dadurch langsam von 60 auf ueber 100, statt zu
+    // stehen. Der Rest des Deckels bleibt jetzt fuer kuenftige Jahrgaenge frei.
     const deckel = new Map<string, number>();
     for (const zeile of presetZeilen) {
       const stufe = resolveNewgenPresetTier(resolvePresetMidOverall(zeile)).deckel;
-      if (stufe !== null) deckel.set(String(zeile['display_name']), stufe);
+      if (stufe !== null) deckel.set(String(zeile['display_name']), Math.min(1, stufe));
     }
     const bestand = new Map<string, number>();
     for (const zeile of this.db.prepare(`

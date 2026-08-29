@@ -191,3 +191,25 @@ describe('Einmaliger Lauf am Bestand', () => {
     db.close();
   });
 });
+
+describe('Deckel waehrend des einmaligen Laufs', () => {
+  it('setzt hoechstens einen Fahrer je Spitzen-Preset', () => {
+    const db = createTestDb();
+    seedReferenceData(db);
+    seedGameState(db, { date: '2027-01-01', season: 2027 });
+    db.prepare('DELETE FROM newgen_potential_presets').run();
+    const spalten = ['preset_id', 'display_name', 'weight', ...SP.flatMap((s) => [`min_pot_${s}`, `max_pot_${s}`])];
+    // Spitzenniveau: die Stufe traegt einen Deckel von drei.
+    db.prepare(`INSERT INTO newgen_potential_presets (${spalten.join(', ')})
+      VALUES (${spalten.map(() => '?').join(', ')})`)
+      .run(1, 'Spitzenpreset', 1, ...SP.flatMap(() => [80, 85]));
+    for (let i = 30; i < 40; i++) legeFahrer(db, i, 70, 2005, 26);
+
+    new PotentialAssignmentService(db).weiseZu(2027, () => 0.5);
+    const n = (db.prepare("SELECT COUNT(*) n FROM riders WHERE pot_preset_key = 'Spitzenpreset'").get() as any).n;
+    // Der Deckel der Stufe waere drei — dieser Lauf nimmt nur einen und laesst
+    // den Rest fuer kuenftige Newgen-Jahrgaenge frei.
+    expect(n).toBe(1);
+    db.close();
+  });
+});
