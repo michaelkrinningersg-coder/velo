@@ -155,7 +155,10 @@ function getSpecializationScores(skills: RiderSkills): Array<{ specialization: R
 
 function buildAgeProfile(): { peakAge: number; declineAge: number; retirementAge: number } {
   const peakAge = rand(24, 28);
-  const declineAge = rand(Math.max(peakAge + 1, 26), 32);
+  // Untergrenze 28: davor stand 26, womit ein Fahrer mit Zielalter 24 schon mit
+  // 26 abzubauen begann — zwei Jahre Plateau bei einer Laufbahn, die bis 38
+  // reicht. Die Obergrenze bleibt bei 32.
+  const declineAge = rand(Math.max(peakAge + 1, 28), 32);
   const retirementAge = rand(Math.max(declineAge + 1, 32), 38);
   return { peakAge, declineAge, retirementAge };
 }

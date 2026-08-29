@@ -41,6 +41,7 @@ import {
 import { isFullMoonDate } from '../util/moonPhase';
 import { StartlistQualityService } from '../game/StartlistQualityService';
 import { POT_PRESET_SKILL_COLUMNS } from '../../../shared/newgenPresetTiers';
+import { PotentialAssignmentService } from '../game/PotentialAssignmentService';
 
 const MASTER_DB_NAME = 'world_data.db';
 const RESULT_TYPE_ROWS = [
@@ -3479,6 +3480,30 @@ export class DatabaseService {
    * befuellt — und wie dort still uebersprungen, wenn die CSV im gepackten
    * Betrieb fehlt.
    */
+  /**
+   * Leitet die Potenziale der Bestandsfahrer einmalig aus den Presets ab.
+   *
+   * Laeuft nach `ensureNewgenPresetData`, weil die Presets dafuer stehen
+   * muessen, und genau einmal je Spielstand: der Lauf wuerfelt, ein zweiter
+   * wuerde dieselben Fahrer neu ziehen.
+   */
+  private ensureBestandsPotenziale(db: Database.Database): void {
+    if (!tableExists(db, 'one_time_migrations')) return;
+    try {
+      const dienst = new PotentialAssignmentService(db);
+      if (dienst.wurdeAusgefuehrt()) return;
+      const saison = (db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined)?.season;
+      if (saison == null) return;
+      const bericht = dienst.weiseZu(saison);
+      if (bericht) {
+        console.log(`  Potenziale der Bestandsfahrer: ${bericht.zugeordnet} aus Presets gezogen, `
+          + `${bericht.amZiel} am Zielalter auf ihr Koennen gesetzt, ${bericht.ohnePreset} ohne passendes Preset.`);
+      }
+    } catch (error) {
+      console.warn('Potenziale der Bestandsfahrer konnten nicht zugeordnet werden:', (error as Error).message);
+    }
+  }
+
   private ensureNewgenPresetData(db: Database.Database): void {
     if (!tableExists(db, 'newgen_potential_presets') || !tableExists(db, 'newgen_start_presets')) {
       return;
@@ -3651,6 +3676,7 @@ export class DatabaseService {
     this.ensureTeamPrestigeColumn(db);
     this.ensurePreferenceKindColumn(db);
     this.ensureNewgenPresetData(db);
+    this.ensureBestandsPotenziale(db);
     this.ensureStageLeadoutsSchema(db);
     this.ensureStageSpeedRecordsSchema(db);
     this.ensureRiderSeasonRolesSchema(db);

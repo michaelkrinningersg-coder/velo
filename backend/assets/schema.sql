@@ -180,6 +180,13 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS idx_contracts_rider_season ON contracts(rider_id, start_season, end_season);
 CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 
+-- Marker fuer Migrationen, die genau einmal je Spielstand laufen duerfen —
+-- etwa weil sie wuerfeln und ein zweiter Lauf denselben Fahrer neu zoege.
+CREATE TABLE IF NOT EXISTS one_time_migrations (
+  key        TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
+
 -- Idempotenz-Marker fuer die automatische Vertragsverlaengerung zum 01.08.
 -- (eine Zeile je Saison, in der der Lauf bereits stattgefunden hat).
 CREATE TABLE IF NOT EXISTS contract_renewal_runs (
