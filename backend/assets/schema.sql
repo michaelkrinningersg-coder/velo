@@ -386,6 +386,19 @@ CREATE TABLE IF NOT EXISTS quick_sim_profiles (
   rank_noise                  REAL NOT NULL
 );
 
+-- ---- Verletzungsarten --------------------------------------
+-- Woraus die Dauer einer Verletzung kommt. Zwei Gewichtsspalten,
+-- weil ein Sturz im Peloton andere Verletzungen macht als eine
+-- harte Trainingswoche. Gepflegt in data/csv/injury_types.csv.
+CREATE TABLE IF NOT EXISTS injury_types (
+  key            TEXT PRIMARY KEY,
+  label          TEXT    NOT NULL,
+  gewicht_alltag INTEGER NOT NULL CHECK(gewicht_alltag >= 0),
+  gewicht_sturz  INTEGER NOT NULL CHECK(gewicht_sturz >= 0),
+  min_tage       INTEGER NOT NULL CHECK(min_tage >= 1),
+  max_tage       INTEGER NOT NULL CHECK(max_tage >= min_tage)
+);
+
 CREATE TABLE IF NOT EXISTS wetter (
   id INTEGER PRIMARY KEY,
   wetter_name TEXT NOT NULL UNIQUE,
@@ -660,6 +673,9 @@ CREATE TABLE IF NOT EXISTS rider_daily_state (
   active_peak_date        TEXT,
   peak_dates_json         TEXT NOT NULL DEFAULT '[]',
   health_status           TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
+  -- Art der Verletzung (Schluessel aus injury_types). NULL bei Krankheit und
+  -- bei Verletzungen aus Spielstaenden vor der Einfuehrung der Arten.
+  health_detail           TEXT REFERENCES injury_types(key),
   unavailable_until       TEXT,
   unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
   season_points           INTEGER NOT NULL DEFAULT 0,

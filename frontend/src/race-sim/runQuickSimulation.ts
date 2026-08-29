@@ -199,6 +199,13 @@ export function runQuickSimulation(
   // tritt an deren Stelle ein gemessener Anteil der Kandidaten.
   const massCrashRandom = createSeededRandom(deriveSeed(seed, 'mass-crash'));
   const riderForVictim = new Map(riders.map((rider) => [rider.id, rider]));
+  // Die vollstaendigen Vorfaelle, nach Fahrer. Die Massensturz-Opfer kommen
+  // waehrend der Aufloesung dazu — sie muessen mit committet werden, sonst
+  // bekommen sie weder Verletzung noch Renn-Nachwirkung, obwohl sie in der
+  // Ergebnisrechnung gestuerzt sind.
+  const vollstaendigJeFahrer = new Map<number, PrecalculatedRaceIncident>(
+    precalculatedIncidents.map((incident) => [incident.riderId, incident]),
+  );
   const incidents = expandMassCrashes(
     massCrashRandom,
     precalculatedIncidents.map(toQuickIncident),
@@ -209,11 +216,18 @@ export function runQuickSimulation(
         return { riderId, type: 'crash', severity: 'light', triggerDistanceKm, waitDurationSeconds: 30 };
       }
       // Derselbe Opfer-Vorfall, den auch die Engine baut.
-      return toQuickIncident(buildDynamicCrashIncident(
+      const opfer = buildDynamicCrashIncident(
         rider, riders, triggerDistanceKm, distanceKm, massCrashRandom,
-      ));
+      );
+      vollstaendigJeFahrer.set(riderId, opfer);
+      return toQuickIncident(opfer);
     },
   );
+  // In der Reihenfolge der aufgeloesten Liste, damit Ausloeser und Opfer
+  // zusammen bleiben. Je Fahrer gibt es hoechstens einen Vorfall.
+  const committeteIncidents = incidents
+    .map((incident) => vollstaendigJeFahrer.get(incident.riderId))
+    .filter((incident): incident is PrecalculatedRaceIncident => incident != null);
 
   const plan = precalculateStageBreakaway(
     riders,
@@ -371,7 +385,7 @@ export function runQuickSimulation(
   return {
     entries,
     markerClassifications,
-    incidents: precalculatedIncidents,
+    incidents: committeteIncidents,
     events: buildEvents(result, bootstrap, plan, riderById, ridersWithSpecialStates),
     leadoutContributions: leadout.contributions,
     superTeamId: plan?.superTeamId,

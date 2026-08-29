@@ -2042,6 +2042,8 @@ export interface InjuryRow {
   teamId: number | null;
   teamDivisionTier: number | null;
   healthStatus: 'ill' | 'injured';
+  /** Art der Verletzung, z. B. "Schluesselbeinbruch". Null bei Krankheit. */
+  healthDetailLabel: string | null;
   unavailableDays: number;
   overallRating: number;
   age: number;

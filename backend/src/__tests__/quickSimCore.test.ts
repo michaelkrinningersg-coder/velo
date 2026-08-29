@@ -100,7 +100,11 @@ describe('resolveIncidentOutcomes', () => {
     expect([...light.values()].some((outcome) => outcome.isAbandon)).toBe(false);
   });
 
-  it('trifft die Aufgabewahrscheinlichkeit schwerer Stuerze', () => {
+  // Frueher entschied hier zusaetzlich ein Wurf gegen `severeDnfChance`, und
+  // derselbe Sturz beendete in der vollen Simulation das Rennen, waehrend der
+  // Fahrer hier zu drei Vierteln weiterfuhr — verletzt, denn die Verletzung
+  // haengt allein an der Schwere.
+  it('beendet die Etappe bei jedem schweren Sturz, wie die volle Simulation', () => {
     const outcomes = resolveIncidentOutcomes(
       createSeededRandom(11),
       Array.from({ length: 4000 }, (_, index) => incident({ riderId: index + 1, severity: 'severe' })),
@@ -108,8 +112,7 @@ describe('resolveIncidentOutcomes', () => {
       200,
     );
     const abandonRate = [...outcomes.values()].filter((outcome) => outcome.isAbandon).length / outcomes.size;
-    expect(abandonRate).toBeGreaterThan(FLAT.severeDnfChance - 0.03);
-    expect(abandonRate).toBeLessThan(FLAT.severeDnfChance + 0.03);
+    expect(abandonRate).toBe(1);
   });
 
   it('ignoriert weitere Vorfaelle nach der Aufgabe', () => {
@@ -120,7 +123,7 @@ describe('resolveIncidentOutcomes', () => {
         incident({ severity: 'severe', triggerDistanceKm: 50 }),
         incident({ severity: 'severe', triggerDistanceKm: 150 }),
       ],
-      { ...FLAT, severeDnfChance: 1 },
+      FLAT,
       200,
     );
     expect(outcomes.get(1)?.isAbandon).toBe(true);
@@ -373,7 +376,7 @@ describe('simulateQuickStage', () => {
 
   it('nimmt Aufgaben aus der Wertung und laesst sie ohne Zeit stehen', () => {
     const result = simulateQuickStage({
-      profile: 'Flat', distanceKm: 200, stageScore: 20, parameters: { ...FLAT, severeDnfChance: 1 },
+      profile: 'Flat', distanceKm: 200, stageScore: 20, parameters: FLAT,
       riders: field(100),
       incidents: [incident({ riderId: 5, severity: 'severe' }), incident({ riderId: 6, severity: 'severe' })],
       random: createSeededRandom(2),
@@ -479,7 +482,7 @@ describe('simulateQuickStage', () => {
     expect(empty.timeLimitSeconds).toBeNull();
 
     const allOut = simulateQuickStage({
-      profile: 'Flat', distanceKm: 190, stageScore: 20, parameters: { ...FLAT, severeDnfChance: 1 },
+      profile: 'Flat', distanceKm: 190, stageScore: 20, parameters: FLAT,
       riders: field(2),
       incidents: [incident({ riderId: 1, severity: 'severe' }), incident({ riderId: 2, severity: 'severe' })],
       random: createSeededRandom(1),

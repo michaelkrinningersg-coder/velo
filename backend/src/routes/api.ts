@@ -1205,10 +1205,12 @@ export function createRouter(dbService: DatabaseService): Router {
           r.overall_rating AS overallRating,
           CAST(strftime('%Y', 'now') - r.birth_year AS INTEGER) AS age,
           rds.health_status AS healthStatus,
+          it.label AS healthDetailLabel,
           rds.unavailable_days_remaining AS unavailableDays,
           rds.unavailable_until AS fitDate
         FROM rider_daily_state rds
         JOIN riders r ON rds.rider_id = r.id
+        LEFT JOIN injury_types it ON it.key = rds.health_detail
         JOIN sta_country c ON r.country_id = c.id
         LEFT JOIN contracts cnt ON r.id = cnt.rider_id AND cnt.status = 'active'
         LEFT JOIN teams t ON cnt.team_id = t.id

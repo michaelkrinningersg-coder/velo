@@ -1,0 +1,10 @@
+key,label,gewicht_alltag,gewicht_sturz,min_tage,max_tage
+schuerfwunden,Schürfwunden,12,42,2,5
+prellung,Prellung,26,20,2,6
+sehnenreizung,Sehnenreizung,36,0,3,10
+muskelfaserriss,Muskelfaserriss,12,2,10,20
+rippenprellung,Rippenprellung,6,15,8,16
+gehirnerschuetterung,Gehirnerschütterung,1,8,7,14
+handgelenksbruch,Handgelenksbruch,3,8,14,28
+schluesselbeinbruch,Schlüsselbeinbruch,3,4,28,42
+beckenbruch,Beckenbruch,1,1,35,56

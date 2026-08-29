@@ -26,7 +26,6 @@ function row(profile: string, overrides: Partial<QuickSimProfileRow> = {}): Quic
     tail_group_size: 3,
     noise_sigma: 0.2,
     incident_loss_multiplier: 2,
-    severe_dnf_chance: 0.3,
     breakaway_shrink_exponent: 1.5,
     time_trial_slope: 0,
     time_trial_noise: 0,
@@ -48,7 +47,6 @@ function createTable(db: Database.Database): void {
       tail_group_size             REAL NOT NULL,
       noise_sigma                 REAL NOT NULL,
       incident_loss_multiplier    REAL NOT NULL,
-      severe_dnf_chance           REAL NOT NULL,
       breakaway_shrink_exponent   REAL NOT NULL,
       time_trial_slope            REAL NOT NULL,
       time_trial_noise            REAL NOT NULL,
@@ -60,12 +58,12 @@ function createTable(db: Database.Database): void {
 
 function insert(db: Database.Database, entry: QuickSimProfileRow): void {
   db.prepare(`
-    INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO quick_sim_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     entry.profile, entry.base_speed_kmh, entry.bunch_intercept,
     entry.bunched_share_intercept, entry.split_share_intercept, entry.tail_gap_per_km,
     entry.tail_group_size, entry.noise_sigma, entry.incident_loss_multiplier,
-    entry.severe_dnf_chance, entry.breakaway_shrink_exponent,
+    entry.breakaway_shrink_exponent,
     entry.time_trial_slope, entry.time_trial_noise, entry.mass_crash_involvement,
     entry.rank_noise,
   );
@@ -102,13 +100,13 @@ describe('mapQuickSimProfileRow', () => {
     const mapped = mapQuickSimProfileRow(row('Flat', {
       base_speed_kmh: 43.5, bunch_intercept: 3.1, bunched_share_intercept: 0.857,
       split_share_intercept: -0.086, tail_gap_per_km: 6.91, tail_group_size: 2.01,
-      noise_sigma: 0.151, incident_loss_multiplier: 1.21, severe_dnf_chance: 0.251,
+      noise_sigma: 0.151, incident_loss_multiplier: 1.21,
       breakaway_shrink_exponent: 1.51, time_trial_slope: 0.0041, time_trial_noise: 0.0191, mass_crash_involvement: 0.31, rank_noise: 0.41,
     }));
     expect(mapped).toEqual({
       baseSpeedKmh: 43.5, bunchIntercept: 3.1, bunchedShareIntercept: 0.857,
       splitShareIntercept: -0.086, tailGapPerKm: 6.91, tailGroupSize: 2.01,
-      noiseSigma: 0.151, incidentLossMultiplier: 1.21, severeDnfChance: 0.251,
+      noiseSigma: 0.151, incidentLossMultiplier: 1.21,
       breakawayShrinkExponent: 1.51, timeTrialSlope: 0.0041, timeTrialNoise: 0.0191, massCrashInvolvement: 0.31, rankNoise: 0.41,
     });
   });

@@ -917,9 +917,9 @@ export function seedQuickSimProfiles(db: Database.Database): void {
     INSERT OR IGNORE INTO quick_sim_profiles (
       profile, base_speed_kmh, bunch_intercept, bunched_share_intercept, split_share_intercept,
       tail_gap_per_km, tail_group_size,
-      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
+      noise_sigma, incident_loss_multiplier, breakaway_shrink_exponent,
       time_trial_slope, time_trial_noise, mass_crash_involvement, rank_noise
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [index, row] of rows.entries()) {
@@ -934,12 +934,31 @@ export function seedQuickSimProfiles(db: Database.Database): void {
       real(req(row, 'tail_group_size', ctx), `${ctx} / tail_group_size`),
       real(req(row, 'noise_sigma', ctx), `${ctx} / noise_sigma`),
       real(req(row, 'incident_loss_multiplier', ctx), `${ctx} / incident_loss_multiplier`),
-      real(req(row, 'severe_dnf_chance', ctx), `${ctx} / severe_dnf_chance`),
       real(req(row, 'breakaway_shrink_exponent', ctx), `${ctx} / breakaway_shrink_exponent`),
       real(req(row, 'time_trial_slope', ctx), `${ctx} / time_trial_slope`),
       real(req(row, 'time_trial_noise', ctx), `${ctx} / time_trial_noise`),
       real(req(row, 'mass_crash_involvement', ctx), `${ctx} / mass_crash_involvement`),
       real(req(row, 'rank_noise', ctx), `${ctx} / rank_noise`),
+    );
+  }
+}
+
+export function seedInjuryTypes(db: Database.Database): void {
+  const rows = readCsv('injury_types.csv');
+  const insert = db.prepare(`
+    INSERT INTO injury_types (key, label, gewicht_alltag, gewicht_sturz, min_tage, max_tage)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [index, row] of rows.entries()) {
+    const ctx = `injury_types.csv Zeile ${index + 2}`;
+    insert.run(
+      req(row, 'key', ctx),
+      req(row, 'label', ctx),
+      int(req(row, 'gewicht_alltag', ctx), `${ctx} / gewicht_alltag`),
+      int(req(row, 'gewicht_sturz', ctx), `${ctx} / gewicht_sturz`),
+      int(req(row, 'min_tage', ctx), `${ctx} / min_tage`),
+      int(req(row, 'max_tage', ctx), `${ctx} / max_tage`),
     );
   }
 }
@@ -1420,6 +1439,7 @@ export function bootstrap(force = false): void {
     seedRaceProgramRaces(db);
     seedRaceProgramProbabilityRules(db);
     seedWetter(db);
+    seedInjuryTypes(db);
     seedQuickSimProfiles(db);
     seedStages(db);
     seedRiders(db);

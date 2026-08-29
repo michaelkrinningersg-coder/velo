@@ -1062,6 +1062,7 @@ export class RiderRepository {
              ${useFreeRaceForm ? 'COALESCE(free_r_form.total, 0)' : '0'} AS free_r_form_bonus,
              ${useDailyState ? 'rider_state.peak_dates_json' : "'[]'"} AS peak_dates_json,
              ${useDailyState ? 'rider_state.health_status' : "'healthy'"} AS health_status,
+             ${useDailyState ? 'injury_type.label' : 'NULL'} AS health_detail_label,
              ${useDailyState ? 'rider_state.unavailable_until' : 'NULL'} AS unavailable_until,
              ${useDailyState ? 'rider_state.unavailable_days_remaining' : '0'} AS unavailable_days_remaining,
              ${useDailyState ? 'rider_state.season_points' : '0'} AS season_points,
@@ -1086,6 +1087,7 @@ export class RiderRepository {
       LEFT JOIN type_rider specialization_2 ON specialization_2.id = riders.specialization_2_id
       LEFT JOIN type_rider specialization_3 ON specialization_3.id = riders.specialization_3_id
       ${useDailyState ? 'LEFT JOIN rider_daily_state rider_state ON rider_state.rider_id = riders.id' : ''}
+      ${useDailyState ? 'LEFT JOIN injury_types injury_type ON injury_type.key = rider_state.health_detail' : ''}
       ${useFreeRaceForm ? 'LEFT JOIN (SELECT rider_id, SUM(amount) AS total FROM rider_r_form_events GROUP BY rider_id) free_r_form ON free_r_form.rider_id = riders.id' : ''}
       WHERE riders.id = ?
     `).get(id) as RiderRow | undefined;

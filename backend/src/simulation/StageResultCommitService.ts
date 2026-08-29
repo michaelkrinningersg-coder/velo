@@ -33,6 +33,8 @@ import {
   roundStageResultSeconds,
 } from '../../../shared/stageResultRules';
 import { ensureRaceEntries } from './RaceRosterService';
+import { ziehVerletzung, type Verletzungsart } from '../../../shared/injuries';
+import { ladeVerletzungsarten } from '../db/injuryTypes';
 import {
   categoryAllowsTeamlessRiders,
   championshipTitleColumn,
@@ -2567,47 +2569,46 @@ export class StageResultCommitService {
     };
   }
 
-  private applySevereCrashInjury(currentDate: string, riderId: number): void {
-    this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS rider_daily_state (
-        rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
-        season INTEGER NOT NULL,
-        form_bonus REAL NOT NULL DEFAULT 0.0,
-        race_form_bonus REAL NOT NULL DEFAULT 0.0,
-        peak_s_form REAL NOT NULL DEFAULT 0.0,
-        peak_r_form REAL NOT NULL DEFAULT 0.0,
-        active_peak_date TEXT,
-        peak_dates_json TEXT NOT NULL DEFAULT '[]',
-        health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
-        unavailable_until TEXT,
-        unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
-        season_race_days_total INTEGER NOT NULL DEFAULT 0 CHECK(season_race_days_total >= 0),
-        rolling_30d_race_days INTEGER NOT NULL DEFAULT 0 CHECK(rolling_30d_race_days >= 0),
-        short_term_fatigue REAL NOT NULL DEFAULT 0.0,
-        long_term_fatigue_decayable REAL NOT NULL DEFAULT 0.0,
-        long_term_fatigue_locked REAL NOT NULL DEFAULT 0.0
-      )
-    `).run();
+  /**
+   * Verletzung aus einem schweren Sturz.
+   *
+   * Legte frueher `rider_daily_state` selbst per CREATE TABLE IF NOT EXISTS an
+   * — mit einem Spaltensatz, dem `consecutive_non_race_days` fehlte. Das
+   * Schema kommt aus schema.sql bzw. `GameStateService.ensureRiderDailyStateTable`;
+   * fehlt die Tabelle hier, ist ohnehin nichts zu aktualisieren.
+   */
+  /** Einmal je Commit geladen, nicht je Sturz. */
+  private verletzungsartenCache: Verletzungsart[] | null = null;
 
-    const isLongInjury = Math.random() < 0.1;
-    const durationDays = isLongInjury
-      ? randomInteger(6, 30)
-      : randomInteger(2, 14);
+  private verletzungsarten(): Verletzungsart[] {
+    if (this.verletzungsartenCache == null) {
+      this.verletzungsartenCache = ladeVerletzungsarten(this.db);
+    }
+    return this.verletzungsartenCache;
+  }
+
+  private applySevereCrashInjury(currentDate: string, riderId: number): void {
+    if (!tableExists(this.db, 'rider_daily_state')) {
+      return;
+    }
+
+    // Dieselbe Ziehung wie im Tageswurf, nur mit der Sturz-Gewichtung:
+    // aus dem Peloton kommen Schuerfwunden, Rippen und Brueche.
+    const verletzung = ziehVerletzung(this.verletzungsarten(), 'sturz', Math.random);
+    const durationDays = verletzung.durationDays;
     const unavailableUntil = addDaysIso(currentDate, durationDays - 1);
+    const hatArt = columnExists(this.db, 'rider_daily_state', 'health_detail');
 
     this.db.prepare(`
       UPDATE rider_daily_state
       SET health_status = 'injured',
+          ${hatArt ? 'health_detail = ?,' : ''}
           unavailable_until = ?,
           unavailable_days_remaining = ?
       WHERE rider_id = ?
-    `).run(unavailableUntil, durationDays, riderId);
+    `).run(...(hatArt ? [verletzung.key] : []), unavailableUntil, durationDays, riderId);
 
     // Track crash-induced injury in career stats
-    const tableExists = (db: Database.Database, name: string): boolean => {
-      const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
-      return !!row;
-    };
     if (tableExists(this.db, 'rider_career_stats')) {
       this.db.prepare(`
         INSERT INTO rider_career_stats (

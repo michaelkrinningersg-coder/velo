@@ -93,9 +93,14 @@ export function renderInjuriesView(): void {
           <div class="results-grid-body">
       `;
       for (const row of riders) {
+        // Steht die Art fest, steht sie im Etikett — "Schluesselbeinbruch" sagt
+        // mehr als "Verletzung". Alte Spielstaende kennen sie nicht.
+        const typeLabel = row.healthStatus === 'injured'
+          ? (row.healthDetailLabel ?? 'Verletzung')
+          : 'Krankheit';
         const typeHtml = row.healthStatus === 'injured'
-          ? '<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fca5a5; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.34); padding:3px 10px; border-radius:99px;">Verletzung 🤕</span>'
-          : '<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fcd34d; background:rgba(234,179,8,.14); border:1px solid rgba(234,179,8,.34); padding:3px 10px; border-radius:99px;">Krankheit 🤒</span>';
+          ? `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fca5a5; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.34); padding:3px 10px; border-radius:99px;">${esc(typeLabel)} 🤕</span>`
+          : `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#fcd34d; background:rgba(234,179,8,.14); border:1px solid rgba(234,179,8,.34); padding:3px 10px; border-radius:99px;">${esc(typeLabel)} 🤒</span>`;
 
         let fitHtml = '';
         if (row.fitDate) {

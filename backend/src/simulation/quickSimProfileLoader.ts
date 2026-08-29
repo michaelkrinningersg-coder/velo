@@ -34,7 +34,7 @@ export function loadQuickSimProfiles(
     SELECT
       profile, base_speed_kmh, bunch_intercept, bunched_share_intercept, split_share_intercept,
       tail_gap_per_km, tail_group_size,
-      noise_sigma, incident_loss_multiplier, severe_dnf_chance, breakaway_shrink_exponent,
+      noise_sigma, incident_loss_multiplier, breakaway_shrink_exponent,
       time_trial_slope, time_trial_noise, mass_crash_involvement, rank_noise
     FROM quick_sim_profiles
   `).all() as QuickSimProfileRow[];

@@ -17,7 +17,7 @@
  *      ihre Zielgroesse fitten
  *
  * Ungemessen bleiben `noise_sigma`, `incident_loss_multiplier`,
- * `severe_dnf_chance`, `breakaway_shrink_exponent` und
+ * `breakaway_shrink_exponent` und
  * `mass_crash_involvement`; sie werden unveraendert uebernommen.
  *
  * Aufruf:
@@ -434,7 +434,6 @@ function writeCsv(
     ['tail_group_size', (p) => p.tailGroupSize, 2],
     ['noise_sigma', (p) => p.noiseSigma, 2],
     ['incident_loss_multiplier', (p) => p.incidentLossMultiplier, 2],
-    ['severe_dnf_chance', (p) => p.severeDnfChance, 2],
     ['breakaway_shrink_exponent', (p) => p.breakawayShrinkExponent, 2],
     ['time_trial_slope', (p) => p.timeTrialSlope, 5],
     ['time_trial_noise', (p) => p.timeTrialNoise, 4],
@@ -493,7 +492,6 @@ function rewriteDefaults(
     `tailGroupSize: ${parameters.tailGroupSize.toFixed(2)}`,
     `noiseSigma: ${parameters.noiseSigma.toFixed(2)}`,
     `incidentLossMultiplier: ${parameters.incidentLossMultiplier.toFixed(2)}`,
-    `severeDnfChance: ${parameters.severeDnfChance.toFixed(2)}`,
     `breakawayShrinkExponent: ${parameters.breakawayShrinkExponent.toFixed(2)}`,
     `timeTrialSlope: ${parameters.timeTrialSlope.toFixed(5)}`,
     `timeTrialNoise: ${parameters.timeTrialNoise.toFixed(4)}`,

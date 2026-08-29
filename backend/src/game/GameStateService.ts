@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
+import { ziehVerletzung, type Verletzungsart } from '../../../shared/injuries';
+import { ladeVerletzungsarten } from '../db/injuryTypes';
 import { ensureContractRenewals } from '../simulation/contractRenewalSchedule';
 import { isRenewalSelectionPending } from '../simulation/contractRenewalSelection';
 import { ensureNationalChampionships } from '../simulation/nationalChampionshipsSchedule';
@@ -86,6 +88,7 @@ interface RiderDailyStateRow {
   active_peak_date: string | null;
   peak_dates_json: string;
   health_status: 'healthy' | 'ill' | 'injured';
+  health_detail?: string | null;
   unavailable_until: string | null;
   unavailable_days_remaining: number;
   season_race_days_total: number;
@@ -172,6 +175,7 @@ export class GameStateService {
     this.knownColumns.add('rider_daily_state.peak_dates_json');
     this.knownColumns.add('rider_daily_state.form_bonus');
     this.knownColumns.add('rider_daily_state.health_status');
+    this.knownColumns.add('rider_daily_state.health_detail');
     this.knownColumns.add('rider_daily_state.unavailable_until');
     this.knownColumns.add('rider_daily_state.unavailable_days_remaining');
     this.knownColumns.add('rider_daily_state.short_term_fatigue');
@@ -822,6 +826,7 @@ export class GameStateService {
         active_peak_date TEXT,
         peak_dates_json TEXT NOT NULL DEFAULT '[]',
         health_status TEXT NOT NULL DEFAULT 'healthy' CHECK(health_status IN ('healthy', 'ill', 'injured')),
+        health_detail TEXT,
         unavailable_until TEXT,
         unavailable_days_remaining INTEGER NOT NULL DEFAULT 0 CHECK(unavailable_days_remaining >= 0),
         season_points INTEGER NOT NULL DEFAULT 0,
@@ -834,6 +839,10 @@ export class GameStateService {
         consecutive_non_race_days INTEGER NOT NULL DEFAULT 0
       )
     `).run();
+
+    if (!columnExists(this.db, 'rider_daily_state', 'health_detail')) {
+      this.db.prepare('ALTER TABLE rider_daily_state ADD COLUMN health_detail TEXT').run();
+    }
 
     if (!columnExists(this.db, 'rider_daily_state', 'season_race_days_total')) {
       this.db.prepare(`
@@ -1405,12 +1414,56 @@ export class GameStateService {
     }
   }
 
+  /**
+   * Zaehlt die Ausfalltage herunter — bewusst ausserhalb der Tagesschleife.
+   *
+   * Die Schleife darunter verlaesst jeden Fahrer wieder, der nicht in einem
+   * Tier-1-Team faehrt (`if (!isTier1 && !seasonChanged) continue`). Solange
+   * das Herunterzaehlen dort drin stand, erreichte es diese Fahrer nie: wer
+   * ohne Vertrag oder in einer unteren Division krank oder verletzt wurde,
+   * blieb es. Im gemessenen Spielstand hingen so 18 vereinslose Fahrer mit
+   * einem Rueckkehrdatum in der Vergangenheit fest.
+   *
+   * Als zwei Anweisungen ueber idx_rider_daily_state_health kostet das
+   * weniger als der eine Schleifendurchlauf, den es vorher gebraucht hat.
+   */
+  private zaehleAusfalltageHerunter(nextDate: string): void {
+    // Nachlass des alten Verhaltens: ein Rueckkehrdatum in der Vergangenheit
+    // kann durch das Herunterzaehlen nicht entstehen. Solche Zeilen werden
+    // gesund, statt noch einmal so viele Tage zu warten, wie ihr Zaehler sagt.
+    this.db.prepare(`
+      UPDATE rider_daily_state
+      SET health_status = 'healthy',
+          health_detail = NULL,
+          unavailable_until = NULL,
+          unavailable_days_remaining = 0
+      WHERE unavailable_days_remaining > 0
+        AND unavailable_until IS NOT NULL
+        AND unavailable_until < ?
+    `).run(nextDate);
+
+    // In den CASE-Ausdruecken steht der alte Spaltenwert, deshalb ueberall
+    // `- 1` bzw. `- 2` gegenueber dem neuen Zaehler.
+    this.db.prepare(`
+      UPDATE rider_daily_state
+      SET unavailable_days_remaining = unavailable_days_remaining - 1,
+          health_status = CASE WHEN unavailable_days_remaining - 1 <= 0 THEN 'healthy' ELSE health_status END,
+          health_detail = CASE WHEN unavailable_days_remaining - 1 <= 0 THEN NULL ELSE health_detail END,
+          unavailable_until = CASE
+            WHEN unavailable_days_remaining - 1 <= 0 THEN NULL
+            ELSE date(?, '+' || (unavailable_days_remaining - 2) || ' days')
+          END
+      WHERE unavailable_days_remaining > 0
+    `).run(nextDate);
+  }
+
   private advanceRiderDailyStates(nextDate: string, nextSeason: number): void {
     if (!this.isTable('rider_daily_state')) {
       return;
     }
 
     this.ensureRiderDailyStateRows(nextSeason);
+    this.zaehleAusfalltageHerunter(nextDate);
     this.syncLieutenantPeakState(nextSeason);
     this.removeExpiredRaceFormEvents(nextDate);
     this.syncRiderLoadState(nextDate, nextSeason);
@@ -1503,6 +1556,11 @@ export class GameStateService {
       ? loadPeakRaceCandidatesForAllRiders(this.db, nextSeason)
       : null;
     const seasonChangedRiderIds: number[] = [];
+    // Einmal je Tageswechsel, nicht je Fahrer.
+    const verletzungsarten = ladeVerletzungsarten(this.db);
+    // Die Art steht nicht im Sammel-UPDATE unten: sie aendert sich nur bei einer
+    // neuen Verletzung, und das sind wenige Zeilen am Tag.
+    const artUpdates: Array<[string | null, number]> = [];
     const developmentContexts: RiderDevelopmentDailyContext[] = [];
     const deleteFormEvents = this.db.prepare(`
       DELETE FROM rider_r_form_events
@@ -1541,20 +1599,12 @@ export class GameStateService {
         seasonChangedRiderIds.push(row.rider_id);
       }
 
-      if (remainingDays > 0) {
-        remainingDays = Math.max(remainingDays - 1, 0);
-        unavailableUntil = remainingDays > 0 ? addDaysIso(nextDate, remainingDays - 1) : null;
-        if (remainingDays === 0) {
-          healthStatus = 'healthy';
-          unavailableUntil = null;
-        }
-      }
-
       if (healthStatus === 'healthy') {
-        const newCondition = rollDailyCondition(nextDate);
+        const newCondition = rollDailyCondition(verletzungsarten);
         if (newCondition) {
           healthStatus = newCondition.status;
           remainingDays = newCondition.durationDays;
+          artUpdates.push([newCondition.detail, row.rider_id]);
           unavailableUntil = addDaysIso(nextDate, newCondition.durationDays - 1);
 
           // Update career stats in the database
@@ -1794,6 +1844,15 @@ export class GameStateService {
           row.rider_id,
         ]);
       }
+    }
+
+    if (artUpdates.length > 0) {
+      const setzeArt = this.db.prepare('UPDATE rider_daily_state SET health_detail = ? WHERE rider_id = ?');
+      this.db.transaction(() => {
+        for (const eintrag of artUpdates) {
+          setzeArt.run(eintrag[0], eintrag[1]);
+        }
+      })();
     }
 
     if (updates.length > 0) {
@@ -3082,19 +3141,26 @@ function dayNumberToIsoDate(dayNumber: number): string {
   return new Date(dayNumber * 86400000).toISOString().slice(0, 10);
 }
 
-function rollDailyCondition(currentDate: string): { status: 'ill' | 'injured'; durationDays: number } | null {
+function rollDailyCondition(
+  verletzungsarten: readonly Verletzungsart[],
+): { status: 'ill' | 'injured'; durationDays: number; detail: string | null } | null {
   if (Math.random() < ILLNESS_CHANCE) {
     return {
       status: 'ill',
       durationDays: randomInteger(1, 14),
+      detail: null,
     };
   }
 
   if (Math.random() < INJURY_CHANCE) {
-    const isLongInjury = Math.random() < 0.1;
+    // Die Dauer kommt aus der Art, nicht mehr aus einer anonymen Spanne.
+    // `injury_types.csv` ist so gewichtet, dass der Erwartungswert unter den
+    // vorherigen 9,0 Tagen bleibt.
+    const verletzung = ziehVerletzung(verletzungsarten, 'alltag', Math.random);
     return {
       status: 'injured',
-      durationDays: isLongInjury ? randomInteger(6, 30) : randomInteger(2, 14),
+      durationDays: verletzung.durationDays,
+      detail: verletzung.key,
     };
   }
 

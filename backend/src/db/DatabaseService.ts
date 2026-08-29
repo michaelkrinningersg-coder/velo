@@ -7,6 +7,7 @@ import { SavegameMeta } from '../../../shared/types';
 import {
   bootstrap,
   readStageScoreSegments,
+  seedInjuryTypes,
   seedNewgenPotentialPresets,
   seedNewgenStartPresets,
   seedQuickSimProfiles,
@@ -1146,6 +1147,7 @@ export class DatabaseService {
     })();
 
     this.ensureQuickSimProfilesSchema(db);
+    this.ensureInjuryTypesSchema(db);
 
     const weatherStageColumns = [
       ['allowed_weather', "TEXT NOT NULL DEFAULT '1|2|3|4|5|6|7'"],
@@ -1524,6 +1526,12 @@ export class DatabaseService {
 
   private ensureRiderFormSchema(db: Database.Database): void {
     if (tableExists(db, 'rider_daily_state')) {
+      // Muss beim Laden stehen, nicht erst beim ersten Tageswechsel: die
+      // Fahrerkarte und die Ausfallliste lesen die Verletzungsart, sobald ein
+      // Spielstand offen ist.
+      if (!columnExists(db, 'rider_daily_state', 'health_detail')) {
+        db.prepare('ALTER TABLE rider_daily_state ADD COLUMN health_detail TEXT').run();
+      }
       if (!columnExists(db, 'rider_daily_state', 'race_form_bonus')) {
         db.prepare(`
           ALTER TABLE rider_daily_state
@@ -3534,6 +3542,46 @@ export class DatabaseService {
    * CSV. Nutzt bewusst dieselbe Seed-Funktion wie der Bootstrapper, damit die
    * Werte nur an einer Stelle gepflegt werden.
    */
+  /**
+   * Legt die Verletzungsarten an und befuellt sie aus der CSV. Gleiche Bauart
+   * wie `ensureQuickSimProfilesSchema`: die Tabelle traegt nur Parameter, bei
+   * geaendertem Spaltensatz wird sie deshalb neu angelegt statt migriert.
+   */
+  private ensureInjuryTypesSchema(db: Database.Database): void {
+    const expectedColumns = ['key', 'label', 'gewicht_alltag', 'gewicht_sturz', 'min_tage', 'max_tage'];
+    if (tableExists(db, 'injury_types')) {
+      const actual = (db.prepare('PRAGMA table_info(injury_types)').all() as Array<{ name: string }>)
+        .map((column) => column.name);
+      const matches = actual.length === expectedColumns.length
+        && expectedColumns.every((column) => actual.includes(column));
+      if (!matches) {
+        db.prepare('DROP TABLE injury_types').run();
+      }
+    }
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS injury_types (
+        key            TEXT PRIMARY KEY,
+        label          TEXT    NOT NULL,
+        gewicht_alltag INTEGER NOT NULL CHECK(gewicht_alltag >= 0),
+        gewicht_sturz  INTEGER NOT NULL CHECK(gewicht_sturz >= 0),
+        min_tage       INTEGER NOT NULL CHECK(min_tage >= 1),
+        max_tage       INTEGER NOT NULL CHECK(max_tage >= min_tage)
+      )
+    `).run();
+
+    try {
+      db.transaction(() => {
+        db.prepare('DELETE FROM injury_types').run();
+        seedInjuryTypes(db);
+      })();
+    } catch (error) {
+      // Im gepackten Betrieb kann die CSV fehlen. Die Tabelle bleibt dann leer,
+      // und die Ziehung faellt auf das Modell ohne Arten zurueck.
+      console.warn('injury_types konnten nicht geladen werden:', (error as Error).message);
+    }
+  }
+
   private ensureQuickSimProfilesSchema(db: Database.Database): void {
     // Die Tabelle traegt ausschliesslich Parameter aus der CSV — keine
     // Spielerdaten. Aendert sich der Spaltensatz, wird sie deshalb neu angelegt
@@ -3544,7 +3592,7 @@ export class DatabaseService {
     const expectedColumns = [
       'profile', 'base_speed_kmh', 'bunch_intercept', 'bunched_share_intercept',
       'split_share_intercept', 'tail_gap_per_km', 'tail_group_size', 'noise_sigma',
-      'incident_loss_multiplier', 'severe_dnf_chance', 'breakaway_shrink_exponent',
+      'incident_loss_multiplier', 'breakaway_shrink_exponent',
       'time_trial_slope', 'time_trial_noise', 'mass_crash_involvement', 'rank_noise',
     ];
     if (tableExists(db, 'quick_sim_profiles')) {
@@ -3574,7 +3622,6 @@ export class DatabaseService {
         tail_group_size             REAL NOT NULL,
         noise_sigma                 REAL NOT NULL,
         incident_loss_multiplier    REAL NOT NULL,
-        severe_dnf_chance           REAL NOT NULL,
         breakaway_shrink_exponent   REAL NOT NULL,
         -- Nur Zeitfahren: Rueckstand je Score-Punkt als Anteil der Siegerzeit
         -- und die Reststreuung um diese Gerade (Tagesform).

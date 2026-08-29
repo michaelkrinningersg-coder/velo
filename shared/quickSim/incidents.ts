@@ -136,11 +136,14 @@ export function resolveIncidentOutcomes(
       continue;
     }
 
-    // Nur schwere Stuerze fuehren zur Aufgabe. Der Wurf faellt fuer jeden
-    // Vorfall, auch wenn der Fahrer schon Zeit verloren hat.
-    const isAbandon = incident.type === 'crash'
-      && incident.severity === 'severe'
-      && random() < parameters.severeDnfChance;
+    // Ein schwerer Sturz beendet die Etappe — dieselbe Regel wie in der vollen
+    // Simulation, wo `severity === 'severe'` den Fahrer unmittelbar auf DNF
+    // setzt. Vorher entschied hier zusaetzlich ein Wurf gegen
+    // `severeDnfChance`: derselbe Sturz beendete in der vollen Simulation das
+    // Rennen und liess den Fahrer in der Quick Simulation zu drei Vierteln
+    // weiterfahren — verletzt, denn die Verletzung haengt in beiden Faellen
+    // allein an der Schwere.
+    const isAbandon = incident.type === 'crash' && incident.severity === 'severe';
     const timeLossSeconds = resolveIncidentTimeLossSeconds(incident, parameters, distanceKm);
 
     if (!existing) {

@@ -148,6 +148,8 @@ export interface RiderRow {
   free_r_form_bonus: number | null;
   peak_dates_json: string | null;
   health_status: RiderHealthStatus | null;
+  /** Bezeichnung der Verletzungsart; nur die Einzelabfrage liefert sie. */
+  health_detail_label?: string | null;
   unavailable_until: string | null;
   unavailable_days_remaining: number | null;
   season_points?: number | null;
@@ -1031,7 +1033,11 @@ export function mapRider(
     healthStatus: row.health_status ?? 'healthy',
     unavailableUntil: row.unavailable_until,
     unavailableDaysRemaining: row.unavailable_days_remaining ?? 0,
-    healthStatusLabel: row.health_status === 'ill' ? 'Krankheit' : row.health_status === 'injured' ? 'Verletzung' : null,
+    // Steht die Art fest, ist sie die Bezeichnung — "Schluesselbeinbruch" sagt
+    // mehr als "Verletzung". Ohne sie bleibt es beim allgemeinen Wort.
+    healthStatusLabel: row.health_status === 'ill'
+      ? 'Krankheit'
+      : row.health_status === 'injured' ? (row.health_detail_label ?? 'Verletzung') : null,
     isUnavailable: (row.unavailable_days_remaining ?? 0) > 0,
   };
 }
