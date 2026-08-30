@@ -668,8 +668,8 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
     </div>`;
 
   // --- Stat-Strip ---
-  const statCell = (label: string, value: string, color = '#f1f5f9', last = false): string =>
-    `<div style="padding:12px 16px;${last ? '' : ' border-right:1px solid #16233c;'}"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:#6a7a95;">${label}</div><div style="font-family:'JetBrains Mono',monospace; font-size:21px; font-weight:800; color:${color}; margin-top:3px;">${value}</div></div>`;
+  const statCell = (label: string, value: string, color = '#f1f5f9', last = false, klick?: { attr: string; titel: string }): string =>
+    `<div${klick ? ` ${klick.attr} role="button" tabindex="0" title="${esc(klick.titel)}"` : ''} style="padding:12px 16px;${last ? '' : ' border-right:1px solid #16233c;'}${klick ? ' cursor:pointer;' : ''}"><div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:#6a7a95;">${label}</div><div style="font-family:'JetBrains Mono',monospace; font-size:21px; font-weight:800; color:${color}; margin-top:3px;">${value}${klick ? '<span style="font-size:13px; margin-left:6px; opacity:.75;">&rsaquo;</span>' : ''}</div></div>`;
 
   return `
     <div style="border-radius:14px; overflow:hidden; border:1px solid #223354; background:linear-gradient(135deg,#101f36,#0c1526); margin-bottom:14px;">
@@ -697,7 +697,18 @@ export function renderRiderStatsSummary(rider: Rider | null, payload: RiderStats
         ${statCell('SAISON-RANG', currentSeasonRank != null ? `#${currentSeasonRank}` : '–')}
         ${statCell('SIEGE', String(seasonWins), '#fbbf24')}
         ${statCell('KARRIERESIEGE', String(careerWins), '#fbbf24')}
-        ${statCell('ALL-TIME-RANG', payload?.allTimePointsRank != null ? `#${payload.allTimePointsRank}` : '–', '#22d3ee')}
+        ${statCell(
+          'ALL-TIME-RANG',
+          payload?.allTimePointsRank != null ? `#${payload.allTimePointsRank}` : '–',
+          '#22d3ee',
+          false,
+          // Der Rang kommt aus getAllTimePointsAndRank: UCI-Punkte ueber alle
+          // Saisons und ueber alle Fahrer, zurueckgetretene eingeschlossen. Der
+          // Klick oeffnet genau diese Liste — die Rekord-Ansicht
+          // "UCI-Punkte (All-Time)" laedt sie mit all=1, also ohne
+          // Retired-Filter und ohne Top-100-Grenze.
+          { attr: 'data-open-alltime-points="1"', titel: 'Zur Rangliste: UCI-Punkte (All-Time), alle Fahrer inkl. zurueckgetretene' },
+        )}
         ${statCell('RENNTAGE', String(currentSeasonRaceDays))}
         ${statCell('AUSREISSER', String(currentSeasonBreakawayAttempts), '#f1f5f9', true)}
       </div>
@@ -2705,6 +2716,7 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
     season: number;
     teamId: number | null;
     teamName: string | null;
+    teamAbbreviation: string | null;
     roleName: string | null;
     status: 'active' | 'future' | 'expired';
   }> = [];
@@ -2723,6 +2735,7 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
         season: yr,
         teamId: c.teamId,
         teamName: c.teamName,
+        teamAbbreviation: (c as any).teamAbbreviation ?? null,
         roleName,
         status: yr === currentSeason ? 'active' : (yr > currentSeason ? 'future' : 'expired'),
       });
@@ -2744,28 +2757,58 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
     return '<span style="font-size:11px;font-weight:700;color:#93a3bd;border:1px solid #2b3a55;padding:3px 10px;border-radius:99px;">Ausgelaufen</span>';
   };
 
-  const GRID = 'display:grid;grid-template-columns:70px minmax(120px,1fr) 96px 104px 74px 56px 82px 52px;gap:10px;align-items:center;';
+  // Die Teamspalte traegt nur noch Trikot und Kuerzel — der volle Name stand
+  // in jeder Zeile und ass die Breite, die jetzt der Punktebalken bekommt.
+  const GRID = 'display:grid;grid-template-columns:64px 92px 92px 100px 68px 50px 64px minmax(90px,1fr) 48px;gap:10px;align-items:center;';
   const MONOF = "font-family:'JetBrains Mono',monospace";
 
   const retiredPill = '<span style="font-size:11px;font-weight:800;color:#fca5a5;background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.45);padding:3px 9px;border-radius:99px;">Retired</span>';
+
+  // Bezugsgroesse des Balkens: die beste Punktesaison dieses Fahrers. Ein
+  // fester Massstab ueber alle Fahrer wuerde bei den meisten nur Stummel
+  // zeigen; so liest sich die Zeile als "wie stark war dieses Jahr, gemessen
+  // an seinem eigenen besten".
+  const punkteMax = Math.max(
+    0,
+    ...yearlySteps
+      .filter((step) => step.status !== 'future')
+      .map((step) => seasonAgg.get(step.season)?.points
+        ?? (step.season === currentSeason ? (payload?.currentSeasonPoints ?? 0) : 0)),
+  );
+
+  const punkteBalken = (punkte: number, zukunft: boolean): string => {
+    if (zukunft || punkteMax <= 0) {
+      return '<span style="height:9px;border-radius:99px;background:#101c31;"></span>';
+    }
+    const anteil = Math.max(0, Math.min(1, punkte / punkteMax));
+    const breite = (anteil * 100).toFixed(1);
+    const bestesJahr = punkte > 0 && punkte === punkteMax;
+    return `<span title="${punkte} Pkt. · ${(anteil * 100).toFixed(0)} % seiner besten Saison (${punkteMax} Pkt.)" style="position:relative;display:block;height:9px;border-radius:99px;background:#101c31;border:1px solid #172a44;overflow:hidden;">`
+      + `<span style="position:absolute;inset:0 auto 0 0;width:${breite}%;border-radius:99px;background:linear-gradient(90deg,#0e7490,#22d3ee);box-shadow:0 0 10px rgba(34,211,238,${bestesJahr ? '.55' : '.28'});"></span>`
+      + '</span>';
+  };
+
   const rowsHtml = yearlySteps.map((step, index) => {
     const agg = seasonAgg.get(step.season);
     const raceDays = raceDaysBySeason.get(step.season) ?? (step.season === currentSeason ? (payload?.currentSeasonRaceDays ?? 0) : 0);
     const wins = step.status === 'future' ? '–' : String(agg?.wins ?? 0);
-    const points = step.status === 'future' ? '–' : String(agg?.points ?? (step.season === currentSeason ? (payload?.currentSeasonPoints ?? 0) : 0));
+    const punkteWert = agg?.points ?? (step.season === currentSeason ? (payload?.currentSeasonPoints ?? 0) : 0);
+    const points = step.status === 'future' ? '–' : String(punkteWert);
     const uci = step.season === currentSeason && payload?.currentSeasonRank != null ? `#${payload.currentSeasonRank}` : '–';
+    // Nur Trikot und Kuerzel; der volle Teamname steht im Titel.
     const teamCell = step.teamId
-      ? `<span style="display:inline-flex;align-items:center;gap:9px;min-width:0;">${renderMiniJersey(step.teamId, step.teamName)}<span style="font-size:12.5px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(step.teamName ?? '')}</span></span>`
-      : '<span style="font-size:12.5px;color:#94a3b8;font-style:italic;">Free Agent</span>';
+      ? `<span title="${esc(step.teamName ?? '')}" style="display:inline-flex;align-items:center;gap:7px;min-width:0;">${renderMiniJersey(step.teamId, step.teamName)}<span style="${MONOF};font-size:11.5px;font-weight:700;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(step.teamAbbreviation ?? step.teamName ?? '')}</span></span>`
+      : '<span style="font-size:12px;color:#94a3b8;font-style:italic;">Free Agent</span>';
     return `
       <div style="${GRID}padding:9px 14px;border-top:1px solid #14203a;">
         <span style="${MONOF};font-size:13px;font-weight:700;color:#e2e8f0;">${step.season}</span>
         ${teamCell}
-        <span style="font-size:12px;color:#9fb0c9;">${esc(step.roleName || '-')}</span>
+        <span style="font-size:12px;color:#9fb0c9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(step.roleName || '-')}</span>
         <span>${payload?.isRetired && index === 0 ? retiredPill : statusPill(step.status)}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${step.status === 'future' ? '–' : raceDays}</span>
         <span style="${MONOF};font-size:12px;color:#fbbf24;justify-self:end;">${wins}</span>
         <span style="${MONOF};font-size:12px;color:#e2e8f0;justify-self:end;">${points}</span>
+        ${punkteBalken(punkteWert, step.status === 'future')}
         <span style="${MONOF};font-size:12px;color:#22d3ee;justify-self:end;">${uci}</span>
       </div>`;
   }).join('');
@@ -2784,7 +2827,7 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
         <div style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;margin-bottom:13px;">VERTRÄGE &amp; SAISON-BILANZ</div>
         <div style="border-radius:12px;overflow:hidden;border:1px solid #16233c;">
           <div style="${GRID}padding:8px 14px;${MONOF};font-size:9px;letter-spacing:.05em;color:#5a6a85;background:#0a1122;border-bottom:1px solid #16233c;">
-            <span>SAISON</span><span>TEAM</span><span>ROLLE</span><span>STATUS</span><span style="justify-self:end;">RENNTAGE</span><span style="justify-self:end;">SIEGE</span><span style="justify-self:end;">PUNKTE</span><span style="justify-self:end;">UCI</span>
+            <span>SAISON</span><span>TEAM</span><span>ROLLE</span><span>STATUS</span><span style="justify-self:end;">RENNTAGE</span><span style="justify-self:end;">SIEGE</span><span style="justify-self:end;">PUNKTE</span><span>${punkteMax > 0 ? `100 % = ${punkteMax}` : ''}</span><span style="justify-self:end;">UCI</span>
           </div>
           ${rowsHtml}
         </div>

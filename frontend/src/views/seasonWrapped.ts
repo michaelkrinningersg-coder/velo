@@ -239,6 +239,28 @@ function siegeNachKategorie(gewonnen: WrappedCareerResult[]): SiegKategorie[] {
   return [...kategorien.values()].sort((a, b) => b.prestige - a.prestige);
 }
 
+// Oberste Ebene der Siegbilanz: Gesamtsiege, Eintagesrennen, Etappensiege,
+// Wertungen. Erst darunter wird nach Kategorie gruppiert.
+//
+// Vorher stand die Kategorie oben. Das beantwortete "wo hat er gewonnen", aber
+// nicht die Frage, die man bei einem Ruecktritt zuerst stellt: was fuer ein
+// Fahrer war das — Rundfahrer, Klassikerspezialist, Etappenjaeger?
+type SiegGruppe = 'GC' | 'Eintages' | 'Etappe' | 'Wertung';
+
+const SIEG_GRUPPEN: Array<{ key: SiegGruppe; label: string; farbe: string }> = [
+  { key: 'GC', label: 'Gesamtsiege', farbe: '#fbbf24' },
+  { key: 'Eintages', label: 'Eintagesrennen', farbe: '#fb923c' },
+  { key: 'Etappe', label: 'Etappensiege', farbe: '#e2e8f0' },
+  { key: 'Wertung', label: 'Wertungen', farbe: '#d8b4fe' },
+];
+
+function siegGruppe(r: WrappedCareerResult): SiegGruppe {
+  if (!istEchterSieg(r)) return 'Wertung';
+  if (r.type === 'GC') return 'GC';
+  if (r.type === 'Eintages') return 'Eintages';
+  return 'Etappe';
+}
+
 function winsBlock(results: WrappedCareerResult[]): string {
   const gewonnen = results.filter((r) => r.rank === 1);
   if (gewonnen.length === 0) return '';
@@ -246,37 +268,52 @@ function winsBlock(results: WrappedCareerResult[]): string {
   const anzahlSiege = zaehle(gewonnen.filter(istEchterSieg));
   const anzahlWertungen = zaehle(gewonnen.filter((r) => !istEchterSieg(r)));
 
+  // Innerhalb der drei Sieg-Gruppen steht die Art schon in der Ueberschrift; nur
+  // bei den Wertungen sagt der Chip noch etwas Neues (Punkte, Berg, Nachwuchs).
   const teilChip = (teil: WrappedCareerResult): string => {
     const farbe = typFarbe(teil);
-    const sieg = istEchterSieg(teil);
-    return `<span title="${esc(seasonsText(teil))}" style="display:inline-flex;align-items:center;gap:4px;${MONO};font-size:9.5px;font-weight:700;color:${farbe};border:1px solid ${farbe}44;background:${farbe}14;border-radius:5px;padding:2px 6px;${sieg ? '' : 'border-style:dashed;'}">
+    return `<span title="${esc(seasonsText(teil))}" style="display:inline-flex;align-items:center;gap:4px;${MONO};font-size:9.5px;font-weight:700;color:${farbe};border:1px solid ${farbe}44;background:${farbe}14;border-radius:5px;padding:2px 6px;border-style:dashed;">
       ${esc(teil.type)}${teil.count > 1 ? ` <span style="opacity:.75;">${teil.count}×</span>` : ''}
     </span>`;
   };
 
-  const kategorien = siegeNachKategorie(gewonnen).map((kategorie) => {
-    const stil = resolveRaceCategoryBadgeStyle(kategorie.name);
-    const zeilen = kategorie.rennen.map((rennen) => `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0;">
-      <span style="font-size:12.5px;font-weight:700;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${renderRaceNameLink(rennen.raceName, null)}</span>
-      <span style="${MONO};font-size:11px;font-weight:800;color:#fbbf24;">(${rennen.anzahl})</span>
-      <span style="display:inline-flex;gap:4px;flex-wrap:wrap;">${rennen.teile.map(teilChip).join('')}</span>
-      <span style="${MONO};font-size:9.5px;color:#5f6f8a;">${esc([...new Set(rennen.teile.flatMap((teil) => teil.seasons ?? [teil.season]))].sort((a, b) => a - b).join(', '))}</span>
-    </div>`).join('');
+  const gruppen = SIEG_GRUPPEN.map((gruppe) => {
+    const eintraege = gewonnen.filter((r) => siegGruppe(r) === gruppe.key);
+    if (eintraege.length === 0) return '';
+    const anzahl = zaehle(eintraege);
+    const zeigeChips = gruppe.key === 'Wertung';
+
+    const kategorien = siegeNachKategorie(eintraege).map((kategorie) => {
+      const stil = resolveRaceCategoryBadgeStyle(kategorie.name);
+      const zeilen = kategorie.rennen.map((rennen) => `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0;">
+        <span style="font-size:12.5px;font-weight:700;color:#e8eef7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${renderRaceNameLink(rennen.raceName, null)}</span>
+        <span style="${MONO};font-size:11px;font-weight:800;color:${gruppe.farbe};">(${rennen.anzahl})</span>
+        ${zeigeChips ? `<span style="display:inline-flex;gap:4px;flex-wrap:wrap;">${rennen.teile.map(teilChip).join('')}</span>` : ''}
+        <span style="${MONO};font-size:9.5px;color:#5f6f8a;">${esc([...new Set(rennen.teile.flatMap((teil) => teil.seasons ?? [teil.season]))].sort((a, b) => a - b).join(', '))}</span>
+      </div>`).join('');
+      return `<div style="min-width:0;">
+        <div style="display:inline-flex;align-items:center;${MONO};font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:${stil.color};background:${stil.background};border:1px solid ${stil.border};border-radius:6px;padding:2px 8px;margin-bottom:5px;">${esc(kategorieKurz(kategorie.name))}</div>
+        <div style="border-left:2px solid ${stil.border};padding-left:10px;">${zeilen}</div>
+      </div>`;
+    }).join('');
+
     return `<div style="min-width:0;">
-      <div style="display:inline-flex;align-items:center;${MONO};font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:${stil.color};background:${stil.background};border:1px solid ${stil.border};border-radius:6px;padding:2px 8px;margin-bottom:5px;">${esc(kategorieKurz(kategorie.name))}</div>
-      <div style="border-left:2px solid ${stil.border};padding-left:10px;">${zeilen}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid ${gruppe.farbe}33;">
+        <span style="${MONO};font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:${gruppe.farbe};">${esc(gruppe.label)}</span>
+        <span style="font-size:15px;font-weight:800;color:${gruppe.farbe};letter-spacing:-.02em;">${anzahl}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px;padding-left:2px;">${kategorien}</div>
     </div>`;
   }).join('');
 
   return `<div style="margin-top:11px;border:1px solid rgba(251,191,36,.28);border-radius:10px;background:rgba(251,191,36,.05);padding:11px 13px;">
-    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:10px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px;flex-wrap:wrap;">
       <span style="font-size:19px;font-weight:800;color:#fbbf24;letter-spacing:-.02em;">${anzahlSiege}</span>
       <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Siege</span>
       ${anzahlWertungen > 0 ? `<span style="font-size:19px;font-weight:800;color:#d8b4fe;letter-spacing:-.02em;margin-left:6px;">${anzahlWertungen}</span>
-      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Wertungen</span>
-      <span style="${MONO};font-size:9px;color:#5f6f8a;margin-left:auto;">durchgezogen = Sieg · gestrichelt = Wertung</span>` : ''}
+      <span style="${MONO};font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8b9ab4;">Wertungen</span>` : ''}
     </div>
-    <div style="display:flex;flex-direction:column;gap:11px;">${kategorien}</div>
+    <div style="display:flex;flex-direction:column;gap:14px;">${gruppen}</div>
   </div>`;
 }
 

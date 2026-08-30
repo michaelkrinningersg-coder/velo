@@ -197,6 +197,20 @@ function initAppListeners(): void {
     openBadgeInLeaderboards(badgeKey);
   });
 
+  // Klick auf den All-Time-Rang im riderStats-Kopf -> Rekord-Ansicht
+  // "UCI-Punkte (All-Time)". Sie laedt mit all=1, zeigt also alle Fahrer
+  // einschliesslich der zurueckgetretenen und ohne Top-100-Grenze — genau die
+  // Liste, aus der der angezeigte Rang stammt.
+  document.body.addEventListener('click', (event) => {
+    const zelle = (event.target as Element).closest<HTMLElement>('[data-open-alltime-points]');
+    if (!zelle) {
+      return;
+    }
+    hideModal('riderStats');
+    activateView('leaderboards');
+    openBadgeInLeaderboards('recUciPoints');
+  });
+
   // Klick auf den Rivalen-Chip im riderStats-Header -> Rivalen-View mit der
   // Rivalitaetskarte des Paares.
   document.body.addEventListener('click', (event) => {
