@@ -21,22 +21,38 @@ export class BadgeMaterializationService {
    * einer einzigen Transaktion.
    */
   public rebuildAllRiderBadges(): void {
-    // Tabelle muss existieren (wird via ensureAllSchemas beim Load angelegt).
-    const tableExists = this.db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rider_badges'")
-      .get();
-    if (!tableExists) return;
+    this.rebuild(null);
+  }
+
+  private hatTabelle(): boolean {
+    return this.hatTabelleNamens('rider_badges');
+  }
+
+  private hatTabelleNamens(name: string): boolean {
+    return this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+      .get(name) != null;
+  }
+
+  /** `riderIds === null` heisst: alle Fahrer. */
+  private rebuild(riderIds: number[] | null): void {
+    if (!this.hatTabelle()) return;
 
     const repo = new RiderRepository(this.db);
-    const riderIds = repo.getAllRiderIds();
+    const zuBauen = riderIds ?? repo.getAllRiderIds();
+    if (zuBauen.length === 0) return;
 
     const insert = this.db.prepare(
       'INSERT INTO rider_badges (rider_id, badge_key, tier) VALUES (?, ?, ?)',
     );
+    const loescheEinen = this.db.prepare('DELETE FROM rider_badges WHERE rider_id = ?');
 
     const rebuild = this.db.transaction(() => {
-      this.db.prepare('DELETE FROM rider_badges').run();
-      for (const riderId of riderIds) {
+      if (riderIds === null) {
+        this.db.prepare('DELETE FROM rider_badges').run();
+      }
+      for (const riderId of zuBauen) {
+        if (riderIds !== null) loescheEinen.run(riderId);
         const inputs = repo.getBadgeInputsForRider(riderId);
         const badges = computeRiderBadgeTiers(inputs);
         for (const badge of badges) {

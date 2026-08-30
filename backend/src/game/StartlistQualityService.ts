@@ -15,6 +15,19 @@ import { tableExists } from '../db/mappers';
  * dort ist das Feld nach Nationen zerlegt, der Anteil am staerkstmoeglichen
  * Feld waere systematisch niedrig und mit anderen Rennen nicht vergleichbar.
  */
+/**
+ * Karrierepunkte je Stichtag, ueber Aufrufe hinweg.
+ *
+ * Der Dienst wird bei jedem Etappen-Commit neu gebaut, ein Feld auf der Instanz
+ * traegt also nichts. Die Summe ueber alle Punkteereignisse kostete auf einem
+ * Spielstand von 2033 gut 28 ms und lief in zwei gemessenen Monaten 78-mal —
+ * einmal je Rennstart, obwohl alle Rennen desselben Tages denselben Wert
+ * brauchen. Der Puffer haelt genau einen Stichtag: Ereignisse werden nur mit
+ * dem laufenden Datum angehaengt, ein einmal berechneter Stichtag aendert sich
+ * also nicht mehr, und ein Datumswechsel verdraengt den alten Eintrag.
+ */
+const punktePuffer = new WeakMap<Database.Database, { stichtag: string; werte: Map<number, number> }>();
+
 export class StartlistQualityService {
   private readonly db: Database.Database;
 
@@ -160,6 +173,10 @@ export class StartlistQualityService {
    * Karrierewertung, die seine Staerke im Renngeschehen nicht widerspiegelt.
    */
   private karrierepunkteVor(stichtag: string): Map<number, number> {
+    const gepuffert = punktePuffer.get(this.db);
+    if (gepuffert && gepuffert.stichtag === stichtag) {
+      return gepuffert.werte;
+    }
     const meisterschaften = CHAMPIONSHIP_CATEGORY_IDS.join(',');
     const zeilen = this.db.prepare(`
       SELECT rider_id AS riderId, SUM(points_awarded) AS punkte
@@ -168,6 +185,8 @@ export class StartlistQualityService {
         AND race_id NOT IN (SELECT id FROM races WHERE category_id IN (${meisterschaften}))
       GROUP BY rider_id
     `).all(stichtag) as Array<{ riderId: number; punkte: number }>;
-    return new Map(zeilen.map((z) => [z.riderId, z.punkte]));
+    const werte = new Map(zeilen.map((z) => [z.riderId, z.punkte]));
+    punktePuffer.set(this.db, { stichtag, werte });
+    return werte;
   }
 }

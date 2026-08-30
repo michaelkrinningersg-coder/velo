@@ -7,6 +7,8 @@ import type {
   Race,
   RaceProgramParticipant,
   GameState,
+  ReloadBundle,
+  AdvanceDayResponse,
   GameStatus,
   StageResultCommitResponse,
   RaceRosterEditorPayload,
@@ -97,7 +99,7 @@ export const api = {
    * Fahrer, Spielstand, Status und Rennen in einem Aufruf. Ersetzt nach dem
    * Tageswechsel und nach einem gespeicherten Ergebnis vier einzelne Anfragen.
    */
-  getReloadBundle:     (light = false) => call<{ gameState: GameState; gameStatus: GameStatus; races: Race[]; riders?: Rider[] }>(
+  getReloadBundle:     (light = false) => call<ReloadBundle>(
     'GET', `/api/reload-bundle${light ? '?light=true' : ''}`),
   getGameState:        () => call<GameState>('GET', '/api/state'),
   getGameStatus:       () => call<GameStatus>('GET', '/api/game/status'),
@@ -107,8 +109,14 @@ export const api = {
   getRealtimeSimulation: (stageId: number) => call<RealtimeSimulationBootstrap>('GET', `/api/simulation/realtime/${stageId}`),
   getRosterEditor:     (stageId: number) => call<RaceRosterEditorPayload>('GET', `/api/simulation/roster/${stageId}`),
   applyRosterEditor:   (stageId: number, payload: RaceRosterSelectionRequest) => call<RealtimeSimulationBootstrap>('POST', `/api/simulation/roster/${stageId}/apply`, payload),
-  completeRealtimeSimulation: (stageId: number, payload: RealtimeStageCommitRequest) => call<StageResultCommitResponse>('POST', `/api/simulation/realtime/${stageId}/complete`, payload),
-  advanceDay:          () => call<GameState>('POST', '/api/state/advance'),
+  /**
+   * `reload` haengt das Reload-Buendel an die Antwort — die Oberflaeche spart
+   * sich damit den unmittelbar folgenden Aufruf von `/reload-bundle`.
+   */
+  completeRealtimeSimulation: (stageId: number, payload: RealtimeStageCommitRequest, reload?: 'light' | 'full') =>
+    call<StageResultCommitResponse>('POST', `/api/simulation/realtime/${stageId}/complete${reload ? `?reload=${reload}` : ''}`, payload),
+  advanceDay:          (reload?: 'light' | 'full') =>
+    call<AdvanceDayResponse>('POST', `/api/state/advance${reload ? `?reload=${reload}` : ''}`),
   getStageResults:     (stageId: number) => call<StageResultsPayload>('GET', `/api/results/${stageId}`),
   getSeasonStandings:  (season?: number) => call<SeasonStandingsPayload>('GET', `/api/season-standings${season ? `?season=${season}` : ''}`),
   getBadgeLeaderboard: (metricKey: string) => call<any[]>('GET', `/api/leaderboards?scope=riders&metricKey=${encodeURIComponent(metricKey)}&period=alltime&all=1`),

@@ -288,9 +288,19 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
     }
   }
 
+  // `results_flat` statt der Sicht `all_results`.
+  //
+  // `all_results` ist eine sechsfache UNION mit zwei json_each-Zweigen ueber
+  // race_results_compact. Der Abfrageplan baut sie als Ko-Routine vollstaendig
+  // auf — die gesamte Archivhistorie wird ausgepackt — und filtert erst danach
+  // nach dem Datum. Auf einem Spielstand von 2033 kostete diese eine Abfrage
+  // 406 ms und lief bei jedem Rennstart. `results_flat` traegt dieselben
+  // Ergebnisse flach und indiziert (idx_results_flat_stage_type); dieselbe
+  // Abfrage kostet dort 0 ms. Ueber alle 216 Renntage der Saison 2033 und drei
+  // Rennen lieferten beide Fassungen dieselben Fahrer.
   const sameDayRows = db.prepare(`
     SELECT DISTINCT results.rider_id AS rider_id
-    FROM all_results results
+    FROM results_flat results
     JOIN stages ON stages.id = results.stage_id
     WHERE results.result_type_id = 1
       AND results.rider_id IS NOT NULL
@@ -304,9 +314,14 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
     }
   }
 
+  // Dieselbe Umstellung, und dazu `active_race_entries` statt der Sicht
+  // `race_entries`: die kompakten Startlisten gehoeren zu abgeschlossenen
+  // Rennen, und ein abgeschlossenes Rennen hat per Definition keine Etappe
+  // mehr offen — es kann diese Abfrage also gar nicht beantworten. Zusammen
+  // 69 ms -> 0 ms.
   const activeStageRaceRows = db.prepare(`
     SELECT DISTINCT re.rider_id AS rider_id
-    FROM race_entries re
+    FROM active_race_entries re
     JOIN races race_entries_race ON race_entries_race.id = re.race_id
     WHERE race_entries_race.is_stage_race = 1
       AND re.race_id != ?
@@ -317,7 +332,7 @@ function buildRiderLockMap(db: Database.Database, repo: any, race: Race, riders:
           AND remaining_stage.date >= ?
           AND NOT EXISTS (
             SELECT 1
-            FROM all_results remaining_result
+            FROM results_flat remaining_result
             WHERE remaining_result.stage_id = remaining_stage.id
               AND remaining_result.result_type_id = 1
           )
@@ -1408,6 +1423,38 @@ export function buildChampionshipRoster(db: Database.Database, repo: any, race: 
   return selected;
 }
 
+/**
+ * Die Fahrerliste eines Spieltags, einmal geladen.
+ *
+ * Die Landesmeisterschaften liegen alle am selben Wochenende — im gemessenen
+ * Zeitraum 78 Rennen — und jedes davon liess sich bisher das komplette Feld
+ * geben, um daraus sein eigenes Land herauszufiltern. Das war mit 32,7 ms je
+ * Aufruf die Haelfte der gesamten verbleibenden SQL-Zeit.
+ *
+ * Zwischengespeichert wird nur, was sich innerhalb eines Spieltags nicht
+ * aendert: Land, Team, Faehigkeiten. Die Tagesform und der Gesundheitszustand
+ * werden in `buildNationalChampionshipRoster` ohnehin separat und frisch
+ * gelesen — ein Fahrer, den das Rennen am Vormittag verletzt hat, faellt also
+ * auch am Nachmittag korrekt heraus.
+ *
+ * `lean` laesst die 19 Potenzialspalten und die Jahresbasiswerte weg; ein Kader
+ * braucht sie nicht, und der Weg ueber `buildLegacyRaceRoster` macht es ebenso.
+ */
+const fahrerPufferJeTag = new WeakMap<Database.Database, { tag: string; fahrer: Rider[] }>();
+
+function fahrerDesTages(db: Database.Database, repo: any): Rider[] {
+  const tag = String(repo.getCurrentDate?.() ?? '');
+  const gepuffert = fahrerPufferJeTag.get(db);
+  if (tag && gepuffert && gepuffert.tag === tag) {
+    return gepuffert.fahrer;
+  }
+  const fahrer = repo.getRiders(undefined, false, { onlyWithTeam: false, lean: true }) as Rider[];
+  if (tag) {
+    fahrerPufferJeTag.set(db, { tag, fahrer });
+  }
+  return fahrer;
+}
+
 // Nominierung nationaler Meisterschaften: es starten ALLE verfuegbaren Fahrer
 // des ausrichtenden Landes (race.countryId) MIT Team. Ausschluss ausschliesslich
 // bei Verletzung/Krankheit oder kombinierter Ermuedung > 12. Keine Begrenzung
@@ -1429,7 +1476,7 @@ export function buildNationalChampionshipRoster(db: Database.Database, repo: any
   const stateByRider = new Map(stateRows.map((row) => [row.rider_id, row]));
 
   // Alle Fahrer des Landes (mit ODER ohne Team).
-  const countryRiders = (repo.getRiders() as Rider[]).filter(
+  const countryRiders = fahrerDesTages(db, repo).filter(
     (rider) => rider.countryId === countryId,
   );
 

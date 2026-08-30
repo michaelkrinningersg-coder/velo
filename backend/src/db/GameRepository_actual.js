@@ -1083,11 +1083,36 @@ class GameRepository {
     // ausschliesslich ueber groupRidersByTeam() und getTeams() —, laedt und
     // bildet sie aber trotzdem ab. Im gemessenen Spielstand sind das 2164 von
     // 3164 Fahrern.
-    getRidersQuery(useContracts, filterByTeam, isCurrentSeason = true, onlyWithTeam = false) {
+    /**
+     * Spalten von `riders`, die der schlanke Modus nicht braucht.
+     *
+     * `riders.*` liefert 61 Spalten, die Aliase der Joins weitere 25 —
+     * better-sqlite3 baut daraus je Fahrer ein Objekt mit ueber achtzig
+     * Feldern, gut 3000-mal. Im schlanken Modus baut die Abbildung weder
+     * `potentials` noch `yearStartSkills`, die zugehoerigen Spalten werden also
+     * gar nicht gelesen. `pot_overall` bleibt drin: daraus kommt `potential`.
+     *
+     * Gemessen auf einem Spielstand von 2033: 14,5 ms fuer alle Spalten gegen
+     * 8,2 ms fuer die schlanke Liste, bei jeder Startaufstellung.
+     */
+    leanRiderColumns() {
+        if (!this.leanColumnCache) {
+            const info = this.db.prepare('PRAGMA table_info(riders)').all();
+            this.leanColumnCache = info
+                .map((column) => column.name)
+                .filter((name) => name === 'pot_overall'
+                    || (!name.startsWith('pot_') && name !== 'yearly_baseline_skills'))
+                .map((name) => `riders."${name}"`)
+                .join(', ');
+        }
+        return this.leanColumnCache;
+    }
+
+    getRidersQuery(useContracts, filterByTeam, isCurrentSeason = true, onlyWithTeam = false, lean = false) {
         const useDailyState = tableExists(this.db, 'rider_daily_state');
         const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
         const countrySelect = `
-      riders.*,
+      ${lean ? this.leanRiderColumns() : 'riders.*'},
       role.name AS role_name,
       role.weighting AS role_weighting,
       rider_type.type_key AS rider_type,
@@ -1202,15 +1227,15 @@ class GameRepository {
         let rows;
         if (teamId != null) {
             if (useContracts) {
-                rows = this.db.prepare(this.getRidersQuery(true, true, true, onlyWithTeam)).all(teamId);
+                rows = this.db.prepare(this.getRidersQuery(true, true, true, onlyWithTeam, lean)).all(teamId);
             } else {
-                rows = this.db.prepare(this.getRidersQuery(false, true, true, onlyWithTeam)).all(teamId);
+                rows = this.db.prepare(this.getRidersQuery(false, true, true, onlyWithTeam, lean)).all(teamId);
             }
         } else {
             if (useContracts) {
-                rows = this.db.prepare(this.getRidersQuery(true, false, true, onlyWithTeam)).all();
+                rows = this.db.prepare(this.getRidersQuery(true, false, true, onlyWithTeam, lean)).all();
             } else {
-                rows = this.db.prepare(this.getRidersQuery(false, false, true, onlyWithTeam)).all();
+                rows = this.db.prepare(this.getRidersQuery(false, false, true, onlyWithTeam, lean)).all();
             }
         }
         const seasonPointsByRiderId = !isCurrentSeason ? this.getSeasonPointsByRiderId(season) : new Map();

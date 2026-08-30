@@ -40,7 +40,7 @@ import { SimulationSnapshot } from '../race-sim/SimulationEngine';
 import { RaceSimView } from '../race-sim/RaceSimView';
 
 // Dynamically or directly imported view updates
-import { loadGameState, loadRaces, reloadCoreState } from './dashboard';
+import { applyReloadBundle, loadGameState, loadRaces, reloadCoreState } from './dashboard';
 import { loadStageResults } from './results';
 import { refreshTeamsViewData } from './teams';
 import { buildRealtimeCommitEntries } from '../race-sim/commitEntries';
@@ -470,7 +470,7 @@ export async function completeRealtimeStage(
       events,
       leadoutContributions,
       superTeamId,
-    });
+    }, lightReload ? 'light' : 'full');
     if (!res.success) {
       alert('Live-Ergebnis konnte nicht gespeichert werden:\n' + (res.error ?? 'Unbekannter Fehler'));
       return;
@@ -482,10 +482,17 @@ export async function completeRealtimeStage(
     state.selectedResultTypeId = 1;
     state.realtimeBootstrap = null;
     state.realtimeError = null;
-    await Promise.all([
-      loadStageResults(stageId, false),
-      reloadCoreState(lightReload),
-    ]);
+    // Im Auto-Weiter (lightReload) faellt der Ergebnisabruf weg: die
+    // Ergebnisliste sieht dort niemand an, und sie wird nachgeladen, sobald der
+    // Lauf anhaelt. Das Reload-Buendel haengt inzwischen an der Commit-Antwort.
+    const nachladen: Array<Promise<unknown>> = [];
+    if (!lightReload) nachladen.push(loadStageResults(stageId, false));
+    if (res.data?.reload) {
+      applyReloadBundle(res.data.reload);
+    } else {
+      nachladen.push(reloadCoreState(lightReload));
+    }
+    if (nachladen.length > 0) await Promise.all(nachladen);
     if (isActiveView('teams') || isActiveView('riders')) {
       await refreshTeamsViewData();
     }

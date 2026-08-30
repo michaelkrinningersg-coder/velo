@@ -30,6 +30,7 @@ import {
 } from '../state';
 import type {
   Race,
+  ReloadBundle,
   Stage,
   PendingStage,
   RaceProgramParticipant,
@@ -208,24 +209,34 @@ export async function loadRaces(): Promise<void> {
  * Faellt der gebuendelte Aufruf aus (aelteres Backend), greifen die drei
  * einzelnen Funktionen weiterhin.
  */
+/**
+ * Uebernimmt ein bereits vorliegendes Buendel, ohne es erneut abzufragen.
+ *
+ * Tageswechsel und Etappen-Commit liefern es inzwischen mit — im Auto-Weiter
+ * spart das je Schritt eine Anfrage samt Umlauf.
+ */
+export function applyReloadBundle(bundle: ReloadBundle): void {
+  // Im schlanken Modus fehlt die Fahrerliste; der vorhandene Stand bleibt
+  // stehen, bis der Auto-Weiter anhaelt und einmal voll nachlaedt.
+  if (bundle.riders) {
+    state.riders = bundle.riders;
+  }
+  state.gameState = bundle.gameState ?? null;
+  state.gameStatus = bundle.gameStatus ?? null;
+  state.races = bundle.races ?? [];
+  renderGameState();
+  if (isActiveView('dashboard')) {
+    renderDashboard();
+  }
+}
+
 export async function reloadCoreState(light = false): Promise<void> {
   const res = await api.getReloadBundle(light);
   if (!res.success || !res.data) {
     await Promise.all([loadRiders(), loadGameState(), loadRaces()]);
     return;
   }
-  // Im schlanken Modus fehlt die Fahrerliste; der vorhandene Stand bleibt
-  // stehen, bis der Auto-Weiter anhaelt und einmal voll nachlaedt.
-  if (res.data.riders) {
-    state.riders = res.data.riders;
-  }
-  state.gameState = res.data.gameState ?? null;
-  state.gameStatus = res.data.gameStatus ?? null;
-  state.races = res.data.races ?? [];
-  renderGameState();
-  if (isActiveView('dashboard')) {
-    renderDashboard();
-  }
+  applyReloadBundle(res.data);
 }
 
 export async function loadRiders(): Promise<void> {
@@ -770,13 +781,17 @@ export async function executeDayAdvance(light = false): Promise<boolean> {
   showLoading('Tag wird fortgeschrieben...');
   const oldSeason = state.gameState?.season;
   try {
-    const res = await api.advanceDay();
+    const res = await api.advanceDay(light ? 'light' : 'full');
     if (!res.success) {
       alert('Tageswechsel fehlgeschlagen:\n' + (res.error ?? 'Unbekannter Fehler'));
       return false;
     }
     if (state.currentSave && res.data) state.currentSave.currentSeason = res.data.season;
-    await reloadCoreState(light);
+    if (res.data?.reload) {
+      applyReloadBundle(res.data.reload);
+    } else {
+      await reloadCoreState(light);
+    }
     if (isActiveView('teams')) {
       const { refreshTeamsViewData } = await import('./teams');
       await refreshTeamsViewData();
@@ -838,8 +853,14 @@ export function stopAutoProgress(): void {
   state.autoProgressTargetDate = null;
   updateAutoProgressUI();
   // Waehrend des Laufs wurde die Fahrerliste nicht mitgeladen — jetzt einmal
-  // nachziehen, damit Saisonpunkte und -siege wieder stimmen.
+  // nachziehen, damit Saisonpunkte und -siege wieder stimmen. Ebenso das
+  // Ergebnis der zuletzt gefahrenen Etappe: waehrend des Laufs wird es
+  // uebersprungen, weil es niemand ansieht.
   void reloadCoreState();
+  const letzteEtappe = state.selectedResultsStageId;
+  if (letzteEtappe != null) {
+    void import('./results').then((m) => m.loadStageResults(letzteEtappe, false));
+  }
 }
 
 /** Pause zwischen zwei Schritten des Auto-Weiter. */

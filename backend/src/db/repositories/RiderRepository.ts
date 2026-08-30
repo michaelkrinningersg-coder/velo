@@ -49,6 +49,32 @@ export class RiderRepository {
 
   private leanColumnCache: string | null = null;
 
+  /**
+   * Merkzettel fuer feldweite Abfragen innerhalb EINER Instanz.
+   *
+   * Die Badge-Eingaben werden am Saisonwechsel fuer jeden der gut 3000 Fahrer
+   * geholt, und mehrere der Abfragen darin haengen gar nicht am Fahrer: die
+   * Siegrangliste des ganzen Feldes, die Rennliste nach Jahren, die besten
+   * Anfahrten, die Zahl aller Ergebnisse. Auf einem Spielstand von 2033 waren
+   * das 9,47 ms je Fahrer, davon 4,38 ms allein fuer die Rangliste — mal 3210
+   * Fahrer der groesste Posten des Jahreswechsels.
+   *
+   * Eine Repository-Instanz lebt so lange wie ein Aufruf (eine Route, ein
+   * Badge-Aufbau). Innerhalb dieser Spanne aendern sich die gemerkten Werte
+   * nicht: der Aufbau schreibt nur `rider_badges`, und das liest keine dieser
+   * Abfragen.
+   */
+  private readonly feldMerker = new Map<string, unknown>();
+
+  private merke<T>(schluessel: string, bauen: () => T): T {
+    if (this.feldMerker.has(schluessel)) {
+      return this.feldMerker.get(schluessel) as T;
+    }
+    const wert = bauen();
+    this.feldMerker.set(schluessel, wert);
+    return wert;
+  }
+
   private getRidersQuery(useContracts: boolean, filterByTeam: boolean, onlyWithTeam = false, isCurrentSeason = true, lean = false): string {
     const useDailyState = tableExists(this.db, 'rider_daily_state');
     const useFreeRaceForm = tableExists(this.db, 'rider_r_form_events');
@@ -1530,21 +1556,24 @@ export class RiderRepository {
       return { rank: null, rankedRiders: 0 };
     }
 
-    const row = this.db.prepare(`
-      SELECT
-        COALESCE(SUM(CASE WHEN wins > ? THEN 1 ELSE 0 END), 0) AS better,
-        COUNT(*) AS ranked
-      FROM (
-        SELECT SUM(gc_wins + stage_wins + one_day_wins) AS wins
-        FROM rider_career_category_stats
-        GROUP BY rider_id
-        HAVING wins > 0
-      )
-    `).get(careerWins) as { better: number; ranked: number };
+    // Die Siegzahlen des ganzen Feldes, absteigend — einmal je Instanz. Der
+    // Rang ergibt sich daraus per Suche, statt die Aggregation fuer jeden
+    // Fahrer erneut ueber die Tabelle laufen zu lassen.
+    const siege = this.merke('alleSiege', () => (this.db.prepare(`
+      SELECT SUM(gc_wins + stage_wins + one_day_wins) AS wins
+      FROM rider_career_category_stats
+      GROUP BY rider_id
+      HAVING wins > 0
+    `).all() as Array<{ wins: number }>)
+      .map((zeile) => zeile.wins)
+      .sort((a, b) => b - a));
+
+    let besser = 0;
+    while (besser < siege.length && siege[besser]! > careerWins) besser += 1;
 
     return {
-      rank: careerWins > 0 ? row.better + 1 : null,
-      rankedRiders: row.ranked,
+      rank: careerWins > 0 ? besser + 1 : null,
+      rankedRiders: siege.length,
     };
   }
 
@@ -1578,7 +1607,7 @@ export class RiderRepository {
    */
   private getDataVersion(): string | null {
     try {
-      const a = (this.db.prepare(`SELECT COUNT(*) AS c FROM results_flat`).get() as { c: number } | undefined)?.c ?? 0;
+      const a = this.merke('anzahlErgebnisse', () => (this.db.prepare(`SELECT COUNT(*) AS c FROM results_flat`).get() as { c: number } | undefined)?.c ?? 0);
       const b = (this.db.prepare(`SELECT value FROM career_meta WHERE key = 'current_season'`).get() as { value: string } | undefined)?.value ?? '';
       return `${a}:${b}`;
     } catch {
@@ -1664,9 +1693,9 @@ export class RiderRepository {
     if (!tableExists(this.db, 'stage_leadouts')) return null;
     let rows: Array<{ team_id: number; sprinter_id: number; contributors_json: string }>;
     try {
-      rows = this.db.prepare(
+      rows = this.merke('besteAnfahrten', () => this.db.prepare(
         'SELECT team_id, sprinter_id, contributors_json FROM stage_leadouts ORDER BY leadout_bonus DESC LIMIT 300'
-      ).all() as Array<{ team_id: number; sprinter_id: number; contributors_json: string }>;
+      ).all() as Array<{ team_id: number; sprinter_id: number; contributors_json: string }>);
     } catch {
       return null;
     }
@@ -1802,7 +1831,8 @@ export class RiderRepository {
       const mySet = new Set<string>();
       for (const c of mine) for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) mySet.add(`${c.team_id}:${y}`);
       if (mySet.size > 0) {
-        const others = this.db.prepare(`SELECT rider_id, team_id, start_season, end_season FROM contracts WHERE rider_id != ?`).all(riderId) as Array<{ rider_id: number; team_id: number; start_season: number; end_season: number }>;
+        const alleVertraege = this.merke('alleVertraege', () => this.db.prepare(`SELECT rider_id, team_id, start_season, end_season FROM contracts`).all() as Array<{ rider_id: number; team_id: number; start_season: number; end_season: number }>);
+        const others = alleVertraege.filter((c) => c.rider_id !== riderId);
         const cnt = new Map<number, number>();
         for (const c of others) {
           let n = 0;
@@ -1855,7 +1885,7 @@ export class RiderRepository {
       const won = new Set<number>();
       for (const r of this.db.prepare(`SELECT DISTINCT s.race_id AS rid FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
         WHERE rf.rider_id=? AND rf.rank=1 AND ((rf.result_type_id=1 AND ra.is_stage_race=0) OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`).all(riderId) as Array<{ rid: number }>) won.add(r.rid);
-      const races = this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>;
+      const races = this.merke('rennenNachJahr', () => this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>);
       const bySeason = new Map<number, number[]>();
       for (const r of races) { const a = bySeason.get(r.yr) ?? []; a.push(r.id); bySeason.set(r.yr, a); }
       for (const arr of bySeason.values()) if (arr.length && won.has(arr[arr.length - 1])) out.grandFinaleWins += 1;
@@ -1937,7 +1967,7 @@ export class RiderRepository {
     } catch { /* */ }
     // Saisons: Sieg im ersten Rennen bzw. 3+ Siege in den ersten 5 Rennen.
     try {
-      const races = this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>;
+      const races = this.merke('rennenNachJahr', () => this.db.prepare(`SELECT id, CAST(substr(start_date,1,4) AS INTEGER) AS yr FROM races ORDER BY yr, start_date, id`).all() as Array<{ id: number; yr: number }>);
       const bySeason = new Map<number, number[]>();
       for (const r of races) { const a = bySeason.get(r.yr) ?? []; a.push(r.id); bySeason.set(r.yr, a); }
       for (const arr of bySeason.values()) {

@@ -829,15 +829,41 @@ export function tableExists(db: Database.Database, tableName: string): boolean {
 /** Vergisst, was ueber die Tabellen einer Verbindung bekannt war. */
 export function forgetTableExistence(db: Database.Database): void {
   knownTablesByDb.delete(db);
+  knownColumnsByDb.delete(db);
 }
 
+/**
+ * Vorhandene Spalten je Verbindung.
+ *
+ * Nach demselben Muster wie `knownTablesByDb`, und aus demselben Grund: in zwei
+ * gemessenen Spielmonaten liefen `PRAGMA table_info(rider_stage_race_state)`
+ * 1890-mal und `PRAGMA table_info(rider_career_stats)` 1187-mal, jedes Mal mit
+ * vollstaendigem Aufbau der Spaltenliste. Gemerkt wird auch hier nur ein "ja" —
+ * Spalten werden zur Laufzeit per ALTER TABLE nachgezogen, ein "nein" muss
+ * deshalb jedes Mal neu geprueft werden.
+ */
+const knownColumnsByDb = new WeakMap<Database.Database, Set<string>>();
+
 export function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
+  const schluessel = `${tableName}.${columnName}`;
+  const bekannt = knownColumnsByDb.get(db);
+  if (bekannt?.has(schluessel)) {
+    return true;
+  }
   if (!tableExists(db, tableName)) {
     return false;
   }
 
   const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return columns.some((column) => column.name === columnName);
+  if (!columns.some((column) => column.name === columnName)) {
+    return false;
+  }
+  if (bekannt) {
+    bekannt.add(schluessel);
+  } else {
+    knownColumnsByDb.set(db, new Set([schluessel]));
+  }
+  return true;
 }
 
 /**

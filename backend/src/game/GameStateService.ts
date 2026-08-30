@@ -518,8 +518,16 @@ export class GameStateService {
 
         // Hall-of-Fame-Badges einmal jaehrlich beim Saisonwechsel neu
         // materialisieren (die Karrierestatistiken der abgeschlossenen Saison
-        // sind hier final). Bewusst nur hier statt bei jedem Load — der volle
-        // Rebuild ist teuer (~26 Queries je Fahrer).
+        // sind hier final). Bewusst nur hier statt bei jedem Load — je Fahrer
+        // kostet das rund 26 Abfragen.
+        //
+        // Der Aufbau laeuft ueber ALLE Fahrer, auch die, die in der Saison gar
+        // nicht gefahren sind. Das ist kein Versehen: `oneClubMan` zaehlt
+        // Jahre im selben Team und waechst auch ohne Renntag, und die
+        // ranglistenbasierten Stufen verschieben sich, sobald sich andere
+        // Fahrer bewegen. Ein Versuch, auf die Gefahrenen einzugrenzen, ergab
+        // an einem Spielstand von 2033 abweichende Stufen bei `oneClubMan`,
+        // `bandOfBrothers`, `recStageScores` und `superDomestique`.
         new BadgeMaterializationService(this.db).rebuildAllRiderBadges();
         // Liga-Rivalitaeten der abgeschlossenen Saison neu materialisieren.
         new RivalryService(this.db).rebuildRivalries();

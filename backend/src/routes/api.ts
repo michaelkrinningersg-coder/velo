@@ -47,6 +47,8 @@ import {
   SeasonStandingsPayload,
   DraftHistoryPayload,
   InjuryRow,
+  ReloadBundle,
+  AdvanceDayResponse,
   StageEditorDraft,
   StageEditorExistingStageListResponse,
   StageEditorExistingStageLoadResponse,
@@ -540,6 +542,24 @@ export function createRouter(dbService: DatabaseService): Router {
    * eigenem `ensureState()` und eigener Netzwerkrunde. Zusammen kosteten sie
    * mehr als die Aktion, die sie begleiten.
    */
+  /**
+   * Der Zustand, den die Oberflaeche nach jedem Schritt braucht.
+   *
+   * Steht sowohl hinter `/reload-bundle` als auch an den Antworten von
+   * Tageswechsel und Etappen-Commit — dort spart es je Schritt eine Anfrage.
+   */
+  function buildReloadBundle(light: boolean): ReloadBundle {
+    const db = dbService.getActiveConnection();
+    const gss = getGss();
+    gss.ensureState();
+    return {
+      gameState: gss.loadState(),
+      gameStatus: gss.loadStatus(),
+      races: new GameRepository(db).getRaces(),
+      ...(light ? {} : { riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false) }),
+    };
+  }
+
   router.get('/reload-bundle', (req: Request, res: Response) => {
     try {
       const db = dbService.getActiveConnection();
@@ -550,12 +570,7 @@ export function createRouter(dbService: DatabaseService): Router {
       // dort laeuft der Aufruf nach jedem Schritt, die Fahrerwerte aendern
       // sich aber nur langsam und die Ansicht zeigt sie waehrenddessen nicht.
       const light = req.query['light'] === 'true';
-      ok(res, {
-        gameState: gss.loadState(),
-        gameStatus: gss.loadStatus(),
-        races: new GameRepository(db).getRaces(),
-        ...(light ? {} : { riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false) }),
-      });
+      ok(res, buildReloadBundle(light));
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -728,7 +743,7 @@ export function createRouter(dbService: DatabaseService): Router {
       }
 
       const db = dbService.getActiveConnection();
-      ok<StageResultCommitResponse>(res, new StageResultCommitService(db).commitRealtimeStage(
+      const ergebnis = new StageResultCommitService(db).commitRealtimeStage(
         stageId,
         payload.entries,
         payload.markerClassifications ?? [],
@@ -736,7 +751,12 @@ export function createRouter(dbService: DatabaseService): Router {
         payload.events ?? [],
         payload.leadoutContributions,
         payload.superTeamId
-      ));
+      );
+      const reloadModus = String(req.query['reload'] ?? '');
+      const reload = reloadModus === 'light' || reloadModus === 'full'
+        ? buildReloadBundle(reloadModus === 'light')
+        : undefined;
+      ok<StageResultCommitResponse>(res, { ...ergebnis, ...(reload ? { reload } : {}) });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 
@@ -813,7 +833,7 @@ export function createRouter(dbService: DatabaseService): Router {
     }
   });
 
-  router.post('/state/advance', (_req: Request, res: Response) => {
+  router.post('/state/advance', (req: Request, res: Response) => {
     try {
       const gss = getGss();
       const vorher = gss.loadState().season;
@@ -824,7 +844,13 @@ export function createRouter(dbService: DatabaseService): Router {
       if (nachher.season !== vorher) {
         dbService.forceEnsureAllSchemas(dbService.getActiveConnection());
       }
-      ok<GameState>(res, nachher);
+      // Das Buendel gleich mitgeben: die Oberflaeche fragt es sonst unmittelbar
+      // danach ueber `/reload-bundle` ab. `?reload=` steuert, ob und wie.
+      const reloadModus = String(req.query['reload'] ?? '');
+      const reload = reloadModus === 'light' || reloadModus === 'full'
+        ? buildReloadBundle(reloadModus === 'light')
+        : undefined;
+      ok<AdvanceDayResponse>(res, { ...nachher, ...(reload ? { reload } : {}) });
     } catch (e) { fail(res, 400, (e as Error).message); }
   });
 

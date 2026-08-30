@@ -861,6 +861,8 @@ export interface StageResultCommitResponse {
   date: string;
   profile: StageProfile;
   resultTypes: ResultType[];
+  /** Spart der Oberflaeche den anschliessenden Aufruf von `/reload-bundle`. */
+  reload?: ReloadBundle;
 }
 
 export type RaceIncidentType = 'crash' | 'mechanical';
@@ -1792,6 +1794,27 @@ export interface WrappedFallenLegend {
   careerToSeason: number | null;
   grandTourWins: number;
   monumentWins: number;
+}
+
+/**
+ * Der Zustand, den die Oberflaeche nach jedem Schritt neu braucht.
+ *
+ * Haengt an den Antworten von Tageswechsel und Etappen-Commit, statt danach
+ * ueber `/reload-bundle` noch einmal abgefragt zu werden: der Server hat die
+ * Daten an dieser Stelle ohnehin. Im Auto-Weiter spart das je Schritt eine
+ * Anfrage samt Umlauf.
+ */
+export interface ReloadBundle {
+  gameState: GameState;
+  gameStatus: GameStatus;
+  races: Race[];
+  /** Fehlt im schlanken Modus (Auto-Weiter). */
+  riders?: Rider[];
+}
+
+/** Antwort des Tageswechsels: der neue Zustand plus das Reload-Buendel. */
+export interface AdvanceDayResponse extends GameState {
+  reload?: ReloadBundle;
 }
 
 export interface SeasonWrappedPayload {
