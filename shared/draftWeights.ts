@@ -79,6 +79,29 @@ export const LOYALTY_FACTOR_DECLINING = 0.6;
 export const QUOTA_FACTOR = 1.8;
 
 /**
+ * Ungeduld: wer im Pool ganz vorn steht und trotzdem liegen bleibt, wird mit
+ * jedem Pick attraktiver.
+ *
+ * Ohne das konnte der beste verfuegbare Fahrer beliebig lange liegen bleiben:
+ * sein Qualitaetsgewicht ist zwar immer 1,0 — er ist ja der Massstab —, aber
+ * die uebrigen Faktoren gehen bis x4, und ein Team mit passender Nation und
+ * offener Quote zog regelmaessig an ihm vorbei. Danach war die Ausgangslage
+ * unveraendert, und dasselbe konnte beim naechsten Pick wieder passieren.
+ *
+ * Der Bonus gilt fuer die drei Besten, nicht nur fuer den Ersten: sonst
+ * entsteht direkt hinter dem Spitzenreiter dasselbe Loch noch einmal.
+ */
+export const PASSED_OVER_RANKS = 3;
+/** Zuwachs je uebergangenem Pick. */
+export const PASSED_OVER_STEP = 0.12;
+/**
+ * Deckel. Bei x3,0 wiegt der Bonus so viel wie ein um gut drei Punkte besserer
+ * Draftwert (Qualitaetsgewicht e^1) — genug, um sich gegen Nation und Fokus zu
+ * behaupten, zu wenig, um eine gesperrte Top-Kappe auszuhebeln.
+ */
+export const PASSED_OVER_MAX = 3.0;
+
+/**
  * Verteilung der Spitzenfahrer.
  *
  * Gemessen hielt ein Team acht starke Bergfahrer, waehrend vier Teams keinen
@@ -114,6 +137,11 @@ export interface DraftRiderInput {
   isDeclining: boolean;
   /** Alter des Leistungszenits. Ein Talent zaehlt bis zwei Jahre davor. */
   peakAge: number | null;
+  /**
+   * Wie oft der Fahrer schon uebergangen wurde, seit er zu den besten
+   * `PASSED_OVER_RANKS` des Pools gehoert. 0 fuer alle uebrigen.
+   */
+  passedOverPicks: number;
 }
 
 export interface DraftTeamInput {
@@ -204,6 +232,13 @@ export function resolveQuotaFactor(rider: DraftRiderInput, team: DraftTeamInput)
   return 1;
 }
 
+/** Faktor der Ungeduld: je oft uebergangen, desto schwerer wiegt der Fahrer. */
+export function resolvePassedOverFactor(rider: DraftRiderInput): number {
+  const uebergangen = Math.max(0, rider.passedOverPicks ?? 0);
+  if (uebergangen <= 0) return 1;
+  return Math.min(PASSED_OVER_MAX, 1 + (PASSED_OVER_STEP * uebergangen));
+}
+
 /** Faktor der Spitzenverteilung: Bonus bei Luecke, Rampe bei Haeufung. */
 export function resolveStrongSpreadFactor(rider: DraftRiderInput, team: DraftTeamInput): number {
   if (rider.overall < STRONG_RIDER_OVERALL || rider.specialization1Id == null) return 1;
@@ -254,6 +289,7 @@ export function resolveDraftWeight(
   anwenden(resolveLoyaltyFactor(rider, team), 'Loyalitaet');
   anwenden(resolveQuotaFactor(rider, team), 'Quote');
   anwenden(resolveStrongSpreadFactor(rider, team), 'Spitzenverteilung');
+  anwenden(resolvePassedOverFactor(rider), `Uebergangen ${rider.passedOverPicks}x`);
   anwenden(topCap.factor, topCap.label ?? 'Top-Kappe');
 
   return { weight: Math.max(0.01, weight), blocked: false, factors };

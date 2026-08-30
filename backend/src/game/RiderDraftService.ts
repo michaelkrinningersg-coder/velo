@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import {
   DRAFT_VALUE_FALLOFF,
+  PASSED_OVER_RANKS,
   STRONG_RIDER_OVERALL,
   resolveDraftWeight,
   type DraftRiderInput,
@@ -546,6 +547,7 @@ export class RiderDraftService {
     }
     const top1RiderId = freeAgents[0].id;
     const bestDraftValue = freeAgents[0].draftValue as number;
+    const uebergangen = this.uebergangeneVersuche(season, freeAgents);
 
     // Zugehoerigkeit der eigenen Fahrer, fuer die abgestufte Loyalitaet.
     const tenure = new Map<number, number>();
@@ -635,6 +637,7 @@ export class RiderDraftService {
         tenureSeasons: tenure.get(rider.id) ?? 0,
         isDeclining: rider.decline_age > 0 && age >= rider.decline_age,
         peakAge: rider.peak_age ?? null,
+        passedOverPicks: uebergangen.get(rider.id) ?? 0,
       };
       // Der eigene Fahrer zaehlt schon fuer das Team — die Kappe gilt fuer ihn nicht.
       const kappe = rider.old_team_id === teamId
@@ -645,6 +648,46 @@ export class RiderDraftService {
     });
 
     return { poolDetails, freeAgents, top1RiderId, teamTop, caps };
+  }
+
+  /**
+   * Wie oft die besten Fahrer des Pools schon uebergangen wurden.
+   *
+   * Braucht keinen eigenen Zaehler: der Draftwert eines Fahrers steht fest, der
+   * Pool wird nur kleiner, ein Rang kann sich also nur verbessern. Aus der
+   * Draft-Historie laesst sich damit ausrechnen, ab welchem Pick ein Fahrer zu
+   * den besten `PASSED_OVER_RANKS` gehoerte — alle Picks danach hat er
+   * ueberstanden, ohne gezogen zu werden. Das ueberlebt auch das Neuladen eines
+   * Spielstands mitten im Draft.
+   */
+  private uebergangeneVersuche(season: number, freeAgents: any[]): Map<number, number> {
+    const ergebnis = new Map<number, number>();
+    const gemacht = this.db.prepare(`
+      SELECT draft_value AS draftValue
+      FROM draft_history WHERE season = ? ORDER BY pick_number ASC
+    `).all(season) as Array<{ draftValue: number }>;
+    if (gemacht.length === 0) return ergebnis;
+
+    const grenze = Math.min(PASSED_OVER_RANKS, freeAgents.length);
+    for (let rang = 0; rang < grenze; rang += 1) {
+      const fahrer = freeAgents[rang];
+      const wert = fahrer.draftValue as number;
+      // Position der schon gezogenen Staerkeren IN DIESER LISTE, nicht deren
+      // Picknummer: gezaehlt wird, wie viele Picks seit dem Aufruecken liegen,
+      // und dafuer muessen beide Groessen dieselbe Skala haben.
+      const staerkerIndizes: number[] = [];
+      gemacht.forEach((eintrag, index) => {
+        if (eintrag.draftValue > wert) staerkerIndizes.push(index);
+      });
+      // Rang zu Draftbeginn: die jetzt noch vor ihm stehenden plus die schon
+      // gezogenen Staerkeren.
+      const startRang = rang + staerkerIndizes.length + 1;
+      // So viele Staerkere mussten gezogen werden, damit er aufrueckt.
+      const noetig = startRang - PASSED_OVER_RANKS;
+      const seitPick = noetig <= 0 ? 0 : (staerkerIndizes[noetig - 1]! + 1);
+      ergebnis.set(fahrer.id, Math.max(0, gemacht.length - seitPick));
+    }
+    return ergebnis;
   }
 
   private computeTopRiderCaps(season: number): {

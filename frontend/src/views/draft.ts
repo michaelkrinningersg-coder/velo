@@ -671,7 +671,7 @@ function createDraftOverlayElement(season: number): HTMLElement {
         <!-- Specs counts displayed here -->
       </div>
       
-      <div style="display: flex; align-items: center; gap: 1.5rem;">
+      <div style="display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.75rem 1.5rem;">
         <div style="display: flex; align-items: center; gap: 0.25rem; background: rgba(255,255,255,0.05); padding: 0.25rem; border-radius: 8px;">
           <button id="draft-overlay-pause-btn" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9rem; font-weight: bold; min-width: 4rem;">Pause</button>
           <span style="border-left: 1px solid rgba(255,255,255,0.15); height: 1.5rem; margin: 0 0.25rem;"></span>
@@ -681,12 +681,18 @@ function createDraftOverlayElement(season: number): HTMLElement {
           <button class="btn btn-secondary draft-speed-btn" data-speed="2" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">x2</button>
           <button class="btn btn-secondary draft-speed-btn" data-speed="4" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">x4</button>
           <button class="btn btn-secondary draft-speed-btn" data-speed="8" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">x8</button>
+          <button class="btn btn-secondary draft-speed-btn" data-speed="16" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">x16</button>
+          <button class="btn btn-secondary draft-speed-btn" data-speed="32" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">x32</button>
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px;">
           <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none; margin: 0; font-size: 0.9rem; color: #fff;">
             <input type="checkbox" id="draft-overlay-auto-checkbox" ${state.draftOverlayAuto ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px; margin: 0;" />
             Auto Progress
+          </label>
+          <label title="Kurze Spannungspause, bevor der Pick aufgedeckt wird. Aus: der Pick steht sofort da." style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none; margin: 0; font-size: 0.9rem; color: #fff;">
+            <input type="checkbox" id="draft-overlay-reveal-checkbox" ${state.draftRevealAnimation ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px; margin: 0;" />
+            Spannungspause
           </label>
         </div>
         
@@ -835,6 +841,12 @@ function createDraftOverlayElement(season: number): HTMLElement {
   
   overlay.addEventListener('change', (event) => {
     const target = event.target as HTMLInputElement;
+    if (target.id === 'draft-overlay-reveal-checkbox') {
+      state.draftRevealAnimation = target.checked;
+      // Beim Abschalten mitten in der Pause den Pick sofort zeigen.
+      triggerDraftSchedule();
+      return;
+    }
     if (target.id === 'draft-overlay-auto-checkbox') {
       state.draftOverlayAuto = target.checked;
       if (state.draftOverlayAuto) {
@@ -876,6 +888,12 @@ export function triggerDraftSchedule(): void {
   if (!picks || index < 0 || index >= picks.length) return;
 
   if (!(state as any).draftRevealShown) {
+    // Ohne Spannungspause steht der Pick sofort da. revealCurrentPick ruft am
+    // Ende wieder hierher zurueck, dann greift der Zweig darunter.
+    if (!state.draftRevealAnimation) {
+      revealCurrentPick();
+      return;
+    }
     const delay = 2000 / speed;
     setWorkerTimeout(() => {
       revealCurrentPick();

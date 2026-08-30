@@ -114,6 +114,11 @@ export const state: {
   draftOverlayCurrentIndex: number;
   draftSpeedMultiplier: number;
   draftPaused: boolean;
+  /**
+   * Spannungspause vor dem Aufdecken eines Picks. Aus (Vorgabe) heisst: der
+   * Pick steht sofort da.
+   */
+  draftRevealAnimation: boolean;
   selectedSeasonStandingScope: 'riders' | 'teams' | 'countries' | 'nationalChampions' | 'internationalChampions' | 'raceWinners';
   teamTableSort: {
     key: TeamTableSortKey;
@@ -245,6 +250,7 @@ export const state: {
   draftOverlayCurrentIndex: 0,
   draftSpeedMultiplier: 1,
   draftPaused: false,
+  draftRevealAnimation: false,
   selectedSeasonStandingScope: 'riders',
   teamTableSort: {
     key: 'name',

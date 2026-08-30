@@ -45,7 +45,8 @@ const specZustand = (teil: Partial<TeamSpecState> = {}): TeamSpecState => ({
 const fahrer = (teil: Partial<DraftRiderInput> = {}): DraftRiderInput => ({
   riderId: 1, overall: 70, potential: 72, age: 26, draftValue: 70,
   specialization1Id: 1, specialization2Id: null, specialization3Id: null,
-  countryId: 7, oldTeamId: null, tenureSeasons: 0, isDeclining: false, peakAge: 26, ...teil,
+  countryId: 7, oldTeamId: null, tenureSeasons: 0, isDeclining: false, peakAge: 26,
+  passedOverPicks: 0, ...teil,
 });
 
 const team = (teil: Partial<DraftTeamInput> = {}): DraftTeamInput => ({
