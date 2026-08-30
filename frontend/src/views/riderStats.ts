@@ -774,6 +774,7 @@ export function renderRiderStatsTabs(payload: RiderStatsPayload | null): string 
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'skills' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="skills" aria-selected="${state.riderStatsTab === 'skills' ? 'true' : 'false'}">Skills</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'fatigue' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="fatigue" aria-selected="${state.riderStatsTab === 'fatigue' ? 'true' : 'false'}">Erschöpfung</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'career' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="career" aria-selected="${state.riderStatsTab === 'career' ? 'true' : 'false'}">Karrierestatistiken</button>
+      <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'racePoints' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="racePoints" aria-selected="${state.riderStatsTab === 'racePoints' ? 'true' : 'false'}">Punkte je Rennen</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'hallOfFame' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="hallOfFame" aria-selected="${state.riderStatsTab === 'hallOfFame' ? 'true' : 'false'}">Hall of Fame</button>
       <button type="button" class="team-detail-page-tab${state.riderStatsTab === 'contracts' ? ' team-detail-page-tab-active' : ''}" data-rider-stats-tab="contracts" aria-selected="${state.riderStatsTab === 'contracts' ? 'true' : 'false'}">Verträge</button>
     </div>`;
@@ -1977,6 +1978,13 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
       ${renderRiderStatsHallOfFameTab(payload)}`;
   }
 
+  if (state.riderStatsTab === 'racePoints') {
+    return `
+      ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
+      ${renderRiderStatsTabs(payload)}
+      ${renderRiderStatsRacePointsTab(payload)}`;
+  }
+
   if (state.riderStatsTab === 'contracts') {
     return `
       ${renderRiderStatsSummary(rider, payload, teamName, countryCode, countryFlag)}
@@ -2106,7 +2114,7 @@ export function renderRiderStatsBody(rider: Rider | null, payload: RiderStatsPay
 function updateRiderStatsModalWidth(): void {
   const card = document.querySelector('.rider-stats-modal-card') as HTMLElement | null;
   if (!card) return;
-  const wideTabs = ['results', 'topResults', 'career', 'hallOfFame', 'form', 'fatigue'];
+  const wideTabs = ['results', 'topResults', 'career', 'hallOfFame', 'form', 'fatigue', 'racePoints'];
   if (wideTabs.includes(state.riderStatsTab)) {
     card.style.minWidth = 'min(1475px, 95vw)';
     card.style.maxWidth = '1687px';
@@ -2306,7 +2314,7 @@ export function initRiderStatsListeners(): void {
     }
 
     const nextTab = tabButton.dataset['riderStatsTab'] as RiderStatsTab;
-    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career' && nextTab !== 'hallOfFame' && nextTab !== 'fatigue' && nextTab !== 'contracts') {
+    if (nextTab !== 'results' && nextTab !== 'program' && nextTab !== 'form' && nextTab !== 'topResults' && nextTab !== 'skills' && nextTab !== 'career' && nextTab !== 'hallOfFame' && nextTab !== 'fatigue' && nextTab !== 'contracts' && nextTab !== 'racePoints') {
       return;
     }
 
@@ -2675,6 +2683,74 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
         </div>
         ${rowsHtml}
         ${pagerHtml}
+      </div>
+    </section>
+  `;
+}
+
+// ---- Punkte je Rennen ------------------------------------------------------
+// Karrierebilanz als Balkendiagramm: eine Zeile je Rennen, absteigend nach
+// Punkten. Bezugsgroesse ist das staerkste Rennen des Fahrers (100 %) — ein
+// fester Massstab ueber alle Fahrer wuerde bei den meisten nur Stummel zeigen.
+export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null): string {
+  const rennen = payload?.careerPointsByRace ?? [];
+
+  if (rennen.length === 0) {
+    return `
+      <section class="rider-stats-placeholder">
+        <h3>Keine Punkte gesammelt</h3>
+        <p>Dieser Fahrer hat in seiner Karriere noch bei keinem Rennen Punkte geholt.</p>
+      </section>
+    `;
+  }
+
+  const MONOF = "font-family:'JetBrains Mono',monospace";
+  // EIN Raster fuer Kopf und alle Zeilen — nicht je Zeile eines. Die
+  // Kategoriespalte ist inhaltsbreit (fit-content); bei einem Raster je Zeile
+  // wuerde sie in jeder Zeile anders breit ausfallen und die Badges wuerden
+  // gegeneinander verspringen. Deshalb tragen die ZELLEN Innenabstand und
+  // Trennlinie, nicht ein Zeilencontainer.
+  const RASTER = 'display:grid;grid-template-columns:34px minmax(120px,1fr) fit-content(390px) minmax(130px,1.6fr) 72px 62px;align-items:center;';
+  const ZELLE = 'padding:9px 12px 9px 0;border-top:1px solid #14203a;';
+  const KOPF = `padding:8px 12px 8px 0;background:#0a1122;border-bottom:1px solid #16233c;${MONOF};font-size:9px;letter-spacing:.05em;color:#5a6a85;`;
+
+  const maximum = rennen[0]?.points ?? 0;
+  const gesamt = rennen.reduce((summe, r) => summe + r.points, 0);
+
+  const zellen = rennen.map((r, index) => {
+    const anteil = maximum > 0 ? Math.max(0, Math.min(1, r.points / maximum)) : 0;
+    const breite = (anteil * 100).toFixed(1);
+    const bestes = index === 0;
+    const titel = `${r.points} Pkt. · ${(anteil * 100).toFixed(0)} % seines besten Rennens (${maximum} Pkt.)`;
+    return `
+      <span style="${ZELLE}padding-left:14px;${MONOF};font-size:11px;color:#5a6a85;text-align:right;">${index + 1}</span>
+      <span title="${esc(r.raceName)}" style="${ZELLE}font-size:12.5px;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.raceName)}</span>
+      <span style="${ZELLE}">${renderRiderStatsCategoryBadge(r.categoryName)}</span>
+      <span style="${ZELLE}">
+        <span title="${titel}" style="position:relative;display:block;height:9px;border-radius:99px;background:#101c31;border:1px solid #172a44;overflow:hidden;">
+          <span style="position:absolute;inset:0 auto 0 0;width:${breite}%;border-radius:99px;background:linear-gradient(90deg,#0e7490,#22d3ee);box-shadow:0 0 10px rgba(34,211,238,${bestes ? '.55' : '.28'});"></span>
+        </span>
+      </span>
+      <span style="${ZELLE}${MONOF};font-size:12.5px;font-weight:700;color:${bestes ? '#22d3ee' : '#e2e8f0'};text-align:right;">${r.points}</span>
+      <span title="Saisons mit Punkten bei diesem Rennen" style="${ZELLE}padding-right:14px;${MONOF};font-size:11px;color:#8494ad;text-align:right;">${r.seasons}×</span>`;
+  }).join('');
+
+  return `
+    <section class="rider-stats-section" style="margin-top: 1rem;">
+      <div style="border-radius:14px;border:1px solid #1e2c49;background:#0c1526;padding:16px 18px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:13px;">
+          <div style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;">PUNKTE JE RENNEN · KARRIERE</div>
+          <div style="${MONOF};font-size:10px;color:#6a7a95;">${rennen.length} Rennen · ${gesamt} Pkt. · 100 % = ${maximum}</div>
+        </div>
+        <div style="${RASTER}border-radius:12px;overflow:hidden;border:1px solid #16233c;">
+          <span style="${KOPF}padding-left:14px;text-align:right;">#</span>
+          <span style="${KOPF}">RENNEN</span>
+          <span style="${KOPF}">KATEGORIE</span>
+          <span style="${KOPF}"></span>
+          <span style="${KOPF}text-align:right;">PUNKTE</span>
+          <span style="${KOPF}padding-right:14px;text-align:right;">SAISONS</span>
+          ${zellen}
+        </div>
       </div>
     </section>
   `;

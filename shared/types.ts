@@ -1507,6 +1507,19 @@ export interface RiderStatsPayload {
     season: number;
     rank: number;
   }>;
+  /**
+   * Karrierepunkte je Rennen (ueber alle Saisons summiert). Gruppiert wird
+   * ueber den RENNNAMEN, nicht ueber races.id: Meisterschaften und Olympia
+   * legen jede Saison eine neue Rennzeile an, gehoeren aber fuer die Bilanz
+   * zusammen. Nur Rennen mit Punkten, absteigend sortiert.
+   */
+  careerPointsByRace: Array<{
+    raceName: string;
+    categoryName: string | null;
+    points: number;
+    /** Anzahl Saisons, in denen der Fahrer bei diesem Rennen gepunktet hat. */
+    seasons: number;
+  }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];
   formHistory?: RiderFormHistoryEntry[];

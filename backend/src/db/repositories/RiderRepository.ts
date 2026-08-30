@@ -476,6 +476,7 @@ export class RiderRepository {
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
     const careerPointsBySeason = this.getCareerPointsBySeason(rider.id);
     const careerRanksBySeason = new ResultRepository(this.db).getRiderSeasonRanks(rider.id);
+    const careerPointsByRace = this.getCareerPointsByRace(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
     const pointsByRaceFormat = emptyRiderStatsPointsByRaceFormat();
@@ -864,6 +865,7 @@ export class RiderRepository {
       careerRaceDaysBySeason,
       careerPointsBySeason,
       careerRanksBySeason,
+      careerPointsByRace,
       seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
       peakDates: tableExists(this.db, 'rider_daily_state') 
         ? parsePeakDates((this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id) as { peak_dates_json: string } | undefined)?.peak_dates_json)
@@ -1274,6 +1276,7 @@ export class RiderRepository {
       careerRaceDaysBySeason,
       careerPointsBySeason: this.getCareerPointsBySeason(rider.id),
       careerRanksBySeason: new ResultRepository(this.db).getRiderSeasonRanks(rider.id),
+      careerPointsByRace: this.getCareerPointsByRace(rider.id),
       seasons: [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory: [],
@@ -2610,6 +2613,43 @@ export class RiderRepository {
       ORDER BY season DESC
     `).all(riderId) as any[];
     return rows.map((r) => ({ season: Number(r.season), points: Number(r.points ?? 0) }));
+  }
+
+  /**
+   * Karrierepunkte je Rennen. Gruppiert ueber `races.name` statt ueber
+   * `races.id`: Nationale Meisterschaften, WM und Olympia legen fuer jede
+   * Saison eine EIGENE Rennzeile an — ueber die id gruppiert stuende jede
+   * Austragung als eigene Zeile in der Bilanz. Die Kategorie kommt aus der
+   * juengsten Austragung (SQLite liefert bei MAX() die uebrigen Spalten aus
+   * genau dieser Zeile), damit eine spaetere Umstufung nicht die alte
+   * Kategorie zeigt.
+   */
+  private getCareerPointsByRace(
+    riderId: number,
+  ): Array<{ raceName: string; categoryName: string | null; points: number; seasons: number }> {
+    if (!tableExists(this.db, 'season_point_events') || !tableExists(this.db, 'races')) {
+      return [];
+    }
+    const rows = this.db.prepare(`
+      SELECT races.name AS raceName,
+             race_categories.name AS categoryName,
+             MAX(races.id) AS lastRaceId,
+             SUM(spe.points_awarded) AS points,
+             COUNT(DISTINCT spe.season) AS seasons
+      FROM season_point_events spe
+      JOIN races ON races.id = spe.race_id
+      LEFT JOIN race_categories ON race_categories.id = races.category_id
+      WHERE spe.rider_id = ?
+      GROUP BY races.name
+      HAVING SUM(spe.points_awarded) > 0
+      ORDER BY points DESC, raceName ASC
+    `).all(riderId) as any[];
+    return rows.map((r) => ({
+      raceName: String(r.raceName ?? ''),
+      categoryName: r.categoryName == null ? null : String(r.categoryName),
+      points: Number(r.points ?? 0),
+      seasons: Number(r.seasons ?? 0),
+    }));
   }
 
 
