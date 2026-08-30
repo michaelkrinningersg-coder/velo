@@ -25,6 +25,20 @@ export function schwelleOhneVertrag(riderId: number): number {
   return 23 + ((Math.imul(riderId, 2654435761) >>> 0) % 3);
 }
 
+/**
+ * Ab diesem Alter reicht eine laengere Vertragslosigkeit fuer den Ruecktritt.
+ *
+ * Die Regel greift bei Fahrern, die durchaus schon unter Vertrag standen, aber
+ * seit Jahren keinen mehr finden. Ohne sie bleiben sie bis zum
+ * retirement_age (im Zweifel 36) im Fahrerfeld stehen, ohne je zu fahren.
+ * Juengere sind bewusst ausgenommen: bei ihnen ist eine Vertragspause noch
+ * kein Karriereende.
+ */
+const MINDESTALTER_VERTRAGSLOS = 28;
+
+/** So viele abgeschlossene Saisons ohne Vertrag fuehren zum Ruecktritt. */
+const JAHRE_OHNE_VERTRAG = 3;
+
 export class ContractService {
   private readonly db: Database.Database;
 
@@ -56,11 +70,14 @@ export class ContractService {
           last_name: string;
         }>;
 
-        // Wer ueberhaupt schon einmal einen Vertrag hatte — auch einen laengst
-        // ausgelaufenen. Wer nie einen hatte, gibt ab Mitte zwanzig auf.
-        const jeUnterVertrag = new Set<number>(
-          (this.db.prepare('SELECT DISTINCT rider_id FROM contracts').all() as Array<{ rider_id: number }>)
-            .map((zeile) => zeile.rider_id),
+        // Letzte Vertragssaison je Fahrer — auch aus laengst ausgelaufenen
+        // Vertraegen. Wer gar nicht in der Tabelle steht, hatte nie einen
+        // Vertrag und gibt ab Mitte zwanzig auf; wer drin steht, aber seit
+        // Jahren nichts Neues hat, ab 28.
+        const letzteVertragssaison = new Map<number, number>(
+          (this.db.prepare('SELECT rider_id, MAX(end_season) AS ende FROM contracts GROUP BY rider_id')
+            .all() as Array<{ rider_id: number; ende: number }>)
+            .map((zeile) => [zeile.rider_id, zeile.ende]),
         );
 
         const mandatoryRetirees: number[] = [];
@@ -72,7 +89,15 @@ export class ContractService {
 
           if (age >= limitAge) {
             mandatoryRetirees.push(r.id);
-          } else if (!jeUnterVertrag.has(r.id) && age >= schwelleOhneVertrag(r.id)) {
+          } else if (!letzteVertragssaison.has(r.id) && age >= schwelleOhneVertrag(r.id)) {
+            mandatoryRetirees.push(r.id);
+          } else if (
+            age >= MINDESTALTER_VERTRAGSLOS
+            // currentSeason ist bereits die NEUE Saison; die zuletzt gefahrene
+            // ist currentSeason - 1. Die Differenz zur letzten Vertragssaison
+            // sind die abgeschlossenen Saisons ohne Vertrag.
+            && (currentSeason - 1) - (letzteVertragssaison.get(r.id) ?? currentSeason) >= JAHRE_OHNE_VERTRAG
+          ) {
             mandatoryRetirees.push(r.id);
           } else if (age >= 29 && (r.role_id === 4 || r.role_id === 5)) {
             earlyCandidates.push(r);

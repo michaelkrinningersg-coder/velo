@@ -1,4 +1,5 @@
 import { api } from './api';
+import { FLAG_CODE_BY_CODE3 } from '../../shared/flagCodes';
 import {
   buildRaceCategoryBadgeCssVariables,
   renderRaceNameLink,
@@ -575,58 +576,9 @@ export function getRidersByTeam(teamId: number): Rider[] {
   return cachedRidersByTeam.get(teamId) || [];
 }
 
-export const FLAG_CODE_BY_CODE3: Record<string, string> = {
-  BEL: 'be',
-  FRA: 'fr',
-  ITA: 'it',
-  ESP: 'es',
-  NED: 'nl',
-  GER: 'de',
-  GBR: 'gb',
-  USA: 'us',
-  CAN: 'ca',
-  MEX: 'mx',
-  COL: 'co',
-  ECU: 'ec',
-  VEN: 've',
-  ARG: 'ar',
-  AUS: 'au',
-  NZL: 'nz',
-  DEN: 'dk',
-  NOR: 'no',
-  SLO: 'si',
-  POR: 'pt',
-  SWI: 'ch',
-  POL: 'pl',
-  AUT: 'at',
-  LUX: 'lu',
-  IRL: 'ie',
-  EST: 'ee',
-  LTU: 'lt',
-  LAT: 'lv',
-  CZE: 'cz',
-  SVK: 'sk',
-  KAZ: 'kz',
-  SWD: 'se',
-  FIN: 'fi',
-  UKR: 'ua',
-  MOL: 'md',
-  CRO: 'hr',
-  HUN: 'hu',
-  ERI: 'er',
-  RWA: 'rw',
-  ETH: 'et',
-  CMR: 'cm',
-  SAR: 'za',
-  JPN: 'jp',
-  UAE: 'ae',
-  BHR: 'bh',
-  SUI: 'ch',
-  IRE: 'ie',
-  RSA: 'za',
-  OMA: 'om',
-  OTH: 'un',
-};
+// Die Tabelle selbst liegt in shared/flagCodes.ts — sie wird auch von
+// race-sim/flags.ts gebraucht und lag frueher doppelt vor.
+export { FLAG_CODE_BY_CODE3 };
 
 export function renderFlag(code3: string): string {
   const alpha2 = FLAG_CODE_BY_CODE3[code3] ?? null;

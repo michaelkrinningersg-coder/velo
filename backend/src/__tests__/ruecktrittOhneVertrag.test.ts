@@ -86,3 +86,74 @@ describe('Ruecktritt ohne je einen Vertrag', () => {
     expect(istImRuhestand(id)).toBe(true);
   });
 });
+
+/**
+ * Wer schon einmal unter Vertrag stand, aber seit drei abgeschlossenen Saisons
+ * keinen mehr findet, gibt ab 28 auf.
+ *
+ * Die Regel oben greift nur bei Fahrern, die NIE einen Vertrag hatten. Wer
+ * einmal einen hatte und dann keinen mehr bekommt, blieb bis zum
+ * retirement_age (im Zweifel 36) im Fahrerfeld stehen, ohne je zu fahren.
+ */
+describe('Ruecktritt nach drei Jahren ohne Vertrag', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createTestDb();
+    seedReferenceData(db);
+    seedTeams(db, { count: 2, playerTeamId: 1 });
+    seedGameState(db, { date: '2031-01-01', season: 2031 });
+  });
+
+  afterEach(() => db.close());
+
+  /** Fahrer ohne Team mit einem Vertrag, der in `vertragsende` auslief. */
+  function legeFahrer(alter: number, vertragsende: number): number {
+    const id = seedRider(db, { activeTeamId: null, overallRating: 68, roleId: 1 });
+    db.prepare('UPDATE riders SET birth_year = ?, retirement_age = 36 WHERE id = ?').run(2031 - alter, id);
+    db.prepare(`INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
+      VALUES (?, 1, ?, ?, 'expired')`).run(id, vertragsende - 1, vertragsende);
+    return id;
+  }
+
+  const istImRuhestand = (id: number): boolean =>
+    (db.prepare('SELECT is_retired FROM riders WHERE id = ?').get(id) as { is_retired: number }).is_retired === 1;
+
+  it('schickt Fahrer ab 28 nach drei vertragslosen Saisons in den Ruhestand', () => {
+    // 2031 ist die neue Saison, zuletzt gefahren wurde 2030. Vertragsende 2027
+    // heisst: 2028, 2029 und 2030 ohne Vertrag — drei Saisons.
+    const drei = legeFahrer(28, 2027);
+    // Vertragsende 2028: nur 2029 und 2030 ohne Vertrag — zwei Saisons.
+    const zwei = legeFahrer(28, 2028);
+
+    new ContractService(db).checkContractStatuses(2031, true);
+
+    expect(istImRuhestand(drei)).toBe(true);
+    expect(istImRuhestand(zwei)).toBe(false);
+    expect((db.prepare('SELECT retired_season FROM riders WHERE id = ?').get(drei) as any).retired_season).toBe(2030);
+  });
+
+  it('laesst Fahrer unter 28 trotz drei vertragsloser Saisons weiterfahren', () => {
+    const jung = legeFahrer(27, 2027);
+    const alt = legeFahrer(28, 2027);
+
+    new ContractService(db).checkContractStatuses(2031, true);
+
+    expect(istImRuhestand(jung)).toBe(false);
+    expect(istImRuhestand(alt)).toBe(true);
+  });
+
+  it('ruehrt Fahrer mit laufendem Vertrag nicht an', () => {
+    const id = seedRider(db, { activeTeamId: 1, overallRating: 68, roleId: 1 });
+    db.prepare('UPDATE riders SET birth_year = ?, retirement_age = 36 WHERE id = ?').run(2031 - 33, id);
+    // Ein alter, laengst ausgelaufener Vertrag UND ein laufender.
+    db.prepare(`INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
+      VALUES (?, 1, 2020, 2022, 'expired')`).run(id);
+    db.prepare(`INSERT INTO contracts (rider_id, team_id, start_season, end_season, status)
+      VALUES (?, 1, 2031, 2033, 'active')`).run(id);
+
+    new ContractService(db).checkContractStatuses(2031, true);
+
+    expect(istImRuhestand(id)).toBe(false);
+  });
+});
