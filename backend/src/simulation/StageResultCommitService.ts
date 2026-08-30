@@ -971,16 +971,33 @@ export class StageResultCommitService {
       } else if (ev.type === 'counter_attack') {
         counterAttackCounts.set(rId, (counterAttackCounts.get(rId) || 0) + 1);
       } else {
-        if (detail === 'Superform aktiv.') {
-          superformCounts.set(rId, (superformCounts.get(rId) || 0) + 1);
-        } else if (detail === 'Supermalus aktiv.') {
-          supermalusCounts.set(rId, (supermalusCounts.get(rId) || 0) + 1);
-        } else if (title.includes('Super-Heimvorteil')) {
-          superHomeAdvantageCounts.set(rId, (superHomeAdvantageCounts.get(rId) || 0) + 1);
-        } else if (title.includes('Heimdruck')) {
-          homePressureCounts.set(rId, (homePressureCounts.get(rId) || 0) + 1);
-        } else if (title.includes('Heimvorteil') && !title.includes('Super-Heimvorteil')) {
-          homeAdvantageCounts.set(rId, (homeAdvantageCounts.get(rId) || 0) + 1);
+        // `formMarker` benennt den Sonderzustand maschinenlesbar. Frueher stand
+        // hier ein Textvergleich auf Ueberschrift und Detail — und weil die
+        // Quick Simulation anders formulierte als die Live-Simulation, zaehlte
+        // der Auto-Weiter jahrelang nichts mit: ueber 6,5 gemessene Spieljahre
+        // blieben alle fuenf Zaehler exakt bei null, waehrend die Effekte
+        // wirkten.
+        //
+        // Der Rueckfall auf die Texte bleibt fuer den Fall, dass eine
+        // Browser-Sitzung mit altem Bundle noch Ereignisse ohne das Feld
+        // schickt; sie kostet nichts und deckt genau die frueheren Wortlaute ab.
+        const marker = ev.formMarker
+          ?? (detail === 'Superform aktiv.' ? 'superform'
+            : detail === 'Supermalus aktiv.' ? 'supermalus'
+              : title.includes('Super-Heimvorteil') ? 'super_home_advantage'
+                : title.includes('Heimdruck') ? 'home_pressure'
+                  : title.includes('Heimvorteil') ? 'home_advantage'
+                    : null);
+        const zaehler: Record<string, Map<number, number>> = {
+          superform: superformCounts,
+          supermalus: supermalusCounts,
+          super_home_advantage: superHomeAdvantageCounts,
+          home_pressure: homePressureCounts,
+          home_advantage: homeAdvantageCounts,
+        };
+        const ziel = marker != null ? zaehler[marker] : undefined;
+        if (ziel) {
+          ziel.set(rId, (ziel.get(rId) || 0) + 1);
         }
       }
     }

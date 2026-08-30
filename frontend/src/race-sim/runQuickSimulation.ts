@@ -944,22 +944,65 @@ function buildEvents(
     });
   }
 
+  // Heimvorteil, Heimdruck, Superform und Supermalus.
+  //
+  // Die Wirkung dieser vier Zustaende rechnet die Quick Simulation seit jeher
+  // mit — der Heimvorteil als Score-Zuschlag, die Sonderformen ueber die
+  // Tagesform. Gemeldet hat sie davon nichts: die Heim-Ereignisse fehlten ganz,
+  // und das Superform-Ereignis war anders formuliert als in der Live-Simulation.
+  // Der Etappen-Commit zaehlt die Tageszaehler aus diesen Ereignissen, also
+  // blieben home_advantage_days, superform_days und die uebrigen im Auto-Weiter
+  // dauerhaft auf null — ueber 6,5 gemessene Spieljahre kein einziger Tag.
+  //
+  // Wortlaut und Ereignistyp folgen jetzt der Live-Simulation, damit dasselbe
+  // Rennen in beiden Modi dasselbe erzaehlt. `formMarker` traegt die Zuordnung
+  // fuer den Commit — ein Feld statt eines Textvergleichs.
   for (const rider of ridersWithSpecialStates) {
-    if (!rider.hasSuperform && !rider.hasSupermalus) {
-      continue;
-    }
-    events.push({
-      id: nextId += 1,
+    const name = `${rider.firstName} ${rider.lastName}`;
+    const basis = {
       elapsedSeconds: 0,
       riderId: rider.id,
-      riderName: `${rider.firstName} ${rider.lastName}`,
+      riderName: name,
       riderTeamId: rider.activeTeamId ?? null,
-      type: 'superteam',
-      tone: rider.hasSuperform ? 'neutral' : 'warning',
-      title: rider.hasSuperform ? 'Superform' : 'Supermalus',
-      detail: `${rider.firstName} ${rider.lastName} startet mit ${(rider.specialFormDelta ?? 0) >= 0 ? '+' : ''}${(rider.specialFormDelta ?? 0).toFixed(1)} Form.`,
       kmMark: 0,
-    });
+    };
+    if (rider.homeEffect === 'super_home') {
+      events.push({
+        ...basis, id: nextId += 1, type: 'support_resume', tone: 'neutral',
+        title: `${name} hat heute Super-Heimvorteil!`,
+        detail: 'Beflügelt durch die Fans im eigenen Land!',
+        formMarker: 'super_home_advantage',
+      });
+    } else if (rider.homeEffect === 'home_pressure') {
+      events.push({
+        ...basis, id: nextId += 1, type: 'support_wait', tone: 'danger',
+        title: `${name} leidet unter Heimdruck!`,
+        detail: 'Der Druck im eigenen Land belastet die Nerven.',
+        formMarker: 'home_pressure',
+      });
+    } else if (rider.homeEffect === 'normal_home') {
+      events.push({
+        ...basis, id: nextId += 1, type: 'support_resume', tone: 'neutral',
+        title: `${name} hat heute Heimvorteil!`,
+        detail: 'Beflügelt durch die Fans im eigenen Land!',
+        formMarker: 'home_advantage',
+      });
+    }
+    if (rider.hasSuperform) {
+      events.push({
+        ...basis, id: nextId += 1, type: 'support_resume', tone: 'neutral',
+        title: `${name} hat heute einen guten Tag`,
+        detail: 'Superform aktiv.',
+        formMarker: 'superform',
+      });
+    } else if (rider.hasSupermalus) {
+      events.push({
+        ...basis, id: nextId += 1, type: 'support_wait', tone: 'danger',
+        title: `${name} hat heute einen schlechten Tag`,
+        detail: 'Supermalus aktiv.',
+        formMarker: 'supermalus',
+      });
+    }
   }
 
   if (plan && plan.riderIds.length > 0) {

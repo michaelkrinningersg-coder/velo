@@ -1502,6 +1502,7 @@ export class SimulationEngine {
           tone: 'neutral',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute Super-Heimvorteil!`,
           detail: `Beflügelt durch die Fans im eigenen Land! (+1 auf 4 Skills, +3 auf einen Skill) (${skillList})`,
+          formMarker: 'super_home_advantage',
         });
       }
       if (r.rider.homeEffect === 'home_pressure') {
@@ -1514,6 +1515,7 @@ export class SimulationEngine {
           tone: 'danger',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} leidet unter Heimdruck!`,
           detail: `Der Druck im eigenen Land belastet die Nerven. (-0,5 auf 5 Skills) (${skillList})`,
+          formMarker: 'home_pressure',
         });
       }
       if (r.rider.homeEffect === 'normal_home') {
@@ -1526,6 +1528,7 @@ export class SimulationEngine {
           tone: 'neutral',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute Heimvorteil!`,
           detail: `Beflügelt durch die Fans im eigenen Land! (+1 auf 5 Skills) (${skillList})`,
+          formMarker: 'home_advantage',
         });
       }
       if (r.rider.hasSuperform) {
@@ -1537,6 +1540,7 @@ export class SimulationEngine {
           tone: 'neutral',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute einen guten Tag`,
           detail: 'Superform aktiv.',
+          formMarker: 'superform',
         });
       }
       if (r.rider.hasSupermalus) {
@@ -1548,6 +1552,7 @@ export class SimulationEngine {
           tone: 'danger',
           title: `${this.formatRiderWithPreStageGc(r.rider.id, r.riderName)} hat heute einen schlechten Tag`,
           detail: 'Supermalus aktiv.',
+          formMarker: 'supermalus',
         });
       }
       if (r.rider.activePeakDate === this.bootstrap.stage.date) {

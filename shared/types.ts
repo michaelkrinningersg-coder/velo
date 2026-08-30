@@ -722,6 +722,19 @@ export interface RaceSimMessage {
   kmMark?: number | null;
   isMassCrash?: boolean;
   isMassCrashTrigger?: boolean;
+  /**
+   * Maschinenlesbare Kennzeichnung des Sonderzustands, den dieses Ereignis
+   * meldet. Der Etappen-Commit zaehlt darueber die Tageszaehler
+   * (superform_days, home_advantage_days, ...).
+   *
+   * Vorher las er die Ueberschrift und den Detailtext: `title.includes('Heimvorteil')`,
+   * `detail === 'Superform aktiv.'`. Die Quick Simulation formuliert ihre
+   * Ereignisse anders als die Live-Simulation, und so zaehlte der Auto-Weiter
+   * jahrelang nichts mit — ueber 6,5 gemessene Spieljahre blieben alle fuenf
+   * Zaehler exakt bei null, waehrend die Effekte sehr wohl wirkten. Ein Feld
+   * kann nicht auseinanderlaufen, ein Satz schon.
+   */
+  formMarker?: 'superform' | 'supermalus' | 'home_advantage' | 'super_home_advantage' | 'home_pressure';
 }
 
 // ------ Savegame / Karriere ----------------------------------
