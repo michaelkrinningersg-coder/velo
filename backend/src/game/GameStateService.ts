@@ -373,6 +373,10 @@ export class GameStateService {
             INSERT OR REPLACE INTO season_standings_snapshots (season, payload_json)
             VALUES (?, ?)
           `).run(currentRow.season, JSON.stringify(standings));
+          // Aus demselben Ergebnis die Rangtabelle schreiben. Sie beantwortet
+          // "welchen Platz belegte dieser Fahrer in Saison X" per Index, statt
+          // den JSON-Blob mit rund 930 Fahrern durchsuchen zu muessen.
+          resultRepo.writeRiderSeasonRanks(currentRow.season, standings);
         } catch (e) {
           console.error('Fehler beim Erstellen des Season Standings Snapshots:', e);
         }

@@ -23,6 +23,50 @@ export class ResultRepository {
     this.db = db;
   }
 
+  /**
+   * Schreibt die Saisonwertung einer abgeschlossenen Saison als Rangtabelle fest.
+   *
+   * Dieselbe Reihenfolge wie der Snapshot, aus dem sie stammt — die
+   * Vertragsuebersicht eines Fahrers zeigt damit genau den Platz, den auch die
+   * Saisonwertung dieser Saison ausweist. Idempotent: ein zweiter Aufruf
+   * ersetzt die Zeilen der Saison.
+   *
+   * `standings` erlaubt es dem Saisonwechsel, den bereits berechneten Snapshot
+   * durchzureichen, statt ihn ein zweites Mal zu bauen.
+   */
+  public writeRiderSeasonRanks(season: number, standings?: SeasonStandingsPayload): number {
+    if (!tableExists(this.db, 'rider_season_rank')) {
+      return 0;
+    }
+    const wertung = standings ?? this.getSeasonStandings(season);
+    const zeilen = (wertung.riderStandings ?? [])
+      .filter((row) => row.riderId != null)
+      .map((row) => [season, row.riderId as number, row.rank, Math.round(row.points ?? 0)] as const);
+    if (zeilen.length === 0) {
+      return 0;
+    }
+    const einfuegen = this.db.prepare(
+      'INSERT OR REPLACE INTO rider_season_rank (season, rider_id, rank, points) VALUES (?, ?, ?, ?)',
+    );
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM rider_season_rank WHERE season = ?').run(season);
+      for (const zeile of zeilen) {
+        einfuegen.run(...zeile);
+      }
+    })();
+    return zeilen.length;
+  }
+
+  /** Platz je abgeschlossener Saison fuer einen Fahrer, neueste zuerst. */
+  public getRiderSeasonRanks(riderId: number): Array<{ season: number; rank: number }> {
+    if (!tableExists(this.db, 'rider_season_rank')) {
+      return [];
+    }
+    return this.db.prepare(`
+      SELECT season, rank FROM rider_season_rank WHERE rider_id = ? ORDER BY season DESC
+    `).all(riderId) as Array<{ season: number; rank: number }>;
+  }
+
   public getSeasonRankForRider(season: number, riderId: number): number | null {
     if (!tableExists(this.db, 'season_point_events')) {
       return null;

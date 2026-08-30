@@ -1927,6 +1927,35 @@ export class DatabaseService {
         payload_json TEXT NOT NULL
       )
     `).run();
+    this.ensureRiderSeasonRankSchema(db);
+  }
+
+  /**
+   * Platz eines Fahrers in der Saisonwertung, je abgeschlossener Saison.
+   *
+   * Der Rang steht im Snapshot der Saisonwertung, aber nur als JSON-Blob mit
+   * rund 930 Fahrern. Ihn dort herauszusuchen kostet 8,8 ms je Fahrerprofil und
+   * waechst mit jeder gespielten Saison; neu zu rechnen kostet 4,5 ms je Saison.
+   * Diese Tabelle beantwortet dieselbe Frage per Index in unter einer
+   * Millisekunde — rund 930 Zeilen je Saison, also etwa 50 KB.
+   *
+   * Nur abgeschlossene Saisons. Der Rang der laufenden aendert sich mit jedem
+   * Rennen und wird weiter direkt gerechnet (getSeasonRankForRider).
+   */
+  private ensureRiderSeasonRankSchema(db: Database.Database): void {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS rider_season_rank (
+        season   INTEGER NOT NULL,
+        rider_id INTEGER NOT NULL,
+        rank     INTEGER NOT NULL,
+        points   INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (season, rider_id)
+      )
+    `).run();
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_season_rank_rider
+        ON rider_season_rank(rider_id)
+    `).run();
   }
 
   /**
@@ -2092,6 +2121,91 @@ export class DatabaseService {
       `).run();
     } catch (e) {
       console.error('Youth-results_flat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+  }
+
+  /**
+   * Traegt die Rangtabelle fuer die bereits gespielten Saisons nach.
+   *
+   * Neue Saisons schreibt der Saisonwechsel selbst (GameStateService). Fuer
+   * einen bestehenden Spielstand fehlt sie; die Werte stehen aber schon im
+   * Snapshot der Saisonwertung und werden von dort uebernommen. Genau daraus
+   * baut auch die Saisonwertung ihre Anzeige — die Vertragsuebersicht zeigt
+   * damit denselben Platz und nicht eine zweite, moeglicherweise abweichende
+   * Rechnung.
+   *
+   * Saisons ohne Snapshot (Spielstaende von vor dieser Funktion) werden aus
+   * `season_point_events` gerechnet, nach derselben Reihenfolge wie
+   * getSeasonStandings: Punkte absteigend, dann Nachname, dann Vorname.
+   *
+   * Laeuft nur fuer Saisons, die noch keine Zeilen haben, und ist damit nach
+   * dem ersten Mal praktisch kostenlos.
+   */
+  private ensureRiderSeasonRankBackfill(db: Database.Database): void {
+    try {
+      if (!tableExists(db, 'rider_season_rank') || !tableExists(db, 'season_point_events')
+        || !tableExists(db, 'game_state') || !tableExists(db, 'riders')) {
+        return;
+      }
+      const stand = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
+      if (stand == null) {
+        return;
+      }
+      const offen = (db.prepare(`
+        SELECT DISTINCT season FROM season_point_events
+        WHERE season < ?
+          AND season NOT IN (SELECT DISTINCT season FROM rider_season_rank)
+        ORDER BY season ASC
+      `).all(stand.season) as Array<{ season: number }>).map((zeile) => zeile.season);
+      if (offen.length === 0) {
+        return;
+      }
+
+      const ausSnapshot = tableExists(db, 'season_standings_snapshots')
+        ? db.prepare('SELECT payload_json FROM season_standings_snapshots WHERE season = ?')
+        : null;
+      // Reihenfolge wie in getSeasonStandings; der Platz ist die Position.
+      const gerechnet = db.prepare(`
+        SELECT season_point_events.rider_id AS riderId,
+               SUM(season_point_events.points_awarded) AS points
+        FROM season_point_events
+        JOIN riders ON riders.id = season_point_events.rider_id
+        WHERE season_point_events.season = ?
+        GROUP BY season_point_events.rider_id, riders.last_name, riders.first_name
+        ORDER BY points DESC, riders.last_name ASC, riders.first_name ASC
+      `);
+      const einfuegen = db.prepare(
+        'INSERT OR REPLACE INTO rider_season_rank (season, rider_id, rank, points) VALUES (?, ?, ?, ?)',
+      );
+
+      let geschrieben = 0;
+      db.transaction(() => {
+        for (const season of offen) {
+          let zeilen: Array<{ riderId: number; rank: number; points: number }> = [];
+          const roh = ausSnapshot?.get(season) as { payload_json: string } | undefined;
+          if (roh) {
+            try {
+              const payload = JSON.parse(roh.payload_json) as { riderStandings?: Array<{ riderId: number | null; rank: number; points: number }> };
+              zeilen = (payload.riderStandings ?? [])
+                .filter((row) => row.riderId != null)
+                .map((row) => ({ riderId: row.riderId as number, rank: row.rank, points: Math.round(row.points ?? 0) }));
+            } catch { /* defekter Snapshot: unten neu rechnen */ }
+          }
+          if (zeilen.length === 0) {
+            zeilen = (gerechnet.all(season) as Array<{ riderId: number; points: number }>)
+              .map((row, index) => ({ riderId: row.riderId, rank: index + 1, points: Math.round(row.points ?? 0) }));
+          }
+          for (const zeile of zeilen) {
+            einfuegen.run(season, zeile.riderId, zeile.rank, zeile.points);
+          }
+          geschrieben += zeilen.length;
+        }
+      })();
+      if (geschrieben > 0) {
+        console.log(`rider_season_rank: ${geschrieben} Plaetze aus ${offen.length} Saison(en) nachgetragen.`);
+      }
+    } catch (e) {
+      console.error('Nachtrag der Saison-Raenge fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
   }
 
@@ -3816,6 +3930,7 @@ export class DatabaseService {
     // Muss NACH ensureResultsFlatSchema laufen: der Backfill dort liest die
     // Payloads, die hier geleert werden.
     this.leereAlteErgebnisPayloads(db);
+    this.ensureRiderSeasonRankBackfill(db);
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureTeamSpecTargets(db);

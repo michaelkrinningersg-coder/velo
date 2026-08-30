@@ -475,6 +475,7 @@ export class RiderRepository {
     const allTime = new ResultRepository(this.db).getAllTimePointsAndRank(rider.id);
     const careerRaceDaysBySeason = this.getCareerRaceDaysBySeason(rider.id);
     const careerPointsBySeason = this.getCareerPointsBySeason(rider.id);
+    const careerRanksBySeason = new ResultRepository(this.db).getRiderSeasonRanks(rider.id);
     const programSummary = this.getRiderProgramRaceSummary(rider.id);
     const pointsByTerrain = emptyRiderStatsPointsByTerrain();
     const pointsByRaceFormat = emptyRiderStatsPointsByRaceFormat();
@@ -862,6 +863,7 @@ export class RiderRepository {
       pointsByRaceFormat,
       careerRaceDaysBySeason,
       careerPointsBySeason,
+      careerRanksBySeason,
       seasons: [...seasons.values()].sort((left, right) => left.season - right.season),
       peakDates: tableExists(this.db, 'rider_daily_state') 
         ? parsePeakDates((this.db.prepare('SELECT peak_dates_json FROM rider_daily_state WHERE rider_id = ?').get(rider.id) as { peak_dates_json: string } | undefined)?.peak_dates_json)
@@ -1271,6 +1273,7 @@ export class RiderRepository {
       pointsByRaceFormat: emptyRiderStatsPointsByRaceFormat(),
       careerRaceDaysBySeason,
       careerPointsBySeason: this.getCareerPointsBySeason(rider.id),
+      careerRanksBySeason: new ResultRepository(this.db).getRiderSeasonRanks(rider.id),
       seasons: [],
       careerStats: this.getRiderCareerStats(rider.id),
       fatigueHistory: [],

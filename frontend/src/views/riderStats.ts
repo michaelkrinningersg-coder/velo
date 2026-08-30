@@ -2701,6 +2701,10 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
   // Trikot-Tagespunkte weg und wichen daher ab.
   const raceDaysBySeason = new Map<number, number>((payload?.careerRaceDaysBySeason ?? []).map((r) => [r.season, r.raceDays]));
   const pointsBySeason = new Map<number, number>((payload?.careerPointsBySeason ?? []).map((r) => [r.season, r.points]));
+  // Platz in der Saisonwertung. Abgeschlossene Saisons stehen festgeschrieben in
+  // `rider_season_rank` (careerRanksBySeason), die laufende kommt aus
+  // `currentSeasonRank` — sie aendert sich mit jedem Rennen.
+  const rankBySeason = new Map<number, number>((payload?.careerRanksBySeason ?? []).map((r) => [r.season, r.rank]));
   const seasonAgg = new Map<number, { wins: number; points: number }>();
   for (const s of payload?.seasons ?? []) {
     let wins = 0;
@@ -2794,7 +2798,8 @@ export function renderRiderStatsContractsTab(payload: RiderStatsPayload | null):
     const wins = step.status === 'future' ? '–' : String(agg?.wins ?? 0);
     const punkteWert = agg?.points ?? (step.season === currentSeason ? (payload?.currentSeasonPoints ?? 0) : 0);
     const points = step.status === 'future' ? '–' : String(punkteWert);
-    const uci = step.season === currentSeason && payload?.currentSeasonRank != null ? `#${payload.currentSeasonRank}` : '–';
+    const rang = step.season === currentSeason ? payload?.currentSeasonRank ?? null : rankBySeason.get(step.season) ?? null;
+    const uci = step.status === 'future' || rang == null ? '–' : `#${rang}`;
     // Nur Trikot und Kuerzel; der volle Teamname steht im Titel.
     const teamCell = step.teamId
       ? `<span title="${esc(step.teamName ?? '')}" style="display:inline-flex;align-items:center;gap:7px;min-width:0;">${renderMiniJersey(step.teamId, step.teamName)}<span style="${MONOF};font-size:11.5px;font-weight:700;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(step.teamAbbreviation ?? step.teamName ?? '')}</span></span>`

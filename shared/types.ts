@@ -1497,6 +1497,16 @@ export interface RiderStatsPayload {
     season: number;
     points: number;
   }>;
+  /**
+   * Platz in der Saisonwertung je ABGESCHLOSSENER Saison, aus
+   * `rider_season_rank`. Der Platz der laufenden Saison steht in
+   * `currentSeasonRank` — er aendert sich mit jedem Rennen und wird deshalb
+   * nicht festgeschrieben.
+   */
+  careerRanksBySeason: Array<{
+    season: number;
+    rank: number;
+  }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];
   formHistory?: RiderFormHistoryEntry[];
