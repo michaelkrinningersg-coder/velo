@@ -85,7 +85,7 @@ describe('commitRealtimeStage – teamlose U23-Meisterschaftsfahrer', () => {
 
     // Ergebnis persistiert, Rang 1, Team = Nationalauswahl-Pseudo-Team.
     const result = db
-      .prepare('SELECT rider_id, team_id, rank FROM all_results WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
+      .prepare('SELECT rider_id, team_id, rank FROM results_flat WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
       .all(STAGE_ID) as Array<{ rider_id: number; team_id: number; rank: number }>;
     expect(result.length).toBe(1);
     expect(result[0].rider_id).toBe(teamlessRiderId);
@@ -153,7 +153,7 @@ describe('commitRealtimeStage – teamlose Fahrer bei nationalen Meisterschaften
     ])).not.toThrow();
 
     const result = db
-      .prepare('SELECT rider_id, team_id, rank FROM all_results WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
+      .prepare('SELECT rider_id, team_id, rank FROM results_flat WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
       .all(STAGE_ID) as Array<{ rider_id: number; team_id: number; rank: number }>;
     expect(result.length).toBe(1);
     expect(result[0].rider_id).toBe(teamlessRiderId);

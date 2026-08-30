@@ -98,7 +98,7 @@ describe('StageResultCommitService reconcile roster drift', () => {
 
     // Die 5 verbliebenen Starter haben ein Etappenergebnis, der DNS-Fahrer nicht.
     const results = db
-      .prepare('SELECT rider_id FROM all_results WHERE stage_id = ? AND result_type_id = 1')
+      .prepare('SELECT rider_id FROM results_flat WHERE stage_id = ? AND result_type_id = 1')
       .all(STAGE_ID) as Array<{ rider_id: number }>;
     const resultRiderIds = new Set(results.map((r) => r.rider_id));
     expect(resultRiderIds.has(riderIds[2])).toBe(false);

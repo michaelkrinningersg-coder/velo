@@ -333,7 +333,7 @@ export class TeamRepository {
         cat_bonus.points_stage AS points_stage,
         stages.super_team_id AS super_team_id,
         results.team_id AS team_id
-      FROM all_results results
+      FROM results_flat results
       JOIN stages ON stages.id = results.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id
@@ -596,7 +596,7 @@ export class TeamRepository {
       SELECT
         CAST(substr(stages.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS count
-      FROM all_results results
+      FROM results_flat results
       JOIN stages ON stages.id = results.stage_id
       WHERE results.team_id = ? AND results.result_type_id = 1 AND results.is_breakaway = 1
       GROUP BY season
@@ -614,13 +614,13 @@ export class TeamRepository {
       SELECT
         CAST(substr(s.date, 1, 4) AS INTEGER) AS season,
         COUNT(*) AS count
-      FROM all_results r1
+      FROM results_flat r1
       JOIN stages s ON s.id = r1.stage_id
       WHERE r1.team_id = ?
         AND r1.result_type_id = 1
         AND r1.is_breakaway = 1
         AND NOT EXISTS (
-          SELECT 1 FROM all_results r2
+          SELECT 1 FROM results_flat r2
           WHERE r2.stage_id = r1.stage_id
             AND r2.result_type_id = 1
             AND r2.rank < r1.rank
@@ -699,7 +699,7 @@ export class TeamRepository {
         cat.name AS category_name,
         r.result_type_id,
         COUNT(*) AS count
-      FROM all_results r
+      FROM results_flat r
       JOIN stages ON stages.id = r.stage_id
       JOIN races ON races.id = stages.race_id
       JOIN race_categories cat ON cat.id = races.category_id

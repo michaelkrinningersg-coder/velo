@@ -1382,6 +1382,17 @@ export class DatabaseService {
         ON results_history(team_id);
     `).run();
 
+    // Die Sicht `all_results` beantwortet keine Spielabfrage mehr. Sie faltet
+    // `results`, `results_history` und die sechs json_each-Zweige ueber
+    // `race_results_compact` zusammen; SQLite muss sie dafuer als CO-ROUTINE
+    // materialisieren, BEVOR gefiltert wird. Auf einem Spielstand von 2033
+    // kostete "alle Ergebnisse eines Fahrers" darueber 2563 ms, ueber
+    // `results_flat` 3 ms.
+    //
+    // Sie bleibt fuer die einmaligen Migrationen in dieser Datei: der
+    // Erstbefuellung von `results_flat` (ensureResultsFlatSchema) und
+    // `migrateSavegameStats`. Beide laufen, bevor `results_flat` steht — sie
+    // brauchen die Rohdaten. Alles andere liest `results_flat`.
     db.prepare(`DROP VIEW IF EXISTS all_results;`).run();
 
     db.prepare(`

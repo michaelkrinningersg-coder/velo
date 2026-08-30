@@ -495,11 +495,11 @@ export class RiderRepository {
     }
 
     // Performance: results_flat/stage_entries_flat sind dauerhafte Relational-
-    // Kopien (beim Commit gepflegt, einmalig backgefuellt). Die json_each-Views
-    // muessten fuer rider-bezogene Filter saemtliche Kompakt-Payloads entpacken
-    // (~600ms, wachsend); die Flat-Tabellen beantworten das per Index.
-    const resultsSource = tableExists(this.db, 'results_flat') ? 'results_flat' : 'all_results';
-    const entriesSource = tableExists(this.db, 'stage_entries_flat') ? 'stage_entries_flat' : 'all_stage_entries';
+    // Kopien (beim Commit gepflegt, einmalig backgefuellt). Beide werden vom
+    // Schema-Aufbau immer angelegt, ein Rueckfall auf die json_each-Sichten
+    // waere toter Code.
+    const resultsSource = 'results_flat';
+    const entriesSource = 'stage_entries_flat';
 
     const stageRows = this.db.prepare(`
       SELECT
@@ -2470,7 +2470,7 @@ export class RiderRepository {
   /**
    * Ermittelt Spezialrennen-Erfolge aus den Siegen des Fahrers (nach Rennnamen).
    * Grand-Tour-Siege = GC-Sieg an der Schlussetappe; Klassiker-Siege = Sieg im
-   * Eintagesrennen. Liest aus results_flat (Fallback all_results) und ist damit
+   * Eintagesrennen. Liest aus results_flat und ist damit
    * eine einzelne fahrergefilterte Query.
    */
   private getSpecialRaceAchievements(riderId: number): {
@@ -2481,7 +2481,7 @@ export class RiderRepository {
     if (!tableExists(this.db, 'results') && !tableExists(this.db, 'results_flat')) {
       return empty;
     }
-    const src = tableExists(this.db, 'results_flat') ? 'results_flat' : 'all_results';
+    const src = 'results_flat';
     const rows = this.db.prepare(`
       SELECT DISTINCT races.name AS name
       FROM ${src} rf
@@ -2664,10 +2664,10 @@ export class RiderRepository {
       if (currentDate < orderedStages[0].date) {
         selectedStage = orderedStages[0];
       } else {
-        const completedStageIds = tableExists(this.db, 'all_results')
+        const completedStageIds = tableExists(this.db, 'results_flat')
           ? new Set<number>((this.db.prepare(`
             SELECT DISTINCT stage_id
-            FROM all_results
+            FROM results_flat
             WHERE result_type_id = ?
               AND stage_id IN (${orderedStages.map(() => '?').join(', ')})
           `).all(RESULT_TYPE_IDS.stage, ...orderedStages.map((stage) => stage.id)) as Array<{ stage_id: number }>).map((row) => row.stage_id))

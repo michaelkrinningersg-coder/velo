@@ -713,7 +713,7 @@ export class ResultRepository {
     if (prevPrevStage) {
       const pRows = this.db.prepare(`
         SELECT rider_id, rank
-        FROM all_results
+        FROM results_flat
         WHERE stage_id = ?
           AND result_type_id = ?
           AND rider_id IS NOT NULL
@@ -725,7 +725,7 @@ export class ResultRepository {
 
     const rows = this.db.prepare(`
       SELECT rider_id, rank, time_seconds
-      FROM all_results
+      FROM results_flat
       WHERE stage_id = ?
         AND result_type_id = ?
         AND rider_id IS NOT NULL
@@ -868,7 +868,7 @@ export class ResultRepository {
     const maxStageRow = this.db.prepare(`
       SELECT MAX(stages.stage_number) AS max_stage_number
       FROM stages
-      JOIN all_results r ON r.stage_id = stages.id
+      JOIN results_flat r ON r.stage_id = stages.id
       WHERE stages.race_id = ? AND r.result_type_id = 2
     `).get(raceId) as { max_stage_number: number | null } | undefined;
     const maxStageNumber = maxStageRow?.max_stage_number ?? null;
@@ -882,7 +882,7 @@ export class ResultRepository {
       if (maxStageIdRow) {
         const gcRanks = this.db.prepare(`
           SELECT rider_id, rank
-          FROM all_results
+          FROM results_flat
           WHERE stage_id = ? AND result_type_id = 2 AND rider_id IS NOT NULL
         `).all(maxStageIdRow.id) as Array<{ rider_id: number; rank: number }>;
         
@@ -983,7 +983,7 @@ export class ResultRepository {
         results.jerseys_worn AS jerseys_worn,
         leadout_riders.last_name AS leadout_rider_last_name,
         leadout_countries.code_3 AS leadout_rider_country_code
-      FROM all_results results
+      FROM results_flat results
       JOIN result_types ON result_types.id = results.result_type_id
       LEFT JOIN riders ON riders.id = results.rider_id
       LEFT JOIN teams ON teams.id = results.team_id
@@ -1029,7 +1029,7 @@ export class ResultRepository {
         if (prevPrevStage) {
           const pRows = this.db.prepare(`
             SELECT rider_id, team_id, rank, result_type_id
-            FROM all_results
+            FROM results_flat
             WHERE stage_id = ?
               AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
           `).all(prevPrevStage.stage_id) as Array<{ rider_id: number | null; team_id: number | null; rank: number; result_type_id: number }>;
@@ -1049,7 +1049,7 @@ export class ResultRepository {
 
         const prevRows = this.db.prepare(`
           SELECT rider_id, team_id, rank, time_seconds, points, result_type_id
-          FROM all_results
+          FROM results_flat
           WHERE stage_id = ?
             AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
           ORDER BY rank ASC
@@ -1399,7 +1399,7 @@ export class ResultRepository {
         SELECT 
           r.rider_id, 
           r.team_id
-        FROM all_results r
+        FROM results_flat r
         JOIN riders ON riders.id = r.rider_id
         WHERE r.stage_id = ? 
           AND r.result_type_id = ? 
@@ -1417,7 +1417,7 @@ export class ResultRepository {
 
     return this.db.prepare(`
       SELECT rider_id, team_id, rank
-      FROM all_results
+      FROM results_flat
       WHERE stage_id = ? AND result_type_id = ? AND rider_id IS NOT NULL AND team_id IS NOT NULL
       ORDER BY rank ASC
     `).all(stageId, resultTypeId) as SeasonPointResultRow[];
@@ -1559,7 +1559,7 @@ export class ResultRepository {
       const season = Number.parseInt(previousStage.date.slice(0, 4), 10);
       const row = this.db.prepare(`
         SELECT r.rider_id
-        FROM all_results r
+        FROM results_flat r
         JOIN riders ON riders.id = r.rider_id
         WHERE r.stage_id = ?
           AND r.result_type_id = ?
@@ -1573,7 +1573,7 @@ export class ResultRepository {
 
     const row = this.db.prepare(`
       SELECT rider_id
-      FROM all_results
+      FROM results_flat
       WHERE stage_id = ?
         AND result_type_id = ?
         AND rider_id IS NOT NULL
@@ -1616,7 +1616,7 @@ export class ResultRepository {
       if (prevPrevStage) {
         const pRows = this.db.prepare(`
           SELECT r.rider_id
-          FROM all_results r
+          FROM results_flat r
           JOIN riders ON riders.id = r.rider_id
           WHERE r.stage_id = ?
             AND r.result_type_id = ?
@@ -1631,7 +1631,7 @@ export class ResultRepository {
 
       const rows = this.db.prepare(`
         SELECT r.rider_id, r.team_id, r.time_seconds, r.points
-        FROM all_results r
+        FROM results_flat r
         JOIN riders ON riders.id = r.rider_id
         WHERE r.stage_id = ?
           AND r.result_type_id = ?
@@ -1661,7 +1661,7 @@ export class ResultRepository {
     if (prevPrevStage) {
       const pRows = this.db.prepare(`
         SELECT rider_id, team_id, rank
-        FROM all_results
+        FROM results_flat
         WHERE stage_id = ?
           AND result_type_id = ?
           AND (rider_id IS NOT NULL OR team_id IS NOT NULL)
@@ -1677,7 +1677,7 @@ export class ResultRepository {
 
     const rows = this.db.prepare(`
       SELECT rider_id, team_id, rank, time_seconds, points
-      FROM all_results
+      FROM results_flat
       WHERE stage_id = ?
         AND result_type_id = ?
         AND (rider_id IS NOT NULL OR team_id IS NOT NULL)

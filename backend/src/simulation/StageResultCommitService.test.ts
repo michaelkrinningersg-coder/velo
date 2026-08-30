@@ -86,7 +86,7 @@ describe('StageResultCommitService.commitRealtimeStage', () => {
     // relational `results` table with the compacted JSON the commit writes for
     // finished races. Every finisher should appear with a stage result.
     const stageResults = db
-      .prepare('SELECT rider_id, rank FROM all_results WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
+      .prepare('SELECT rider_id, rank FROM results_flat WHERE stage_id = ? AND result_type_id = 1 ORDER BY rank')
       .all(STAGE_ID) as Array<{ rider_id: number; rank: number }>;
     expect(stageResults.length).toBe(4);
 
