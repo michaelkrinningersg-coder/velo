@@ -404,57 +404,35 @@ export class GameStateService {
           `).run(`${currentRow.season}-%`);
           console.log(`Ergebnisse und Etappeneinträge der Saison ${currentRow.season} erfolgreich archiviert/bereinigt.`);
 
-          // Prune race_results_compact for the elapsed season to keep only point-scoring results
+          // Die Payloads der abgelaufenen Saison leeren.
+          //
+          // `race_results_compact` war einmal das Ergebnisarchiv. Seit alle
+          // Spielabfragen auf `results_flat` lesen, wird der JSON-Blob nur noch
+          // geschrieben, nie gelesen — gebraucht wird allein, dass die ZEILE
+          // existiert: sie ist die Markierung "dieses Rennen ist abgeschlossen"
+          // (ensureStageCanBeSimulated, getPendingStages).
+          //
+          // Frueher wurde der Blob hier Zeile fuer Zeile geprunt (Sieger und
+          // Punkteraenge behalten). Das Ergebnis war eine zweite, unindizierte
+          // Kopie dessen, was `results_flat` ohnehin traegt — im gemessenen
+          // Spielstand von 2033 15,7 MB, gut 1,2 MB je Saison. Ein
+          // Mengenvergleich in beide Richtungen ergab: keine einzige Zeile
+          // steckt nur im Blob.
+          //
+          // `'{}'` ist dieselbe leere Markierung, die
+          // finalizeChampionshipWithoutStarters schon immer schreibt; die Sicht
+          // `all_results` liefert dafuer null Zeilen statt eines Fehlers.
           try {
-            console.log(`Pruning race results compact for season ${currentRow.season}...`);
-            const pointsEvents = this.db.prepare(`
-              SELECT stage_id, rider_id, team_id
-              FROM season_point_events
-              WHERE season = ? AND points_awarded > 0
-            `).all(currentRow.season) as Array<{ stage_id: number; rider_id: number | null; team_id: number }>;
+            const geleert = this.db.prepare(`
+              UPDATE race_results_compact SET payload = '{}' WHERE season = ? AND payload <> '{}'
+            `).run(currentRow.season);
+            console.log(`race_results_compact: ${geleert.changes} Payloads der Saison ${currentRow.season} geleert.`);
 
-            const riderPointsKeys = new Set<string>();
-            const teamPointsKeys = new Set<string>();
-            for (const p of pointsEvents) {
-              if (p.rider_id != null) {
-                riderPointsKeys.add(`${p.stage_id}_${p.rider_id}`);
-              } else {
-                teamPointsKeys.add(`${p.stage_id}_${p.team_id}`);
-              }
-            }
-
-            const compactRows = this.db.prepare(`
-              SELECT race_id, payload FROM race_results_compact WHERE season = ?
-            `).all(currentRow.season) as Array<{ race_id: number; payload: string }>;
-
-            const updateStmt = this.db.prepare(`
-              UPDATE race_results_compact SET payload = ? WHERE race_id = ?
-            `);
-
-            for (const row of compactRows) {
-              const groups = JSON.parse(row.payload);
-              for (const typeKey of Object.keys(groups)) {
-                if (Array.isArray(groups[typeKey])) {
-                  groups[typeKey] = groups[typeKey].filter((r: any) => {
-                    const stageId = r[0];
-                    const riderId = r[1];
-                    const teamId = r[2];
-                    const rank = r[3];
-                    if (rank === 1) return true; // Sieger immer behalten
-                    if (riderId != null) {
-                      return riderPointsKeys.has(`${stageId}_${riderId}`);
-                    } else {
-                      return teamPointsKeys.has(`${stageId}_${teamId}`);
-                    }
-                  });
-                }
-              }
-              updateStmt.run(JSON.stringify(groups), row.race_id);
-            }
-            console.log(`Pruning finished for season ${currentRow.season}.`);
-
-            // results_flat mit derselben Regel prunen wie die Kompakt-Payloads:
-            // Rang-1-Zeilen immer behalten, sonst nur Zeilen mit Saisonpunkten.
+            // results_flat prunen: Rang-1-Zeilen immer behalten, sonst nur
+            // Zeilen mit Saisonpunkten. Das ist jetzt die einzige Ausduennung —
+            // die Kompakt-Payloads werden darueber geleert, nicht mehr geprunt.
+            // Dieselbe Regel wie frueher dort, damit sich am Umfang der
+            // erhaltenen Ergebnisse nichts aendert.
             // stage_entries_flat bleibt unangetastet — es ist seit dem Wegfall von
             // stage_entries_compact das Archiv der Startlisten, und die DNF-Eintraege
             // darin traegt die Fahrer-Historie.

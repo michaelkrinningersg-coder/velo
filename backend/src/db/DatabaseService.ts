@@ -1929,6 +1929,20 @@ export class DatabaseService {
     `).run();
   }
 
+  /**
+   * Markierung "dieses Rennen ist abgeschlossen", je Rennen eine Zeile.
+   *
+   * Die Tabelle war einmal das Ergebnisarchiv: beim Rennabschluss wanderten
+   * alle Ergebnisse als JSON nach `payload`, und die Sicht `all_results`
+   * packte sie bei jeder Abfrage wieder aus. Seit alle Spielabfragen auf
+   * `results_flat` lesen, wird `payload` nur noch geschrieben. Gebraucht wird
+   * allein die Existenz der Zeile — `ensureStageCanBeSimulated` und
+   * `getPendingStages` erkennen daran ein fertiges Rennen.
+   *
+   * Beim Saisonwechsel wird `payload` deshalb auf `'{}'` gesetzt statt geprunt
+   * (siehe advanceDay), und `leereAlteErgebnisPayloads` holt das fuer
+   * bestehende Spielstaende einmalig nach.
+   */
   private ensureRaceResultsCompactSchema(db: Database.Database): void {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS race_results_compact (
@@ -1947,11 +1961,11 @@ export class DatabaseService {
   /**
    * Dauerhafte, schlanke Relational-Kopie aller Ergebnisse und Etappen-
    * Einsaetze ("History-Ablage"). Wird beim Ergebnis-Commit inkrementell
-   * gepflegt und ueberlebt die Kompaktierung beim Rennabschluss. Am Saison-
-   * ende wird sie mit derselben Regel geprunt wie die Kompakt-Payloads
-   * (Rang 1 + Punkte-Zeilen bleiben, siehe advanceDay). Rider-/Team-
-   * bezogene Abfragen (z.B. Fahrer-Statistik) muessen damit nicht mehr die
-   * json_each-Views entpacken (dort ~600ms pro Aufruf, linear wachsend).
+   * gepflegt und ueberlebt die Kompaktierung beim Rennabschluss. Am Saisonende
+   * wird sie ausgeduennt: Rang-1-Zeilen und Zeilen mit Saisonpunkten bleiben
+   * (siehe advanceDay). Sie ist seit der Umstellung aller Spielabfragen die
+   * alleinige Ablage der Ergebnisse — `race_results_compact` haelt nur noch die
+   * Markierung, dass ein Rennen abgeschlossen ist.
    */
   private ensureResultsFlatSchema(db: Database.Database): void {
     db.prepare(`
@@ -2078,6 +2092,52 @@ export class DatabaseService {
       `).run();
     } catch (e) {
       console.error('Youth-results_flat-Backfill fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
+    }
+  }
+
+  /**
+   * Leert die Ergebnis-Payloads abgeschlossener Saisons — einmalig je Save.
+   *
+   * `race_results_compact` war einmal das Ergebnisarchiv. Seit alle
+   * Spielabfragen auf `results_flat` lesen, wird der JSON-Blob nur noch
+   * geschrieben, nie gelesen; gebraucht wird allein, dass die ZEILE existiert —
+   * sie ist die Markierung "dieses Rennen ist abgeschlossen". Im gemessenen
+   * Spielstand von 2033 hingen daran 15,7 MB.
+   *
+   * Nur Saisons VOR der laufenden. Die laufende bleibt vollstaendig: ihre
+   * Payloads liest `backfillSeasonWinsV2` (GameStateService) beim Laden alter
+   * Saves, und sie werden beim naechsten Saisonwechsel ohnehin geleert.
+   *
+   * Reihenfolge: laeuft nach `ensureResultsFlatSchema` (dessen Backfill die
+   * Payloads braucht) und nach `migrateSavegameStats` (aufgerufen aus
+   * `ensureRiderCategoryStatsSchema`, die frueher an der Reihe ist).
+   */
+  private leereAlteErgebnisPayloads(db: Database.Database): void {
+    try {
+      if (!tableExists(db, 'race_results_compact') || !tableExists(db, 'career_meta')
+        || !tableExists(db, 'game_state') || !tableExists(db, 'results_flat')) {
+        return;
+      }
+      const flag = db.prepare(`SELECT value FROM career_meta WHERE key = 'compact_payloads_cleared_v1'`).get() as { value: string } | undefined;
+      if (flag) {
+        return;
+      }
+      const stand = db.prepare('SELECT season FROM game_state WHERE id = 1').get() as { season: number } | undefined;
+      if (stand == null) {
+        return;
+      }
+      const geleert = db.prepare(`
+        UPDATE race_results_compact SET payload = '{}' WHERE season < ? AND payload <> '{}'
+      `).run(stand.season);
+      db.prepare(`
+        INSERT INTO career_meta (key, value) VALUES ('compact_payloads_cleared_v1', '1')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run();
+      if (geleert.changes > 0) {
+        console.log(`race_results_compact: ${geleert.changes} Payloads abgeschlossener Saisons geleert.`);
+      }
+    } catch (e) {
+      console.error('Leeren der alten Ergebnis-Payloads fehlgeschlagen (wird beim naechsten Start erneut versucht):', e);
     }
   }
 
@@ -3753,6 +3813,9 @@ export class DatabaseService {
     // ensureRiderCategoryStatsSchema (all_stage_entries-View) aufrufen —
     // der Backfill liest beide Views.
     this.ensureResultsFlatSchema(db);
+    // Muss NACH ensureResultsFlatSchema laufen: der Backfill dort liest die
+    // Payloads, die hier geleert werden.
+    this.leereAlteErgebnisPayloads(db);
     this.ensureCareerDerivedBackfills(db);
     this.ensureTeamPreferencesData(db);
     this.ensureTeamSpecTargets(db);
