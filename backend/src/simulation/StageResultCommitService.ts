@@ -1576,33 +1576,72 @@ export class StageResultCommitService {
         return groupSize >= BUNCH_SPRINT_MIN_GROUP ? winnerRow.riderId : null;
       })();
 
-      const updateFinishedStats = this.db.prepare(`
-        UPDATE rider_career_stats
-        SET race_days = race_days + 1,
-            successful_breakaways = successful_breakaways + ?,
-            total_km = total_km + ?
-        WHERE rider_id = ?
-      `);
-
-      const updateFinishedSeasonStats = this.db.prepare(`
-        UPDATE rider_season_stats
-        SET race_days = race_days + 1,
-            successful_breakaways = successful_breakaways + ?,
-            total_km = total_km + ?
-        WHERE rider_id = ? AND season = ?
-      `);
-
-      const updateFinishedCategoryStats = this.db.prepare(`
-        UPDATE rider_season_category_stats
-        SET race_days = race_days + 1
-        WHERE rider_id = ? AND season = ? AND category_name = ?
-      `);
-
-      const updateFinishedCareerCategoryStats = this.db.prepare(`
-        UPDATE rider_career_category_stats
-        SET race_days = race_days + 1
-        WHERE rider_id = ? AND category_name = ?
-      `);
+      // Die vier Renntag-Buchungen liefen bisher je Fahrer — bei 200 Startern
+      // 800 Anweisungen je Etappe, in zwei gemessenen Spielmonaten rund 56 000.
+      // Gesammelt und in Bloecken geschrieben sind es wenige je Etappe.
+      //
+      // `stageDistanceKm` und `categoryName` sind ueber die Etappe konstant,
+      // `isSuccess` ist 0 oder 1 — es genuegen also zwei Gruppen. Kaeme ein
+      // Fahrer zweimal vor, wuerde eine `IN`-Liste seinen Renntag nur einmal
+      // zaehlen; deshalb wird in Runden geschrieben, eine je Wiederholung.
+      const renntagBuchungen: Array<{ riderId: number; erfolg: number }> = [];
+      const renntagAnweisungen = (groesse: number) => {
+        const platzhalter = Array.from({ length: groesse }, () => '?').join(',');
+        return [
+          this.db.prepare(`
+            UPDATE rider_career_stats
+            SET race_days = race_days + 1,
+                successful_breakaways = successful_breakaways + ?,
+                total_km = total_km + ?
+            WHERE rider_id IN (${platzhalter})
+          `),
+          this.db.prepare(`
+            UPDATE rider_season_stats
+            SET race_days = race_days + 1,
+                successful_breakaways = successful_breakaways + ?,
+                total_km = total_km + ?
+            WHERE season = ? AND rider_id IN (${platzhalter})
+          `),
+          this.db.prepare(`
+            UPDATE rider_season_category_stats
+            SET race_days = race_days + 1
+            WHERE season = ? AND category_name = ? AND rider_id IN (${platzhalter})
+          `),
+          this.db.prepare(`
+            UPDATE rider_career_category_stats
+            SET race_days = race_days + 1
+            WHERE category_name = ? AND rider_id IN (${platzhalter})
+          `),
+        ] as const;
+      };
+      const schreibeRenntage = (): void => {
+        let rest = [...renntagBuchungen];
+        while (rest.length > 0) {
+          const runde: Array<{ riderId: number; erfolg: number }> = [];
+          const uebrig: Array<{ riderId: number; erfolg: number }> = [];
+          const gesehen = new Set<number>();
+          for (const buchung of rest) {
+            if (gesehen.has(buchung.riderId)) uebrig.push(buchung);
+            else { gesehen.add(buchung.riderId); runde.push(buchung); }
+          }
+          rest = uebrig;
+          for (const erfolg of [0, 1]) {
+            let ids = runde.filter((b) => b.erfolg === erfolg).map((b) => b.riderId);
+            for (const groesse of [128, 16, 1]) {
+              const [karriere, saison, saisonKategorie, karriereKategorie] = renntagAnweisungen(groesse);
+              while (ids.length >= groesse) {
+                const block = ids.slice(0, groesse);
+                ids = ids.slice(groesse);
+                karriere.run(erfolg, stageDistanceKm, ...block);
+                saison.run(erfolg, stageDistanceKm, currentSeason, ...block);
+                saisonKategorie.run(currentSeason, categoryName, ...block);
+                karriereKategorie.run(categoryName, ...block);
+              }
+            }
+          }
+        }
+        renntagBuchungen.length = 0;
+      };
 
       const getTeamRidersStmt = this.db.prepare(`
         SELECT rider_id FROM stage_entries
@@ -1715,10 +1754,7 @@ export class StageResultCommitService {
               getOrCreateCareerCategoryStats.run(rId, categoryName);
 
               const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
-              updateFinishedStats.run(isSuccess, stageDistanceKm, rId);
-              updateFinishedSeasonStats.run(isSuccess, stageDistanceKm, rId, currentSeason);
-              updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
-              updateFinishedCareerCategoryStats.run(rId, categoryName);
+              renntagBuchungen.push({ riderId: rId, erfolg: isSuccess });
 
               const w1 = (row.rank === 1 && stage.rolledWeatherId === 1) ? 1 : 0;
               const w2 = (row.rank === 1 && stage.rolledWeatherId === 2) ? 1 : 0;
@@ -1747,10 +1783,7 @@ export class StageResultCommitService {
         getOrCreateCareerCategoryStats.run(rId, categoryName);
 
         const isSuccess = isBreakawayWinner && breakawayRiderIds.has(rId) ? 1 : 0;
-        updateFinishedStats.run(isSuccess, stageDistanceKm, rId);
-        updateFinishedSeasonStats.run(isSuccess, stageDistanceKm, rId, currentSeason);
-        updateFinishedCategoryStats.run(rId, currentSeason, categoryName);
-        updateFinishedCareerCategoryStats.run(rId, categoryName);
+        renntagBuchungen.push({ riderId: rId, erfolg: isSuccess });
 
         const escKms = riderEscapeKms.get(rId) ?? 0.0;
         const sform = superformCounts.get(rId) ?? 0;
@@ -1811,6 +1844,10 @@ export class StageResultCommitService {
           rId, categoryName
         );
       }
+
+      // Die gesammelten Renntage jetzt schreiben — noch innerhalb derselben
+      // Transaktion und vor allem, was danach kommt.
+      schreibeRenntage();
 
       // Massensprint-Sieg fuer den Sieger vermerken (Career-Row existiert
       // bereits aus der Finisher-Schleife oben). Spalte kann in sehr alten

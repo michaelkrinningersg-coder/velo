@@ -55,6 +55,17 @@ SPUR="SELECT riders.*" ... tools/fortschritt/messung.ts savegames/mein.db 2
 Mehrere Anfänge lassen sich mit `;;` trennen; die Zählung nennt dann je Zeile,
 welche Abfrage gemeint war.
 
+## Wanduhr: messung oder vorlauf?
+
+`messung.ts` legt eine Messhülle um **jede** SQL-Ausführung. Das kostet — in
+einem Profil entfielen knapp 40 % der Laufzeit auf die Hülle selbst. Die
+Aufteilung nach Phasen und die Rangliste der Abfragen stimmen trotzdem, die
+absolute Wanduhr ist aber zu hoch.
+
+Für ein ehrliches Vorher/Nachher deshalb `vorlauf.ts` nehmen: es misst nur die
+Phasen, ohne Hülle. Zwei Monate ab 2033-06 auf demselben Spielstand kosteten so
+15,96 s vorher und 10,16 s nachher — 79,8 gegen 50,8 ms je Schritt.
+
 ## Schalter
 
 - `STUMM=0` — die Protokollausgabe der Simulation stehen lassen. Sie kostet

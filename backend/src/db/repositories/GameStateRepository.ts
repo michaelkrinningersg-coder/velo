@@ -175,17 +175,27 @@ export class GameStateRepository {
           ORDER BY rider_id ASC
         `).all(stage.raceId)) as Array<{ race_id: number; team_id: number; rider_id: number }>;
 
-    const insertStageEntry = this.db.prepare(`
+    // In Bloecken statt Fahrer fuer Fahrer. Bei 200 Startern waren das 200
+    // Ausfuehrungen je Aufruf, und der Aufruf kommt zweimal je Etappe (einmal
+    // beim Aufbau, einmal beim Verbuchen): in zwei gemessenen Spielmonaten
+    // 56 630 Anweisungen. Feste Blockgroessen, damit der
+    // Anweisungs-Zwischenspeicher an der Verbindung nicht mit einer neuen
+    // Anweisung je Feldgroesse volllaeuft.
+    const zeilen = raceEntries.filter((entry) => !inactiveRiderIds.has(entry.rider_id));
+    const einfuegen = (groesse: number) => this.db.prepare(`
       INSERT OR IGNORE INTO stage_entries (stage_id, race_id, team_id, rider_id, status, status_reason)
-      VALUES (?, ?, ?, ?, 'scheduled', NULL)
+      VALUES ${Array.from({ length: groesse }, () => "(?, ?, ?, ?, 'scheduled', NULL)").join(', ')}
     `);
 
     this.db.transaction(() => {
-      for (const entry of raceEntries) {
-        if (inactiveRiderIds.has(entry.rider_id)) {
-          continue;
+      let rest = zeilen;
+      for (const groesse of [128, 16, 1]) {
+        const anweisung = einfuegen(groesse);
+        while (rest.length >= groesse) {
+          const block = rest.slice(0, groesse);
+          rest = rest.slice(groesse);
+          anweisung.run(block.flatMap((entry) => [stage.id, stage.raceId, entry.team_id, entry.rider_id]));
         }
-        insertStageEntry.run(stage.id, stage.raceId, entry.team_id, entry.rider_id);
       }
     })();
 
