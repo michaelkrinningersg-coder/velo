@@ -35,6 +35,7 @@ describe('StageResultCommitService reconcile roster drift', () => {
       getRaceById: (id: number) => raceRepo.getRaceById(id),
       getStageById: (id: number) => raceRepo.getStageById(id),
       getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
+      getRaceEntryIds: (raceId: number) => raceRepo.getRaceEntryIds(raceId),
       getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
       prepareStageRaceFatigue: (raceId: number, sn: number, ids: number[]) => gsRepo.prepareStageRaceFatigue(raceId, sn, ids),
       ensureStageEntries: (stage: any) => gsRepo.ensureStageEntries(stage),

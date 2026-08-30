@@ -44,6 +44,11 @@ import {
   isNationalChampionshipCategory,
   NATIONAL_SELECTION_TEAM_ID,
 } from './championships';
+// `tableExists`/`columnExists` kommen aus db/mappers: dort werden positive
+// Antworten je Verbindung gemerkt. Die frueheren lokalen Kopien fragten das
+// Schema bei jedem Aufruf neu — in zwei gemessenen Spielmonaten waren das 7341
+// sqlite_master-Abfragen und 2117 `PRAGMA table_info`.
+import { columnExists, tableExists } from '../db/mappers';
 
 const RESULT_TYPES = {
   stage: 1,
@@ -115,14 +120,33 @@ interface ResultInsertRow {
   leadoutBonus?: number | null;
 }
 
-function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
-  return row != null;
-}
-
-function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
-  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return rows.some((r) => r.name === columnName);
+/**
+ * Haelt eine INSERT-OR-IGNORE-Anweisung davon ab, dieselbe Zeile mehrfach
+ * anzulegen.
+ *
+ * Die Statistikzeilen werden im Etappen-Commit an rund fuenfzehn Stellen
+ * vorsichtshalber angelegt, bevor sie hochgezaehlt werden — jede Stelle mit
+ * einem eigenen INSERT OR IGNORE. In zwei gemessenen Spielmonaten waren das
+ * 56 193 Anlage-Versuche fuer 14 000 Fahrer-Etappen, also rund 400 je Etappe
+ * fuer immer dieselben paar hundert Fahrer.
+ *
+ * Der Merker macht daraus einen Aufruf je Fahrer. Die Aufrufstellen bleiben,
+ * wo sie sind: sie duerfen ihre Zeile weiter anfordern, nur die Wiederholung
+ * faellt weg. Ein Merker gilt fuer genau einen Commit.
+ */
+function einmalJeCommit<S extends unknown[]>(
+  anweisung: Database.Statement,
+  schluessel: (...args: S) => string | null,
+): { run: (...args: S) => void } {
+  const erledigt = new Set<string>();
+  return {
+    run: (...args: S): void => {
+      const k = schluessel(...args);
+      if (k == null || erledigt.has(k)) return;
+      erledigt.add(k);
+      anweisung.run(...(args as unknown[]));
+    },
+  };
 }
 
 function parseRankedValues(serialized: string | undefined): number[] {
@@ -299,6 +323,7 @@ export class StageResultCommitService {
       getStageById: (id: number) => raceRepo.getStageById(id),
       getRaceById: (id: number) => raceRepo.getRaceById(id),
       getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
+      getRaceEntryIds: (raceId: number) => raceRepo.getRaceEntryIds(raceId),
       getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),
       getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
       // TeamRepository methods
@@ -484,10 +509,6 @@ export class StageResultCommitService {
   }
 
   private loadDnsEvents(race: Race, stage: Stage): RaceSimMessage[] {
-    const tableExists = (db: Database.Database, name: string): boolean => {
-      const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
-      return !!row;
-    };
     if (!tableExists(this.db, 'rider_daily_state')) {
       return [];
     }
@@ -1224,9 +1245,9 @@ export class StageResultCommitService {
       const currentSeason = this.repo.getCurrentSeason();
 
       // Ensure stats row exists for the season
-      const insertSeasonStatsRowStmt = this.db.prepare(`
+      const insertSeasonStatsRowStmt = einmalJeCommit<[number, number]>(this.db.prepare(`
         INSERT OR IGNORE INTO rider_season_stats (rider_id, season) VALUES (?, ?)
-      `);
+      `), (riderId, saison) => (riderId == null ? null : `${riderId}:${saison}`));
       // Update statement for stage results career-like increments in season stats
       const updateSeasonCareerLikeStmt = this.db.prepare(`
         UPDATE rider_season_stats SET
@@ -1433,21 +1454,21 @@ export class StageResultCommitService {
         console.error('Error updating team category stats:', err.message);
       }
 
-      const insertCareerStatsRow = this.db.prepare(`
+      const insertCareerStatsRow = einmalJeCommit<[number]>(this.db.prepare(`
         INSERT OR IGNORE INTO rider_career_stats (rider_id) VALUES (?)
-      `);
+      `), (riderId) => (riderId == null ? null : String(riderId)));
 
-      const insertSeasonStatsRow = this.db.prepare(`
+      const insertSeasonStatsRow = einmalJeCommit<[number, number]>(this.db.prepare(`
         INSERT OR IGNORE INTO rider_season_stats (rider_id, season) VALUES (?, ?)
-      `);
+      `), (riderId, saison) => (riderId == null ? null : `${riderId}:${saison}`));
 
-      const getOrCreateCategoryStats = this.db.prepare(`
+      const getOrCreateCategoryStats = einmalJeCommit<[number, number, string]>(this.db.prepare(`
         INSERT OR IGNORE INTO rider_season_category_stats (rider_id, season, category_name) VALUES (?, ?, ?);
-      `);
+      `), (riderId, saison, kategorie) => (riderId == null ? null : `${riderId}:${saison}:${kategorie}`));
 
-      const getOrCreateCareerCategoryStats = this.db.prepare(`
+      const getOrCreateCareerCategoryStats = einmalJeCommit<[number, string]>(this.db.prepare(`
         INSERT OR IGNORE INTO rider_career_category_stats (rider_id, category_name) VALUES (?, ?);
-      `);
+      `), (riderId, kategorie) => (riderId == null ? null : `${riderId}:${kategorie}`));
 
       const updateCareerIncrement = this.db.prepare(`
         UPDATE rider_career_stats
@@ -1504,17 +1525,26 @@ export class StageResultCommitService {
         // Pruning: je Saison und all-time die 50 SCHNELLSTEN UND die 50
         // LANGSAMSTEN behalten. Eine Zeile ueberlebt, wenn sie in einer der vier
         // Ranglisten unter den ersten 50 liegt. Haelt die Tabelle klein.
+        //
+        // Geloescht werden kann nur in der LAUFENDEN Saison. Eine abgeschlossene
+        // Saison bekommt keine Zeilen mehr dazu, ihre eigenen beiden Ranglisten
+        // aendern sich also nicht — und wer dort unter den ersten 50 steht,
+        // ueberlebt jede kuenftige Runde. Frueher lief die Auswertung ueber alle
+        // Saisons (PARTITION BY season) und damit ueber die ganze Tabelle:
+        // 1,28 ms je Etappe statt 0,54 ms. An 400 kuenstlichen Neuzugaengen
+        // gegen die alte Fassung geprueft, Zeile fuer Zeile dieselbe Tabelle.
         this.db.prepare(`
-          WITH season_fast AS (
-            SELECT id, ROW_NUMBER() OVER (PARTITION BY season ORDER BY avg_speed_kmh DESC, id ASC) rn
-            FROM stage_speed_records WHERE kind = ?
+          WITH kandidaten AS (
+            SELECT id, avg_speed_kmh FROM stage_speed_records WHERE kind = ? AND season = ?
+          ),
+          season_fast AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh DESC, id ASC) rn FROM kandidaten
+          ),
+          season_slow AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh ASC, id ASC) rn FROM kandidaten
           ),
           alltime_fast AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY avg_speed_kmh DESC, id ASC) rn
-            FROM stage_speed_records WHERE kind = ?
-          ),
-          season_slow AS (
-            SELECT id, ROW_NUMBER() OVER (PARTITION BY season ORDER BY avg_speed_kmh ASC, id ASC) rn
             FROM stage_speed_records WHERE kind = ?
           ),
           alltime_slow AS (
@@ -1522,12 +1552,12 @@ export class StageResultCommitService {
             FROM stage_speed_records WHERE kind = ?
           )
           DELETE FROM stage_speed_records
-          WHERE kind = ?
+          WHERE kind = ? AND season = ?
             AND id NOT IN (SELECT id FROM season_fast WHERE rn <= 50)
             AND id NOT IN (SELECT id FROM alltime_fast WHERE rn <= 50)
             AND id NOT IN (SELECT id FROM season_slow WHERE rn <= 50)
             AND id NOT IN (SELECT id FROM alltime_slow WHERE rn <= 50)
-        `).run(kind, kind, kind, kind, kind);
+        `).run(kind, speedSeason, kind, kind, kind, speedSeason);
       }
 
       // Bunch-Sprint-Erkennung: Wurde das Finish im Tie-Break-Zeitfenster
@@ -2551,7 +2581,15 @@ export class StageResultCommitService {
 
     const gameStateService = new GameStateService(this.db);
     gameStateService.applyRaceDayFormBonuses(stage.date, completedRiderIds);
-    gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason());
+    // Nur die Fahrer dieser Etappe: allein deren Renntage haben sich gerade
+    // geaendert. Siehe refreshRiderLoadState — ohne die Liste schrieb der
+    // Commit `rider_daily_state` fuer das gesamte Fahrerfeld neu.
+    const betroffeneFahrer = new Set<number>([
+      ...ridersById.keys(),
+      ...completedRiderIds,
+      ...dnfEntries.map((e) => e.riderId),
+    ]);
+    gameStateService.refreshRiderLoadState(stage.date, this.repo.getCurrentSeason(), [...betroffeneFahrer]);
     gameStateService.applyStageFatigue(stage.id, completedRiderIds, dnfEntries.map((e) => e.riderId));
 
     this.repo.syncSeasonPointEventsForSeason(this.repo.getCurrentSeason(), stage.id);

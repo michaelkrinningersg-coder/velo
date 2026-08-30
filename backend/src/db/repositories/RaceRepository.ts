@@ -176,6 +176,27 @@ export class RaceRepository {
   }
 
 
+  /**
+   * Nur Fahrer- und Team-ID der Startliste eines Rennens.
+   *
+   * `getRaceRiders` baut dafuer vollstaendige Fahrerobjekte samt Tageszustand,
+   * Vertrag und Saisonpunkten — im gemessenen Spielstand von 2033 sind das 200
+   * Zeilen mit rund 80 Spalten je Etappe, plus das Mapping in JavaScript. Drei
+   * Aufrufstellen (ensureRaceEntries, resolveParticipatingTeams,
+   * applyChampionshipEntries) lesen davon ausschliesslich IDs.
+   *
+   * Dieselbe Auswahl und dieselbe Reihenfolge wie `getRaceRiders`.
+   */
+  public getRaceEntryIds(raceId: number): Array<{ riderId: number; teamId: number | null }> {
+    return this.db.prepare(`
+      SELECT r.id AS riderId, r.active_team_id AS teamId
+      FROM riders r
+      INNER JOIN race_entries re ON re.rider_id = r.id
+      WHERE re.race_id = ? AND r.is_retired = 0
+      ORDER BY r.overall_rating DESC
+    `).all(raceId) as Array<{ riderId: number; teamId: number | null }>;
+  }
+
   public getRaceRiders(raceId: number): Rider[] {
     const season = new GameStateRepository(this.db).getCurrentSeason();
     const currentDate = new GameStateRepository(this.db).getCurrentDate();
@@ -238,7 +259,12 @@ export class RaceRepository {
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(raceId) as RiderRow[];
-    const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(season);
+    // Nur die Punkte der geladenen Fahrer aggregieren. Ohne die Einschraenkung
+    // laeuft ein GROUP BY ueber alle Punktereignisse der Saison (74 000 Zeilen
+    // im gemessenen Spielstand von 2033, 1,9 ms je Aufruf), um daraus 200
+    // Fahrer nachzuschlagen — und der Aufruf steckt in jedem Etappenschritt.
+    const seasonPointsByRiderId = new RiderRepository(this.db)
+      .getSeasonPointsByRiderId(season, rows.map((row) => row.id));
     const stageRow = this.db.prepare('SELECT stage_number FROM stages WHERE race_id = ? AND date = ? ORDER BY stage_number ASC LIMIT 1').get(raceId, currentDate) as { stage_number: number } | undefined;
     return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stageRow?.stage_number));
   }
@@ -317,7 +343,9 @@ export class RaceRepository {
       ORDER BY r.overall_rating DESC
     `).all(stageId) as RiderRow[];
 
-    const seasonPointsByRiderId = new RiderRepository(this.db).getSeasonPointsByRiderId(season);
+    // Siehe getRaceRiders: nur die geladenen Fahrer aggregieren.
+    const seasonPointsByRiderId = new RiderRepository(this.db)
+      .getSeasonPointsByRiderId(season, rows.map((row) => row.id));
     return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stage.stageNumber));
   }
 

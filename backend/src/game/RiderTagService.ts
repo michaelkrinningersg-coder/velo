@@ -1,5 +1,10 @@
 import Database from 'better-sqlite3';
 import type { RiderSpecialization } from '../../../shared/types';
+// `tableExists`/`columnExists` kommen aus db/mappers: dort werden positive
+// Antworten je Verbindung gemerkt. Die frueheren lokalen Kopien fragten das
+// Schema bei jedem Aufruf neu — in zwei gemessenen Spielmonaten waren das 7341
+// sqlite_master-Abfragen und 2117 `PRAGMA table_info`.
+import { columnExists, tableExists } from '../db/mappers';
 
 export interface RiderTagFlags {
   isStageRacer: number;
@@ -7,16 +12,6 @@ export interface RiderTagFlags {
   hasGrandTourTag: number;
   hasStageRaceTag: number;
   hasOneDayClassicTag: number;
-}
-
-function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
-  return row != null;
-}
-
-function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return columns.some(column => column.name === columnName);
 }
 
 interface RiderTagRow {

@@ -269,16 +269,24 @@ export class GameStateRepository {
       )
     `).run();
 
-    // SQL-Statement einmalig vorbereiten
-    const updateStmt = this.db.prepare(`
+    // In Bloecken statt Fahrer fuer Fahrer. Bei 200 Startern waren das 200
+    // Ausfuehrungen je Etappe, in zwei gemessenen Spielmonaten 14 022; die
+    // Blockgroessen sind fest (256, 32, 1), damit der Anweisungs-Zwischenspeicher
+    // an der Verbindung nicht mit einer neuen Anweisung je Feldgroesse volllaeuft.
+    const anweisung = (groesse: number) => this.db.prepare(`
       UPDATE stage_entries
       SET status = 'finished', status_reason = NULL
-      WHERE stage_id = ? AND rider_id = ?
+      WHERE stage_id = ? AND rider_id IN (${Array.from({ length: groesse }, () => '?').join(',')})
     `);
 
     this.db.transaction(() => {
-      for (const riderId of riderIds) {
-        updateStmt.run(stageId, riderId);
+      let rest = [...riderIds];
+      for (const groesse of [256, 32, 1]) {
+        const stmt = anweisung(groesse);
+        while (rest.length >= groesse) {
+          stmt.run(stageId, ...rest.slice(0, groesse));
+          rest = rest.slice(groesse);
+        }
       }
     })();
   }

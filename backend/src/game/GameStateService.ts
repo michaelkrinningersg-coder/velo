@@ -15,7 +15,11 @@ import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
 
 
-import { getDeterministicWeatherEffect, isoDateToDayNumber, isWinterBreak } from '../db/mappers';
+// `tableExists`/`columnExists` kommen aus db/mappers: dort werden positive
+// Antworten je Verbindung gemerkt. Die frueheren lokalen Kopien fragten das
+// Schema bei jedem Aufruf neu — in zwei gemessenen Spielmonaten waren das 7341
+// sqlite_master-Abfragen und 2117 `PRAGMA table_info`.
+import { columnExists, getDeterministicWeatherEffect, isoDateToDayNumber, isWinterBreak, tableExists } from '../db/mappers';
 import { ContractService } from './ContractService';
 import { RiderDevelopmentService, type RiderDevelopmentDailyContext } from './RiderDevelopmentService';
 import { RiderProgramService } from './RiderProgramService';
@@ -102,20 +106,6 @@ interface RiderDailyStateRow {
   active_team_id?: number | null;
   team_tier?: number | null;
   is_player_team?: number | null;
-}
-
-function tableExists(db: Database.Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(tableName) as { name: string } | undefined;
-  return row != null;
-}
-
-function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
-  if (!tableExists(db, tableName)) {
-    return false;
-  }
-
-  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return rows.some((row: any) => row.name === columnName);
 }
 
 export class GameStateService {
@@ -808,10 +798,18 @@ export class GameStateService {
     this.programWindowsBySeason.clear();
   }
 
-  public refreshRiderLoadState(currentDate: string, currentSeason: number): void {
+  /**
+   * `riderIds` grenzt die Fortschreibung auf die Fahrer ein, deren Renntage
+   * sich gerade geaendert haben. Der Etappen-Commit kennt seine Teilnehmer;
+   * ohne die Einschraenkung schrieb er bei jeder Etappe alle 4134 Zeilen von
+   * `rider_daily_state` neu (3,0 ms je Aufruf im gemessenen Spielstand von
+   * 2033). Ohne Angabe bleibt es beim vollen Durchlauf — den braucht der
+   * Tageswechsel.
+   */
+  public refreshRiderLoadState(currentDate: string, currentSeason: number, riderIds?: number[]): void {
     this.ensureRiderDailyStateTable();
     this.ensureRiderDailyStateRows(currentSeason);
-    this.syncRiderLoadState(currentDate, currentSeason);
+    this.syncRiderLoadState(currentDate, currentSeason, riderIds);
   }
 
   private ensureStateRow(): void {
@@ -1175,6 +1173,13 @@ export class GameStateService {
     this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_expires_on
       ON rider_r_form_events(expires_on)
+    `).run();
+
+    // Siehe DatabaseService: deckender Index fuer die Summe je Fahrer, an der
+    // jede Fahrerabfrage haengt.
+    this.db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_rider_r_form_events_rider_amount
+      ON rider_r_form_events(rider_id, amount)
     `).run();
 
     this.db.prepare(`
@@ -1906,11 +1911,26 @@ export class GameStateService {
     new RiderDevelopmentService(this.db).advanceDailyDevelopment(nextDate, nextSeason, developmentContexts);
   }
 
-  private syncRiderLoadState(currentDate: string, currentSeason: number): void {
+  private syncRiderLoadState(currentDate: string, currentSeason: number, riderIds?: number[]): void {
     if (!this.isTable('rider_daily_state') || !this.isTable('rider_season_stats')) {
       return;
     }
 
+    // `rolling_30d_race_days` wird hier nur genullt; nach dem ersten Durchlauf
+    // steht die Spalte ohnehin auf 0. Wirklich neu zu schreiben sind
+    // `season_race_days_total` der Fahrer, deren Renntage sich geaendert haben
+    // — beim Etappen-Commit also die Teilnehmer, nicht das ganze Feld.
+    if (riderIds != null && riderIds.length === 0) {
+      return;
+    }
+    const eingrenzung = riderIds != null && riderIds.length <= 900
+      ? ` WHERE rider_id IN (${riderIds.map(() => '?').join(',')})`
+      : '';
+    // Der WHERE-Zusatz schreibt nur, wo sich wirklich etwas aendert. Ohne ihn
+    // wurden im Tageswechsel alle 4134 Zeilen neu geschrieben, obwohl an einem
+    // rennfreien Tag keine einzige einen anderen Wert bekommt: 2,37 ms statt
+    // 1,10 ms. Derselbe Endzustand — ein Schreibvorgang mit unveraendertem Wert
+    // ist ein Nulleffekt.
     this.db.prepare(`
       UPDATE rider_daily_state
       SET season_race_days_total = COALESCE((
@@ -1920,7 +1940,17 @@ export class GameStateService {
           AND rider_season_stats.season = ?
       ), 0),
       rolling_30d_race_days = 0
-    `).run(currentSeason);
+      WHERE (
+        season_race_days_total <> COALESCE((
+          SELECT race_days
+          FROM rider_season_stats
+          WHERE rider_season_stats.rider_id = rider_daily_state.rider_id
+            AND rider_season_stats.season = ?
+        ), 0)
+        OR rolling_30d_race_days <> 0
+      )
+      ${eingrenzung ? eingrenzung.replace(' WHERE ', ' AND ') : ''}
+    `).run(currentSeason, currentSeason, ...(eingrenzung ? riderIds! : []));
 
     // season_wins wird nicht mehr taeglich per Voll-Aggregation neu berechnet
     // (die alte CTE joinete gegen die all_stage_entries-View und kostete ~370ms

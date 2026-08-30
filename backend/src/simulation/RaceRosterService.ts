@@ -515,9 +515,11 @@ function selectRaceRoster(team: Team, eligibleRoster: Rider[], targetCount: numb
 
 function resolveParticipatingTeams(repo: any, race: Race, riderLocks: Map<number, RiderLockReason>, ridersByTeamId: Map<number, Rider[]>): Team[] {
   const targetDivision = DIVISION_BY_TIER[race.category?.tier ?? 1];
-  const existingEntries = repo.getRaceRiders(race.id);
+  // Nur die Team-IDs, siehe getRaceEntryIds — vollstaendige Fahrerobjekte
+  // wurden hier gebaut und sofort wieder weggeworfen.
+  const existingEntries = repo.getRaceEntryIds(race.id);
   if (existingEntries.length > 0) {
-    const existingTeamIds = new Set(existingEntries.map((rider: any) => rider.activeTeamId).filter((teamId: any): teamId is number => teamId != null));
+    const existingTeamIds = new Set(existingEntries.map((eintrag: any) => eintrag.teamId).filter((teamId: any): teamId is number => teamId != null));
     return repo.getTeams().filter((team: any) => existingTeamIds.has(team.id));
   }
 
@@ -1169,10 +1171,11 @@ function buildRaceRoster(db: Database.Database, repo: any, race: Race, stage: St
 }
 
 export function previewRaceRoster(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
-  const existingEntries = repo.getRaceRiders(race.id);
+  // Nur die IDs, siehe getRaceEntryIds.
+  const existingEntries = repo.getRaceEntryIds(race.id);
   if (existingEntries.length > 0) {
     if (race.isStageRace) {
-      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider: any) => rider.id));
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((eintrag: any) => eintrag.riderId));
     }
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);
@@ -1510,7 +1513,8 @@ function applyChampionshipEntries(
   forceRebuild: boolean,
   rosterBuilder: (db: Database.Database, repo: any, race: Race, stage: Stage) => Rider[] = buildChampionshipRoster,
 ): Rider[] {
-  const existing = repo.getRaceRiders(race.id);
+  // Nur gezaehlt, nicht gelesen — siehe getRaceEntryIds.
+  const existing = repo.getRaceEntryIds(race.id);
   if (!forceRebuild && existing.length > 0) {
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);
@@ -1569,10 +1573,11 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
   if (isNationalChampionshipCategory(race.categoryId)) {
     return applyChampionshipEntries(db, repo, race, stage, false, buildNationalChampionshipRoster);
   }
-  const existingEntries = repo.getRaceRiders(race.id);
+  // Nur die IDs, siehe getRaceEntryIds.
+  const existingEntries = repo.getRaceEntryIds(race.id);
   if (existingEntries.length > 0) {
     if (race.isStageRace) {
-      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((rider: any) => rider.id));
+      repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((eintrag: any) => eintrag.riderId));
     }
     repo.ensureStageEntries(stage);
     return repo.getStageRiders(stage.id);

@@ -798,6 +798,11 @@ CREATE INDEX IF NOT EXISTS idx_season_point_events_season_team
 CREATE INDEX IF NOT EXISTS idx_season_point_events_season_stage
   ON season_point_events(season, stage_id);
 
+-- Fuer die Karrierepunkte der Startlisten-Qualitaet, die in Tagesabschnitten
+-- fortgeschrieben werden (StartlistQualityService).
+CREATE INDEX IF NOT EXISTS idx_season_point_events_awarded_on
+  ON season_point_events(awarded_on);
+
 -- ---- Saisonstatistiken (aggregiert am Saisonende) -----------
 CREATE TABLE IF NOT EXISTS season_stats (
   rider_id      INTEGER NOT NULL REFERENCES riders(id),

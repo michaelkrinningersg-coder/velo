@@ -25,6 +25,11 @@ import type {
   PalmaresRiderRef,
   RaceWinnerEntry,
 } from '../../../shared/types';
+// `tableExists`/`columnExists` kommen aus db/mappers: dort werden positive
+// Antworten je Verbindung gemerkt. Die frueheren lokalen Kopien fragten das
+// Schema bei jedem Aufruf neu — in zwei gemessenen Spielmonaten waren das 7341
+// sqlite_master-Abfragen und 2117 `PRAGMA table_info`.
+import { columnExists, tableExists } from '../db/mappers';
 
 // Zweite Plaetze, mit demselben Zuschnitt wie WIN_FILTER.
 const SECOND_FILTER = `
@@ -48,13 +53,6 @@ const WIN_FILTER = `
   spe.rank = 1 AND (
     (r.is_stage_race = 1 AND spe.award_type IN ('stage_result','gc_final'))
     OR (r.is_stage_race = 0 AND spe.award_type = 'one_day_result'))`;
-
-function tableExists(db: Database.Database, name: string): boolean {
-  return db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name) != null;
-}
-function columnExists(db: Database.Database, table: string, col: string): boolean {
-  return (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).some((c) => c.name === col);
-}
 
 function awardLabel(award: string): string {
   switch (award) {

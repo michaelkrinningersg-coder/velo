@@ -1428,7 +1428,7 @@ class GameRepository {
         const currentSeasonStandings = this.getSeasonStandings(currentSeason).riderStandings;
         const currentSeasonRank = currentSeasonStandings.find((row) => row.riderId === rider.id)?.rank ?? null;
         this.syncSeasonPointEventsForSeason(currentSeason);
-        const currentSeasonPoints = isCurrentSeason ? (rider.seasonPoints ?? 0) : (this.getSeasonPointsByRiderId(currentSeason).get(rider.id) ?? 0);
+        const currentSeasonPoints = isCurrentSeason ? (rider.seasonPoints ?? 0) : (this.getSeasonPointsByRiderId(currentSeason, [rider.id]).get(rider.id) ?? 0);
         const currentSeasonRaceStats = isCurrentSeason ? { raceDays: rider.seasonRaceDaysTotal ?? 0, wins: rider.seasonWins ?? 0 } : this.getSeasonRaceStatsByRiderId(currentSeason, [rider.id], isCurrentSeason).get(rider.id) ?? { raceDays: 0, wins: 0 };
         const raceDays = isCurrentSeason ? (rider.seasonRaceDaysTotal ?? 0) : currentSeasonRaceStats.raceDays;
         const currentSeasonBreakawayAttempts = this.getSeasonBreakawayAttempts(currentSeason, rider.id);
@@ -2108,6 +2108,26 @@ class GameRepository {
         const stages = stagesByRaceId.get(id) ?? [];
         return mapRaceWithSummary(row, stages, this.getUpcomingStageSummary(stages, row.is_stage_race === 1, currentDate));
     }
+    /**
+     * Nur Fahrer- und Team-ID der Startliste eines Rennens.
+     *
+     * `getRaceRiders` baut dafuer vollstaendige Fahrerobjekte samt Tageszustand,
+     * Vertrag und Saisonpunkten — im gemessenen Spielstand von 2033 sind das
+     * 200 Zeilen mit rund 80 Spalten je Etappe, plus das Mapping in JavaScript.
+     * Drei Aufrufstellen (ensureRaceEntries, resolveParticipatingTeams,
+     * applyChampionshipEntries) lesen davon ausschliesslich IDs.
+     *
+     * Dieselbe Auswahl und dieselbe Reihenfolge wie `getRaceRiders`.
+     */
+    getRaceEntryIds(raceId) {
+        return this.db.prepare(`
+      SELECT r.id AS riderId, r.active_team_id AS teamId
+      FROM riders r
+      INNER JOIN race_entries re ON re.rider_id = r.id
+      WHERE re.race_id = ? AND r.is_retired = 0
+      ORDER BY r.overall_rating DESC
+    `).all(raceId);
+    }
     getRaceRiders(raceId) {
         const season = this.getCurrentSeason();
         const currentDate = this.getCurrentDate();
@@ -2170,7 +2190,7 @@ class GameRepository {
       WHERE re.race_id = ? AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(raceId);
-        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
+        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season, rows.map((row) => row.id));
         const stageRow = this.db.prepare('SELECT stage_number FROM stages WHERE race_id = ? AND date = ? ORDER BY stage_number ASC LIMIT 1').get(raceId, currentDate);
         return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stageRow?.stage_number));
     }
@@ -2243,7 +2263,7 @@ class GameRepository {
         AND r.is_retired = 0
       ORDER BY r.overall_rating DESC
     `).all(stageId);
-        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season);
+        const seasonPointsByRiderId = this.getSeasonPointsByRiderId(season, rows.map((row) => row.id));
         return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stage.stageNumber));
     }
     ensureStageRaceStateSchema() {
@@ -2357,6 +2377,37 @@ class GameRepository {
             });
         }
         return points;
+    }
+    /**
+     * Nur Team-ID -> Saisonpunkte.
+     *
+     * Die Startreihenfolge der Teams braucht genau das. Ueber
+     * `getSeasonStandings()` kostete sie drei Voll-Aggregate ueber alle
+     * Punktereignisse der Saison (Fahrer-, Team- und Laenderwertung, zusammen
+     * 11,8 ms im gemessenen Spielstand von 2033) — und zwar bei jedem
+     * Eintagesrennen und jeder ersten Etappe, also genau dort, wo sich das
+     * Weiterschalten am zaehesten anfuehlt.
+     *
+     * Bewusst dieselben Verknuepfungen und derselbe Filter wie im Teil
+     * `teamRows` von `getSeasonStandings`, damit die Reihenfolge unveraendert
+     * bleibt.
+     */
+    getSeasonTeamPoints(season = this.getCurrentSeason()) {
+        this.syncSeasonPointEventsForSeason(season);
+        if (!tableExists(this.db, 'season_point_events')) {
+            return new Map();
+        }
+        const rows = this.db.prepare(`
+      SELECT
+        season_point_events.team_id AS team_id,
+        SUM(season_point_events.points_awarded) AS points_total
+      FROM season_point_events
+      JOIN teams ON teams.id = season_point_events.team_id
+      JOIN sta_country country ON country.id = teams.country_id
+      WHERE season_point_events.season = ?
+      GROUP BY season_point_events.team_id
+    `).all(season);
+        return new Map(rows.map((row) => [row.team_id, row.points_total]));
     }
     getSeasonStandings(season = this.getCurrentSeason()) {
         this.syncSeasonPointEventsForSeason(season);
@@ -2992,11 +3043,29 @@ class GameRepository {
             elevationGainMeters: summary.elevationGainMeters,
         };
     }
-    getSeasonPointsByRiderId(season) {
+    // `riderIds` schraenkt die Aggregation auf die wirklich gebrauchten Fahrer
+    // ein. Ohne die Einschraenkung laeuft ein GROUP BY ueber alle
+    // Punktereignisse der Saison (74 000 Zeilen im gemessenen Spielstand von
+    // 2033, 1,9 ms), nur um daraus 200 Fahrer nachzuschlagen — und der Aufruf
+    // steckt in jedem Etappenschritt zweimal.
+    getSeasonPointsByRiderId(season, riderIds) {
         if (!tableExists(this.db, 'season_point_events')) {
             return new Map();
         }
-        const rows = this.db.prepare(`
+        if (riderIds && riderIds.length === 0) {
+            return new Map();
+        }
+        // Ueber 500 Platzhalter wird die IN-Liste selbst teuer; dann lohnt der
+        // Voll-Scan wieder.
+        const gefiltert = riderIds != null && riderIds.length <= 500;
+        const rows = gefiltert
+            ? this.db.prepare(`
+      SELECT rider_id, SUM(points_awarded) AS points_total
+      FROM season_point_events
+      WHERE season = ? AND rider_id IN (${riderIds.map(() => '?').join(',')})
+      GROUP BY rider_id
+    `).all(season, ...riderIds)
+            : this.db.prepare(`
       SELECT rider_id, SUM(points_awarded) AS points_total
       FROM season_point_events
       WHERE season = ?

@@ -122,10 +122,14 @@ export function resolveRealtimeTeamStartOrder(repo: any, race: Race, stageNumber
       .map((team) => team.id);
   }
 
+  // `getSeasonTeamPoints` statt `getSeasonStandings()`: gebraucht wird hier nur
+  // Team -> Punkte, geliefert wurden zusaetzlich die komplette Fahrer- und
+  // Laenderwertung. Das kostete 11,8 ms je Aufruf und traf ausgerechnet
+  // Eintagesrennen und erste Etappen — spaetere Etappen nehmen den Zweig
+  // darueber und waren deshalb spuerbar schneller.
+  const alleTeamPunkte = repo.getSeasonTeamPoints() as Map<number, number>;
   const seasonTeamPoints = new Map(
-    repo.getSeasonStandings().teamStandings
-      .filter((row: any) => row.teamId != null && participatingTeamIds.has(row.teamId))
-      .map((row: any) => [row.teamId as number, row.points] as const),
+    [...alleTeamPunkte.entries()].filter(([teamId]) => participatingTeamIds.has(teamId)),
   );
 
   return [...participatingTeams.values()]
