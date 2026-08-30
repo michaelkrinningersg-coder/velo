@@ -256,6 +256,24 @@ export class WrappedService {
     return out;
   }
 
+  // Ewige Bestenliste nach dieser Saison. Die kumulierten Ranglisten liegen
+  // ohnehin schon vor (Legenden/Herausgefallene) — hier kommt keine weitere
+  // Abfrage dazu, nur ein Schnitt durch die vorhandene Reihenfolge.
+  private allTimeTop(
+    now: { ordered: Array<{ riderId: number; pts: number; rank: number }> },
+    prev: { rankById: Map<number, number> },
+    limit = 20,
+  ): WrappedRiderPoints[] {
+    const out: WrappedRiderPoints[] = [];
+    for (const entry of now.ordered.slice(0, limit)) {
+      const rider = this.riderRef(entry.riderId);
+      // Wer vor dieser Saison noch keinen Punkt hatte, steht nicht in der
+      // Vorjahres-Rangliste — rankDelta zeigt dafuer "NEU".
+      if (rider) out.push({ rider, points: entry.pts, previousRank: prev.rankById.get(entry.riderId) ?? null });
+    }
+    return out;
+  }
+
   private riderSeasonWins(season: number, riderId: number): number {
     const row = this.db.prepare(`
       SELECT COUNT(*) AS wins FROM season_point_events spe
@@ -319,16 +337,37 @@ export class WrappedService {
     return row?.w ?? 0;
   }
 
-  private retirees(season: number, allTimeRank: Map<number, number>, limit = 5): { list: WrappedRetiree[]; ids: Set<number> } {
+  /**
+   * Abschiede der Saison, nach All-Time-UCI-Punkten sortiert.
+   *
+   * Gezeigt werden die besten `mindestens` — und darueber hinaus jeder, der in
+   * der ewigen Bestenliste in den Top `elitegrenze` steht. Ein fester Deckel
+   * von fuenf verschwieg in Jahrgaengen mit vielen grossen Karriereenden
+   * Fahrer, die in der ewigen Wertung weit vorne stehen.
+   *
+   * Beide Reihenfolgen — die Abfrage hier und `allTimeRank` — sortieren nach
+   * denselben All-Time-Punkten, die Elitefahrer bilden also immer einen
+   * Praefix der Liste; die Auswahl kann nicht loechrig werden.
+   */
+  private retirees(
+    season: number,
+    allTimeRank: Map<number, number>,
+    mindestens = 10,
+    elitegrenze = 100,
+  ): { list: WrappedRetiree[]; ids: Set<number> } {
     if (!columnExists(this.db, 'riders', 'retired_season')) return { list: [], ids: new Set() };
-    const rows = this.db.prepare(`
+    const alle = this.db.prepare(`
       SELECT ri.id AS riderId,
              (SELECT COALESCE(SUM(points_awarded),0) FROM season_point_events WHERE rider_id = ri.id) AS uci
       FROM riders ri
       WHERE ri.retired_season = ?
       ORDER BY uci DESC
-      LIMIT ?
-    `).all(season, limit) as Array<{ riderId: number; uci: number }>;
+    `).all(season) as Array<{ riderId: number; uci: number }>;
+    // Erst auswaehlen, dann Details laden: die Karrierezahlen und die besten
+    // Ergebnisse je Fahrer sind teuer, und ein Jahrgang kann Hunderte
+    // Ruecktritte umfassen.
+    const rows = alle.filter((row, index) =>
+      index < mindestens || (allTimeRank.get(row.riderId) ?? Number.POSITIVE_INFINITY) <= elitegrenze);
     const list: WrappedRetiree[] = [];
     const ids = new Set<number>();
     for (const row of rows) {
@@ -785,6 +824,7 @@ export class WrappedService {
       topRidersByWins,
       topRidersBySecond: this.topRidersByWins(season, 5, SECOND_FILTER),
       topRidersByPoints,
+      allTimeTop: this.allTimeTop(cumNow, cumPrev),
       topTeamsByWins: this.topTeamsByWins(season),
       topTeamsByPoints,
       bestNewcomers: this.bestNewcomers(season, seasonRank),

@@ -6,7 +6,7 @@ import type {
   WrappedWinsEntry, WrappedTeamStat, WrappedNewcomer, WrappedRetiree, WrappedLegend,
   WrappedFallenLegend, WrappedPlayerTeam, WrappedProgression, WrappedRivalry,
   WrappedJerseyGroup, WrappedGrandTourClassifications, WrappedGrind,
-  WrappedStrongestField,
+  WrappedStrongestField, WrappedRiderPoints,
 } from '../../../shared/types';
 
 // Saison-Rückblick ("Wrapped") als Vollbild-Overlay, gezeigt beim Jahreswechsel
@@ -96,16 +96,22 @@ function wrappedSection(color: string, label: string, meta: string, inner: strin
 }
 
 // Podium-Zeilen (Rang · Fahrer/Team · Wert) im Tabellen-Stil einer Sektion.
-function statRows(entries: Array<{ label: string; sub: string; delta?: string }>): string {
+// `versatz` verschiebt die Nummerierung, damit eine lange Liste ueber zwei
+// Spalten laufen kann, ohne rechts wieder bei 1 anzufangen. Medaillenfarbe und
+// Zeilenhoehe haengen am ABSOLUTEN Platz, nicht an der Position in der Spalte.
+function statRows(entries: Array<{ label: string; sub: string; delta?: string }>, versatz = 0): string {
   if (entries.length === 0) return `<div style="padding:14px;color:#6a7a95;font-size:13px;">–</div>`;
   const mitDelta = entries.some((e) => e.delta);
   const spalten = mitDelta ? '30px 1fr auto 44px' : '34px 1fr auto';
-  return entries.map((e, i) => `<div style="display:grid;grid-template-columns:${spalten};align-items:center;gap:12px;padding:${i < 3 ? 10 : 7}px 14px;border-top:1px solid #14203a;">
-    <span style="${MONO};font-size:${i < 3 ? 16 : 13}px;font-weight:800;color:${MEDAL[i] ?? '#5f6f8a'};text-align:center;">${i + 1}</span>
+  return entries.map((e, i) => {
+    const platz = i + versatz;
+    return `<div style="display:grid;grid-template-columns:${spalten};align-items:center;gap:12px;padding:${platz < 3 ? 10 : 7}px 14px;border-top:1px solid #14203a;">
+    <span style="${MONO};font-size:${platz < 3 ? 16 : 13}px;font-weight:800;color:${MEDAL[platz] ?? '#5f6f8a'};text-align:center;">${platz + 1}</span>
     <span style="min-width:0;">${e.label}</span>
-    <span style="${MONO};font-size:${i < 3 ? 15 : 13}px;font-weight:800;color:#fbbf24;">${e.sub}</span>
+    <span style="${MONO};font-size:${platz < 3 ? 15 : 13}px;font-weight:800;color:#fbbf24;">${e.sub}</span>
     ${mitDelta ? `<span style="text-align:right;">${e.delta ?? ''}</span>` : ''}
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 
 // Auf-/Abstieg gegenueber demselben Rang der Vorsaison. `previousRank` ist die
@@ -709,6 +715,34 @@ function tierLabel(t: number): string {
   return t === 1 ? 'Neu · Nr. 1 All-Time' : `Neu in Top ${t} All-Time`;
 }
 
+// Ewige Bestenliste nach dieser Saison, mit Auf-/Abstieg gegenueber dem Stand
+// nach der Vorsaison. Steht bewusst VOR den Legenden und den Herausgefallenen:
+// beide Abschnitte beziehen sich auf genau diese Tabelle.
+function allTimeSection(entries: WrappedRiderPoints[]): string {
+  if (entries.length === 0) return '';
+  const zeile = (e: WrappedRiderPoints, platz: number) => ({
+    label: riderChip(e.rider),
+    sub: e.points.toLocaleString('de-DE'),
+    delta: rankDelta(platz, e.previousRank),
+  });
+  const links = entries.slice(0, 10);
+  const rechts = entries.slice(10);
+  // In den ersten Saisons stehen noch keine 11 Fahrer in der Wertung — dann
+  // bleibt es bei einer Spalte statt einer leeren rechten Haelfte.
+  const inner = rechts.length === 0
+    ? statRows(links.map((e, i) => zeile(e, i)))
+    : `<div style="display:grid;grid-template-columns:1fr 1fr;">
+        <div>${statRows(links.map((e, i) => zeile(e, i)))}</div>
+        <div style="border-left:1px solid #1c2b47;">${statRows(rechts.map((e, i) => zeile(e, i + 10)), 10)}</div>
+      </div>`;
+  return wrappedSection(
+    '#a855f7',
+    'Ewige Bestenliste · UCI-Punkte',
+    `Top ${entries.length} · Pfeile gegenüber dem Vorjahr`,
+    inner,
+  );
+}
+
 function legendsSection(list: WrappedLegend[]): string {
   if (list.length === 0) return '';
   return wrappedSection('#a855f7', 'Legenden', 'neu in der All-Time-UCI-Elite', list.map((l) => detailRow(
@@ -721,15 +755,22 @@ function legendsSection(list: WrappedLegend[]): string {
   )).join(''));
 }
 
-function retireesSection(list: WrappedRetiree[]): string {
-  if (list.length === 0) return '';
-  return wrappedSection('#94a3b8', 'In den Ruhestand', 'Top 5 nach All-Time-UCI', list.map((r, i) => detailRow(
-    rankBadge(i), r.rider,
-    `${r.allTimeUciRank != null ? '#' + r.allTimeUciRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
-    r.bestResults,
-    careerLine(r),
-    true,
-  )).join(''));
+// Jeder Abschied bekommt eine eigene Seite: das vollstaendige Palmares eines
+// Fahrers fuellt fuer sich schon einen Bildschirm — zehn davon untereinander
+// waeren eine Bildlaufstrecke statt eines Rueckblicks.
+function retireeSlides(list: WrappedRetiree[]): string[] {
+  return list.map((r, i) => wrappedSection(
+    '#94a3b8',
+    'In den Ruhestand',
+    `Abschied ${i + 1} von ${list.length} · nach All-Time-UCI`,
+    detailRow(
+      rankBadge(i), r.rider,
+      `${r.allTimeUciRank != null ? '#' + r.allTimeUciRank + ' All-Time-UCI · ' : ''}${r.careerWins} Karrieresiege · ${r.allTimeUciPoints.toLocaleString('de-DE')} UCI`,
+      r.bestResults,
+      careerLine(r),
+      true,
+    ),
+  ));
 }
 
 // Herausgefallene Legenden: bis zur Vorsaison in den Top 25 All-Time, jetzt
@@ -800,9 +841,10 @@ function buildSlides(w: SeasonWrappedPayload): WrappedSlide[] {
   push(surpriseSection(w.surprise));
   push(recordsSection(w.records));
   push(newcomersSection(w.bestNewcomers));
+  push(allTimeSection(w.allTimeTop));
   push(legendsSection(w.legends));
   push(fallenLegendsSection(w.fallenLegends));
-  push(retireesSection(w.retirees));
+  for (const seite of retireeSlides(w.retirees)) push(seite);
   return slides;
 }
 

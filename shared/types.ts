@@ -1860,6 +1860,13 @@ export interface SeasonWrappedPayload {
   /** Meiste zweite Plaetze der Saison — derselbe Ergebnisfilter wie die Siege. */
   topRidersBySecond: WrappedWinsEntry[];
   topRidersByPoints: WrappedRiderPoints[];
+  /**
+   * Top 20 der kumulierten All-Time-UCI-Wertung nach dieser Saison.
+   * `previousRank` ist der Platz derselben Wertung nach der VORSAISON — der
+   * Pfeil zeigt also, wie sich die ewige Bestenliste ueber diese Saison
+   * bewegt hat, nicht die Saisonwertung.
+   */
+  allTimeTop: WrappedRiderPoints[];
   topTeamsByWins: WrappedTeamStat[];
   topTeamsByPoints: WrappedTeamStat[];
   bestNewcomers: WrappedNewcomer[];
