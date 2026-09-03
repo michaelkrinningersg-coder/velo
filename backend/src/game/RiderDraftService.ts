@@ -21,6 +21,7 @@ import {
 import { TeamPrestigeService, resolveTopRiderCaps } from './TeamPrestigeService';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
+import { schreibeInBloecken } from '../db/schreibeInBloecken';
 import { ResultRepository } from "../db/repositories/ResultRepository";
 import { RiderRepository } from "../db/repositories/RiderRepository";
 import { TeamRepository } from "../db/repositories/TeamRepository";
@@ -102,6 +103,18 @@ const draftSequenceChunks = [
 
 export class RiderDraftService {
   private readonly db: Database.Database;
+  /**
+   * Draftreihenfolge je Saison, einmal je Dienst-Instanz.
+   *
+   * Sie leitet sich aus der Saisonwertung des VORJAHRES ab, und die aendert
+   * sich waehrend des Drafts nicht — der Draft schreibt nur Vertraege und
+   * Draft-Historie der neuen Saison. Vorher wurde sie zweimal je Pick neu
+   * geholt (getNextPickState und buildWeightedPool), jedes Mal samt Auspacken
+   * des Standings-Schnappschusses mit rund 930 Fahrern.
+   */
+  private readonly rangfolgeJeSaison = new Map<number, number[]>();
+  /** Team-Prestige, waehrend des Drafts konstant (vorher vor dem Draft gerechnet). */
+  private prestigeJeTeam: Map<number, number> | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -132,6 +145,14 @@ export class RiderDraftService {
   }
 
   public getRankedTeamIds(season: number): number[] {
+    const gemerkt = this.rangfolgeJeSaison.get(season);
+    if (gemerkt) return gemerkt;
+    const frisch = this.berechneRangfolge(season);
+    this.rangfolgeJeSaison.set(season, frisch);
+    return frisch;
+  }
+
+  private berechneRangfolge(season: number): number[] {
     const resultRepo = new ResultRepository(this.db);
     const standings = resultRepo.getSeasonStandings(season - 1);
     let rankedTeamIds = standings.teamStandings.map((t: any) => t.teamId).filter((id: any): id is number => id !== null);
@@ -167,21 +188,25 @@ export class RiderDraftService {
       teamLimitsMap.set(limit.id, limit.max_roster_size);
     }
 
-    // Reconstruct current roster sizes based on contracts + history
+    // Kadergroesse vor dem Draft je Team: laufende Vertraege minus die in
+    // diesem Draft schon vergebenen. Zwei Gruppenabfragen statt zweier
+    // Einzelzaehlungen je Team — die liefen bei jedem der rund 250 Picks
+    // fuenfzigmal.
+    const vertraegeJeTeam = new Map<number, number>(
+      (this.db.prepare(`
+        SELECT team_id AS teamId, COUNT(*) AS c FROM contracts
+        WHERE status IN ('active', 'future') GROUP BY team_id
+      `).all() as Array<{ teamId: number; c: number }>).map((z) => [z.teamId, z.c]),
+    );
+    const gedraftetJeTeam = new Map<number, number>(
+      (this.db.prepare(`
+        SELECT team_id AS teamId, COUNT(*) AS c FROM draft_history
+        WHERE season = ? GROUP BY team_id
+      `).all(season) as Array<{ teamId: number; c: number }>).map((z) => [z.teamId, z.c]),
+    );
     const teamCountsMap = new Map<number, number>();
     for (const teamId of rankedTeamIds) {
-      const activeContracts = (this.db.prepare(`
-        SELECT COUNT(*) as c FROM contracts 
-        WHERE team_id = ? AND status IN ('active', 'future')
-      `).get(teamId) as { c: number }).c;
-      
-      const draftedCount = (this.db.prepare(`
-        SELECT COUNT(*) as c FROM draft_history
-        WHERE team_id = ? AND season = ?
-      `).get(teamId, season) as { c: number }).c;
-      
-      const initialCount = activeContracts - draftedCount;
-      teamCountsMap.set(teamId, initialCount);
+      teamCountsMap.set(teamId, (vertraegeJeTeam.get(teamId) ?? 0) - (gedraftetJeTeam.get(teamId) ?? 0));
     }
 
     // Load undrafted free agents to check if any exist
@@ -370,7 +395,11 @@ export class RiderDraftService {
     // Vertragslaenge nach Alter, Potenzial und Prestige des Teams statt
     // gleichverteilt 1 bis 3. Siehe shared/contractTerms.ts — das ist die
     // Stellschraube, die die Kaderfluktuation von 15 auf 6 bis 10 senkt.
-    const prestige = new TeamPrestigeService(this.db).loadPrestigeByTeamId().get(teamId) ?? 3;
+    // Das Prestige wird vor dem Draft einmal neu gerechnet und aendert sich
+    // waehrend seiner Picks nicht; vorher wurde die ganze Tabelle je Pick
+    // geladen.
+    if (this.prestigeJeTeam == null) this.prestigeJeTeam = new TeamPrestigeService(this.db).loadPrestigeByTeamId();
+    const prestige = this.prestigeJeTeam.get(teamId) ?? 3;
     const contractLength = resolveContractYears({
       age: season - draftedRider.birth_year,
       potential: draftedRider.pot_overall,
@@ -398,10 +427,6 @@ export class RiderDraftService {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const insertPoolCandidate = this.db.prepare(`
-      INSERT INTO draft_picks_pool (season, pick_number, rider_id, weight, probability, old_team_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
 
     if (draftedRider.old_team_id === teamId) {
       extendContract.run(contractLength, draftedRider.id, teamId, season - 1);
@@ -415,10 +440,14 @@ export class RiderDraftService {
       draftedRider.pot_overall, draftedRider.draftValue
     );
 
-    for (const p of poolDetails) {
-      const prob = totalWeight > 0 ? (p.weight / totalWeight * 100) : 0;
-      insertPoolCandidate.run(season, pickNumber, p.rider.id, p.weight, prob, p.rider.old_team_id);
-    }
+    // Der Kandidatenpool eines Picks umfasst gut hundert Fahrer; ueber den
+    // ganzen Draft sind das rund 35 000 Zeilen, vorher einzeln geschrieben.
+    schreibeInBloecken(
+      this.db,
+      'INSERT INTO draft_picks_pool (season, pick_number, rider_id, weight, probability, old_team_id) VALUES ',
+      '(?, ?, ?, ?, ?, ?)',
+      poolDetails.map((p) => [season, pickNumber, p.rider.id, p.weight, totalWeight > 0 ? (p.weight / totalWeight * 100) : 0, p.rider.old_team_id]),
+    );
 
     // Update game_state current pick number
     this.db.prepare('UPDATE game_state SET draft_current_pick_number = ? WHERE id = 1').run(pickNumber + 1);

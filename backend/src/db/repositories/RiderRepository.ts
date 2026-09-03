@@ -1792,7 +1792,24 @@ export class RiderRepository {
       try { const r = this.db.prepare(sql).get(...params) as { c: number } | undefined; return r?.c ?? 0; } catch { return 0; }
     };
     out.waterCarrierDays = num(`SELECT COALESCE(SUM(rss.race_days),0) AS c FROM rider_season_roles rsr JOIN rider_season_stats rss ON rss.rider_id = rsr.rider_id AND rss.season = rsr.season WHERE rsr.rider_id = ? AND rsr.role_id = 5`);
-    out.superDomestiqueLeadouts = num(`SELECT COUNT(*) AS c FROM stage_leadouts WHERE contributors_json LIKE ?`, [`%"riderId":${riderId},%`]);
+    // Anfahrten je Fahrer aus EINER Lesung der Tabelle. Vorher lief je Fahrer
+    // ein `LIKE '%"riderId":N,%'` — ein Vollscan, der sich nicht indizieren
+    // laesst und beim Badge-Aufbau ueber alle Fahrer entsprechend oft lief.
+    // Die Karte zaehlt jede Anfahrt hoechstens einmal je Fahrer, wie es der
+    // Zeilen-Treffer des LIKE tat (auf dem Spielstand von 2035 fuer alle 4294
+    // Fahrer deckungsgleich).
+    out.superDomestiqueLeadouts = this.merke('anfahrtenJeFahrer', () => {
+      const karte = new Map<number, number>();
+      try {
+        const zeilen = this.db.prepare('SELECT contributors_json FROM stage_leadouts').all() as Array<{ contributors_json: string }>;
+        for (const zeile of zeilen) {
+          let ids: number[] = [];
+          try { ids = (JSON.parse(zeile.contributors_json) as Array<{ riderId: number }>).map((c) => c.riderId); } catch { continue; }
+          for (const id of new Set(ids)) karte.set(id, (karte.get(id) ?? 0) + 1);
+        }
+      } catch { /* Quelle fehlt */ }
+      return karte;
+    }).get(riderId) ?? 0;
     out.lieutenantSeasons = num(`SELECT COUNT(DISTINCT season) AS c FROM rider_lieutenants WHERE lieutenant_id = ?`);
     out.kingmakerCount = num(`SELECT COUNT(*) AS c FROM rider_lieutenants rl WHERE rl.lieutenant_id = ? AND EXISTS (
       SELECT 1 FROM results_flat rf JOIN stages s ON s.id = rf.stage_id JOIN races ra ON ra.id = s.race_id JOIN race_categories rc ON rc.id = ra.category_id
@@ -1825,8 +1842,21 @@ export class RiderRepository {
       const teamTotal = this.db.prepare(`
         SELECT COUNT(*) AS c FROM results_flat rf JOIN stages s ON s.id=rf.stage_id JOIN races ra ON ra.id=s.race_id
         WHERE rf.team_id=? AND CAST(substr(s.date,1,4) AS INTEGER)=? AND rf.rank=1 AND (rf.result_type_id=1 OR (rf.result_type_id=2 AND ra.is_stage_race=1 AND s.stage_number=ra.number_of_stages))`);
+      // Die Gesamtsiege eines Teams in einer Saison haengen nicht am Fahrer.
+      // Gemerkt statt je Fahrerzeile neu gezaehlt: beim Badge-Aufbau ueber
+      // alle Fahrer lief dieselbe Abfrage tausendfach fuer dieselben 233
+      // Paare aus Team und Saison — mit 3,8 ms je Aufruf der teuerste Posten
+      // des ganzen Saisonwechsels. Bewusst faul gefuellt und nicht als eine
+      // Gruppenabfrage vorweg: fuer EIN geoeffnetes Fahrerprofil sind es nur
+      // eine Handvoll Paare, eine feldweite Aggregation waere dort teurer.
+      const teamSiege = this.merke('teamSiegeJeSaison', () => new Map<string, number>());
       for (const r of rw) {
-        const tt = (teamTotal.get(r.tid, r.yr) as { c: number } | undefined)?.c ?? 0;
+        const schluessel = `${r.tid}:${r.yr}`;
+        let tt = teamSiege.get(schluessel);
+        if (tt == null) {
+          tt = (teamTotal.get(r.tid, r.yr) as { c: number } | undefined)?.c ?? 0;
+          teamSiege.set(schluessel, tt);
+        }
         if (tt >= 5 && r.c > tt / 2) out.franchiseSeasons += 1;
       }
     } catch { /* */ }
@@ -1837,13 +1867,29 @@ export class RiderRepository {
       const mySet = new Set<string>();
       for (const c of mine) for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) mySet.add(`${c.team_id}:${y}`);
       if (mySet.size > 0) {
-        const alleVertraege = this.merke('alleVertraege', () => this.db.prepare(`SELECT rider_id, team_id, start_season, end_season FROM contracts`).all() as Array<{ rider_id: number; team_id: number; start_season: number; end_season: number }>);
-        const others = alleVertraege.filter((c) => c.rider_id !== riderId);
+        // Ein Fach je Team und Saison mit den Fahrern, die dort unter Vertrag
+        // standen. Vorher lief je Fahrer die volle Vertragsliste durch und
+        // spannte jeden Vertrag in seine Jahre auf — beim Badge-Aufbau ueber
+        // alle Fahrer dieselbe Arbeit viertausendfach. Jetzt einmal aufgebaut,
+        // danach nur noch die eigenen Team-Saisons nachgeschlagen.
+        const faecher = this.merke('vertraegeJeTeamSaison', () => {
+          const karte = new Map<string, number[]>();
+          const alle = this.db.prepare(`SELECT rider_id, team_id, start_season, end_season FROM contracts`).all() as Array<{ rider_id: number; team_id: number; start_season: number; end_season: number }>;
+          for (const c of alle) {
+            for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) {
+              const schluessel = `${c.team_id}:${y}`;
+              const fach = karte.get(schluessel);
+              if (fach) fach.push(c.rider_id); else karte.set(schluessel, [c.rider_id]);
+            }
+          }
+          return karte;
+        });
         const cnt = new Map<number, number>();
-        for (const c of others) {
-          let n = 0;
-          for (let y = c.start_season; y <= Math.min(c.end_season, cur); y++) if (mySet.has(`${c.team_id}:${y}`)) n += 1;
-          if (n > 0) cnt.set(c.rider_id, (cnt.get(c.rider_id) ?? 0) + n);
+        for (const teamSaison of mySet) {
+          for (const anderer of faecher.get(teamSaison) ?? []) {
+            if (anderer === riderId) continue;
+            cnt.set(anderer, (cnt.get(anderer) ?? 0) + 1);
+          }
         }
         for (const v of cnt.values()) if (v > out.bandOfBrothersBest) out.bandOfBrothersBest = v;
       }
