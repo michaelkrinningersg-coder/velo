@@ -555,8 +555,10 @@ export function createRouter(dbService: DatabaseService): Router {
     return {
       gameState: gss.loadState(),
       gameStatus: gss.loadStatus(),
-      races: new GameRepository(db).getRaces(),
-      ...(light ? {} : { riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false) }),
+      ...(light ? {} : {
+        races: new GameRepository(db).getRaces(),
+        riders: new RiderRepository(db).getRiders(undefined, false, false, undefined, false),
+      }),
     };
   }
 
@@ -565,10 +567,11 @@ export function createRouter(dbService: DatabaseService): Router {
       const db = dbService.getActiveConnection();
       const gss = getGss();
       gss.ensureState();
-      // `?light=true` laesst die Fahrerliste weg. Sie ist mit rund 55 ms der
-      // groesste Posten des Buendels, und im Auto-Weiter braucht sie niemand:
-      // dort laeuft der Aufruf nach jedem Schritt, die Fahrerwerte aendern
-      // sich aber nur langsam und die Ansicht zeigt sie waehrenddessen nicht.
+      // `?light=true` laesst Fahrer- und Rennliste weg. Die Fahrer sind mit
+      // rund 55 ms der groesste Rechenposten, die Rennen mit 537 KB der
+      // groesste Uebertragungsposten des Buendels — und im Auto-Weiter braucht
+      // beides niemand: der Aufruf laeuft nach jedem Schritt, die Werte
+      // aendern sich langsam, und die Ansicht zeigt sie waehrenddessen nicht.
       const light = req.query['light'] === 'true';
       ok(res, buildReloadBundle(light));
     } catch (e) { fail(res, 400, (e as Error).message); }

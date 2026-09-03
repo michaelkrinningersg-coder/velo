@@ -43,7 +43,6 @@ import type {
 import { renderStaticStageProfile } from '../race-sim/renderProfile';
 import {
   renderDashboardBroadcast,
-  ensureSpotlightWinsLoaded,
   spotlightStageId,
 } from './dashboardBroadcast';
 
@@ -164,12 +163,9 @@ export function renderDashboard(): void {
   // Broadcast-Redesign (2A): kompletter View-Body als HTML-String.
   // Die Tageswechsel-/Auto-Progress-Steuerung liegt ausserhalb (#game-state-bar).
   $('view-dashboard').innerHTML = renderDashboardBroadcast();
-  // Siegliste des Fokus-Fahrers lazy nachladen und Karte danach neu rendern.
-  void ensureSpotlightWinsLoaded().then((changed) => {
-    if (changed && isActiveView('dashboard')) {
-      $('view-dashboard').innerHTML = renderDashboardBroadcast();
-    }
-  });
+  // Die Siegliste des Fokus-Fahrers gibt es nicht mehr: sie zog nach jedem
+  // Schritt das komplette Profil-Payload (469 ms auf einem reifen Spielstand)
+  // und war im Auto-Weiter mit offenem Dashboard die Haelfte der Jahreszeit.
   // Echtes Höhenprofil der laufenden Etappe lazy nachladen (Spotlight-Mini-Widget).
   void ensureSpotlightStageProfileLoaded();
 }
@@ -221,9 +217,14 @@ export function applyReloadBundle(bundle: ReloadBundle): void {
   if (bundle.riders) {
     state.riders = bundle.riders;
   }
+  // Im schlanken Modus fehlen auch die Rennen: die Liste der Saison steht
+  // schon, und die tagesabhaengigen Felder (naechste Etappe) holt das
+  // Dashboard aus gameStatus. Der volle Stand kommt beim Anhalten.
+  if (bundle.races) {
+    state.races = bundle.races;
+  }
   state.gameState = bundle.gameState ?? null;
   state.gameStatus = bundle.gameStatus ?? null;
-  state.races = bundle.races ?? [];
   renderGameState();
   if (isActiveView('dashboard')) {
     renderDashboard();
@@ -778,7 +779,9 @@ export async function executeDayAdvance(light = false): Promise<boolean> {
     void import('./contractRenewal').then((m) => m.openContractRenewalModal());
     return false;
   }
-  showLoading('Tag wird fortgeschrieben...');
+  // Im Auto-Weiter kein Lade-Overlay: es wuerde je Schritt ein- und
+  // ausgeblendet und stuende ohnehin nur Millisekunden.
+  if (!light) showLoading('Tag wird fortgeschrieben...');
   const oldSeason = state.gameState?.season;
   try {
     const res = await api.advanceDay(light ? 'light' : 'full');
@@ -863,8 +866,14 @@ export function stopAutoProgress(): void {
   }
 }
 
-/** Pause zwischen zwei Schritten des Auto-Weiter. */
-const AUTO_PROGRESS_PAUSE_MS = 10;
+/**
+ * Pause zwischen zwei Schritten des Auto-Weiter.
+ *
+ * Null heisst: einmal an die Ereignisschleife zurueckgeben, damit Neuzeichnen
+ * und die Leertaste drankommen. Die frueheren 10 ms summierten sich ueber ein
+ * Jahr (820 Schritte) auf gut 8 Sekunden reines Warten.
+ */
+const AUTO_PROGRESS_PAUSE_MS = 0;
 
 async function runAutoProgressLoop(): Promise<void> {
   while (autoProgressActive) {

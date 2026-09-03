@@ -10,6 +10,8 @@ import { summarizeStageProfile } from './StageParser';
 import { isFullMoonDate } from '../util/moonPhase';
 
 import { GameStateService } from '../game/GameStateService';
+import { schreibeInBloecken } from '../db/schreibeInBloecken';
+import type { KaderKern } from '../db/repositories/RaceRepository';
 import type {
   PrecalculatedRaceIncident,
   StageResultCommitResponse,
@@ -32,7 +34,7 @@ import {
   resolveTimeLimitPercent,
   roundStageResultSeconds,
 } from '../../../shared/stageResultRules';
-import { ensureRaceEntries } from './RaceRosterService';
+import { ensureRaceEntryKerne } from './RaceRosterService';
 import { ziehVerletzung, type Verletzungsart } from '../../../shared/injuries';
 import { ladeVerletzungsarten } from '../db/injuryTypes';
 import {
@@ -326,6 +328,7 @@ export class StageResultCommitService {
       getRaceEntryIds: (raceId: number) => raceRepo.getRaceEntryIds(raceId),
       getRaceProgramsForRace: (raceId: number) => raceRepo.getRaceProgramsForRace(raceId),
       getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
+      getStageRiderKerne: (stageId: number) => raceRepo.getStageRiderKerne(stageId),
       // TeamRepository methods
       getTeams: (teamId?: number) => (teamRepo as any).getTeams(teamId),
       getTeamById: (id: number) => (teamRepo as any).getTeamById(id),
@@ -608,7 +611,7 @@ export class StageResultCommitService {
   private loadStageContext(stageId: number): {
     race: Race;
     stage: Stage;
-    riders: Rider[];
+    riders: KaderKern[];
     teamsById: Map<number, Team>;
   } {
     if (!tableExists(this.db, 'results') || !tableExists(this.db, 'result_types')) {
@@ -627,7 +630,10 @@ export class StageResultCommitService {
 
     this.ensureStageCanBeSimulated(stage);
 
-    const riders = ensureRaceEntries(this.db, this.repo, race, stage);
+    // Der Kader nur mit den Feldern, die der Commit liest — die Abstimmung
+    // der Startliste (Ausfaelle nach dem Aufbau, Rundfahrt-Ermuedung) laeuft
+    // darin genau wie beim vollen Laden.
+    const riders: KaderKern[] = ensureRaceEntryKerne(this.db, this.repo, race, stage);
     if (riders.length === 0) {
       throw new Error('Für dieses Rennen konnten keine Fahrer für die Startliste bestimmt werden.');
     }
@@ -1081,11 +1087,22 @@ export class StageResultCommitService {
       addLeader(breakawayLeader, 'purple');
     }
 
-    const insert = this.db.prepare(`
-      INSERT INTO results (
-        race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    // Die Ergebniszeilen werden gesammelt und nach den Schleifen in Bloecken
+    // geschrieben: je Etappe sind es rund 390 Zeilen ueber sieben Wertungen,
+    // im Jahr 180 000 Einzel-INSERTs.
+    const ergebnisZeilen: unknown[][] = [];
+    const insert = { run: (...werte: unknown[]) => { ergebnisZeilen.push(werte); } };
+    const ergebnisseSchreiben = () => schreibeInBloecken(
+      this.db,
+      'INSERT INTO results (race_id, stage_id, rider_id, team_id, result_type_id, rank, time_seconds, points, is_breakaway, leadout_rider_id, leadout_bonus, breakaway_kms, event_ids, jerseys_worn) VALUES ',
+      '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ergebnisZeilen,
+      (zeile, fehler) => {
+        throw new Error(
+          `Ergebnis konnte nicht gespeichert werden (type=${zeile[4]}, stage=${zeile[1]}, rank=${zeile[5]}, rider=${zeile[2] ?? 'null'}, team=${zeile[3] ?? 'null'}): ${fehler.message}`,
+        );
+      },
+    );
     const insertMarkerResult = this.db.prepare(`
       INSERT INTO stage_marker_results (
         race_id, stage_id, marker_key, marker_label, marker_type, marker_category, km_mark,
@@ -1161,6 +1178,7 @@ export class StageResultCommitService {
           isBreakaway: false,
         });
       }
+      ergebnisseSchreiben();
       for (const classification of markerClassifications) {
         const entriesToSave = classification.entries.filter(
           (entry: any) => (entry.pointsAwarded != null && entry.pointsAwarded > 0) || entry.rank === 1
@@ -2807,7 +2825,7 @@ export class StageResultCommitService {
   }
 
   private insertResultRow(
-    insert: Database.Statement,
+    insert: { run: (...werte: unknown[]) => unknown },
     raceId: number,
     stageId: number,
     resultTypeId: number,

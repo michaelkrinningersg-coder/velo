@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { schreibeInBloecken } from '../db/schreibeInBloecken';
 import { EventEmitter } from 'events';
 import { GameState, GameStatus, LastStageWinner, PendingStage } from '../../../shared/types';
 import { ziehVerletzung, type Verletzungsart } from '../../../shared/injuries';
@@ -2021,19 +2022,18 @@ export class GameStateService {
       FROM rider_r_form_daily_awards
       WHERE rider_id = ? AND award_date = ?
     `);
-    const insertAward = this.db.prepare(`
-      INSERT INTO rider_r_form_daily_awards (rider_id, award_date, award_type)
-      VALUES (?, ?, ?)
-    `);
     const updateRaceForm = this.db.prepare(`
       UPDATE rider_daily_state
       SET race_form_bonus = ?
       WHERE rider_id = ?
     `);
-    const insertFreeRaceForm = this.db.prepare(`
-      INSERT INTO rider_r_form_events (rider_id, source_date, expires_on, amount, event_type)
-      VALUES (?, ?, ?, ?, 'race_day')
-    `);
+    // Ereignisse und Vergaben werden gesammelt und am Ende in Bloecken
+    // geschrieben: je Etappe sind das rund 130 Fahrer mit je zwei Zeilen,
+    // ueber ein Jahr 125 000 Einzel-INSERTs.
+    const neueEreignisse: Array<[number, string, string, number]> = [];
+    const neueVergaben: Array<[number, string, string]> = [];
+    const insertFreeRaceForm = { run: (riderId: number, quelle: string, ablauf: string, betrag: number) => { neueEreignisse.push([riderId, quelle, ablauf, betrag]); } };
+    const insertAward = { run: (riderId: number, datum: string, art: string) => { neueVergaben.push([riderId, datum, art]); } };
 
     this.db.transaction(() => {
       for (const riderId of uniqueRiderIds) {
@@ -2069,6 +2069,8 @@ export class GameStateService {
           insertAward.run(riderId, raceDate, 'free');
         }
       }
+      schreibeInBloecken(this.db, 'INSERT INTO rider_r_form_events (rider_id, source_date, expires_on, amount, event_type) VALUES ', "(?, ?, ?, ?, 'race_day')", neueEreignisse);
+      schreibeInBloecken(this.db, 'INSERT INTO rider_r_form_daily_awards (rider_id, award_date, award_type) VALUES ', '(?, ?, ?)', neueVergaben);
     })();
   }
 

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import type { KaderKern } from '../db/repositories/RaceRepository';
 import { GameStateRepository } from "../db/repositories/GameStateRepository";
 import { RaceRepository } from "../db/repositories/RaceRepository";
 import { ResultRepository } from "../db/repositories/ResultRepository";
@@ -1512,12 +1513,13 @@ function applyChampionshipEntries(
   stage: Stage,
   forceRebuild: boolean,
   rosterBuilder: (db: Database.Database, repo: any, race: Race, stage: Stage) => Rider[] = buildChampionshipRoster,
+  laden: (stageId: number) => Rider[] = (stageId) => repo.getStageRiders(stageId),
 ): Rider[] {
   // Nur gezaehlt, nicht gelesen — siehe getRaceEntryIds.
   const existing = repo.getRaceEntryIds(race.id);
   if (!forceRebuild && existing.length > 0) {
     repo.ensureStageEntries(stage);
-    return repo.getStageRiders(stage.id);
+    return laden(stage.id);
   }
 
   const selected = rosterBuilder(db, repo, race, stage);
@@ -1545,7 +1547,7 @@ function applyChampionshipEntries(
   })();
 
   repo.ensureStageEntries(stage);
-  return repo.getStageRiders(stage.id);
+  return laden(stage.id);
 }
 
 /**
@@ -1566,12 +1568,27 @@ export function finalizeChampionshipWithoutStarters(db: Database.Database, race:
   })();
 }
 
-export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {
+/**
+ * Stellt die Startliste sicher und liefert den Kader.
+ *
+ * `laden` bestimmt, WIE der fertige Kader gelesen wird: standardmaessig als
+ * vollstaendige Fahrerobjekte (Aufbau der Etappe, Kader-Editor). Der
+ * Ergebnis-Commit braucht davon nur sieben Felder und uebergibt den
+ * schlanken Lader (siehe ensureRaceEntryKerne) — die Abstimmung der
+ * Startliste (Ausfaelle, Ermuedung der Rundfahrt) laeuft in beiden Faellen.
+ */
+export function ensureRaceEntries(
+  db: Database.Database,
+  repo: any,
+  race: Race,
+  stage: Stage,
+  laden: (stageId: number) => Rider[] = (stageId) => repo.getStageRiders(stageId),
+): Rider[] {
   if (isChampionshipCategory(race.categoryId)) {
-    return applyChampionshipEntries(db, repo, race, stage, false);
+    return applyChampionshipEntries(db, repo, race, stage, false, undefined, laden);
   }
   if (isNationalChampionshipCategory(race.categoryId)) {
-    return applyChampionshipEntries(db, repo, race, stage, false, buildNationalChampionshipRoster);
+    return applyChampionshipEntries(db, repo, race, stage, false, buildNationalChampionshipRoster, laden);
   }
   // Nur die IDs, siehe getRaceEntryIds.
   const existingEntries = repo.getRaceEntryIds(race.id);
@@ -1580,7 +1597,7 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
       repo.prepareStageRaceFatigue(race.id, stage.stageNumber, existingEntries.map((eintrag: any) => eintrag.riderId));
     }
     repo.ensureStageEntries(stage);
-    return repo.getStageRiders(stage.id);
+    return laden(stage.id);
   }
 
   const selected = mitKollisionsDaten(db, race, () => buildRaceRoster(db, repo, race, stage, true));
@@ -1600,7 +1617,17 @@ export function ensureRaceEntries(db: Database.Database, repo: any, race: Race, 
   }
 
   repo.ensureStageEntries(stage);
-  return repo.getStageRiders(stage.id);
+  return laden(stage.id);
+}
+
+/**
+ * Wie ensureRaceEntries, liefert aber nur den Kader-Ausschnitt, den der
+ * Ergebnis-Commit liest (siehe RaceRepository.getStageRiderKerne). Spart je
+ * Etappe das zweite Voll-Mapping von rund 200 Fahrern mit 80 Spalten, das
+ * der Aufbau der Etappe unmittelbar davor schon einmal gemacht hat.
+ */
+export function ensureRaceEntryKerne(db: Database.Database, repo: any, race: Race, stage: Stage): KaderKern[] {
+  return ensureRaceEntries(db, repo, race, stage, (stageId) => repo.getStageRiderKerne(stageId)) as unknown as KaderKern[];
 }
 
 export function refreshRaceEntriesForRaceStart(db: Database.Database, repo: any, race: Race, stage: Stage): Rider[] {

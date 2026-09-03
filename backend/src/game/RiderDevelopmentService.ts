@@ -260,6 +260,14 @@ function buildUpdatedSpecializationIds(skills: RiderSkills, typeIdByKey: Map<Rid
   return { riderTypeId, specialization1Id, specialization2Id, specialization3Id };
 }
 
+/** Anzahl Tage des Monats vor dem Monat des ISO-Datums. */
+function tageImVormonat(isoDate: string): number {
+  const jahr = Number(isoDate.slice(0, 4));
+  const monat = Number(isoDate.slice(5, 7)); // 1..12
+  // Tag 0 des laufenden Monats ist der letzte Tag des Vormonats.
+  return new Date(Date.UTC(jahr, monat - 1, 0)).getUTCDate();
+}
+
 export class RiderDevelopmentService {
   private readonly db: Database.Database;
 
@@ -280,6 +288,26 @@ export class RiderDevelopmentService {
     if (!tableExists(this.db, 'riders') || !tableExists(this.db, 'type_rider')) return;
 
     const boundedDayMultiplier = Math.max(1, Math.min(31, Math.floor(dayMultiplier)));
+
+    // Wochenschritt: die Fahrer der ersten Liga werden nicht mehr taeglich,
+    // sondern am 1., 8., 15. und 22. gerechnet, jeweils fuer die Tage seit dem
+    // vorigen Stichtag. Das Modell rechnet einen Mehrtagesschritt geschlossen
+    // (siehe advanceSkill); gegen sieben Tagesschritte weicht er um hoechstens
+    // 0,003 Punkte je Woche ab — gemessen ueber Alter 19 bis 34 und alle
+    // Entwicklungswerte (Test entwicklungWochenschritt). Ueber eine Saison
+    // sind das im schlechtesten Fall rund 0,15 Punkte, unter der
+    // Anzeigegenauigkeit. Gespart werden an sechs von sieben
+    // Tagen das Laden von 620 Fahrern mit 45 Spalten und 620 Schreibvorgaenge.
+    // Ein expliziter Mehrtages-Aufruf (dayMultiplier > 1) rechnet wie bisher
+    // bei jedem Aufruf.
+    const tag = Number(currentDate.slice(8, 10));
+    const stichtag = boundedDayMultiplier > 1 || tag === 1 || tag === 8 || tag === 15 || tag === 22;
+    if (!stichtag) return;
+    const tageSeitStichtag = boundedDayMultiplier > 1
+      ? boundedDayMultiplier
+      : tag === 1
+        ? tageImVormonat(currentDate) - 21 // vom 22. des Vormonats bis zum 1.
+        : 7;
 
     const rows = this.db.prepare(`
       SELECT riders.id, riders.birth_year, riders.skill_development, riders.peak_age, riders.decline_age, riders.retirement_age,
@@ -360,7 +388,7 @@ export class RiderDevelopmentService {
       // Naeherung mehr: `advanceSkill` rechnet den Aufbau geschlossen und teilt
       // an jeder Phasengrenze, ein Monatsschritt kommt deshalb auf denselben
       // Wert wie dreissig Tagesschritte.
-      const days = isTier1 ? boundedDayMultiplier : 30;
+      const days = isTier1 ? tageSeitStichtag : 30;
 
       if (row.is_retired === 1) {
         continue;

@@ -220,7 +220,10 @@ export function assembleStageBootstrap(
     simSeed: options.simSeed ?? undefined,
     race,
     stage,
-    riders: ridersWithMentors,
+    // Potenziale und Peak-Termine liest keine der beiden Simulationen und
+    // auch die Live-Ansicht nicht; zusammen sind sie 57 der 405 KB Fahrerdaten
+    // je Etappe. Alles Weitere an der Fahrerliste braucht die Live-Ansicht.
+    riders: ridersWithMentors.map(({ potentials: _potenziale, seasonFormPeakDates: _peakTermine, ...rest }) => rest),
     teams: participatingTeams,
     stageSummary: StageParser.summarizeStageProfile(stage.detailsCsvFile, stage.startElevation),
     gcStandings: repo.getPreviousGcStandings(stage.raceId, stage.stageNumber),

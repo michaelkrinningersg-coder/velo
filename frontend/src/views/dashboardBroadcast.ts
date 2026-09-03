@@ -3,25 +3,20 @@
  * ----------------------------------------------------------------------
  * Rendert den Body von #view-dashboard als HTML-String (innerHTML).
  * Bauteile: KPI-Strip · Live-Spotlight · Renn-Radar · Fahrer im Fokus
- * (rotierend, Radar + Siegliste) · Top-10 Fahrer · Top-10 Teams.
+ * (rotierend, Radar) · Top-10 Fahrer · Top-10 Teams.
  *
  * Styling: Inline-Styles 1:1 aus dem Broadcast-Design.
  * Datenquellen: globaler `state` + Team-Aggregation aus state.riders.
- * Siegliste der Fokus-Karte wird per api.getRiderStats lazy nachgeladen.
  */
-import { api } from '../api';
 import { state, resolveRaceCategoryBadgeStyle, renderRaceNameLink } from '../state';
 import { renderMiniStageProfileMarkup } from '../race-sim/renderProfile';
-import type { Race, Rider, Team, RiderStatsPayload, StageProfile } from '../../../shared/types';
+import type { Race, Rider, Team, StageProfile } from '../../../shared/types';
 
 const MONO = "font-family:'JetBrains Mono',monospace";
 const MONTHS = ['JAN', 'FEB', 'MRZ', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
 
 // ---- Fokus-Fahrer (1 zufaelliger Sieger, stabil) + Siegliste-Cache ---------
 let spotlightRiderId: number | null = null;
-interface SpotlightWin { race: string; raceId: number | null; detail: string; color: string; isGc: boolean; }
-const spotlightWinsCache = new Map<number, SpotlightWin[]>();
-const spotlightWinsInFlight = new Set<number>();
 
 // ---- kleine Helfer ---------------------------------------------------------
 function addDays(dateStr: string, days: number): string {
@@ -311,7 +306,6 @@ function renderRiderSpotlight(): string {
   const teamColor = team?.colorPrimary ?? '#22d3ee';
   const ovr = rider.overallRating ?? 0;
   const form = rider.formBonus ?? 0;
-  const winCount = rider.seasonWins ?? 0;
   const country = rider.country?.code3 ?? rider.nationality ?? '';
   const role = rider.role?.name ?? '';
 
@@ -321,21 +315,6 @@ function renderRiderSpotlight(): string {
   const lastWinnerLabel = lastWinner != null && lastWinner.riderId === rider.id
     ? `${lastWinner.isTeamTimeTrial ? 'TTT-Sieg' : 'Sieger'} · ${renderRaceNameLink(lastWinner.raceName, lastWinner.raceId)}${lastWinner.stageNumber != null ? ` · E${lastWinner.stageNumber}` : ''}`
     : null;
-
-  const cachedWins = spotlightWinsCache.get(rider.id);
-  let winsHtml: string;
-  if (cachedWins == null) {
-    winsHtml = `<div style="${MONO};font-size:11px;color:#7c8aa3;padding:6px 2px;">Lade Siege…</div>`;
-  } else if (cachedWins.length === 0) {
-    winsHtml = `<div style="${MONO};font-size:11px;color:#7c8aa3;padding:6px 2px;">Keine Einzelsiege in dieser Saison.</div>`;
-  } else {
-    winsHtml = cachedWins.map((w) => `
-      <div style="display:flex;align-items:stretch;background:#0c1729;border:1px solid #1c2b47;border-radius:8px;overflow:hidden;">
-        ${w.isGc ? '<span style="width:3px;background:#fbbf24;flex:0 0 auto;"></span>' : ''}
-        <span style="width:4px;background:${w.color};flex:0 0 auto;"></span>
-        <div style="flex:1;min-width:0;padding:8px 11px;"><div style="font-size:13px;font-weight:700;color:#e8edf5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${renderRaceNameLink(w.race, w.raceId)}</div><div style="${MONO};font-size:10px;color:#8494ad;">${w.detail}</div></div>
-      </div>`).join('');
-  }
 
   return `
     <div style="border-radius:14px;border:1px solid #223354;background:linear-gradient(160deg,#101d33,#0b1424);padding:15px 16px;display:flex;flex-direction:column;">
@@ -355,11 +334,6 @@ function renderRiderSpotlight(): string {
         </div>
       </div>
       ${renderSpotlightRadar(rider)}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;padding-top:10px;border-top:1px solid #1c2b47;">
-        <span style="${MONO};font-size:10px;letter-spacing:.12em;color:#7c8aa3;text-transform:uppercase;">Siege · nach UCI-Punkten</span>
-        <span style="${MONO};font-size:11px;font-weight:700;color:#fbbf24;">${winCount} ${winCount === 1 ? 'Sieg' : 'Siege'}</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">${winsHtml}</div>
     </div>`;
 }
 
@@ -415,56 +389,4 @@ export function renderDashboardBroadcast(): string {
       ${renderRiderSpotlight()}
     </div>
   </div>`;
-}
-
-// ---- Lazy-Siegliste (von dashboard.ts aufgerufen) --------------------------
-export function focusedSpotlightRiderId(): number | null {
-  return spotlightRider()?.id ?? null;
-}
-
-// Laedt die Siegliste des fokussierten Fahrers nach (einmal je Fahrer, gecacht).
-// Gibt true zurueck, wenn danach neu gerendert werden sollte.
-export async function ensureSpotlightWinsLoaded(): Promise<boolean> {
-  const riderId = focusedSpotlightRiderId();
-  if (riderId == null) return false;
-  if (spotlightWinsCache.has(riderId) || spotlightWinsInFlight.has(riderId)) return false;
-  spotlightWinsInFlight.add(riderId);
-  try {
-    const res = await api.getRiderStats(riderId, true);
-    if (!res.success || !res.data) {
-      spotlightWinsCache.set(riderId, []);
-      return true;
-    }
-    spotlightWinsCache.set(riderId, extractSeasonWins(res.data, state.gameState?.season ?? null));
-    return true;
-  } catch {
-    spotlightWinsCache.set(riderId, []);
-    return true;
-  } finally {
-    spotlightWinsInFlight.delete(riderId);
-  }
-}
-
-function extractSeasonWins(payload: RiderStatsPayload, season: number | null): SpotlightWin[] {
-  const seasons = payload.seasons ?? [];
-  const target = season != null
-    ? seasons.find((s) => s.season === season) ?? seasons[seasons.length - 1]
-    : seasons[seasons.length - 1];
-  if (!target) return [];
-  const wins: Array<SpotlightWin & { points: number }> = [];
-  for (const block of target.raceBlocks ?? []) {
-    for (const row of block.rows ?? []) {
-      // Siege: Etappensieg / One-Day-Sieg (stage_result rank 1) oder GC-Sieg (gc_final rank 1)
-      const isStageOrOneDayWin = row.rowType === 'stage_result' && row.resultRank === 1;
-      const isGcWin = row.rowType === 'gc_final' && row.resultRank === 1;
-      if (!isStageOrOneDayWin && !isGcWin) continue;
-      const color = resolveRaceCategoryBadgeStyle(row.raceCategoryName).border;
-      const detail = isGcWin
-        ? 'Gesamtwertung'
-        : (row.isStageRace ? (row.stageNumber != null ? `Etappe ${row.stageNumber}` : 'Etappe') : 'Eintagesrennen');
-      wins.push({ race: row.raceName, raceId: row.raceId, detail, color, isGc: isGcWin, points: row.seasonPoints ?? 0 });
-    }
-  }
-  wins.sort((a, b) => b.points - a.points);
-  return wins.slice(0, 4).map(({ race, raceId, detail, color, isGc }) => ({ race, raceId, detail, color, isGc }));
 }

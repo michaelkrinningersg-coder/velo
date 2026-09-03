@@ -125,7 +125,8 @@ export async function openOfflineStage(
   // schlichte Ladehinweis fuer die beiden Netzwerkaufrufe.
   if (mode === 'instant') {
     showInstantProgress(0);
-  } else {
+  } else if (!lightReload) {
+    // Im Auto-Weiter kein Overlay: es stuende je Etappe nur Millisekunden.
     showLoading('Etappe wird ausgewertet …');
   }
   try {
@@ -461,7 +462,7 @@ export async function completeRealtimeStage(
   }
 
   setRealtimeCompletionInFlight(true);
-  showLoading('Live-Ergebnis wird gespeichert...');
+  if (!lightReload) showLoading('Live-Ergebnis wird gespeichert...');
   try {
     const res = await api.completeRealtimeSimulation(stageId, {
       entries,

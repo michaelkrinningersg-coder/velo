@@ -45,6 +45,7 @@ describe('Tageszaehler aus formMarker', () => {
       getRaceRiders: (raceId: number) => raceRepo.getRaceRiders(raceId),
       getRaceEntryIds: (raceId: number) => raceRepo.getRaceEntryIds(raceId),
       getStageRiders: (stageId: number) => raceRepo.getStageRiders(stageId),
+      getStageRiderKerne: (stageId: number) => raceRepo.getStageRiderKerne(stageId),
       prepareStageRaceFatigue: (raceId: number, sn: number, ids: number[]) => gsRepo.prepareStageRaceFatigue(raceId, sn, ids),
       ensureStageEntries: (stage: any) => gsRepo.ensureStageEntries(stage),
       getTeams: (teamId?: number) => teamRepo.getTeams(teamId),

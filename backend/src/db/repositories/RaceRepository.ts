@@ -8,6 +8,9 @@ import { RiderRepository } from './RiderRepository';
 import { TeamRepository } from './TeamRepository';
 
 
+/** Kader-Ausschnitt fuer den Ergebnis-Commit, siehe getStageRiderKerne. */
+export type KaderKern = Pick<Rider, 'id' | 'activeTeamId' | 'firstName' | 'lastName' | 'birthYear' | 'favoriteRaces' | 'nonFavoriteRaces'>;
+
 export class RaceRepository {
   private readonly db: Database.Database;
 
@@ -347,6 +350,41 @@ export class RaceRepository {
     const seasonPointsByRiderId = new RiderRepository(this.db)
       .getSeasonPointsByRiderId(season, rows.map((row) => row.id));
     return rows.map((row) => mapRider(row, season, currentDate, seasonPointsByRiderId.get(row.id) ?? 0, stage.stageNumber));
+  }
+
+  /**
+   * Der Kader einer Etappe auf die Felder reduziert, die der Ergebnis-Commit
+   * wirklich liest: Identitaet, Team, Jahrgang (Nachwuchswertung) und die
+   * Lieblings-/Angstrennen (Rennpraeferenzen).
+   *
+   * `getStageRiders` baut fuer dieselben 200 Fahrer vollstaendige Objekte mit
+   * rund 80 Spalten, Tageszustand, Vertrag und Saisonpunkten — das hatte der
+   * Aufbau der Etappe unmittelbar davor schon einmal getan. Dieselbe Auswahl
+   * und Reihenfolge wie dort.
+   */
+  public getStageRiderKerne(stageId: number): KaderKern[] {
+    if (!tableExists(this.db, 'stage_entries')) return [];
+    const rows = this.db.prepare(`
+      SELECT r.id, r.active_team_id, r.first_name, r.last_name, r.birth_year, r.favorite_races, r.non_favorite_races
+      FROM riders r
+      JOIN stage_entries ON stage_entries.rider_id = r.id
+      WHERE stage_entries.stage_id = ?
+        AND stage_entries.status IN ('scheduled', 'started', 'finished')
+        AND r.is_retired = 0
+      ORDER BY r.overall_rating DESC
+    `).all(stageId) as Array<{
+      id: number; active_team_id: number | null; first_name: string; last_name: string; birth_year: number;
+      favorite_races: string; non_favorite_races: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      activeTeamId: row.active_team_id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      birthYear: row.birth_year,
+      favoriteRaces: parseRaceList(row.favorite_races),
+      nonFavoriteRaces: parseRaceList(row.non_favorite_races),
+    }));
   }
 
 

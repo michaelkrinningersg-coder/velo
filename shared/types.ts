@@ -1843,8 +1843,13 @@ export interface WrappedFallenLegend {
 export interface ReloadBundle {
   gameState: GameState;
   gameStatus: GameStatus;
-  races: Race[];
-  /** Fehlt im schlanken Modus (Auto-Weiter). */
+  /**
+   * Fehlen im schlanken Modus (Auto-Weiter). Die Rennen der Saison mit allen
+   * Etappen sind 537 KB je Schritt — ueber ein Jahr 440 MB JSON — und aendern
+   * sich waehrend des Laufs nur in tagesabhaengigen Feldern, die das
+   * Dashboard aus `gameStatus` hat.
+   */
+  races?: Race[];
   riders?: Rider[];
 }
 
