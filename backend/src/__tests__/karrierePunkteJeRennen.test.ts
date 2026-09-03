@@ -47,7 +47,7 @@ describe('Karrierepunkte je Rennen', () => {
     rennen.run(5, 'Punktloses Rennen', 901, '2028-08-01', '2028-08-01');
 
     const etappe = db.prepare(`INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
-      VALUES (?, ?, 1, ?, 'Flat', 0, 'x.csv')`);
+      VALUES (?, ?, 1, ?, 'Flat', 0, 'dummy_flat_a.csv')`);
     etappe.run(1, 1, '2027-04-01');
     etappe.run(2, 2, '2028-04-01');
     etappe.run(3, 3, '2027-06-20');
@@ -55,6 +55,12 @@ describe('Karrierepunkte je Rennen', () => {
     etappe.run(5, 5, '2028-08-01');
 
     fahrer = seedRider(db, { activeTeamId: 1, overallRating: 70 });
+
+    // Renntage kommen aus dem Startlisten-Archiv, nicht aus den Punkten.
+    const eintrag = db.prepare(`
+      INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (?, ?, 1, ?, ?, NULL)
+    `);
 
     const ereignis = db.prepare(`
       INSERT INTO season_point_events (season, race_id, stage_id, rider_id, team_id, award_type, rank, points_awarded, awarded_on)
@@ -65,6 +71,13 @@ describe('Karrierepunkte je Rennen', () => {
     ereignis.run(2027, 3, 3, fahrer, 90, '2027-06-20');
     ereignis.run(2028, 4, 4, fahrer, 60, '2028-06-20');
     ereignis.run(2028, 5, 5, fahrer, 0, '2028-08-01');
+
+    eintrag.run(1, 1, fahrer, 'finished');
+    eintrag.run(2, 2, fahrer, 'finished');
+    eintrag.run(3, 3, fahrer, 'finished');
+    eintrag.run(4, 4, fahrer, 'finished');
+    // Aufgabe zaehlt nicht als Renntag.
+    eintrag.run(5, 5, fahrer, 'dnf');
   });
 
   afterEach(() => db.close());
@@ -74,13 +87,30 @@ describe('Karrierepunkte je Rennen', () => {
     expect(payload).not.toBeNull();
     expect(payload!.careerPointsByRace).toEqual([
       // 100 (2027) + 200 (2028); Kategorie aus der juengsten Austragung.
-      { raceName: 'Klassiker', categoryName: 'Testkategorie Eintagesrennen', points: 300, seasons: 2 },
+      { raceName: 'Klassiker', categoryName: 'Testkategorie Eintagesrennen', points: 300, seasons: 2, raceDays: 2 },
       {
         raceName: 'Nationale Meisterschaft Strasse – Testland',
         categoryName: 'Testkategorie Meisterschaft',
         points: 150,
         seasons: 2,
+        raceDays: 2,
       },
     ]);
+  });
+
+  it('zaehlt die Renntage gleichnamiger Austragungen zusammen und laesst Aufgaben weg', () => {
+    // Eine dritte Austragung von 'Klassiker', beendet, aber ohne Punkte: sie
+    // erhoeht die Renntage, nicht die Punkte.
+    db.prepare(`INSERT INTO races (id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige)
+      VALUES (6, 'Klassiker', 1, 901, 0, 1, '2028-09-01', '2028-09-01', 50)`).run();
+    db.prepare(`INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
+      VALUES (6, 6, 1, '2028-09-01', 'Flat', 0, 'dummy_flat_a.csv')`).run();
+    db.prepare(`INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (6, 6, 1, ?, 'finished', NULL)`).run(fahrer);
+
+    const bilanz = new RiderRepository(db).getRiderStats(fahrer)!.careerPointsByRace;
+    expect(bilanz.find((e) => e.raceName === 'Klassiker')).toMatchObject({ points: 300, raceDays: 3 });
+    // Das punktlose Rennen bleibt draussen, obwohl es einen Eintrag hat.
+    expect(bilanz.some((e) => e.raceName === 'Punktloses Rennen')).toBe(false);
   });
 });

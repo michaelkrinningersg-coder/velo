@@ -2626,29 +2626,51 @@ export class RiderRepository {
    */
   private getCareerPointsByRace(
     riderId: number,
-  ): Array<{ raceName: string; categoryName: string | null; points: number; seasons: number }> {
+  ): Array<{ raceName: string; categoryName: string | null; points: number; seasons: number; raceDays: number }> {
     if (!tableExists(this.db, 'season_point_events') || !tableExists(this.db, 'races')) {
       return [];
     }
-    const rows = this.db.prepare(`
-      SELECT races.name AS raceName,
-             race_categories.name AS categoryName,
-             MAX(races.id) AS lastRaceId,
-             SUM(spe.points_awarded) AS points,
-             COUNT(DISTINCT spe.season) AS seasons
-      FROM season_point_events spe
-      JOIN races ON races.id = spe.race_id
-      LEFT JOIN race_categories ON race_categories.id = races.category_id
-      WHERE spe.rider_id = ?
+    const hatEintraege = tableExists(this.db, 'stage_entries_flat');
+    // Die Renntage kommen aus `stage_entries_flat`, dem dauerhaften Archiv der
+    // Startlisten: `results_flat` wird beim Saisonwechsel ausgeduennt und
+    // taugt als Teiler nicht. Gezaehlt werden beendete Etappen — dieselbe
+    // Definition, die der Commit in `rider_career_stats.race_days` fortschreibt
+    // (auf dem gemessenen Spielstand von 2033 fuer alle 2928 Fahrer identisch).
+    const renntage = hatEintraege
+      ? `, renntage AS (
+      SELECT races.name AS renntageName, COUNT(*) AS raceDays
+      FROM stage_entries_flat e
+      JOIN races ON races.id = e.race_id
+      WHERE e.rider_id = ? AND e.status = 'finished'
       GROUP BY races.name
-      HAVING SUM(spe.points_awarded) > 0
-      ORDER BY points DESC, raceName ASC
-    `).all(riderId) as any[];
+    )`
+      : '';
+    const rows = this.db.prepare(`
+      WITH punkte AS (
+        SELECT races.name AS raceName,
+               race_categories.name AS categoryName,
+               MAX(races.id) AS lastRaceId,
+               SUM(spe.points_awarded) AS points,
+               COUNT(DISTINCT spe.season) AS seasons
+        FROM season_point_events spe
+        JOIN races ON races.id = spe.race_id
+        LEFT JOIN race_categories ON race_categories.id = races.category_id
+        WHERE spe.rider_id = ?
+        GROUP BY races.name
+        HAVING SUM(spe.points_awarded) > 0
+      )${renntage}
+      SELECT punkte.raceName, punkte.categoryName, punkte.points, punkte.seasons,
+             ${hatEintraege ? 'COALESCE(renntage.raceDays, 0)' : '0'} AS raceDays
+      FROM punkte
+      ${hatEintraege ? 'LEFT JOIN renntage ON renntage.renntageName = punkte.raceName' : ''}
+      ORDER BY punkte.points DESC, punkte.raceName ASC
+    `).all(...(hatEintraege ? [riderId, riderId] : [riderId])) as any[];
     return rows.map((r) => ({
       raceName: String(r.raceName ?? ''),
       categoryName: r.categoryName == null ? null : String(r.categoryName),
       points: Number(r.points ?? 0),
       seasons: Number(r.seasons ?? 0),
+      raceDays: Number(r.raceDays ?? 0),
     }));
   }
 

@@ -1519,6 +1519,11 @@ export interface RiderStatsPayload {
     points: number;
     /** Anzahl Saisons, in denen der Fahrer bei diesem Rennen gepunktet hat. */
     seasons: number;
+    /**
+     * Renntage bei diesem Rennen ueber die ganze Karriere — die Etappen, die
+     * der Fahrer beendet hat. Teiler fuer die Ansicht "Punkte je Renntag".
+     */
+    raceDays: number;
   }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];
