@@ -2709,21 +2709,38 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 // fester Massstab ueber alle Fahrer wuerde bei den meisten nur Stummel zeigen.
 /**
  * Eintagesrennen, die trotz des kurzen Formats schwer wiegen: Monumente,
- * Weltmeisterschaften, Olympia und die kontinentalen Meisterschaften. Die
- * NATIONALEN Meisterschaften gehoeren bewusst nicht dazu.
+ * Weltmeisterschaften, Olympia sowie die kontinentalen und nationalen
+ * Meisterschaften.
  */
-const SCHWERE_EINTAGESRENNEN = /(^|\s)(Weltmeisterschaft|Olympische Spiele|Europameisterschaft|Asien-Ozeanien-Meisterschaft|Amerika-Meisterschaft|Afrika-Meisterschaft)|Monument/;
+const SCHWERE_EINTAGESRENNEN = /(^|\s)(Weltmeisterschaft|Olympische Spiele|Europameisterschaft|Asien-Ozeanien-Meisterschaft|Amerika-Meisterschaft|Afrika-Meisterschaft|Nationale Meisterschaft)|Monument/;
 
 /**
  * Abschlag fuer das Rennformat in der normierten Ansicht.
  *
  * Ein Eintagesrennen vergibt seine ganze Punktzahl an einem Tag und stuende
- * je Renntag sonst uneinholbar vor jeder Rundfahrt. Die schweren
- * Eintagesrennen bekommen einen kleineren Abschlag.
+ * je Renntag sonst uneinholbar vor jeder Rundfahrt. Wie stark der Abschlag
+ * ausfaellt, haengt am Gewicht des Rennens:
+ *
+ *   /1    Rundfahrten — kein Abschlag
+ *   /3    Monumente, WM, Olympia, kontinentale und nationale Meisterschaften
+ *   /3,5  World Tour One Day High
+ *   /4    die uebrigen Eintagesrennen (One Day Middle und Low)
  */
 function formatFaktor(rennen: { isStageRace: boolean; categoryName: string | null }): number {
   if (rennen.isStageRace) return 1;
-  return SCHWERE_EINTAGESRENNEN.test(rennen.categoryName ?? '') ? 3 : 4;
+  const kategorie = rennen.categoryName ?? '';
+  if (SCHWERE_EINTAGESRENNEN.test(kategorie)) return 3;
+  if (/One Day High/.test(kategorie)) return 3.5;
+  return 4;
+}
+
+/** Beschriftung des Format-Abschlags fuer den Titel einer Zeile. */
+function formatFaktorGrund(rennen: { isStageRace: boolean; categoryName: string | null }): string {
+  if (rennen.isStageRace) return 'Rundfahrt';
+  const kategorie = rennen.categoryName ?? '';
+  if (SCHWERE_EINTAGESRENNEN.test(kategorie)) return 'schweres Eintagesrennen';
+  if (/One Day High/.test(kategorie)) return 'One Day High';
+  return 'Eintagesrennen';
 }
 
 /**
@@ -2786,7 +2803,7 @@ export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null)
       const stichprobe = stichprobenFaktor(r.raceDays);
       const format = formatFaktor(r);
       if (stichprobe > 1) teiler.push(`÷ ${stichprobe} (nur ${r.raceDays} Renntage)`);
-      if (format > 1) teiler.push(`÷ ${format} (${r.isStageRace ? 'Rundfahrt' : SCHWERE_EINTAGESRENNEN.test(r.categoryName ?? '') ? 'schweres Eintagesrennen' : 'Eintagesrennen'})`);
+      if (format > 1) teiler.push(`÷ ${format.toLocaleString('de-DE')} (${formatFaktorGrund(r)})`);
     }
     const titel = !geteilt
       ? `${r.points} Pkt. · ${(anteil * 100).toFixed(0)} % seines besten Rennens (${maximum} Pkt.)`
@@ -2830,7 +2847,7 @@ export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null)
           </div>
           <div style="${MONOF};font-size:10px;color:#6a7a95;">${rennen.length} Rennen · ${gesamtPunkte} Pkt. · ${gesamtTage} Renntage · ${bezug}</div>
         </div>
-        ${rennpunkteAnsicht === 'normiert' ? `<div style="${MONOF};font-size:10px;color:#5f7590;margin:-6px 0 12px;">Punkte je Renntag, abgewertet um ÷4 für Eintagesrennen (÷3 bei Monumenten, WM, Olympia und kontinentalen Meisterschaften) und um ÷2 / ÷3 / ÷4 bei nur 3, 2 oder 1 Renntag.</div>` : ''}
+        ${rennpunkteAnsicht === 'normiert' ? `<div style="${MONOF};font-size:10px;color:#5f7590;margin:-6px 0 12px;">Punkte je Renntag, abgewertet nach Format — ÷3 bei Monumenten, WM, Olympia sowie kontinentalen und nationalen Meisterschaften, ÷3,5 bei One Day High, ÷4 bei den übrigen Eintagesrennen — und zusätzlich um ÷2 / ÷3 / ÷4 bei nur 3, 2 oder 1 Renntag.</div>` : ''}
         <div style="${RASTER}border-radius:12px;overflow:hidden;border:1px solid #16233c;">
           <span style="${KOPF}padding-left:14px;text-align:right;">#</span>
           <span style="${KOPF}">RENNEN</span>
