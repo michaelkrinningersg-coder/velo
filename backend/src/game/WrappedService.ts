@@ -262,7 +262,7 @@ export class WrappedService {
   private allTimeTop(
     now: { ordered: Array<{ riderId: number; pts: number; rank: number }> },
     prev: { rankById: Map<number, number> },
-    limit = 20,
+    limit = 50,
   ): WrappedRiderPoints[] {
     const out: WrappedRiderPoints[] = [];
     for (const entry of now.ordered.slice(0, limit)) {

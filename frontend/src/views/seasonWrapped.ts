@@ -99,16 +99,26 @@ function wrappedSection(color: string, label: string, meta: string, inner: strin
 // `versatz` verschiebt die Nummerierung, damit eine lange Liste ueber zwei
 // Spalten laufen kann, ohne rechts wieder bei 1 anzufangen. Medaillenfarbe und
 // Zeilenhoehe haengen am ABSOLUTEN Platz, nicht an der Position in der Spalte.
-function statRows(entries: Array<{ label: string; sub: string; delta?: string }>, versatz = 0): string {
+//
+// `einheitlich` nimmt den Plaetzen 1 bis 3 die groessere Schrift und den
+// hoeheren Innenabstand. Noetig, sobald zwei Spalten nebeneinander stehen: die
+// Podiumszeilen sind sonst hoeher als die uebrigen, und die rechte Spalte
+// verrutscht gegen die linke. Die Medaillenfarbe bleibt — sie kostet keine Hoehe.
+function statRows(
+  entries: Array<{ label: string; sub: string; delta?: string }>,
+  versatz = 0,
+  einheitlich = false,
+): string {
   if (entries.length === 0) return `<div style="padding:14px;color:#6a7a95;font-size:13px;">–</div>`;
   const mitDelta = entries.some((e) => e.delta);
   const spalten = mitDelta ? '30px 1fr auto 44px' : '34px 1fr auto';
   return entries.map((e, i) => {
     const platz = i + versatz;
-    return `<div style="display:grid;grid-template-columns:${spalten};align-items:center;gap:12px;padding:${platz < 3 ? 10 : 7}px 14px;border-top:1px solid #14203a;">
-    <span style="${MONO};font-size:${platz < 3 ? 16 : 13}px;font-weight:800;color:${MEDAL[platz] ?? '#5f6f8a'};text-align:center;">${platz + 1}</span>
+    const podium = !einheitlich && platz < 3;
+    return `<div style="display:grid;grid-template-columns:${spalten};align-items:center;gap:12px;padding:${podium ? 10 : 7}px 14px;border-top:1px solid #14203a;">
+    <span style="${MONO};font-size:${podium ? 16 : 13}px;font-weight:800;color:${MEDAL[platz] ?? '#5f6f8a'};text-align:center;">${platz + 1}</span>
     <span style="min-width:0;">${e.label}</span>
-    <span style="${MONO};font-size:${platz < 3 ? 15 : 13}px;font-weight:800;color:#fbbf24;">${e.sub}</span>
+    <span style="${MONO};font-size:${podium ? 15 : 13}px;font-weight:800;color:#fbbf24;">${e.sub}</span>
     ${mitDelta ? `<span style="text-align:right;">${e.delta ?? ''}</span>` : ''}
   </div>`;
   }).join('');
@@ -725,15 +735,18 @@ function allTimeSection(entries: WrappedRiderPoints[]): string {
     sub: e.points.toLocaleString('de-DE'),
     delta: rankDelta(platz, e.previousRank),
   });
-  const links = entries.slice(0, 10);
-  const rechts = entries.slice(10);
-  // In den ersten Saisons stehen noch keine 11 Fahrer in der Wertung — dann
+  const HALB = 25;
+  const links = entries.slice(0, HALB);
+  const rechts = entries.slice(HALB);
+  // Einheitliche Zeilenhoehe (siehe statRows): nur so stehen die Plaetze 26 bis
+  // 50 rechts auf derselben Linie wie 1 bis 25 links.
+  // In den ersten Saisons stehen noch keine 26 Fahrer in der Wertung — dann
   // bleibt es bei einer Spalte statt einer leeren rechten Haelfte.
   const inner = rechts.length === 0
-    ? statRows(links.map((e, i) => zeile(e, i)))
+    ? statRows(links.map((e, i) => zeile(e, i)), 0, true)
     : `<div style="display:grid;grid-template-columns:1fr 1fr;">
-        <div>${statRows(links.map((e, i) => zeile(e, i)))}</div>
-        <div style="border-left:1px solid #1c2b47;">${statRows(rechts.map((e, i) => zeile(e, i + 10)), 10)}</div>
+        <div>${statRows(links.map((e, i) => zeile(e, i)), 0, true)}</div>
+        <div style="border-left:1px solid #1c2b47;">${statRows(rechts.map((e, i) => zeile(e, i + HALB)), HALB, true)}</div>
       </div>`;
   return wrappedSection(
     '#a855f7',
