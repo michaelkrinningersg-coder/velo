@@ -4094,6 +4094,13 @@ export class DatabaseService {
       -- Ohne den Index kostet ein Abschnitt 22 ms, mit ihm 0,1 ms.
       CREATE INDEX IF NOT EXISTS idx_season_point_events_awarded_on
         ON season_point_events(awarded_on);
+
+      -- Fuer das Rennfenster: Siegerliste, Rekordteilnahme und
+      -- Punkte-Rangliste filtern alle ueber die Austragungen EINES Rennens.
+      -- Ohne den Index kostet die Punkte-Rangliste der Tour de France auf
+      -- einem Spielstand von 2033 28 ms, mit ihm 3,4 ms.
+      CREATE INDEX IF NOT EXISTS idx_season_point_events_race
+        ON season_point_events(race_id);
       
       CREATE TRIGGER IF NOT EXISTS trg_season_points_insert
       AFTER INSERT ON season_point_events

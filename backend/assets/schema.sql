@@ -803,6 +803,11 @@ CREATE INDEX IF NOT EXISTS idx_season_point_events_season_stage
 CREATE INDEX IF NOT EXISTS idx_season_point_events_awarded_on
   ON season_point_events(awarded_on);
 
+-- Fuer das Rennfenster: Siegerliste, Rekordteilnahme und Punkte-Rangliste
+-- filtern alle ueber die Austragungen EINES Rennens.
+CREATE INDEX IF NOT EXISTS idx_season_point_events_race
+  ON season_point_events(race_id);
+
 -- ---- Saisonstatistiken (aggregiert am Saisonende) -----------
 CREATE TABLE IF NOT EXISTS season_stats (
   rider_id      INTEGER NOT NULL REFERENCES riders(id),

@@ -125,6 +125,7 @@ function renderTabs(): string {
     ${tab('bestenlisten', 'Bestenlisten', true)}
     ${tab('analysis', 'Analyse', true)}
     ${tab('record', 'Rekordteilnahme', true)}
+    ${tab('punkte', 'Punkte-Rangliste', true)}
   </div>`;
 }
 
@@ -139,6 +140,7 @@ function renderTabContent(race: Race): string {
   if (state.raceDetailTab === 'bestenlisten') return renderBestenlistenTab(palmares);
   if (state.raceDetailTab === 'analysis') return renderAnalysisTab(palmares);
   if (state.raceDetailTab === 'record') return renderRecordTab(palmares);
+  if (state.raceDetailTab === 'punkte') return renderPointsTab(palmares);
   return '';
 }
 
@@ -524,6 +526,54 @@ function renderRecordTab(palmares: RacePalmaresPayload): string {
   return `<div class="rd-record">
     <div class="rd-record-head">Teilnahme mit erzielten UCI-Punkten <span class="rd-record-sub">· ab 3 Saisons</span></div>
     ${rows}
+  </div>`;
+}
+
+// ============================================================================
+// Tab 5: Punkte-Rangliste
+// ============================================================================
+const PUNKTE_JE_SEITE = 20;
+
+/**
+ * Die besten Punktesammler dieses Rennens ueber alle Austragungen, zwanzig je
+ * Seite. Anders als die Rekordteilnahme ohne Mindestzahl an Teilnahmen: wer
+ * das Rennen einmal gewonnen hat, steht hier weit vorne, dort gar nicht.
+ */
+function renderPointsTab(palmares: RacePalmaresPayload): string {
+  const zeilen = palmares.pointsRanking;
+  if (zeilen.length === 0) {
+    return '<div class="dashboard-stage-profile-empty" style="padding:24px;">Bei diesem Rennen hat noch kein Fahrer UCI-Punkte geholt.</div>';
+  }
+
+  const schluessel = 'punkte';
+  const seiten = Math.max(1, Math.ceil(zeilen.length / PUNKTE_JE_SEITE));
+  // Die Seite kann nach einem Rennwechsel hinter dem Ende liegen.
+  const seite = Math.min(bestenlistenSeite.get(schluessel) ?? 0, seiten - 1);
+  const ersterRang = seite * PUNKTE_JE_SEITE + 1;
+  const sichtbar = zeilen.slice(seite * PUNKTE_JE_SEITE, (seite + 1) * PUNKTE_JE_SEITE);
+
+  const rows = sichtbar.map((p, i) => `<div class="rd-record-row">
+    <span class="rd-record-rank">${ersterRang + i}</span>
+    <span class="rd-pal-rider">${renderFlag(p.countryCode ?? '')}${riderLinkButton(p.riderId, `${esc(p.firstName)} ${esc(p.lastName)}`)}</span>
+    <span class="rd-record-seasons">${p.seasons}× Teilnahme</span>
+    <span class="rd-record-points">${p.totalPoints.toLocaleString('de-DE')} Pkt</span>
+  </div>`).join('');
+
+  let steuerung = '';
+  if (seiten > 1) {
+    const knopf = (richtung: 'prev' | 'next', zeichen: string, aus: boolean) =>
+      `<button type="button" class="rd-best-page-btn" data-race-detail-page="${richtung}" data-race-detail-list="${schluessel}" ${aus ? 'disabled' : ''}>${zeichen}</button>`;
+    steuerung = `<div class="rd-best-pager">
+      ${knopf('prev', '‹', seite === 0)}
+      <span class="rd-best-page-label">${ersterRang}–${ersterRang + sichtbar.length - 1} von ${zeilen.length}</span>
+      ${knopf('next', '›', seite >= seiten - 1)}
+    </div>`;
+  }
+
+  return `<div class="rd-record">
+    <div class="rd-record-head">UCI-Punkte über alle Austragungen <span class="rd-record-sub">· Top ${zeilen.length}</span></div>
+    ${rows}
+    ${steuerung}
   </div>`;
 }
 

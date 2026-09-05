@@ -649,6 +649,12 @@ export interface RacePalmaresPayload {
   isStageRace: boolean;
   seasons: PalmaresSeasonEntry[];
   participation: PalmaresParticipationRow[];
+  /**
+   * Die 100 Fahrer mit den meisten UCI-Punkten bei diesem Rennen, ueber alle
+   * Austragungen. Anders als `participation` ohne Mindestzahl an Teilnahmen
+   * und nach Punkten sortiert.
+   */
+  pointsRanking: PalmaresParticipationRow[];
   records: RaceRecordsPayload;
 }
 

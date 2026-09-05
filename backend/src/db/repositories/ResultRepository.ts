@@ -100,7 +100,7 @@ export class ResultRepository {
     const raceName = raceRow?.name ?? null;
 
     if (!tableExists(this.db, 'season_point_events') || raceName == null) {
-      return { raceId, isStageRace, seasons: [], participation: [], records: this.leereRekorde(raceId) };
+      return { raceId, isStageRace, seasons: [], participation: [], pointsRanking: [], records: this.leereRekorde(raceId) };
     }
 
     const podiumAward = isStageRace ? 'gc_final' : 'one_day_result';
@@ -199,7 +199,37 @@ export class ResultRepository {
       totalPoints: r.total_points,
     }));
 
-    return { raceId, isStageRace, seasons, participation, records: this.getRaceRecords(raceId, raceName, isStageRace) };
+    // Punkte-Rangliste: dieselbe Quelle wie die Rekordteilnahme, aber ohne
+    // Mindestzahl an Teilnahmen und nach Punkten sortiert. Ein Fahrer, der ein
+    // Rennen einmal gewonnen hat, gehoert in diese Liste — in die
+    // Rekordteilnahme (ab drei Saisons) gehoert er nicht.
+    const punkteRows = this.db.prepare(`
+      SELECT
+        spe.rider_id AS rider_id,
+        riders.first_name AS first_name,
+        riders.last_name AS last_name,
+        country.code_3 AS country_code,
+        COUNT(DISTINCT spe.season) AS seasons,
+        SUM(spe.points_awarded) AS total_points
+      FROM season_point_events spe
+      JOIN riders ON riders.id = spe.rider_id
+      JOIN sta_country country ON country.id = riders.country_id
+      WHERE spe.race_id IN (SELECT id FROM races WHERE name = ?) AND spe.points_awarded > 0
+      GROUP BY spe.rider_id, riders.first_name, riders.last_name, country.code_3
+      ORDER BY total_points DESC, seasons DESC, riders.last_name ASC
+      LIMIT 100
+    `).all(raceName) as typeof participationRows;
+
+    const pointsRanking: PalmaresParticipationRow[] = punkteRows.map((r) => ({
+      riderId: r.rider_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      countryCode: r.country_code,
+      seasons: r.seasons,
+      totalPoints: r.total_points,
+    }));
+
+    return { raceId, isStageRace, seasons, participation, pointsRanking, records: this.getRaceRecords(raceId, raceName, isStageRace) };
   }
 
   /**
