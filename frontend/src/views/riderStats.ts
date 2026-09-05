@@ -43,11 +43,11 @@ let comparedRiders: Array<{
   currentSeasonRank: number | null;
 }> = [];
 let selectedCompareTeamId: number | null = null;
-// Schalter im Tab "Punkte je Rennen": zeigt statt der Gesamtpunkte die Punkte
-// je Renntag. Bewusst Modulzustand und nicht in `state`: er gehoert zu dieser
-// einen Ansicht und soll einen Fahrerwechsel ueberdauern, aber nicht
-// gespeichert werden.
-let jeRenntag = false;
+// Ansicht im Tab "Punkte je Rennen". Bewusst Modulzustand und nicht in
+// `state`: sie gehoert zu dieser einen Ansicht und soll einen Fahrerwechsel
+// ueberdauern, aber nicht gespeichert werden.
+type RennpunkteAnsicht = 'gesamt' | 'jeRenntag' | 'normiert';
+let rennpunkteAnsicht: RennpunkteAnsicht = 'gesamt';
 
 let chartToggles = {
   form: true,
@@ -2307,10 +2307,10 @@ export function initRiderStatsListeners(): void {
         return;
       }
 
-      // Schalter im Tab "Punkte je Rennen": Gesamt <-> je Renntag.
+      // Schalter im Tab "Punkte je Rennen": Gesamt / je Renntag / normiert.
       const modusButton = (event.target as Element).closest<HTMLButtonElement>('button[data-race-points-mode]');
       if (modusButton) {
-        jeRenntag = modusButton.dataset['racePointsMode'] === 'jeRenntag';
+        rennpunkteAnsicht = modusButton.dataset['racePointsMode'] as RennpunkteAnsicht;
         const rider = findRiderById(state.riderStatsSelectedRiderId);
         $('rider-stats-body').innerHTML = renderRiderStatsBody(rider, state.riderStatsPayload, false);
         return;
@@ -2707,6 +2707,36 @@ export function renderRiderStatsTopResultsTab(payload: RiderStatsPayload): strin
 // Karrierebilanz als Balkendiagramm: eine Zeile je Rennen, absteigend nach
 // Punkten. Bezugsgroesse ist das staerkste Rennen des Fahrers (100 %) — ein
 // fester Massstab ueber alle Fahrer wuerde bei den meisten nur Stummel zeigen.
+/**
+ * Eintagesrennen, die trotz des kurzen Formats schwer wiegen: Monumente,
+ * Weltmeisterschaften, Olympia und die kontinentalen Meisterschaften. Die
+ * NATIONALEN Meisterschaften gehoeren bewusst nicht dazu.
+ */
+const SCHWERE_EINTAGESRENNEN = /(^|\s)(Weltmeisterschaft|Olympische Spiele|Europameisterschaft|Asien-Ozeanien-Meisterschaft|Amerika-Meisterschaft|Afrika-Meisterschaft)|Monument/;
+
+/**
+ * Abschlag fuer das Rennformat in der normierten Ansicht.
+ *
+ * Ein Eintagesrennen vergibt seine ganze Punktzahl an einem Tag und stuende
+ * je Renntag sonst uneinholbar vor jeder Rundfahrt. Die schweren
+ * Eintagesrennen bekommen einen kleineren Abschlag.
+ */
+function formatFaktor(rennen: { isStageRace: boolean; categoryName: string | null }): number {
+  if (rennen.isStageRace) return 1;
+  return SCHWERE_EINTAGESRENNEN.test(rennen.categoryName ?? '') ? 3 : 4;
+}
+
+/**
+ * Abschlag fuer eine duenne Stichprobe: wer ein Rennen erst ein- oder zweimal
+ * gefahren ist, soll die Liste nicht mit einem einzelnen guten Tag anfuehren.
+ */
+function stichprobenFaktor(renntage: number): number {
+  if (renntage >= 4) return 1;
+  if (renntage === 3) return 2;
+  if (renntage === 2) return 3;
+  return 4;
+}
+
 export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null): string {
   const rennen = payload?.careerPointsByRace ?? [];
 
@@ -2725,16 +2755,20 @@ export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null)
   // wuerde sie in jeder Zeile anders breit ausfallen und die Badges wuerden
   // gegeneinander verspringen. Deshalb tragen die ZELLEN Innenabstand und
   // Trennlinie, nicht ein Zeilencontainer.
-  const RASTER = 'display:grid;grid-template-columns:34px minmax(120px,1fr) fit-content(390px) minmax(130px,1.6fr) 78px 56px 62px;align-items:center;';
+  const RASTER = 'display:grid;grid-template-columns:34px minmax(120px,1fr) fit-content(390px) minmax(130px,1.6fr) 84px 56px 62px;align-items:center;';
   const ZELLE = 'padding:9px 12px 9px 0;border-top:1px solid #14203a;';
   const KOPF = `padding:8px 12px 8px 0;background:#0a1122;border-bottom:1px solid #16233c;${MONOF};font-size:9px;letter-spacing:.05em;color:#5a6a85;`;
 
+  const geteilt = rennpunkteAnsicht !== 'gesamt';
   // Der Wert, nach dem sortiert und der Balken skaliert wird. Ohne Renntage
   // laesst sich nicht teilen — solche Rennen rutschen ans Ende und zeigen
   // einen Strich statt einer erfundenen Null.
   const wertVon = (r: typeof rennen[number]): number => {
-    if (!jeRenntag) return r.points;
-    return r.raceDays > 0 ? r.points / r.raceDays : -1;
+    if (rennpunkteAnsicht === 'gesamt') return r.points;
+    if (r.raceDays <= 0) return -1;
+    const jeTag = r.points / r.raceDays;
+    if (rennpunkteAnsicht === 'jeRenntag') return jeTag;
+    return jeTag / stichprobenFaktor(r.raceDays) / formatFaktor(r);
   };
   const sortiert = [...rennen].sort((a, b) => wertVon(b) - wertVon(a) || a.raceName.localeCompare(b.raceName, 'de'));
 
@@ -2747,31 +2781,41 @@ export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null)
     const wert = wertVon(r);
     const anteil = maximum > 0 && wert > 0 ? Math.max(0, Math.min(1, wert / maximum)) : 0;
     const bestes = index === 0 && wert > 0;
-    const titel = jeRenntag
-      ? (r.raceDays > 0
-        ? `${zahl(r.points / r.raceDays)} Pkt. je Renntag · ${r.points} Pkt. aus ${r.raceDays} Renntagen`
-        : `${r.points} Pkt., aber keine Renntage im Archiv — nicht teilbar`)
-      : `${r.points} Pkt. · ${(anteil * 100).toFixed(0)} % seines besten Rennens (${maximum} Pkt.)`;
-    const wertText = jeRenntag ? (r.raceDays > 0 ? zahl(wert) : '–') : String(r.points);
+    const teiler: string[] = [];
+    if (rennpunkteAnsicht === 'normiert') {
+      const stichprobe = stichprobenFaktor(r.raceDays);
+      const format = formatFaktor(r);
+      if (stichprobe > 1) teiler.push(`÷ ${stichprobe} (nur ${r.raceDays} Renntage)`);
+      if (format > 1) teiler.push(`÷ ${format} (${r.isStageRace ? 'Rundfahrt' : SCHWERE_EINTAGESRENNEN.test(r.categoryName ?? '') ? 'schweres Eintagesrennen' : 'Eintagesrennen'})`);
+    }
+    const titel = !geteilt
+      ? `${r.points} Pkt. · ${(anteil * 100).toFixed(0)} % seines besten Rennens (${maximum} Pkt.)`
+      : r.raceDays > 0
+        ? [`${r.points} Pkt. ÷ ${r.raceDays} Renntage`, ...teiler, `= ${zahl(wert)}`].join(' ')
+        : `${r.points} Pkt., aber keine Renntage im Archiv — nicht teilbar`;
+    const wertText = !geteilt ? String(r.points) : (r.raceDays > 0 ? zahl(wert) : '–');
     return `
       <span style="${ZELLE}padding-left:14px;${MONOF};font-size:11px;color:#5a6a85;text-align:right;">${index + 1}</span>
       <span title="${esc(r.raceName)}" style="${ZELLE}font-size:12.5px;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.raceName)}</span>
       <span style="${ZELLE}">${renderRiderStatsCategoryBadge(r.categoryName)}</span>
       <span style="${ZELLE}">
-        <span title="${titel}" style="position:relative;display:block;height:9px;border-radius:99px;background:#101c31;border:1px solid #172a44;overflow:hidden;">
+        <span title="${esc(titel)}" style="position:relative;display:block;height:9px;border-radius:99px;background:#101c31;border:1px solid #172a44;overflow:hidden;">
           <span style="position:absolute;inset:0 auto 0 0;width:${(anteil * 100).toFixed(1)}%;border-radius:99px;background:linear-gradient(90deg,#0e7490,#22d3ee);box-shadow:0 0 10px rgba(34,211,238,${bestes ? '.55' : '.28'});"></span>
         </span>
       </span>
-      <span title="${titel}" style="${ZELLE}${MONOF};font-size:12.5px;font-weight:700;color:${bestes ? '#22d3ee' : '#e2e8f0'};text-align:right;">${wertText}</span>
+      <span title="${esc(titel)}" style="${ZELLE}${MONOF};font-size:12.5px;font-weight:700;color:${bestes ? '#22d3ee' : '#e2e8f0'};text-align:right;">${wertText}</span>
       <span title="Beendete Etappen bei diesem Rennen" style="${ZELLE}${MONOF};font-size:11px;color:#8494ad;text-align:right;">${r.raceDays}</span>
-      <span title="Saisons mit Punkten bei diesem Rennen" style="${ZELLE}padding-right:14px;${MONOF};font-size:11px;color:#8494ad;text-align:right;">${r.seasons}×</span>`;
+      <span title="Bestrittene Austragungen — davon ${r.seasons} mit Punkten" style="${ZELLE}padding-right:14px;${MONOF};font-size:11px;color:#8494ad;text-align:right;">${r.seasonsRidden}×</span>`;
   }).join('');
 
-  const schalterKnopf = (aktiv: boolean, wert: 'gesamt' | 'jeRenntag', beschriftung: string): string =>
-    `<button type="button" data-race-points-mode="${wert}" style="${MONOF};font-size:10px;letter-spacing:.06em;font-weight:700;padding:5px 11px;border-radius:7px;cursor:pointer;border:1px solid ${aktiv ? '#22d3ee' : '#1e2c49'};background:${aktiv ? 'rgba(34,211,238,.14)' : 'transparent'};color:${aktiv ? '#67e8f9' : '#6a7a95'};">${beschriftung}</button>`;
+  const schalterKnopf = (wert: RennpunkteAnsicht, beschriftung: string): string => {
+    const aktiv = rennpunkteAnsicht === wert;
+    return `<button type="button" data-race-points-mode="${wert}" style="${MONOF};font-size:10px;letter-spacing:.06em;font-weight:700;padding:5px 11px;border-radius:7px;cursor:pointer;border:1px solid ${aktiv ? '#22d3ee' : '#1e2c49'};background:${aktiv ? 'rgba(34,211,238,.14)' : 'transparent'};color:${aktiv ? '#67e8f9' : '#6a7a95'};">${beschriftung}</button>`;
+  };
 
-  const bezug = jeRenntag
-    ? (maximum > 0 ? `100 % = ${zahl(maximum)} Pkt./Tag` : 'keine Renntage im Archiv')
+  const spaltenKopf = rennpunkteAnsicht === 'gesamt' ? 'PUNKTE' : rennpunkteAnsicht === 'jeRenntag' ? 'PKT/TAG' : 'NORMIERT';
+  const bezug = geteilt
+    ? (maximum > 0 ? `100 % = ${zahl(maximum)}` : 'keine Renntage im Archiv')
     : `100 % = ${maximum}`;
 
   return `
@@ -2781,19 +2825,20 @@ export function renderRiderStatsRacePointsTab(payload: RiderStatsPayload | null)
           <div style="display:flex;align-items:center;gap:12px;">
             <span style="${MONOF};font-size:10px;letter-spacing:.12em;color:#6a7a95;">PUNKTE JE RENNEN · KARRIERE</span>
             <span style="display:inline-flex;gap:4px;padding:3px;border-radius:9px;background:#0a1122;border:1px solid #16233c;">
-              ${schalterKnopf(!jeRenntag, 'gesamt', 'GESAMT')}${schalterKnopf(jeRenntag, 'jeRenntag', 'JE RENNTAG')}
+              ${schalterKnopf('gesamt', 'GESAMT')}${schalterKnopf('jeRenntag', 'JE RENNTAG')}${schalterKnopf('normiert', 'NORMIERT')}
             </span>
           </div>
           <div style="${MONOF};font-size:10px;color:#6a7a95;">${rennen.length} Rennen · ${gesamtPunkte} Pkt. · ${gesamtTage} Renntage · ${bezug}</div>
         </div>
+        ${rennpunkteAnsicht === 'normiert' ? `<div style="${MONOF};font-size:10px;color:#5f7590;margin:-6px 0 12px;">Punkte je Renntag, abgewertet um ÷4 für Eintagesrennen (÷3 bei Monumenten, WM, Olympia und kontinentalen Meisterschaften) und um ÷2 / ÷3 / ÷4 bei nur 3, 2 oder 1 Renntag.</div>` : ''}
         <div style="${RASTER}border-radius:12px;overflow:hidden;border:1px solid #16233c;">
           <span style="${KOPF}padding-left:14px;text-align:right;">#</span>
           <span style="${KOPF}">RENNEN</span>
           <span style="${KOPF}">KATEGORIE</span>
           <span style="${KOPF}"></span>
-          <span style="${KOPF}text-align:right;color:${jeRenntag ? '#67e8f9' : '#5a6a85'};">${jeRenntag ? 'PKT/TAG' : 'PUNKTE'}</span>
+          <span style="${KOPF}text-align:right;color:${geteilt ? '#67e8f9' : '#5a6a85'};">${spaltenKopf}</span>
           <span style="${KOPF}text-align:right;">TAGE</span>
-          <span style="${KOPF}padding-right:14px;text-align:right;">SAISONS</span>
+          <span style="${KOPF}padding-right:14px;text-align:right;">GEFAHREN</span>
           ${zellen}
         </div>
       </div>

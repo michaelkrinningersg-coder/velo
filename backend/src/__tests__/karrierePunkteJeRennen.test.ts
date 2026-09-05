@@ -87,13 +87,15 @@ describe('Karrierepunkte je Rennen', () => {
     expect(payload).not.toBeNull();
     expect(payload!.careerPointsByRace).toEqual([
       // 100 (2027) + 200 (2028); Kategorie aus der juengsten Austragung.
-      { raceName: 'Klassiker', categoryName: 'Testkategorie Eintagesrennen', points: 300, seasons: 2, raceDays: 2 },
+      { raceName: 'Klassiker', categoryName: 'Testkategorie Eintagesrennen', points: 300, seasons: 2, seasonsRidden: 2, raceDays: 2, isStageRace: false },
       {
         raceName: 'Nationale Meisterschaft Strasse – Testland',
         categoryName: 'Testkategorie Meisterschaft',
         points: 150,
         seasons: 2,
+        seasonsRidden: 2,
         raceDays: 2,
+        isStageRace: false,
       },
     ]);
   });
@@ -109,8 +111,24 @@ describe('Karrierepunkte je Rennen', () => {
       VALUES (6, 6, 1, ?, 'finished', NULL)`).run(fahrer);
 
     const bilanz = new RiderRepository(db).getRiderStats(fahrer)!.careerPointsByRace;
-    expect(bilanz.find((e) => e.raceName === 'Klassiker')).toMatchObject({ points: 300, raceDays: 3 });
+    expect(bilanz.find((e) => e.raceName === 'Klassiker')).toMatchObject({ points: 300, raceDays: 3, seasonsRidden: 3 });
     // Das punktlose Rennen bleibt draussen, obwohl es einen Eintrag hat.
     expect(bilanz.some((e) => e.raceName === 'Punktloses Rennen')).toBe(false);
+  });
+
+  it('zaehlt bestrittene Austragungen getrennt von den Saisons mit Punkten', () => {
+    // Eine vierte Austragung von 'Klassiker', gefahren und beendet, aber ohne
+    // Punkte. Genau dieser Fall laesst ein Eintagesrennen mehr Renntage als
+    // Punktesaisons haben — er ist richtig, nicht widerspruechlich.
+    db.prepare(`INSERT INTO races (id, name, country_id, category_id, is_stage_race, number_of_stages, start_date, end_date, prestige)
+      VALUES (7, 'Klassiker', 1, 901, 0, 1, '2029-04-01', '2029-04-01', 50)`).run();
+    db.prepare(`INSERT INTO stages (id, race_id, stage_number, date, profile, start_elevation, details_csv_file)
+      VALUES (7, 7, 1, '2029-04-01', 'Flat', 0, 'dummy_flat_a.csv')`).run();
+    db.prepare(`INSERT INTO stage_entries_flat (stage_id, race_id, team_id, rider_id, status, status_reason)
+      VALUES (7, 7, 1, ?, 'finished', NULL)`).run(fahrer);
+
+    const klassiker = new RiderRepository(db).getRiderStats(fahrer)!.careerPointsByRace
+      .find((e) => e.raceName === 'Klassiker');
+    expect(klassiker).toMatchObject({ points: 300, raceDays: 3, seasonsRidden: 3, seasons: 2 });
   });
 });

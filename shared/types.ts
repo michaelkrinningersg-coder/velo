@@ -1520,10 +1520,19 @@ export interface RiderStatsPayload {
     /** Anzahl Saisons, in denen der Fahrer bei diesem Rennen gepunktet hat. */
     seasons: number;
     /**
+     * Anzahl Austragungen, die der Fahrer bestritten hat — aus dem
+     * Startlisten-Archiv, also einschliesslich der Jahre ohne Punkte.
+     * Kann groesser sein als `seasons`; bei einem Eintagesrennen ist es
+     * genau die Zahl der Renntage.
+     */
+    seasonsRidden: number;
+    /**
      * Renntage bei diesem Rennen ueber die ganze Karriere — die Etappen, die
      * der Fahrer beendet hat. Teiler fuer die Ansicht "Punkte je Renntag".
      */
     raceDays: number;
+    /** Fuer die Gewichtung der normierten Ansicht. */
+    isStageRace: boolean;
   }>;
   seasons: RiderStatsSeason[];
   peakDates?: string[];

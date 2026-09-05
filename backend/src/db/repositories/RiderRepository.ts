@@ -2672,7 +2672,7 @@ export class RiderRepository {
    */
   private getCareerPointsByRace(
     riderId: number,
-  ): Array<{ raceName: string; categoryName: string | null; points: number; seasons: number; raceDays: number }> {
+  ): Array<{ raceName: string; categoryName: string | null; points: number; seasons: number; seasonsRidden: number; raceDays: number; isStageRace: boolean }> {
     if (!tableExists(this.db, 'season_point_events') || !tableExists(this.db, 'races')) {
       return [];
     }
@@ -2682,9 +2682,13 @@ export class RiderRepository {
     // taugt als Teiler nicht. Gezaehlt werden beendete Etappen — dieselbe
     // Definition, die der Commit in `rider_career_stats.race_days` fortschreibt
     // (auf dem gemessenen Spielstand von 2033 fuer alle 2928 Fahrer identisch).
+    // Jede Austragung ist eine eigene Zeile in `races` (der Kalender legt sie
+    // je Saison neu an), deshalb ist COUNT(DISTINCT race_id) genau die Zahl
+    // der bestrittenen Austragungen — ohne Umweg ueber die Etappendaten.
     const renntage = hatEintraege
       ? `, renntage AS (
-      SELECT races.name AS renntageName, COUNT(*) AS raceDays
+      SELECT races.name AS renntageName, COUNT(*) AS raceDays,
+             COUNT(DISTINCT e.race_id) AS seasonsRidden
       FROM stage_entries_flat e
       JOIN races ON races.id = e.race_id
       WHERE e.rider_id = ? AND e.status = 'finished'
@@ -2696,6 +2700,7 @@ export class RiderRepository {
         SELECT races.name AS raceName,
                race_categories.name AS categoryName,
                MAX(races.id) AS lastRaceId,
+               races.is_stage_race AS isStageRace,
                SUM(spe.points_awarded) AS points,
                COUNT(DISTINCT spe.season) AS seasons
         FROM season_point_events spe
@@ -2705,8 +2710,9 @@ export class RiderRepository {
         GROUP BY races.name
         HAVING SUM(spe.points_awarded) > 0
       )${renntage}
-      SELECT punkte.raceName, punkte.categoryName, punkte.points, punkte.seasons,
-             ${hatEintraege ? 'COALESCE(renntage.raceDays, 0)' : '0'} AS raceDays
+      SELECT punkte.raceName, punkte.categoryName, punkte.points, punkte.seasons, punkte.isStageRace,
+             ${hatEintraege ? 'COALESCE(renntage.raceDays, 0)' : '0'} AS raceDays,
+             ${hatEintraege ? 'COALESCE(renntage.seasonsRidden, 0)' : '0'} AS seasonsRidden
       FROM punkte
       ${hatEintraege ? 'LEFT JOIN renntage ON renntage.renntageName = punkte.raceName' : ''}
       ORDER BY punkte.points DESC, punkte.raceName ASC
@@ -2716,7 +2722,11 @@ export class RiderRepository {
       categoryName: r.categoryName == null ? null : String(r.categoryName),
       points: Number(r.points ?? 0),
       seasons: Number(r.seasons ?? 0),
+      // Ohne Archiv (sehr alte Spielstaende) bleibt nur die Zahl der
+      // Punktesaisons — besser als eine Null, die "nie gefahren" behauptet.
+      seasonsRidden: Number(r.seasonsRidden ?? 0) || Number(r.seasons ?? 0),
       raceDays: Number(r.raceDays ?? 0),
+      isStageRace: Number(r.isStageRace ?? 0) === 1,
     }));
   }
 
